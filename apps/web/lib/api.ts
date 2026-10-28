@@ -16,8 +16,6 @@ import type {
   VoiceOption,
 } from '@/lib/types';
 import { isVoiceOption } from './voice-catalog';
-import { seedCreatedPostCaches } from './generation/created-post-caches';
-import { VOICE_FALLBACK_WARNING_CODE } from './voice-fallback';
 import { logger } from '@/lib/logger';
 import type { PublishLink } from '@/lib/publish-links';
 import { narrowGeneration, narrowProgressHistory, narrowPublishLinks, type GenerationFacts, type ProgressHistoryEntry } from './slot-detail';
@@ -185,7 +183,7 @@ export interface DeletePersonaResult {
 
 export interface DeletePreviewVideo {
   taskId: string | null;
-  topic: string | null;
+  title: string | null;
   status: string;
   downloadUrl: string | null;
 }
@@ -657,9 +655,9 @@ export function useVoicesQuery() {
 
 //---------------
 // Fill Schedule — video publishing timetables (days + time window + posts/day).
-// Created by POST /api/videos/generate-and-schedule (1-10 topics, each a
-// video + slot + task); the engine does generation per slot, then
-// publishing at each slot's time via /api/upload-content.
+// Created by POST /api/videos/generate-and-schedule (one video + slot +
+// task per call); the engine does generation per slot, then publishing at
+// each slot's time via /api/upload-content.
 //---------------
 
 export interface ScheduleConfig {
@@ -689,7 +687,7 @@ export interface ScheduledSlot {
   slotAt: string;
   // The API presents the DB 'pending' state as 'awaiting'.
   status: 'awaiting' | 'generating' | 'ready' | 'publishing' | 'published' | 'failed';
-  topic: string | null;
+  title: string | null;
   error?: string | null;
   publishedAt?: string | null;
   // Engine task id, set when generation dispatches — poll progress with it.
@@ -732,7 +730,7 @@ interface SlotRow {
   schedule_id: string;
   slot_at: string;
   status: ScheduledSlot['status'];
-  topic: string | null;
+  title: string | null;
   error?: string | null;
   published_at?: string | null;
   task_id?: string | null;
@@ -781,7 +779,7 @@ function mapSlot(row: SlotRow): ScheduledSlot {
     scheduleId: row.schedule_id,
     slotAt: row.slot_at,
     status: row.status,
-    topic: row.topic,
+    title: row.title,
     error: row.error,
     publishedAt: row.published_at,
     taskId: row.task_id ?? null,
@@ -956,16 +954,16 @@ async function throwForBadResponse(response: Response, fallback: string): Promis
 // edited/deleted — the API returns 409 otherwise, surfaced to the user.
 //---------------
 
-export async function updateSlotTopic(slotId: string, topic: string): Promise<string> {
+export async function updateSlotTitle(slotId: string, title: string): Promise<string> {
   const response = await fetch(`/api/schedule/slots/${encodeURIComponent(slotId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ topic }),
+    body: JSON.stringify({ title }),
   });
   if (!response.ok) await throwForBadResponse(response, 'Failed to update slot');
-  const data = await parseJsonBody<{ success: boolean; topic?: string; error?: string }>(response);
+  const data = await parseJsonBody<{ success: boolean; title?: string; error?: string }>(response);
   if (!data?.success) throw new Error(data?.error ?? 'Failed to update slot');
-  return data.topic ?? topic;
+  return data.title ?? title;
 }
 
 export async function deleteSlot(slotId: string): Promise<void> {
@@ -980,12 +978,12 @@ export async function deleteSlot(slotId: string): Promise<void> {
 export function useUpdateSlotMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ slotId, topic }: { slotId: string; topic: string }) =>
-      updateSlotTopic(slotId, topic),
+    mutationFn: ({ slotId, title }: { slotId: string; title: string }) =>
+      updateSlotTitle(slotId, title),
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
       // The detail page reads ['post-detail', slotId] with a 30s staleTime;
-      // invalidate it too so the saved topic shows immediately.
+      // invalidate it too so the saved title shows immediately.
       void queryClient.invalidateQueries({ queryKey: ['post-detail', variables.slotId] });
     },
   });
@@ -1012,7 +1010,7 @@ export interface SlotDetailPayload {
     scheduleId: string;
     slotAt: string;
     status: ScheduledSlot['status'];
-    topic: string | null;
+    title: string | null;
     error: string | null;
     publishedAt: string | null;
     taskId: string | null;
@@ -1022,7 +1020,7 @@ export interface SlotDetailPayload {
     queuePosition: number | null;
     queueTotal: number | null;
     // The specific angle the engine built the script around (derived from
-    // the topic). Null until generation starts, or when none was recorded.
+    // the video subject). Null until generation starts, or when none was recorded.
     scriptAngle: string | null;
     // Where the post went, one entry per provider. Empty until the slot is
     // published (nothing exists to link to before that).
@@ -1112,203 +1110,6 @@ export function usePostDetailQuery(id: string) {
   });
 }
 
-//---------------
-// Create post — POST /api/videos/generate-and-schedule: one call mints the
-// videos AND their publishing schedule.
-//---------------
-
-export interface CreatePostInput {
-  /** Omit for a faceless post with no persona (the API reads the absent key
-      as "no persona"). Sending an empty string would mean something else. */
-  personaId?: string;
-  topics: string[];
-  providers: string[];
-  accounts: Record<string, string[]>;
-  /** 'scheduled' (default) or 'asap' (publish the moment generation finishes). */
-  mode?: 'scheduled' | 'asap';
-  /** Offset-aware ISO instant the window opens; required unless mode is 'asap'. */
-  startAt?: string;
-  /** Daily publish times as "HH:MM", wall clock in `timezone`; required unless mode is 'asap'. */
-  times?: string[];
-  /** Required unless mode is 'asap' (the server defaults it to 'UTC'). */
-  timezone?: string;
-  /** Generate without a face (no lipsync). Personas are always faced;
-      this is the per-post choice. Sent explicitly — the server is the
-      billing authority and prices the two cases differently. */
-  faceless: boolean;
-  /** What fills the video, with or without a face: 'broll' (stock
-      footage only) or 'svg' (catalog illustrations only). Never mixed. */
-  facelessMaterial?: 'broll' | 'svg';
-  /** Required only without a persona: the engine needs exactly one voice. */
-  voiceId?: string;
-}
-
-export interface CreatedSlot {
-  slotId: string;
-  slotAt: string;
-  topic: string;
-  taskId: string | null;
-  status: string;
-  errorCode?: string;
-}
-
-export interface CreatePostResult {
-  success: boolean;
-  /** Null when the request failed before a schedule existed (never charged). */
-  scheduleId: string | null;
-  /** The schedule's publish mode, when the response carried one. */
-  scheduleMode: 'scheduled' | 'asap' | null;
-  slots: CreatedSlot[];
-  replayed: boolean;
-  error: string | null;
-  /** Stable machine code (lib/error-codes.ts) so the UI can localize. */
-  code: string | null;
-  /** INSUFFICIENT_TOKENS only: tokens needed / tokens available. */
-  need: number | null;
-  have: number | null;
-  /** The applied persona-voice swap (issue #277), when the dispatch had to
-      replace an unavailable voice. `fromVoice` is '' when the persona had
-      no stored voice at all — the UI renders its own copy for that case. */
-  voiceFallback: { fromVoice: string; toVoice: string } | null;
-}
-
-//---------------
-// narrowCreatedSlots — the payload crosses a network boundary, so every
-// field the success screen reads is checked; a malformed entry is dropped.
-//---------------
-function narrowCreatedSlots(value: unknown): CreatedSlot[] {
-  if (!Array.isArray(value)) return [];
-  const slots: CreatedSlot[] = [];
-  for (const entry of value) {
-    if (typeof entry !== 'object' || entry === null) continue;
-    const record = entry as Record<string, unknown>;
-    if (typeof record.slotId !== 'string' || typeof record.slotAt !== 'string') continue;
-    slots.push({
-      slotId: record.slotId,
-      slotAt: record.slotAt,
-      topic: typeof record.topic === 'string' ? record.topic : '',
-      taskId: typeof record.taskId === 'string' ? record.taskId : null,
-      status: typeof record.status === 'string' ? record.status : 'pending',
-      ...(typeof record.errorCode === 'string' ? { errorCode: record.errorCode } : {}),
-    });
-  }
-  return slots;
-}
-
-//---------------
-// narrowVoiceFallbackWarning — the dispatch response's `warnings` array
-// crosses a network boundary, so every field is checked; only the stable
-// voice-fallback code is recognized, and a malformed entry narrows to null.
-//---------------
-function narrowVoiceFallbackWarning(body: Record<string, unknown> | null): {
-  fromVoice: string;
-  toVoice: string;
-} | null {
-  if (body === null) return null;
-  const warnings = body.warnings;
-  if (!Array.isArray(warnings)) return null;
-  for (const entry of warnings) {
-    if (typeof entry !== 'object' || entry === null) continue;
-    const record = entry as Record<string, unknown>;
-    if (record.code !== VOICE_FALLBACK_WARNING_CODE) continue;
-    if (typeof record.fromVoice !== 'string' || typeof record.toVoice !== 'string' || record.toVoice.length === 0) {
-      continue;
-    }
-    return { fromVoice: record.fromVoice, toVoice: record.toVoice };
-  }
-  return null;
-}
-
-export async function createPost(input: CreatePostInput): Promise<CreatePostResult> {
-  const mode = input.mode ?? 'scheduled';
-  const response = await fetch('/api/videos/generate-and-schedule', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      // Spreading so a persona-less post sends no key at all: the server
-      // distinguishes absent from empty.
-      ...(input.personaId !== undefined ? { personaId: input.personaId } : {}),
-      topics: input.topics,
-      options: {
-        faceless: input.faceless,
-        ...(input.facelessMaterial !== undefined ? { facelessMaterial: input.facelessMaterial } : {}),
-        ...(input.voiceId !== undefined ? { voiceId: input.voiceId } : {}),
-      },
-      publishing: {
-        mode,
-        providers: input.providers,
-        accounts: input.accounts,
-        // ASAP carries no schedule plan at all: the server lands every slot
-        // at the request time. The key is omitted (not null) so the server
-        // reads absence as "no plan".
-        ...(mode === 'asap'
-          ? input.timezone !== undefined
-            ? { timezone: input.timezone }
-            : {}
-          : {
-            schedule: {
-              startAt: input.startAt,
-              times: input.times,
-              timezone: input.timezone,
-            },
-          }),
-      },
-    }),
-  });
-  const body = await parseJsonBody<Record<string, unknown>>(response);
-  const schedule = body !== null ? body.schedule : null;
-  const scheduleId =
-    typeof schedule === 'object' && schedule !== null && typeof (schedule as { id?: unknown }).id === 'string'
-      ? (schedule as { id: string }).id
-      : null;
-  const rawMode =
-    typeof schedule === 'object' && schedule !== null
-      ? (schedule as { mode?: unknown }).mode
-      : null;
-  const scheduleMode = rawMode === 'asap' ? 'asap' : rawMode === 'scheduled' ? 'scheduled' : null;
-  const failure: CreatePostResult = {
-    success: false,
-    scheduleId,
-    scheduleMode,
-    slots: narrowCreatedSlots(body !== null ? body.slots : null),
-    replayed: body !== null && body.replayed === true,
-    error:
-      body !== null && typeof body.error === 'string' && body.error.length > 0
-        ? body.error
-        : `Post creation failed with status ${response.status}.`,
-    code: body !== null && typeof body.code === 'string' ? body.code : null,
-    need: body !== null && typeof body.need === 'number' ? body.need : null,
-    have: body !== null && typeof body.have === 'number' ? body.have : null,
-    voiceFallback: narrowVoiceFallbackWarning(body),
-  };
-  // A non-ok response, an unreadable body, or success:false is never success.
-  if (!response.ok || body === null || body.success !== true) return failure;
-  return { ...failure, success: true, error: null, code: null };
-}
-
-export function useCreatePostMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: CreatePostInput) => createPost(input),
-    onSuccess: (result, input) => {
-      // A failed create charges nothing and created nothing — never
-      // invalidate on it, so the caches keep showing the true state.
-      if (!result.success) return;
-      // Seed the caches with the created slots/schedule BEFORE invalidating:
-      // the /posts/new screen redirects to /posts right after success, and
-      // the Posts page joins slots against the schedules cache — a refetch
-      // race could otherwise hide the new post until the next poll. The
-      // invalidations below still converge every cache to server truth.
-      seedCreatedPostCaches(queryClient, input, result);
-
-      void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
-      void queryClient.invalidateQueries({ queryKey: ['fill-schedules'] });
-      void queryClient.invalidateQueries({ queryKey: ['video-generations'] });
-    },
-  });
-}
-
-export { seedCreatedPostCaches } from './generation/created-post-caches';
 
 export {
   fetchYouTubeAccounts,

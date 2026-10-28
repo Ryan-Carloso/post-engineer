@@ -140,7 +140,7 @@ describe('Posts video detail', () => {
     cy.contains('button', /Histórico|History/).click();
 
     // Open the post card by exact href — a bare `a[href^="/posts/"]`
-    // matches /posts/new first and lands on the creation page instead.
+    // would also match the list page itself.
     cy.get(`a[href="/posts/${DETAIL_SLOT_ID}"]`).first().click();
     cy.url().should('match', new RegExp(`/posts/${DETAIL_SLOT_ID}$`));
 

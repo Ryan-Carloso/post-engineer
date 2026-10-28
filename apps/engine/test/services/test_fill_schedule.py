@@ -93,14 +93,19 @@ class BatchScheduleTests(unittest.TestCase):
 
     plan() must skip batch schedules (their slots are pre-materialized by
     POST /api/videos/generate-and-schedule); generate() must always process their pending
-    slots using the stored topic — no LLM topic, no token spend.
+    slots using the stored segments — no LLM script, no token spend.
     """
 
-    def _batch_slot(self, topic="Batch topic one"):
+    def _batch_slot(self, title="Batch title one"):
         return {
             "id": "slot-batch-1",
             "slot_at": "2026-09-08T09:00:00+00:00",
-            "topic": topic,
+            "title": title,
+            "segments": [
+            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
+            {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
+            {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+        ],
             "schedules": {
                 "id": "sched-batch-1",
                                 "user_id": "user-1",
@@ -129,7 +134,7 @@ class BatchScheduleTests(unittest.TestCase):
         )
 
 
-    def test_generate_batch_slot_uses_stored_topic_no_llm_no_spend(self):
+    def test_generate_batch_slot_uses_stored_segments_no_llm_no_spend(self):
         slot = self._batch_slot()
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
@@ -146,18 +151,19 @@ class BatchScheduleTests(unittest.TestCase):
         dispatch_generation.assert_called_once()
         task_id, request, user_id = dispatch_generation.call_args.args
         self.assertEqual(user_id, "user-1")
-        self.assertIn("Batch topic one", request.model_dump_json())
+        self.assertIn("Batch title one", request.model_dump_json())
         self.assertNotIn("LLM topic", request.model_dump_json())
+        self.assertEqual(request.video_subject, "Batch title one")
         update = dict(store.updates[0][1])
         self.assertEqual(update["status"], "generating")
-        self.assertEqual(update["topic"], "Batch topic one")
+        self.assertEqual(update["title"], "Batch title one")
         self.assertEqual(update["task_id"], task_id)
 
     def test_batch_dispatch_carries_the_video_language(self):
         # The embed's language ('en' in the fixture) must reach the job as
         # video_language: without it the script prompt carries no
         # "- language:" line and the script language is left to the LLM's
-        # fallback (same language as the topic) - a coin toss.
+        # fallback (same language as the title) - a coin toss.
         slot = self._batch_slot()
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
@@ -202,8 +208,13 @@ class BatchScheduleTests(unittest.TestCase):
         request = dispatch_generation.call_args.args[1]
         self.assertEqual(request.video_language, "en-GB")
 
-    def test_generate_batch_slot_without_topic_fails(self):
-        slot = self._batch_slot(topic="   ")
+    def test_generate_slot_without_segments_fails_without_dispatch_or_spend(self):
+        # Phase 4 contract: a slot without a script is skipped by the
+        # generic rule — failed with a segments error surfaced on the
+        # slot, no dispatch, no token spend, no topic-specific branch.
+        slot = self._batch_slot()
+        slot["title"] = "Porto trip"
+        slot["segments"] = None
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
         scheduler = self._scheduler(store)
@@ -217,7 +228,39 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertEqual(enqueued, 0)
         dispatch_generation.assert_not_called()
         self.assertEqual(store.spent, [])
+        self.assertEqual(store.refund_batch_calls, [])
         self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertIn("segments", store.updates[0][1]["error"])
+
+    def test_generate_slot_with_segments_uses_title_as_subject(self):
+        # Phase 4 contract: segments are the script; the title is only
+        # the slot label and the video subject, never a regeneration input.
+        slot = self._batch_slot()
+        slot["title"] = "Porto trip"
+        slot["segments"] = [
+            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
+            {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
+            {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+        ]
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(
+            scheduler.generator, "_dispatch_generation"
+        ) as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(enqueued, 1)
+        dispatch_generation.assert_called_once()
+        task_id, request, user_id = dispatch_generation.call_args.args
+        self.assertEqual(request.video_subject, "Porto trip")
+        self.assertIn("ninety minute line", request.video_script)
+        update = dict(store.updates[0][1])
+        self.assertEqual(update["status"], "generating")
+        self.assertEqual(update["title"], "Porto trip")
+        self.assertEqual(update["task_id"], task_id)
 
     def test_generate_batch_slot_without_persona_fails_slot_without_throwing(self):
         # Regression: a schedule with no persona embed (deleted persona)
@@ -1031,7 +1074,7 @@ class PublishDueTests(unittest.TestCase):
     def _slot(self):
         return {
             "id": "slot-1",
-            "topic": "Tokyo coffee",
+            "title": "Tokyo coffee",
             "task_id": "t-1",
             "schedules": {"user_id": "user-1", "providers": ["youtube"]},
         }
@@ -1238,7 +1281,7 @@ class PublishRetryLimitTests(unittest.TestCase):
     def _slot(self, publish_attempts=0):
         return {
             "id": "slot-1",
-            "topic": "Tokyo coffee",
+            "title": "Tokyo coffee",
             "task_id": "t-1",
             "faceless": True,
             "publish_attempts": publish_attempts,
@@ -1536,11 +1579,16 @@ class NotifyIntegrationTests(unittest.TestCase):
         defaults.update(kwargs)
         return fs.FillScheduleScheduler(**defaults)
 
-    def test_generate_batch_notifies_with_topics(self):
+    def test_generate_batch_notifies_with_titles(self):
         slot = {
             "id": "slot-1",
             "slot_at": "2026-09-07T12:00:00+00:00",
-            "topic": "Batch topic one",
+            "title": "Batch title one",
+            "segments": [
+                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
+                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
+                {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+            ],
             "schedules": {
                 "id": "sched-1",
                                 "user_id": "user-1",
@@ -1559,7 +1607,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
         notify.assert_called_once()
         message = notify.call_args.args[0]
-        self.assertIn("Batch topic one", message)
+        self.assertIn("Batch title one", message)
         self.assertIn("Ana", message)
 
     def test_generate_failure_notifies(self):
@@ -1567,7 +1615,12 @@ class NotifyIntegrationTests(unittest.TestCase):
         slot = {
             "id": "slot-2",
             "slot_at": "2026-09-07T12:00:00+00:00",
-            "topic": "Batch topic",
+            "title": "Batch title",
+            "segments": [
+                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
+                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
+                {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+            ],
             "schedules": {
                 "id": "sched-2",
                                 "user_id": "user-1",
@@ -1597,7 +1650,12 @@ class NotifyIntegrationTests(unittest.TestCase):
         slot = {
             "id": "slot-3",
             "slot_at": "2026-09-07T12:00:00+00:00",
-            "topic": "Batch topic",
+            "title": "Batch title",
+            "segments": [
+                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
+                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
+                {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+            ],
             "schedules": {
                 "id": "sched-3",
                                 "user_id": "user-1",
@@ -1615,7 +1673,7 @@ class NotifyIntegrationTests(unittest.TestCase):
         self.assertIn("❌", message)
         self.assertIn("provider", message)
 
-    def test_publish_success_notifies_persona_topic_providers(self):
+    def test_publish_success_notifies_persona_title_providers(self):
         handle, video_path = tempfile.mkstemp(suffix=".mp4")
         with os.fdopen(handle, "wb") as video_file:
             video_file.write(b"fake-video-bytes")
@@ -1623,7 +1681,7 @@ class NotifyIntegrationTests(unittest.TestCase):
 
         slot = {
             "id": "slot-1",
-            "topic": "Tokyo coffee",
+            "title": "Tokyo coffee",
             "task_id": "t-1",
             "schedules": {
                                 "user_id": "user-1",
@@ -1662,7 +1720,7 @@ class NotifyIntegrationTests(unittest.TestCase):
 
         slot = {
             "id": "slot-1",
-            "topic": "Tokyo coffee",
+            "title": "Tokyo coffee",
             "task_id": "t-1",
             "schedules": {
                                 "user_id": "user-1",
@@ -1695,7 +1753,12 @@ class NotifyIntegrationTests(unittest.TestCase):
         slot = {
             "id": "slot-1",
             "slot_at": "2026-09-07T12:00:00+00:00",
-            "topic": "Batch topic",
+            "title": "Batch title",
+            "segments": [
+                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
+                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
+                {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+            ],
             "schedules": {
                 "id": "sched-1",
                                 "user_id": "user-1",
@@ -1744,7 +1807,7 @@ class CoverageGapTests(unittest.TestCase):
     def _slot(self):
         return {
             "id": "slot-1",
-            "topic": "Tokyo coffee",
+            "title": "Tokyo coffee",
             "task_id": "t-1",
             "schedules": {
                                 "user_id": "user-1",
@@ -1870,7 +1933,7 @@ class CoverageGapTests(unittest.TestCase):
     def test_due_slot_without_videos_fails(self):
         store = _FakeStore()
         store.ready_due_slots = lambda now: [
-            {"id": "slot-x", "topic": "T", "task_id": "t-1", "schedules": {"user_id": "u1", "providers": []}}
+            {"id": "slot-x", "title": "T", "task_id": "t-1", "schedules": {"user_id": "u1", "providers": []}}
         ]
         state = MagicMock()
         state.get_task.return_value = {"state": 1, "videos": []}
@@ -1966,7 +2029,7 @@ class CoverageGapTests(unittest.TestCase):
 
     def test_metadata_for_unsupported_provider_raises(self):
         with self.assertRaises(RuntimeError) as ctx:
-            fs.metadata_for("tiktok", "topic", {})
+            fs.metadata_for("tiktok", "title", {})
         self.assertIn("unsupported schedule provider", str(ctx.exception))
 
     # -- _validate_publish_plan with bluesky+linkedin (full path) ----------------
@@ -1979,7 +2042,7 @@ class CoverageGapTests(unittest.TestCase):
             "linkedin_account_ids": ["urn:li:person:1"],
         }
         # does not raise
-        fs.validate_publish_plan(schedule, "topic")
+        fs.validate_publish_plan(schedule, "title")
 
     def test_validate_publish_plan_rejects_bluesky_without_accounts(self):
         with self.assertRaises(ValueError) as ctx:
@@ -2349,7 +2412,12 @@ class CoverageGapTests(unittest.TestCase):
         slot = {
             "id": "slot-1",
             "slot_at": "2026-09-07T12:00:00+00:00",
-            "topic": "Batch topic",
+            "title": "Batch title",
+            "segments": [
+                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
+                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
+                {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+            ],
             "schedules": {
                 "id": "sched-1",
                                 "user_id": "user-1",
@@ -2478,11 +2546,16 @@ class BatchDispatchTests(unittest.TestCase):
     horizon. Slots beyond the horizon are not dispatched.
     """
 
-    def _batch_slot(self, topic="Batch topic one"):
+    def _batch_slot(self, title="Batch title one"):
         return {
             "id": "slot-batch-1",
             "slot_at": "2026-09-08T09:00:00+00:00",
-            "topic": topic,
+            "title": title,
+            "segments": [
+            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
+            {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
+            {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+        ],
             "schedules": {
                 "id": "sched-batch-1",
                 "user_id": "user-1",

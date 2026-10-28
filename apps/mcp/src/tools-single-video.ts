@@ -1,6 +1,6 @@
-// Singular MCP-first tools (Phase 1): generate_persona_video and
-// validate_script. The batch tool generate_persona_videos is NOT removed
-// here; it is deprecated later, after the singular tool has proven itself.
+// Singular MCP-first tools: generate_persona_video and validate_script.
+// The batch tool was removed in Phase 4: one call
+// is one video, with a title and a complete segments script.
 // Validation runs mechanically before the client call, so a rejected script
 // never reaches the web route and never debits tokens. validate_script
 // then calls POST /api/videos/validate-script, which re-runs the same
@@ -125,9 +125,9 @@ export async function handleGeneratePersonaVideo(
     // sets one, or the top-level value is silently dropped.
     const language = args.options?.language ?? args.language;
     const narrowed = narrowScheduledVideos(
-      await client.generatePersonaVideos({
+      await client.generatePersonaVideo({
         personaId: args.personaId,
-        topics: [args.title],
+        title: args.title,
         providers: args.providers,
         youtubeAccountIds: args.youtubeAccountIds,
         instagramAccountIds: args.instagramAccountIds,
@@ -152,7 +152,7 @@ export async function handleGeneratePersonaVideo(
         : `Scheduled 1 video in schedule ${scheduleId}: it is generated and auto-published at its slot.`;
     const slotLines = narrowed.slots.map(
       (slot, i) =>
-        `${i + 1}. ${slot.topic ?? '(untitled)'} → ${slot.slotAt ?? '(unscheduled)'} [${slot.status ?? 'unknown'}${slot.taskId ? `, task ${slot.taskId}` : ''}]`,
+        `${i + 1}. ${slot.title ?? '(untitled)'} → ${slot.slotAt ?? '(unscheduled)'} [${slot.status ?? 'unknown'}${slot.taskId ? `, task ${slot.taskId}` : ''}]`,
     );
     return {
       content: [
@@ -169,7 +169,7 @@ export async function handleGeneratePersonaVideo(
 
 function narrowScheduledVideos(result: unknown): {
   schedule: { id: string | null; mode: string | null };
-  slots: Array<{ slotId: string | null; slotAt: string | null; topic: string | null; taskId: string | null; status: string | null }>;
+  slots: Array<{ slotId: string | null; slotAt: string | null; title: string | null; taskId: string | null; status: string | null }>;
   replayed: boolean | null;
 } {
   const record = typeof result === 'object' && result !== null ? (result as Record<string, unknown>) : {};
@@ -180,7 +180,7 @@ function narrowScheduledVideos(result: unknown): {
     schedule: { id: str(schedule.id), mode: str(schedule.mode) },
     slots: rawSlots.map((slot) => {
       const s = typeof slot === 'object' && slot !== null ? (slot as Record<string, unknown>) : {};
-      return { slotId: str(s.slotId), slotAt: str(s.slotAt), topic: str(s.topic), taskId: str(s.taskId), status: str(s.status) };
+      return { slotId: str(s.slotId), slotAt: str(s.slotAt), title: str(s.title), taskId: str(s.taskId), status: str(s.status) };
     }),
     replayed: typeof record.replayed === 'boolean' ? record.replayed : null,
   };

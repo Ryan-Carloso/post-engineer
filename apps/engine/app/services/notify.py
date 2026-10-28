@@ -228,22 +228,22 @@ def scheduler_started_msg() -> str:
     return "🗓️ Fill schedule scheduler started"
 
 
-def generation_batch_msg(count: int, topics: list[str]) -> str:
-    listing = "\n".join(f"  • {_clip(topic, 120)}" for topic in topics) if topics else "  (none)"
+def generation_batch_msg(count: int, titles: list[str]) -> str:
+    listing = "\n".join(f"  • {_clip(title, 120)}" for title in titles) if titles else "  (none)"
     return _clip(f"🎬 Generation batch: {count} video(s) started\n{listing}", DISCORD_MAX_CONTENT)
 
 
-def slot_published_msg(persona: str, topic: str, providers: list[str]) -> str:
+def slot_published_msg(persona: str, title: str, providers: list[str]) -> str:
     return _clip(
-        f"✅ Post published — persona: {_clip(persona, 100)} | topic: {_clip(topic, 150)} | providers: {', '.join(providers)}",
+        f"✅ Post published — persona: {_clip(persona, 100)} | title: {_clip(title, 150)} | providers: {', '.join(providers)}",
         DISCORD_MAX_CONTENT,
     )
 
 
-def slot_failed_msg(persona: str, topic: str, reason: str) -> str:
-    topic_part = f"topic: {_clip(topic, 150)} | " if topic else ""
+def slot_failed_msg(persona: str, title: str, reason: str) -> str:
+    title_part = f"title: {_clip(title, 150)} | " if title else ""
     return _clip(
-        f"❌ Slot failed — persona: {_clip(persona, 100)} | {topic_part}reason: {_clip(reason, 300)}",
+        f"❌ Slot failed — persona: {_clip(persona, 100)} | {title_part}reason: {_clip(reason, 300)}",
         DISCORD_MAX_CONTENT,
     )
 

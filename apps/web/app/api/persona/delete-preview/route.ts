@@ -280,7 +280,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
   let linksIncomplete = false;
   const videos: Array<{
     taskId: string | null;
-    topic: string | null;
+    title: string | null;
     status: string;
     downloadUrl: string | null;
   }> = [];
@@ -302,7 +302,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
     }
     videos.push({
       taskId: gen.engine_task_id,
-      topic: gen.video_subject,
+      title: gen.video_subject,
       status: gen.status,
       downloadUrl,
     });

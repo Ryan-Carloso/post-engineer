@@ -11,11 +11,11 @@ import { computeVideoTokens, type FaceQuality } from '@/lib/tokens';
 
 //---------------
 // /api/schedule — read and cancel the automatic fill-schedule timetables.
-// Schedules are created by POST /api/videos/generate-and-schedule (the web
-// form and the MCP generate_persona_videos tool); this route only lists
-// them (GET) and cancels one (DELETE, used by the MCP cancel_schedule
-// tool). There is no edit verb. Cancel deletes every unpublished slot
-// (pending, generating, ready) before the schedule row: generate-and-schedule
+// Schedules are created by POST /api/videos/generate-and-schedule (the
+// singular MCP generate_persona_video tool or the web API directly);
+// this route only lists them (GET) and cancels one (DELETE, used by the
+// MCP cancel_schedule tool). There is no edit verb. Cancel deletes every
+// unpublished slot (pending, generating, ready) before the schedule row: generate-and-schedule
 // dispatches those slots immediately, and the publisher posts from the slot
 // row, so deleting only the schedule would leave a post that still goes out.
 // Prepaid tokens for the removed slots are refunded. A soft refund failure
@@ -24,7 +24,7 @@ import { computeVideoTokens, type FaceQuality } from '@/lib/tokens';
 //
 // One schedule is one generate-and-schedule batch. The engine
 // (fill-schedule-scheduler thread, starts with the app) reads these tables
-// via the service role and does the rest: LLM topic, video generation, and
+// via the service role and does the rest: LLM script, video generation, and
 // publishing at each slot's time via /api/upload-content.
 //---------------
 

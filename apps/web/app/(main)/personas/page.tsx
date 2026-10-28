@@ -167,7 +167,7 @@ const PersonaCard = ({
         aria-label={t('personas.details')}
         className="flex min-w-0 flex-1 items-center gap-4"
       >
-        {/* Avatar compartilhado com o seletor de /posts/new (mesmo
+        {/* Avatar compartilhado com o seletor de criação de posts (mesmo
             fallback, mesmo anel) — duas cópias do bloco divergem. */}
         <PersonaAvatar
           avatarUrl={persona.avatarUrl}

@@ -12,9 +12,8 @@ describe('buildSlotRows', () => {
     const rows = buildSlotRows({
       slots: [
         { slotAtISO: '2026-09-08T09:00:00.000Z', dayIndex: 0, timeIndex: 0 },
-        { slotAtISO: '2026-09-09T09:00:00.000Z', dayIndex: 1, timeIndex: 0 },
       ],
-      topics: ['Porto walks', 'Porto food'],
+      title: 'Porto walks',
       scheduleId: 'sched-1',
       userId: 'user-1',
       faceless: true,
@@ -25,13 +24,13 @@ describe('buildSlotRows', () => {
         { kind: 'cta', text: 'Follow for more.' },
       ],
     });
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(1);
     expect(rows[0]).toEqual({
       schedule_id: 'sched-1',
       user_id: 'user-1',
       slot_at: '2026-09-08T09:00:00.000Z',
       status: 'pending',
-      topic: 'Porto walks',
+      title: 'Porto walks',
       faceless: true,
       faceless_material: 'svg',
       segments: [
@@ -40,13 +39,12 @@ describe('buildSlotRows', () => {
         { kind: 'cta', text: 'Follow for more.' },
       ],
     });
-    expect(rows[1]?.topic).toBe('Porto food');
   });
 
   it('stores null segments when the request carries none', () => {
     const rows = buildSlotRows({
       slots: [{ slotAtISO: '2026-09-08T09:00:00.000Z', dayIndex: 0, timeIndex: 0 }],
-      topics: ['Porto walks'],
+      title: 'Porto walks',
       scheduleId: 'sched-1',
       userId: 'user-1',
       faceless: false,

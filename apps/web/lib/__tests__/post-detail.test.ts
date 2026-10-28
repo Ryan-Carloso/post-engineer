@@ -63,7 +63,7 @@ const SLOT_ROW = {
   schedule_id: 'sched-1',
   slot_at: '2026-10-18T10:00:00.000Z',
   status: 'generating',
-  topic: 'myth busting',
+  title: 'myth busting',
   error: null,
   published_at: null,
   task_id: 'task-1',
@@ -120,7 +120,7 @@ describe('getSlotPost', () => {
     // Pin the query shape: the select column list is load-bearing for the
     // camelCase mapping below.
     expect(chains['scheduled_posts'].select).toHaveBeenCalledWith(
-      'id, schedule_id, slot_at, status, topic, error, published_at, task_id, faceless, faceless_material'
+      'id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, faceless_material'
     );
     expect(chains['schedules'].select).toHaveBeenCalledWith(
       'id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode'

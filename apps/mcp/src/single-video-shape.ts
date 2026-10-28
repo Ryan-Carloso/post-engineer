@@ -4,7 +4,7 @@
 // calls using the handlers in tools-single-video.ts.
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
-import { GeneratePersonaVideosOptionsShape } from './schedule-shapes.js';
+import { GeneratePersonaVideoOptionsShape } from './schedule-shapes.js';
 
 export const ScriptSegmentShape = {
   kind: z.enum(['hook', 'body', 'cta']).describe('Segment role: hook first, body in the middle, CTA last. Exactly one hook and one CTA.'),
@@ -28,7 +28,7 @@ export const GeneratePersonaVideoShape = {
     .min(1, 'Provide at least one segment')
     .max(12, 'At most 12 segments per video')
     .describe('The complete script as segments: first hook, then body segments, last CTA. Total 60-200 words, body at least 30, CTA 5-20, hook 15-40 words before TTS. The hook must end with terminal punctuation. No LLM expands this script.'),
-  title: z.string().min(1, 'title must be a non-empty string').describe('Video title; also the single topic sent to the web route (one call is one video).'),
+  title: z.string().min(1, 'title must be a non-empty string').describe('Video title: the slot label sent to the web route (one call is one video).'),
   language: z
     .string()
     .min(1)
@@ -61,7 +61,7 @@ export const GeneratePersonaVideoShape = {
     .optional()
     .describe('Daily publish times in HH:MM 24-hour format. Required unless mode is \'asap\'.'),
   timezone: z.string().min(1).default('UTC').describe('IANA timezone for a naive startAt and the HH:MM times, e.g. "Europe/Lisbon". Defaults to UTC.'),
-  options: z.object(GeneratePersonaVideosOptionsShape).optional().describe('Generation options applied to this video.'),
+  options: z.object(GeneratePersonaVideoOptionsShape).optional().describe('Generation options applied to this video.'),
   idempotencyKey: z.string().min(1).optional().describe('Idempotency key: retrying the call with the same key returns the original schedule (replayed: true) instead of generating again.'),
 };
 

@@ -65,7 +65,7 @@ const UPCOMING_SLOT = {
   scheduleId: 's1',
   slotAt: '2030-06-01T10:00:00.000Z',
   status: 'awaiting',
-  topic: 'Upcoming topic',
+  title: 'Upcoming topic',
   error: null,
   publishedAt: null,
 };
@@ -75,7 +75,7 @@ const PUBLISHED_SLOT = {
   scheduleId: 's1',
   slotAt: '2020-01-01T10:00:00.000Z',
   status: 'published',
-  topic: 'Past topic',
+  title: 'Past topic',
   error: null,
   publishedAt: '2020-01-01T10:05:00.000Z',
   taskId: 'task-9',
@@ -86,7 +86,7 @@ const FAILED_SLOT = {
   scheduleId: 's1',
   slotAt: '2020-01-02T10:00:00.000Z',
   status: 'failed',
-  topic: 'Failed topic',
+  title: 'Failed topic',
   error: 'Upload failed',
   publishedAt: null,
 };
@@ -145,7 +145,7 @@ beforeEach(() => {
 });
 
 describe('PostsPage', () => {
-  it('shows upcoming posts by default with persona, topic, status and account avatars', () => {
+  it('shows upcoming posts by default with persona, title, status and account avatars', () => {
     render(<PostsPage />);
 
     expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
@@ -168,14 +168,6 @@ describe('PostsPage', () => {
     expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
     expect(screen.getByText('posts.noPersona')).toBeInTheDocument();
     expect(screen.queryByText('posts.personaFallback')).not.toBeInTheDocument();
-  });
-
-  // The primary CTA must open the create-post screen, not the persona list:
-  // a post is a video + publishing slot, a persona is its face/voice.
-  it('links the new-post CTA to /posts/new', () => {
-    render(<PostsPage />);
-
-    expect(screen.getByRole('link', { name: 'posts.newPost' })).toHaveAttribute('href', '/posts/new');
   });
 
   it('renders the network icon at the card top and initial avatars in the footer', () => {
@@ -552,7 +544,7 @@ describe('PostsPage card progress', () => {
     scheduleId: 's1',
     slotAt: '2030-06-01T10:00:00.000Z',
     status: 'generating',
-    topic: 'Generating topic',
+    title: 'Generating topic',
     error: null,
     publishedAt: null,
     taskId: 'task-42',
@@ -565,7 +557,7 @@ describe('PostsPage card progress', () => {
     scheduleId: 's1',
     slotAt: '2030-06-02T10:00:00.000Z',
     status: 'awaiting',
-    topic: 'Awaiting topic',
+    title: 'Awaiting topic',
     error: null,
     publishedAt: null,
     taskId: null,
@@ -655,7 +647,7 @@ describe('PostsPage fallbacks', () => {
 
     await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
     expect(screen.getByText('posts.personaFallback')).toBeInTheDocument();
-    expect(screen.getAllByText('posts.unknownTopic').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('posts.unknownTitle').length).toBeGreaterThanOrEqual(1);
   });
 
   it('prefers publishedAt for history slots but falls back to slotAt', async () => {
@@ -665,14 +657,14 @@ describe('PostsPage fallbacks', () => {
       id: 'r3',
       slotAt: '2020-03-10T10:00:00.000Z',
       publishedAt: '2020-05-20T10:00:00.000Z',
-      topic: 'Dated topic',
+      title: 'Dated topic',
     };
     const withoutPublishedAt = {
       ...PUBLISHED_SLOT,
       id: 'r4',
       slotAt: '2020-03-10T10:00:00.000Z',
       publishedAt: null,
-      topic: 'Undated topic',
+      title: 'Undated topic',
     };
     mockQueries({ upcoming: [], recent: [withPublishedAt, withoutPublishedAt] });
     render(<PostsPage />);
@@ -706,7 +698,7 @@ describe('PostsPage fallbacks', () => {
       ...UPCOMING_SLOT,
       id: 'u7',
       status: 'ready',
-      topic: 'Ready topic',
+      title: 'Ready topic',
       progress: 71,
       taskId: 'task-7',
     };
@@ -714,7 +706,7 @@ describe('PostsPage fallbacks', () => {
       ...UPCOMING_SLOT,
       id: 'u8',
       status: 'publishing',
-      topic: 'Publishing topic',
+      title: 'Publishing topic',
       progress: 88,
       taskId: 'task-8',
     };

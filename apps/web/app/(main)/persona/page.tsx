@@ -234,7 +234,7 @@ const PersonaHeader = ({ editing }: { editing: boolean }) => {
 //---------------
 // PersonaAvatarSection — visual identity choice: AI-generated or photo
 // upload. Always rendered (every persona has a face); "no face" is a
-// per-post choice (NewPostFaceField on /posts/new).
+// per-post choice (set on the post at creation, via MCP).
 //---------------
 const PersonaAvatarSection = () => {
   const [source, setSource] = useState<'characters' | 'upload'>('characters');

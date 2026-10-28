@@ -20,7 +20,6 @@ import {
   ListPostsShape,
   CancelScheduleShape,
   GetTokenBalanceShape,
-  GeneratePersonaVideosShape,
   GetVideoStatusShape,
   GetVideoTaskProgressShape,
   ListPersonaImagesShape,
@@ -28,7 +27,7 @@ import {
   UpdatePersonaImageShape,
   RemovePersonaImageShape,
   GetSlotShape,
-  UpdateSlotTopicShape,
+  UpdateSlotTitleShape,
   DeleteSlotShape,
   ListVideoGenerationsShape,
   GetVideoGenerationShape,
@@ -78,7 +77,7 @@ const EXPECTED_TOOLS = [
   'list_posts',
   'cancel_schedule',
   'get_slot',
-  'update_slot_topic',
+  'update_slot_title',
   'delete_slot',
   'list_video_generations',
   'get_video_generation',
@@ -90,7 +89,6 @@ const EXPECTED_TOOLS = [
   'delete_persona',
   'disconnect_account',
   'get_token_balance',
-  'generate_persona_videos',
   'generate_persona_video',
   'validate_script',
   'upload_media',
@@ -224,7 +222,7 @@ describe('registered tool schemas (single source of truth)', () => {
       list_posts: ListPostsShape,
       cancel_schedule: CancelScheduleShape,
       get_slot: GetSlotShape,
-      update_slot_topic: UpdateSlotTopicShape,
+      update_slot_title: UpdateSlotTitleShape,
       delete_slot: DeleteSlotShape,
       list_video_generations: ListVideoGenerationsShape,
       get_video_generation: GetVideoGenerationShape,
@@ -236,7 +234,6 @@ describe('registered tool schemas (single source of truth)', () => {
       delete_persona: DeletePersonaShape,
       disconnect_account: DisconnectAccountShape,
       get_token_balance: GetTokenBalanceShape,
-      generate_persona_videos: GeneratePersonaVideosShape,
       generate_persona_video: GeneratePersonaVideoShape,
       validate_script: ValidateScriptShape,
       upload_media: UploadMediaShape,
@@ -336,7 +333,7 @@ describe('new tool registrations run their handlers', () => {
   // through the in-memory transport so the wrappers stay covered.
   const mockClient = {
     getSlot: vi.fn(),
-    updateSlotTopic: vi.fn(),
+    updateSlotTitle: vi.fn(),
     deleteSlot: vi.fn(),
     listVideoGenerations: vi.fn(),
     getVideoGeneration: vi.fn(),
@@ -381,12 +378,12 @@ describe('new tool registrations run their handlers', () => {
     });
   });
 
-  it('calls through update_slot_topic', async () => {
+  it('calls through update_slot_title', async () => {
     await callNewTool(
-      'update_slot_topic',
-      { slotId: 's1', topic: 'T' },
-      vi.mocked(mockClient.updateSlotTopic),
-      { topic: 'T' }
+      'update_slot_title',
+      { slotId: 's1', title: 'T' },
+      vi.mocked(mockClient.updateSlotTitle),
+      { title: 'T' }
     );
   });
 

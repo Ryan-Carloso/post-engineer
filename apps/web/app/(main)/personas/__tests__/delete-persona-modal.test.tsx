@@ -36,8 +36,8 @@ const PREVIEW = {
   persona: { id: 'persona-1', name: 'Ryan' },
   counts: { schedules: 2, upcomingSlots: 3, publishedSlots: 0, failedSlots: 0, generatedVideos: 2, personaImages: 1 },
   videos: [
-    { taskId: 'task-aaa', topic: 'Topic one', status: 'completed', downloadUrl: '/dl/task-aaa/f.mp4' },
-    { taskId: 'task-bbb', topic: 'Topic two', status: 'failed', downloadUrl: null },
+    { taskId: 'task-aaa', title: 'Topic one', status: 'completed', downloadUrl: '/dl/task-aaa/f.mp4' },
+    { taskId: 'task-bbb', title: 'Topic two', status: 'failed', downloadUrl: null },
   ],
 };
 

@@ -163,9 +163,9 @@ export async function fetchEnginePublishResults(
 }
 
 //---------------
-// fetchEngineScriptAngle — the angle the engine picked for the topic before
+// fetchEngineScriptAngle — the angle the engine picked for the video subject before
 // scripting (task record `script_angle`). Null when the engine recorded none
-// (angle generation fell back to the bare topic, or the task predates it).
+// (angle generation fell back to the bare subject, or the task predates it).
 //
 // Throws on the same conditions as fetchEngineTaskProgress (unsafe id,
 // unconfigured engine, failed lookup) — the caller decides the fallback.
@@ -181,7 +181,7 @@ export async function fetchEngineScriptAngle(
 //---------------
 // scriptAngleFromTask — the angle on a raw task record: the trimmed string,
 // or null when absent, not a string, or blank (angle generation fell back
-// to the bare topic). The one parsing every task-record reader shares.
+// to the bare subject). The one parsing every task-record reader shares.
 //---------------
 function scriptAngleFromTask(task: Record<string, unknown>): string | null {
   const angle = task.script_angle;

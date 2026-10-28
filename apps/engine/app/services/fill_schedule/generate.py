@@ -1,4 +1,4 @@
-"""Video generation dispatch: pending batch slots (parallel) to the video pipeline."""
+"""Video generation dispatch: pending slots (parallel) to the video pipeline."""
 
 from __future__ import annotations
 
@@ -45,9 +45,11 @@ def new_task_id(slot: dict[str, Any]) -> str:
 class BatchGenerator:
     """Starts video generation for pending batch slots.
 
-    Batch slots are user-requested and prepaid at request time
+    Slots are user-requested and prepaid at request time
     (``batch:{scheduleId}``): they always generate, using the slot's
-    stored topic with no LLM call and no token spend.
+    stored script segments with no LLM call and no token spend. A slot
+    without segments has no script: it fails loudly with no dispatch,
+    no token spend and no refund (it never reached dispatch).
     """
 
     def __init__(
@@ -63,17 +65,17 @@ class BatchGenerator:
     def run(self, now: datetime) -> int:
         """Dispatch generation for pending slots. Returns enqueued count."""
         enqueued = 0
-        enqueued_topics: list[str] = []
+        enqueued_titles: list[str] = []
 
-        # Batch slots: parallel dispatch within the generation horizon.
+        # Pending slots: parallel dispatch within the generation horizon.
         for slot in self.store.pending_slots(now):
             label = self._generate_slot(slot)
             if label is not None:
                 enqueued += 1
-                enqueued_topics.append(label)
+                enqueued_titles.append(label)
 
         if enqueued:
-            notify_safe(self.notify, notify_module.generation_batch_msg(enqueued, enqueued_topics))
+            notify_safe(self.notify, notify_module.generation_batch_msg(enqueued, enqueued_titles))
         return enqueued
 
     def _generate_slot(self, slot: dict[str, Any]) -> str | None:
@@ -89,15 +91,18 @@ class BatchGenerator:
             # the whole generate stage every tick. A persona-less schedule
             # resolves from its own snapshot columns here.
             identity = post_identity(schedule)
-            # Topics are stored at creation; there is no LLM fallback,
-            # so an empty topic fails the slot loudly.
-            topic = str(slot.get("topic") or "").strip()
-            if not topic:
-                raise RuntimeError("Batch slot has no topic")
+            # Segments are the script, stored at creation; there is no LLM
+            # fallback, so a slot without segments has no script and fails
+            # loudly here — before dispatch, so nothing is spent and
+            # nothing needs refunding.
+            title = str(slot.get("title") or "").strip()
+            segments = slot.get("segments")
+            if not segments:
+                raise RuntimeError("Slot has no script segments")
             # Pre-flight before anything about the job itself: a slot that
             # could never publish is the more fundamental failure, and this
             # check is free.
-            validate_publish_plan(schedule, topic)
+            validate_publish_plan(schedule, title)
             # `PersonaParams` requires exactly one of voice_id / voice_audio_url,
             # so a schedule that resolves no voice can never generate. Checked
             # before the dispatch: failing the slot now gives a readable reason
@@ -107,7 +112,7 @@ class BatchGenerator:
             voice_for(identity)
             faceless = slot_faceless(slot)
             request = TaskVideoRequest(
-                video_subject=topic,
+                video_subject=title,
                 persona=build_persona_params(identity, self.store, faceless),
                 video_aspect=identity.get("video_aspect") or "9:16",
                 # Layout resolves through post_identity() like every other
@@ -122,20 +127,19 @@ class BatchGenerator:
                 # Segments (scheduled_posts, migration 030), forwarded exactly
                 # like the web's direct dispatch does. Without this, a
                 # requeued slot (engine restart mid-generation) or a
-                # tick-dispatched pending slot regenerates from the topic
-                # alone: the script differs and every user photo disappears
-                # with no warning. A row without segments (NULL) behaves
-                # exactly as before; the TaskVideoRequest validator joins
-                # them into video_script and rejects a malformed row, so a
-                # corrupt row fails the slot loudly instead of rendering a
-                # different video.
-                segments=slot.get("segments"),
+                # tick-dispatched pending slot would regenerate a script
+                # from the title alone: the script differs and every user
+                # photo disappears with no warning. The TaskVideoRequest
+                # validator joins them into video_script and rejects a
+                # malformed row, so a corrupt row fails the slot loudly
+                # instead of rendering a different video.
+                segments=segments,
                 video_script_prompt=identity.get("script_prompt") or "",
                 video_cta=identity.get("cta_text") or "",
                 # Snapshot (post_language) already resolved by post_identity();
                 # without this the prompt carries no "- language:" line and
                 # the script language falls back to the LLM's guess from the
-                # topic (DEFAULT_SCRIPT_SYSTEM_PROMPT rule 7).
+                # title (DEFAULT_SCRIPT_SYSTEM_PROMPT rule 7).
                 video_language=str(identity.get("language") or ""),
                 paragraph_number=(
                     int(identity["paragraph_number"])
@@ -204,9 +208,9 @@ class BatchGenerator:
                     )
                 raise
             self.store.update_slot(
-                slot["id"], status=SLOT_GENERATING, topic=topic, task_id=task_id
+                slot["id"], status=SLOT_GENERATING, title=title, task_id=task_id
             )
-            return f"{identity.get('name', 'Persona')}: {topic}"
+            return f"{identity.get('name', 'Persona')}: {title}"
         except Exception as exc:
             # A failed slot is a real recurring error: log at ERROR so the
             # PostHog bridge (loguru sink, ERROR+) forwards it, scrubbed.
@@ -222,7 +226,7 @@ class BatchGenerator:
                 slot["id"], status=SLOT_FAILED, error=scrub_secret_values(str(exc))[:500]
             )
             # Funnel note: slot failures raised before task creation (deleted
-            # persona, empty topic, missing user_id) intentionally have no
+            # persona, scriptless slot, missing user_id) intentionally have no
             # matching video_generation_requested — they are scheduling/data
             # errors, not generation failures, so they sit outside the
             # requested -> failed task funnel by design.

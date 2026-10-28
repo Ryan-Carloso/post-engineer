@@ -8,7 +8,7 @@
 //      caller, not here). An unknown id selects nothing (null) — silently
 //      substituting another face would put a photo in the video the user
 //      didn't pick.
-//   2. Keyword overlap between the video context (topic/niche/script) and the
+//   2. Keyword overlap between the video context (title/niche/script) and the
 //      image tag + description, excluding recently used images.
 //   3. Primary image (or first) when nothing matches.
 //
@@ -60,7 +60,7 @@ export interface PersonaLibraryImage {
 }
 
 export interface ImageSelectionInput {
-  topic?: string | null;
+  title?: string | null;
   niche?: string | null;
   script?: string | null;
   imageId?: string | null;
@@ -70,7 +70,7 @@ function tokenize(text: string): Set<string> {
   // Unicode-aware: personas may be created in non-Latin scripts (Cyrillic,
   // Greek, CJK). A Latin-only class would silently degrade scoring to
   // primary/first for those personas.
-  // Note: CJK text has no word separators, so an entire topic becomes one
+  // Note: CJK text has no word separators, so an entire title becomes one
   // token and rarely matches a tag/description token exactly — scoring
   // degrades to primary/first for those users.
   const words = text
@@ -110,7 +110,7 @@ export function selectPersonaImage(
 
   const recent = new Set(recentIds);
   const keywords = tokenize(
-    [input.topic, input.niche, input.script].filter(Boolean).join(' '),
+    [input.title, input.niche, input.script].filter(Boolean).join(' '),
   );
 
   const eligible = images.filter((image) => !recent.has(image.id));

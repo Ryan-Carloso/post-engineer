@@ -26,4 +26,4 @@ PUBLISH_RETRY_DELAY_SECONDS = (30, 120, 600)
 
 # Unified generate+schedule batches (POST /api/videos/generate-and-schedule):
 # finite, user-requested, prepaid at request time. Their slots carry the
-# topic chosen by the user.
+# title chosen by the user.

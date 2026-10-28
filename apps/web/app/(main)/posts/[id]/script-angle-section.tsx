@@ -3,7 +3,7 @@
 import { useI18n } from '@/lib/i18n/provider';
 
 //---------------
-// ScriptAngleSection — the specific angle the engine turned the topic into
+// ScriptAngleSection — the specific angle the engine turned the video subject into
 // before scripting. Read-only; renders nothing when no angle was recorded.
 //---------------
 export const ScriptAngleSection = ({ angle }: { angle: string | null }) => {

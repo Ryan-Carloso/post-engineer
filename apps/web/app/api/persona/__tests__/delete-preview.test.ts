@@ -215,12 +215,12 @@ describe('GET /api/persona/delete-preview', () => {
       new Request(`http://localhost/api/persona/delete-preview?personaId=${PERSONA_ID}`),
     );
     const body = (await res.json()) as {
-      videos: Array<{ taskId: string; topic: string; status: string; downloadUrl: string | null }>;
+      videos: Array<{ taskId: string; title: string; status: string; downloadUrl: string | null }>;
     };
     expect(body.videos).toHaveLength(2);
     expect(body.videos[0]).toMatchObject({
       taskId: 'task-aaa',
-      topic: 'Topic one',
+      title: 'Topic one',
       status: 'completed',
       downloadUrl: '/api/persona/video-download/task-aaa/final.mp4',
     });

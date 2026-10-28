@@ -6,7 +6,6 @@ import {
   handleAddPersonaImage,
   handleUpdatePersonaImage,
   handleRemovePersonaImage,
-  handleGeneratePersonaVideos,
   handleListVoices,
   handleListFaces,
   handleUpdatePersona,
@@ -19,7 +18,6 @@ import {
   ListPostsSchema,
   CreatePersonaSchema,
   UpdatePersonaSchema,
-  GeneratePersonaVideosSchema,
   ListPersonaImagesSchema,
   AddPersonaImageSchema,
   UpdatePersonaImageSchema,
@@ -43,7 +41,6 @@ describe('MCP Tool Handlers', () => {
   const mockClient = {
     createPersona: vi.fn(),
     listPersonas: vi.fn(),
-    generatePersonaVideos: vi.fn(),
     listVoices: vi.fn(),
     listFaces: vi.fn(),
     updatePersona: vi.fn(),
@@ -448,7 +445,7 @@ describe('persona image library tools', () => {
 
   it('CreatePersonaSchema rejects a missing avatarUrl at parse time', () => {
     // avatarUrl is always required: every persona has a face, and "no face"
-    // is a per-video choice (generate_persona_videos options.faceless),
+    // is a per-video choice (generate_persona_video options.faceless),
     // never a persona one. There is no images-specific rule anymore — the
     // missing required field fails the parse on its own.
     expect(() =>
@@ -735,390 +732,6 @@ describe('video task progress tools', () => {
   });
 });
 
-describe('generate_persona_videos tool', () => {
-  const mockClient = {
-    generatePersonaVideos: vi.fn(),
-  } as unknown as PostEngineerClient;
-
-  const baseArgs = {
-    personaId: 'persona-123',
-    topics: ['Launch a SaaS in days', 'Pricing lessons'],
-    providers: ['youtube', 'bluesky'] as ('youtube' | 'bluesky')[],
-    youtubeAccountIds: ['chan-1'],
-    blueskyAccountIds: ['did:plc:abc'],
-    startAt: '2026-10-05T20:00:00',
-    times: ['20:00'],
-    timezone: 'Europe/Lisbon',
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('GeneratePersonaVideosSchema accepts a full valid call', () => {
-    const result = GeneratePersonaVideosSchema.safeParse(baseArgs);
-    expect(result.success).toBe(true);
-  });
-
-  it('GeneratePersonaVideosSchema accepts an omitted personaId (a faceless post)', () => {
-    // Since migration 012 a persona is optional: a faceless post is defined by
-    // options.faceless plus a voice. The empty string is still rejected — it
-    // is a caller bug (half-specified persona), not a way to omit one.
-    const { personaId: _personaId, ...rest } = baseArgs;
-    const withoutPersona = GeneratePersonaVideosSchema.safeParse({
-      ...rest,
-      options: { faceless: true, voiceId: 'calm' },
-    });
-    expect(withoutPersona.success).toBe(true);
-    expect(
-      GeneratePersonaVideosSchema.safeParse({ ...baseArgs, personaId: '' }).success
-    ).toBe(false);
-  });
-
-  it('GeneratePersonaVideosSchema accepts the persona-less identity options', () => {
-    // The rest of what a persona used to supply. Pinned because they are the
-    // only way to define a post without one.
-    const { personaId: _personaId, ...rest } = baseArgs;
-    const result = GeneratePersonaVideosSchema.safeParse({
-      ...rest,
-      options: {
-        faceless: true,
-        voiceId: 'calm',
-        scriptPrompt: 'Be direct.',
-        videoAspect: '16:9',
-        paragraphNumber: 3,
-        language: 'en-US',
-        niche: 'tech',
-      },
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('GeneratePersonaVideosSchema rejects a non-English options.language (English-only launch)', () => {
-    const { personaId: _personaId, ...rest } = baseArgs;
-    const result = GeneratePersonaVideosSchema.safeParse({
-      ...rest,
-      options: { faceless: true, voiceId: 'calm', language: 'pt-BR' },
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.map((issue) => issue.message)).toContain(
-        'Only English videos are supported for now',
-      );
-    }
-  });
-
-  it('GeneratePersonaVideosSchema rejects an out-of-range identity option', () => {
-    // The caps mirror the engine's PersonaParams; catching them at parse
-    // time is what turns an engine-side validation error into a tool error.
-    const { personaId: _personaId, ...rest } = baseArgs;
-    expect(
-      GeneratePersonaVideosSchema.safeParse({
-        ...rest,
-        options: { faceless: true, voiceId: 'calm', paragraphNumber: 11 },
-      }).success
-    ).toBe(false);
-    expect(
-      GeneratePersonaVideosSchema.safeParse({
-        ...rest,
-        options: { faceless: true, voiceId: 'calm', videoAspect: '4:3' },
-      }).success
-    ).toBe(false);
-  });
-
-  it('GeneratePersonaVideosSchema requires topics and providers', () => {
-    const { topics: _topics, ...noTopics } = baseArgs;
-    expect(GeneratePersonaVideosSchema.safeParse(noTopics).success).toBe(false);
-    const { providers: _providers, ...noProviders } = baseArgs;
-    expect(GeneratePersonaVideosSchema.safeParse(noProviders).success).toBe(false);
-  });
-
-  it("GeneratePersonaVideosSchema defaults mode to 'scheduled'", () => {
-    const result = GeneratePersonaVideosSchema.safeParse(baseArgs);
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.mode).toBe('scheduled');
-  });
-
-  it("GeneratePersonaVideosSchema accepts mode 'asap' without startAt/times", () => {
-    // ASAP mode publishes each video the moment generation finishes: no
-    // schedule plan is sent, so startAt and times are simply absent.
-    const { startAt: _startAt, times: _times, ...rest } = baseArgs;
-    const result = GeneratePersonaVideosSchema.safeParse({ ...rest, mode: 'asap' });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.mode).toBe('asap');
-      expect(result.data.startAt).toBeUndefined();
-      expect(result.data.times).toBeUndefined();
-    }
-  });
-
-  it('GeneratePersonaVideosSchema bounds topics to 1-10', () => {
-    expect(
-      GeneratePersonaVideosSchema.safeParse({ ...baseArgs, topics: [] }).success
-    ).toBe(false);
-    expect(
-      GeneratePersonaVideosSchema.safeParse({
-        ...baseArgs,
-        topics: Array.from({ length: 11 }, (_, i) => `topic ${i}`),
-      }).success
-    ).toBe(false);
-    expect(
-      GeneratePersonaVideosSchema.safeParse({
-        ...baseArgs,
-        topics: Array.from({ length: 10 }, (_, i) => `topic ${i}`),
-      }).success
-    ).toBe(true);
-    expect(
-      GeneratePersonaVideosSchema.safeParse({ ...baseArgs, topics: [''] }).success
-    ).toBe(false);
-  });
-
-  it('GeneratePersonaVideosSchema rejects an invalid startAt and non-HH:MM times', () => {
-    expect(
-      GeneratePersonaVideosSchema.safeParse({ ...baseArgs, startAt: 'not-a-date' }).success
-    ).toBe(false);
-    expect(
-      GeneratePersonaVideosSchema.safeParse({ ...baseArgs, times: ['9:30'] }).success
-    ).toBe(false);
-    expect(
-      GeneratePersonaVideosSchema.safeParse({ ...baseArgs, times: ['24:00'] }).success
-    ).toBe(false);
-    expect(
-      GeneratePersonaVideosSchema.safeParse({ ...baseArgs, times: ['09:30', '20:00'] }).success
-    ).toBe(true);
-  });
-
-  it('GeneratePersonaVideosSchema defaults timezone to UTC', () => {
-    const { timezone: _timezone, ...rest } = baseArgs;
-    const result = GeneratePersonaVideosSchema.safeParse(rest);
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.timezone).toBe('UTC');
-  });
-
-  it('GeneratePersonaVideosSchema requires https (loopback http allowed) for audioUrl/webhookUrl', () => {
-    expect(
-      GeneratePersonaVideosSchema.safeParse({
-        ...baseArgs,
-        options: { audioUrl: 'https://cdn.example.com/narracao.mp3' },
-      }).success
-    ).toBe(true);
-    expect(
-      GeneratePersonaVideosSchema.safeParse({
-        ...baseArgs,
-        options: { audioUrl: 'http://cdn.example.com/narracao.mp3' },
-      }).success
-    ).toBe(false);
-    expect(
-      GeneratePersonaVideosSchema.safeParse({
-        ...baseArgs,
-        options: { webhookUrl: 'http://localhost:3000/hook' },
-      }).success
-    ).toBe(true);
-  });
-
-  it('handleGeneratePersonaVideos returns a human summary plus the machine JSON', async () => {
-    vi.mocked(mockClient.generatePersonaVideos).mockResolvedValue({
-      success: true,
-      schedule: { id: 'sched-1' },
-      slots: [
-        {
-          slotId: 'slot-1',
-          slotAt: '2026-10-05T20:00:00Z',
-          topic: 'Launch a SaaS in days',
-          taskId: 'task-1',
-          status: 'generating',
-        },
-        {
-          slotId: 'slot-2',
-          slotAt: '2026-10-06T20:00:00Z',
-          topic: 'Pricing lessons',
-          taskId: 'task-2',
-          status: 'awaiting',
-        },
-      ],
-      replayed: false,
-    });
-
-    const response = await handleGeneratePersonaVideos(
-      mockClient,
-      GeneratePersonaVideosSchema.parse(baseArgs)
-    );
-
-    expect(mockClient.generatePersonaVideos).toHaveBeenCalledWith(
-      expect.objectContaining({
-        personaId: 'persona-123',
-        topics: ['Launch a SaaS in days', 'Pricing lessons'],
-        providers: ['youtube', 'bluesky'],
-        startAt: '2026-10-05T20:00:00',
-        times: ['20:00'],
-        timezone: 'Europe/Lisbon',
-      })
-    );
-    expect(response.isError).toBeUndefined();
-    const text = textOf(response);
-    expect(text).toContain('sched-1');
-    expect(text).toContain('Launch a SaaS in days');
-    expect(text).toContain('task-1');
-    expect(text).toContain('task-2');
-    expect(text).toContain('"replayed": false');
-    expect(text).toContain('"slotId": "slot-1"');
-  });
-
-  it("handleGeneratePersonaVideos fails fast when startAt/times ride along with mode 'asap'", async () => {
-    // A stray schedule plan 400s server-side; the tool names the rule
-    // before the client ever fires.
-    const { startAt: _startAt, times: _times, ...rest } = baseArgs;
-    const withStartAt = await handleGeneratePersonaVideos(
-      mockClient,
-      GeneratePersonaVideosSchema.parse({ ...baseArgs, mode: 'asap' })
-    );
-    expect(withStartAt.isError).toBe(true);
-    expect(textOf(withStartAt)).toMatch(/must not be set/i);
-
-    const withTimes = await handleGeneratePersonaVideos(
-      mockClient,
-      GeneratePersonaVideosSchema.parse({ ...rest, mode: 'asap', times: ['20:00'] })
-    );
-    expect(withTimes.isError).toBe(true);
-    expect(textOf(withTimes)).toMatch(/must not be set/i);
-
-    expect(mockClient.generatePersonaVideos).not.toHaveBeenCalled();
-  });
-
-  it("handleGeneratePersonaVideos fails fast when startAt/times are missing in scheduled mode", async () => {
-    const { startAt: _startAt, times: _times, ...rest } = baseArgs;
-    const response = await handleGeneratePersonaVideos(
-      mockClient,
-      GeneratePersonaVideosSchema.parse(rest)
-    );
-    expect(response.isError).toBe(true);
-    expect(textOf(response)).toMatch(/startAt and times are required/i);
-    expect(mockClient.generatePersonaVideos).not.toHaveBeenCalled();
-  });
-
-  it("handleGeneratePersonaVideos passes mode through and summarizes ASAP publishing", async () => {
-    vi.mocked(mockClient.generatePersonaVideos).mockResolvedValue({
-      success: true,
-      schedule: { id: 'sched-7', mode: 'asap' },
-      slots: [
-        {
-          slotId: 'slot-7',
-          slotAt: '2026-10-09T22:00:00Z',
-          topic: 'Launch a SaaS in days',
-          taskId: 'task-7',
-          status: 'generating',
-        },
-      ],
-      replayed: false,
-    });
-
-    const { startAt: _startAt, times: _times, ...rest } = baseArgs;
-    const response = await handleGeneratePersonaVideos(
-      mockClient,
-      GeneratePersonaVideosSchema.parse({ ...rest, mode: 'asap' })
-    );
-
-    expect(mockClient.generatePersonaVideos).toHaveBeenCalledWith(
-      expect.objectContaining({ mode: 'asap' })
-    );
-    expect(response.isError).toBeUndefined();
-    const text = textOf(response);
-    expect(text).toMatch(/as soon as/i);
-    expect(text).toContain('"mode": "asap"');
-  });
-
-  it('handleGeneratePersonaVideos notes a replayed idempotent schedule', async () => {
-    vi.mocked(mockClient.generatePersonaVideos).mockResolvedValue({
-      success: true,
-      schedule: { id: 'sched-9' },
-      slots: [],
-      replayed: true,
-    });
-
-    const response = await handleGeneratePersonaVideos(
-      mockClient,
-      GeneratePersonaVideosSchema.parse(baseArgs)
-    );
-
-    const text = textOf(response);
-    expect(text).toMatch(/replayed/i);
-    expect(text).toContain('"replayed": true');
-  });
-
-  it('handleGeneratePersonaVideos surfaces the structured API error as JSON (never a bare failure)', async () => {
-    const { ApiError } = await import('../errors.js');
-    vi.mocked(mockClient.generatePersonaVideos).mockRejectedValue(
-      new ApiError(
-        'Failed to generate and schedule videos: 422 Provide at least one video topic.',
-        'TOPICS_REQUIRED',
-        'topics'
-      )
-    );
-
-    const response = await handleGeneratePersonaVideos(
-      mockClient,
-      GeneratePersonaVideosSchema.parse(baseArgs)
-    );
-
-    expect(response.isError).toBe(true);
-    const text = textOf(response);
-    expect(text).toContain('"code":"TOPICS_REQUIRED"');
-    expect(text).toContain('"field":"topics"');
-    expect(text).toContain('Provide at least one video topic.');
-    expect(text).not.toMatch(/Tool execution failed/i);
-  });
-
-  it('handleGeneratePersonaVideos redacts credential-shaped fragments from the API error', async () => {
-    const { ApiError } = await import('../errors.js');
-    vi.mocked(mockClient.generatePersonaVideos).mockRejectedValue(
-      new ApiError(
-        'Failed to generate and schedule videos: 500 engine blew up for Bearer abc123XYZ',
-        'INTERNAL_ERROR',
-        null
-      )
-    );
-
-    const response = await handleGeneratePersonaVideos(
-      mockClient,
-      GeneratePersonaVideosSchema.parse(baseArgs)
-    );
-
-    const text = textOf(response);
-    expect(text).toContain('"code":"INTERNAL_ERROR"');
-    expect(text).toContain('Bearer [redacted]');
-    expect(text).not.toContain('abc123XYZ');
-  });
-
-  it('handleGeneratePersonaVideos surfaces non-API failures as isError', async () => {
-    vi.mocked(mockClient.generatePersonaVideos).mockRejectedValue(new Error('fetch failed'));
-
-    const response = await handleGeneratePersonaVideos(
-      mockClient,
-      GeneratePersonaVideosSchema.parse(baseArgs)
-    );
-
-    expect(response.isError).toBe(true);
-    expect(textOf(response)).toContain('fetch failed');
-  });
-
-  it('handleGeneratePersonaVideos forwards a caller-supplied idempotencyKey', async () => {
-    vi.mocked(mockClient.generatePersonaVideos).mockResolvedValue({
-      success: true,
-      schedule: { id: 'sched-1' },
-      slots: [],
-      replayed: false,
-    });
-
-    await handleGeneratePersonaVideos(
-      mockClient,
-      GeneratePersonaVideosSchema.parse({ ...baseArgs, idempotencyKey: 'key-123' })
-    );
-
-    expect(mockClient.generatePersonaVideos).toHaveBeenCalledWith(
-      expect.objectContaining({ idempotencyKey: 'key-123' })
-    );
-  });
-});
 
 describe('handleLibraryCall message contracts', () => {
   // The error-verb and success-prefix strings are user-facing (surfaced to
@@ -1243,7 +856,7 @@ describe('narrowTaskProgress type narrowing', () => {
 describe('slot tools', () => {
   const mockClient = {
     getSlot: vi.fn(),
-    updateSlotTopic: vi.fn(),
+    updateSlotTitle: vi.fn(),
     deleteSlot: vi.fn(),
   } as unknown as PostEngineerClient;
 
@@ -1258,15 +871,15 @@ describe('slot tools', () => {
     expect(GetSlotSchema.safeParse({}).success).toBe(false);
   });
 
-  it('UpdateSlotTopicSchema requires slotId and a non-empty topic', async () => {
-    const { UpdateSlotTopicSchema } = await import('../tools.js');
+  it('UpdateSlotTitleSchema requires slotId and a non-empty title', async () => {
+    const { UpdateSlotTitleSchema } = await import('../tools.js');
     expect(
-      UpdateSlotTopicSchema.safeParse({ slotId: 'slot-1', topic: 'New' }).success
+      UpdateSlotTitleSchema.safeParse({ slotId: 'slot-1', title: 'New' }).success
     ).toBe(true);
     expect(
-      UpdateSlotTopicSchema.safeParse({ slotId: 'slot-1', topic: '' }).success
+      UpdateSlotTitleSchema.safeParse({ slotId: 'slot-1', title: '' }).success
     ).toBe(false);
-    expect(UpdateSlotTopicSchema.safeParse({ slotId: 'slot-1' }).success).toBe(false);
+    expect(UpdateSlotTitleSchema.safeParse({ slotId: 'slot-1' }).success).toBe(false);
   });
 
   it('handleGetSlot narrows the detail envelope and summarizes', async () => {
@@ -1278,7 +891,7 @@ describe('slot tools', () => {
         scheduleId: 'sched-1',
         slotAt: '2026-10-10T20:00:00Z',
         status: 'awaiting',
-        topic: 'Launch day',
+        title: 'Launch day',
         taskId: 'task-1',
         progress: 0,
         stage: null,
@@ -1297,7 +910,7 @@ describe('slot tools', () => {
     expect(text).toContain('slot-1');
     expect(text).toContain('Launch day');
     expect(text).toContain('awaiting');
-    expect(text).toContain('"topic": "Launch day"');
+    expect(text).toContain('"title": "Launch day"');
     expect(text).not.toContain('extraUnpinnedField');
   });
 
@@ -1315,20 +928,20 @@ describe('slot tools', () => {
     expect(text).toContain('"field":"slotId"');
   });
 
-  it('handleUpdateSlotTopic passes the trimmed topic and summarizes', async () => {
-    const { handleUpdateSlotTopic } = await import('../tools.js');
-    vi.mocked(mockClient.updateSlotTopic).mockResolvedValue({
+  it('handleUpdateSlotTitle passes the trimmed title and summarizes', async () => {
+    const { handleUpdateSlotTitle } = await import('../tools.js');
+    vi.mocked(mockClient.updateSlotTitle).mockResolvedValue({
       success: true,
-      topic: 'New topic',
+      title: 'New title',
     });
 
-    const response = await handleUpdateSlotTopic(mockClient, {
+    const response = await handleUpdateSlotTitle(mockClient, {
       slotId: 'slot-1',
-      topic: 'New topic',
+      title: 'New title',
     });
-    expect(mockClient.updateSlotTopic).toHaveBeenCalledWith('slot-1', 'New topic');
+    expect(mockClient.updateSlotTitle).toHaveBeenCalledWith('slot-1', 'New title');
     expect(response.isError).toBeUndefined();
-    expect(textOf(response)).toContain('New topic');
+    expect(textOf(response)).toContain('New title');
   });
 
   it('handleDeleteSlot confirms the deletion', async () => {
@@ -1544,7 +1157,7 @@ describe('delete persona tools', () => {
         personaImages: 3,
       },
       videos: [
-        { taskId: 'task-1', topic: 'Launch day', status: 'completed', downloadUrl: 'https://cdn.example.com/v.mp4' },
+        { taskId: 'task-1', title: 'Launch day', status: 'completed', downloadUrl: 'https://cdn.example.com/v.mp4' },
       ],
       videosTruncated: false,
       linksIncomplete: false,
@@ -1652,7 +1265,7 @@ describe('disconnect account tool', () => {
 describe('new tool error paths and narrowing fallbacks', () => {
   const mockClient = {
     getSlot: vi.fn(),
-    updateSlotTopic: vi.fn(),
+    updateSlotTitle: vi.fn(),
     listVideoGenerations: vi.fn(),
     getVideoGeneration: vi.fn(),
     listTokenTransactions: vi.fn(),
@@ -1699,34 +1312,34 @@ describe('new tool error paths and narrowing fallbacks', () => {
     expect(text).not.toContain('42');
   });
 
-  it('handleUpdateSlotTopic surfaces API errors with the structured contract', async () => {
-    const { handleUpdateSlotTopic } = await import('../tools.js');
+  it('handleUpdateSlotTitle surfaces API errors with the structured contract', async () => {
+    const { handleUpdateSlotTitle } = await import('../tools.js');
     const { ApiError } = await import('../errors.js');
-    vi.mocked(mockClient.updateSlotTopic).mockRejectedValue(
-      new ApiError('Failed to update slot topic: 409 Slot already generating.', 'SLOT_LOCKED', 'slotId')
+    vi.mocked(mockClient.updateSlotTitle).mockRejectedValue(
+      new ApiError('Failed to update slot title: 409 Slot already generating.', 'SLOT_LOCKED', 'slotId')
     );
 
-    const response = await handleUpdateSlotTopic(mockClient, { slotId: 'slot-1', topic: 'New' });
+    const response = await handleUpdateSlotTitle(mockClient, { slotId: 'slot-1', title: 'New' });
     expect(response.isError).toBe(true);
     expect(textOf(response)).toContain('"code":"SLOT_LOCKED"');
   });
 
-  it('handleUpdateSlotTopic surfaces a plain failure without the structured contract', async () => {
-    const { handleUpdateSlotTopic } = await import('../tools.js');
-    vi.mocked(mockClient.updateSlotTopic).mockRejectedValue(new Error('network down'));
+  it('handleUpdateSlotTitle surfaces a plain failure without the structured contract', async () => {
+    const { handleUpdateSlotTitle } = await import('../tools.js');
+    vi.mocked(mockClient.updateSlotTitle).mockRejectedValue(new Error('network down'));
 
-    const response = await handleUpdateSlotTopic(mockClient, { slotId: 'slot-1', topic: 'New' });
+    const response = await handleUpdateSlotTitle(mockClient, { slotId: 'slot-1', title: 'New' });
     expect(response.isError).toBe(true);
-    expect(textOf(response)).toBe('Error updating slot topic: network down');
+    expect(textOf(response)).toBe('Error updating slot title: network down');
   });
 
-  it('handleUpdateSlotTopic falls back to the requested topic when the response has none', async () => {
-    const { handleUpdateSlotTopic } = await import('../tools.js');
-    vi.mocked(mockClient.updateSlotTopic).mockResolvedValue({ success: true, topic: 42 });
+  it('handleUpdateSlotTitle falls back to the requested title when the response has none', async () => {
+    const { handleUpdateSlotTitle } = await import('../tools.js');
+    vi.mocked(mockClient.updateSlotTitle).mockResolvedValue({ success: true, title: 42 });
 
-    const response = await handleUpdateSlotTopic(mockClient, { slotId: 'slot-1', topic: 'New' });
+    const response = await handleUpdateSlotTitle(mockClient, { slotId: 'slot-1', title: 'New' });
     expect(response.isError).toBeUndefined();
-    expect(textOf(response)).toContain('Slot slot-1 topic updated to "New".');
+    expect(textOf(response)).toContain('Slot slot-1 title updated to "New".');
   });
 
   it('handleListVideoGenerations surfaces a plain failure without the structured contract', async () => {

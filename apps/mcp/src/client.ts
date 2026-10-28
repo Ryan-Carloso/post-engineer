@@ -20,7 +20,7 @@ import type {
   CreatePersonaInput,
   DirectPublishAccountResult,
   DirectPublishResult,
-  GeneratePersonaVideosInput,
+  GeneratePersonaVideoInput,
   PersonaLibraryImageInput,
   PostEngineerClientOptions,
   PublishVideoDirectInput,
@@ -32,7 +32,7 @@ export type {
   CreatePersonaInput,
   DirectPublishAccountResult,
   DirectPublishResult,
-  GeneratePersonaVideosInput,
+  GeneratePersonaVideoInput,
   PersonaLibraryImageInput,
   PostEngineerClientOptions,
   PublishVideoDirectInput,
@@ -40,6 +40,7 @@ export type {
   VideoLayout,
 } from './client-types.js';
 import { readFile, stat } from 'node:fs/promises';
+import { requireTitle } from './require-title.js';
 import { basename, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -352,7 +353,7 @@ export class PostEngineerClient {
     const hasAvatar = input.avatarUrl !== undefined && input.avatarUrl !== null && input.avatarUrl.length > 0;
     if (!hasAvatar) {
       throw new Error(
-        'avatarUrl is required: every persona has a face. Use list_faces for a stock face URL, and generate_persona_videos options.faceless for videos without a face.',
+        'avatarUrl is required: every persona has a face. Use list_faces for a stock face URL, and generate_persona_video options.faceless for videos without a face.',
       );
     }
     formData.set('name', input.name);
@@ -522,22 +523,16 @@ export class PostEngineerClient {
     );
   }
 
-  async updateSlotTopic(slotId: string, topic: string): Promise<unknown> {
-    // The route 400s on an empty topic — fail fast with the field named
-    // before any fetch goes out. The trimmed value is sent: the server
-    // stores the trimmed topic, so the payload carries exactly what lands.
-    const trimmed = topic.trim();
-    if (trimmed.length === 0) {
-      throw new Error('topic must be a non-empty string.');
-    }
+  async updateSlotTitle(slotId: string, title: string): Promise<unknown> {
+    const trimmed = requireTitle(title);
     return this.request(
       `/api/schedule/slots/${encodeURIComponent(slotId)}`,
       {
         method: 'PATCH',
         headers: this.getHeaders(),
-        body: JSON.stringify({ topic: trimmed }),
+        body: JSON.stringify({ title: trimmed }),
       },
-      'update slot topic'
+      'update slot title'
     );
   }
 
@@ -658,7 +653,8 @@ export class PostEngineerClient {
     );
   }
 
-  async generatePersonaVideos(input: GeneratePersonaVideosInput): Promise<unknown> {
+  async generatePersonaVideo(input: GeneratePersonaVideoInput): Promise<unknown> {
+    const title = requireTitle(input.title);
     // Map the per-provider account arrays into the publishing.accounts
     // record. Only set entries the caller provided: the server enforces
     // which providers need accounts and rejects unknown ones.
@@ -688,7 +684,7 @@ export class PostEngineerClient {
           // personaId as "post without a persona" and an empty string as the
           // same thing, but omitting keeps the payload honest.
           ...(input.personaId !== undefined ? { personaId: input.personaId } : {}),
-          topics: input.topics,
+          title,
           publishing: {
             mode,
             providers: input.providers,
@@ -711,7 +707,7 @@ export class PostEngineerClient {
           idempotencyKey: input.idempotencyKey ?? randomUUID(),
         }),
       },
-      'generate and schedule videos'
+      'generate and schedule video'
     );
   }
 

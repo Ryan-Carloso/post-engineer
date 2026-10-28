@@ -412,7 +412,7 @@ describe('PostEngineerClient', () => {
   });
 
   it('gets one slot by id', async () => {
-    const mockSlot = { success: true, slot: { id: 'slot-1', topic: 'Hello' } };
+    const mockSlot = { success: true, slot: { id: 'slot-1', title: 'Hello' } };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -427,25 +427,25 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual(mockSlot);
   });
 
-  it('updates a slot topic with a PATCH body', async () => {
+  it('updates a slot title with a PATCH body', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify({ success: true, topic: 'New topic' }),
+      text: async () => JSON.stringify({ success: true, title: 'New title' }),
     });
 
-    await client.updateSlotTopic('slot-1', '  New topic  ');
+    await client.updateSlotTitle('slot-1', '  New title  ');
     const [, init] = vi.mocked(global.fetch).mock.calls[0] as [string, RequestInit];
     expect(init.method).toBe('PATCH');
-    // Trimmed before sending: the server stores the trimmed topic, so the
+    // Trimmed before sending: the server stores the trimmed title, so the
     // payload carries exactly what will be stored.
-    expect(JSON.parse(String(init.body))).toEqual({ topic: 'New topic' });
+    expect(JSON.parse(String(init.body))).toEqual({ title: 'New title' });
   });
 
-  it('fails fast on an empty slot topic without fetching', async () => {
+  it('fails fast on an empty slot title without fetching', async () => {
     global.fetch = vi.fn();
-    await expect(client.updateSlotTopic('slot-1', '   ')).rejects.toThrow(
-      /topic must be a non-empty string/
+    await expect(client.updateSlotTitle('slot-1', '   ')).rejects.toThrow(
+      /title must be a non-empty string/
     );
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -623,13 +623,13 @@ describe('PostEngineerClient', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-describe('generate and schedule videos client', () => {
+describe('generate and schedule video client', () => {
   const baseUrl = 'https://post-engineer.com';
   let client: PostEngineerClient;
 
   const baseInput = {
     personaId: 'persona-123',
-    topics: ['Launch a SaaS in days', 'Pricing lessons'],
+    title: 'Launch a SaaS in days',
     providers: ['youtube', 'bluesky'] as ('youtube' | 'bluesky')[],
     youtubeAccountIds: ['chan-1'],
     blueskyAccountIds: ['did:plc:abc'],
@@ -658,7 +658,7 @@ describe('generate and schedule videos client', () => {
   }
 
   it('posts to the unified generate-and-schedule endpoint with the mapped body', async () => {
-    const result = await client.generatePersonaVideos(baseInput);
+    const result = await client.generatePersonaVideo(baseInput);
 
     expect(global.fetch).toHaveBeenCalledWith(
       `${baseUrl}/api/videos/generate-and-schedule`,
@@ -672,7 +672,8 @@ describe('generate and schedule videos client', () => {
     );
     const body = lastRequestBody();
     expect(body.personaId).toBe('persona-123');
-    expect(body.topics).toEqual(['Launch a SaaS in days', 'Pricing lessons']);
+    expect(body.title).toBe('Launch a SaaS in days');
+    expect(body).not.toHaveProperty('topics');
     expect(body.publishing).toEqual({
       mode: 'scheduled',
       providers: ['youtube', 'bluesky'],
@@ -704,7 +705,7 @@ describe('generate and schedule videos client', () => {
   });
 
   it('nests each provider account array under publishing.accounts', async () => {
-    await client.generatePersonaVideos({
+    await client.generatePersonaVideo({
       ...baseInput,
       instagramAccountIds: ['ig-1'],
       linkedinAccountIds: ['li-1'],
@@ -723,7 +724,7 @@ describe('generate and schedule videos client', () => {
     // string: the API reads absence as "no persona", and sending `""` would
     // ship a value the caller never meant.
     const { personaId: _personaId, ...rest } = baseInput;
-    await client.generatePersonaVideos({
+    await client.generatePersonaVideo({
       ...rest,
       options: { faceless: true, voiceId: 'calm', videoAspect: '16:9' },
     });
@@ -735,38 +736,38 @@ describe('generate and schedule videos client', () => {
 
   it('sends an empty accounts record when no account arrays are provided', async () => {
     const { youtubeAccountIds: _yt, blueskyAccountIds: _bsky, ...rest } = baseInput;
-    await client.generatePersonaVideos(rest);
+    await client.generatePersonaVideo(rest);
     const publishing = lastRequestBody().publishing as Record<string, unknown>;
     expect(publishing.accounts).toEqual({});
   });
 
   it('defaults the schedule timezone to UTC when omitted', async () => {
     const { timezone: _timezone, ...rest } = baseInput;
-    await client.generatePersonaVideos(rest);
+    await client.generatePersonaVideo(rest);
     const publishing = lastRequestBody().publishing as Record<string, unknown>;
     expect((publishing.schedule as Record<string, unknown>).timezone).toBe('UTC');
   });
 
   it('forwards options and omits the key when options are absent', async () => {
-    await client.generatePersonaVideos({
+    await client.generatePersonaVideo({
       ...baseInput,
       options: { faceless: true, voiceId: 'v-1' },
     });
     expect(lastRequestBody().options).toEqual({ faceless: true, voiceId: 'v-1' });
 
-    await client.generatePersonaVideos(baseInput);
+    await client.generatePersonaVideo(baseInput);
     expect('options' in lastRequestBody()).toBe(false);
   });
 
   it('forwards a caller-supplied idempotencyKey', async () => {
-    await client.generatePersonaVideos({ ...baseInput, idempotencyKey: 'key-123' });
+    await client.generatePersonaVideo({ ...baseInput, idempotencyKey: 'key-123' });
     expect(lastRequestBody().idempotencyKey).toBe('key-123');
   });
 
   it('generates a UUID idempotencyKey per call when omitted', async () => {
-    await client.generatePersonaVideos(baseInput);
+    await client.generatePersonaVideo(baseInput);
     const first = requestBody(0).idempotencyKey;
-    await client.generatePersonaVideos(baseInput);
+    await client.generatePersonaVideo(baseInput);
     const second = requestBody(1).idempotencyKey;
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     expect(first).toMatch(uuid);
@@ -777,16 +778,16 @@ describe('generate and schedule videos client', () => {
   it("sends mode 'scheduled' explicitly by default", async () => {
     // The API defaults an absent mode to 'scheduled'; the client sends it
     // explicitly so the payload always says what the caller meant.
-    await client.generatePersonaVideos(baseInput);
+    await client.generatePersonaVideo(baseInput);
     const publishing = lastRequestBody().publishing as Record<string, unknown>;
     expect(publishing.mode).toBe('scheduled');
   });
 
   it("sends mode 'asap' with no schedule plan and a display timezone", async () => {
-    // In ASAP mode the videos publish the moment generation finishes: the
+    // In ASAP mode the video publishes the moment generation finishes: the
     // request carries no schedule plan, only the display timezone.
     const { startAt: _startAt, times: _times, ...rest } = baseInput;
-    await client.generatePersonaVideos({ ...rest, mode: 'asap' });
+    await client.generatePersonaVideo({ ...rest, mode: 'asap' });
     const publishing = lastRequestBody().publishing as Record<string, unknown>;
     expect(publishing).toEqual({
       mode: 'asap',
@@ -801,14 +802,14 @@ describe('generate and schedule videos client', () => {
     // A stray schedule plan in ASAP mode would 400 server-side ("must not
     // be set"); fail fast with the same rule before any fetch goes out.
     const withStartAt: unknown = await client
-      .generatePersonaVideos({ ...baseInput, mode: 'asap' })
+      .generatePersonaVideo({ ...baseInput, mode: 'asap' })
       .catch((e: unknown) => e);
     expect(withStartAt).toBeInstanceOf(Error);
     expect((withStartAt as Error).message).toMatch(/must not be set/i);
 
     const { startAt: _startAt, ...withTimes } = baseInput;
     const withTimesOnly: unknown = await client
-      .generatePersonaVideos({ ...withTimes, mode: 'asap' })
+      .generatePersonaVideo({ ...withTimes, mode: 'asap' })
       .catch((e: unknown) => e);
     expect((withTimesOnly as Error).message).toMatch(/must not be set/i);
 
@@ -820,16 +821,25 @@ describe('generate and schedule videos client', () => {
     // name the missing fields before any fetch goes out.
     const { startAt: _startAt, ...noStartAt } = baseInput;
     const missingStartAt: unknown = await client
-      .generatePersonaVideos(noStartAt)
+      .generatePersonaVideo(noStartAt)
       .catch((e: unknown) => e);
     expect((missingStartAt as Error).message).toMatch(/startAt and times are required/i);
 
     const { times: _times, ...noTimes } = baseInput;
     const missingTimes: unknown = await client
-      .generatePersonaVideos(noTimes)
+      .generatePersonaVideo(noTimes)
       .catch((e: unknown) => e);
     expect((missingTimes as Error).message).toMatch(/startAt and times are required/i);
 
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast on an empty title without fetching', async () => {
+    const error: unknown = await client
+      .generatePersonaVideo({ ...baseInput, title: '   ' })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(/title must be a non-empty string/i);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -841,23 +851,23 @@ describe('generate and schedule videos client', () => {
       text: async () =>
         JSON.stringify({
           success: false,
-          error: 'Provide at least one video topic.',
-          code: 'TOPICS_REQUIRED',
-          field: 'topics',
+          error: 'title must be a non-empty string.',
+          code: 'VALIDATION_FAILED',
+          field: 'title',
         }),
     });
 
     const error: unknown = await client
-      .generatePersonaVideos(baseInput)
+      .generatePersonaVideo(baseInput)
       .catch((e: unknown) => e);
 
     if (!(error instanceof ApiError)) {
       throw new Error(`expected ApiError, got: ${String(error)}`);
     }
-    expect(error.code).toBe('TOPICS_REQUIRED');
-    expect(error.field).toBe('topics');
-    expect(error.message).toContain('Failed to generate and schedule videos: 422');
-    expect(error.message).toContain('Provide at least one video topic.');
+    expect(error.code).toBe('VALIDATION_FAILED');
+    expect(error.field).toBe('title');
+    expect(error.message).toContain('Failed to generate and schedule video: 422');
+    expect(error.message).toContain('title must be a non-empty string.');
   });
 });
 

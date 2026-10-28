@@ -7,7 +7,7 @@ import { findRepoRoot } from '@/test/repo-root';
 // scheduled_posts.segments — written by generate-and-schedule at slot
 // creation and read by the engine batch pipeline. Without the column,
 // a requeued slot (engine restart mid-generation) or a tick-dispatched
-// pending slot regenerates from the topic alone: the script differs
+// pending slot regenerates from the title alone: the script differs
 // and every user photo disappears with no warning.
 //---------------
 const root = findRepoRoot(import.meta.url);

@@ -50,7 +50,7 @@ class FillSchedulePublishPostHogTests(TestCase):
     def _slot(self, **overrides):  # type: ignore[no-untyped-def]
         slot = {
             "id": "slot-1",
-            "topic": "Porto coffee",
+            "title": "Porto coffee",
             "task_id": "t-1",
             "faceless": True,
             "publish_attempts": 0,

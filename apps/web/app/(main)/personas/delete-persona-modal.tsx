@@ -257,7 +257,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
                       className="flex items-center justify-between gap-3 text-sm"
                     >
                       <span className="min-w-0 flex-1 truncate text-neutral-700">
-                        {video.topic ?? video.taskId ?? `video-${index + 1}`}
+                        {video.title ?? video.taskId ?? `video-${index + 1}`}
                       </span>
                       {video.downloadUrl ? (
                         <a

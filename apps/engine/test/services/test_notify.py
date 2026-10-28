@@ -360,13 +360,13 @@ class MessageBuilderTests(unittest.TestCase):
         message = nf.scheduler_started_msg()
         self.assertIn("scheduler started", message)
 
-    def test_generation_batch_lists_topics(self):
+    def test_generation_batch_lists_titles(self):
         message = nf.generation_batch_msg(2, ["Tokyo coffee", "Lisbon trams"])
         self.assertIn("2", message)
         self.assertIn("Tokyo coffee", message)
         self.assertIn("Lisbon trams", message)
 
-    def test_slot_published_includes_persona_topic_providers(self):
+    def test_slot_published_includes_persona_title_providers(self):
         message = nf.slot_published_msg("Ana", "Tokyo coffee", ["youtube", "instagram"])
         self.assertIn("Ana", message)
         self.assertIn("Tokyo coffee", message)
@@ -379,7 +379,7 @@ class MessageBuilderTests(unittest.TestCase):
         self.assertIn("Tokyo coffee", message)
         self.assertIn("task has no finished videos", message)
 
-    def test_slot_failed_handles_empty_topic(self):
+    def test_slot_failed_handles_empty_title(self):
         message = nf.slot_failed_msg("Ana", "", "boom")
         self.assertIn("Ana", message)
         self.assertIn("boom", message)

@@ -85,7 +85,7 @@ const SLOT_ROW = {
   schedule_id: SCHEDULE_ID,
   slot_at: '2026-10-18T10:00:00.000Z',
   status: 'generating',
-  topic: 'myth busting',
+  title: 'myth busting',
   error: null,
   published_at: null,
   task_id: 'task-1',

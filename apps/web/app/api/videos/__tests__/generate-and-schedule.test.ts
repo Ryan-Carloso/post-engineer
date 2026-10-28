@@ -130,7 +130,7 @@ interface DbConfig {
   /** publish_mode the mocked schedules row carries (replay envelope test). */
   existingSchedulePublishMode?: 'scheduled' | 'asap';
   scheduleLookupError?: boolean;
-  replaySlots?: Array<{ id: string; slot_at: string; topic: string; task_id: string | null; status: string }>;
+  replaySlots?: Array<{ id: string; slot_at: string; title: string; task_id: string | null; status: string }>;
   slotCount?: number | null;
   ledgerIds?: string[];
   ledgerError?: boolean;
@@ -255,10 +255,10 @@ function makeClient(cfg: DbConfig): unknown {
               if (cfg.slotInsertFails) {
                 return Promise.resolve({ data: null, error: { message: 'insert failed' } }).then(resolve, reject);
               }
-              const data = (rows as Array<{ slot_at: string; topic: string }>).map((r, i) => ({
+              const data = (rows as Array<{ slot_at: string; title: string }>).map((r, i) => ({
                 id: `slot-${i}`,
                 slot_at: r.slot_at,
-                topic: r.topic,
+                title: r.title,
               }));
               return Promise.resolve({ data, error: null }).then(resolve, reject);
             }
@@ -400,17 +400,30 @@ function setup(cfg: DbConfig = {}): void {
   });
 }
 
+const DEFAULT_SEGMENTS = [
+  {
+    kind: 'hook',
+    text: 'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.',
+  },
+  {
+    kind: 'body',
+    text: 'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.',
+  },
+  { kind: 'cta', text: 'Save this video before your next trip to Porto.' },
+];
+
 function baseBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const { options: optionsOverrides, ...rest } = overrides;
   return {
     personaId: 'persona-1',
-    topics: ['Idea 1', 'Idea 2'],
+    title: 'Porto trip',
     publishing: {
       providers: ['youtube'],
       accounts: { youtube: ['acct-1'] },
       schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
     },
-    options: {},
-    ...overrides,
+    options: { segments: DEFAULT_SEGMENTS, ...((optionsOverrides ?? {}) as Record<string, unknown>) },
+    ...rest,
   };
 }
 
@@ -437,21 +450,20 @@ beforeEach(() => {
 
 describe('POST /api/videos/generate-and-schedule', () => {
   describe('happy path', () => {
-    it('creates 1 schedule + N slots with bound taskIds for 2 topics', async () => {
+    it('creates 1 schedule + 1 slot with a bound taskId for the title', async () => {
       const res = await post(baseBody());
       const json = await res.json();
       expect(res.status).toBe(200);
       expect(json.success).toBe(true);
       expect(json.replayed).toBe(false);
       expect(typeof json.schedule.id).toBe('string');
-      expect(json.schedule.id.length).toBeGreaterThan(0);      expect(json.slots).toHaveLength(2);
-      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', taskId: 'task-Idea 1', status: 'generating' });
-      expect(json.slots[1]).toMatchObject({ topic: 'Idea 2', taskId: 'task-Idea 2', status: 'generating' });
+      expect(json.schedule.id.length).toBeGreaterThan(0);      expect(json.slots).toHaveLength(1);
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', taskId: 'task-Porto trip', status: 'generating' });
 
-      // ONE atomic spend for the whole operation: 2 videos x 2 tokens.
+      // ONE atomic spend for the whole operation: 1 video x 2 tokens.
       const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
       expect(spends).toHaveLength(1);
-      expect(spends[0].args.p_amount).toBe(4);
+      expect(spends[0].args.p_amount).toBe(2);
       expect(spends[0].args.p_user_id).toBe(USER_ID);
 
       // Schedule row: deterministic id; scheduled_at is the legacy column
@@ -462,19 +474,19 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(scheduleRows).toHaveLength(1);
       expect(scheduleRows[0]).not.toHaveProperty('kind');
       expect(scheduleRows[0].scheduled_at).toBeNull();
-      expect(scheduleRows[0].posts_per_day).toBe(2);
+      expect(scheduleRows[0].posts_per_day).toBe(1);
       expect(scheduleRows[0].youtube_account_ids).toEqual(['acct-1']);
 
-      // Slots carry topics in order.
+      // The slot carries the title.
       const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
-      expect(slotRows).toHaveLength(2);
-      expect(slotRows.map((r) => r.topic)).toEqual(['Idea 1', 'Idea 2']);
+      expect(slotRows).toHaveLength(1);
+      expect(slotRows.map((r) => r.title)).toEqual(['Porto trip']);
       expect(slotRows.every((r) => r.status === 'pending')).toBe(true);
 
-      // Each slot was flipped to generating with its task_id.
+      // The slot was flipped to generating with its task_id.
       const binds = updates.filter((u) => u.table === 'scheduled_posts' && u.fields.status === 'generating');
-      expect(binds).toHaveLength(2);
-      expect(binds[0].fields.task_id).toBe('task-Idea 1');
+      expect(binds).toHaveLength(1);
+      expect(binds[0].fields.task_id).toBe('task-Porto trip');
     });
 
     it('inserts only columns that exist on public.schedules', async () => {
@@ -538,26 +550,11 @@ describe('POST /api/videos/generate-and-schedule', () => {
       }
     });
 
-    it('distributes 10 topics across days preserving order', async () => {
-      const topics = Array.from({ length: 10 }, (_, i) => `Topic ${i + 1}`);
-      const res = await post(baseBody({ topics }));
-      const json = await res.json();
-      expect(res.status).toBe(200);
-      expect(json.slots).toHaveLength(10);
-      expect(json.slots.map((s: { topic: string }) => s.topic)).toEqual(topics);
-      const instants = json.slots.map((s: { slotAt: string }) => new Date(s.slotAt).getTime());
-      for (let i = 1; i < instants.length; i += 1) {
-        expect(instants[i]).toBeGreaterThan(instants[i - 1]);
-      }
-      const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
-      expect(spends[0].args.p_amount).toBe(20);
-    });
-
     it('charges the faceless rate (1 token/video) and skips image resolution', async () => {
       const res = await post(baseBody({ options: { faceless: true } }));
       expect(res.status).toBe(200);
       const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
-      expect(spends[0].args.p_amount).toBe(2);
+      expect(spends[0].args.p_amount).toBe(1);
       expect(vi.mocked(resolveVideoImage)).not.toHaveBeenCalled();
     });
 
@@ -568,7 +565,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const res = await post(baseBody({ options: { faceless: true, facelessMaterial: 'svg' } }));
       expect(res.status).toBe(200);
       const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
-      expect(slotRows).toHaveLength(2);
+      expect(slotRows).toHaveLength(1);
       for (const row of slotRows) {
         expect(row).toMatchObject({ faceless: true, faceless_material: 'svg' });
       }
@@ -677,16 +674,16 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(serialized.persona).not.toHaveProperty('photo_url');
     });
 
-    it('forwards webhook_url and per-topic script prompts to the engine payload', async () => {
+    it('forwards webhook_url and the single script prompt to the engine payload', async () => {
       const res = await post(
-        baseBody({ options: { webhookUrl: 'https://example.com/hook', scriptPrompts: ['First script', 'Second script'] } }),
+        baseBody({ options: { webhookUrl: 'https://example.com/hook', scriptPrompts: ['First script'] } }),
       );
       expect(res.status).toBe(200);
       const calls = vi.mocked(startEngineVideoTask).mock.calls;
-      expect(calls).toHaveLength(2);
+      expect(calls).toHaveLength(1);
       expect((calls[0][1] as Record<string, unknown>).webhook_url).toBe('https://example.com/hook');
-      expect((calls[0][1] as Record<string, unknown>).video_subject).toBe('Idea 1');
-      expect((calls[1][1] as Record<string, unknown>).video_script_prompt).toBe('Second script');
+      expect((calls[0][1] as Record<string, unknown>).video_subject).toBe('Porto trip');
+      expect((calls[0][1] as Record<string, unknown>).video_script_prompt).toBe('First script');
     });
 
     it('forwards the persona language, video_aspect and paragraph_number to the engine payload', async () => {
@@ -702,24 +699,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
   });
 
   describe('validation', () => {
-    it('rejects 0 topics with TOPICS_REQUIRED and charges nothing', async () => {
-      const res = await post(baseBody({ topics: [] }));
-      const json = await res.json();
-      expect(res.status).toBe(400);
-      expect(json.code).toBe('TOPICS_REQUIRED');
-      expect(json.field).toBe('topics');
-      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
-      expect(inserts['schedules']).toBeUndefined();
-    });
-
-    it('rejects 11 topics with TOPICS_LIMIT_EXCEEDED', async () => {
-      const res = await post(baseBody({ topics: Array.from({ length: 11 }, (_, i) => `T${i}`) }));
-      const json = await res.json();
-      expect(res.status).toBe(400);
-      expect(json.code).toBe('TOPICS_LIMIT_EXCEEDED');
-      expect(json.field).toBe('topics');
-    });
-
     it('rejects an invalid provider', async () => {
       const res = await post(
         baseBody({ publishing: { providers: ['myspace'], accounts: {}, schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' } } }),
@@ -808,8 +787,8 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(400);
     });
 
-    it('rejects scriptPrompts with the wrong length', async () => {
-      const res = await post(baseBody({ options: { scriptPrompts: ['only one'] } }));
+    it('rejects scriptPrompts with more than one entry (one call is one video)', async () => {
+      const res = await post(baseBody({ options: { scriptPrompts: ['one', 'two'] } }));
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.field).toBe('options.scriptPrompts');
@@ -832,19 +811,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
         { kind: 'hook', text: segmentsHook },
         { kind: 'cta', text: segmentsCta },
       ];
-      const res = await post(baseBody({ topics: ['Porto trip'], options: { segments: bad } }));
+      const res = await post(baseBody({ options: { segments: bad } }));
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.code).toBe('VALIDATION_FAILED');
       expect(String(json.field)).toContain('segments');
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
-    });
-
-    it('rejects segments with more than one topic (one call is one video)', async () => {
-      const res = await post(baseBody({ options: { segments: validSegments } }));
-      const json = await res.json();
-      expect(res.status).toBe(400);
-      expect(String(json.field)).toContain('segments');
     });
 
     it('rejects an unknown segment key at parse time instead of stripping it', async () => {
@@ -853,7 +825,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         { kind: 'body', text: segmentsBody, voice: 'narrator' },
         { kind: 'cta', text: segmentsCta },
       ];
-      const res = await post(baseBody({ topics: ['Porto trip'], options: { segments: withVoice } }));
+      const res = await post(baseBody({ options: { segments: withVoice } }));
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.code).toBe('VALIDATION_FAILED');
@@ -867,7 +839,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         { kind: 'body', text: segmentsBody, media: { mediaId: 'abc', alt: 'kitchen' } },
         { kind: 'cta', text: segmentsCta },
       ];
-      const res = await post(baseBody({ topics: ['Porto trip'], options: { segments: withAlt } }));
+      const res = await post(baseBody({ options: { segments: withAlt } }));
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.code).toBe('VALIDATION_FAILED');
@@ -876,7 +848,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('forwards the joined segments script to the engine for a valid segments request', async () => {
-      const res = await post(baseBody({ topics: ['Porto trip'], options: { segments: validSegments } }));
+      const res = await post(baseBody({ options: { segments: validSegments } }));
       expect(res.status).toBe(200);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
       expect(payload.video_script).toBe(`${segmentsHook}\n\n${segmentsBody}\n\n${segmentsCta}`);
@@ -957,14 +929,14 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
   describe('billing', () => {
     it('returns INSUFFICIENT_TOKENS with have/need and creates nothing', async () => {
-      setup({ ...DEFAULT_CFG, spend: { spent: false, balance: 2 } });
+      setup({ ...DEFAULT_CFG, spend: { spent: false, balance: 1 } });
       const res = await post(baseBody());
       const json = await res.json();
       expect(res.status).toBe(402);
       expect(json.code).toBe('INSUFFICIENT_TOKENS');
-      expect(json.error).toBe('You need 4 tokens, but only have 2.');
-      expect(json.have).toBe(2);
-      expect(json.need).toBe(4);
+      expect(json.error).toBe('You need 2 tokens, but only have 1.');
+      expect(json.have).toBe(1);
+      expect(json.need).toBe(2);
       expect(inserts['schedules']).toBeUndefined();
       expect(inserts['scheduled_posts']).toBeUndefined();
     });
@@ -981,8 +953,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         ...DEFAULT_CFG,
         existingScheduleId: scheduleId,
         replaySlots: [
-          { id: 'slot-0', slot_at: futureISO(48), topic: 'Idea 1', task_id: 'task-Idea 1', status: 'generating' },
-          { id: 'slot-1', slot_at: futureISO(49), topic: 'Idea 2', task_id: 'task-Idea 2', status: 'generating' },
+          { id: 'slot-0', slot_at: futureISO(48), title: 'Porto trip', task_id: 'task-Porto trip', status: 'generating' },
         ],
       });
       const second = await post(baseBody({ idempotencyKey: key }));
@@ -991,7 +962,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.replayed).toBe(true);
       expect(json.schedule.id).toBe(scheduleId);
       expect(json.schedule.mode).toBe('scheduled');
-      expect(json.slots).toHaveLength(2);
+      expect(json.slots).toHaveLength(1);
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
       expect(inserts['schedules']).toBeUndefined();
     });
@@ -1094,7 +1065,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(200);
       // Not a replay: the zombie was cleared and the operation ran fresh.
       expect(json.replayed).toBe(false);
-      expect(json.slots).toHaveLength(2);
+      expect(json.slots).toHaveLength(1);
       // The zombie schedule row was deleted.
       expect(deletes).toContain('schedules');
       // No second charge: the ledger already had this generation_id.
@@ -1122,7 +1093,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // Not a replay: the zombie was cleared and the operation ran fresh.
       expect(json.replayed).toBe(false);
       expect(json.schedule.id).toBe(scheduleId);
-      expect(json.slots).toHaveLength(2);
+      expect(json.slots).toHaveLength(1);
       // The zombie schedule row was deleted.
       expect(deletes).toContain('schedules');
       // No second charge: the ledger already had this generation_id.
@@ -1145,11 +1116,11 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(200);
       expect(json.replayed).toBe(false);
       expect(json.schedule.id).toBe(scheduleId);
-      expect(json.slots).toHaveLength(2);
+      expect(json.slots).toHaveLength(1);
       expect(deletes).toContain('schedules');
       const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
       expect(spends).toHaveLength(1);
-      expect(spends[0].args.p_amount).toBe(4);
+      expect(spends[0].args.p_amount).toBe(2);
     });
 
     it('treats a null slot count as a 0-slot zombie and runs fresh', async () => {
@@ -1172,7 +1143,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // Not a replay: the zombie was cleared and the operation ran fresh.
       expect(json.replayed).toBe(false);
       expect(json.schedule.id).toBe(scheduleId);
-      expect(json.slots).toHaveLength(2);
+      expect(json.slots).toHaveLength(1);
       // The zombie schedule row was deleted.
       expect(deletes).toContain('schedules');
       // No second charge: the ledger already had this generation_id.
@@ -1255,14 +1226,16 @@ describe('POST /api/videos/generate-and-schedule', () => {
   });
 
   describe('per-slot failures', () => {
-    it('marks the failed slot failed+refunded and continues the rest', async () => {
-      setup({ ...DEFAULT_CFG, engineFailSubjects: ['Idea 1'] });
+    it('marks the failed slot failed+refunded', async () => {
+      // One call is one video: the single slot failing means every slot
+      // failed, so the honest answer is 502 — with the refund still issued.
+      setup({ ...DEFAULT_CFG, engineFailSubjects: ['Porto trip'] });
       const res = await post(baseBody());
       const json = await res.json();
-      expect(res.status).toBe(200);
-      expect(json.success).toBe(true);
-      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', taskId: null, status: 'failed' });
-      expect(json.slots[1]).toMatchObject({ topic: 'Idea 2', taskId: 'task-Idea 2', status: 'generating' });
+      expect(res.status).toBe(502);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('ENGINE_UNAVAILABLE');
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', taskId: null, status: 'failed' });
 
       const refunds = rpcCalls.filter((c) => c.name === 'refund_batch_tokens');
       expect(refunds).toHaveLength(1);
@@ -1275,15 +1248,15 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(failedUpdates).toHaveLength(1);
     });
 
-    it('returns 502 when every slot fails', async () => {
-      setup({ ...DEFAULT_CFG, engineFailSubjects: ['Idea 1', 'Idea 2'] });
+    it('returns 502 when the slot fails', async () => {
+      setup({ ...DEFAULT_CFG, engineFailSubjects: ['Porto trip'] });
       const res = await post(baseBody());
       const json = await res.json();
       expect(res.status).toBe(502);
       expect(json.success).toBe(false);
       expect(json.code).toBe('ENGINE_UNAVAILABLE');
-      expect(json.slots).toHaveLength(2);
-      expect(rpcCalls.filter((c) => c.name === 'refund_batch_tokens')).toHaveLength(2);
+      expect(json.slots).toHaveLength(1);
+      expect(rpcCalls.filter((c) => c.name === 'refund_batch_tokens')).toHaveLength(1);
     });
 
     it('reports the 502 to PostHog with route, code and user id', async () => {
@@ -1296,7 +1269,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         captureExceptionAs,
       } as never);
       try {
-        setup({ ...DEFAULT_CFG, engineFailSubjects: ['Idea 1', 'Idea 2'] });
+        setup({ ...DEFAULT_CFG, engineFailSubjects: ['Porto trip'] });
         const res = await post(baseBody());
         expect(res.status).toBe(502);
         await vi.waitFor(() => expect(captureExceptionAs).toHaveBeenCalledTimes(1));
@@ -1320,25 +1293,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
   });
 
   describe('validation branches (mutation hardening)', () => {
-    it('rejects an empty-after-trim topic with the indexed field', async () => {
-      const res = await post(baseBody({ topics: ['   '] }));
-      const json = await res.json();
-      expect(res.status).toBe(400);
-      expect(json.code).toBe('VALIDATION_FAILED');
-      expect(json.error).toBe('Topic 1 is empty.');
-      expect(json.field).toBe('topics.0');
-      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
-    });
-
-    it('rejects a topic over 300 characters with the indexed field', async () => {
-      const res = await post(baseBody({ topics: ['x'.repeat(301)] }));
-      const json = await res.json();
-      expect(res.status).toBe(400);
-      expect(json.code).toBe('VALIDATION_FAILED');
-      expect(json.error).toBe('Topic 1 must be at most 300 characters.');
-      expect(json.field).toBe('topics.0');
-    });
-
     it('rejects an empty provider list', async () => {
       const res = await post(
         baseBody({
@@ -1408,7 +1362,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('rejects an over-long scriptPrompts entry with the indexed field', async () => {
-      const res = await post(baseBody({ options: { scriptPrompts: ['x'.repeat(2001), 'fine'] } }));
+      const res = await post(baseBody({ options: { scriptPrompts: ['x'.repeat(2001)] } }));
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.code).toBe('VALIDATION_FAILED');
@@ -2067,7 +2021,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         spendErrorMessage:
           'duplicate key value violates unique constraint "token_transactions_generation_id_key"',
         replaySlots: [
-          { id: 'slot-0', slot_at: futureISO(49), topic: 'Idea 1', task_id: 'task-1', status: 'generating' },
+          { id: 'slot-0', slot_at: futureISO(49), title: 'Porto trip', task_id: 'task-1', status: 'generating' },
         ],
       });
       const res = await post(baseBody({ idempotencyKey: 'spend-race-key' }));
@@ -2075,7 +2029,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(200);
       expect(json.replayed).toBe(true);
       expect(json.slots).toHaveLength(1);
-      expect(json.slots[0]).toMatchObject({ slotId: 'slot-0', topic: 'Idea 1', taskId: 'task-1' });
+      expect(json.slots[0]).toMatchObject({ slotId: 'slot-0', title: 'Porto trip', taskId: 'task-1' });
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
     });
 
@@ -2165,27 +2119,25 @@ describe('POST /api/videos/generate-and-schedule', () => {
       setup({ ...DEFAULT_CFG, updateErrorTables: ['scheduled_posts'] });
       const res = await post(baseBody());
       const json = await res.json();
-      // Every slot failed, none with an engine code: honest 502, internal.
+      // The slot failed, none with an engine code: honest 502, internal.
       expect(res.status).toBe(502);
       expect(json.success).toBe(false);
       expect(json.code).toBe('INTERNAL_ERROR');
-      expect(json.slots).toHaveLength(2);
-      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', taskId: null, status: 'failed', errorCode: 'bind_failed' });
-      expect(json.slots[1]).toMatchObject({ topic: 'Idea 2', taskId: null, status: 'failed', errorCode: 'bind_failed' });
-      // The engine accepted both tasks: the task ids were preserved for
+      expect(json.slots).toHaveLength(1);
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', taskId: null, status: 'failed', errorCode: 'bind_failed' });
+      // The engine accepted the task: the task id was preserved for
       // recovery instead of being orphaned.
-      expect(vi.mocked(startEngineVideoTask)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(startEngineVideoTask)).toHaveBeenCalledTimes(1);
     });
 
     it('marks the slot engine_unavailable when the engine has no upstream status', async () => {
-      setup({ ...DEFAULT_CFG, engineUnavailableSubjects: ['Idea 1', 'Idea 2'] });
+      setup({ ...DEFAULT_CFG, engineUnavailableSubjects: ['Porto trip'] });
       const res = await post(baseBody());
       const json = await res.json();
       expect(res.status).toBe(502);
       expect(json.success).toBe(false);
       expect(json.code).toBe('ENGINE_UNAVAILABLE');
-      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', status: 'failed', errorCode: 'engine_unavailable' });
-      expect(json.slots[1]).toMatchObject({ topic: 'Idea 2', status: 'failed', errorCode: 'engine_unavailable' });
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', errorCode: 'engine_unavailable' });
     });
 
     it('marks the slot image_resolve_failed when dispatch-time resolution fails', async () => {
@@ -2195,7 +2147,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(502);
       expect(json.success).toBe(false);
       expect(json.code).toBe('INTERNAL_ERROR');
-      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', status: 'failed', errorCode: 'image_resolve_failed' });
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', errorCode: 'image_resolve_failed' });
     });
 
     it('marks the slot image_sign_failed when the selected image cannot be signed', async () => {
@@ -2208,7 +2160,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(res.status).toBe(502);
       expect(json.success).toBe(false);
-      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', status: 'failed', errorCode: 'image_sign_failed' });
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', errorCode: 'image_sign_failed' });
     });
 
     it('marks the slot photo_missing when no face source exists', async () => {
@@ -2218,40 +2170,26 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(502);
       expect(json.success).toBe(false);
       expect(json.code).toBe('INTERNAL_ERROR');
-      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', status: 'failed', errorCode: 'photo_missing' });
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', errorCode: 'photo_missing' });
     });
 
     it('marks the slot no_task_id when the engine accepts without a task id', async () => {
-      setup({ ...DEFAULT_CFG, engineNoTaskIdSubjects: ['Idea 1', 'Idea 2'] });
+      setup({ ...DEFAULT_CFG, engineNoTaskIdSubjects: ['Porto trip'] });
       const res = await post(baseBody());
       const json = await res.json();
       expect(res.status).toBe(502);
       expect(json.success).toBe(false);
       expect(json.code).toBe('ENGINE_UNAVAILABLE');
-      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', status: 'failed', errorCode: 'no_task_id' });
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', errorCode: 'no_task_id' });
     });
 
-    it('reports INTERNAL_ERROR on mixed engine/non-engine slot failures', async () => {
-      // every() is false but some() is true here: the outage classifier must
-      // not claim a full engine outage when one slot failed for another
-      // reason (this pins the every-vs-some distinction).
-      setup({ ...DEFAULT_CFG, engineUnavailableSubjects: ['Idea 1'], updateErrorTables: ['scheduled_posts'] });
+    it('records tokensRefunded false when the per-slot refund fails', async () => {
+      setup({ ...DEFAULT_CFG, engineFailSubjects: ['Porto trip'], refundBatchErrorCode: 'XX000' });
       const res = await post(baseBody());
       const json = await res.json();
       expect(res.status).toBe(502);
       expect(json.success).toBe(false);
-      expect(json.code).toBe('INTERNAL_ERROR');
-      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', errorCode: 'engine_unavailable' });
-      expect(json.slots[1]).toMatchObject({ topic: 'Idea 2', errorCode: 'bind_failed' });
-    });
-
-    it('records tokensRefunded false when the per-slot refund fails', async () => {
-      setup({ ...DEFAULT_CFG, engineFailSubjects: ['Idea 1'], refundBatchErrorCode: 'XX000' });
-      const res = await post(baseBody());
-      const json = await res.json();
-      expect(res.status).toBe(200);
-      expect(json.success).toBe(true);
-      expect(json.slots[0]).toMatchObject({ topic: 'Idea 1', status: 'failed' });
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed' });
       // The slot still reports failed; the history marks the refund as not
       // delivered so the discrepancy stays visible.
       const failedCall = vi
@@ -2322,13 +2260,13 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(payload.persona.name).toBe('Persona');
     });
 
-    it('trims topics before storing and dispatching', async () => {
-      const res = await post(baseBody({ topics: ['  Idea 1  ', 'Idea 2'] }));
+    it('trims the title before storing and dispatching', async () => {
+      const res = await post(baseBody({ title: '  Porto trip  ' }));
       const json = await res.json();
       expect(res.status).toBe(200);
-      expect(json.slots[0].topic).toBe('Idea 1');
-      const slotRows = inserts.scheduled_posts as Array<{ topic: string }>;
-      expect(slotRows.map((r) => r.topic)).toEqual(['Idea 1', 'Idea 2']);
+      expect(json.slots[0].title).toBe('Porto trip');
+      const slotRows = inserts.scheduled_posts as Array<{ title: string }>;
+      expect(slotRows.map((r) => r.title)).toEqual(['Porto trip']);
     });
 
     it('sorts and dedupes schedule times on insert', async () => {
@@ -2347,12 +2285,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('tracks tasks_created with accepted and failed counts', async () => {
-      setup({ ...DEFAULT_CFG, engineFailSubjects: ['Idea 1'] });
+      // One call is one video: the success case pins accepted 1, failed 0.
       const res = await post(baseBody());
       expect(res.status).toBe(200);
       expect(vi.mocked(trackApiEvent)).toHaveBeenCalledWith(
         'video_tasks_created',
-        expect.objectContaining({ tasksAccepted: 1, tasksFailed: 1 }),
+        expect.objectContaining({ tasksAccepted: 1, tasksFailed: 0 }),
       );
       // durationMs is wall-clock elapsed (Date.now() - startedAt), not a sum.
       const completed = vi
@@ -2545,7 +2483,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(200);
       const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
       expect(spends).toHaveLength(1);
-      expect(spends[0].args.p_amount).toBe(2);
+      expect(spends[0].args.p_amount).toBe(1);
       // No persona means no library to resolve from and no anti-repeat
       // history to record into.
       expect(vi.mocked(resolveVideoImage)).not.toHaveBeenCalled();
@@ -2621,13 +2559,13 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(200);
       expect(json.success).toBe(true);
       expect(json.schedule.mode).toBe('asap');
-      expect(json.slots).toHaveLength(2);
+      expect(json.slots).toHaveLength(1);
 
       // slot_at is the request time, not a distributed future slot: the
       // engine's tick publishes ready slots with slot_at <= now, so these
       // go out the moment generation finishes. The 3h window never applies.
       const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
-      expect(slotRows).toHaveLength(2);
+      expect(slotRows).toHaveLength(1);
       for (const row of slotRows) {
         const at = new Date(row.slot_at as string).getTime();
         expect(at).toBeGreaterThanOrEqual(before - 1000);
@@ -2651,7 +2589,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         existingScheduleId: scheduleId,
         existingSchedulePublishMode: 'asap',
         replaySlots: [
-          { id: 'slot-0', slot_at: new Date().toISOString(), topic: 'Idea 1', task_id: 'task-1', status: 'generating' },
+          { id: 'slot-0', slot_at: new Date().toISOString(), title: 'Porto trip', task_id: 'task-1', status: 'generating' },
         ],
       });
       const second = await post(asapBody({ idempotencyKey: key }));
@@ -2708,7 +2646,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(200);
       const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
       expect(spends).toHaveLength(1);
-      expect(spends[0].args.p_amount).toBe(4);
+      expect(spends[0].args.p_amount).toBe(2);
     });
 
     it('defaults to scheduled and persists publish_mode=scheduled', async () => {
@@ -2746,5 +2684,86 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(json.field).toBe('publishing.schedule');
     });
+  });
+});
+
+describe('segments-only contract (Phase 4)', () => {
+  const hook =
+    'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
+  const bodyText =
+    'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
+  const cta = 'Save this video before your next trip to Porto.';
+  const segments = [
+    { kind: 'hook', text: hook },
+    { kind: 'body', text: bodyText },
+    { kind: 'cta', text: cta },
+  ];
+  function singleBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    const base: Record<string, unknown> = {
+      personaId: 'persona-1',
+      title: 'Porto trip',
+      publishing: {
+        providers: ['youtube'],
+        accounts: { youtube: ['acct-1'] },
+        schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
+      },
+      options: { segments },
+    };
+    return { ...base, ...overrides };
+  }
+
+  it('rejects a topics key with 400 naming the field and the fix, before any charge', async () => {
+    const res = await post({ ...singleBody(), topics: ['Porto trip'] });
+    const json = await res.json();
+    expect(res.status).toBe(400);
+    expect(json.field).toBe('topics');
+    expect(String(json.error ?? json.message ?? '')).toMatch(/title/i);
+    expect(String(json.error ?? json.message ?? '')).toMatch(/segments/i);
+    expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+  });
+
+  it('rejects a missing title with 400 naming title', async () => {
+    const body = singleBody();
+    delete body.title;
+    const res = await post(body);
+    const json = await res.json();
+    expect(res.status).toBe(400);
+    expect(String(json.field)).toContain('title');
+    expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+  });
+
+  it('rejects an empty title with 400 naming title', async () => {
+    const res = await post(singleBody({ title: '   ' }));
+    const json = await res.json();
+    expect(res.status).toBe(400);
+    expect(String(json.field)).toContain('title');
+    expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+  });
+
+  it('rejects missing segments with 400 naming options.segments, before any charge', async () => {
+    const res = await post(singleBody({ options: {} }));
+    const json = await res.json();
+    expect(res.status).toBe(400);
+    expect(String(json.field)).toContain('options.segments');
+    expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+  });
+
+  it('creates exactly one slot titled by title, charging one video, with no topics anywhere', async () => {
+    const res = await post(singleBody());
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.slots).toHaveLength(1);
+    expect(json.slots[0].title).toBe('Porto trip');
+    expect(json.slots[0]).not.toHaveProperty('topic');
+    expect(json.slots[0]).not.toHaveProperty('topics');
+    const rows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].title).toBe('Porto trip');
+    expect(rows[0]).not.toHaveProperty('topic');
+    const spend = rpcCalls.find((c) => c.name === 'spend_tokens');
+    expect(spend?.args.p_amount).toBe(2);
+    const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+    expect(payload.video_subject).toBe('Porto trip');
+    expect(payload.video_script).toBe(`${hook}\n\n${bodyText}\n\n${cta}`);
   });
 });

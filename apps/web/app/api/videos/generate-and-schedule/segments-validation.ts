@@ -1,22 +1,19 @@
 // Segments request validation for POST /api/videos/generate-and-schedule,
 // extracted from route.ts so the route stays under the file-size ratchet.
 // Runs before auth and before any token is charged. Returns the joined
-// script, undefined when the request carries no segments, or a 400 response.
+// script, or a 400 response. Segments are required: one call is one video
+// with a complete script — a request without segments has nothing to
+// generate, so it fails here instead of dispatching an empty job.
 import type { NextResponse } from 'next/server';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { validationFailed } from './prepare-persona';
 import { joinSegments, validateSegments } from '@/lib/generation/script-segments';
 
-export function validateSegmentsRequest(
-  rawSegments: unknown,
-  topicCount: number,
-): string | undefined | NextResponse {
-  if (rawSegments === undefined) return undefined;
-  // One segments call is one video, so it needs exactly one topic.
-  if (topicCount !== 1) {
+export function validateSegmentsRequest(rawSegments: unknown): string | NextResponse {
+  if (rawSegments === undefined) {
     return validationFailed(
       ERROR_CODES.VALIDATION_FAILED,
-      'A segments request creates exactly one video: send exactly one topic.',
+      'options.segments is required: send the full script as segments (first hook, then body, last CTA).',
       'options.segments',
     );
   }

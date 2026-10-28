@@ -24,7 +24,7 @@ interface SlotRow {
   id: string;
   schedule_id: string;
   status: string;
-  topic: string | null;
+  title: string | null;
 }
 
 interface ScheduleRow {
@@ -41,7 +41,7 @@ async function loadOwnedSlot(
 ): Promise<{ slot: SlotRow } | { error: NextResponse }> {
   const { data: slot, error } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, status, topic')
+    .select('id, schedule_id, status, title')
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();
@@ -222,12 +222,12 @@ async function deleteHandler(
 }
 
 //---------------
-// PATCH — edit the topic of a slot that has not been dispatched to the
-// engine yet (DB status 'pending', presented as 'awaiting'). The engine
-// generates each video from the stored topic, so this is the edit-text
-// action; anything already generating or beyond is rejected with 409.
-// Only { topic: string } is accepted; the topic is trimmed and must be
-// non-empty (same contract as the creation route's parseTopics).
+// PATCH — edit the title of a slot that has not been dispatched to the
+// engine yet (DB status 'pending', presented as 'awaiting'). The title is
+// the slot label; the video script comes from the stored segments, so this
+// is the edit-label action; anything already generating or beyond is
+// rejected with 409. Only { title: string } is accepted; the title is
+// trimmed and must be non-empty.
 //---------------
 async function patchHandler(
   request: Request,
@@ -268,17 +268,17 @@ async function patchHandler(
       route: 'PATCH /api/schedule/slots',
     });
   }
-  const rawTopic = (body as { topic?: unknown } | null)?.topic;
-  if (typeof rawTopic !== 'string' || rawTopic.trim() === '') {
-    return apiErrorResponse(400, 'topic must be a non-empty string.', {
+  const rawTitle = (body as { title?: unknown } | null)?.title;
+  if (typeof rawTitle !== 'string' || rawTitle.trim() === '') {
+    return apiErrorResponse(400, 'title must be a non-empty string.', {
       route: 'PATCH /api/schedule/slots',
     });
   }
-  const topic = rawTopic.trim();
+  const title = rawTitle.trim();
 
   const { error: updateError } = await supabase
     .from('scheduled_posts')
-    .update({ topic })
+    .update({ title })
     .eq('id', slot.id)
     .eq('user_id', auth.userId)
     // Re-check the status in the UPDATE predicate itself: the slot may have
@@ -300,7 +300,7 @@ async function patchHandler(
       cause: updateError,
     });
   }
-  return NextResponse.json({ success: true, topic });
+  return NextResponse.json({ success: true, title });
 }
 
 //---------------

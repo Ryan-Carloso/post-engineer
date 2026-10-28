@@ -36,6 +36,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 028 | `migrations/028_publish_retry_backoff.sql` | Publish retry backoff: `scheduled_posts.publish_not_before`, skipped by `ready_due_slots` until the delay elapses |
 | 029 | `migrations/029_scheduled-posts-material.sql` | Per-post video material (`scheduled_posts.faceless_material`, `'broll'` or `'svg'`, default `'broll'`), forwarded by the engine batch pipeline |
 | 030 | `migrations/030_scheduled-posts-segments.sql` | Per-post script segments (`scheduled_posts.segments`, nullable jsonb), forwarded by the engine batch pipeline so a requeued slot keeps its script and user photos |
+| 031 | `migrations/031_scheduled-posts-title-drop-topic.sql` | BREAKING: `scheduled_posts.title` (slot label) replaces `scheduled_posts.topic` — existing labels are backfilled from `topic`, then the `topic` column is dropped (requires the `db:destructive-approved` label). Segments-NULL rows have no script and fail under the engine's generic scriptless rule |
 
 ## How to apply
 

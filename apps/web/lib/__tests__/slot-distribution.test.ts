@@ -11,7 +11,7 @@ import {
 } from '../schedule/slot-distribution';
 
 describe('distributeSlots', () => {
-  it('places a single topic on the first slot', () => {
+  it('places a single slot on the first slot', () => {
     const slots = distributeSlots({
       startAtISO: '2026-10-02T18:00:00+01:00',
       times: ['18:00'],
@@ -23,7 +23,7 @@ describe('distributeSlots', () => {
     ]);
   });
 
-  it('distributes the spec example across days preserving topic order', () => {
+  it('distributes the spec example across days preserving slot order', () => {
     const slots = distributeSlots({
       startAtISO: '2026-10-02T18:00:00+01:00',
       times: ['18:00', '21:00'],
@@ -40,7 +40,7 @@ describe('distributeSlots', () => {
     expect(slots.map((s) => s.timeIndex)).toEqual([0, 1, 0, 1]);
   });
 
-  it('spreads 10 topics over 4 days with 3 daily times', () => {
+  it('spreads 10 slots over 4 days with 3 daily times', () => {
     const slots = distributeSlots({
       startAtISO: '2026-10-02T08:00:00+01:00',
       times: ['09:00', '13:00', '18:00'],
@@ -77,15 +77,15 @@ describe('distributeSlots', () => {
       timezone: 'Europe/Lisbon',
       count: 2,
     });
-    // 02/10 18:00 is before startAt, so topic 1 takes 02/10 21:00 and
-    // topic 2 moves to the next day — no shared slots.
+    // 02/10 18:00 is before startAt, so slot 1 takes 02/10 21:00 and
+    // slot 2 moves to the next day — no shared slots.
     expect(slots).toEqual([
       { slotAtISO: '2026-10-02T20:00:00.000Z', dayIndex: 0, timeIndex: 1 },
       { slotAtISO: '2026-10-03T17:00:00.000Z', dayIndex: 1, timeIndex: 0 },
     ]);
   });
 
-  it('dedupes identical times so topics never share a slot', () => {
+  it('dedupes identical times so slots never share a time', () => {
     const slots = distributeSlots({
       startAtISO: '2026-10-02T08:00:00+01:00',
       times: ['18:00', '18:00'],

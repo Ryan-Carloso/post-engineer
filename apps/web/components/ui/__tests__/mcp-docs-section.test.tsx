@@ -108,7 +108,7 @@ describe('McpDocsSection', () => {
     expect(screen.queryByTestId('mcp-docs-help-cta')).toBeNull();
   });
 
-  it('renders the tools grid with all forty tools', () => {
+  it('renders the tools grid with all 41 tools', () => {
     render(<McpDocsSection />);
 
     const grid = screen.getByTestId('mcp-tools-grid');
@@ -135,7 +135,6 @@ describe('McpDocsSection', () => {
       'remove_persona_image',
       'publish_video_direct',
       'get_token_balance',
-      'generate_persona_videos',
       'generate_persona_video',
       'validate_script',
       'upload_media',
@@ -150,7 +149,7 @@ describe('McpDocsSection', () => {
       'list_posts',
       'cancel_schedule',
       'get_slot',
-      'update_slot_topic',
+      'update_slot_title',
       'delete_slot',
       'list_video_generations',
       'get_video_generation',
@@ -178,7 +177,7 @@ describe('McpDocsSection', () => {
       'apiKeys.toolDescRemovePersonaImage',
       'apiKeys.toolDescPublishVideoDirect',
       'apiKeys.toolDescGetTokenBalance',
-      'apiKeys.toolDescGeneratePersonaVideos',
+      'apiKeys.toolDescGeneratePersonaVideo',
       'apiKeys.toolDescValidateScript',
       'apiKeys.toolDescGetVideoStatus',
       'apiKeys.toolDescGetVideoTaskProgress',
@@ -190,7 +189,7 @@ describe('McpDocsSection', () => {
       'apiKeys.toolDescListPosts',
       'apiKeys.toolDescCancelSchedule',
       'apiKeys.toolDescGetSlot',
-      'apiKeys.toolDescUpdateSlotTopic',
+      'apiKeys.toolDescUpdateSlotTitle',
       'apiKeys.toolDescDeleteSlot',
       'apiKeys.toolDescListVideoGenerations',
       'apiKeys.toolDescGetVideoGeneration',
@@ -214,7 +213,7 @@ describe('McpDocsSection', () => {
     const prompt = vi.mocked(window.navigator.clipboard.writeText).mock.calls[0][0] as string;
     expect(prompt).toContain('post-engineer');
     expect(prompt).toContain('POST_ENGINEER_API_KEY');
-    expect(prompt).toContain('generate_persona_videos');
+    expect(prompt).toContain('generate_persona_video');
     expect(prompt).toContain('"command": ["npx", "-y", "post-engineer-mcp@latest"]');
     expect(prompt).toContain('list_personas');
     expect(prompt).toContain('list_voices');
@@ -222,16 +221,15 @@ describe('McpDocsSection', () => {
     expect(prompt).toContain('list_social_accounts');
     expect(prompt).toContain('get_token_balance');
     expect(prompt).toContain('cancel_schedule');
-    // Batch generation, per-video progress, image library, and account
+    // Single-video generation, per-video progress, image library, and account
     // connect must be visible to the agent in the copied prompt.
-    expect(prompt).toContain('generate_persona_videos');
+    expect(prompt).toContain('generate_persona_video');
     expect(prompt).toContain('get_video_task_progress');
     expect(prompt).toContain('list_persona_images');
     expect(prompt).toContain('add_persona_image');
     expect(prompt).toContain('update_persona_image');
     expect(prompt).toContain('remove_persona_image');
     expect(prompt).toContain('connect_account');
-    expect(prompt).toContain('webhookUrl');
     // list_posts lets the agent show upcoming and past posts.
     expect(prompt).toContain('list_posts');
     expect(prompt).toContain('upcoming');
@@ -243,10 +241,9 @@ describe('McpDocsSection', () => {
     expect(prompt).toContain(
       'list_posts: list my upcoming (scheduled) and past posts across all connected accounts (optional limit, default 20, max 500).',
     );
-    // generate_persona_videos documents the per-video overrides.
-    expect(prompt).toContain('generate_persona_videos');
-    expect(prompt).toContain('audioUrl');
-    expect(prompt).toContain('overriding the persona voice');
+    // generate_persona_video documents the segments script and title.
+    expect(prompt).toContain('generate_persona_video');
+    expect(prompt).toContain('segments');
     expect(prompt).toContain('How to work with me');
     expect(prompt).toContain('Never invent a personaId');
     expect(prompt).not.toContain('Clone');
@@ -256,7 +253,7 @@ describe('McpDocsSection', () => {
     // omits what the server offers.
     for (const tool of [
       'get_slot',
-      'update_slot_topic',
+      'update_slot_title',
       'delete_slot',
       'list_video_generations',
       'get_video_generation',
@@ -320,7 +317,7 @@ describe('McpDocsSection', () => {
       prompts[locale] = calls[calls.length - 1][0] as string;
       unmount();
     }
-    // The generate_persona_videos doc line is the agent's source of truth
+    // The generate_persona_video doc line is the agent's source of truth
     // for the schedule window; EN and PT must agree on the minimum advance
     // (regression: the PT line still advertised the old 24h window).
     // Step 5 of the prompt carries the same window and is pinned too, plus
@@ -333,7 +330,7 @@ describe('McpDocsSection', () => {
       );
       const videoLine = prompts[locale]
         .split('\n')
-        .find((line) => line.includes('- generate_persona_videos:'));
+        .find((line) => line.includes('- generate_persona_video:'));
       expect(videoLine, `${locale} prompt`).toBeDefined();
       expect(videoLine, `${locale} prompt`).toContain('3h');
       const step5Line = prompts[locale]
@@ -354,7 +351,7 @@ describe('McpDocsSection', () => {
       // The nine gap-closing tools are documented in both locales' prompts.
       for (const tool of [
         'get_slot',
-        'update_slot_topic',
+        'update_slot_title',
         'delete_slot',
         'list_video_generations',
         'get_video_generation',
@@ -394,27 +391,26 @@ const EXPECTED_EN_PROMPT: string[] = [
   "- list_faces: list stock avatar faces (id, url, name, gender, age, ethnicity, hair, description in English); pass a face url as avatarUrl when calling create_persona.",
   "- create_persona: create an AI persona (name, avatarUrl, voiceId, language, videoAspect 9:16|16:9, scriptPrompt, paragraphNumber 1-5, niche).",
   "- update_persona: update an existing persona (only provided fields change).",
-  "- list_persona_images: list a persona's image library (id, tag, description, is_primary); pass an id as imageId to generate_persona_videos to force a specific image for one video.",
+  "- list_persona_images: list a persona's image library (id, tag, description, is_primary); pass an id as imageId to generate_persona_video to force a specific image for the video.",
   "- add_persona_image: add an image to a persona's library from a local file path (JPG/JPEG, PNG, or WebP, max 9MB). Optional tag and description drive the deterministic per-video image selection.",
   "- update_persona_image: update a library image's tag, description, or primary flag.",
   "- remove_persona_image: remove an image from a persona's library.",
   "- publish_video_direct: publish a ready-made video file directly (no generation, no schedule): local .mp4/.mov path (max 2GB) + account IDs from list_social_accounts; YouTube needs title, description, tags, privacyStatus; Instagram/Bluesky/LinkedIn need caption.",
   "- get_token_balance: get my prepaid token wallet balance.",
-  "- generate_persona_videos: generate AND schedule 1-10 persona videos in ONE operation (personaId optional — omit it for a faceless post with no persona, then set options.faceless and options.voiceId, plus scriptPrompt/videoAspect/language/niche as needed; topics is one topic per video; providers plus per-provider account IDs from list_social_accounts; mode 'scheduled' (default) slots each video across startAt ISO datetime + times [\"HH:MM\"] in timezone, mode 'asap' publishes each video the moment its generation finishes with no startAt/times; slots must be 3h-30d ahead; optional overrides: scriptPrompt/scriptPrompts, audioUrl overriding the persona voice, imageId from list_persona_images, webhookUrl). Each video is generated then auto-published at its slot; there is no separate schedule step. Poll each slot's taskId with get_video_task_progress. Costs tokens per video.",
-  "- generate_persona_video: generate AND schedule ONE persona video from a complete script (segments: first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation — no LLM expands it; title is the single topic; personaId optional with the same faceless rules as generate_persona_videos; providers plus per-provider account IDs from list_social_accounts; mode 'scheduled' (default) slots the video across startAt ISO datetime + times [\"HH:MM\"] in timezone, mode 'asap' publishes it the moment its generation finishes with no startAt/times; slot must be 3h-30d ahead). The video is generated then auto-published at its slot; there is no separate schedule step. Poll the slot's taskId with get_video_task_progress. Costs tokens.",
+  "- generate_persona_video: generate AND schedule ONE persona video from a complete script (segments: first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation — no LLM expands it; title is the slot label; personaId optional — omit it for a faceless post with no persona, then set options.faceless and options.voiceId; providers plus per-provider account IDs from list_social_accounts; mode 'scheduled' (default) slots the video across startAt ISO datetime + times [\"HH:MM\"] in timezone, mode 'asap' publishes it the moment its generation finishes with no startAt/times; slot must be 3h-30d ahead). The video is generated then auto-published at its slot; there is no separate schedule step. Poll the slot's taskId with get_video_task_progress. Costs tokens.",
   "- validate_script: validate a segments script mechanically, without spending tokens (segments: first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation). Returns the word counts and the hook window (8-12 seconds spoken). Measured hook duration is pending a hook-only TTS endpoint and is reported as pending, never invented.",
   "- upload_media: upload a local image for a video segment and get a mediaId for the segment media field (JPG, PNG, or WebP, max 8MB — the engine photo limit; temporary asset, 1 hour TTL, so upload shortly before generating).",
   "- check_media: mechanically check one public image URL for a segment, without an LLM and without judging relevance (returns exactly one code: ok, blocked_403, not_image, too_small, too_large, timeout, or face_detected).",
   "- Recipes: daily news becomes a video — see docs/recipes/daily-news.md in the post-engineer repo for the copy-ready prompt and worked example.",
   "- get_video_status: check generation status with a taskId and get the final video URL.",
-  "- get_video_task_progress: poll one video task for machine-readable progress ({task_id, state, progress, stage, error}); error is the failure reason when state is -1, null otherwise; use per video (1/6, 2/6, ...) after generate_persona_videos.",
+  "- get_video_task_progress: poll one video task for machine-readable progress ({task_id, state, progress, stage, error}); error is the failure reason when state is -1, null otherwise; use for the video after generate_persona_video.",
   "- list_social_accounts: list my connected social accounts with the account IDs needed for scheduling.",
   "- connect_account: connect a social account (youtube/instagram/linkedin return an authorization URL for me to open in a browser; bluesky connects directly with handle + app password).",
   "- list_schedules: list my automation schedules.",
   "- list_posts: list my upcoming (scheduled) and past posts across all connected accounts (optional limit, default 20, max 500).",
   "- cancel_schedule: cancel a schedule by its ID.",
-  "- get_slot: get one scheduled post's full detail by slot ID (status, topic, scheduled time, progress, schedule, persona).",
-  "- update_slot_topic: edit the topic of a scheduled post that has not started generating yet.",
+  "- get_slot: get one scheduled post's full detail by slot ID (status, title, scheduled time, progress, schedule, persona).",
+  "- update_slot_title: edit the title of a scheduled post that has not started generating yet.",
   "- delete_slot: delete one scheduled post slot (only pending/awaiting or failed slots; never the schedule's last slot).",
   "- list_video_generations: list my video generation history, newest first (optional limit, default 50, max 200).",
   "- get_video_generation: get one video generation's detail by generation ID.",
@@ -428,9 +424,9 @@ const EXPECTED_EN_PROMPT: string[] = [
   "",
   "How to work with me (agent instructions):",
   "1. Start by calling list_personas and showing me what I already have (name, language, niche). If I have none, say so.",
-  "2. Ask me what I want before doing anything that costs tokens. Check get_token_balance first and warn me if the balance is low. Use an existing persona or create a new one? If new, call list_voices and show me the real voice options, then ask for: language (e.g. pt-BR, en-US), niche/topic, avatar (photo URL or a stock face from list_faces — every persona has a face), voice choice, video format 9:16 or 16:9, and the script style/prompt.",
+  "2. Ask me what I want before doing anything that costs tokens. Check get_token_balance first and warn me if the balance is low. Use an existing persona or create a new one? If new, call list_voices and show me the real voice options, then ask for: language (e.g. pt-BR, en-US), niche, video subject area, avatar (photo URL or a stock face from list_faces — every persona has a face), voice choice, video format 9:16 or 16:9, and the script style/prompt.",
   "3. Confirm the persona details with me before calling create_persona. To fix a persona later, use update_persona (never create a duplicate). Never invent a personaId: always use the id returned by list_personas or create_persona.",
-  "4. For videos, confirm the script/prompt with me first, then call generate_persona_videos (one topic per video) and poll each slot's taskId with get_video_task_progress until it finishes. Ask me whether the videos should show the persona face or be faceless (options.faceless). Share the final video URL with me.",
+  "4. For videos, confirm the script/prompt with me first, then call generate_persona_video with the full segments script and title, and poll the slot's taskId with get_video_task_progress until it finishes. Ask me whether the videos should show the persona face or be faceless (options.faceless). Share the final video URL with me.",
   "5. For publishing, call list_social_accounts first to discover my connected accounts and their IDs. Then ask for the platforms, start date, publish times, and timezone. Only schedule between 3h and 30 days in advance. Show my schedules with list_schedules on request, and use cancel_schedule to remove one.",
   "6. When I ask about my posts (what is coming next, what already went out), call list_posts and summarize the upcoming and past posts, including any failure errors.",
 ];
@@ -461,27 +457,26 @@ const EXPECTED_PT_PROMPT: string[] = [
   "- list_faces: listar rostos de avatar padrão (id, url, nome, gênero, idade, etnia, cabelo, descrição em inglês); use a url como avatarUrl ao chamar create_persona.",
   "- create_persona: criar uma persona de IA (name, avatarUrl, voiceId, language, videoAspect 9:16|16:9, scriptPrompt, paragraphNumber 1-5, niche).",
   "- update_persona: atualizar uma persona existente (só os campos enviados mudam).",
-  "- list_persona_images: listar a biblioteca de imagens de uma persona (id, tag, description, is_primary); passe um id como imageId no generate_persona_videos para forçar uma imagem específica em um vídeo.",
+  "- list_persona_images: listar a biblioteca de imagens de uma persona (id, tag, description, is_primary); passe um id como imageId no generate_persona_video para forçar uma imagem específica em um vídeo.",
   "- add_persona_image: adicionar uma imagem à biblioteca de uma persona a partir de um arquivo local (JPG/JPEG, PNG ou WebP, máx 9MB). Tag e descrição opcionais guiam a seleção determinística de imagem por vídeo.",
   "- update_persona_image: atualizar a tag, a descrição ou o flag de principal de uma imagem da biblioteca.",
   "- remove_persona_image: remover uma imagem da biblioteca de uma persona.",
   "- publish_video_direct: publicar um vídeo pronto diretamente (sem geração, sem agendamento): arquivo local .mp4/.mov (máx 2GB) + account IDs do list_social_accounts; YouTube exige title, description, tags e privacyStatus; Instagram/Bluesky/LinkedIn exigem caption.",
   "- get_token_balance: ver o saldo da minha carteira de tokens.",
-  "- generate_persona_videos: gerar E agendar de 1 a 10 vídeos de uma persona em UMA operação (personaId opcional — omita para um post faceless sem persona e informe options.faceless e options.voiceId, mais scriptPrompt/videoAspect/language/niche se precisar; topics é um tópico por vídeo; providers mais account IDs por provider do list_social_accounts; startAt datetime ISO, times [\"HH:MM\"], timezone; slots devem estar de 3h a 30 dias à frente). Cada vídeo é gerado e publicado automaticamente no seu slot; não há etapa separada de agendamento. Acompanhe o taskId de cada slot com get_video_task_progress. Custa tokens por vídeo.",
-  "- generate_persona_video: gerar E agendar UM vídeo de persona a partir de um roteiro completo (segments: primeiro hook, depois body, por último CTA; 60-200 palavras no total, body no mínimo 30, CTA 5-20, hook 15-40 palavras terminando com pontuação final — nenhum LLM expande o roteiro; title é o único tópico; personaId opcional com as mesmas regras faceless do generate_persona_videos; providers mais account IDs por provider do list_social_accounts; mode 'scheduled' (padrão) agenda o vídeo com startAt datetime ISO + times [\"HH:MM\"] em timezone, mode 'asap' publica no momento em que a geração termina sem startAt/times; slot deve estar de 3h a 30 dias à frente). O vídeo é gerado e publicado automaticamente no seu slot; não há etapa separada de agendamento. Acompanhe o taskId do slot com get_video_task_progress. Custa tokens.",
+  "- generate_persona_video: gerar E agendar UM vídeo de persona a partir de um roteiro completo (segments: primeiro hook, depois body, por último CTA; 60-200 palavras no total, body no mínimo 30, CTA 5-20, hook 15-40 palavras terminando com pontuação final — nenhum LLM expande o roteiro; title é o rótulo do slot; personaId opcional — omita para um post faceless sem persona e informe options.faceless e options.voiceId; providers mais account IDs por provider do list_social_accounts; mode 'scheduled' (padrão) agenda o vídeo com startAt datetime ISO + times [\"HH:MM\"] em timezone, mode 'asap' publica no momento em que a geração termina sem startAt/times; slot deve estar de 3h a 30 dias à frente). O vídeo é gerado e publicado automaticamente no seu slot; não há etapa separada de agendamento. Acompanhe o taskId do slot com get_video_task_progress. Custa tokens.",
   "- validate_script: validar um roteiro em segments mecanicamente, sem gastar tokens (segments: primeiro hook, depois body, por último CTA; 60-200 palavras no total, body no mínimo 30, CTA 5-20, hook 15-40 palavras terminando com pontuação final). Retorna as contagens de palavras e a janela do hook (8-12 segundos falados). A duração medida do hook está pendente de um endpoint TTS só do hook e é informada como pendente, nunca inventada.",
   "- upload_media: enviar uma imagem local para um segmento de vídeo e obter um mediaId para o campo media do segmento (JPG, PNG ou WebP, máx. 8MB — o limite de foto do engine; asset temporário, TTL de 1 hora, então envie pouco antes de gerar).",
   "- check_media: verificar mecanicamente uma URL pública de imagem para um segmento, sem LLM e sem julgar relevância (retorna exatamente um código: ok, blocked_403, not_image, too_small, too_large, timeout ou face_detected).",
   "- Receitas: notícias do dia viram vídeo — ver docs/recipes/daily-news.md no repo post-engineer para o prompt pronto e o exemplo.",
   "- get_video_status: conferir o status da geração com o taskId e pegar a URL do vídeo final.",
-  "- get_video_task_progress: acompanhar o progresso legível por máquina de uma tarefa de vídeo ({task_id, state, progress, stage, error}); error é o motivo da falha quando state é -1, null caso contrário; use por vídeo (1/6, 2/6, ...) após generate_persona_videos.",
+  "- get_video_task_progress: acompanhar o progresso legível por máquina de uma tarefa de vídeo ({task_id, state, progress, stage, error}); error é o motivo da falha quando state é -1, null caso contrário; use para o vídeo após generate_persona_video.",
   "- list_social_accounts: listar minhas contas sociais conectadas com os IDs necessários para agendar.",
   "- connect_account: conectar uma conta social (youtube/instagram/linkedin retornam uma URL de autorização para eu abrir no navegador; bluesky conecta direto com handle + app password).",
   "- list_schedules: listar meus agendamentos.",
   "- list_posts: listar meus posts futuros (agendados) e passados em todas as contas conectadas (limit opcional, padrão 20, máx 500).",
   "- cancel_schedule: cancelar um agendamento pelo ID.",
-  "- get_slot: ver o detalhe completo de um post agendado pelo slot ID (status, tópico, horário, progresso, agendamento, persona).",
-  "- update_slot_topic: editar o tópico de um post agendado que ainda não começou a gerar.",
+  "- get_slot: ver o detalhe completo de um post agendado pelo slot ID (status, título, horário, progresso, agendamento, persona).",
+  "- update_slot_title: editar o título de um post agendado que ainda não começou a gerar.",
   "- delete_slot: deletar um slot de post agendado (só slots pendentes/aguardando ou falhados; nunca o último slot do agendamento).",
   "- list_video_generations: listar meu histórico de gerações de vídeo, do mais recente ao mais antigo (limit opcional, padrão 50, máx 200).",
   "- get_video_generation: ver o detalhe de uma geração de vídeo pelo generation ID.",
@@ -497,7 +492,7 @@ const EXPECTED_PT_PROMPT: string[] = [
   "1. Comece chamando list_personas e me mostrando o que eu já tenho (nome, idioma, nicho). Se eu não tiver nenhuma, diga isso.",
   "2. Pergunte o que eu quero antes de qualquer ação que custe tokens. Consulte get_token_balance primeiro e me avise se o saldo estiver baixo. Usar uma persona existente ou criar uma nova? Se for nova, chame list_voices e me mostre as opções reais de voz, depois pergunte: idioma (ex. pt-BR, en-US), nicho/tema, avatar (foto por URL ou um rosto padrão do list_faces — toda persona tem rosto), escolha de voz, formato 9:16 ou 16:9 e o estilo/prompt do roteiro.",
   "3. Confirme os detalhes da persona comigo antes de chamar create_persona. Para corrigir uma persona depois, use update_persona (nunca crie uma duplicada). Nunca invente um personaId: use sempre o id retornado por list_personas ou create_persona.",
-  "4. Para vídeos, confirme o roteiro/prompt comigo primeiro, depois chame generate_persona_videos (um tópico por vídeo) e acompanhe o taskId de cada slot com get_video_task_progress até concluir. Pergunte se os vídeos devem mostrar o rosto da persona ou ser faceless (options.faceless). Compartilhe a URL final do vídeo comigo.",
+  "4. Para vídeos, confirme o roteiro/prompt comigo primeiro, depois chame generate_persona_video com o roteiro completo em segments e o title, e acompanhe o taskId do slot com get_video_task_progress até concluir. Pergunte se os vídeos devem mostrar o rosto da persona ou ser faceless (options.faceless). Compartilhe a URL final do vídeo comigo.",
   "5. Para publicar, chame list_social_accounts primeiro para descobrir minhas contas conectadas e seus IDs. Depois pergunte as plataformas, data de início, horários de publicação e timezone. Agende somente de 3h a 30 dias de antecedência. Mostre meus agendamentos com list_schedules quando eu pedir, e use cancel_schedule para remover um.",
   "6. Quando eu perguntar sobre meus posts (o que vem aí, o que já saiu), chame list_posts e resuma os próximos e os passados, incluindo os erros de falha.",
 ];
