@@ -78,6 +78,17 @@ describe('countAddedLines', () => {
     assert.equal(total, 8);
     assert.equal(files[0].path, 'apps/web/lib/my file.ts');
   });
+
+  it('counts C-quoted non-ASCII paths instead of silently dropping them', () => {
+    const { files, total } = countAddedLines('8\t0\t"apps/web/lib/caf\\303\\251.ts"\n');
+    assert.equal(total, 8);
+    assert.equal(files[0].path, 'apps/web/lib/café.ts');
+  });
+
+  it('counts raw UTF-8 paths', () => {
+    const { total } = countAddedLines('8\t0\tapps/web/lib/café.ts\n');
+    assert.equal(total, 8);
+  });
 });
 
 describe('exceedsLimit and exemption label', () => {
