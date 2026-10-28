@@ -9,5 +9,7 @@ export const recipesI18nEn = {
       'Turn your GitHub pull requests into persona videos.',
   copyPrompt: 'Copy prompt',
   copiedPrompt: 'Copied!',
+  kindRecipe: 'Recipe',
+  kindPrompt: 'Prompt',
   viewRecipe: 'View recipe',
 } as const;

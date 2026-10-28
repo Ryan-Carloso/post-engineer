@@ -7,11 +7,16 @@ import { Button } from '@/components/ui/button';
 import SiteFooter from '@/components/site-footer';
 
 //---------------
-// Recipes list — editorial list, not a generic card grid: a large
-// accent number per recipe, a strong title, one objective line, then
-// the action (doc link, or a copyable prompt panel). Solid colors
-// only, from the existing palette: ink #101728, paper #f7f8fa,
-// accent #ff544c. No gradients, no purple/blue AI slop.
+// Recipes list — editorial list, not a generic card grid: a kind
+// label per entry (doc vs prompt, which is true about the content —
+// this list is not a sequence, so no 01/02 numbering), a strong
+// title, one objective line, then the action (doc link, or the
+// copyable prompt panel). The prompt panel is the single bold
+// element: dark ink, accent copy button, everything else quiet.
+// Solid colors only, from the existing palette: ink #101728,
+// paper #f7f8fa, accent #ff544c. No gradients, no purple/blue
+// AI slop. Type: black-weight display, regular body, mono for
+// the prompt data — no new font family, the repo loads none.
 // To add a recipe, add one entry to RECIPES below and its i18n
 // title/objective keys in both locales. An entry is either a doc
 // link (href) or a copy-ready prompt shown on the page (prompt);
@@ -45,12 +50,14 @@ const RECIPES = [
   {
     titleKey: 'recipes.dailyNewsTitle',
     objectiveKey: 'recipes.dailyNewsObjective',
+    kindKey: 'recipes.kindRecipe',
     href: 'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/daily-news.md',
     prompt: null,
   },
   {
     titleKey: 'recipes.githubPrsTitle',
     objectiveKey: 'recipes.githubPrsObjective',
+    kindKey: 'recipes.kindPrompt',
     href: null,
     prompt: GITHUB_PRS_PROMPT,
   },
@@ -82,14 +89,11 @@ export default function RecipesPage() {
           {t('recipes.subtitle')}
         </p>
         <ol className="mt-12 divide-y divide-[#e3e8ef] border-y border-[#e3e8ef]">
-          {RECIPES.map((recipe, index) => (
-            <li key={recipe.titleKey} className="flex gap-5 py-8 sm:gap-8 sm:py-10">
-              <span
-                aria-hidden="true"
-                className="w-10 shrink-0 text-3xl font-black text-[#ff544c] sm:text-4xl"
-              >
-                {String(index + 1).padStart(2, '0')}
-              </span>
+          {RECIPES.map((recipe) => (
+            <li key={recipe.titleKey} className="py-8 sm:py-10">
+              <p className="text-xs font-bold tracking-[0.2em] text-[#ff544c] uppercase">
+                {t(recipe.kindKey)}
+              </p>
               <div className="min-w-0 flex-1">
                 <h2 className="text-2xl font-bold tracking-tight text-[#101728]">
                   {t(recipe.titleKey)}
@@ -116,7 +120,7 @@ export default function RecipesPage() {
                       <Button
                         type="button"
                         onClick={handleCopyPrompt}
-                        className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/20"
+                        className="rounded-lg bg-[#ff544c] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#ff544c]/90"
                       >
                         {copied ? t('recipes.copiedPrompt') : t('recipes.copyPrompt')}
                       </Button>

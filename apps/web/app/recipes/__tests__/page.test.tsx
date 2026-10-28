@@ -19,6 +19,8 @@ vi.mock('@/lib/i18n/provider', () => {
       'Turn your GitHub pull requests into persona videos.',
     'recipes.copyPrompt': 'Copy prompt',
     'recipes.copiedPrompt': 'Copied!',
+    'recipes.kindRecipe': 'Recipe',
+    'recipes.kindPrompt': 'Prompt',
   };
   return {
     useI18n: () => ({
@@ -54,6 +56,14 @@ describe('/recipes page', () => {
     expect(
       screen.getByText(/validate_script with your script/),
     ).toBeInTheDocument();
+  });
+
+  it('labels entries by kind, not by sequence number', () => {
+    render(<RecipesPage />);
+    expect(screen.getByText('Recipe')).toBeInTheDocument();
+    expect(screen.getByText('Prompt')).toBeInTheDocument();
+    expect(screen.queryByText('01')).not.toBeInTheDocument();
+    expect(screen.queryByText('02')).not.toBeInTheDocument();
   });
 
   it('copies the GitHub PRs prompt to the clipboard', () => {

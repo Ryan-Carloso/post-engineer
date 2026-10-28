@@ -9,5 +9,7 @@ export const recipesI18nPt = {
       'Transformar seus pull requests do GitHub em vídeos de persona.',
   copyPrompt: 'Copiar prompt',
   copiedPrompt: 'Copiado!',
+  kindRecipe: 'Receita',
+  kindPrompt: 'Prompt',
   viewRecipe: 'Ver receita',
 } as const;
