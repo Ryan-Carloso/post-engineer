@@ -44,6 +44,7 @@ import {
 } from '../tools-publishing-accounts.js';
 import { GetClonedVoiceShape } from '../cloned-voice-tools.js';
 import { GeneratePersonaVideoShape, ValidateScriptShape } from '../tools-single-video.js';
+import { CheckMediaShape, UploadMediaShape } from '../tools-user-media.js';
 import { GetPostShape, GetPostMetricsShape } from '../tools-posts.js';
 import { CancelVideoTaskShape } from '../video-task-tools.js';
 import type { PostEngineerClient } from '../client.js';
@@ -51,6 +52,11 @@ import type { PostEngineerClient } from '../client.js';
 const mockTrackEvent = vi.fn();
 vi.mock('../analytics.js', () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+  // Same shape as the real withTracking: track, then run the handler.
+  withTracking: (toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
+    mockTrackEvent('mcp_tool_called', { toolName });
+    return handler(args);
+  },
 }));
 
 const EXPECTED_TOOLS = [
@@ -87,6 +93,8 @@ const EXPECTED_TOOLS = [
   'generate_persona_videos',
   'generate_persona_video',
   'validate_script',
+  'upload_media',
+  'check_media',
   'get_video_status',
   'get_video_task_progress',
   'list_persona_images',
@@ -231,6 +239,8 @@ describe('registered tool schemas (single source of truth)', () => {
       generate_persona_videos: GeneratePersonaVideosShape,
       generate_persona_video: GeneratePersonaVideoShape,
       validate_script: ValidateScriptShape,
+      upload_media: UploadMediaShape,
+      check_media: CheckMediaShape,
       get_video_status: GetVideoStatusShape,
       get_video_task_progress: GetVideoTaskProgressShape,
       list_persona_images: ListPersonaImagesShape,

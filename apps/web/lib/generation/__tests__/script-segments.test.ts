@@ -26,6 +26,15 @@ describe('validateSegments', () => {
     expect(joinSegments(validSegments())).toBe(`${hook}\n\n${body}\n\n${cta}`);
   });
 
+  it('strips padding before joining, matching the engine join the TaskVideoRequest validator compares against', () => {
+    const padded = [
+      { kind: 'hook', text: `  ${hook}  ` },
+      { kind: 'body', text: `  ${body} ` },
+      { kind: 'cta', text: `${cta}   ` },
+    ];
+    expect(joinSegments(padded)).toBe(`${hook}\n\n${body}\n\n${cta}`);
+  });
+
   it('rejects empty segments with the segments field', () => {
     const result = validateSegments([]);
     expect(result.ok).toBe(false);

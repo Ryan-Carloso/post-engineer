@@ -119,6 +119,17 @@ class BatchGenerator:
                 # Per-post material (scheduled_posts, migration 029), forwarded
                 # exactly like the web's direct dispatch does.
                 faceless_material=slot_material(slot),
+                # Segments (scheduled_posts, migration 030), forwarded exactly
+                # like the web's direct dispatch does. Without this, a
+                # requeued slot (engine restart mid-generation) or a
+                # tick-dispatched pending slot regenerates from the topic
+                # alone: the script differs and every user photo disappears
+                # with no warning. A row without segments (NULL) behaves
+                # exactly as before; the TaskVideoRequest validator joins
+                # them into video_script and rejects a malformed row, so a
+                # corrupt row fails the slot loudly instead of rendering a
+                # different video.
+                segments=slot.get("segments"),
                 video_script_prompt=identity.get("script_prompt") or "",
                 video_cta=identity.get("cta_text") or "",
                 # Snapshot (post_language) already resolved by post_identity();

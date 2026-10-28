@@ -88,16 +88,8 @@ import {
   handleCancelVideoTask,
 } from './video-task-tools.js';
 import { GeneratePersonaVideoShape, ValidateScriptShape, ValidateScriptDescription, handleGeneratePersonaVideo, handleValidateScript } from './tools-single-video.js';
-import { trackEvent } from './analytics.js';
-
-// Track every tool invocation as a PostHog analytics event (never throws, never blocks).
-
-function withTracking<TArgs extends Record<string, unknown>, TResult>(toolName: string, handler: (args: TArgs) => Promise<TResult>): (args: TArgs) => Promise<TResult> {
-  return async (args: TArgs): Promise<TResult> => {
-    trackEvent('mcp_tool_called', { toolName });
-    return handler(args);
-  };
-}
+import { CheckMediaDescription, CheckMediaShape, UploadMediaDescription, UploadMediaShape, handleCheckMedia, handleUploadMedia } from './tools-user-media.js';
+import { withTracking } from './analytics.js';
 
 // The server advertises the package version: import it so a version bump in
 // package.json flows through without touching this file.
@@ -404,6 +396,8 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     withTracking('generate_persona_video', async (args) => handleGeneratePersonaVideo(apiClient, args)),
   );
   server.tool('validate_script', ValidateScriptDescription, ValidateScriptShape, withTracking('validate_script', async (args) => handleValidateScript(apiClient, args)));
+  server.tool('upload_media', UploadMediaDescription, UploadMediaShape, withTracking('upload_media', async (args) => handleUploadMedia(apiClient, args)));
+  server.tool('check_media', CheckMediaDescription, CheckMediaShape, withTracking('check_media', async (args) => handleCheckMedia(apiClient, args)));
 
   server.tool(
     'get_video_status',

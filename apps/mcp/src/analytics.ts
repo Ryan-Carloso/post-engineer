@@ -139,3 +139,16 @@ export function resetAnalyticsForTesting(): void {
   warned = false;
   clientPromise = null;
 }
+
+//---------------
+// Wrap a tool handler so every invocation is tracked (never throws,
+// never blocks): the PostHog event carries only the tool name.
+// Moved here from index.ts so that file stays under the 500-line cap.
+//---------------
+
+export function withTracking<TArgs extends Record<string, unknown>, TResult>(toolName: string, handler: (args: TArgs) => Promise<TResult>): (args: TArgs) => Promise<TResult> {
+  return async (args: TArgs): Promise<TResult> => {
+    trackEvent('mcp_tool_called', { toolName });
+    return handler(args);
+  };
+}

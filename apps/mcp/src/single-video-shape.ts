@@ -13,7 +13,7 @@ export const ScriptSegmentShape = {
     .object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional() })
     .strict()
     .optional()
-    .describe('Phase 1: media reference shape only (upload_media is Phase 2). Exactly one of mediaId or url.'),
+    .describe('Phase 2: media reference, exactly one of mediaId (from upload_media) or url (a public image URL).'),
   terms: z.array(z.string().min(1)).max(10).optional().describe('Stock terms for this segment, chosen by the agent. At most 10.'),
 };
 

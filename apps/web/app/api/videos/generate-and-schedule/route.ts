@@ -31,6 +31,7 @@ import {
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber } from '@/lib/tokens';
+import { buildSlotRows } from './slot-rows';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
 import { validateTopics } from './topics-validation';
 import { validateSegmentsRequest } from './segments-validation';
@@ -1000,23 +1001,19 @@ async function postHandler(request: Request): Promise<NextResponse> {
     publishMode: mode,
   });
 
-  // 10. Insert the slots (pending). The id is database-generated; the
-  // returned rows carry it for the per-slot dispatch below.
-  // `faceless` is stored ON the slot, not derived from the persona at read
-  // time: it is a per-post choice, and the engine's batch pipeline reads it
-  // from this row when it prices a slot's failure refund.
+  // 10. Insert the slots (pending); see slot-rows.ts for the row shape.
   const { data: slotRows, error: slotsError } = await supabase
     .from('scheduled_posts')
     .insert(
-      slots.map((slot, i) => ({
-        schedule_id: idem.scheduleId,
-        user_id: userId,
-        slot_at: slot.slotAtISO,
-        status: 'pending',
-        topic: topics[i],
+      buildSlotRows({
+        slots,
+        topics,
+        scheduleId: idem.scheduleId,
+        userId,
         faceless: prep.faceless,
-        faceless_material: validatedOptions.facelessMaterial,
-      })),
+        facelessMaterial: validatedOptions.facelessMaterial,
+        segments: options?.segments,
+      }),
     )
     .select('id, slot_at, topic');
   if (slotsError || !slotRows || slotRows.length !== topics.length) {
@@ -1123,6 +1120,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         lipsync: !prep.faceless,
         // The material choice rides the payload under its snake_case name on every post, face or not.
         faceless_material: validatedOptions.facelessMaterial,
+        segments: options?.segments, // Segment media rides to the engine here, next to the joined script.
       });
       if (!hasNonEmptyString(payload.video_subject)) {
         throw new SlotDispatchError('empty_subject', 'Video subject is empty.');
