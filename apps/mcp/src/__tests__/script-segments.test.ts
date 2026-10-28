@@ -157,6 +157,97 @@ describe('validateSegments (shared module)', () => {
   });
 });
 
+describe('validateSegments (fail paths reformatted by the shared copy)', () => {
+  it('rejects a non-array and an empty array', () => {
+    for (const input of ['nope', []]) {
+      const result = validateSegments(input);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.field).toBe('segments');
+    }
+  });
+
+  it('rejects a last segment that is not the CTA', () => {
+    const result = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'body', text: body },
+      { kind: 'body', text: body },
+    ]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.field).toBe('segments.2.kind');
+  });
+
+  it('rejects a script with no body segment', () => {
+    const result = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.field).toBe('segments');
+  });
+
+  it('rejects a link inside a segment', () => {
+    const result = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'body', text: `${body} https://example.com/menu` },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.field).toBe('segments.1.text');
+  });
+
+  it('rejects a hook without terminal punctuation', () => {
+    const result = validateSegments([
+      { kind: 'hook', text: hook.replace(/\.$/, '') },
+      { kind: 'body', text: body },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.field).toBe('segments.0.text');
+  });
+
+  it('rejects a CTA outside the 5-20 word range', () => {
+    const result = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'body', text: body },
+      { kind: 'cta', text: 'Save this video.' },
+    ]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.field).toBe('segments.2.text');
+  });
+
+  it('rejects a hook outside the 15-40 word range', () => {
+    const result = validateSegments([
+      { kind: 'hook', text: 'Stop wasting your trip today.' },
+      { kind: 'body', text: body },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.field).toBe('segments.0.text');
+  });
+
+  it('rejects a script below the 60 word total', () => {
+    const shortHook = 'Stop wasting your trip stuck in a ninety minute line for the original dish today.';
+    const body30 = Array.from({ length: 30 }, (_, i) => `word${i}`).join(' ') + '.';
+    const result = validateSegments([
+      { kind: 'hook', text: shortHook },
+      { kind: 'body', text: body30 },
+      { kind: 'cta', text: 'Save this video before bed.' },
+    ]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.rule).toBe('the script must be 60-200 words in total');
+  });
+
+  it('rejects media with neither mediaId nor url', () => {
+    const result = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'body', text: body, media: {} },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.field).toBe('segments.1.media');
+  });
+});
+
 describe('tool schemas (strict segment objects)', () => {
   const valid = {
     segments: [
