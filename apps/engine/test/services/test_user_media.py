@@ -83,6 +83,24 @@ def test_exact_word_walk_gives_each_segment_its_spoken_interval():
     assert intervals == [(0.0, 1.2), (2.0, 4.0), (5.0, 6.3)]
 
 
+def test_zero_token_segment_inherits_the_previous_boundary_instead_of_crashing():
+    # A punctuation-only segment passes validation (non-empty after
+    # strip, split-counted words) but tokenises to zero words. When the
+    # subtitle walk otherwise matches exactly, the empty slice must not
+    # raise IndexError and fail the whole task: the segment gets a
+    # zero-width interval at the previous boundary, so its photo keeps
+    # the original clip instead of crashing the video.
+    words = [("Porto", 0.0, 1.0), ("walks", 1.0, 2.0), ("now", 2.0, 3.0)]
+    segments = [
+        {"kind": "hook", "text": "Porto walks."},
+        {"kind": "body", "text": "!!! ???"},
+        {"kind": "cta", "text": "now."},
+    ]
+    intervals, fallback = user_media.segment_intervals(segments, words, 3.0)
+    assert fallback is False
+    assert intervals == [(0.0, 2.0), (2.0, 2.0), (2.0, 3.0)]
+
+
 def test_contraction_mismatch_falls_back_to_proportional_timing_and_says_so():
     # Whisper splits "don't" into one word; the segment text tokenises
     # into two ("don", "t"), so the exact walk cannot match.
