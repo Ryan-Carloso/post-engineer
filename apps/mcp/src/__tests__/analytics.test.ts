@@ -21,7 +21,7 @@ vi.mock('posthog-node', () => ({
   },
 }));
 
-import { trackEvent, resetAnalyticsForTesting, DEFAULT_POSTHOG_HOST } from '../analytics.js';
+import { trackEvent, withTracking, resetAnalyticsForTesting, DEFAULT_POSTHOG_HOST } from '../analytics.js';
 
 describe('trackEvent', () => {
   beforeEach(() => {
@@ -178,5 +178,32 @@ describe('trackEvent', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe('withTracking', () => {
+  beforeEach(() => {
+    mockCapture.mockClear();
+    mockPostHogCtor.mockClear();
+    resetAnalyticsForTesting();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetAnalyticsForTesting();
+  });
+
+  it('tracks the tool name and returns the handler result', async () => {
+    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
+    const wrapped = withTracking('upload_media', async (args: { path: string }) => `done:${args.path}`);
+    await expect(wrapped({ path: 'photo.jpg' })).resolves.toBe('done:photo.jpg');
+    // trackEvent is fire-and-forget (async lazy SDK load); wait a tick.
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(mockCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'mcp_tool_called',
+        properties: expect.objectContaining({ toolName: 'upload_media' }),
+      }),
+    );
   });
 });

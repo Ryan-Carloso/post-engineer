@@ -3,6 +3,7 @@
 import type { Dictionary } from './pt';
 import { personaVoiceCloneEn, voiceCloneApiToolDescEn } from './voice-clone-i18n-en';
 import { postToolDescEn } from './post-tools-i18n-en';
+import { segmentMediaToolDescEn } from './segment-media-i18n-en';
 import { accountI18nEn } from './account-i18n-en';
 export const enDictionary: Dictionary = {
   nav: {
@@ -380,10 +381,7 @@ export const enDictionary: Dictionary = {
     toolDescUpdatePersona: 'Update an existing persona',
     toolDescGetTokenBalance: 'Check token balance',
     toolDescGeneratePersonaVideos: 'Generate and schedule 1-10 persona videos in one operation',
-    toolDescGeneratePersonaVideo: 'Generate and schedule one persona video from a script',
-    toolDescValidateScript: 'Validate a script mechanically, without spending tokens',
-    toolDescUploadMedia: 'Upload a segment image (JPG, PNG, WebP, max 8MB)',
-    toolDescCheckMedia: 'Check a segment image URL mechanically',
+    ...segmentMediaToolDescEn,
     toolDescGetVideoStatus: 'Check video status',
     toolDescGetVideoTaskProgress: 'Poll per-video progress (%, stage)',
     toolDescListPersonaImages: "List a persona's image library",

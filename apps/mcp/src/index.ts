@@ -89,16 +89,7 @@ import {
 } from './video-task-tools.js';
 import { GeneratePersonaVideoShape, ValidateScriptShape, ValidateScriptDescription, handleGeneratePersonaVideo, handleValidateScript } from './tools-single-video.js';
 import { CheckMediaDescription, CheckMediaShape, UploadMediaDescription, UploadMediaShape, handleCheckMedia, handleUploadMedia } from './tools-user-media.js';
-import { trackEvent } from './analytics.js';
-
-// Track every tool invocation as a PostHog analytics event (never throws, never blocks).
-
-function withTracking<TArgs extends Record<string, unknown>, TResult>(toolName: string, handler: (args: TArgs) => Promise<TResult>): (args: TArgs) => Promise<TResult> {
-  return async (args: TArgs): Promise<TResult> => {
-    trackEvent('mcp_tool_called', { toolName });
-    return handler(args);
-  };
-}
+import { withTracking } from './analytics.js';
 
 // The server advertises the package version: import it so a version bump in
 // package.json flows through without touching this file.
