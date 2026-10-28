@@ -8,6 +8,8 @@ import {
   hasExemptLabel,
   isCountedFile,
   isExcludedFile,
+  parseArgs,
+  resolveLimit,
 } from './check.mjs';
 
 describe('isCountedFile', () => {
@@ -103,5 +105,25 @@ describe('exceedsLimit and exemption label', () => {
     assert.equal(hasExemptLabel(JSON.stringify([{ name: 'other' }])), false);
     assert.equal(hasExemptLabel(''), false);
     assert.equal(hasExemptLabel('not json'), false);
+  });
+});
+
+describe('parseArgs and resolveLimit', () => {
+  it('parses a value-less flag as true, not as the next flag', () => {
+    assert.deepEqual(parseArgs(['--limit']), { limit: true });
+    assert.deepEqual(parseArgs(['--limit', '--head', 'x']), { limit: true, head: 'x' });
+    assert.deepEqual(parseArgs(['--limit', '500']), { limit: '500' });
+  });
+
+  it('a value-less or missing limit means the default, never a silent NaN cap', () => {
+    assert.equal(resolveLimit(undefined), PR_SIZE_LIMIT);
+    assert.equal(resolveLimit(true), PR_SIZE_LIMIT);
+    assert.equal(resolveLimit('500'), 500);
+  });
+
+  it('rejects non-numeric, zero, and negative limits', () => {
+    for (const bad of ['true', 'abc', '0', '-5', '']) {
+      assert.throws(() => resolveLimit(bad), /--limit must be a positive number/, bad);
+    }
   });
 });

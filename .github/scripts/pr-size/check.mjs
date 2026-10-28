@@ -134,23 +134,47 @@ export function hasExemptLabel(labelsJson) {
   }
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const args = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const key = a.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-      args[key] = argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[++i] : 'true';
+      if (!argv[i + 1] || argv[i + 1].startsWith('--')) {
+        args[key] = true;
+      } else {
+        args[key] = argv[++i];
+      }
     }
   }
   return args;
+}
+
+/**
+ * Resolve the --limit value: undefined/true (value-less flag) means the
+ * default, a numeric string means that number, anything else throws —
+ * a malformed limit must error, never silently disable the cap via NaN.
+ */
+export function resolveLimit(limitRaw) {
+  if (limitRaw === undefined || limitRaw === true) return PR_SIZE_LIMIT;
+  const limit = Number(limitRaw);
+  if (!Number.isFinite(limit) || limit <= 0) {
+    throw new Error('--limit must be a positive number');
+  }
+  return limit;
 }
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const base = args.base;
   const head = args.head || 'HEAD';
-  const limit = args.limit ? Number(args.limit) : PR_SIZE_LIMIT;
+  let limit;
+  try {
+    limit = resolveLimit(args.limit);
+  } catch (e) {
+    console.error(e.message);
+    process.exit(2);
+  }
   if (!base) {
     console.error('Usage: node check.mjs --base <sha> --head <sha> [--limit 800] [--labels <json>]');
     process.exit(2);
