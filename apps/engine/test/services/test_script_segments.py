@@ -353,6 +353,28 @@ def test_media_with_unknown_key_is_400():
     assert exc_info.value.field == "segments.1.media"
 
 
+def test_media_shape_error_precedes_media_cap():
+    # Pins the documented rule order: the media shape loop runs before
+    # the media cap, so a shape violation in an over-cap request fires
+    # first instead of the cap error.
+    segments = [{"kind": "hook", "text": _hook()}]
+    for i in range(7):
+        media = {"url": f"https://example.com/{i}.jpg"}
+        if i == 1:
+            media = {"mediaId": "abc", "alt": "kitchen"}
+        segments.append(
+            {
+                "kind": "body",
+                "text": " ".join(["body"] * 12) + f" number {i}.",
+                "media": media,
+            }
+        )
+    segments.append({"kind": "cta", "text": _cta()})
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments)
+    assert exc_info.value.field == "segments.2.media"
+
+
 def test_valid_media_shape_passes():
     segments = [
         {"kind": "hook", "text": _hook()},

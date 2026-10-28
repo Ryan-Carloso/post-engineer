@@ -350,6 +350,21 @@ class TaskVideoRequest(VideoParams, BaseModel):
         joined = script_segments.segments_to_script(
             [segment.model_dump(exclude_none=True) for segment in self.segments]
         )
+        # The joined value is assigned, not re-validated: pydantic v2
+        # does not re-apply field constraints on assignment, so enforce
+        # the video_script cap here or a segments request bypasses the
+        # bound a directly supplied video_script must satisfy. The cap
+        # is read from the field, not hardcoded, so it cannot drift.
+        # Pydantic v2 stores it in the field metadata, not on FieldInfo.
+        max_script_chars = None
+        for constraint in TaskVideoRequest.model_fields["video_script"].metadata:
+            if hasattr(constraint, "max_length"):
+                max_script_chars = constraint.max_length
+        if max_script_chars is not None and len(joined) > max_script_chars:
+            raise ValueError(
+                "segments join to a script longer than video_script allows "
+                f"({max_script_chars} characters)"
+            )
         if self.video_script and self.video_script != joined:
             raise ValueError("video_script must match the segments script")
         self.video_script = joined

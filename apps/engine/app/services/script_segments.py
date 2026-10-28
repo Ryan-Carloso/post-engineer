@@ -167,9 +167,9 @@ def validate_segments(segments: Any) -> dict[str, Any]:
 
     Rule order is deliberate: shape, then forbidden content, then hook
     punctuation, then repetition, then per-part word counts, then the
-    total, then segment/media caps, then media shape. A caller that
-    fixes the first reported error and resubmits converges without
-    guessing.
+    total, then the segment cap, then media shape, then the media cap.
+    A caller that fixes the first reported error and resubmits converges
+    without guessing.
     """
     if not isinstance(segments, list) or not segments:
         raise SegmentValidationError(
