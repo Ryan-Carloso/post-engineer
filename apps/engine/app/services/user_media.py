@@ -349,8 +349,12 @@ def splice_segment_media(
                 f"segment {media.index} media skipped: clip already used by an earlier segment"
             )
             continue
+        # Render at the replaced clip's modeled duration, not clip_seconds:
+        # a short original clip replaced by a full-length photo clip would
+        # lengthen the timeline past that point and shift every later
+        # segment's photo out of its spoken interval.
         rendered = image_material.render_image_file_to_mp4(
-            media.still_path, clip_duration=max(1, round(clip_seconds))
+            media.still_path, clip_duration=max(1, round(durations[best_index]))
         )
         if rendered:
             result[best_index] = rendered

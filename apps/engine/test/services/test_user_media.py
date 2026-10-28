@@ -318,6 +318,22 @@ def test_splice_skips_a_second_segment_on_an_already_used_clip(tmp_path):
     assert render_mock.call_count == 1
 
 
+def test_splice_renders_the_replacement_at_the_replaced_clips_duration(tmp_path):
+    # A short original clip (2s probed, 4s clip_seconds) must be replaced
+    # by a 2s photo clip, not a 4s one: rendering at clip_seconds would
+    # lengthen the timeline past that point and shift every later
+    # segment's photo out of its spoken interval.
+    clips = ["a.mp4", "b.mp4", "c.mp4"]
+    prepared = [user_media.SegmentMedia(index=0, still_path="/t/still.jpg", start=0.0, end=2.0)]
+    with patch.object(
+        user_media.image_material, "render_image_file_to_mp4", return_value="rendered.mp4"
+    ) as render_mock, patch.object(user_media, "_clip_durations", return_value=[2.0, 4.0, 4.0]):
+        result, skipped = user_media.splice_segment_media(clips, prepared, 4)
+    assert result == ["rendered.mp4", "b.mp4", "c.mp4"]
+    assert skipped == []
+    assert render_mock.call_args[1]["clip_duration"] == 2
+
+
 def test_splice_reports_a_segment_whose_interval_overlaps_no_clip(tmp_path):
     clips = ["a.mp4", "b.mp4", "c.mp4"]
     # Interval 10-12 sits past the 0-6 clip timeline: the photo is kept
