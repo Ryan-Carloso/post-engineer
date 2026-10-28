@@ -110,10 +110,16 @@ export async function middleware(request: NextRequest) {
   // and token/register are public by spec.
   const publicPaths = ['/landing', '/login', '/privacy', '/terms', '/recipes'];
 
+  // A public path covers its subpaths too: /recipes/[slug] detail pages
+  // are public exactly like the /recipes list page.
+  const isPublicPath = publicPaths.some(
+    (publicPath) => pathname === publicPath || pathname.startsWith(`${publicPath}/`),
+  );
+
   // No user on a protected page → /landing. A transient getUser failure
   // is not "logged out": the cookie is still there, and following the
   // redirect leaves the browser on /landing for the rest of the navigation.
-  if (!user && !publicPaths.includes(pathname)) {
+  if (!user && !isPublicPath) {
     if (!isTransientAuthError(error)) {
       return NextResponse.redirect(new URL('/landing', request.url))
     }

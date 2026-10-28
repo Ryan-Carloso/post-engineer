@@ -8,19 +8,18 @@ vi.mock('@/components/site-footer', () => ({
 
 vi.mock('@/lib/i18n/provider', () => {
   const translations: Record<string, string> = {
-    'recipes.title': 'Recipes',
-    'recipes.subtitle': 'Copy-ready recipes for the Post Engineer MCP server.',
+    'recipes.title': 'Get your prompts',
+    'recipes.subtitle':
+      'Copy-ready prompts for the Post Engineer MCP server. Copy one, paste it into your agent, done.',
     'recipes.dailyNewsTitle': 'Daily news becomes a video',
     'recipes.dailyNewsObjective':
       'Turn one news story of the day into one persona video.',
-    'recipes.viewRecipe': 'View recipe',
     'recipes.githubPrsTitle': 'GitHub PRs become videos',
     'recipes.githubPrsObjective':
       'Turn your GitHub pull requests into persona videos.',
-    'recipes.copyPrompt': 'Copy prompt',
-    'recipes.copiedPrompt': 'Copied!',
     'recipes.kindRecipe': 'Recipe',
     'recipes.kindPrompt': 'Prompt',
+    'recipes.openPrompt': 'Open prompt',
   };
   return {
     useI18n: () => ({
@@ -33,29 +32,30 @@ vi.mock('@/lib/i18n/provider', () => {
 
 import RecipesPage from '../page';
 
-describe('/recipes page', () => {
-  it('renders the page title and subtitle', () => {
+describe('/recipes prompts hub list', () => {
+  it('renders the hub title and subtitle', () => {
     render(<RecipesPage />);
-    expect(screen.getByRole('heading', { name: 'Recipes' })).toBeInTheDocument();
     expect(
-      screen.getByText('Copy-ready recipes for the Post Engineer MCP server.'),
+      screen.getByRole('heading', { name: 'Get your prompts' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Copy-ready prompts for the Post Engineer MCP server. Copy one, paste it into your agent, done.',
+      ),
     ).toBeInTheDocument();
   });
 
-  it('lists the GitHub PRs prompt with its objective and copyable prompt text', () => {
+  it('links each entry to its own detail page, not straight to GitHub', () => {
     render(<RecipesPage />);
     expect(
-      screen.getByRole('heading', { name: 'GitHub PRs become videos' }),
-    ).toBeInTheDocument();
+      screen.getByRole('link', { name: /Daily news becomes a video/ }),
+    ).toHaveAttribute('href', '/recipes/daily-news');
     expect(
-      screen.getByText('Turn your GitHub pull requests into persona videos.'),
-    ).toBeInTheDocument();
+      screen.getByRole('link', { name: /GitHub PRs become videos/ }),
+    ).toHaveAttribute('href', '/recipes/github-prs');
     expect(
-      screen.getByText(/Turn this GitHub pull request into one persona video/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/validate_script with your script/),
-    ).toBeInTheDocument();
+      screen.queryByText(/Turn this GitHub pull request into one persona video/),
+    ).not.toBeInTheDocument();
   });
 
   it('labels entries by kind, not by sequence number', () => {
@@ -64,35 +64,5 @@ describe('/recipes page', () => {
     expect(screen.getByText('Prompt')).toBeInTheDocument();
     expect(screen.queryByText('01')).not.toBeInTheDocument();
     expect(screen.queryByText('02')).not.toBeInTheDocument();
-  });
-
-  it('copies the GitHub PRs prompt to the clipboard', () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(window.navigator, 'clipboard', {
-      value: { writeText },
-      configurable: true,
-    });
-    render(<RecipesPage />);
-    screen.getByRole('button', { name: 'Copy prompt' }).click();
-    expect(writeText).toHaveBeenCalledOnce();
-    const prompt = writeText.mock.calls[0][0] as string;
-    expect(prompt).toContain('generate_persona_video');
-    expect(prompt).toContain('validate_script');
-    expect(prompt).toContain('60–200 words');
-  });
-
-  it('lists the daily-news recipe with its objective and doc link', () => {
-    render(<RecipesPage />);
-    expect(
-      screen.getByRole('heading', { name: 'Daily news becomes a video' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText('Turn one news story of the day into one persona video.'),
-    ).toBeInTheDocument();
-    const link = screen.getByRole('link', { name: /View recipe/ });
-    expect(link).toHaveAttribute(
-      'href',
-      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/daily-news.md',
-    );
   });
 });

@@ -158,7 +158,7 @@ Rules:
    pieces, and stories sourced only from a social post.
 2. Write the script as segments: first hook (aim 20-30 words, end with
    terminal punctuation), then body segments (at least 30 words total),
-   last CTA (5-20 words). Total 60-200 words, spoken English only, no
+   last CTA (5-20 words). Total 60–200 words, spoken English only, no
    links, hashtags, markdown, emoji, or stage directions. Only facts the
    source supports; attribute single-sourced claims.
 3. Call validate_script with those segments. Fix any named error and
