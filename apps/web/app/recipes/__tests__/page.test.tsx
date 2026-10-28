@@ -14,6 +14,11 @@ vi.mock('@/lib/i18n/provider', () => {
     'recipes.dailyNewsObjective':
       'Turn one news story of the day into one persona video.',
     'recipes.viewRecipe': 'View recipe',
+    'recipes.githubPrsTitle': 'GitHub PRs become videos',
+    'recipes.githubPrsObjective':
+      'Turn your GitHub pull requests into persona videos.',
+    'recipes.copyPrompt': 'Copy prompt',
+    'recipes.copiedPrompt': 'Copied!',
   };
   return {
     useI18n: () => ({
@@ -33,6 +38,37 @@ describe('/recipes page', () => {
     expect(
       screen.getByText('Copy-ready recipes for the Post Engineer MCP server.'),
     ).toBeInTheDocument();
+  });
+
+  it('lists the GitHub PRs prompt with its objective and copyable prompt text', () => {
+    render(<RecipesPage />);
+    expect(
+      screen.getByRole('heading', { name: 'GitHub PRs become videos' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Turn your GitHub pull requests into persona videos.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Turn this GitHub pull request into one persona video/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/validate_script with your script/),
+    ).toBeInTheDocument();
+  });
+
+  it('copies the GitHub PRs prompt to the clipboard', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+    render(<RecipesPage />);
+    screen.getByRole('button', { name: 'Copy prompt' }).click();
+    expect(writeText).toHaveBeenCalledOnce();
+    const prompt = writeText.mock.calls[0][0] as string;
+    expect(prompt).toContain('generate_persona_video');
+    expect(prompt).toContain('validate_script');
+    expect(prompt).toContain('60–200 words');
   });
 
   it('lists the daily-news recipe with its objective and doc link', () => {
