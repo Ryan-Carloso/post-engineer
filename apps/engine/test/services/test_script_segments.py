@@ -163,6 +163,49 @@ def test_emoji_is_400():
     assert exc_info.value.field == "segments.1.text"
 
 
+@pytest.mark.parametrize(
+    "emoji",
+    [
+        "\U0001f600",  # emoticons, inside 1F300-1FAFF
+        "\U0001f300",  # start of 1F300-1FAFF
+        "\U0001faff",  # end of 1F300-1FAFF
+        "\U00002600",  # start of 2600-27BF
+        "\U000027bf",  # end of 2600-27BF
+        "\U0001f000",  # start of 1F000-1F2FF
+        "\U0001f2ff",  # end of 1F000-1F2FF
+        "\ufe0f",  # variation selector
+    ],
+)
+def test_emoji_rejected_across_all_ranges(emoji):
+    segments = [
+        {"kind": "hook", "text": _hook()},
+        {"kind": "body", "text": _body() + " " + emoji},
+        {"kind": "cta", "text": _cta()},
+    ]
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments)
+    assert exc_info.value.field == "segments.1.text"
+    assert "emoji" in str(exc_info.value).lower()
+
+
+@pytest.mark.parametrize(
+    "char",
+    [
+        "\u25ff",  # just below 2600
+        "\u27c0",  # just above 27BF
+        "\u1eff",  # just below 1F000
+        "\U0001fb00",  # just above 1FAFF
+    ],
+)
+def test_boundary_chars_outside_emoji_ranges_pass(char):
+    segments = [
+        {"kind": "hook", "text": _hook()},
+        {"kind": "body", "text": _body() + " " + char},
+        {"kind": "cta", "text": _cta()},
+    ]
+    script_segments.validate_segments(segments)
+
+
 def test_stage_direction_is_400():
     segments = [
         {"kind": "hook", "text": _hook()},

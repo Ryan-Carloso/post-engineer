@@ -37,15 +37,29 @@ MAX_HOOK_WORDS = 40
 MAX_TERMS_PER_SEGMENT = 10
 
 _TERMINAL_PUNCTUATION = (".", "!", "?", "。", "！", "？")
-_EMOJI_PATTERN = re.compile(
-    "["
-    # codeql[py/overly-large-range]: false positive — the three ranges in this class are disjoint (1F300-1FAFF, 2600-27BF, 1F000-1F2FF) plus FE0F, the broad emoji block is intentional, and a match only REJECTS spoken text, so wider matching can never bypass a filter here.
-    "\U0001f300-\U0001faff"
-    "\U00002600-\U000027bf"
-    "\U0001f000-\U0001f2ff"
-    "\uFE0F"
-    "]"
+# Emoji code points, checked by ordinal, not by a regex character class.
+# CodeQL py/overly-large-range flags astral ranges inside a regex class,
+# and a suppression comment only covers the line it precedes, so a class
+# with three flagged ranges cannot be suppressed with one comment. This
+# tuple is exactly the old class's set (1F300-1FAFF, 2600-27BF,
+# 1F000-1F2FF, plus FE0F), so nothing previously rejected becomes
+# accepted and nothing previously accepted becomes rejected.
+_EMOJI_RANGES = (
+    (0x1F300, 0x1FAFF),
+    (0x2600, 0x27BF),
+    (0x1F000, 0x1F2FF),
+    (0xFE0F, 0xFE0F),
 )
+
+
+def _contains_emoji(text: str) -> bool:
+    return any(
+        start <= ord(char) <= end
+        for char in text
+        for start, end in _EMOJI_RANGES
+    )
+
+
 _PLACEHOLDERS = ("[insira", "[insert", "todo", "lorem")
 
 
@@ -93,7 +107,7 @@ def _check_text_content(text: str, field: str) -> None:
             "Text contains markdown.",
             "Remove markdown formatting; spoken text must be plain text.",
         )
-    if _EMOJI_PATTERN.search(text):
+    if _contains_emoji(text):
         raise SegmentValidationError(
             field,
             "Text contains an emoji.",
