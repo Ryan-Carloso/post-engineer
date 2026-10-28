@@ -84,6 +84,7 @@ table['POST /api/persona/cloned-voices/[cloneId]/preview'] = 'cloned_voice_previ
 table['POST /api/persona/images'] = 'persona_image_added';
 table['POST /api/upload-content'] = 'content_uploaded';
 table['POST /api/videos/generate-and-schedule'] = 'generate_and_schedule_started';
+table['POST /api/videos/validate-script'] = 'script_validated';
 table['PUT /api/persona/publishing-accounts'] = 'persona_publishing_accounts_updated';
 
 export const API_TELEMETRY_NAMES: Record<string, string> = table;

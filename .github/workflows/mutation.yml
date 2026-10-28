@@ -191,7 +191,17 @@ jobs:
               echo "$MUTATE_GLOBS"
               echo '```'
             } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
-            if pnpm exec stryker run --mutate "$MUTATE_GLOBS"; then
+            # Stryker's --mutate takes ONE comma-separated argument: a
+            # space-separated list is treated as a single glob pattern
+            # matching nothing, which fails the scoped run and forces the
+            # whole-file fallback (on this PR: 2627 mutants, ~19h estimate,
+            # killed by the 3h job timeout). changed-ranges.mjs emits
+            # space-separated patterns, so comma-join them here — with NO
+            # space after the comma, because Stryker splits on commas and
+            # a leading space makes every later glob match nothing (a
+            # previous attempt with ', ' passed vacuously with 0 mutants).
+            # The fallback below already passes comma-joined files.
+            if pnpm exec stryker run --mutate "${MUTATE_GLOBS// /,}"; then
               exit 0
             fi
             echo "::warning::line-scoped run failed — falling back to whole changed files"

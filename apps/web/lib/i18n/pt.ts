@@ -380,6 +380,8 @@ export const ptDictionary = {
     toolDescUpdatePersona: 'Atualize uma persona existente',
     toolDescGetTokenBalance: 'Consulte o saldo de tokens',
     toolDescGeneratePersonaVideos: 'Gerar e agendar de 1 a 10 vídeos de persona em uma operação',
+    toolDescGeneratePersonaVideo: 'Gerar e agendar um vídeo de persona a partir de um roteiro',
+    toolDescValidateScript: 'Validar um roteiro mecanicamente, sem gastar tokens',
     toolDescGetVideoStatus: 'Confira o status do vídeo',
     toolDescGetVideoTaskProgress: 'Acompanhe o progresso por vídeo (%, etapa)',
     toolDescListPersonaImages: 'Liste a biblioteca de imagens da persona',
@@ -398,7 +400,6 @@ export const ptDictionary = {
     toolDescDeletePersona: 'Deletar uma persona (destrutivo)',
     toolDescDisconnectAccount: 'Desconectar uma conta social',
   },
-
   // App API Key
   persona: {
     title: 'Criar persona',
@@ -726,7 +727,6 @@ export const ptDictionary = {
     support: 'Suporte',
     rights: '© {year} Post Engineer. Todos os direitos reservados.',
   },
-
   // Legal pages
   legal: {
     privacyTitle: 'Política de Privacidade',

@@ -90,6 +90,13 @@ export interface GeneratePersonaVideosInput {
     paragraphNumber?: number;
     language?: string;
     niche?: string;
+    /** Segments script (MCP first, Phase 1): first hook, body segments, last CTA. Validated by the web route before any token debit. */
+    segments?: Array<{
+      kind: 'hook' | 'body' | 'cta';
+      text: string;
+      media?: { mediaId?: string; url?: string };
+      terms?: string[];
+    }>;
   };
   /** Omitted: a UUID is generated per call, so a retry cannot double-generate. */
   idempotencyKey?: string;

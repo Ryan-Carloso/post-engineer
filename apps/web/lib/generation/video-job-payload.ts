@@ -37,6 +37,10 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<string> = [
   'video_aspect',
   'video_layout',
   'video_script_prompt',
+  // video_script is a first-class engine field (VideoParams carries it as
+  // the supplied script); a segments request joins its segments into this
+  // field so the engine takes the supplied-script path, never the LLM one.
+  'video_script',
   'video_quality',
   'paragraph_number',
   // webhook_url is a first-class engine field (TaskVideoRequest validates it

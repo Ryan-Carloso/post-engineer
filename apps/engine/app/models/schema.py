@@ -4,7 +4,7 @@ from typing import Any, List, Literal, Optional, Union
 from urllib.parse import urlparse
 
 import pydantic
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.config import config
 from app.models import publish as publish_models
@@ -296,10 +296,39 @@ def _validate_webhook_url(value: Optional[str]) -> Optional[str]:
     return value
 
 
+class SegmentMedia(BaseModel):
+    """Phase 1: media reference shape only (upload_media is Phase 2)."""
+
+    # Unknown keys are forbidden, not stripped: the unknown-field guard in
+    # validate_segments runs on model_dump output, so extra='ignore' would
+    # silently drop a key like voice on the request path before the guard
+    # ever sees it.
+    model_config = ConfigDict(extra="forbid")
+
+    mediaId: Optional[str] = None
+    url: Optional[str] = None
+
+
+class ScriptSegment(BaseModel):
+    # Same reason as SegmentMedia: forbid so unknown segment keys fail
+    # request validation instead of being dropped before validation.
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["hook", "body", "cta"]
+    text: str
+    media: Optional[SegmentMedia] = None
+    terms: Optional[list[str]] = None
+
+
 class TaskVideoRequest(VideoParams, BaseModel):
     # Optional callback fired once when the task reaches a terminal state
     # (completed/failed). Must be http(s); delivery is fire-and-forget.
     webhook_url: Optional[str] = None
+    # Segments contract (MCP first, Phase 1): one call = one video. When
+    # present, segments are mechanically validated and joined into
+    # video_script before the task is created; a supplied video_script
+    # that differs from the joined segments is rejected, never coerced.
+    segments: Optional[list[ScriptSegment]] = None
     # Web-side correlation id (video_generations.generation_id). Carried
     # through the task row into PostHog events so a generation can be
     # traced end-to-end without a database lookup. Never used as the task
@@ -311,6 +340,25 @@ class TaskVideoRequest(VideoParams, BaseModel):
     @classmethod
     def _validate_task_webhook_url(cls, value: Optional[str]) -> Optional[str]:
         return _validate_webhook_url(value)
+
+    @model_validator(mode="after")
+    def _validate_segments_into_script(self) -> "TaskVideoRequest":
+        if self.segments is None:
+            return self
+        from app.services import script_segments
+
+        joined = script_segments.segments_to_script(
+            [segment.model_dump(exclude_none=True) for segment in self.segments]
+        )
+        # Pydantic v2 does not re-validate on assignment: enforce the
+        # video_script cap from the field metadata, not a hardcoded value.
+        max_chars = next((c.max_length for c in TaskVideoRequest.model_fields["video_script"].metadata if hasattr(c, "max_length")), None)
+        if max_chars is not None and len(joined) > max_chars:
+            raise ValueError(f"segments join to a script longer than video_script allows ({max_chars} characters)")
+        if self.video_script and self.video_script != joined:
+            raise ValueError("video_script must match the segments script")
+        self.video_script = joined
+        return self
 
 
 PublishParams = publish_models.PublishParams
@@ -440,61 +488,11 @@ class VideoSocialMetadataResponse(BaseResponse):
         }
 
 
-class BgmRetrieveResponse(BaseResponse):
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "status": 200,
-                "message": "success",
-                "body": {
-                    "files": [
-                        {
-                            "name": "output013.mp3",
-                            "size": 1891269,
-                            "file": "/post-engineer/resource/songs/output013.mp3",
-                        }
-                    ]
-                },
-            },
-        }
-
-
-class BgmUploadResponse(BaseResponse):
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "status": 200,
-                "message": "success",
-                "body": {"file": "/post-engineer/resource/songs/example.mp3"},
-            },
-        }
-
-class VideoMaterialRetrieveResponse(BaseResponse):
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "status": 200,
-                "message": "success",
-                "body": {
-                    "files": [
-                        {
-                            "name": "example.mp4",
-                            "size": 12345678,
-                            "file": "/post-engineer/resource/videos/example.mp4",
-                        }
-                    ]
-                },
-            },
-        }
-
-class VideoMaterialUploadResponse(BaseResponse):
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "status": 200,
-                "message": "success",
-                "body": {
-                    "file": "/post-engineer/resource/videos/example.mp4",
-                },
-            },
-        }
+# Re-exported from app/models/media_responses.py (same envelope fields as
+# BaseResponse); moved so this file stays under the 500-line ratchet.
+from app.models.media_responses import (  # noqa: E402,F401
+    BgmRetrieveResponse,
+    BgmUploadResponse,
+    VideoMaterialRetrieveResponse,
+    VideoMaterialUploadResponse,
+)

@@ -54,6 +54,14 @@ describe('buildJobPayload — request allowlist', () => {
     expect(payload).not.toHaveProperty('junk_field');
   });
 
+  it('forwards video_script so a segments request takes the supplied-script engine path', () => {
+    const payload = buildJobPayload(persona(), {
+      video_subject: 'Porto trip',
+      video_script: 'Hook.\n\nBody.\n\nCTA.',
+    });
+    expect(payload.video_script).toBe('Hook.\n\nBody.\n\nCTA.');
+  });
+
   it('forwards slot_id so boot orphan triage can requeue web-created tasks', () => {
     const payload = buildJobPayload(persona(), {
       video_subject: 'myth busting',
