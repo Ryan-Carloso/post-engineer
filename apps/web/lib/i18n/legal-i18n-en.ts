@@ -1,10 +1,10 @@
 export const legalI18nEn = {
-    privacyTitle: 'Privacy Policy',
-    privacyUpdated: 'Last updated: September 10, 2026',
-    privacyBody:
+  privacyTitle: 'Privacy Policy',
+  privacyUpdated: 'Last updated: September 10, 2026',
+  privacyBody:
       'Post Engineer is a platform that creates and publishes AI content to YouTube and Instagram. This policy explains what data we collect and how we use it.\n\nAccount data: when you sign in with GitHub, we collect your name, email and avatar via Supabase Auth, used only to identify your account.\n\nSocial accounts: if you connect YouTube or Instagram, we store the OAuth tokens required to publish content on your behalf. You can revoke access at any time in your Google/Instagram settings or by contacting us.\n\nContent: personas, scripts and videos you create are stored to operate the service and your scheduled publications.\n\nPayments: one-time payments are processed by Stripe. We never store credit card data.\n\nWe do not sell your data. We only share what is necessary with the providers listed above (Supabase, Stripe, Google, Instagram) to operate the service.\n\nYou can request deletion of your account and all associated data at any time via madebyryandev@gmail.com.\n\nContact: madebyryandev@gmail.com',
-    termsTitle: 'Terms of Service',
-    termsUpdated: 'Last updated: September 10, 2026',
-    termsBody:
+  termsTitle: 'Terms of Service',
+  termsUpdated: 'Last updated: September 10, 2026',
+  termsBody:
       'By using Post Engineer you agree to these terms.\n\nService: Post Engineer generates AI videos using your personas and publishes them automatically to YouTube and Instagram on accounts you connect.\n\nPrepaid tokens: token packs are one-time purchases. Tokens are deducted when a video generation starts and are refunded when a generation fails because of our service or provider.\n\nPayments and refunds: payments are processed by Stripe. Contact madebyryandev@gmail.com for refund requests.\n\nAcceptable use: you are responsible for the content published to your accounts and must comply with YouTube and Instagram terms. Using the service for illegal, misleading content or content that violates platform policies is prohibited.\n\nLimitation of liability: the service is provided "as is". We do not guarantee reach or monetization results. We are not liable for actions taken by platforms against your accounts.\n\nContact: madebyryandev@gmail.com',
-  } as const;
+} as const;
