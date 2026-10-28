@@ -104,7 +104,7 @@ describe('validateSegments', () => {
     ).toBe(false);
   });
 
-  it('rejects totals outside 60-200 words and more than 12 segments', () => {
+  it('rejects totals outside 60-200 words', () => {
     const short = validateSegments([
       { kind: 'hook', text: Array.from({ length: 20 }, () => 'word').join(' ') + '.' },
       { kind: 'body', text: Array.from({ length: 30 }, () => 'word').join(' ') + '.' },
@@ -119,12 +119,22 @@ describe('validateSegments', () => {
     ]);
     expect(long.ok).toBe(false);
     if (!long.ok) expect(long.error.field).toBe('segments');
-    const many = [{ kind: 'hook', text: hook }];
+  });
+
+  it('rejects more than 12 segments inside the word total, via the cap rule', () => {
+    // 20 + 11*14 + 5 = 179 words: inside the 60-200 total, so the segment
+    // cap rule is what fires, not the total rule.
+    const hook20 = Array.from({ length: 20 }, () => 'word').join(' ') + '.';
+    const segments: Array<{ kind: string; text: string }> = [{ kind: 'hook', text: hook20 }];
     for (let i = 0; i < 11; i += 1) {
-      many.push({ kind: 'body', text: `${body} Variation ${i}.` });
+      segments.push({ kind: 'body', text: Array.from({ length: 12 }, () => 'body').join(' ') + ` number ${i}.` });
     }
-    many.push({ kind: 'cta', text: cta });
-    expect(validateSegments(many).ok).toBe(false);
+    segments.push({ kind: 'cta', text: 'Save this video now please.' });
+    const result = validateSegments(segments);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.field).toBe('segments');
+    expect(result.error.rule).toBe('at most 12 segments are allowed');
   });
 
   it('rejects a hook with fewer than 15 or more than 40 words before TTS', () => {
@@ -144,7 +154,7 @@ describe('validateSegments', () => {
     ).toBe(false);
   });
 
-  it('rejects media with both mediaId and url, and more than 6 medias', () => {
+  it('rejects media with both mediaId and url', () => {
     const both = validateSegments([
       { kind: 'hook', text: hook },
       { kind: 'body', text: body, media: { mediaId: 'abc', url: 'https://example.com/x.jpg' } },
@@ -152,12 +162,76 @@ describe('validateSegments', () => {
     ]);
     expect(both.ok).toBe(false);
     if (!both.ok) expect(both.error.field).toBe('segments.1.media');
-    const manyMedia: Array<{ kind: string; text: string; media?: { url: string } }> = [{ kind: 'hook', text: hook }];
+  });
+
+  it('rejects more than 6 medias inside the word total, via the cap rule', () => {
+    // 20 + 7*14 + 5 = 123 words and 9 segments: inside the total and the
+    // segment cap, so the media cap rule is what fires.
+    const hook20 = Array.from({ length: 20 }, () => 'word').join(' ') + '.';
+    const segments: Array<{ kind: string; text: string; media?: { url: string } }> = [{ kind: 'hook', text: hook20 }];
     for (let i = 0; i < 7; i += 1) {
-      manyMedia.push({ kind: 'body', text: `${body} Extra ${i}.`, media: { url: `https://example.com/${i}.jpg` } });
+      segments.push({
+        kind: 'body',
+        text: Array.from({ length: 12 }, () => 'body').join(' ') + ` number ${i}.`,
+        media: { url: `https://example.com/${i}.jpg` },
+      });
     }
-    manyMedia.push({ kind: 'cta', text: cta });
-    expect(validateSegments(manyMedia).ok).toBe(false);
+    segments.push({ kind: 'cta', text: 'Save this video now please.' });
+    const result = validateSegments(segments);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.field).toBe('segments');
+    expect(result.error.rule).toBe('at most 6 medias are allowed per video');
+  });
+
+  it('mirrors the engine media shape: blank values count as present, null is skipped', () => {
+    const blankUrl = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'body', text: body, media: { mediaId: 'abc', url: '' } },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(blankUrl.ok).toBe(false);
+    if (!blankUrl.ok) expect(blankUrl.error.field).toBe('segments.1.media');
+    const blankId = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'body', text: body, media: { mediaId: '   ' } },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(blankId.ok).toBe(false);
+    if (!blankId.ok) expect(blankId.error.field).toBe('segments.1.media');
+    const neither = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'body', text: body, media: {} },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(neither.ok).toBe(false);
+    if (!neither.ok) expect(neither.error.field).toBe('segments.1.media');
+    const nullMedia = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'body', text: body, media: null },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(nullMedia.ok).toBe(true);
+  });
+
+  it('reports the engine field for a bad kind and a short body', () => {
+    const badKind = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'middle', text: body },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(badKind.ok).toBe(false);
+    if (!badKind.ok) expect(badKind.error.field).toBe('segments.1.kind');
+    const shortBody = validateSegments([
+      { kind: 'hook', text: hook },
+      { kind: 'body', text: 'Short body text here.' },
+      { kind: 'cta', text: cta },
+    ]);
+    expect(shortBody.ok).toBe(false);
+    if (!shortBody.ok) expect(shortBody.error.field).toBe('segments.1.text');
+    const notObject = validateSegments([{ kind: 'hook', text: hook }, 'not a segment', { kind: 'cta', text: cta }]);
+    expect(notObject.ok).toBe(false);
+    if (!notObject.ok) expect(notObject.error.field).toBe('segments.1');
   });
 
   it('accepts a valid media shape and counts medias', () => {

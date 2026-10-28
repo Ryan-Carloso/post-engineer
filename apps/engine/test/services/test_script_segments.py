@@ -245,24 +245,36 @@ def test_cta_word_range_is_400():
 
 
 def test_max_segments_is_400():
-    body = _body()
-    segments = [{"kind": "hook", "text": _hook()}]
-    segments.extend({"kind": "body", "text": f"{body} Variation {i}."} for i in range(11))
-    segments.append({"kind": "cta", "text": _cta()})
+    # 20 + 11*14 + 5 = 179 words: inside the 60-200 total, so the segment
+    # cap rule is what fires, not the total rule.
+    segments = [{"kind": "hook", "text": " ".join(["word"] * 20) + "."}]
+    for i in range(11):
+        segments.append({"kind": "body", "text": " ".join(["body"] * 12) + f" number {i}."})
+    segments.append({"kind": "cta", "text": "Save this video now please."})
     assert len(segments) == 13
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments)
     assert exc_info.value.field == "segments"
+    assert exc_info.value.rule == f"At most {script_segments.MAX_SEGMENTS} segments are allowed."
 
 
 def test_max_medias_is_400():
-    segments = [{"kind": "hook", "text": _hook()}]
+    # 20 + 7*14 + 5 = 123 words and 9 segments: inside the total and the
+    # segment cap, so the media cap rule is what fires.
+    segments = [{"kind": "hook", "text": " ".join(["word"] * 20) + "."}]
     for i in range(7):
-        segments.append({"kind": "body", "text": f"{_body()} Extra {i}.", "media": {"url": f"https://example.com/{i}.jpg"}})
-    segments.append({"kind": "cta", "text": _cta()})
+        segments.append(
+            {
+                "kind": "body",
+                "text": " ".join(["body"] * 12) + f" number {i}.",
+                "media": {"url": f"https://example.com/{i}.jpg"},
+            }
+        )
+    segments.append({"kind": "cta", "text": "Save this video now please."})
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments)
     assert exc_info.value.field == "segments"
+    assert exc_info.value.rule == f"At most {script_segments.MAX_MEDIAS} medias are allowed."
 
 
 def test_media_id_and_url_together_is_400():

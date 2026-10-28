@@ -11,6 +11,7 @@ export const ScriptSegmentShape = {
   text: z.string().min(1, 'Each segment text must be non-empty').describe('Spoken text only: no placeholders, links, markdown, emoji or stage directions.'),
   media: z
     .object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional() })
+    .strict()
     .optional()
     .describe('Phase 1: media reference shape only (upload_media is Phase 2). Exactly one of mediaId or url.'),
   terms: z.array(z.string().min(1)).max(10).optional().describe('Stock terms for this segment, chosen by the agent. At most 10.'),
@@ -23,7 +24,7 @@ export const GeneratePersonaVideoShape = {
     .optional()
     .describe('The persona to generate the video with. Omit for a faceless post with no persona: in that case set options.faceless and options.voiceId (or options.audioUrl).'),
   segments: z
-    .array(z.object(ScriptSegmentShape))
+    .array(z.object(ScriptSegmentShape).strict())
     .min(1, 'Provide at least one segment')
     .max(12, 'At most 12 segments per video')
     .describe('The complete script as segments: first hook, then body segments, last CTA. Total 60-200 words, body at least 30, CTA 5-20, hook 15-40 words before TTS. The hook must end with terminal punctuation. No LLM expands this script.'),
@@ -68,7 +69,7 @@ export const GeneratePersonaVideoSchema = z.object(GeneratePersonaVideoShape);
 
 export const ValidateScriptShape = {
   segments: z
-    .array(z.object(ScriptSegmentShape))
+    .array(z.object(ScriptSegmentShape).strict())
     .min(1, 'Provide at least one segment')
     .max(12, 'At most 12 segments per video')
     .describe('The complete script as segments to validate mechanically, without spending tokens.'),

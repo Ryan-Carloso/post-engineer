@@ -109,17 +109,21 @@ export function validateSegments(input: unknown): SegmentsResult {
   const segments = input as ScriptSegment[];
   for (let i = 0; i < segments.length; i += 1) {
     const segment = segments[i];
-    if (
-      typeof segment !== 'object' ||
-      segment === null ||
-      (segment.kind !== 'hook' && segment.kind !== 'body' && segment.kind !== 'cta') ||
-      typeof segment.text !== 'string' ||
-      segment.text.trim().length === 0
-    ) {
+    if (typeof segment !== 'object' || segment === null) {
+      return fail(`segments.${i}`, 'Segment must be an object.', 'Send each segment as { kind, text }.');
+    }
+    if (segment.kind !== 'hook' && segment.kind !== 'body' && segment.kind !== 'cta') {
+      return fail(
+        `segments.${i}.kind`,
+        'Segment kind must be hook, body, or cta.',
+        'Set kind to hook for the first segment, body for the middle, cta for the last.',
+      );
+    }
+    if (typeof segment.text !== 'string' || segment.text.trim().length === 0) {
       return fail(
         `segments.${i}.text`,
-        'each segment needs a kind (hook, body or cta) and non-empty text',
-        'Fill in the missing segment text.',
+        'Segment text must be a non-empty string.',
+        'Write the spoken text for this segment.',
       );
     }
     // The engine rejects unknown segment keys and checks terms for every
@@ -205,9 +209,9 @@ export function validateSegments(input: unknown): SegmentsResult {
   const bodyWords = bodyTexts.reduce((sum, text) => sum + countWords(text), 0);
   if (bodyWords < MIN_BODY_WORDS) {
     return fail(
-      'segments',
-      `body segments need at least ${MIN_BODY_WORDS} words in total`,
-      'Add more body content before the CTA.',
+      `segments.${segments.indexOf(bodies[0])}.text`,
+      `Body must have at least ${MIN_BODY_WORDS} words.`,
+      `Add body words until the body reaches ${MIN_BODY_WORDS} words.`,
     );
   }
   const ctaText = ctas[0].text;
@@ -245,18 +249,35 @@ export function validateSegments(input: unknown): SegmentsResult {
   let mediaCount = 0;
   for (let i = 0; i < segments.length; i += 1) {
     const media = segments[i].media;
-    if (media === undefined) continue;
-    if (
-      typeof media !== 'object' ||
-      media === null ||
-      ((typeof media.mediaId === 'string' && media.mediaId.length > 0) ===
-        (typeof media.url === 'string' && media.url.length > 0))
-    ) {
+    // Mirror the engine's _check_media: null media is skipped, not
+    // rejected, and presence is key-present and non-null — a blank
+    // string counts as present, so it fails the blank check instead
+    // of passing as absent.
+    if (media === undefined || media === null) continue;
+    if (typeof media !== 'object') {
+      return fail(`segments.${i}.media`, 'Media must be an object.', 'Send media as { mediaId } or { url }.');
+    }
+    const mediaIdPresent = media.mediaId !== undefined && media.mediaId !== null;
+    const urlPresent = media.url !== undefined && media.url !== null;
+    if (mediaIdPresent && urlPresent) {
       return fail(
         `segments.${i}.media`,
-        'media needs exactly one of mediaId or url',
-        'Send either a mediaId or a url for this segment, not both and not neither.',
+        'Media has both mediaId and url.',
+        'Send only one of mediaId or url for a segment.',
       );
+    }
+    if (!mediaIdPresent && !urlPresent) {
+      return fail(
+        `segments.${i}.media`,
+        'Media has neither mediaId nor url.',
+        'Send mediaId for an uploaded file or url for a direct image URL.',
+      );
+    }
+    if (mediaIdPresent && (typeof media.mediaId !== 'string' || media.mediaId.trim().length === 0)) {
+      return fail(`segments.${i}.media`, 'mediaId must be a non-empty string.', 'Send a non-empty mediaId.');
+    }
+    if (urlPresent && (typeof media.url !== 'string' || media.url.trim().length === 0)) {
+      return fail(`segments.${i}.media`, 'url must be a non-empty string.', 'Send a non-empty image URL.');
     }
     mediaCount += 1;
   }

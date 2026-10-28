@@ -109,12 +109,17 @@ const OptionsSchema = z
     // apply to persona videos downstream.
     segments: z
       .array(
-        z.object({
-          kind: z.enum(['hook', 'body', 'cta']),
-          text: z.string(),
-          media: z.object({ mediaId: z.string().optional(), url: z.string().optional() }).optional(),
-          terms: z.array(z.string()).optional(),
-        }),
+        z
+          .object({
+            kind: z.enum(['hook', 'body', 'cta']),
+            text: z.string(),
+            media: z
+              .object({ mediaId: z.string().optional(), url: z.string().optional() })
+              .strict()
+              .optional(),
+            terms: z.array(z.string()).optional(),
+          })
+          .strict(),
       )
       .optional(),
     webhookUrl: z.string().optional(),

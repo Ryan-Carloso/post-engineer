@@ -847,6 +847,20 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(String(json.field)).toContain('segments');
     });
 
+    it('rejects an unknown segment key at parse time instead of stripping it', async () => {
+      const withVoice = [
+        { kind: 'hook', text: segmentsHook },
+        { kind: 'body', text: segmentsBody, voice: 'narrator' },
+        { kind: 'cta', text: segmentsCta },
+      ];
+      const res = await post(baseBody({ topics: ['Porto trip'], options: { segments: withVoice } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(String(json.field)).toContain('segments');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
     it('forwards the joined segments script to the engine for a valid segments request', async () => {
       const res = await post(baseBody({ topics: ['Porto trip'], options: { segments: validSegments } }));
       expect(res.status).toBe(200);

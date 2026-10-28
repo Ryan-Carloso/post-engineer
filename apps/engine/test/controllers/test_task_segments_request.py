@@ -60,6 +60,20 @@ def test_request_without_segments_is_unchanged():
     assert request.segments is None
 
 
+def test_segments_with_unknown_segment_key_is_rejected():
+    segments = valid_segments()
+    segments[1]["voice"] = "narrator"
+    with pytest.raises(ValidationError, match="voice"):
+        TaskVideoRequest(video_subject="Porto", segments=segments)
+
+
+def test_segments_with_unknown_media_key_is_rejected():
+    segments = valid_segments()
+    segments[1]["media"] = {"mediaId": "abc", "alt": "kitchen"}
+    with pytest.raises(ValidationError, match="alt"):
+        TaskVideoRequest(video_subject="Porto", segments=segments)
+
+
 def test_empty_segments_list_is_rejected():
     with pytest.raises(ValidationError, match="segments"):
         TaskVideoRequest(video_subject="Porto", segments=[])

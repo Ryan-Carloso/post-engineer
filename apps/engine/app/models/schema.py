@@ -4,7 +4,7 @@ from typing import Any, List, Literal, Optional, Union
 from urllib.parse import urlparse
 
 import pydantic
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.config import config
 from app.models import publish as publish_models
@@ -299,11 +299,21 @@ def _validate_webhook_url(value: Optional[str]) -> Optional[str]:
 class SegmentMedia(BaseModel):
     """Phase 1: media reference shape only (upload_media is Phase 2)."""
 
+    # Unknown keys are forbidden, not stripped: the unknown-field guard in
+    # validate_segments runs on model_dump output, so extra='ignore' would
+    # silently drop a key like voice on the request path before the guard
+    # ever sees it.
+    model_config = ConfigDict(extra="forbid")
+
     mediaId: Optional[str] = None
     url: Optional[str] = None
 
 
 class ScriptSegment(BaseModel):
+    # Same reason as SegmentMedia: forbid so unknown segment keys fail
+    # request validation instead of being dropped before validation.
+    model_config = ConfigDict(extra="forbid")
+
     kind: Literal["hook", "body", "cta"]
     text: str
     media: Optional[SegmentMedia] = None
