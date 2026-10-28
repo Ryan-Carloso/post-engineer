@@ -113,7 +113,8 @@ def download_public_file(
             # assert_public_url (http(s) scheme, DNS resolution, all
             # resolved IPs global, fail closed) on this hop, and redirects
             # are followed manually with the same check per hop.
-            response = http.get(  # codeql[py/full-ssrf]: guarded, see assert_public_url
+            # codeql[py/full-ssrf]: guarded, see assert_public_url
+            response = http.get(
                 current_url,
                 stream=True,
                 timeout=timeout,
