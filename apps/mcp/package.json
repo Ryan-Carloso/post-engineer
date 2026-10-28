@@ -24,7 +24,9 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "lint": "eslint src/",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.spec.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.spec.json",
+    "prebuild": "node ../../scripts/sync-script-segments.mjs",
+    "pretest": "node ../../scripts/sync-script-segments.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

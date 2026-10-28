@@ -1,0 +1,53 @@
+name: pr-size
+
+# PR size limit: fails when a PR adds more than 800 lines of production
+# code. Deletions never count. There is no exemption and no label
+# bypass: a PR over the limit fails, period. Split the PR by complete
+# layer, or justify it in the PR body (a justification documents an
+# unavoidable large PR; it does not make the check pass). The check
+# runs on every PR, but it is NOT a required status check in the
+# "main" ruleset until a maintainer adds it there — a PR over the
+# limit can still merge while the check is non-required, and the
+# failure is the signal to split it or justify it in the PR body.
+#
+# Counted: production code only — *.ts, *.tsx, *.py, *.js, *.mjs, *.cjs,
+# *.sql (migrations are risky code, usually small; repo scripts such as
+# .github/scripts/file-size/check.mjs are real code, otherwise the limit
+# is gameable).
+#
+# Excluded entirely: test files (paths under **/__tests__/**, **/test/**,
+# **/tests/**, filenames *.test.*, *.spec.*, test_*.py, *_test.py), docs
+# (*.md, docs/**, README files), lockfiles, and generated/snapshot files.
+#
+# Implementation: .github/scripts/pr-size/check.mjs (Node stdlib only),
+# unit-tested by .github/scripts/pr-size/check.test.mjs, mirroring the
+# file-size workflow's pattern.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  pr-size:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
+        with:
+          node-version: '22'
+
+      - name: Unit tests (pr-size counter)
+        run: node --test .github/scripts/pr-size/*.test.mjs
+
+      - name: Check PR size
+        run: |
+          set -euo pipefail
+          node .github/scripts/pr-size/check.mjs \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.sha }}"
