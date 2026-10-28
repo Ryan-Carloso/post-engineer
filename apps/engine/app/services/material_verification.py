@@ -4,11 +4,14 @@ Stock is verified only when a scorer clears it: the best candidate must
 reach the minimum score and beat the runner-up by the margin. Scores are
 relative, never probabilities; unscored candidates are never verified.
 
-A segment with no verified stock is dropped: broll mode is stock only,
-so a rejected clip is never replaced by a catalog SVG, a neutral
-background, or the rejected clip itself. The remaining verified clips
-fill the timeline; when none is left the download fails like any other
-empty stock search. Svg mode never runs verification (catalog only).
+A segment with no verified stock is dropped when another segment
+verifies: broll mode is stock only, so a rejected clip is never
+replaced by a catalog SVG, a neutral background, or the rejected clip
+itself. When no segment verifies at all, scored segments keep their
+best-scored clips as an unverified fallback instead of failing the
+download; segments the scorer never scored (no candidates, scorer
+unavailable), and scored segments whose candidates were all already
+taken by another segment, stay dropped. Svg mode never runs verification (catalog only).
 
 Scoring is pluggable through an option (the repo's injection pattern).
 The default scorer is lazy ONNX (see siglip_scorer): without onnxruntime,
@@ -330,7 +333,9 @@ def apply_verification(
     config: Optional[VerificationConfig] = None,
 ) -> tuple[List[MaterialInfo], List[SegmentDecision]]:
     """Apply verification to groups, in order: verified stock is kept,
-    every other segment is dropped. Disabled verification passes
+    every other segment is dropped — except when no segment verifies at
+    all, when scored segments keep their best-scored clips as an
+    unverified fallback (_keep_best_scored). Disabled verification passes
     candidates through unchanged, preserving existing behavior."""
     cfg = config or verification_config()
     if not cfg.enabled:
@@ -404,8 +409,10 @@ def _keep_best_scored(
     """When no segment verified, keep each scored segment's best candidates.
 
     Segments the scorer never scored (no candidates, scorer unavailable)
-    stay dropped: a verifier that cannot run still fails closed. Scored
-    segments keep up to MAX_KEPT_UNVERIFIED alternatives, best first, so
+    stay dropped: a verifier that cannot run still fails closed. A scored
+    segment whose candidates were all already taken by another segment
+    also stays dropped: there is nothing new to keep. Scored segments
+    keep up to MAX_KEPT_UNVERIFIED alternatives, best first, so
     the round-robin loop in material.py rotates distinct clips instead of
     repeating the single best one.
     """

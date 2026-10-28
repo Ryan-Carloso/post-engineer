@@ -104,6 +104,26 @@ def test_a_file_with_the_wrong_hash_is_never_kept(tmp_path, files):
     assert not (tmp_path / "tokenizer.json.part").exists()
 
 
+def test_a_failed_part_cleanup_is_swallowed(tmp_path, files, monkeypatch):
+    # The finally-block cleanup must never mask the download failure: if
+    # removing the .part file raises, the original VerificationUnavailable
+    # still surfaces and the .part file is simply left behind.
+    calls = []
+
+    def boom(path):
+        calls.append(path)
+        raise OSError("read-only model volume")
+
+    monkeypatch.setattr(os, "remove", boom)
+    model_path = str(tmp_path / "siglip" / siglip_model.MODEL_FILE)
+    with pytest.raises(VerificationUnavailable):
+        siglip_model.ensure_model(model_path, fetch=_Fetcher(files, corrupt={siglip_model.MODEL_FILE}))
+    part_path = tmp_path / "siglip" / (siglip_model.MODEL_FILE + ".part")
+    assert calls == [str(part_path)]
+    assert part_path.exists()
+    assert not (tmp_path / "siglip" / siglip_model.MODEL_FILE).exists()
+
+
 def test_a_failing_download_is_reported_as_unavailable_without_leaking_the_path(tmp_path, files):
     def boom(url, dest_path):
         raise OSError(f"disk full writing {dest_path}")
@@ -156,6 +176,32 @@ def test_warm_fetches_the_model_when_verification_is_on(monkeypatch, tmp_path):
     monkeypatch.setattr(siglip_model, "ensure_model", lambda p, fetch=None: called.append(p))
     siglip_model.warm()
     assert called == [path]
+
+
+def test_warm_never_stops_the_boot_when_makedirs_fails(monkeypatch, tmp_path):
+    # Regression: warm() only caught VerificationUnavailable, but
+    # ensure_model's os.makedirs (and a getsize race in _present) raise
+    # OSError, which stopped the boot despite the "never stops the boot"
+    # contract in asgi.py and in warm()'s own docstring.
+    monkeypatch.setitem(siglip_model.config.app, "material_verification_enabled", True)
+    monkeypatch.setitem(siglip_model.config.app, "material_verification_model_path", str(tmp_path / "siglip" / siglip_model.MODEL_FILE))
+
+    def fail(path, fetch=None):
+        raise OSError("read-only model volume")
+
+    monkeypatch.setattr(siglip_model, "ensure_model", fail)
+    siglip_model.warm()  # must not raise
+
+
+def test_a_model_directory_os_error_is_unavailable_not_a_crash(monkeypatch, tmp_path, files):
+    def boom(path, exist_ok=False):
+        raise OSError("read-only volume")
+
+    monkeypatch.setattr(os, "makedirs", boom)
+    model_path = str(tmp_path / "siglip" / siglip_model.MODEL_FILE)
+    with pytest.raises(VerificationUnavailable) as caught:
+        siglip_model.ensure_model(model_path, fetch=_Fetcher(files))
+    assert str(tmp_path) not in str(caught.value)
 
 
 def test_warm_never_stops_the_boot_when_the_download_fails(monkeypatch, tmp_path):

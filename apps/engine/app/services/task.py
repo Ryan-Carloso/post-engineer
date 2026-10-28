@@ -1389,13 +1389,13 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             _complete_task(task_id, params, subtitle_path=subtitle_path)
             return {"subtitle_path": subtitle_path}
 
-        # The video is cut to the audio file's length: drop the dead air after the
-        # last spoken word (Whisper word times; Chatterbox ends with a silent tail).
-        trimmed_seconds = audio_trim.trim_after_last_word(
-            audio_file, subtitle.file_to_words(subtitle_path)
-        )
-        if trimmed_seconds is not None:
-            audio_duration = math.ceil(trimmed_seconds)
+        task_local = audio_trim.task_local_copy(audio_file, utils.task_dir(task_id))
+        if task_local is not None:  # None: copy failed; skip the trim, never cut shared
+            audio_file = task_local
+            trimmed_seconds = audio_trim.trim_after_last_word(
+                audio_file, subtitle.file_to_words(subtitle_path))
+            if trimmed_seconds is not None:
+                audio_duration = math.ceil(trimmed_seconds)
 
         # 4b. Persona hook guard: the lip-sync intro needs the hook to end
         # between 3 and 6 seconds. Validate now — before the expensive
