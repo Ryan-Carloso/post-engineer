@@ -1,0 +1,84 @@
+name: pr-size
+
+# PR size limit: fails when a PR adds more than 800 lines of production
+# code. Deletions never count. The limit is intentionally soft in one
+# respect: it is a check that runs on every PR, but it is NOT a required
+# status check in the "main" ruleset until a maintainer adds it there
+# (see the exemption note below) — a PR over the limit can still merge
+# while the check is non-required, and the failure is the signal to split
+# it or justify it in the PR body.
+#
+# Counted: production code only — *.ts, *.tsx, *.py, *.js, *.mjs, *.cjs,
+# *.sql (migrations are risky code, usually small; repo scripts such as
+# .github/scripts/file-size/check.mjs are real code, otherwise the limit
+# is gameable).
+#
+# Excluded entirely: test files (paths under **/__tests__/**, **/test/**,
+# **/tests/**, filenames *.test.*, *.spec.*, test_*.py, *_test.py), docs
+# (*.md, docs/**, README files), lockfiles, and generated/snapshot files.
+#
+# Exemption: a maintainer may apply the `size-limit-exempt` label to a PR
+# for a genuine exception (e.g. a PR predating this rule, or a mechanical
+# rename/move). Labels are maintainer-applied, so this is not a bypass
+# any author can self-apply silently in the PR body.
+#
+# Dependency-free: git diff --numstat against the merge-base with main,
+# no node/python toolchain setup.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+        with:
+          fetch-depth: 0
+
+      - name: Check PR size
+        env:
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels) }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          merge_base="$(git merge-base "$PR_BASE_SHA" HEAD)"
+          echo "Merge-base with main: $merge_base"
+          git diff --numstat "$merge_base" HEAD > /tmp/pr-size-numstat.txt
+          awk '
+            BEGIN { FS = "\t"; total = 0 }
+            {
+              added = $1; path = $3
+              if (added == "-") next
+              # Excluded: docs, lockfiles, generated/snapshot files.
+              if (path ~ /(^|\/)docs\//) next
+              if (path ~ /\.md$/) next
+              if (path ~ /(^|\/)README(\.|$)/) next
+              if (path ~ /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|[^\/]*\.lock)$/) next
+              if (path ~ /(^|\/)__snapshots__\// || path ~ /\.snap$/) next
+              # Excluded: test files.
+              if (path ~ /(^|\/)(__tests__|test|tests)\//) next
+              if (path ~ /(^|\/)[^\/]*\.(test|spec)\.[^\/]+$/) next
+              if (path ~ /(^|\/)(test_[^\/]*|[^\/]*_test)\.py$/) next
+              # Counted: production code extensions only.
+              if (path !~ /\.(ts|tsx|py|js|mjs|cjs|sql)$/) next
+              printf "%s %s\n", added, path
+              total += added
+            }
+            END { printf "TOTAL %d\n", total }
+          ' /tmp/pr-size-numstat.txt | tee /tmp/pr-size-counted.txt
+          total="$(awk '/^TOTAL / { print $2 }' /tmp/pr-size-counted.txt)"
+          echo "Total added production lines (tests/docs/deletions excluded): $total"
+          if echo "$PR_LABELS" | grep -q '"name":"size-limit-exempt"'; then
+            echo "PR carries the size-limit-exempt label: limit not enforced on this PR."
+            exit 0
+          fi
+          if [ "$total" -gt 800 ]; then
+            echo "::error::PR adds $total production lines, over the 800-line limit (deletions, tests, and docs excluded). Split the PR by complete layer, or justify it in the PR body, or ask a maintainer for the size-limit-exempt label."
+            exit 1
+          fi
+          echo "PR size within the 800-line limit."
