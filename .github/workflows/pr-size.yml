@@ -28,7 +28,10 @@ name: pr-size
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    # labeled/unlabeled re-run the check when a maintainer applies or
+    # removes the size-limit-exempt label; without them the exemption
+    # would never take effect until the next push or reopen.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 jobs:
   pr-size:
