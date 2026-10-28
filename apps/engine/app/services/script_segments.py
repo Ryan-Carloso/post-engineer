@@ -304,11 +304,12 @@ def validate_segments(segments: Any) -> dict[str, Any]:
 
 
 def segments_to_script(segments: Sequence[dict[str, Any]]) -> str:
-    """Join validated segment texts into the single spoken script.
+    """Validate and join segment texts into the single spoken script.
 
-    Callers must validate first: this function trusts the segment order
-    and joins hook, body paragraphs, and CTA with blank lines, which is
-    the paragraph layout the existing TTS and subtitle pipeline reads.
+    This function runs the full mechanical validation itself and raises
+    SegmentValidationError on the first failed rule, then joins hook,
+    body paragraphs, and CTA with blank lines, which is the paragraph
+    layout the existing TTS and subtitle pipeline reads.
     """
     validated = validate_segments(list(segments))
     parts = [validated["hook_text"], *validated["body_texts"], validated["cta_text"]]

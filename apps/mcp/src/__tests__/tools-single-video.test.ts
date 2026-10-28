@@ -4,6 +4,7 @@ import {
   handleValidateScript,
 } from '../tools-single-video.js';
 import type { PostEngineerClient } from '../client.js';
+import { ApiError } from '../errors.js';
 import type { McpToolResponse } from '../tools.js';
 
 function textOf(response: McpToolResponse): string {
@@ -105,6 +106,29 @@ describe('generate_persona_video tool', () => {
     expect(vi.mocked(client.generatePersonaVideos)).not.toHaveBeenCalled();
     expect(textOf(response)).toContain('segments');
   });
+
+  it('redacts credential-shaped material from a thrown endpoint error', async () => {
+    const client = mockClient();
+    vi.mocked(client.generatePersonaVideos).mockRejectedValue(
+      new ApiError('Failed to generate: 500 Bearer abc123token https://admin:s3cret@example.com/x', null, null),
+    );
+    const response = await handleGeneratePersonaVideo(client, {
+      personaId: 'persona-1',
+      segments,
+      title: 'Porto trip',
+      language: 'en-US',
+      providers: ['youtube'],
+      youtubeAccountIds: ['acct-1'],
+      mode: 'asap',
+      timezone: 'Europe/Lisbon',
+    });
+    expect(response.isError).toBe(true);
+    const text = textOf(response);
+    expect(text).toContain('Bearer [redacted]');
+    expect(text).toContain('https://[redacted]@example.com');
+    expect(text).not.toContain('abc123token');
+    expect(text).not.toContain('s3cret');
+  });
 });
 
 describe('validate_script tool', () => {
@@ -154,5 +178,19 @@ describe('validate_script tool', () => {
     const response = await handleValidateScript(client, { segments });
     expect(response.isError).toBe(true);
     expect(textOf(response)).toContain('Script rejected');
+  });
+
+  it('redacts credential-shaped material from a thrown endpoint error', async () => {
+    const client = mockClient();
+    vi.mocked(client.validateScript).mockRejectedValue(
+      new ApiError('Failed to validate: 500 Bearer abc123token https://admin:s3cret@example.com/x', null, null),
+    );
+    const response = await handleValidateScript(client, { segments });
+    expect(response.isError).toBe(true);
+    const text = textOf(response);
+    expect(text).toContain('Bearer [redacted]');
+    expect(text).toContain('https://[redacted]@example.com');
+    expect(text).not.toContain('abc123token');
+    expect(text).not.toContain('s3cret');
   });
 });

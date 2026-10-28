@@ -13,6 +13,7 @@
 import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
 import { getErrorMessage } from './errors.js';
+import { sanitizeEngineError } from './tools.js';
 import type { McpToolResponse } from './tools-call.js';
 import {
   HOOK_MAX_SECONDS,
@@ -78,7 +79,7 @@ export async function handleValidateScript(
   try {
     payload = narrowValidateScriptPayload(await client.validateScript(args.segments));
   } catch (error) {
-    return errorResponse(`Error validating the script: ${getErrorMessage(error)}`);
+    return errorResponse(`Error validating the script: ${sanitizeEngineError(getErrorMessage(error))}`);
   }
   if (typeof payload === 'string') {
     return errorResponse(`Script validation failed: ${payload}`);
@@ -162,7 +163,7 @@ export async function handleGeneratePersonaVideo(
       ],
     };
   } catch (error) {
-    return errorResponse(`Error generating the video: ${getErrorMessage(error)}`);
+    return errorResponse(`Error generating the video: ${sanitizeEngineError(getErrorMessage(error))}`);
   }
 }
 
