@@ -333,6 +333,47 @@ def test_splice_renders_the_replacement_at_the_replaced_clips_duration(tmp_path)
     assert render_mock.call_args[1]["clip_duration"] == 2
 
 
+def test_splice_renders_shared_still_segments_from_distinct_copies(tmp_path):
+    # Two segments sharing one mediaId share one still path, and the
+    # render output derives from the input path: rendering both from
+    # the same still overwrites the first mp4 with the second's
+    # duration, shifting the timeline. Each segment must render from
+    # its own copy, so the two renders take distinct inputs.
+    still = tmp_path / "segment-media-abc.jpg"
+    still.write_bytes(_jpeg())
+    prepared = [
+        user_media.SegmentMedia(index=0, still_path=str(still), start=0.0, end=2.0),
+        user_media.SegmentMedia(index=1, still_path=str(still), start=2.0, end=6.0),
+    ]
+    with patch.object(
+        user_media.image_material,
+        "render_image_file_to_mp4",
+        side_effect=["rendered0.mp4", "rendered1.mp4"],
+    ) as render_mock, patch.object(user_media, "_clip_durations", return_value=[2.0, 4.0]):
+        result, skipped = user_media.splice_segment_media(
+            ["a.mp4", "b.mp4"], prepared, 4
+        )
+    assert result == ["rendered0.mp4", "rendered1.mp4"]
+    assert skipped == []
+    inputs = [call[0][0] for call in render_mock.call_args_list]
+    assert inputs[0] == str(still)
+    assert inputs[1] != str(still)
+    durations = [call[1]["clip_duration"] for call in render_mock.call_args_list]
+    assert durations == [2, 4]
+
+
+def test_expired_media_id_reports_expired_not_invalid(tmp_path, monkeypatch):
+    # A well-formed id whose temp asset the 1 hour TTL already purged
+    # is expired, not invalid: the resolve raises "file does not exist"
+    # before any isfile check could run.
+    monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
+    still, reason = user_media._resolve_media_id(
+        "abc123def456abc123def456abc12345.jpg", str(tmp_path), VideoAspect.portrait
+    )
+    assert still == ""
+    assert reason == "media expired or missing"
+
+
 def test_splice_reports_a_segment_whose_interval_overlaps_no_clip(tmp_path):
     clips = ["a.mp4", "b.mp4", "c.mp4"]
     # Interval 10-12 sits past the 0-6 clip timeline: the photo is kept

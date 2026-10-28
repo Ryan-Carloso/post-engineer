@@ -25,6 +25,7 @@ carry only the segment index and a stable reason.
 import contextlib
 import os
 import re
+import shutil
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence
 
@@ -223,11 +224,12 @@ def _resolve_media_id(media_id: str, task_dir: str, aspect: VideoAspect) -> tupl
         source = file_security.resolve_path_within_directory(
             _temp_assets_dir(), os.path.join(_temp_assets_dir(), media_id)
         )
-    except ValueError:
+    except ValueError as exc:
+        # A well-formed id whose temp asset the 1 hour TTL already purged
+        # is expired, not invalid; anything else (an escaping path) is invalid.
+        if str(exc) == "file does not exist":
+            return "", "media expired or missing"
         return "", "invalid media id"
-    if not os.path.isfile(source):
-        # The 1 hour temp_assets TTL already purged it, or it never existed.
-        return "", "media expired or missing"
     still = os.path.join(task_dir, f"segment-media-{os.path.splitext(media_id)[0]}.jpg")
     return _prepare_still(source, still, aspect)
 
@@ -328,6 +330,7 @@ def splice_segment_media(
         cursor += duration
     result = list(clips)
     used: set[int] = set()
+    rendered_stills: set[str] = set()
     skipped: list[str] = []
     for media in sorted(prepared, key=lambda item: item.start):
         best_index: Optional[int] = None
@@ -353,12 +356,27 @@ def splice_segment_media(
         # a short original clip replaced by a full-length photo clip would
         # lengthen the timeline past that point and shift every later
         # segment's photo out of its spoken interval.
+        # Two segments may share one still (same mediaId), and the render
+        # output derives from the input path: rendering both from the
+        # same still would overwrite the first mp4 with the second's
+        # duration. A still already rendered in this call renders from
+        # a per-segment copy instead.
+        still_path = media.still_path
+        if still_path in rendered_stills:
+            still_path = f"{os.path.splitext(still_path)[0]}-seg{media.index}.jpg"
+            try:
+                shutil.copyfile(media.still_path, still_path)
+            except OSError:
+                logger.warning("segment media still copy failed; keeping the original clip")
+                skipped.append(f"segment {media.index} media skipped: photo clip failed to render")
+                continue
         rendered = image_material.render_image_file_to_mp4(
-            media.still_path, clip_duration=max(1, round(durations[best_index]))
+            still_path, clip_duration=max(1, round(durations[best_index]))
         )
         if rendered:
             result[best_index] = rendered
             used.add(best_index)
+            rendered_stills.add(media.still_path)
         else:
             logger.warning("segment media clip failed to render; keeping the original clip")
             skipped.append(f"segment {media.index} media skipped: photo clip failed to render")
