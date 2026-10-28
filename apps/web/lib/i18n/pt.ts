@@ -194,7 +194,6 @@ export const ptDictionary = {
   publishing: {
     mustSelectAccount: 'Selecione pelo menos uma conta para publicar.',
   },
-
   // Accounts
   accounts: {
     title: 'Contas',
@@ -292,7 +291,6 @@ export const ptDictionary = {
     agreePrefix: 'Ao continuar, você concorda com os nossos',
     agreeAnd: 'e',
   },
-
   // OAuth
   oauth: {
     startFailed: 'Não foi possível iniciar o OAuth.',
@@ -382,6 +380,8 @@ export const ptDictionary = {
     toolDescGeneratePersonaVideos: 'Gerar e agendar de 1 a 10 vídeos de persona em uma operação',
     toolDescGeneratePersonaVideo: 'Gerar e agendar um vídeo de persona a partir de um roteiro',
     toolDescValidateScript: 'Validar um roteiro mecanicamente, sem gastar tokens',
+    toolDescUploadMedia: 'Enviar uma imagem de segmento (JPG, PNG, WebP, máx. 8MB)',
+    toolDescCheckMedia: 'Verificar uma URL de imagem de segmento mecanicamente',
     toolDescGetVideoStatus: 'Confira o status do vídeo',
     toolDescGetVideoTaskProgress: 'Acompanhe o progresso por vídeo (%, etapa)',
     toolDescListPersonaImages: 'Liste a biblioteca de imagens da persona',

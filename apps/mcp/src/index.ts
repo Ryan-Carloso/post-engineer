@@ -88,6 +88,7 @@ import {
   handleCancelVideoTask,
 } from './video-task-tools.js';
 import { GeneratePersonaVideoShape, ValidateScriptShape, ValidateScriptDescription, handleGeneratePersonaVideo, handleValidateScript } from './tools-single-video.js';
+import { CheckMediaDescription, CheckMediaShape, UploadMediaDescription, UploadMediaShape, handleCheckMedia, handleUploadMedia } from './tools-user-media.js';
 import { trackEvent } from './analytics.js';
 
 // Track every tool invocation as a PostHog analytics event (never throws, never blocks).
@@ -404,7 +405,8 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     withTracking('generate_persona_video', async (args) => handleGeneratePersonaVideo(apiClient, args)),
   );
   server.tool('validate_script', ValidateScriptDescription, ValidateScriptShape, withTracking('validate_script', async (args) => handleValidateScript(apiClient, args)));
-
+  server.tool('upload_media', UploadMediaDescription, UploadMediaShape, withTracking('upload_media', async (args) => handleUploadMedia(apiClient, args)));
+  server.tool('check_media', CheckMediaDescription, CheckMediaShape, withTracking('check_media', async (args) => handleCheckMedia(apiClient, args)));
   server.tool(
     'get_video_status',
     'Check the generation status and fetch final video URLs for a taskId.',
@@ -413,7 +415,6 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
       return handleGetVideoStatus(apiClient, args);
     })
   );
-
   server.tool(
     'get_video_task_progress',
     'Poll one video task for its machine-readable progress: returns {task_id, state, progress, stage, error}. error is the engine failure reason when state is -1 (failed), null otherwise. Use per-video (1/6, 2/6, ...) after generate_persona_videos; prefer this over get_video_status when only progress matters.',
@@ -422,7 +423,6 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
       return handleGetVideoTaskProgress(apiClient, args);
     })
   );
-
   server.tool(
     'list_persona_images',
     `List the image library of a persona (up to ${MAX_LIBRARY_IMAGES} tagged images). Each entry has id, tag, description, and is_primary. Use the ids with generate_persona_videos options.imageId to force a specific image for every video in one call.`,

@@ -16,6 +16,17 @@ export const MAX_LIBRARY_IMAGE_BYTES = 10 * 1024 * 1024;
 export const MAX_LIBRARY_IMAGE_MB = MAX_LIBRARY_IMAGE_BYTES / (1024 * 1024);
 
 /**
+ * Max segment media size in bytes (8MB). This is the engine photo
+ * bottleneck (place_photos MAX_PHOTO_BYTES), NOT the persona library
+ * limit: a larger segment upload could never render. The server
+ * re-validates the same bound; this local guard only fails fast.
+ */
+export const MAX_SEGMENT_MEDIA_BYTES = 8 * 1024 * 1024;
+
+/** Same limit in whole MB, derived from the byte limit. */
+export const MAX_SEGMENT_MEDIA_MB = MAX_SEGMENT_MEDIA_BYTES / (1024 * 1024);
+
+/**
  * Max direct-publish video size in bytes (2GB). Mirrors the server-side
  * limit in POST /api/upload-content (youtube handler): the MCP fails fast
  * locally instead of uploading gigabytes the server would reject.

@@ -193,7 +193,6 @@ export const enDictionary: Dictionary = {
   publishing: {
     mustSelectAccount: 'Select at least one account to publish to.',
   },
-
   accounts: {
     title: 'Accounts',
     subtitle: 'Connect and manage your publishing accounts.',
@@ -266,7 +265,6 @@ export const enDictionary: Dictionary = {
     view: '{count} view',
     video: '{count} video',
   },
-
   // Login
   login: {
     title: 'Welcome back',
@@ -382,6 +380,8 @@ export const enDictionary: Dictionary = {
     toolDescGeneratePersonaVideos: 'Generate and schedule 1-10 persona videos in one operation',
     toolDescGeneratePersonaVideo: 'Generate and schedule one persona video from a script',
     toolDescValidateScript: 'Validate a script mechanically, without spending tokens',
+    toolDescUploadMedia: 'Upload a segment image (JPG, PNG, WebP, max 8MB)',
+    toolDescCheckMedia: 'Check a segment image URL mechanically',
     toolDescGetVideoStatus: 'Check video status',
     toolDescGetVideoTaskProgress: 'Poll per-video progress (%, stage)',
     toolDescListPersonaImages: "List a persona's image library",

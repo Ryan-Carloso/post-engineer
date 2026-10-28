@@ -35,6 +35,12 @@
   "PATCH /api/persona": [
     "update_persona"
   ],
+  "POST /api/media/upload": [
+    "upload_media"
+  ],
+  "POST /api/media/check": [
+    "check_media"
+  ],
   "GET /api/metrics": [
     "get_post_metrics"
   ],
