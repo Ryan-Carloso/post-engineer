@@ -104,7 +104,9 @@ const OptionsSchema = z
     scriptPrompt: z.string().optional(),
     scriptPrompts: z.array(z.string()).optional(),
     // Segments contract (MCP first, Phase 1): one call = one video. The
-    // joined script is spoken verbatim; no LLM expands it.
+    // joined script becomes the video script; no LLM expands it. The
+    // engine's existing persona script budget and duration trim still
+    // apply to persona videos downstream.
     segments: z
       .array(
         z.object({

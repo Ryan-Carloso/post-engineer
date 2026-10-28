@@ -60,6 +60,11 @@ def test_request_without_segments_is_unchanged():
     assert request.segments is None
 
 
+def test_empty_segments_list_is_rejected():
+    with pytest.raises(ValidationError, match="segments"):
+        TaskVideoRequest(video_subject="Porto", segments=[])
+
+
 def test_media_shape_only_in_phase_one():
     segments = valid_segments()
     segments[1]["media"] = {"mediaId": "abc", "url": "https://example.com/x.jpg"}

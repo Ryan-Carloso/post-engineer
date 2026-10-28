@@ -333,7 +333,7 @@ class TaskVideoRequest(VideoParams, BaseModel):
 
     @model_validator(mode="after")
     def _validate_segments_into_script(self) -> "TaskVideoRequest":
-        if not self.segments:
+        if self.segments is None:
             return self
         from app.services import script_segments
 
