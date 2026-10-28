@@ -13,6 +13,7 @@ import { findRepoRoot } from '@/test/repo-root';
 const root = findRepoRoot(import.meta.url);
 const migration = readFileSync(join(root, 'supabase/migrations/030_scheduled-posts-segments.sql'), 'utf8');
 const route = readFileSync(join(root, 'apps/web/app/api/videos/generate-and-schedule/route.ts'), 'utf8');
+const slotRows = readFileSync(join(root, 'apps/web/app/api/videos/generate-and-schedule/slot-rows.ts'), 'utf8');
 
 describe('scheduled_posts.segments', () => {
   it('is added to scheduled_posts as a nullable jsonb column', () => {
@@ -21,6 +22,7 @@ describe('scheduled_posts.segments', () => {
   });
 
   it('is written on every slot insert', () => {
-    expect(route).toContain('segments: options?.segments ?? null,');
+    expect(slotRows).toContain('segments: input.segments ?? null,');
+    expect(route).toContain('buildSlotRows({');
   });
 });
