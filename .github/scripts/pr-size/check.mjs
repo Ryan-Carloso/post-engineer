@@ -6,13 +6,13 @@
  * main .. head) and fails when the total exceeds PR_SIZE_LIMIT.
  * Deletions never count. Only .ts, .tsx, .py, .js, .mjs, .cjs, .sql
  * count; test files, docs, lockfiles, and generated/snapshot files are
- * excluded entirely. A maintainer-applied `size-limit-exempt` label
- * (passed via --labels JSON or the PR_LABELS env var) short-circuits
- * the limit without changing what is counted.
+ * excluded entirely. There is no exemption and no label bypass: a PR
+ * over the limit fails, period. Split the PR by complete layer, or
+ * justify it in the PR body (a justification documents an unavoidable
+ * large PR; it does not make the check pass).
  *
  * Usage:
  *   node check.mjs --base <sha> --head <sha> [--limit 800]
- *   [--labels '<JSON array of {name} objects>']
  *
  * Exit code: 1 when the counted total exceeds the limit, else 0.
  * Counted files and the total are printed, with a GitHub ::error
@@ -25,8 +25,6 @@ import { pathToFileURL } from 'node:url';
 // The cap (added production lines) a PR may have before the check fails.
 // Shared from one constant so tests pin the same value as CI.
 export const PR_SIZE_LIMIT = 800;
-
-export const SIZE_LIMIT_EXEMPT_LABEL = 'size-limit-exempt';
 
 const COUNTED_EXTENSIONS = ['ts', 'tsx', 'py', 'js', 'mjs', 'cjs', 'sql'];
 
@@ -142,17 +140,6 @@ export function exceedsLimit(total, limit = PR_SIZE_LIMIT) {
   return total > limit;
 }
 
-/** True when the PR labels JSON contains the maintainer exemption label. */
-export function hasExemptLabel(labelsJson) {
-  if (!labelsJson) return false;
-  try {
-    const labels = JSON.parse(labelsJson);
-    return Array.isArray(labels) && labels.some((l) => l && l.name === SIZE_LIMIT_EXEMPT_LABEL);
-  } catch {
-    return false;
-  }
-}
-
 export function parseArgs(argv) {
   const args = {};
   for (let i = 0; i < argv.length; i++) {
@@ -195,7 +182,7 @@ function main() {
     process.exit(2);
   }
   if (!base) {
-    console.error('Usage: node check.mjs --base <sha> --head <sha> [--limit 800] [--labels <json>]');
+    console.error('Usage: node check.mjs --base <sha> --head <sha> [--limit 800]');
     process.exit(2);
   }
   const mergeBase = execFileSync('git', ['merge-base', base, head], { encoding: 'utf8' }).trim();
@@ -205,14 +192,9 @@ function main() {
   const { files, total } = countAddedLines(numstat);
   for (const f of files) console.log(`${f.added} ${f.path}`);
   console.log(`Total added production lines (tests/docs/deletions excluded): ${total}`);
-  const labelsJson = args.labels || process.env.PR_LABELS || '';
-  if (hasExemptLabel(labelsJson)) {
-    console.log(`PR carries the ${SIZE_LIMIT_EXEMPT_LABEL} label: limit not enforced on this PR.`);
-    return;
-  }
   if (exceedsLimit(total, limit)) {
     console.log(
-      `::error::PR adds ${total} production lines, over the ${limit}-line limit (deletions, tests, and docs excluded). Split the PR by complete layer, or justify it in the PR body, or ask a maintainer for the ${SIZE_LIMIT_EXEMPT_LABEL} label.`,
+      `::error::PR adds ${total} production lines, over the ${limit}-line limit (deletions, tests, and docs excluded). Split the PR by complete layer, or justify it in the PR body. There is no exemption and no label bypass.`,
     );
     process.exit(1);
   }

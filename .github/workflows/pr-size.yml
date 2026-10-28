@@ -1,12 +1,14 @@
 name: pr-size
 
 # PR size limit: fails when a PR adds more than 800 lines of production
-# code. Deletions never count. The limit is intentionally soft in one
-# respect: it is a check that runs on every PR, but it is NOT a required
-# status check in the "main" ruleset until a maintainer adds it there
-# (see the exemption note below) — a PR over the limit can still merge
-# while the check is non-required, and the failure is the signal to split
-# it or justify it in the PR body.
+# code. Deletions never count. There is no exemption and no label
+# bypass: a PR over the limit fails, period. Split the PR by complete
+# layer, or justify it in the PR body (a justification documents an
+# unavoidable large PR; it does not make the check pass). The check
+# runs on every PR, but it is NOT a required status check in the
+# "main" ruleset until a maintainer adds it there — a PR over the
+# limit can still merge while the check is non-required, and the
+# failure is the signal to split it or justify it in the PR body.
 #
 # Counted: production code only — *.ts, *.tsx, *.py, *.js, *.mjs, *.cjs,
 # *.sql (migrations are risky code, usually small; repo scripts such as
@@ -17,21 +19,13 @@ name: pr-size
 # **/tests/**, filenames *.test.*, *.spec.*, test_*.py, *_test.py), docs
 # (*.md, docs/**, README files), lockfiles, and generated/snapshot files.
 #
-# Exemption: a maintainer may apply the `size-limit-exempt` label to a PR
-# for a genuine exception (e.g. a PR predating this rule, or a mechanical
-# rename/move). Labels are maintainer-applied, so this is not a bypass
-# any author can self-apply silently in the PR body.
-#
 # Implementation: .github/scripts/pr-size/check.mjs (Node stdlib only),
 # unit-tested by .github/scripts/pr-size/check.test.mjs, mirroring the
 # file-size workflow's pattern.
 
 on:
   pull_request:
-    # labeled/unlabeled re-run the check when a maintainer applies or
-    # removes the size-limit-exempt label; without them the exemption
-    # would never take effect until the next push or reopen.
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened]
 
 jobs:
   pr-size:
@@ -52,8 +46,6 @@ jobs:
         run: node --test .github/scripts/pr-size/*.test.mjs
 
       - name: Check PR size
-        env:
-          PR_LABELS: ${{ toJson(github.event.pull_request.labels) }}
         run: |
           set -euo pipefail
           node .github/scripts/pr-size/check.mjs \
