@@ -7,6 +7,11 @@ const trackEventMock = vi.fn();
 vi.mock('../analytics.js', () => ({
   trackEvent: (...args: unknown[]) => trackEventMock(...args),
   resetAnalyticsForTesting: vi.fn(),
+  // Same shape as the real withTracking: track, then run the handler.
+  withTracking: (toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
+    trackEventMock('mcp_tool_called', { toolName });
+    return handler(args);
+  },
 }));
 
 import { createPostEngineerMcpServer } from '../index.js';
