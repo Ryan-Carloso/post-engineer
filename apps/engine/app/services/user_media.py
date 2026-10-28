@@ -299,14 +299,18 @@ def _clip_durations(clips: Sequence[str], clip_seconds: float) -> list[float]:
 
 def splice_segment_media(
     clips: list[str], prepared: Sequence[SegmentMedia], clip_seconds: float
-) -> list[str]:
+) -> tuple[list[str], list[str]]:
     """`clips` with each segment's photo clip replacing its max-overlap clip.
 
-    A segment whose interval overlaps no clip, or whose still fails to
-    render, keeps the original clip. The input list is untouched.
+    Returns (clips, skipped warnings). A segment whose interval overlaps
+    no clip, or whose still fails to render, keeps the original clip.
+    A segment whose best clip is already used by an earlier segment's
+    photo is skipped with a warning instead of overwriting that photo
+    with no trace: two short adjacent segments can both overlap the
+    same clip most. The input list is untouched.
     """
     if not prepared or not clips or clip_seconds <= 0:
-        return list(clips)
+        return list(clips), []
     durations = _clip_durations(clips, clip_seconds)
     starts: list[float] = []
     cursor = 0.0
@@ -314,6 +318,8 @@ def splice_segment_media(
         starts.append(cursor)
         cursor += duration
     result = list(clips)
+    used: set[int] = set()
+    skipped: list[str] = []
     for media in sorted(prepared, key=lambda item: item.start):
         best_index: Optional[int] = None
         best_overlap = 0.0
@@ -325,14 +331,23 @@ def splice_segment_media(
         if best_index is None:
             logger.warning("segment media interval overlaps no clip; keeping the original clip")
             continue
+        if best_index in used:
+            logger.warning(
+                "segment media clip already used by an earlier segment; keeping the first photo"
+            )
+            skipped.append(
+                f"segment {media.index} media skipped: clip already used by an earlier segment"
+            )
+            continue
         rendered = image_material.render_image_file_to_mp4(
             media.still_path, clip_duration=max(1, round(clip_seconds))
         )
         if rendered:
             result[best_index] = rendered
+            used.add(best_index)
         else:
             logger.warning("segment media clip failed to render; keeping the original clip")
-    return result
+    return result, skipped
 
 
 def apply_segment_media(
@@ -366,4 +381,5 @@ def apply_segment_media(
     clip_seconds = svg_terms.clip_seconds(params, len(clips), audio_duration)
     if not clip_seconds:
         clip_seconds = params.video_clip_duration or 4
-    return splice_segment_media(clips, prepared, clip_seconds), skipped
+    spliced, splice_skipped = splice_segment_media(clips, prepared, clip_seconds)
+    return spliced, [*skipped, *splice_skipped]

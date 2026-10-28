@@ -1016,6 +1016,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         topic: topics[i],
         faceless: prep.faceless,
         faceless_material: validatedOptions.facelessMaterial,
+        segments: options?.segments ?? null,
       })),
     )
     .select('id, slot_at, topic');

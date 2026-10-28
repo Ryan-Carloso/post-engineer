@@ -296,9 +296,12 @@ describe('uploadEngineTempAsset', () => {
   it.each([
     ['null body', 'null'],
     ['string body', '"just a string"'],
-    ['null data', '{"data":null}'],
-    ['missing url', '{"data":{}}'],
-    ['non-string url', '{"data":{"url":42}}'],
+    // The engine envelope is { status, body } — a `data` key is not a
+    // URL carrier, so a legacy-shaped payload must not resolve.
+    ['null body field', '{"status":200,"body":null}'],
+    ['missing url', '{"status":200,"body":{}}'],
+    ['non-string url', '{"status":200,"body":{"url":42}}'],
+    ['data envelope, no body', '{"status":200,"data":{"url":"https://engine.test/temp/a.mp3"}}'],
   ])('returns undefined for %s', async (_label, body) => {
     vi.stubEnv('MONEYPRINT_API_URL', 'http://engine.test');
     vi.stubEnv('MONEYPRINT_API_SECRET', 'test-secret');
@@ -310,7 +313,7 @@ describe('uploadEngineTempAsset', () => {
     vi.stubEnv('MONEYPRINT_API_URL', 'http://engine.test///');
     vi.stubEnv('MONEYPRINT_API_SECRET', 'test-secret');
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) =>
-      engineResponse(JSON.stringify({ data: { url: 'https://engine.test/temp/a.mp3' } })),
+      engineResponse(JSON.stringify({ status: 200, body: { url: 'https://engine.test/temp/a.mp3' } })),
     );
     vi.stubGlobal('fetch', fetchMock);
     const url = await uploadEngineTempAsset('user-1', file, 'mp3');

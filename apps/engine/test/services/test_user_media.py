@@ -263,7 +263,7 @@ def test_segment_without_media_keeps_its_clip(tmp_path):
     with patch.object(
         user_media.image_material, "render_image_file_to_mp4", return_value="rendered.mp4"
     ), patch.object(user_media, "_clip_durations", return_value=[2.0, 2.0, 2.0]):
-        result = user_media.splice_segment_media(clips, prepared, 2)
+        result, _ = user_media.splice_segment_media(clips, prepared, 2)
     assert result[0] == "a.mp4"
     assert result[2] == "c.mp4"
     assert result[1] == "rendered.mp4"
@@ -278,8 +278,26 @@ def test_splice_breaks_overlap_ties_toward_the_earliest_clip(tmp_path):
     with patch.object(
         user_media.image_material, "render_image_file_to_mp4", return_value="rendered.mp4"
     ), patch.object(user_media, "_clip_durations", return_value=[2.0, 2.0, 2.0]):
-        result = user_media.splice_segment_media(clips, prepared, 2)
+        result, _ = user_media.splice_segment_media(clips, prepared, 2)
     assert result == ["a.mp4", "rendered.mp4", "c.mp4"]
+
+
+def test_splice_skips_a_second_segment_on_an_already_used_clip(tmp_path):
+    clips = ["a.mp4", "b.mp4", "c.mp4"]
+    # Both intervals overlap clip 1 (2-4) most: the first segment wins it
+    # and the second is skipped with a warning instead of overwriting
+    # the first photo with no trace.
+    prepared = [
+        user_media.SegmentMedia(index=0, still_path="/t/first.jpg", start=2.0, end=3.0),
+        user_media.SegmentMedia(index=1, still_path="/t/second.jpg", start=2.5, end=3.5),
+    ]
+    with patch.object(
+        user_media.image_material, "render_image_file_to_mp4", return_value="rendered.mp4"
+    ) as render_mock, patch.object(user_media, "_clip_durations", return_value=[2.0, 2.0, 2.0]):
+        result, skipped = user_media.splice_segment_media(clips, prepared, 2)
+    assert result == ["a.mp4", "rendered.mp4", "c.mp4"]
+    assert skipped == ["segment 1 media skipped: clip already used by an earlier segment"]
+    assert render_mock.call_count == 1
 
 
 def test_splice_picks_the_clip_with_max_interval_overlap(tmp_path):
@@ -290,7 +308,7 @@ def test_splice_picks_the_clip_with_max_interval_overlap(tmp_path):
     with patch.object(
         user_media.image_material, "render_image_file_to_mp4", return_value="rendered.mp4"
     ), patch.object(user_media, "_clip_durations", return_value=[2.0, 2.0, 2.0]):
-        result = user_media.splice_segment_media(clips, prepared, 2)
+        result, _ = user_media.splice_segment_media(clips, prepared, 2)
     assert result == ["a.mp4", "b.mp4", "rendered.mp4"]
 
 
@@ -408,7 +426,7 @@ def test_faceless_render_shows_each_photo_inside_its_own_interval(tmp_path):
         user_media.SegmentMedia(index=0, still_path=red_still, start=0.0, end=4.0),
         user_media.SegmentMedia(index=1, still_path=blue_still, start=4.0, end=8.0),
     ]
-    spliced = user_media.splice_segment_media(clips, prepared, 2)
+    spliced, _ = user_media.splice_segment_media(clips, prepared, 2)
     assert spliced[0] != gray_clip and spliced[2] != gray_clip
     final = str(tmp_path / "final.mp4")
     concat = tmp_path / "concat.txt"
