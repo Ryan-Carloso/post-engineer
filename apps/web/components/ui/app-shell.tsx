@@ -10,7 +10,7 @@ import AppLogo from '@/components/ui/app-logo';
 import {
   AccountsIcon,
   ChartIcon,
-  CoinsIcon,
+  ComposeIcon,
   HistoryIcon,
   SparklesIcon,
 } from '@/lib/ui';
@@ -20,8 +20,8 @@ import {
 //---------------
 interface NavItem {
   href: string;
-  labelKey: 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.metrics' | 'nav.billing' | 'nav.debug';
-  hintKey: 'nav.accountsHint' | 'nav.personaHint' | 'nav.postsHint' | 'nav.metricsHint' | 'nav.billingHint' | 'nav.debugHint';
+  labelKey: 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.metrics' | 'nav.prompts' | 'nav.debug';
+  hintKey: 'nav.accountsHint' | 'nav.personaHint' | 'nav.postsHint' | 'nav.metricsHint' | 'nav.promptsHint' | 'nav.debugHint';
   icon: () => React.JSX.Element;
 }
 
@@ -59,7 +59,7 @@ const MainSidebar = () => {
     { href: '/accounts', labelKey: 'nav.accounts', hintKey: 'nav.accountsHint', icon: AccountsIcon },
     { href: '/personas', labelKey: 'nav.persona', hintKey: 'nav.personaHint', icon: SparklesIcon },
     { href: '/metrics', labelKey: 'nav.metrics', hintKey: 'nav.metricsHint', icon: ChartIcon },
-    { href: '/billing', labelKey: 'nav.billing', hintKey: 'nav.billingHint', icon: CoinsIcon },
+    { href: '/recipes', labelKey: 'nav.prompts', hintKey: 'nav.promptsHint', icon: ComposeIcon },
   ];
 
   return (
@@ -153,7 +153,7 @@ const MobileNavigation = () => {
     { href: '/posts', labelKey: 'nav.posts', icon: HistoryIcon, isActive: pathname.startsWith('/posts') },
     { href: '/personas', labelKey: 'nav.persona', icon: SparklesIcon, isActive: pathname.startsWith('/persona') },
     { href: '/accounts', labelKey: 'nav.accounts', icon: AccountsIcon, isActive: pathname.startsWith('/accounts') },
-    { href: '/billing', labelKey: 'nav.billing', icon: CoinsIcon, isActive: pathname.startsWith('/billing') },
+    { href: '/recipes', labelKey: 'nav.prompts', icon: ComposeIcon, isActive: pathname.startsWith('/recipes') },
   ];
 
   return (
