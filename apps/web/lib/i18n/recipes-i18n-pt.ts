@@ -65,4 +65,22 @@ export const recipesI18nPt = {
   addYourPromptHint: 'Tem um prompt que funciona? Manda pra gente.',
   stepCount: '{count} passos',
   promptCount: '{count} prompts',
+  fullSetupTitle: 'Setup completo vira vídeos',
+  fullSetupObjective:
+      'Conectar contas, criar a persona, validar o roteiro e publicar o primeiro vídeo sem pular nenhum passo.',
+  fullSetupStep1:
+      'Para quem está começando do zero, sem contas ou persona conectadas.',
+  fullSetupStep2:
+      'Ele guia contas, persona, roteiro validado e publicação real em um único fluxo.',
+  fullSetupStep3: 'Conecte suas contas e crie sua persona.',
+  fullSetupStep4:
+      'Escreva o roteiro, valide antes de gastar qualquer token e confirme como ele será publicado.',
+  fullSetupStep5: 'Gere um vídeo e publique onde você pediu.',
+  fullSetupDeliver1: 'Todas as contas conectadas e uma persona criada.',
+  fullSetupDeliver2:
+      'Um roteiro validado: 60–200 palavras, gancho primeiro, CTA por último.',
+  fullSetupDeliver3: 'Seu primeiro vídeo publicado nas suas contas.',
+  fullSetupExampleInput: 'Começando sem nenhuma conta e sem persona.',
+  fullSetupExampleOutput:
+      'Contas conectadas, persona criada, roteiro validado, um vídeo publicado.',
 } as const;

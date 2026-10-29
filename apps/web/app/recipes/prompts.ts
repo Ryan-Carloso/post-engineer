@@ -14,6 +14,33 @@
 
 import type { TranslationKey } from '@/lib/i18n';
 
+export const FULL_SETUP_PROMPT = [
+  'Set up Post Engineer end to end and publish your first video. Follow the',
+  'steps in order; do not skip ahead of validation or the publish confirmation.',
+  '',
+  '1. Call list_social_accounts. For youtube, instagram, and linkedin, if the',
+  '   account is missing, call connect_account with that provider and hand the',
+  '   returned https OAuth link to the user to finish in the browser, then',
+  '   re-check with list_social_accounts.',
+  '2. Bluesky is optional. If the user wants it, ask for the handle and the',
+  '   app password (never the main password); use the app password only in',
+  '   connect_account and never repeat, print, or log it.',
+  '3. Call create_persona with the answers the user gives (name, language,',
+  '   tone). Remember the personaId for later calls.',
+  '4. Call get_token_balance first. Then write the script as segments: hook',
+  '   first, CTA last, 60–200 words total, spoken English only, no links,',
+  '   hashtags, markdown, emoji, or stage directions. Call validate_script',
+  '   and fix any named error until it passes — validate before any token is',
+  '   spent.',
+  '5. Before generating, tell the user the video IS published as a',
+  '   real post, and confirm the providers/accounts and the mode (scheduled|asap)',
+  '   with the user. Warning: Bluesky video publishing is',  '   currently being fixed (issue #327); Bluesky is optional and can be',
+  '   skipped.',
+  '6. Call generate_persona_video once with the validated segments unchanged,',
+  '   then poll get_video_task_progress until done and share the final video',
+  '   URL from get_video_status.',
+].join('\n');
+
 export const DAILY_NEWS_PROMPT = [
   "Turn one top story from today's GNews headlines (lang=en, country=us) into",
   'one Post Engineer video. My GNews key is in your own environment as',
@@ -81,8 +108,7 @@ export interface PromptEntry {
 
 export const PROMPTS: PromptEntry[] = [
   {
-    slug: 'daily-news',
-    icon: 'globe',
+    slug: 'daily-news',    icon: 'globe',
     titleKey: 'recipes.dailyNewsTitle',
     objectiveKey: 'recipes.dailyNewsObjective',
     kindKey: 'recipes.kindRecipe',
@@ -127,6 +153,30 @@ export const PROMPTS: PromptEntry[] = [
     docHref:
       'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/github-prs.md',
     prompt: GITHUB_PRS_PROMPT,
+  },
+  {
+    slug: 'full-setup',
+    icon: 'compose',
+    titleKey: 'recipes.fullSetupTitle',
+    objectiveKey: 'recipes.fullSetupObjective',
+    kindKey: 'recipes.kindRecipe',
+    stepKeys: [
+      'recipes.fullSetupStep1',
+      'recipes.fullSetupStep2',
+      'recipes.fullSetupStep3',
+      'recipes.fullSetupStep4',
+      'recipes.fullSetupStep5',
+    ],
+    deliverKeys: [
+      'recipes.fullSetupDeliver1',
+      'recipes.fullSetupDeliver2',
+      'recipes.fullSetupDeliver3',
+    ],
+    exampleInputKey: 'recipes.fullSetupExampleInput',
+    exampleOutputKey: 'recipes.fullSetupExampleOutput',
+    docHref:
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/full-setup.md',
+    prompt: FULL_SETUP_PROMPT,
   },
 ];
 
