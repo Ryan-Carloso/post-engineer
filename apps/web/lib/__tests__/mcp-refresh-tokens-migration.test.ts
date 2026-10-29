@@ -63,6 +63,31 @@ describe('supabase/migrations/033_mcp-refresh-tokens.sql', () => {
     expect(sql).toContain('consumed_at timestamptz');
   });
 
+  it('backfills missing columns as nullable so a populated pre-existing table survives', () => {
+    const sql = readSql();
+    // A NOT NULL add without a default aborts on a table that already
+    // holds rows — exactly the out-of-band-with-rows case the backfill
+    // exists for. Only created_at keeps NOT NULL, because its default
+    // fills existing rows. Rows predating a backfilled column carry
+    // NULL there and fail the rotate predicate with invalid_grant
+    // (fail closed), never an error leak.
+    for (const col of [
+      'add column user_id uuid',
+      'add column client_id text',
+      'add column resource text',
+      'add column scope text',
+      'add column expires_at timestamptz',
+      'add column consumed_at timestamptz',
+    ]) {
+      expect(sql).toContain(
+        `execute 'alter table public.mcp_oauth_refresh_tokens ${col}';`,
+      );
+    }
+    expect(sql).toContain(
+      "execute 'alter table public.mcp_oauth_refresh_tokens add column created_at timestamptz not null default now()';",
+    );
+  });
+
   it('is service-role only: RLS on, no owner policy', () => {
     const sql = readSql();
     expect(sql).toContain(

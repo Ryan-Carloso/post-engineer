@@ -34,9 +34,14 @@
 -- IDEMPOTENCY: create table if not exists, create or replace for
 -- both functions, and guarded column backfills — if an environment
 -- already carries this table from an out-of-band creation, applying
--- this file adds any missing column without dropping a row. The
--- functions are replaced, never dropped, so existing allowlist rows
--- survive. No data is deleted anywhere in this file.
+-- this file adds any missing column without dropping a row. Backfilled
+-- columns are added nullable on purpose: a NOT NULL add without a
+-- default aborts on a populated table, which would break exactly the
+-- out-of-band-with-rows case this backfill exists for. Rows predating
+-- a backfilled column carry NULL there and fail the rotate predicate
+-- with invalid_grant (fail closed) until re-registered. The functions
+-- are replaced, never dropped, so existing allowlist rows survive.
+-- No data is deleted anywhere in this file.
 --
 -- TRUST BOUNDARY: the table has RLS enabled and deliberately no
 -- policy at all (mirrors scheduler_leases, 027): only the two
@@ -68,7 +73,7 @@ begin
       and table_name = 'mcp_oauth_refresh_tokens'
       and column_name = 'user_id'
   ) then
-    execute 'alter table public.mcp_oauth_refresh_tokens add column user_id uuid not null';
+    execute 'alter table public.mcp_oauth_refresh_tokens add column user_id uuid';
   end if;
   if not exists (
     select 1 from information_schema.columns
@@ -76,7 +81,7 @@ begin
       and table_name = 'mcp_oauth_refresh_tokens'
       and column_name = 'client_id'
   ) then
-    execute 'alter table public.mcp_oauth_refresh_tokens add column client_id text not null';
+    execute 'alter table public.mcp_oauth_refresh_tokens add column client_id text';
   end if;
   if not exists (
     select 1 from information_schema.columns
@@ -84,7 +89,7 @@ begin
       and table_name = 'mcp_oauth_refresh_tokens'
       and column_name = 'resource'
   ) then
-    execute 'alter table public.mcp_oauth_refresh_tokens add column resource text not null';
+    execute 'alter table public.mcp_oauth_refresh_tokens add column resource text';
   end if;
   if not exists (
     select 1 from information_schema.columns
@@ -92,7 +97,7 @@ begin
       and table_name = 'mcp_oauth_refresh_tokens'
       and column_name = 'scope'
   ) then
-    execute 'alter table public.mcp_oauth_refresh_tokens add column scope text not null';
+    execute 'alter table public.mcp_oauth_refresh_tokens add column scope text';
   end if;
   if not exists (
     select 1 from information_schema.columns
@@ -100,7 +105,7 @@ begin
       and table_name = 'mcp_oauth_refresh_tokens'
       and column_name = 'expires_at'
   ) then
-    execute 'alter table public.mcp_oauth_refresh_tokens add column expires_at timestamptz not null';
+    execute 'alter table public.mcp_oauth_refresh_tokens add column expires_at timestamptz';
   end if;
   if not exists (
     select 1 from information_schema.columns
