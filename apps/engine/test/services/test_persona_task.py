@@ -210,18 +210,15 @@ class TestPersonaHookGate:
         generate.assert_not_called()
 
 
-class TestPersonaHookRetry:
-    """An overshooting persona hook must be regenerated, not fail the task.
+class TestPersonaHookFits:
+    """An overshooting persona hook is measured once and tracked, never
+    regenerated and never a task failure (task.py::_ensure_persona_hook_fits):
+    the guard returns the script/audio/subtitle tuple unchanged on every
+    branch, and only logs/tracks when the spoken hook falls outside the
+    8-12 second window."""
 
-    The engine appends its own hook instruction ("20 to 37 words, 8 to 16
-    seconds") to the user's prompt, so LLM variance can still produce a
-    hook the TTS speaks in >16s. Regenerating a shorter hook (plus its
-    audio/subtitles) is cheaper than failing the whole task.
-    """
-
-    # An overshooting hook is LONG by construction: the regeneration cap is
-    # clamped to [words_min, words_max], so a 13-word fixture would floor at
-    # words_min and stop being shorter than what it replaced.
+    # An overshooting hook is LONG by construction: it must speak past the
+    # 12 second ceiling to exercise the outside-window branch.
     _LONG_HOOK = (
         "This is a much longer hook paragraph written purely for testing "
         "purposes, dragging on well past the sixteen second ceiling that the "
@@ -238,63 +235,54 @@ class TestPersonaHookRetry:
         end = f"00:{int(minutes):02d}:{seconds:06.3f}".replace(".", ",")
         return [(1, f"00:00:00,000 --> {end}", hook_text)]
 
-    def _run_guard(self, params, script, subs_side_effect, hook_regen="Short hook here."):
+    def _run_guard(self, params, script, subs_side_effect):
         from app.services.task import _ensure_persona_hook_fits
 
         sub_maker = object()
-        with (
-            patch.object(task_service.subtitle, "file_to_subtitles", side_effect=subs_side_effect),
-            patch.object(task_service.llm, "generate_script", return_value=hook_regen) as gen_hook,
-            patch.object(task_service, "generate_audio", return_value=("audio2.mp3", 30, sub_maker)) as gen_audio,
-            patch.object(task_service, "generate_subtitle", return_value="subtitle.srt") as gen_sub,
-        ):
+        with patch.object(task_service.subtitle, "file_to_subtitles", side_effect=subs_side_effect):
             result = _ensure_persona_hook_fits(
                 "task-1", params, script, "audio.mp3", 40, sub_maker, "subtitle.srt"
             )
-        return result, gen_hook, gen_audio, gen_sub
+        return result
 
-    def test_hook_within_window_passes_without_regeneration(self):
+    def test_hook_within_window_passes_unchanged(self):
         params = _params(name="Ana", voice_id="calm")
         script = self._script(self._LONG_HOOK)
         subs = self._subs(self._LONG_HOOK + ".", 9.0)
 
-        result, gen_hook, gen_audio, _ = self._run_guard(params, script, [subs])
+        result = self._run_guard(params, script, [subs])
 
         assert result[0] == script
-        gen_hook.assert_not_called()
-        gen_audio.assert_not_called()
+        assert result[1] == "audio.mp3"
+        assert result[2] == 40
+        assert result[3] is not None
+        assert result[4] == "subtitle.srt"
 
-    def test_custom_audio_skips_retry(self):
-        """With custom audio the hook timing is fixed by the user's recording;
-        regenerating text cannot change it, so no retry is attempted."""
+    def test_custom_audio_passes_through_unchanged(self):
+        """With custom audio there is no subtitle maker to measure from,
+        so the guard returns the tuple unchanged."""
         from app.services.task import _ensure_persona_hook_fits
 
         params = _params(name="Ana", voice_id="calm")
         script = self._script(self._LONG_HOOK)
-        overshoot = self._subs(self._LONG_HOOK + ".", 6.5)
-        with (
-            patch.object(task_service.subtitle, "file_to_subtitles", return_value=overshoot),
-            patch.object(task_service, "generate_audio") as gen_audio,
-        ):
-            result = _ensure_persona_hook_fits(
-                "task-1", params, script, "custom.mp3", 40, None, "subtitle.srt"
-            )
+        result = _ensure_persona_hook_fits(
+            "task-1", params, script, "custom.mp3", 40, None, "subtitle.srt"
+        )
 
         assert result[0] == script
-        gen_audio.assert_not_called()
+        assert result[1] == "custom.mp3"
 
-    def test_lipsync_inactive_skips_retry(self):
+    def test_lipsync_inactive_passes_through_unchanged(self):
         from app.services.task import _ensure_persona_hook_fits
 
         params = _params()  # no persona: faceless
         script = self._script(self._LONG_HOOK)
-        with patch.object(task_service, "generate_audio") as gen_audio:
-            result = _ensure_persona_hook_fits(
-                "task-1", params, script, "audio.mp3", 40, object(), "subtitle.srt"
-            )
+        result = _ensure_persona_hook_fits(
+            "task-1", params, script, "audio.mp3", 40, object(), "subtitle.srt"
+        )
 
         assert result[0] == script
-        gen_audio.assert_not_called()
+        assert result[1] == "audio.mp3"
 
 
 class TestPersonaPacingConstants:
