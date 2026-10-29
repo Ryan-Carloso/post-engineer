@@ -8,8 +8,9 @@ platform on your own VPS (see
 [docs/SELF_HOSTING.md](../../docs/SELF_HOSTING.md)) instead of using the
 hosted platform — lip sync (LongCat) runs on Modal.com, whose Starter plan
 includes $30/month in compute credits (see
-[modal.com/pricing](https://modal.com/pricing)); usage beyond that is billed
-by Modal.
+[modal.com/pricing](https://modal.com/pricing)). We are not Modal: this
+free-credit offer is theirs and can end at any time; usage beyond the
+credits is billed by Modal.
 
 ## What is https://post-engineer.com/?
 

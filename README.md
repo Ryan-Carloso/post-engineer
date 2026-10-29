@@ -19,8 +19,10 @@ Self-host the whole platform on your own VPS following
 [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md), or use the hosted version and
 buy tokens. Lip sync (LongCat) runs on [Modal.com](https://modal.com):
 Modal's Starter plan includes $30/month in compute credits (see
-[modal.com/pricing](https://modal.com/pricing)), so light self-hosted usage
-can fit inside the free credits — usage beyond that is billed by Modal.
+[modal.com/pricing](https://modal.com/pricing)). We are not Modal: this
+free-credit offer is theirs and can end at any time. Light self-hosted usage
+can fit inside the free credits while it lasts — usage beyond that is billed
+by Modal.
 
 > Prefer the hosted version? The same platform runs at
 > [post-engineer.com](https://post-engineer.com) — you can skip the local
