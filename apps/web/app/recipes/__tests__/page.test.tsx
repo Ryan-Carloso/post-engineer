@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 
 vi.mock('@/lib/i18n/provider', () => {
   const translations: Record<string, string> = {
@@ -98,14 +98,16 @@ describe('/recipes prompts hub list', () => {
       'https://github.com/Ryan-Carloso/post-engineer/issues/new?template=prompt_request.md',
     );
     expect(link).toHaveAttribute('target', '_blank');
-    expect(link).toHaveAttribute('rel', 'noopener');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     const grid = container.querySelector('ul');
-    expect(grid).not.toBeNull();
+    if (!grid) throw new Error('prompt grid not rendered');
     // The link sits outside and after the card grid, never inside it.
-    expect(link.parentElement).not.toBe(grid);
+    expect(grid.contains(link)).toBe(false);
     expect(
-      grid!.compareDocumentPosition(link) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      within(grid).queryByRole('link', { name: 'Add your prompt' }),
+    ).toBeNull();
+    expect(
+      grid.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 

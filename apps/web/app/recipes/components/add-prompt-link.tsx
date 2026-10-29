@@ -21,8 +21,8 @@ export default function AddPromptLink() {
       <a
         href={ADD_PROMPT_URL}
         target="_blank"
-        rel="noopener"
-        className="text-sm text-[#ff544c] underline decoration-dotted transition-colors hover:decoration-solid"
+        rel="noopener noreferrer"
+        className="inline-flex items-center self-start text-sm text-[#ff544c] underline decoration-dotted transition-colors hover:decoration-solid"
       >
         {t('recipes.addYourPrompt')}
       </a>
