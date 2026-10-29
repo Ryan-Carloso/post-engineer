@@ -17,6 +17,7 @@ from app.services import (
     audio_trim,
     faceless_material,
     llm,
+    social_metadata,
     longcat,
     material,
     persona_hook,
@@ -1394,13 +1395,14 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=50)
 
-        available_moods = video.get_available_music_moods()
-        logger.info(f"available BGM moods for video: {available_moods}")
+        # Phase 5: no LLM music-mood pick — BGM is always off. "none"
+        # is the LLM function's own failure fallback, kept as the
+        # mechanical value so the rest of the pipeline is unchanged.
         phases.begin("music_mood")
-        music_mood = llm.generate_music_mood(video_script, available_moods)
+        music_mood = "none"
         sm.state.update_task(task_id, music_mood=music_mood)
         phases.complete("music_mood")
-        logger.info(f"music mood selected for video: {music_mood}")
+        logger.info("music mood is none: BGM disabled without an LLM pick")
 
         # Only the full video pipeline needs the video concat mode handling;
         # this keeps /subtitle and /audio style requests from touching
@@ -1446,11 +1448,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
             youtube_extra = None
             if any(p.startswith("youtube") for p in platforms):
-                metadata = llm.generate_social_metadata(
+                # Phase 5: mechanical subject-only metadata, no LLM call.
+                metadata = social_metadata.mechanical_social_metadata(
                     video_subject=params.video_subject,
-                    video_script=video_script,
-                    language=params.video_language or "",
-                    platform="youtube_shorts",
                 )
                 youtube_extra = {
                     "youtube_title": metadata.get("title", params.video_subject),
