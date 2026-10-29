@@ -56,6 +56,3 @@ def _no_real_posthog_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("posthog.Posthog", MagicMock(name="Posthog"))
     yield
     analytics.reset_for_testing()
-
-
-
