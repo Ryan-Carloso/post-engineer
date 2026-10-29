@@ -9,6 +9,11 @@ name: release-mcp
 #   with auto-merge enabled instead of skipping; merging that PR tags the
 #   new version. A merge that touches only apps/mcp/package.json is tagged
 #   directly, so a version-bump PR publishes on merge with no manual tag.
+#   NOTE: the auto workflow pushes tags with MCP_RELEASE_TOKEN (a
+#   fine-grained PAT), never with GITHUB_TOKEN — GitHub does not start
+#   workflow runs for events created with GITHUB_TOKEN, so a tag pushed
+#   with it would never start this workflow. If that secret is missing,
+#   the auto job fails loudly instead of pushing anything.
 #   MANUAL (fallback):
 #     1. Bump the version in apps/mcp/package.json (e.g. 1.2.0 -> 1.3.0) and push.
 #     2. git tag -a mcp-v1.3.0 -m "post-engineer-mcp v1.3.0"

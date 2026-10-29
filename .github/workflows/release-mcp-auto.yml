@@ -29,6 +29,14 @@ name: Release MCP (auto)
 # and that manual merge triggers the same bump-only tagging path above —
 # so a version can be delayed, but never silently forgotten.
 #
+# Token rule (load-bearing, do not "simplify" back to github.token):
+# every push and PR below MUST use MCP_RELEASE_TOKEN (a fine-grained PAT).
+# GitHub does not start workflow runs for events created with the
+# repository GITHUB_TOKEN, so a tag pushed with it would never start
+# release-mcp.yml and a PR opened with it would never get CI — the exact
+# silent failure this workflow exists to prevent. If the secret is missing
+# the job fails loudly instead of pushing anything.
+#
 # Safeguards: this workflow only runs after CI succeeds on main
 # (workflow_run conclusion == success); the publish job in release-mcp.yml
 # still builds, lints, typechecks and tests before publishing, so a bad
@@ -59,14 +67,31 @@ jobs:
       contents: write # needed to push release tags and bump branches
       pull-requests: write # needed to open the auto-bump PR and enable auto-merge
     steps:
+      - name: Require the release token
+        env:
+          RELEASE_TOKEN: ${{ secrets.MCP_RELEASE_TOKEN }}
+        run: |
+          # A tag pushed with GITHUB_TOKEN never starts release-mcp.yml, and
+          # a PR opened with GITHUB_TOKEN never gets CI, so neither may be
+          # used here: both would fail silently. Fail loudly instead.
+          # MCP_RELEASE_TOKEN is a fine-grained PAT (contents: read/write,
+          # pull requests: read/write) on this repo; pushes and PRs made
+          # with it trigger downstream workflows normally.
+          if [ -z "$RELEASE_TOKEN" ]; then
+            echo "::error::MCP_RELEASE_TOKEN secret is missing. Create a fine-grained PAT (Contents: read/write, Pull requests: read/write, this repo only) and save it as the MCP_RELEASE_TOKEN repository secret, then re-run this job. Refusing to push a tag or open a PR that would silently do nothing."
+            exit 1
+          fi
+          echo "MCP_RELEASE_TOKEN is set (value never printed)."
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 2 # need the parent commit to diff the merge
+          token: ${{ secrets.MCP_RELEASE_TOKEN }}
 
       - name: Tag or auto-bump the MCP release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.MCP_RELEASE_TOKEN }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
