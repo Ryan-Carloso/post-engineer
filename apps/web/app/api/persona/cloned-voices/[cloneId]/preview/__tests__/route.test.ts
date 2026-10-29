@@ -328,6 +328,23 @@ describe('POST /api/persona/cloned-voices/:cloneId/preview caller text', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('answers 400 and logs when the request body cannot be read', async () => {
+    const fetchMock = okAudioFetch(new Uint8Array([9]), 'audio/mpeg');
+    vi.stubGlobal('fetch', fetchMock);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const request = new Request('http://localhost/api/persona/cloned-voices/clone-1/preview', {
+      method: 'POST',
+    });
+    vi.spyOn(request, 'text').mockRejectedValueOnce(new Error('stream aborted'));
+
+    const response = await POST(request, ctx('clone-1'));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ success: false, error: 'Invalid body.' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
   it('rejects invalid JSON with 400 before calling the engine', async () => {
     const fetchMock = okAudioFetch(new Uint8Array([9]), 'audio/mpeg');
     vi.stubGlobal('fetch', fetchMock);
