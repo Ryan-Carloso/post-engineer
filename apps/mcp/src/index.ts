@@ -88,6 +88,7 @@ import {
 import { GeneratePersonaVideoShape, ValidateScriptShape, ValidateScriptDescription, handleGeneratePersonaVideo, handleValidateScript } from './tools-single-video.js';
 import { CheckMediaDescription, CheckMediaShape, UploadMediaDescription, UploadMediaShape, handleCheckMedia, handleUploadMedia } from './tools-user-media.js';
 import { withTracking } from './analytics.js';
+import { parseHttpTransportOptions, serveHttpTransport } from './http-transport.js';
 
 // The server advertises the package version: import it so a version bump in
 // package.json flows through without touching this file.
@@ -470,6 +471,20 @@ export function isMainModule(): boolean {
 async function main() {
   // Fail fast: without a key every tool call would fail with an opaque 401.
   const apiKey = requireApiKey();
+  // Explicit opt-in only: without --http-transport (and with the legacy
+  // --http flag, which is ignored) the server stays on stdio and opens
+  // no port. The HTTP skeleton binds loopback unless --allow-remote
+  // is passed, and has no authentication yet — P6-2 adds it.
+  const httpOptions = parseHttpTransportOptions(process.argv.slice(2), process.env);
+  if (httpOptions !== null) {
+    // A fresh server per HTTP request: the SDK's stateless transport
+    // cannot be reused across requests (see http-transport.ts).
+    await serveHttpTransport(
+      () => createPostEngineerMcpServer(new PostEngineerClient({ apiKey })),
+      httpOptions,
+    );
+    return;
+  }
   const server = createPostEngineerMcpServer(new PostEngineerClient({ apiKey }));
   const transport = new StdioServerTransport();
   await server.connect(transport);
