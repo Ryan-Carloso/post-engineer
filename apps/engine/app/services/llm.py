@@ -12,7 +12,7 @@ from openai.types.chat import ChatCompletion
 
 from app.config import config
 from app.services.analytics import scrub_error_text, scrub_secret_values, track_ai_request
-from app.services import script_claims, stock_terms, web_search_facts
+from app.services import script_claims, stock_terms
 from app.services.llm_providers import validate_llm_provider
 from app.services.script_prompts import DEFAULT_SCRIPT_CTA_INSTRUCTION, DEFAULT_SCRIPT_SYSTEM_PROMPT
 from app.services.script_language_rules import (  # noqa: F401 - failure retries use these
@@ -1048,11 +1048,10 @@ def build_script_prompt(
         prompt += f"\n- number of paragraphs: {paragraph_number}"
     if language:
         prompt += f"\n- language: {language}"
-    # Web search results come with the contract context (before the user's
-    # additional requirements) so the model treats them as constraints, not
-    # suggestions, and keeps names/prices from the sources instead of
-    # inventing them. They are search snippets, not verified facts.
-    prompt += web_search_facts.format_facts_block(facts or [])
+    # Phase 5-5: the web-search facts feature is deleted (web_search_facts
+    # is trimmed to its place-photos client), so no facts block is appended
+    # here anymore. The `facts` parameter is retained for signature
+    # compatibility until llm.py itself is deleted in P5-6.
     # A partial script (a standalone hook regenerated for timing) must not
     # end with a call to action: the rest of the script already has one.
     if not include_cta:
@@ -1092,10 +1091,11 @@ def generate_script(
     custom_system_prompt = _limit_script_text(
         custom_system_prompt, MAX_SCRIPT_SYSTEM_PROMPT_LENGTH, "custom_system_prompt"
     )
-    # None: a direct caller (the /scripts endpoint) searches for itself; the
-    # task passes the one search it already made, empty or not.
+    # Phase 5-5: web search is gone, so a caller that passes no facts gets
+    # an empty list instead of a live search. The /scripts endpoint that
+    # used to search for itself is deleted in this PR.
     if facts is None:
-        facts = web_search_facts.fetch_facts(video_subject, language=language)
+        facts = []
     prompt = build_script_prompt(
         video_subject=video_subject,
         language=language,

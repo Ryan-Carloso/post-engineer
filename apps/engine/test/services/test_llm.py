@@ -6,14 +6,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import call, patch
 
-from pydantic import ValidationError
-
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.config import config
-from app.models.schema import VideoScriptRequest, VideoSocialMetadataRequest
 from app.services import llm
-from app.services import web_search_facts
 
 
 def _auth_headers() -> dict[str, str]:
@@ -29,62 +25,6 @@ RUN_INTEGRATION_TESTS = os.environ.get("MPT_RUN_INTEGRATION_TESTS", "").lower() 
     "true",
     "yes",
 }
-
-
-class TestWebFactsInPrompt(unittest.TestCase):
-    """Web search results fetched before scripting are injected into the
-    script prompt so names/prices come from sources, never LLM-invented."""
-
-    def test_build_script_prompt_injects_facts_with_sources(self):
-        prompt = llm.build_script_prompt(
-            "best francesinha Porto",
-            language="pt",
-            video_script_prompt="keep the tone casual",
-            facts=[
-                {
-                    "text": "Cafe Santiago serves the classic francesinha for about 11 euros.",
-                    "url": "https://example.com/porto-1",
-                }
-            ],
-        )
-
-        self.assertIn("Cafe Santiago serves the classic francesinha", prompt)
-        self.assertIn("source: https://example.com/porto-1", prompt)
-        # The facts block must come BEFORE the additional user requirements —
-        # keep contract context first, the user prompt last.
-        self.assertLess(
-            prompt.index("Web search results"),
-            prompt.index("Additional User Requirements"),
-        )
-        # Search snippets are not verified: the label must not claim it.
-        self.assertNotIn("Verified", prompt)
-
-    def test_build_script_prompt_without_facts_has_no_facts_block(self):
-        prompt = llm.build_script_prompt("how redis works", language="en")
-
-        self.assertNotIn("Web search results", prompt)
-
-    def test_generate_script_fetches_facts_for_the_subject(self):
-        with patch.object(
-            llm, "_generate_response_with_fallback", return_value="clean script body"
-        ) as generate, patch.object(
-            web_search_facts,
-            "fetch_facts",
-            return_value=[
-                {
-                    "text": "Francesinha Columbus opens at 12:00.",
-                    "url": "https://example.com/porto-2",
-                }
-            ],
-        ) as fetch:
-            llm.generate_script(video_subject="best francesinha Porto", language="pt")
-
-        fetch.assert_called_once()
-        self.assertEqual(fetch.call_args.args[0], "best francesinha Porto")
-        fetch.assert_called_with(
-            "best francesinha Porto", language="pt"
-        )
-        self.assertIn("Francesinha Columbus opens at 12:00.", generate.call_args.kwargs["prompt"])
 
 
 class TestScriptPromptOptions(unittest.TestCase):
@@ -139,79 +79,6 @@ class TestScriptPromptOptions(unittest.TestCase):
         with self.assertRaises(ValueError):
             llm._normalize_text_response("<think>hidden reasoning", "minimax")
 
-    def test_build_script_prompt_appends_advanced_requirements(self):
-        """
-        Advanced copy requirements only add constraints; they never replace
-        the default system prompt. Plain users without configuration keep the
-        stable default rules, while advanced users can still refine style.
-        """
-        prompt = llm.build_script_prompt(
-            video_subject="咖啡",
-            language="zh-CN",
-            paragraph_number=3,
-            video_script_prompt="语气轻松，面向程序员",
-        )
-
-        self.assertIn("# Role: Video Script Generator", prompt)
-        self.assertIn("- video subject: 咖啡", prompt)
-        self.assertIn("- number of paragraphs: 3", prompt)
-        self.assertIn("- language: zh-CN", prompt)
-        self.assertIn("# Additional User Requirements:", prompt)
-        self.assertIn("语气轻松，面向程序员", prompt)
-
-    def test_build_script_prompt_uses_word_target_without_forcing_paragraphs(self):
-        prompt = llm.build_script_prompt(video_subject="Short story")
-
-        self.assertIn("- target length: 80 to 110 words", prompt)
-        self.assertNotIn("number of paragraphs", prompt)
-
-    def test_build_script_prompt_accepts_internal_word_target_override(self):
-        prompt = llm.build_script_prompt(
-            video_subject="Short hook",
-            target_words_min=8,
-            target_words_max=16,
-        )
-
-        self.assertIn("- target length: 8 to 16 words", prompt)
-
-    def test_custom_system_prompt_keeps_runtime_context(self):
-        """
-        A custom system prompt replaces the default script rules, but the
-        video subject, language, and paragraph count are still appended by
-        the service layer so advanced users can't drop required context.
-        """
-        prompt = llm.build_script_prompt(
-            video_subject="露营",
-            language="en",
-            paragraph_number=2,
-            custom_system_prompt="Only write cinematic narration.",
-        )
-
-        self.assertNotIn("# Role: Video Script Generator", prompt)
-        self.assertIn("Only write cinematic narration.", prompt)
-        self.assertIn("- video subject: 露营", prompt)
-        self.assertIn("- number of paragraphs: 2", prompt)
-        self.assertIn("- language: en", prompt)
-
-    def test_generate_script_sends_custom_prompt_to_llm(self):
-        captured = {}
-
-        def fake_generate_response(prompt, llm_provider):
-            captured["prompt"] = prompt
-            return "第一段。\n\n第二段。", {}
-
-        with patch.object(llm, "_generate_response_inner", side_effect=fake_generate_response):
-            result = llm.generate_script(
-                video_subject="咖啡",
-                language="zh-CN",
-                paragraph_number=2,
-                video_script_prompt="开头更有悬念",
-            )
-
-        self.assertEqual(result, "第一段。\n\n第二段。")
-        self.assertIn("- number of paragraphs: 2", captured["prompt"])
-        self.assertIn("开头更有悬念", captured["prompt"])
-
     def test_generate_terms_can_request_script_ordered_keywords(self):
         """
         Script-ordered material matching needs the LLM to return ordered
@@ -237,72 +104,6 @@ class TestScriptPromptOptions(unittest.TestCase):
         self.assertEqual(result, ["opening city", "middle office", "final sunset"])
         self.assertIn("chronological stock-video search terms", captured["prompt"])
         self.assertIn("same order as the script narration", captured["prompt"])
-
-    def test_video_script_request_rejects_invalid_advanced_options(self):
-        """
-        The API request model must clamp advanced prompt parameters so
-        external callers can't bypass the WebUI with absurd paragraph counts
-        or oversized prompts that blow up model cost and results.
-        """
-        with self.assertRaises(ValidationError):
-            VideoScriptRequest(video_subject="咖啡", paragraph_number=0)
-
-        with self.assertRaises(ValidationError):
-            VideoScriptRequest(
-                video_subject="咖啡",
-                video_script_prompt="x" * (llm.MAX_SCRIPT_PROMPT_LENGTH + 1),
-            )
-
-
-class TestGenerateScriptForeignCharacters(unittest.TestCase):
-    """Guard against foreign-script characters (e.g. CJK) leaking from the
-    LLM into scripts, subtitles, and TTS. Seen in production: the provider
-    returned "veio替代izar" (Chinese for "substituir") inside a Portuguese
-    word, and it went straight to the voiceover and burnt-in subtitles."""
-
-    GLITCHY = "A IA não veio替代izar todos, mas automatizar o tédio."
-    CLEAN = "A IA não veio substituir todos, mas automatizar o tédio."
-
-    def test_latin_language_script_rejects_cjk_and_retries(self):
-        with patch.object(
-            llm,
-            "_generate_response_with_fallback",
-            side_effect=[self.GLITCHY, self.CLEAN],
-        ) as generate:
-            result = llm.generate_script(
-                video_subject="IA no trabalho", language="pt-BR"
-            )
-
-        self.assertEqual(generate.call_count, 2)
-        self.assertNotIn("替代", result)
-        self.assertIn("substituir", result)
-
-    def test_stripped_script_never_ships_foreign_characters(self):
-        # The provider glitches on every attempt: the retries are exhausted
-        # and the last resort strips the intruders instead of shipping them.
-        with patch.object(
-            llm, "_generate_response_with_fallback", return_value=self.GLITCHY
-        ) as generate:
-            result = llm.generate_script(
-                video_subject="IA no trabalho", language="pt-BR"
-            )
-
-        self.assertEqual(generate.call_count, llm._max_retries)
-        self.assertNotIn("替代", result)
-        self.assertIn("izar", result)
-
-    def test_cjk_language_keeps_cjk_characters(self):
-        # A video in Chinese legitimately contains CJK: the guard is only
-        # active for languages written in the Latin script.
-        script = "人工智能正在改变我们的工作方式。"
-        with patch.object(
-            llm, "_generate_response_with_fallback", return_value=script
-        ) as generate:
-            result = llm.generate_script(video_subject="人工智能", language="zh")
-
-        self.assertEqual(generate.call_count, 1)
-        self.assertIn("人工智能", result)
-
 
 class TestLiteLLMProvider(unittest.TestCase):
     def setUp(self):
@@ -1974,27 +1775,6 @@ class TestSocialMetadata(unittest.TestCase):
         self.assertEqual(len(result["hashtags"]), 8)
         self.assertEqual(result["hashtags"][0], "#shorts")
 
-    def test_request_model_defaults_to_auto_language_tiktok(self):
-        body = VideoSocialMetadataRequest(video_subject="Test")
-
-        self.assertEqual(body.language, "auto")
-        self.assertEqual(body.platform, "tiktok")
-
-    def test_request_model_rejects_oversized_social_metadata_fields(self):
-        """
-        External APIs can't accept unbounded script and language params, or
-        LLM token costs multiply directly. The schema layer intercepts
-        first; the service layer guards internal calls as a backstop.
-        """
-        with self.assertRaises(ValidationError):
-            VideoSocialMetadataRequest(video_subject="x" * 501)
-
-        with self.assertRaises(ValidationError):
-            VideoSocialMetadataRequest(video_subject="x", video_script="x" * 8001)
-
-        with self.assertRaises(ValidationError):
-            VideoSocialMetadataRequest(video_subject="x", language="x" * 65)
-
     def test_build_prompt_clamps_direct_service_inputs(self):
         prompt = llm.build_social_metadata_prompt(
             video_subject="x" * 600,
@@ -2006,43 +1786,6 @@ class TestSocialMetadata(unittest.TestCase):
         self.assertNotIn("x" * (llm.MAX_SOCIAL_SUBJECT_LENGTH + 1), prompt)
         self.assertIn("y" * llm.MAX_SOCIAL_SCRIPT_LENGTH, prompt)
         self.assertNotIn("y" * (llm.MAX_SOCIAL_SCRIPT_LENGTH + 1), prompt)
-
-    def test_social_metadata_endpoint_response_shape(self):
-        from fastapi.testclient import TestClient
-
-        from app.asgi import app
-
-        request_body = {
-            "video_subject": "Tokyo coffee shops",
-            "video_script": "Three quiet coffee shops for your next Tokyo morning.",
-            "language": "en",
-            "platform": "youtube_shorts",
-        }
-        llm_response = (
-            '{"title":"3 Quiet Tokyo Coffee Shops",'
-            '"caption":"Save these spots for your next Tokyo morning.",'
-            '"hashtags":["#Tokyo","#Coffee","#Shorts"]}'
-        )
-
-        with patch.object(llm, "_generate_response_with_fallback", return_value=llm_response):
-            response = TestClient(app, headers=_auth_headers()).post(
-                "/api/v1/social-metadata",
-                json=request_body,
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.json(),
-            {
-                "status": 200,
-                "message": "success",
-                "body": {
-                    "title": "3 Quiet Tokyo Coffee Shops",
-                    "caption": "Save these spots for your next Tokyo morning.",
-                    "hashtags": ["#Tokyo", "#Coffee", "#Shorts"],
-                },
-            },
-        )
 
 
 FOUNDRY_KEY = os.environ.get("ANTHROPIC_FOUNDRY_API_KEY", "")

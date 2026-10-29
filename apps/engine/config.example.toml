@@ -113,235 +113,11 @@ twelvelabs_rerank_terms = false
 # twelvelabs_marengo_model = "marengo3.0"
 # twelvelabs_pegasus_model = "pegasus1.5"
 
-# 支持的提供商 (Supported providers):
-#   openai
-#   aihubmix   (OpenAI-compatible AI model gateway)
-#   aimlapi     (OpenAI-compatible multi-model AI API)
-#   moonshot    (月之暗面)
-#   azure
-#   qwen        (通义千问)
-#   zai         (Z.ai OpenAI-compatible API, https://docs.z.ai)
-#   gemini
-#   ollama
-#   g4f        (disabled by default; set enable_g4f=true only after accepting its risks)
-#   oneapi
-#   cloudflare
-#   minimax
-#   evolink    (OpenAI-compatible multi-model AI gateway)
-#   volcengine (VolcEngine Ark OpenAI-compatible API)
-#   mimo       (Xiaomi MiMo)
-#   ernie       (文心一言)
-#   modelscope  (魔搭社区)
-#   litellm     (100+ providers via LiteLLM gateway)
-#   groq        (Groq LPU inference API)
-#   openrouter  (unified gateway, https://openrouter.ai — automatic fallback;
-#                the free tier is tried first, then this paid tier)
-#   openrouter_free (same gateway, zero-cost models only — usually left as the
-#                fallback tier rather than selected here)
-llm_provider = "groq"
-
-########## Pollinations AI Settings
-# Visit https://pollinations.ai/ to learn more
-# API Key is optional - leave empty for public access
-pollinations_api_key = ""
-# Base URL for Pollinations API.
-# Leave empty to use the default endpoint (https://text.pollinations.ai/openai).
-# Note: the old "https://pollinations.ai/api/v1" endpoint no longer accepts
-# requests (returns 405 Method Not Allowed), so only set this if you have a
-# working custom endpoint.
-pollinations_base_url = ""
-# Default model for text generation
-pollinations_model_name = "openai-fast"
-
-########## Ollama Settings
-# No need to set it unless you want to use your own proxy
-ollama_base_url = ""
-# Check your available models at https://ollama.com/library
-ollama_model_name = ""
-
-########## OpenAI API Key
-# Get your API key at https://platform.openai.com/api-keys
-# 也可以填写兼容 OpenAI Chat Completions 协议的供应商密钥，
-# 例如 OpenRouter 这类提供自定义 base_url 的平台。
-openai_api_key = ""
-# No need to set it unless you want to use your own proxy
-# 如果使用兼容 OpenAI 接口的平台，请在这里填写对应的 base_url。
-openai_base_url = ""
-# Check your available models at https://platform.openai.com/account/limits
-# 如果使用兼容供应商，请填写该平台要求的模型 ID。
-openai_model_name = "gpt-4o-mini"
-
-########## AIHubMix API Key
-# AIHubMix is OpenAI-compatible and can use one API key to access multiple models.
-# Visit https://aihubmix.com to register and get your API key.
-aihubmix_api_key = ""
-aihubmix_base_url = "https://aihubmix.com/v1"
-aihubmix_model_name = "gpt-5.4-mini"
-
-########## AIML API Key
-# AIML API is OpenAI-compatible and can use one API key to access multiple model families.
-# Visit https://aimlapi.com/app/keys to create your API key.
-aimlapi_api_key = ""
-aimlapi_base_url = "https://api.aimlapi.com/v1"
-aimlapi_model_name = "openai/gpt-4o-mini"
-
-########## Moonshot API Key
-# Visit https://platform.moonshot.cn/console/api-keys to get your API key.
-moonshot_api_key = ""
-moonshot_base_url = "https://api.moonshot.cn/v1"
-moonshot_model_name = "moonshot-v1-8k"
-
-########## OneAPI API Key
-# Visit https://github.com/songquanpeng/one-api to get your API key
-oneapi_api_key = ""
-oneapi_base_url = ""
-oneapi_model_name = ""
-
-########## G4F
-# g4f relies on reverse-engineered third-party endpoints and is not recommended
-# for production. Prefer official APIs, OpenAI-compatible providers, LiteLLM,
-# Ollama, or local inference.
-# If you still need it, install the optional dependency with:
-#   uv sync --extra g4f
-enable_g4f = false
-# Visit https://github.com/xtekky/gpt4free to get more details
-# Supported model list: https://github.com/xtekky/gpt4free/blob/main/g4f/models.py
-g4f_model_name = "gpt-3.5-turbo"
-
-########## Azure API Key
-# Visit https://learn.microsoft.com/zh-cn/azure/ai-services/openai/ to get more details
-# API documentation: https://learn.microsoft.com/zh-cn/azure/ai-services/openai/reference
-azure_api_key = ""
-azure_base_url = ""
-azure_model_name = "gpt-35-turbo"        # replace with your model deployment name
-azure_api_version = "2024-02-15-preview"
-
-########## Gemini API Key
-gemini_api_key = ""
-gemini_model_name = "gemini-2.5-flash"
-
-########## Grok API Key
-grok_api_key = ""
-grok_model_name = "grok-4.3"
-grok_base_url = "https://api.x.ai/v1"
-
-########## Groq API Key
-# Visit https://console.groq.com/keys to get your api keys
-# API documentation: https://console.groq.com/docs/api-reference
-# Available models: https://console.groq.com/docs/api-reference#models-list
-groq_api_key = ""
-groq_model_name = "qwen/qwen3.8-27b"
-groq_base_url = "https://api.groq.com/openai/v1"
-
-########## Qwen API Key
-# Visit https://dashscope.console.aliyun.com/apiKey to get your API key
-# Visit below links to get more details
-# https://tongyi.aliyun.com/qianwen/
-# https://help.aliyun.com/zh/dashscope/developer-reference/model-introduction
-qwen_api_key = ""
-qwen_model_name = "qwen-max"
-
-
-########## MiniMax API Key
-# Visit https://platform.minimax.io or https://platform.minimaxi.com to get your API key
-# MiniMax API is OpenAI-compatible
-# Available models: MiniMax-M3 (default), MiniMax-M2.7, MiniMax-M2.7-highspeed
-# If your API key returns 401 on api.minimax.io, try the China endpoint: https://api.minimaxi.com/v1
-minimax_api_key = ""
-minimax_base_url = "https://api.minimax.io/v1"
-minimax_model_name = "MiniMax-M3"
-
-########## EvoLink API Key
-# EvoLink is an OpenAI-compatible gateway for language models.
-# Visit https://evolink.ai/dashboard/keys to get your API key.
-# API documentation: https://docs.evolink.ai/en/api-manual/language-series
-# Available models include gpt-5.5, gpt-5.4, gpt-5.2, gemini-3.1-pro, and doubao-seed-2.0-pro.
-evolink_api_key = ""
-evolink_base_url = "https://direct.evolink.ai/v1"
-evolink_model_name = "gpt-5.5"
-
-########## VolcEngine Ark API Key
-# VolcEngine Ark provides an OpenAI-compatible Chat Completions API.
-# Create an API key in the VolcEngine Ark console and use a model ID that is
-# enabled for your account.
-volcengine_api_key = ""
-volcengine_base_url = "https://ark.cn-beijing.volces.com/api/v3"
-volcengine_model_name = "doubao-seed-2-1-turbo-260628"
-
-########## Xiaomi MiMo API Key
-# Xiaomi MiMo API is OpenAI-compatible.
-# Visit https://platform.xiaomimimo.com/docs/zh-CN/quick-start/first-api-call to get more details.
-mimo_api_key = ""
-mimo_base_url = "https://api.xiaomimimo.com/v1"
-mimo_model_name = "mimo-v2.5-pro"
-# Xiaomi MiMo TTS uses the same API key and base_url as MiMo LLM.
-mimo_tts_model_name = "mimo-v2.5-tts"
-# Optional natural language style prompt for MiMo TTS.
-mimo_tts_style_prompt = "请用自然、清晰、适合短视频旁白的语气朗读。"
-
-########## Z.ai (Zhipu GLM) API Key
-# Visit https://z.ai/manage-apikey/apikey-list to get your API key.
-# OpenAI-compatible endpoint (https://docs.z.ai).
-zai_api_key = ""
-zai_base_url = "https://api.z.ai/api/paas/v4"
-zai_model_name = "glm-5.3-flash"
-
-
-########## OpenRouter API Key
-# Visit https://openrouter.ai/keys to get your API key.
-# Unified gateway over 300+ models (https://openrouter.ai). Used as the
-# automatic fallback when the primary LLM provider fails. The default model
-# is the Auto Router (openrouter/auto): OpenRouter picks the model
-# server-side per request.
-openrouter_api_key = ""
-openrouter_base_url = "https://openrouter.ai/api/v1"
-openrouter_model_name = "openrouter/auto"
-# Optional attribution headers shown in the OpenRouter dashboard.
-openrouter_site_url = ""
-openrouter_app_name = "Post Engineer"
-
-########## OpenRouter Free-Tier API Key (first fallback)
-# A second OpenRouter key used ONLY for zero-cost models, tried before the
-# paid key above. Order: primary provider -> this free tier -> paid tier.
-# Separate keys matter because OpenRouter meters free-model rate limits per
-# key, so free traffic can never exhaust the paid budget (and vice versa).
-# Leave empty to skip this tier and fall back straight to the paid key.
-# The default model is the Free Router (openrouter/free), which routes
-# server-side to free models only — retiring a free model needs no code
-# change. Override with any ":free" model id to pin one model.
-openrouter_free_api_key = ""
-openrouter_free_model_name = "openrouter/free"
-
-
-########## ModelScope API Key
-# Visit https://modelscope.cn/docs/model-service/API-Inference/intro to get your API key
-# And note that you need to bind your Alibaba Cloud account before using the API.
-modelscope_api_key = ""
-modelscope_base_url = "https://api-inference.modelscope.cn/v1/"
-modelscope_model_name = "Qwen/Qwen3-32B"
-
-
 ########## GNews API Key
 # Visit https://gnews.io/register to get your API key.
 # Used to fetch trending news matching a channel's
 # niche and turn them into video topics. Can also be set via GNEWS_API_KEY env.
 gnews_api_key = ""
-
-########## LiteLLM (AI Gateway — 100+ providers)
-# LiteLLM routes to any LLM provider via a unified interface.
-# Use this for providers not directly supported above: Anthropic (native API),
-# AWS Bedrock, Google Vertex AI, Cohere, Mistral, Together AI, etc.
-# Visit https://docs.litellm.ai/docs/providers for the full list.
-#
-# LiteLLM reads provider API keys from environment variables automatically:
-#   OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, AWS_ACCESS_KEY_ID, etc.
-# Set the appropriate env var for your chosen provider before running.
-#
-# Model name in LiteLLM format: "provider/model-name"
-# Examples: "openai/gpt-4o", "anthropic/claude-sonnet-4-20250514",
-#           "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0",
-#           "gemini/gemini-2.5-flash", "ollama/llama3"
-litellm_model_name = "openai/gpt-4o-mini"
 
 # Subtitle Provider, "edge" or "whisper"
 # If empty, the subtitle will not be generated
@@ -483,11 +259,6 @@ redis_password = ""
 
 # 文生视频时的最大并发任务数
 max_concurrent_tasks = 1
-
-# Phase 5-4: UNUSED — scripts come from segments only and the task can no
-# longer override video_script_prompt (the field is gone from VideoParams).
-# The key itself is removed with the other LLM keys in P5-5.
-default_video_script_prompt = "Use a storytelling style. For each script, choose one emotion at random and one narrative angle at random, then write a unique, human-sounding story around them. Keep the pacing tight, the hook strong, and the language specific instead of generic. Avoid clichés, vague motivation, and predictable structure. End every script with a short call to action like 'Follow us for more gains.'"
 
 # 并发任务已满后的最大排队任务数，超过后接口返回 429，避免匿名请求无限堆积
 max_queued_tasks = 100
@@ -684,17 +455,14 @@ intro_duration_seconds = 5
 catalog_file = "resource/songs/catalog.toml"
 
 [search]
-# Optional pre-script fact lookup. Off by default: turning it on needs
-# TAVILY_API_KEY or EXA_API_KEY in the environment (never in this file), and
-# with enabled = true and no key at all the engine refuses to start.
-# One search per video fetches up to max_facts results (place names, prices,
-# addresses) with source URLs, injected as plain text into the script prompt.
-# Only one provider answers per video: the first in "providers" with results
-# wins; the next runs only when it has no key, errors or finds nothing. A
-# failing lookup never stops the video.
+# Search client kept for place photos only (Phase 5 PR 5: the pre-script
+# fact lookup is deleted). Off by default: turning it on needs
+# TAVILY_API_KEY in the environment (never in this file) — place photos
+# use Tavily only; Exa stays in the provider map for the boot check but
+# backs no feature. With enabled = true and no key at all the engine
+# refuses to start.
 enabled = false
 providers = ["tavily", "exa"]
-max_facts = 5
 timeout_seconds = 8.0
 # Photos of named places, for every video type: drawings, stock footage and persona videos
 # (a persona video keeps its face intro and outro on screen). When the script names a

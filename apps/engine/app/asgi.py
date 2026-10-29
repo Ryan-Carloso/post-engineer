@@ -456,9 +456,9 @@ def startup_event():
         reconcile_pending_registrations()
     except Exception as exc:  # noqa: BLE001 - startup continues regardless
         logger.warning(f"cloned voice pending reconcile failed: {exc}")
-    # Optional [search] fact lookup: enabled=true with no provider key is a
-    # configuration error that must fail the boot (no silent env fallback),
-    # not skip facts per video at runtime.
+    # Optional [search] client (place photos only): enabled=true with no
+    # provider key is a configuration error that must fail the boot
+    # (no silent env fallback), not skip photos per video at runtime.
     from app.services import web_search_facts
 
     web_search_facts.validate_config()

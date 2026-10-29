@@ -192,9 +192,9 @@ class VideoParams(BaseModel):
     stroke_width: float = Field(default=config.ui.get("stroke_width", 1.5), ge=0, le=20)
     n_threads: Optional[int] = Field(default=2, ge=1, le=64)
     paragraph_number: Optional[int] = Field(default=None, ge=1, le=10)
-    # Phase 5-4: no script prompt fields — scripts come from segments only.
-    # The /scripts controller's own request model (VideoScriptRequest) still
-    # carries them until Phase 5-5 deletes that controller with its model.
+    # Phase 5-5: the /scripts controller is deleted, so no script prompt
+    # fields remain anywhere in the request models — scripts come from
+    # segments only.
     # The persona's call to action ("" = generic); 200 mirrors MAX_SCRIPT_CTA_LENGTH + migration 024.
     video_cta: str = Field(default="", max_length=200)
 
@@ -227,24 +227,6 @@ class AudioRequest(BaseModel):
     voice_rate: Optional[float] = Field(default=1.2, ge=0.1, le=5.0)
 
 
-class VideoScriptParams:
-    """
-    {
-      "video_subject": "春天的花海",
-      "video_language": "",
-      "paragraph_number": null,
-      "video_script_prompt": "",
-      "custom_system_prompt": ""
-    }
-    """
-
-    video_subject: Optional[str] = "春天的花海"
-    video_language: Optional[str] = ""
-    paragraph_number: Optional[int] = Field(default=None, ge=1, le=10)
-    video_script_prompt: str = Field(default="", max_length=2000)
-    custom_system_prompt: str = Field(default="", max_length=8000)
-
-
 class VideoTermsParams(BaseModel):
     """
     {
@@ -261,22 +243,6 @@ class VideoTermsParams(BaseModel):
     )
     amount: Optional[int] = Field(default=5, ge=1, le=50)
     match_materials_to_script: bool = False
-
-
-class VideoSocialMetadataParams:
-    """
-    {
-      "video_subject": "A day in Shanghai",
-      "video_script": "",
-      "language": "auto",
-      "platform": "tiktok"
-    }
-    """
-
-    video_subject: Optional[str] = Field(default="A day in Shanghai", max_length=500)
-    video_script: Optional[str] = Field(default="", max_length=8000)
-    language: Optional[str] = Field(default="auto", max_length=64)
-    platform: Optional[str] = Field(default="tiktok", max_length=64)
 
 
 class BaseResponse(BaseModel):
@@ -376,18 +342,6 @@ class TaskQueryRequest(BaseModel):
     pass
 
 
-class VideoScriptRequest(VideoScriptParams, BaseModel):
-    pass
-
-
-class VideoTermsRequest(VideoTermsParams, BaseModel):
-    pass
-
-
-class VideoSocialMetadataRequest(VideoSocialMetadataParams, BaseModel):
-    pass
-
-
 ######################################################################################################
 ######################################################################################################
 ######################################################################################################
@@ -443,45 +397,6 @@ class TaskDeletionResponse(BaseResponse):
                     "combined_videos": [
                         "http://127.0.0.1:8080/tasks/6c85c8cc-a77a-42b9-bc30-947815aa0558/combined-1.mp4"
                     ],
-                },
-            },
-        }
-
-
-class VideoScriptResponse(BaseResponse):
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "status": 200,
-                "message": "success",
-                "body": {
-                    "video_script": "春天的花海，是大自然的一幅美丽画卷。在这个季节里，大地复苏，万物生长，花朵争相绽放，形成了一片五彩斑斓的花海..."
-                },
-            },
-        }
-
-
-class VideoTermsResponse(BaseResponse):
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "status": 200,
-                "message": "success",
-                "body": {"video_terms": ["sky", "tree"]},
-            },
-        }
-
-
-class VideoSocialMetadataResponse(BaseResponse):
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "status": 200,
-                "message": "success",
-                "body": {
-                    "title": "A Day in Shanghai You Should Not Miss",
-                    "caption": "Save this quick Shanghai inspiration and follow for more short travel ideas.",
-                    "hashtags": ["#shorts", "#travel", "#shanghai", "#viral", "#fyp"],
                 },
             },
         }

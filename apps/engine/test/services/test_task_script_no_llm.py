@@ -22,7 +22,6 @@ import pytest
 from app.controllers.v1 import video as video_controller
 from app.models.schema import PersonaParams, VideoParams
 from app.services import task as tm
-from app.services import web_search_facts
 
 
 def _persona_params(**overrides) -> VideoParams:
@@ -44,7 +43,6 @@ def test_empty_script_fails_without_search_or_llm():
     with (
         patch.object(tm, "_fail_task") as fail_task,
         patch.object(tm.llm, "generate_script") as generate,
-        patch.object(web_search_facts, "fetch_facts") as fetch,
     ):
         result = tm.generate_script("empty-task", params)
 
@@ -52,7 +50,6 @@ def test_empty_script_fails_without_search_or_llm():
     fail_task.assert_called_once_with(
         "empty-task", "failed to generate video script", params, stage="script"
     )
-    fetch.assert_not_called()
     generate.assert_not_called()
 
 
@@ -61,11 +58,9 @@ def test_supplied_script_passes_without_llm():
     params = VideoParams(video_subject="coffee", video_script=script)
     with (
         patch.object(tm.llm, "generate_script") as generate,
-        patch.object(web_search_facts, "fetch_facts") as fetch,
     ):
         assert tm.generate_script("supplied-task", params) == script
 
-    fetch.assert_not_called()
     generate.assert_not_called()
 
 

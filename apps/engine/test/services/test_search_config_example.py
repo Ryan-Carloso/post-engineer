@@ -1,10 +1,12 @@
-"""config.example.toml ships the web search lookup switched off.
+"""config.example.toml ships the search lookup switched off.
 
 enabled = true makes the engine refuse to boot when no search API key is in
 the environment (web_search_facts.validate_config), and a fresh install
 copies this file as its config: with the switch on, a self-hoster with no
 Tavily/Exa key could not start the engine at all. The feature is opt-in, so
 the shipped default is off; an operator turns it on together with the key.
+The section now documents only the place-photos client (Phase 5 PR 5
+deleted the pre-script fact lookup and its max_facts limit).
 """
 
 import tomllib
@@ -25,8 +27,8 @@ def test_search_is_off_in_the_shipped_example():
 def test_example_still_documents_the_providers_and_limits():
     section = _search_section()
     assert section["providers"] == ["tavily", "exa"]
-    assert section["max_facts"] == 5
     assert section["timeout_seconds"] == 8.0
+    assert "max_facts" not in section
 
 
 def test_example_comment_says_the_switch_is_opt_in():
