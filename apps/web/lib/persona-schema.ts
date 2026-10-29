@@ -37,8 +37,8 @@ const optionalText = <T extends z.ZodType>(schema: T) =>
 //---------------
 //---------------
 // PERSONA_CTA_MAX_LENGTH — cap on the persona's call to action. Mirrored by
-// the DB check (migration 024) and the engine (MAX_SCRIPT_CTA_LENGTH);
-// pinned by a sync test.
+// the DB check (migration 024) and the engine schema
+// (video_cta: Field(max_length=200)); pinned by a sync test.
 //---------------
 export const PERSONA_CTA_MAX_LENGTH = 200;
 
