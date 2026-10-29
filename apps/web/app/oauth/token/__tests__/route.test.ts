@@ -23,7 +23,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
 
 //---------------
-// In-memory stand-in for the 0026 migration RPCs, mirroring their SQL
+// In-memory stand-in for the 033 migration RPCs, mirroring their SQL
 // semantics: single-use jtis, unknown/expired/consumed → rotation fails.
 //---------------
 interface RefreshRecord {
