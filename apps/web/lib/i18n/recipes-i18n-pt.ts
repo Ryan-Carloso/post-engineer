@@ -76,7 +76,7 @@ export const recipesI18nPt = {
   fullSetupStep4:
       'Escreva o roteiro, valide antes de gastar qualquer token e confirme como ele será publicado.',
   fullSetupStep5: 'Gere um vídeo e publique onde você pediu.',
-  fullSetupDeliver1: 'Todas as contas conectadas e uma persona criada.',
+  fullSetupDeliver1: 'As contas que você escolheu conectadas e uma persona criada.',
   fullSetupDeliver2:
       'Um roteiro validado: 60–200 palavras, gancho primeiro, CTA por último.',
   fullSetupDeliver3: 'Seu primeiro vídeo publicado nas suas contas.',

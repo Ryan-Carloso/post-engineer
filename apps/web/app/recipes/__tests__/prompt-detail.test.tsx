@@ -56,7 +56,9 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 import { getPrompt } from '../prompts';
-import PromptDetail from '../prompt-detail';describe('prompt detail page', () => {
+import PromptDetail from '../prompt-detail';
+
+describe('prompt detail page', () => {
   const prompt = getPrompt('daily-news');
   if (prompt === undefined) {
     throw new Error('daily-news prompt entry is missing');

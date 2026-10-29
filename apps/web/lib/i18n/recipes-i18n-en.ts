@@ -1,4 +1,5 @@
-export const recipesI18nEn = {  title: 'Get your prompts',
+export const recipesI18nEn = {
+  title: 'Get your prompts',
   subtitle:
       'Copy-ready prompts for the Post Engineer MCP server. Copy one, paste it into your agent, done.',
   dailyNewsTitle: 'Daily news becomes a video',
@@ -75,7 +76,7 @@ export const recipesI18nEn = {  title: 'Get your prompts',
   fullSetupStep4:
       'Write the script, validate before any token is spent, and confirm how it publishes.',
   fullSetupStep5: 'Generate one video and publish it where you asked.',
-  fullSetupDeliver1: 'Every account connected and a persona created.',
+  fullSetupDeliver1: 'The accounts you chose connected and a persona created.',
   fullSetupDeliver2:
       'A validated script: 60–200 words, hook first, CTA last.',
   fullSetupDeliver3: 'Your first video published on your accounts.',
