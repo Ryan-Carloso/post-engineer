@@ -30,9 +30,9 @@ override video-generation behaviour.
 ### Where the behaviour MUST be changed instead
 - **Subtitle styling** → `config.toml` `[ui]` section
   (read by `app/models/schema.py` `VideoParams`).
-- **Script/caption style** (sentence length, punctuation rhythm) →
-  `config.toml` `[app]` `default_video_script_prompt`
-  (read by `VideoParams.video_script_prompt`).
+- **Script/caption style** → scripts come from segments only (Phase 5-4);
+  there is no prompt-driven style knob anymore. P5-5 removes the unused
+  `default_video_script_prompt` config key.
 - **Encoding speed** → `config.toml` `[app]` `video_codec`
   (use `h264_videotoolbox` on macOS for ~10x speedup).
 
