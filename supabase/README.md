@@ -47,10 +47,9 @@ manually. After a PR merges to `main`:
    validated the migration chain on the PR: numbering is unique and
    strictly increasing, and the whole chain applies cleanly to
    a fresh Postgres. BETA: there is no destructive-DDL label gate —
-   destructive migrations are approved by the owner's merge tap plus a
-   `breaking:` line in the PR body; reintroduce the
-   `db:destructive-approved` label gate explicitly when the first paying
-   user arrives (the BETA flip rule).
+   destructive migrations are approved by the owner's merge tap, no
+   separate label step; reintroduce the `db:destructive-approved` label
+   gate explicitly when the first paying user arrives (the BETA flip rule).
 2. The Deploy workflow (`.github/workflows/deploy.yml`) runs
    `supabase db push --linked --include-all`, which applies **migrations
    missing from the remote history table** (tracked in
@@ -112,11 +111,10 @@ builds these paths, and the tests pin the shape per writer.
   an existing table — add FKs on existing tables in an explicit do-block
   (see section 1b of `migrations/002_persona-images.sql` for the pattern).
 - Avoid destructive DDL. BETA: `DROP COLUMN`, `TRUNCATE`, and unconditional
-  `DROP TABLE` are no longer blocked by a CI label gate — data loss must
-  still be an explicit, reviewed decision: the owner's merge tap plus a
-  `breaking:` line in the PR body. Reintroduce the
-  `db:destructive-approved` label gate explicitly when the first paying
-  user arrives (the BETA flip rule).
+  `DROP TABLE` are no longer blocked by a CI label gate — approval of a
+  destructive migration is the owner's merge tap, no separate label step.
+  Reintroduce the `db:destructive-approved` label gate explicitly when
+  the first paying user arrives (the BETA flip rule).
 - If the migration adds behavior the app depends on, add a static sync
   test that parses the SQL file and asserts the literals (see the
   `supabase/migrations/002_persona-images.sql literals` describe block in

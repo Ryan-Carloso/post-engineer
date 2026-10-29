@@ -624,10 +624,9 @@ jobs:
           echo "numbering OK (${prev_file:-no migrations} is latest)"
 
           # BETA: no destructive-DDL label gate. Destructive migrations are
-          # approved by the owner's merge tap plus a `breaking:` line in the
-          # PR body — no separate label step. Reintroduce the
-          # `db:destructive-approved` label gate explicitly when the first
-          # paying user arrives (the BETA flip rule).
+          # approved by the owner's merge tap, no separate label step.
+          # Reintroduce the `db:destructive-approved` label gate explicitly
+          # when the first paying user arrives (the BETA flip rule).
 
       - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1 pinned 2026-10-03
         with:
