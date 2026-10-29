@@ -94,6 +94,26 @@ class PromptBuilderSurvivesSearchTrimTests(unittest.TestCase):
         prompt = llm.build_script_prompt(video_subject="café", facts=None)
         assert "1. hook: the very first sentence." in prompt
 
+    def test_generate_script_with_no_facts_searches_nothing(self):
+        # facts=None used to trigger a live web search; in P5-5 it must
+        # mean "no facts". Patching the provider proves the None branch is
+        # taken (any search attempt would raise AttributeError: the search
+        # functions are deleted) and covers the branch for codecov/patch.
+        from unittest.mock import patch
+
+        from app.services import llm
+
+        with patch.object(
+            llm,
+            "_generate_response_with_fallback",
+            return_value="Hook sentence.\n\nBody sentence.",
+        ) as generate:
+            script = llm.generate_script(
+                video_subject="café", language="en", facts=None
+            )
+        generate.assert_called_once()
+        assert "Hook sentence." in script
+
 
 class PromptConstantsKeptUntilCoreDeletionTests(unittest.TestCase):
     def test_script_prompt_modules_still_importable_for_llm_core(self):
