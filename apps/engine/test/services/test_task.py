@@ -92,7 +92,10 @@ class TestTaskService(unittest.TestCase):
             "task-id", terms_warning=terms_fallback.TERMS_EXPANDED_WARNING
         )
 
-    def test_generate_terms_uses_twenty_agent_terms_untouched_without_warning(self):
+    def test_generate_terms_uses_twenty_agent_terms_untouched_and_clears_stale_warning(self):
+        # 20+ agent terms are used verbatim with no new warning — but the
+        # key is still written (as None) so a retry clears a stale warning
+        # recorded by an earlier run, the same contract as media_warnings.
         words = [
             "morning", "light", "riverside", "cafes", "taste", "warm",
             "francesinha", "sandwiches", "busy", "bolhao", "market", "stalls",
@@ -111,7 +114,7 @@ class TestTaskService(unittest.TestCase):
             result = tm.generate_terms("task-id", params, self._SCRIPT)
 
         self.assertEqual(result, supplied)
-        update.assert_not_called()
+        update.assert_called_once_with("task-id", terms_warning=None)
 
     def test_generate_terms_with_empty_expansion_fails_loudly(self):
         # A script with no distinctive words yields no terms at all: the

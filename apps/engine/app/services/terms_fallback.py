@@ -5,11 +5,14 @@ terms. When it supplies too few, this module expands them mechanically
 from the script itself, so the stock download queue still has terms to
 work with and no model is ever asked to invent footage topics:
 
-- 20 or more agent terms are used untouched, with no warning.
+- 20 or more agent terms are used verbatim, with no warning — including
+  any duplicates the agent supplied: deduplication applies only to the
+  expansion below, never to the verbatim path.
 - Fewer than 20 agent terms are expanded to a target of 20, in this
   order: consecutive distinctive-word pairs from the script, then
   niche/subject combinations with script words, then single script
-  words. Everything is deduplicated (case-insensitive).
+  words. The expansion is deduplicated (case-insensitive) against the
+  agent terms and itself.
 - Zero agent terms generate all terms from the script the same way.
 
 Every generated term's words come only from the script, the niche, or

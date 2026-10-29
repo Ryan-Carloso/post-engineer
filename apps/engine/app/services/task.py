@@ -514,8 +514,7 @@ def generate_terms(task_id, params, video_script):
         video_terms, terms_warning = terms_fallback.expand_terms(
             video_terms, video_script, params.video_subject, persona_niche
         )
-        if terms_warning:
-            _update_task(task_id, terms_warning=terms_warning)
+        _update_task(task_id, terms_warning=terms_warning)
         # Log only the count — the terms themselves are user content and must
         # not reach the logs.
         logger.debug(f"video terms: {len(video_terms)} terms")

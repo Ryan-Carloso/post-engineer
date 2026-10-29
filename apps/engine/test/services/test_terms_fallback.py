@@ -72,6 +72,16 @@ def test_exactly_twenty_agent_terms_are_used_untouched():
     assert warning is None
 
 
+def test_twenty_agent_terms_with_duplicates_are_returned_verbatim():
+    # Deduplication applies only to the expansion path: the 20+ verbatim
+    # path must not dedup, or a dup-heavy 20-term list would suddenly
+    # expand and warn instead of being used untouched as specified.
+    supplied = [f"agent term {index}" for index in range(19)] + ["agent term 0"]
+    terms, warning = terms_fallback.expand_terms(supplied, SCRIPT, SUBJECT, NICHE)
+    assert terms == supplied
+    assert warning is None
+
+
 def test_agent_terms_keep_their_order_and_generated_terms_follow():
     terms, _warning = terms_fallback.expand_terms(
         ["Bolhao market", "Douro river"], SCRIPT, SUBJECT, NICHE
