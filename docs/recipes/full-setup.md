@@ -29,14 +29,15 @@ user before generation.
   only for `connect_account`; the agent never repeats, prints, or logs it —
   not in chat, not in a file. The user creates it in their Bluesky security
   settings if they do not have one.
-- Script planning answers: what the user's channel is about, spoken language,
-  and tone for `create_persona` (name, avatarUrl via `list_faces`, voiceId via
+- Script planning answers: what the user's channel is about, and the persona
+  details for `create_persona` (name, avatarUrl via `list_faces`, voiceId via
   `list_voices`, language English-only, niche).
 
 ## Rules that never change
 
-- Secrets stay out of every surface. The Bluesky app password is typed by the
-  user into the platform UI only; an agent never repeats, prints, or logs it.
+- Secrets stay out of every surface. The user gives the Bluesky app password
+  to the agent only for `connect_account`; the agent never repeats, prints,
+  or logs it.
 - Validate before generating. `get_token_balance` first, then
   `validate_script` until it passes; generation never runs on an unvalidated
   script. `validate_script` does not debit tokens; `generate_persona_video`
@@ -69,8 +70,11 @@ user before generation.
    providers/accounts and the mode (`scheduled|asap`); mention the Bluesky
    limitation (issue #327) and that Bluesky can be skipped.
 6. `generate_persona_video` once with that `personaId`, the validated
-   segments unchanged, the confirmed providers with their account IDs and
-   mode; poll `get_video_task_progress`; share the URL from
+   segments unchanged, title (chosen with the user), language `"en"`, the
+   confirmed providers with their account IDs from `list_social_accounts`,
+   and the confirmed mode (`scheduled` needs `startAt` 3h–30 days ahead +
+   `times` [HH:MM] in the user's timezone; `asap` needs neither). Then call
+   `get_video_task_progress` until done and share the video URL from
    `get_video_status`.
 
 ## Example
