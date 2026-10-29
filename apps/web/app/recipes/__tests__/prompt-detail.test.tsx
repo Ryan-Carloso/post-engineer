@@ -2,10 +2,6 @@ import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
-vi.mock('@/components/site-footer', () => ({
-  default: () => <div data-testid="site-footer" />,
-}));
-
 vi.mock('@/lib/i18n/provider', () => {
   const translations: Record<string, string> = {
     'recipes.dailyNewsTitle': 'Daily news becomes a video',
@@ -167,5 +163,11 @@ describe('prompt detail page', () => {
     const { container } = render(<PromptDetail prompt={prompt} />);
     // The substring check covers any hyphenated internal skill name too.
     expect(container.textContent?.toLowerCase()).not.toContain('adhd');
+  });
+
+  it('shows the agent logos next to the copy explanation', () => {
+    const { container } = render(<PromptDetail prompt={prompt} />);
+    const ids = [...container.querySelectorAll('[data-agent]')].map((el) => el.getAttribute('data-agent'));
+    expect(ids).toEqual(['cursor', 'claude', 'opencode']);
   });
 });

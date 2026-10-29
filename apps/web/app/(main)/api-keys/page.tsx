@@ -1,7 +1,6 @@
 'use client';
 
-import { SiClaudecode, SiOpencode } from 'react-icons/si';
-import { PiOpenAiLogo } from "react-icons/pi";
+import AgentLogos from '@/components/ui/agent-logos';
 import ApiKeysSection from '@/components/ui/api-keys-section';
 import McpDocsSection from '@/components/ui/mcp-docs-section';
 import { useI18n } from '@/lib/i18n/provider';
@@ -60,21 +59,7 @@ function ApiKeysHero(): React.ReactElement {
           <p className="mt-1 text-sm leading-6 text-muted-foreground">{t('apiKeys.heroSubtitle')}</p>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2.5" aria-hidden="true">
-        {/* Claude */}
-        <span className="flex size-16 items-center justify-center rounded-xl border border-[#e7e2dc] bg-[#f7f5f2] text-[#D97757] shadow-[0_4px_12px_rgba(16,23,40,0.08)]">
-          <SiClaudecode className="size-10" />
-        </span>
-        {/* OpenAI */}
-        <span className="flex size-16 items-center justify-center rounded-xl border border-[#e7e2dc] bg-[#f7f5f2] text-[#D97757] shadow-[0_4px_12px_rgba(16,23,40,0.08)]">
-          <PiOpenAiLogo className="size-10" />
-        </span>
-
-        {/* OpenCode */}
-        <span className="flex size-16 items-center justify-center rounded-xl border border-[#dfe5ec] bg-white text-[#101728] shadow-[0_4px_12px_rgba(16,23,40,0.08)]">
-          <SiOpencode className="size-10" />
-        </span>
-      </div>
+      <AgentLogos agents={['claude', 'openai', 'opencode']} />
       <div className="shrink-0 lg:text-right">
         <p className="text-sm font-bold text-[#101728]">{t('apiKeys.heroTagline')}</p>
         <p className="mt-0.5 text-sm text-muted-foreground">{t('apiKeys.heroTaglineSub')}</p>

@@ -6,10 +6,6 @@ vi.mock('next/navigation', () => ({
   useParams: () => ({ slug: 'no-such-prompt' }),
 }));
 
-vi.mock('@/components/site-footer', () => ({
-  default: () => <div data-testid="site-footer" />,
-}));
-
 vi.mock('@/lib/i18n/provider', () => {
   const translations: Record<string, string> = {
     'recipes.notFound': 'That prompt does not exist.',

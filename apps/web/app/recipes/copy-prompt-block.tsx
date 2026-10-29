@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
 import { Button } from '@/components/ui/button';
+import AgentLogos from '@/components/ui/agent-logos';
 
 //---------------
 // CopyPromptBlock — the detail page's signature element and its
@@ -39,7 +40,10 @@ export default function CopyPromptBlock({ prompt }: { prompt: string }) {
 
   return (
     <section className="mt-12">
-      <p className="leading-relaxed text-[#414d63]">{t('recipes.copyExplanation')}</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <AgentLogos agents={['cursor', 'claude', 'opencode']} size="sm" />
+        <p className="leading-relaxed text-[#414d63]">{t('recipes.copyExplanation')}</p>
+      </div>
       <div className="mt-6 overflow-hidden rounded-xl bg-[#101728] shadow-[0_8px_24px_rgba(16,23,40,0.25)]">
         <div className="flex items-center justify-between gap-4 border-b border-white/10 px-4 py-3">
           <span className="text-xs font-semibold text-slate-300">
