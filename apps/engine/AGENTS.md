@@ -65,18 +65,16 @@ anything you add there propagates to every entry point automatically.
 
 ---
 
-## 3. Language is a runtime parameter, never hardcoded in prompts
+## 3. Language is a runtime parameter, never hardcoded
 
-The script-generation prompt is built by `build_script_prompt()` in
-`app/services/llm.py`. It receives `language` as a separate field and injects
-it as `- language: <code>`. Therefore:
+Scripts arrive with the job via segments (Phase 5); there is no
+script-generation prompt anymore (the LLM core is deleted). The task's
+language still travels as a separate runtime parameter, never baked
+into a default:
 
-- Instruction-style prompt text (like `default_video_script_prompt`) MUST be
-  written in **English** (the instruction language), never in the output
-  language. The LLM then writes the script in whatever `language` the task
-  requested.
-- Do NOT bake "write in Portuguese" / "escreva em português" into a default
-  prompt. That breaks every other language. Pass `video_language` instead.
+- Do NOT bake "write in Portuguese" / "escreva em português" into a
+  default. That breaks every other language. Pass `video_language`
+  instead.
 
 ---
 
@@ -107,7 +105,7 @@ unavailable, so this is safe on any host.
 ## 6. Tests
 
 - Test runner: `pytest`; tests may use either pytest functions or `unittest.TestCase`.
-- Integration tests (anything hitting real LLM / TTS / Pexels) MUST be gated
+- Integration tests (anything hitting real TTS / Pexels) MUST be gated
   behind `MPT_RUN_INTEGRATION_TESTS=1` via `@unittest.skipUnless(...)`.
 - A test that calls `tm.start(...)` end-to-end is for verifying that the
   **production defaults** produce a valid video — not for redefining those

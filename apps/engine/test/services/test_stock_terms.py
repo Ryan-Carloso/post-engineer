@@ -4,16 +4,15 @@ Svg terms carry "a | b | c" alternatives that score against the subject
 token by token; filtering them as stock terms would drop exactly the
 generic fallbacks ("food") that keep a sparse catalog on topic.
 
-The LLM term judge is gone: task.generate_terms now calls this filter
-directly. It was already the judge's fallback when the model failed, so
-the mechanical path is unchanged — only the model call goes.
+The LLM term judge and the term prompt are gone: task.generate_terms
+builds terms mechanically (terms_fallback) and calls this filter
+directly. The mechanical path is unchanged — only the model call goes.
 """
 
 import inspect
-from unittest.mock import patch
 
 from app.models.schema import VideoParams
-from app.services import llm, stock_terms
+from app.services import stock_terms
 from app.services import task as tm
 
 
@@ -115,51 +114,6 @@ def test_a_term_that_repeats_the_script_is_still_dropped_when_it_is_unfilmable()
     assert stock_terms.filter_weak_stock_terms(params, ["Porto Save Video", "Porto street"], script) == ["Porto street"]
 
 
-# ---- the prompt
-
-
-def _prompt(ordered=True, amount=8):
-    return stock_terms.terms_prompt("best ramen in Tokyo", "script text", amount, ordered)
-
-
-def test_prompt_asks_for_what_the_camera_sees_anchored_on_the_subject():
-    prompt = _prompt()
-    assert "one word taken from the video subject" in prompt
-    assert "what the camera sees" in prompt
-
-
-def test_prompt_bans_abstract_meta_words_years_and_business_names():
-    prompt = _prompt()
-    assert "never use abstract or meta words" in prompt
-    assert "never years or numbers" in prompt
-    assert "never use the name of a specific business or person" in prompt
-
-
-def test_every_unfilmable_word_is_named_in_the_prompt():
-    # The filter and the prompt must agree on the list: one source, two uses.
-    prompt = _prompt()
-    for word in stock_terms.UNFILMABLE_WORDS:
-        assert word in prompt, word
-
-
-def test_an_abstract_sentence_is_to_be_filmed_as_the_subject_itself():
-    assert "film the subject itself" in _prompt()
-
-
-def test_ordered_prompt_keeps_the_script_order_contract():
-    prompt = _prompt(ordered=True, amount=3)
-    assert "chronological stock-video search terms" in prompt
-    assert "same order as the script narration" in prompt
-    assert "Generate 3 " in prompt
-
-
-def test_unordered_prompt_has_the_same_constraints_without_the_ordering_rule():
-    prompt = _prompt(ordered=False, amount=5)
-    assert "search terms for stock videos" in prompt
-    assert "same order as the script narration" not in prompt
-    assert "never use abstract or meta words" in prompt
-
-
 # ---- the task filters its terms through this filter, never an LLM judge
 
 
@@ -174,11 +128,13 @@ def test_the_task_module_no_longer_imports_the_judge():
 
 
 def test_the_filter_never_reaches_the_llm():
+    # The LLM core is deleted: there is nothing left to reach, and the
+    # task module no longer carries an llm attribute at all.
+    assert not hasattr(tm, "llm")
     params = VideoParams(video_subject="Where to eat the best francesinha in Porto")
-    with patch.object(llm, "_generate_response_with_fallback", side_effect=AssertionError("an LLM call")):
-        kept = stock_terms.filter_weak_stock_terms(
-            params, ["francesinha plate", "gato selado"], "script"
-        )
+    kept = stock_terms.filter_weak_stock_terms(
+        params, ["francesinha plate", "gato selado"], "script"
+    )
     assert kept == ["francesinha plate"]
 
 
@@ -193,16 +149,3 @@ def test_weak_terms_are_filtered_without_any_llm_and_all_filtered_keeps_the_list
         "gato selado",
         "xyzzy plugh",
     ]
-
-
-def test_generate_terms_builds_its_prompt_through_the_stock_terms_module():
-    captured = {}
-
-    def fake_generate_response(prompt, llm_provider):
-        captured["prompt"] = prompt
-        return '["ramen bowl", "Tokyo street"]', {}
-
-    with patch.object(llm, "_generate_response_inner", side_effect=fake_generate_response):
-        result = llm.generate_terms("best ramen in Tokyo", "script text", amount=2, match_script_order=True)
-    assert result == ["ramen bowl", "Tokyo street"]
-    assert captured["prompt"] == stock_terms.terms_prompt("best ramen in Tokyo", "script text", 2, True)

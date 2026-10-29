@@ -27,8 +27,8 @@
 [app]
 max_video_duration_seconds = 40
 max_video_script_characters = 600
-# Target script length for roughly 30-40 seconds of speech. Paragraph count is
-# left to the LLM unless a legacy caller explicitly sends paragraph_number.
+# Target script length for roughly 30-40 seconds of speech. Paragraph count
+# comes from the supplied segments; paragraph_number is a legacy caller override.
 script_target_words_min = 80
 script_target_words_max = 110
 # Persistent per-user BGM history database. Keep this on durable storage.

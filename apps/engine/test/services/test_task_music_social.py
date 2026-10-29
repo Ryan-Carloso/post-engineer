@@ -5,8 +5,9 @@ used to ask it for YouTube cross-post copy. Both are now mechanical:
 the mood is always "none" (no BGM — the LLM function's own failure
 fallback) and the YouTube metadata is the subject-only mechanical
 fallback. The tests below drive ``start()`` to the cross-post stage
-with every other stage mocked, and fail loudly if an LLM function is
-called at all.
+with every other stage mocked. Phase 5 PR 6 deleted the LLM core, so
+there is no LLM function left to call; the structural pin at the end
+still scans ``start()`` for any ``llm.*`` call that might reappear.
 """
 
 import ast
@@ -107,20 +108,6 @@ class StartMusicSocialTests(unittest.TestCase):
                     return_value={"success": True},
                 )
             )
-            music_mood_llm = stack.enter_context(
-                patch.object(
-                    tm.llm,
-                    "generate_music_mood",
-                    side_effect=AssertionError("LLM music mood must not be called"),
-                )
-            )
-            social_llm = stack.enter_context(
-                patch.object(
-                    tm.llm,
-                    "generate_social_metadata",
-                    side_effect=AssertionError("LLM social metadata must not be called"),
-                )
-            )
             moods_catalog = stack.enter_context(
                 patch.object(
                     tm.video,
@@ -130,19 +117,18 @@ class StartMusicSocialTests(unittest.TestCase):
             )
             complete = tm._complete_task
             result = tm.start(task_id="task-music-social", params=_params(subject))
-            return result, complete, cross_post, music_mood_llm, social_llm, moods_catalog
+            return result, complete, cross_post, moods_catalog
 
     def test_music_mood_is_none_without_any_llm_call(self):
-        result, complete, _, music_llm, _, moods_catalog = self._run_start(["youtube"])
+        assert not hasattr(tm, "llm")
+        result, complete, _, moods_catalog = self._run_start(["youtube"])
         self.assertEqual(result["music_mood"], "none")
-        music_llm.assert_not_called()
         moods_catalog.assert_not_called()
         complete_kwargs = complete.call_args.kwargs
         self.assertEqual(complete_kwargs["music_mood"], "none")
 
     def test_youtube_cross_post_uses_mechanical_subject_only_metadata(self):
-        _, _, cross_post, _, social_llm, _ = self._run_start(["youtube"])
-        social_llm.assert_not_called()
+        _, _, cross_post, _ = self._run_start(["youtube"])
         cross_post.assert_called_once()
         youtube_extra = cross_post.call_args.kwargs["youtube_extra"]
         self.assertEqual(
@@ -162,7 +148,7 @@ class StartMusicSocialTests(unittest.TestCase):
         # mechanical metadata must never carry an empty title. (The
         # generic `title` argument's own whitespace hole is pre-existing
         # and out of this PR's scope, so only youtube_title is pinned.)
-        _, _, cross_post, _, _, _ = self._run_start(["youtube"], subject="   ")
+        _, _, cross_post, _ = self._run_start(["youtube"], subject="   ")
         cross_post.assert_called_once()
         youtube_extra = cross_post.call_args.kwargs["youtube_extra"]
         self.assertEqual(youtube_extra["youtube_title"], "Check out this video! #shorts #viral")
@@ -170,8 +156,7 @@ class StartMusicSocialTests(unittest.TestCase):
     def test_cross_post_without_youtube_gets_no_youtube_extra(self):
         # The mechanical fallback applies only to the YouTube metadata
         # path; other platforms cross-post without youtube_extra.
-        _, _, cross_post, _, social_llm, _ = self._run_start(["tiktok"])
-        social_llm.assert_not_called()
+        _, _, cross_post, _ = self._run_start(["tiktok"])
         cross_post.assert_called_once()
         self.assertIsNone(cross_post.call_args.kwargs["youtube_extra"])
 
@@ -216,7 +201,7 @@ class StartNoLlmMusicSocialScanTests(unittest.TestCase):
         self.assertIn("generate_music_mood", offenders[0])
 
     def test_scan_ignores_llm_calls_outside_start(self):
-        # generate_terms still calls the LLM (later PR's scope): only
-        # start() is pinned here.
+        # The pin's scope stays start() only, even though generate_terms
+        # no longer calls the LLM either (Phase 5 PR 6).
         src = "def generate_terms(task_id):\n    return llm.generate_social_metadata(subject='x')\n"
         self.assertEqual(_llm_music_social_calls_in_start(src), [])

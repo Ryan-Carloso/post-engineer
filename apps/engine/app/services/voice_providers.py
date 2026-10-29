@@ -214,7 +214,7 @@ def populate_legacy_submaker_with_full_text(
 # key=value or JSON shape, and "https://user:pass@host" URLs probe the
 # People's own base_url). The secret-value rules come from the shared
 # scrub_secret_values (analytics); the URL userinfo redactor mirrors the
-# one llm.py applies to its own error paths.
+# one the engine's error paths apply to their own messages.
 #---------------
 _URL_USERINFO_RE = re.compile(
     r"((?:https?|wss?)://)([^/\s?#@]*:[^/\s?#@]*@)",

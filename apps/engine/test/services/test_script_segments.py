@@ -437,19 +437,9 @@ def test_measure_hook_duration_calls_synthesizer_once_and_checks_window():
 
 
 def test_supplied_segments_script_calls_no_llm():
+    # The LLM core is deleted: there is no generate_script to patch
+    # anymore, only the mechanical pass-through in task.generate_script.
+    assert not hasattr(task_service, "llm")
     joined = script_segments.segments_to_script(_valid_segments())
     params = VideoParams(video_script=joined, video_subject="Porto", video_language="en-US")
-    original = task_service.llm.generate_script
-    calls = []
-
-    def _recording_generate_script(*args, **kwargs):
-        calls.append((args, kwargs))
-        return "should not be called"
-
-    try:
-        task_service.llm.generate_script = _recording_generate_script  # type: ignore[attr-defined]
-        result = task_service.generate_script("test-task", params)
-    finally:
-        task_service.llm.generate_script = original  # type: ignore[attr-defined]
-    assert result == joined
-    assert calls == []
+    assert task_service.generate_script("test-task", params) == joined

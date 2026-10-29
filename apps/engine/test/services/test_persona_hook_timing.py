@@ -109,7 +109,6 @@ class TestHookOutsideWindowNeverRegeneratesOrFails:
             patch.object(task_service.subtitle, "file_to_subtitles", return_value=_WHISPER_CUES),
             patch.object(task_service, "_find_hook_end_seconds", return_value=24.76),
             patch.object(task_service, "generate_audio") as generate_audio,
-            patch.object(task_service.llm, "generate_script") as generate_script,
             patch.object(persona_hook, "track_event") as track,
         ):
             result = task_service._ensure_persona_hook_fits(
@@ -118,7 +117,7 @@ class TestHookOutsideWindowNeverRegeneratesOrFails:
         assert result[0] == _WHISPER_SCRIPT
         assert result[1:3] == ("audio.mp3", 24.9)
         generate_audio.assert_not_called()
-        generate_script.assert_not_called()
+        assert not hasattr(task_service, "llm")
         track.assert_called_once()
         assert track.call_args[0][0] == "persona_hook_outside_window"
 
