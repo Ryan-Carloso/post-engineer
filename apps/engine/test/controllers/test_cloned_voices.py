@@ -4,13 +4,16 @@ import io
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.asgi import app
+from app.services.cloned_voices.constants import STATUS_READY
+from app.services.cloned_voices.preview_text import CLONE_PREVIEW_TEXT_MAX_CHARS
+from app.services.persona import VOICE_SAMPLE_TEXTS
 
 
 class ClonedVoicesControllerTests(unittest.TestCase):
@@ -367,5 +370,143 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         service.preview_mp3.assert_called_once_with(
-            "user-uuid-1", "clone-1", language="en-US"
+            "user-uuid-1", "clone-1", language="en-US", text=None
         )
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_preview_with_text_forwards_trimmed_text_to_the_service(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+        service.preview_mp3.return_value = b"mp3"
+
+        response = self.client.post(
+            "/api/v1/cloned-voices/clone-1/preview",
+            headers=self.headers,
+            json={"text": "  hello world  "},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"mp3")
+        service.preview_mp3.assert_called_once_with(
+            "user-uuid-1", "clone-1", language=None, text="hello world"
+        )
+
+    @patch("app.services.cloned_voices.service.chatterbox_tts")
+    @patch("app.services.cloned_voices.service.ClonedVoiceStore")
+    def test_preview_text_is_spoken_by_chatterbox(self, mock_store_cls, mock_tts):
+        # Real service: the caller's text must reach chatterbox, not just
+        # the service boundary.
+        mock_store_cls.return_value.get_for_user.return_value = {
+            "id": "clone-1",
+            "status": STATUS_READY,
+            "engine_voice_key": "uabc_clone1",
+            "language": "en",
+        }
+        mock_tts.return_value = MagicMock(error=None)
+
+        response = self.client.post(
+            "/api/v1/cloned-voices/clone-1/preview",
+            headers=self.headers,
+            json={"text": "custom preview words"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mock_tts.assert_called_once_with(
+            "custom preview words",
+            "uabc_clone1",
+            ANY,
+            voice_rate=1.0,
+            voice_volume=1.0,
+        )
+
+    @patch("app.services.cloned_voices.service.chatterbox_tts")
+    @patch("app.services.cloned_voices.service.ClonedVoiceStore")
+    def test_preview_without_text_speaks_the_language_sample(self, mock_store_cls, mock_tts):
+        mock_store_cls.return_value.get_for_user.return_value = {
+            "id": "clone-1",
+            "status": STATUS_READY,
+            "engine_voice_key": "uabc_clone1",
+            "language": "en",
+        }
+        mock_tts.return_value = MagicMock(error=None)
+
+        response = self.client.post(
+            "/api/v1/cloned-voices/clone-1/preview",
+            headers=self.headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        # "en" has no sample of its own: the en-us sample is the fallback.
+        mock_tts.assert_called_once_with(
+            VOICE_SAMPLE_TEXTS["en-us"],
+            "uabc_clone1",
+            ANY,
+            voice_rate=1.0,
+            voice_volume=1.0,
+        )
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_preview_rejects_over_length_text(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+
+        response = self.client.post(
+            "/api/v1/cloned-voices/clone-1/preview",
+            headers=self.headers,
+            json={"text": "a" * (CLONE_PREVIEW_TEXT_MAX_CHARS + 1)},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["message"],
+            "preview text must be 1 to 300 characters after trimming",
+        )
+        service.preview_mp3.assert_not_called()
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_preview_rejects_text_empty_after_trim(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+
+        response = self.client.post(
+            "/api/v1/cloned-voices/clone-1/preview",
+            headers=self.headers,
+            json={"text": "   "},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["message"],
+            "preview text must be 1 to 300 characters after trimming",
+        )
+        service.preview_mp3.assert_not_called()
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_preview_rejects_non_string_text(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+
+        response = self.client.post(
+            "/api/v1/cloned-voices/clone-1/preview",
+            headers=self.headers,
+            json={"text": 123},
+        )
+
+        # The pydantic body model rejects the type; the app maps request
+        # validation errors to 400.
+        self.assertEqual(response.status_code, 400)
+        service.preview_mp3.assert_not_called()
+
+    @patch("app.controllers.v1.cloned_voices.ClonedVoiceService")
+    def test_preview_rejects_a_malformed_json_body(self, mock_service_cls):
+        service = MagicMock()
+        mock_service_cls.return_value = service
+
+        response = self.client.post(
+            "/api/v1/cloned-voices/clone-1/preview",
+            headers={**self.headers, "content-type": "application/json"},
+            content=b"not-json{",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        service.preview_mp3.assert_not_called()

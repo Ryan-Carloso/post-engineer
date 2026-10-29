@@ -142,6 +142,7 @@ export async function previewClonedVoice(
   client: ClonedVoiceClientHost,
   cloneId: string,
   language?: string,
+  text?: string,
 ): Promise<unknown> {
   const suffix =
     language && language.trim() ? `?language=${encodeURIComponent(language.trim())}` : '';
@@ -153,6 +154,8 @@ export async function previewClonedVoice(
   const response = await fetch(`${client.baseUrl}${path}`, {
     method: 'POST',
     headers: client.getHeaders(),
+    // Caller text travels in the JSON body, never the URL.
+    ...(text === undefined ? {} : { body: JSON.stringify({ text }) }),
     redirect: 'error',
     signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
   });

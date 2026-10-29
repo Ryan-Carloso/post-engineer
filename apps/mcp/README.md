@@ -95,7 +95,7 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `create_cloned_voice`: register a voice clone from a short HTTPS audio URL (requires `consent: true` and `denoise`: `true` cleans background noise first, `false` keeps the original).
 - `get_cloned_voice`: get one voice clone by id — poll its `status` after `create_cloned_voice` until `ready` (then `voice_id` is set) or `failed`.
 - `delete_cloned_voice`: delete a voice clone by id.
-- `preview_cloned_voice`: synthesize a short MP3 preview for a ready clone (returns base64 audio).
+- `preview_cloned_voice`: synthesize a short MP3 preview for a ready clone (returns base64 audio). Optional `text` (1-300 chars, English) makes the clone speak your words instead of the fixed sample; previews are free and limited to 10 per user per day.
 - `list_faces`: list default/stock persona faces (live catalog from `/api/persona/faces`). Each item has `id`, `url`, `name`, `gender`, `age` (single number, e.g. 23), `ethnicity`, `hair`, and `description` (English) so agents can choose without the photo; pass a face `url` as `avatarUrl` on `create_persona`.
 - `create_persona`: create an AI persona (avatar, voice, language, niche). `avatarUrl` is REQUIRED — every persona has a face; "no face" is a per-video choice (`options.faceless` on `generate_persona_video`).
 - `update_persona`: update an existing persona (only the provided fields change).

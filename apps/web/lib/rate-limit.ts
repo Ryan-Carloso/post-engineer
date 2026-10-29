@@ -29,6 +29,9 @@ export const RATE_LIMITS = {
   // Voice clone registration: GPU/registry cost — stricter than media upload.
   voiceCloneCreate: { name: 'voice-clone-create', limit: 3, windowMs: 60 * 60 * 1000 },
   voiceCloneDenoisePreview: { name: 'voice-clone-denoise-preview', limit: 20, windowMs: 60 * 60 * 1000 },
+  // Cloned-voice TTS preview (optional caller text): free, so capped per user per day
+  // across all clones to keep it from becoming a free TTS service.
+  voiceClonePreview: { name: 'voice-clone-preview', limit: 10, windowMs: 24 * 60 * 60 * 1000 },
   // Instagram content posting
   instagramPost: { name: 'instagram-post', limit: 10, windowMs: 60_000 },
   // OAuth token endpoint: brute-force / token-farming protection
