@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { PostEngineerClient, MAX_LIBRARY_IMAGES, MAX_LIBRARY_IMAGE_MB, MAX_UPLOAD_VIDEO_GB } from './client.js';
+import { registerPrompts } from './prompts.js';
 import {
   CreatePersonaShape,
   ListPersonasShape,
@@ -108,6 +109,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     name: 'post-engineer-mcp',
     version: pkg.version,
   });
+  registerPrompts(server);
 
   server.tool(
     'create_persona',
