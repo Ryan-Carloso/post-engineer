@@ -100,6 +100,22 @@ describe('parseHttpTransportOptions', () => {
     expect(() => parseHttpTransportOptions(['--http-transport', '--http-port'], {})).toThrow(/port/);
   });
 
+  it('accepts the --http-port=value form', () => {
+    const options = parseHttpTransportOptions(['--http-transport', '--http-port=4125'], {});
+    expect(options).toEqual({ host: '127.0.0.1', port: 4125, allowRemote: false });
+  });
+
+  it('rejects a missing port entirely (no flag, no env)', () => {
+    expect(() => parseHttpTransportOptions(['--http-transport'], {})).toThrow(/port/);
+  });
+
+  it('allows a non-loopback host via the MCP_HTTP_ALLOW_REMOTE env flag', () => {
+    const options = parseHttpTransportOptions(['--http-transport', '--http-port', '4123', '--host', '0.0.0.0'], {
+      MCP_HTTP_ALLOW_REMOTE: 'true',
+    });
+    expect(options).toEqual({ host: '0.0.0.0', port: 4123, allowRemote: true });
+  });
+
   it('rejects a missing --host value', () => {
     expect(() => parseHttpTransportOptions(['--http-transport', '--http-port', '4123', '--host'], {})).toThrow(
       /host/,
@@ -191,5 +207,74 @@ describe('serveHttpTransport', () => {
     });
     await response.arrayBuffer().catch(() => undefined);
     expect(response.status).toBe(400);
+  });
+
+  it('rejects an empty POST body with 400', async () => {
+    const handle = await serveHttpTransport(() => createPostEngineerMcpServer(mockClient()), { host: '127.0.0.1', port: 0, allowRemote: false });
+    handles.push(handle);
+    const response = await fetch(handle.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+    });
+    await response.arrayBuffer().catch(() => undefined);
+    expect(response.status).toBe(400);
+  });
+
+  it('rejects an oversized body with 413 before parsing it', async () => {
+    const handle = await serveHttpTransport(() => createPostEngineerMcpServer(mockClient()), { host: '127.0.0.1', port: 0, allowRemote: false });
+    handles.push(handle);
+    const response = await fetch(handle.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      body: 'a'.repeat(1024 * 1024 + 1),
+    });
+    await response.arrayBuffer().catch(() => undefined);
+    expect(response.status).toBe(413);
+  });
+
+  it('answers 404 for unknown paths', async () => {
+    const handle = await serveHttpTransport(() => createPostEngineerMcpServer(mockClient()), { host: '127.0.0.1', port: 0, allowRemote: false });
+    handles.push(handle);
+    const response = await fetch(handle.url.replace(/\/mcp$/, '/nope'));
+    await response.arrayBuffer().catch(() => undefined);
+    expect(response.status).toBe(404);
+  });
+
+  it('warns on stderr when started with --allow-remote (no auth yet)', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const handle = await serveHttpTransport(() => createPostEngineerMcpServer(mockClient()), {
+        host: '127.0.0.1',
+        port: 0,
+        allowRemote: true,
+      });
+      handles.push(handle);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('WARNING'));
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('answers 500 when the server factory throws instead of crashing the listener', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const handle = await serveHttpTransport(
+        () => {
+          throw new Error('boom');
+        },
+        { host: '127.0.0.1', port: 0, allowRemote: false },
+      );
+      handles.push(handle);
+      const response = await fetch(handle.url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+      });
+      await response.arrayBuffer().catch(() => undefined);
+      expect(response.status).toBe(500);
+      expect(errorSpy).toHaveBeenCalledWith('MCP HTTP request failed:', expect.anything());
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });

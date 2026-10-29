@@ -55,9 +55,7 @@ function parsePort(value: string): number {
 }
 
 function flagValue(argv: string[], flag: string, envValue: string | undefined): string | undefined {
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === undefined) continue;
+  for (const [i, arg] of argv.entries()) {
     if (arg === flag) {
       const value = argv[i + 1];
       if (value === undefined || value.startsWith('--')) {
@@ -168,8 +166,8 @@ export async function serveHttpTransport(
       const cleanup = (): void => {
         if (cleanedUp) return;
         cleanedUp = true;
-        void transport.close().catch(() => undefined);
-        void server.close().catch(() => undefined);
+        // allSettled never rejects, so no rejection handler is needed here.
+        void Promise.allSettled([transport.close(), server.close()]);
       };
       res.on('close', cleanup);
       await server.connect(transport);
