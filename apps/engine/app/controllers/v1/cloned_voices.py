@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import BackgroundTasks, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel
 
 from app.controllers import base
 from app.controllers.v1.base import new_router
@@ -25,6 +26,7 @@ from app.services.cloned_voices.constants import (
     MAX_REFERENCE_BYTES,
     MAX_REFERENCE_SECONDS,
 )
+from app.services.cloned_voices.preview_text import validate_preview_text
 from app.services.cloned_voices.service import ClonedVoiceService
 from app.services.language_gate import ENGLISH_ONLY_CLONE_MESSAGE, is_english_language
 from app.utils import utils
@@ -254,11 +256,28 @@ def denoise_preview(request: Request, file: UploadFile = File(...)):
     return Response(content=cleaned.wav_bytes, media_type="audio/wav")
 
 
+class ClonedVoicePreviewRequest(BaseModel):
+    """Optional JSON body of the preview endpoint: ``{"text": "..."}``.
+
+    Only the string type is enforced here — a malformed body or a
+    non-string text fails pydantic validation, which the app maps to a
+    400. The trimmed-length check lives in validate_preview_text, so a
+    string longer than the cap that trims into range is still accepted.
+    """
+
+    text: str | None = None
+
+
 @cloned_router.post(
     "/cloned-voices/{clone_id}/preview",
     summary="TTS preview for a ready cloned voice (audio/mpeg)",
 )
-def preview_cloned_voice(request: Request, clone_id: str, language: str | None = None):
+def preview_cloned_voice(
+    request: Request,
+    clone_id: str,
+    language: str | None = None,
+    body: ClonedVoicePreviewRequest | None = None,
+):
     auth = base.get_auth_context(request)
     # English-only launch: a preview renders the cloned voice speaking, so a
     # non-English language override is rejected like a non-English
@@ -268,9 +287,21 @@ def preview_cloned_voice(request: Request, clone_id: str, language: str | None =
             status_code=400,
             content=utils.get_response(status=400, message=ENGLISH_ONLY_CLONE_MESSAGE),
         )
+    # Optional caller text: the clone speaks it instead of the fixed
+    # sample. Rejections carry the stable validator message, never the
+    # submitted text.
+    try:
+        preview_text = validate_preview_text(body.text if body is not None else None)
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=400,
+            content=utils.get_response(status=400, message=str(exc)),
+        )
     service = ClonedVoiceService()
     try:
-        audio_bytes = service.preview_mp3(auth.user_id, clone_id, language=language)
+        audio_bytes = service.preview_mp3(
+            auth.user_id, clone_id, language=language, text=preview_text
+        )
     except ReferenceAudioError as exc:
         status = 404 if exc.error_code == ERROR_NOT_FOUND else 400
         if exc.error_code == ERROR_NOT_READY:

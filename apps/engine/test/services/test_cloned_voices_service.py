@@ -1,7 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -18,6 +18,7 @@ from app.services.cloned_voices.service import (
     reconcile_pending_registrations,
     register_clone_in_background,
 )
+from app.services.persona import VOICE_SAMPLE_TEXTS
 
 
 class ClonedVoiceServiceTests(unittest.TestCase):
@@ -134,6 +135,51 @@ class ClonedVoiceServiceTests(unittest.TestCase):
         with patch("builtins.open", unittest.mock.mock_open(read_data=b"mp3-bytes")):
             audio = self.service.preview_mp3("user-1", "clone-1")
         self.assertEqual(audio, b"mp3-bytes")
+
+    @patch("app.services.cloned_voices.service.chatterbox_tts")
+    def test_preview_uses_caller_text_instead_of_the_sample(self, mock_tts):
+        from app.services.voice_providers import TtsResult
+
+        self.store.get_for_user.return_value = {
+            "status": STATUS_READY,
+            "engine_voice_key": "uabc_clone1",
+            "language": "en-us",
+        }
+        mock_tts.return_value = TtsResult(sub_maker=MagicMock())
+
+        with patch("builtins.open", unittest.mock.mock_open(read_data=b"mp3-bytes")):
+            audio = self.service.preview_mp3("user-1", "clone-1", text="say this instead")
+
+        self.assertEqual(audio, b"mp3-bytes")
+        mock_tts.assert_called_once_with(
+            "say this instead",
+            "uabc_clone1",
+            ANY,
+            voice_rate=1.0,
+            voice_volume=1.0,
+        )
+
+    @patch("app.services.cloned_voices.service.chatterbox_tts")
+    def test_preview_without_text_speaks_the_language_sample(self, mock_tts):
+        from app.services.voice_providers import TtsResult
+
+        self.store.get_for_user.return_value = {
+            "status": STATUS_READY,
+            "engine_voice_key": "uabc_clone1",
+            "language": "en-us",
+        }
+        mock_tts.return_value = TtsResult(sub_maker=MagicMock())
+
+        with patch("builtins.open", unittest.mock.mock_open(read_data=b"mp3-bytes")):
+            self.service.preview_mp3("user-1", "clone-1")
+
+        mock_tts.assert_called_once_with(
+            VOICE_SAMPLE_TEXTS["en-us"],
+            "uabc_clone1",
+            ANY,
+            voice_rate=1.0,
+            voice_volume=1.0,
+        )
 
     def test_delete_returns_false_when_row_missing(self):
         self.store.get_for_user.return_value = None

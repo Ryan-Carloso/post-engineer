@@ -10,6 +10,7 @@ import {
 } from './cloned-voice-client.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 import { isEnglishLanguage, ONLY_ENGLISH_CLONE_MESSAGE } from './language.js';
+import { CLONE_PREVIEW_TEXT_MAX_CHARS } from './limits.js';
 
 export const ListClonedVoicesShape = {};
 
@@ -49,6 +50,15 @@ export const PreviewClonedVoiceShape = {
     .refine(isEnglishLanguage, { message: ONLY_ENGLISH_CLONE_MESSAGE })
     .optional()
     .describe('Optional preview language override — English only for now'),
+  text: z
+    .string()
+    .trim()
+    .min(1)
+    .max(CLONE_PREVIEW_TEXT_MAX_CHARS)
+    .optional()
+    .describe(
+      `Optional words for the clone to speak (1-${CLONE_PREVIEW_TEXT_MAX_CHARS} chars, English). Omit to hear the fixed sample. Previews are free and limited to 10 per user per day.`,
+    ),
 };
 
 export const PreviewClonedVoiceSchema = z.object(PreviewClonedVoiceShape);
@@ -93,7 +103,7 @@ export async function handlePreviewClonedVoice(
   args: z.infer<typeof PreviewClonedVoiceSchema>,
 ): Promise<McpToolResponse> {
   return handleLibraryCall(
-    () => previewClonedVoice(client, args.cloneId, args.language),
+    () => previewClonedVoice(client, args.cloneId, args.language, args.text),
     'previewing cloned voice',
   );
 }

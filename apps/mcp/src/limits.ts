@@ -6,6 +6,14 @@
  * a client<->errors import cycle.
  */
 
+/**
+ * Max caller text for preview_cloned_voice, in characters after trimming.
+ * Same literal as the engine (app/services/cloned_voices/preview_text.py)
+ * and the web preview route (preview/preview-text.ts), pinned by
+ * __tests__/clone-preview-text-sync.test.ts.
+ */
+export const CLONE_PREVIEW_TEXT_MAX_CHARS = 300;
+
 /** Max library image size in bytes (10MB). */
 export const MAX_LIBRARY_IMAGE_BYTES = 10 * 1024 * 1024;
 

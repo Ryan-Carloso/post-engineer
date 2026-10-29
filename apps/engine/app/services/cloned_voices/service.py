@@ -276,7 +276,13 @@ class ClonedVoiceService:
                 )
         return self._store.delete_row(user_id, clone_id)
 
-    def preview_mp3(self, user_id: str, clone_id: str, language: str | None = None) -> bytes:
+    def preview_mp3(
+        self,
+        user_id: str,
+        clone_id: str,
+        language: str | None = None,
+        text: str | None = None,
+    ) -> bytes:
         row = self._store.get_for_user(user_id, clone_id)
         if row is None:
             raise ReferenceAudioError(ERROR_NOT_FOUND, "cloned voice not found")
@@ -285,14 +291,19 @@ class ClonedVoiceService:
         voice_key = row.get("engine_voice_key")
         if not isinstance(voice_key, str) or not voice_key:
             raise ReferenceAudioError(ERROR_PREVIEW_FAILED, "cloned voice is misconfigured")
-        lang = (language or row.get("language") or "en").strip().lower()
-        sample_text = VOICE_SAMPLE_TEXTS.get(lang) or VOICE_SAMPLE_TEXTS.get("en-us", "")
+        if text is None:
+            lang = (language or row.get("language") or "en").strip().lower()
+            spoken_text = VOICE_SAMPLE_TEXTS.get(lang) or VOICE_SAMPLE_TEXTS.get("en-us", "")
+        else:
+            # Caller-provided preview text (validated at the endpoint): the
+            # clone speaks exactly this instead of the fixed sample.
+            spoken_text = text
 
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             tmp_path = tmp.name
         try:
             result = chatterbox_tts(
-                sample_text,
+                spoken_text,
                 voice_key,
                 tmp_path,
                 voice_rate=1.0,

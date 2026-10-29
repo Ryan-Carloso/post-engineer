@@ -113,6 +113,14 @@ describe('rate-limit', () => {
       expect(RATE_LIMITS.instagramPost.name).toBe('instagram-post');
     });
 
+    it('caps cloned-voice previews at 10 per user per day', () => {
+      expect(RATE_LIMITS.voiceClonePreview).toEqual({
+        name: 'voice-clone-preview',
+        limit: 10,
+        windowMs: 24 * 60 * 60 * 1000,
+      });
+    });
+
     it('exposes the auth/credential profiles added for the public release', () => {
       for (const key of [
         'oauthToken',

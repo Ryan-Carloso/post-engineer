@@ -174,7 +174,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'preview_cloned_voice',
-    'Synthesize a short MP3 preview for a ready voice clone (returns base64 audio).',
+    'Synthesize a short MP3 preview for a ready voice clone, optionally speaking your own text (returns base64 audio; 10 previews per day).',
     PreviewClonedVoiceShape,
     withTracking('preview_cloned_voice', async (args) => {
       return handlePreviewClonedVoice(apiClient, args);
