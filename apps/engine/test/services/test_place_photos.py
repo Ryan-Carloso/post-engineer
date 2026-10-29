@@ -21,7 +21,36 @@ from app.models.schema import VideoAspect, VideoParams
 from app.services import place_photos, web_search_facts
 from app.services.place_names import PHOTO_FILE_PREFIX, PreparedPhoto
 from app.utils import ssrf
-from test.services.test_web_search_facts import _FakeClient, _FakeResponse
+
+
+class _FakeResponse:
+    """Minimal stand-in for an httpx.Response at the boundary."""
+
+    def __init__(self, payload: object, status_code: int) -> None:
+        self._payload = payload
+        self.status_code = status_code
+
+    def json(self) -> object:
+        return self._payload
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise RuntimeError(f"http {self.status_code}")
+
+
+class _FakeClient:
+    """Records requests and replays canned responses."""
+
+    def __init__(self, responses: list) -> None:
+        self._responses = list(responses)
+        self.calls: list[dict[str, object]] = []
+
+    def post(self, url: str, json: dict[str, object], headers: dict[str, str]):
+        self.calls.append({"url": url, "json": json, "headers": headers})
+        outcome = self._responses.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
 
 PUBLIC_IP = [ipaddress.ip_address("93.184.216.34")]
 SUBJECT = "Where to eat the best francesinha in Porto"

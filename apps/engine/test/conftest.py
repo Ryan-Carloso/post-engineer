@@ -20,9 +20,9 @@ def _no_real_web_search(monkeypatch: pytest.MonkeyPatch):
     """Never let a test call a paid search API.
 
     A dev machine has TAVILY_API_KEY / EXA_API_KEY in .env and may have
-    [search] enabled = true in config.toml, so every test that reached
-    generate_script made a real search call. The lookup is off for every
-    test; test_web_search_facts opts in by patching the section itself.
+    [search] enabled = true in config.toml, so every test that reaches
+    place photos would make a real search call. The lookup is off for
+    every test; place-photos tests opt in by patching the section itself.
     """
     monkeypatch.setattr(web_search_facts, "_search_section", {"enabled": False})
 
