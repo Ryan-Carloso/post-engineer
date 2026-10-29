@@ -141,7 +141,11 @@ function isAllowedRequest(req: IncomingMessage, options: HttpTransportOptions): 
   const origin = req.headers.origin;
   if (origin !== undefined) {
     try {
-      if (!LOOPBACK_HOSTS.has(new URL(origin).hostname)) return false;
+      // URL keeps brackets on IPv6 literals: http://[::1]:5173 has
+      // hostname "[::1]", while LOOPBACK_HOSTS stores the bare "::1".
+      // Strip them so the Origin branch agrees with the Host branch.
+      const originHost = new URL(origin).hostname.replace(/^\[|\]$/g, '');
+      if (!LOOPBACK_HOSTS.has(originHost)) return false;
     } catch {
       return false;
     }

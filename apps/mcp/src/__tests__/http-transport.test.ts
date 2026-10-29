@@ -294,6 +294,9 @@ describe('serveHttpTransport', () => {
     handles.push(handle);
     const healthUrl = handle.url.replace(/\/mcp$/, '/health');
     expect(await rawStatus(healthUrl, { origin: 'http://localhost:5173' })).toBe(200);
+    // URL keeps brackets on IPv6 literals: the [::1] origin must pass
+    // the same loopback check as the bare ::1 host.
+    expect(await rawStatus(healthUrl, { origin: 'http://[::1]:5173' })).toBe(200);
   });
 
   it('rejects a non-loopback Host header with 403 while bound to loopback', async () => {
