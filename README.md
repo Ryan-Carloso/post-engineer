@@ -14,6 +14,14 @@ schedule. Manage everything from the web dashboard, drive it programmatically
 through the API, or let your AI agent run it through the MCP server — all from
 this one monorepo.
 
+Post Engineer is open source under the [Apache License, Version 2.0](LICENSE).
+Self-host the whole platform on your own VPS following
+[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md), or use the hosted version and
+buy tokens. Lip sync (LongCat) runs on [Modal.com](https://modal.com):
+Modal's Starter plan includes $30/month in compute credits (see
+[modal.com/pricing](https://modal.com/pricing)), so light self-hosted usage
+can fit inside the free credits — usage beyond that is billed by Modal.
+
 > Prefer the hosted version? The same platform runs at
 > [post-engineer.com](https://post-engineer.com) — you can skip the local
 > setup and connect the MCP server straight to your account (see

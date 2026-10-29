@@ -2,6 +2,15 @@
 
 Public MCP (Model Context Protocol) server for [Post Engineer](https://post-engineer.com/). It lets AI agents (Claude, Cursor, Codex, and OpenCode) create personas, generate videos, check generation status, and schedule posts directly on your Post Engineer account.
 
+Post Engineer is open source under the Apache License, Version 2.0 (see
+[LICENSE](../../LICENSE) in the repo root). You can self-host the whole
+platform on your own VPS (see
+[docs/SELF_HOSTING.md](../../docs/SELF_HOSTING.md)) instead of using the
+hosted platform — lip sync (LongCat) runs on Modal.com, whose Starter plan
+includes $30/month in compute credits (see
+[modal.com/pricing](https://modal.com/pricing)); usage beyond that is billed
+by Modal.
+
 ## What is https://post-engineer.com/?
 
 [https://post-engineer.com/](https://post-engineer.com/) is the Post Engineer web platform. You use it to:
