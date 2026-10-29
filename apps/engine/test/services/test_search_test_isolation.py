@@ -21,15 +21,17 @@ def test_search_is_off_for_every_test_even_with_keys_in_the_environment():
         assert web_search_facts.fetch_facts("any subject", language="en") == []
 
 
-def test_the_stock_term_judge_never_reaches_the_llm_in_tests():
-    # task.generate_terms judges stock terms with an LLM call; a test that only
-    # patches llm.generate_terms must not spend real tokens on it.
+def test_term_filtering_never_reaches_the_llm_in_tests():
+    # The LLM term judge is gone: task.generate_terms filters stock terms
+    # mechanically, so a test that only patches llm.generate_terms can no
+    # longer spend real tokens on a judge call.
     from app.models.schema import VideoParams
-    from app.services import llm, stock_term_judge
+    from app.services import llm, stock_terms
+    from app.services import task as tm
 
+    assert not hasattr(tm, "stock_term_judge")
     params = VideoParams(video_subject="Where to eat the best francesinha in Porto", faceless_material="broll")
     with patch.object(llm, "_generate_response_with_fallback", side_effect=AssertionError("a real LLM call")) as call:
-        kept = stock_term_judge.select_terms(params, ["Porto street", "gato selado"], "script")
-    # The judge swallows model errors, so only "never called" proves the stub.
+        kept = stock_terms.filter_weak_stock_terms(params, ["Porto street", "gato selado"], "script")
     call.assert_not_called()
     assert kept == ["Porto street"]

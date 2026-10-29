@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.config import config
-from app.services import analytics, stock_term_judge, web_search_facts
+from app.services import analytics, web_search_facts
 
 
 TEST_ROOT = Path(__file__).resolve().parent.parent
@@ -58,17 +58,4 @@ def _no_real_posthog_client(monkeypatch: pytest.MonkeyPatch):
     analytics.reset_for_testing()
 
 
-@pytest.fixture(autouse=True)
-def _no_real_stock_judge_call(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
-    """Never let a pipeline test reach the real LLM to judge stock terms.
-
-    task.generate_terms asks the LLM which stock terms belong to the video;
-    tests that only patch llm.generate_terms would otherwise hit a real
-    provider (tokens spent, results varying run to run). The stub is an
-    unusable answer, so the word-overlap filter decides, as it always did.
-    Tests of the judge opt in with @pytest.mark.real_stock_judge.
-    """
-    if request.node.get_closest_marker("real_stock_judge") is None:
-        monkeypatch.setattr(stock_term_judge, "_ask_judge", lambda *args, **kwargs: None)
-    yield
 
