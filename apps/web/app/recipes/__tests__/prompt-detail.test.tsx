@@ -37,6 +37,14 @@ vi.mock('@/lib/i18n/provider', () => {
       'Next: your agent validates the script, then generates and publishes the video. Validation is free; generation costs tokens.',
     'recipes.viewOnGithub': 'View this prompt on GitHub',
     'recipes.backToPrompts': 'Back to prompts',
+    'recipes.fullSetupTitle': 'Full setup becomes videos',
+    'recipes.fullSetupObjective':
+      'Connect accounts, create a persona, validate the script, and publish your first video.',
+    'recipes.fullSetupStep1': 'Connect your accounts.',
+    'recipes.fullSetupStep2':
+      'It walks accounts, persona, a validated script, and real publishing in one flow.',
+    'recipes.fullSetupDeliver1': 'Every account connected and a persona created.',
+    'recipes.fullSetupExampleInput': 'Starting with zero accounts and no persona.',
   };
   return {
     useI18n: () => ({
@@ -169,5 +177,48 @@ describe('prompt detail page', () => {
     const { container } = render(<PromptDetail prompt={prompt} />);
     const ids = [...container.querySelectorAll('[data-agent]')].map((el) => el.getAttribute('data-agent'));
     expect(ids).toEqual(['cursor', 'claude', 'opencode']);
+  });
+});
+
+describe('full-setup detail page', () => {
+  const prompt = getPrompt('full-setup');
+  if (prompt === undefined) {
+    throw new Error('full-setup prompt entry is missing');
+  }
+
+  it('renders the full-setup title and objective', () => {
+    render(<PromptDetail prompt={prompt} />);
+    expect(
+      screen.getByRole('heading', { name: 'Full setup becomes videos' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Connect accounts, create a persona, validate the script, and publish your first video.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('points the doc link at docs/recipes/full-setup.md', () => {
+    render(<PromptDetail prompt={prompt} />);
+    expect(
+      screen.getByRole('link', { name: 'View this prompt on GitHub' }),
+    ).toHaveAttribute(
+      'href',
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/full-setup.md',
+    );
+  });
+
+  it('shows the full prompt with the ordered setup flow', () => {
+    render(<PromptDetail prompt={prompt} />);
+    for (const marker of [
+      'list_social_accounts',
+      'never repeat, print, or log it',
+      'create_persona',
+      'get_token_balance',
+      'confirm the providers/accounts and the mode (scheduled|asap)',
+      'generate_persona_video',
+    ]) {
+      expect(screen.getByText(new RegExp(marker.replace(/[.[\\(\\)|*+?^$]/g, '\\$&')))).toBeInTheDocument();
+    }
   });
 });

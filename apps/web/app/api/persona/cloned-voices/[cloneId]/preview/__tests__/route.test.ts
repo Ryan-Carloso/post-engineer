@@ -14,7 +14,7 @@ vi.mock('@/lib/request-auth', () => ({
 
 vi.mock('@/lib/rate-limit', () => ({
   applyRateLimit: vi.fn(async () => null),
-  RATE_LIMITS: { mediaUpload: { name: 'media-upload', limit: 10, windowMs: 60000 } },
+  RATE_LIMITS: { voiceClonePreview: { name: 'voice-clone-preview', limit: 10, windowMs: 86_400_000 } },
 }));
 
 vi.mock('@/lib/api-error-reporting', () => ({
@@ -261,5 +261,128 @@ describe('POST /api/persona/cloned-voices/:cloneId/preview error branches', () =
     );
     expect(response.status).toBe(502);
     expect((await response.json()).error).toBe('Preview service unreachable.');
+  });
+});
+
+describe('POST /api/persona/cloned-voices/:cloneId/preview caller text', () => {
+  beforeEach(() => {
+    vi.stubEnv('MONEYPRINT_API_URL', 'http://127.0.0.1:8080');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('forwards trimmed text to the engine as a JSON body', async () => {
+    const fetchMock = okAudioFetch(new Uint8Array([9]), 'audio/mpeg');
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await POST(
+      new Request('http://localhost/api/persona/cloned-voices/clone-1/preview', {
+        method: 'POST',
+        body: JSON.stringify({ text: '  say this  ' }),
+      }),
+      ctx('clone-1'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://127.0.0.1:8080/api/v1/cloned-voices/clone-1/preview');
+    expect(init?.body).toBe(JSON.stringify({ text: 'say this' }));
+    expect(new Headers(init?.headers).get('content-type')).toBe('application/json');
+    // The text never travels in the URL.
+    expect(String(url).includes('say')).toBe(false);
+  });
+
+  it('keeps the no-body request unchanged (fixed sample)', async () => {
+    const fetchMock = okAudioFetch(new Uint8Array([9]), 'audio/mpeg');
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await POST(
+      new Request('http://localhost/api/persona/cloned-voices/clone-1/preview', { method: 'POST' }),
+      ctx('clone-1'),
+    );
+
+    expect(response.status).toBe(200);
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init?.body).toBeUndefined();
+    expect(new Headers(init?.headers).get('content-type')).toBeNull();
+  });
+
+  it('rejects over-length text with 400 before calling the engine', async () => {
+    const fetchMock = okAudioFetch(new Uint8Array([9]), 'audio/mpeg');
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await POST(
+      new Request('http://localhost/api/persona/cloned-voices/clone-1/preview', {
+        method: 'POST',
+        body: JSON.stringify({ text: 'a'.repeat(301) }),
+      }),
+      ctx('clone-1'),
+    );
+
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('answers 400 and logs when the request body cannot be read', async () => {
+    const fetchMock = okAudioFetch(new Uint8Array([9]), 'audio/mpeg');
+    vi.stubGlobal('fetch', fetchMock);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const request = new Request('http://localhost/api/persona/cloned-voices/clone-1/preview', {
+      method: 'POST',
+    });
+    vi.spyOn(request, 'text').mockRejectedValueOnce(new Error('stream aborted'));
+
+    const response = await POST(request, ctx('clone-1'));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ success: false, error: 'Invalid body.' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it('rejects invalid JSON with 400 before calling the engine', async () => {
+    const fetchMock = okAudioFetch(new Uint8Array([9]), 'audio/mpeg');
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await POST(
+      new Request('http://localhost/api/persona/cloned-voices/clone-1/preview', {
+        method: 'POST',
+        body: 'not-json{',
+      }),
+      ctx('clone-1'),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ success: false, error: 'Invalid JSON body.' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('applies the daily voiceClonePreview limit and stops at 429 without calling the engine', async () => {
+    const fetchMock = okAudioFetch(new Uint8Array([9]), 'audio/mpeg');
+    vi.stubGlobal('fetch', fetchMock);
+    vi.mocked(applyRateLimit).mockResolvedValueOnce(
+      NextResponse.json({ success: false, error: 'Too many requests.' }, { status: 429 }),
+    );
+
+    const response = await POST(
+      new Request('http://localhost/api/persona/cloned-voices/clone-1/preview', {
+        method: 'POST',
+        body: JSON.stringify({ text: 'hi' }),
+      }),
+      ctx('clone-1'),
+    );
+
+    expect(response.status).toBe(429);
+    expect(applyRateLimit).toHaveBeenCalledWith(
+      expect.any(Request),
+      { name: 'voice-clone-preview', limit: 10, windowMs: 86_400_000 },
+      'user-1',
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

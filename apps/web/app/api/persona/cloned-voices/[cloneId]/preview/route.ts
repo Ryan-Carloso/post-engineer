@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
+import { parsePreviewTextBody } from './preview-text';
 
 type RouteContext = { params: Promise<{ cloneId: string }> };
 
@@ -15,7 +16,7 @@ async function postHandler(request: Request, context: RouteContext): Promise<Nex
     return authError;
   }
 
-  const limited = await applyRateLimit(request, RATE_LIMITS.mediaUpload, auth.userId);
+  const limited = await applyRateLimit(request, RATE_LIMITS.voiceClonePreview, auth.userId);
   if (limited) {
     return limited;
   }
@@ -23,6 +24,20 @@ async function postHandler(request: Request, context: RouteContext): Promise<Nex
   const { cloneId } = await context.params;
   if (!cloneId.trim()) {
     return NextResponse.json({ success: false, error: 'Clone id is required.' }, { status: 400 });
+  }
+
+  // Optional caller text, validated before the engine call. The text is
+  // never logged; only the parse error (which carries no text) is returned.
+  let rawBody: string;
+  try {
+    rawBody = await request.text();
+  } catch (error) {
+    logger.error('[api/persona/cloned-voices/:id/preview] body unreadable', error);
+    return NextResponse.json({ success: false, error: 'Invalid body.' }, { status: 400 });
+  }
+  const previewText = parsePreviewTextBody(rawBody);
+  if (!previewText.ok) {
+    return NextResponse.json({ success: false, error: previewText.error }, { status: 400 });
   }
 
   let baseUrl: string;
@@ -48,10 +63,16 @@ async function postHandler(request: Request, context: RouteContext): Promise<Nex
   }
 
   try {
-    const upstream = await fetch(url.toString(), {
-      method: 'POST',
-      headers: engineAuthHeaders(auth.userId),
-    });
+    const upstream = await fetch(
+      url.toString(),
+      previewText.text === null
+        ? { method: 'POST', headers: engineAuthHeaders(auth.userId) }
+        : {
+          method: 'POST',
+          headers: { ...engineAuthHeaders(auth.userId), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: previewText.text }),
+        },
+    );
     if (upstream.status === 404) {
       return NextResponse.json({ success: false, error: 'Cloned voice not found.' }, { status: 404 });
     }

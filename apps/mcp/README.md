@@ -95,7 +95,7 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `create_cloned_voice`: register a voice clone from a short HTTPS audio URL (requires `consent: true` and `denoise`: `true` cleans background noise first, `false` keeps the original).
 - `get_cloned_voice`: get one voice clone by id — poll its `status` after `create_cloned_voice` until `ready` (then `voice_id` is set) or `failed`.
 - `delete_cloned_voice`: delete a voice clone by id.
-- `preview_cloned_voice`: synthesize a short MP3 preview for a ready clone (returns base64 audio).
+- `preview_cloned_voice`: synthesize a short MP3 preview for a ready clone (returns base64 audio). Optional `text` (1-300 chars, English) makes the clone speak your words instead of the fixed sample; previews are free and limited to 10 per user per day.
 - `list_faces`: list default/stock persona faces (live catalog from `/api/persona/faces`). Each item has `id`, `url`, `name`, `gender`, `age` (single number, e.g. 23), `ethnicity`, `hair`, and `description` (English) so agents can choose without the photo; pass a face `url` as `avatarUrl` on `create_persona`.
 - `create_persona`: create an AI persona (avatar, voice, language, niche). `avatarUrl` is REQUIRED — every persona has a face; "no face" is a per-video choice (`options.faceless` on `generate_persona_video`).
 - `update_persona`: update an existing persona (only the provided fields change).
@@ -145,6 +145,23 @@ database row id and is rejected):
 | Bluesky | `blueskyAccountIds` | `did` (e.g. `did:plc:...`) |
 
 Passing a `recordId` fails fast with an error naming the right field.
+
+## Prompts (slash commands)
+
+The server serves the prompts hub from the Post Engineer web platform over
+the MCP [prompts capability](https://modelcontextprotocol.io/docs/concepts/prompts),
+so MCP clients (Cursor, Claude) list them as slash commands. Each prompt is
+zero-arg; placeholders (`[PERSONA_ID]`, `[STORY_TITLE]`, …) stay in the text
+for you to fill in when you run it. The copy is kept in sync with the web
+hub by a sync test (`prompts-sync.test.ts`).
+
+- `/daily-news`: Daily news becomes a video — turn one top GNews story of the day into one persona video, validated before any token is spent.
+- `/github-prs`: GitHub PRs become videos — turn a GitHub pull request into one persona video.
+
+Add a new prompt to the web hub (`apps/web/app/recipes/prompts.ts` + its
+i18n title/description), then copy the same slug, title, description, and
+exact prompt text into `src/prompts.ts`; `pnpm test` fails if the copies
+drift.
 
 ## Links
 

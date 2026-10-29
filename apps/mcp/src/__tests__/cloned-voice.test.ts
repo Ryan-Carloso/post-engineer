@@ -16,6 +16,7 @@ import {
   handleGetClonedVoice,
   handleListClonedVoices,
   handlePreviewClonedVoice,
+  PreviewClonedVoiceSchema,
 } from '../cloned-voice-tools.js';
 import { createPostEngineerMcpServer } from '../index.js';
 import type { PostEngineerClient } from '../client.js';
@@ -225,6 +226,25 @@ describe('cloned voice client calls', () => {
         },
       })
     );
+  });
+
+  it('sends caller text in the JSON body, never in the URL', async () => {
+    global.fetch = vi.fn().mockResolvedValue(audioResponse([1], 'audio/mpeg'));
+    const host = fakeHost(vi.fn());
+    await previewClonedVoice(host, 'clone-1', undefined, 'say this');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.test/api/persona/cloned-voices/clone-1/preview',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ text: 'say this' }) })
+    );
+  });
+
+  it('sends no body when no caller text is given', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(audioResponse([1], 'audio/mpeg'));
+    global.fetch = fetchMock;
+    const host = fakeHost(vi.fn());
+    await previewClonedVoice(host, 'clone-1');
+    const init: unknown = fetchMock.mock.calls[0][1];
+    expect(typeof init === 'object' && init !== null && 'body' in init).toBe(false);
   });
 
   it('adds a trimmed, encoded language suffix to previews', async () => {
@@ -548,6 +568,33 @@ describe('cloned voice tools run through the MCP server', () => {
     expect(global.fetch).toHaveBeenCalledWith(
       'https://api.test/api/persona/cloned-voices/clone-1/preview',
       expect.objectContaining({ method: 'POST' })
+    );
+  });
+});
+
+describe('PreviewClonedVoiceSchema text', () => {
+  it('accepts and trims text up to 300 chars', () => {
+    const parsed = PreviewClonedVoiceSchema.parse({ cloneId: 'c', text: `  ${'a'.repeat(300)}  ` });
+    expect(parsed.text).toBe('a'.repeat(300));
+  });
+
+  it('rejects 301 chars and empty-after-trim text', () => {
+    expect(PreviewClonedVoiceSchema.safeParse({ cloneId: 'c', text: 'a'.repeat(301) }).success).toBe(false);
+    expect(PreviewClonedVoiceSchema.safeParse({ cloneId: 'c', text: '   ' }).success).toBe(false);
+  });
+
+  it('keeps text optional', () => {
+    expect(PreviewClonedVoiceSchema.parse({ cloneId: 'c' }).text).toBeUndefined();
+  });
+
+  it('handlePreviewClonedVoice forwards the text to the client', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(audioResponse([1], 'audio/mpeg'));
+    global.fetch = fetchMock;
+    const client = fakeHost(vi.fn()) as unknown as PostEngineerClient;
+    await handlePreviewClonedVoice(client, { cloneId: 'clone-1', text: 'hello there' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.test/api/persona/cloned-voices/clone-1/preview',
+      expect.objectContaining({ body: JSON.stringify({ text: 'hello there' }) })
     );
   });
 });
