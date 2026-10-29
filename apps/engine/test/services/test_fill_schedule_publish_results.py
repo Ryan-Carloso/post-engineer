@@ -54,7 +54,7 @@ class FillSchedulePublishResultsTests(TestCase):
     def _slot(self, providers):  # type: ignore[no-untyped-def]
         return {
             "id": "slot-1",
-            "topic": "Porto coffee",
+            "title": "Porto coffee",
             "task_id": "t-1",
             "faceless": True,
             "publish_attempts": 0,

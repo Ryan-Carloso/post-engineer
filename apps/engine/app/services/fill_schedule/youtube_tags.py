@@ -1,8 +1,8 @@
-"""Derive YouTube tags from the video topic.
+"""Derive YouTube tags from the video title.
 
-Tags are extracted from the topic text itself, so they always land in the
-video's own language (a Portuguese topic yields Portuguese tags, a Hindi
-topic yields Hindi tags, ...). There are no per-language word lists:
+Tags are extracted from the title text itself, so they always land in the
+video's own language (a Portuguese title yields Portuguese tags, a Hindi
+title yields Hindi tags, ...). There are no per-language word lists:
 tokenization keeps Unicode letters, combining marks and numbers (so
 Devanagari vowel signs stay glued to their base letter) and the only
 filters are language-independent (minimum token length, digits-only
@@ -47,27 +47,27 @@ def _tokenize(text: str) -> list[str]:
     return tokens
 
 
-def derive_tags_from_topic(topic: str) -> tuple[str, ...]:
-    """Extract up to ``_MAX_TAGS`` keyword tags from the topic.
+def derive_tags_from_title(title: str) -> tuple[str, ...]:
+    """Extract up to ``_MAX_TAGS`` keyword tags from the title.
 
     Returns lowercase, de-duplicated tokens in first-seen order. When the
     strict pass finds nothing usable, falls back to cutting the title into
     raw words with looser rules: tags are metadata garnish, not worth
     failing a slot over — a rough tag beats a failed generation. Only a
-    topic with no words at all (pure punctuation) still yields ``()``,
+    title with no words at all (pure punctuation) still yields ``()``,
     and only then does the publish pre-flight fail the slot.
     """
-    tags = _derive_tags(topic, min_token_length=_MIN_TOKEN_LENGTH, drop_digits=True)
+    tags = _derive_tags(title, min_token_length=_MIN_TOKEN_LENGTH, drop_digits=True)
     if not tags:
-        tags = _derive_tags(topic, min_token_length=1, drop_digits=False)
+        tags = _derive_tags(title, min_token_length=1, drop_digits=False)
     return tags
 
 
-def _derive_tags(topic: str, *, min_token_length: int, drop_digits: bool) -> tuple[str, ...]:
+def _derive_tags(title: str, *, min_token_length: int, drop_digits: bool) -> tuple[str, ...]:
     seen: set[str] = set()
     tags: list[str] = []
     total_chars = 0
-    for token in _tokenize(topic.lower()):
+    for token in _tokenize(title.lower()):
         if len(token) < min_token_length:
             continue
         if drop_digits and token.isdigit():

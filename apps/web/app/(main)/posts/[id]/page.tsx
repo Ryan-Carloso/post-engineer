@@ -29,7 +29,7 @@ import type { TranslationKey } from '@/lib/i18n';
 
 //---------------
 // PostDetailPage (/posts/[id]) — the full-page post detail: big video
-// player, live progress while generating, topic editing and delete for
+// player, live progress while generating, title editing and delete for
 // awaiting/failed slots. Resolved by id through the unified detail
 // endpoint (GET /api/posts/[id]), never by scanning the history lists.
 //---------------
@@ -131,9 +131,9 @@ export default function PostDetailPage() {
   const linkedinQuery = useLinkedinAccountsQuery();
   const blueskyQuery = useBlueskyAccountsQuery();
 
-  // Target accounts resolved from the same account queries the new-post
-  // page uses, mapped to the shared AccountCard props (real thumbnails and
-  // names — see posts/new for the canonical mapping).
+  // Target accounts resolved from the same account queries the accounts
+  // screen uses, mapped to the shared AccountCard props (real thumbnails
+  // and names).
   const accountOptions: AccountCardData[] = useMemo(
     () => [
       ...(youtubeQuery.data?.accounts ?? []).map((account) => ({
@@ -216,7 +216,7 @@ export default function PostDetailPage() {
         <ScriptAngleSection angle={generation.scriptAngle} />
         <section aria-label={t('posts.detailsTitle')} className="mt-6">
           <p className="text-sm text-muted-foreground">
-            {formatDateTime(generation.createdAt, locale)} · {generation.videoSubject ?? t('posts.unknownTopic')}
+            {formatDateTime(generation.createdAt, locale)} · {generation.videoSubject ?? t('posts.unknownTitle')}
           </p>
           {(generation.status === 'pending' || generation.status === 'running') && generation.engineTaskId ? (
             <DetailProgressBar progress={generation.progress} stage={generation.stage} />
@@ -536,7 +536,7 @@ const PublishLinks = ({ links }: { links: PublishLink[] }) => {
 
 //---------------
 // SlotDetail — the scheduled-post body: player or generating progress,
-// topic (editable while awaiting), target accounts, error, and the
+// title (editable while awaiting), target accounts, error, and the
 // per-status actions. Delete redirects back to /posts on success;
 // mutation errors render inline and never navigate away.
 //---------------
@@ -561,10 +561,10 @@ export const SlotDetail = ({
 }) => {
   const { t } = useI18n();
   const router = useRouter();
-  const updateTopic = useUpdateSlotMutation();
+  const updateTitle = useUpdateSlotMutation();
   const deleteSlot = useDeleteSlotMutation();
   const [editing, setEditing] = useState(false);
-  const [topicDraft, setTopicDraft] = useState(slot.topic ?? '');
+  const [titleDraft, setTitleDraft] = useState(slot.title ?? '');
   // Two-step delete: the first click arms the confirmation button.
   const [armed, setArmed] = useState(false);
 
@@ -573,12 +573,12 @@ export const SlotDetail = ({
   const canEdit = slot.status === 'awaiting';
   const canDelete = slot.status === 'awaiting' || slot.status === 'failed';
   const mutationError =
-    (updateTopic.isError ? updateTopic.error?.message : null) ??
+    (updateTitle.isError ? updateTitle.error?.message : null) ??
     (deleteSlot.isError ? deleteSlot.error?.message : null);
 
   const handleSave = (): void => {
-    updateTopic.mutate(
-      { slotId: slot.id, topic: topicDraft },
+    updateTitle.mutate(
+      { slotId: slot.id, title: titleDraft },
       { onSuccess: () => setEditing(false) },
     );
   };
@@ -608,11 +608,11 @@ export const SlotDetail = ({
         <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t('posts.captionLabel')}</p>
         {editing ? (
           <div className="mt-2">
-            <label className="sr-only" htmlFor="slot-topic">{t('posts.captionLabel')}</label>
+            <label className="sr-only" htmlFor="slot-title">{t('posts.captionLabel')}</label>
             <textarea
-              id="slot-topic"
-              value={topicDraft}
-              onChange={(event) => setTopicDraft(event.target.value)}
+              id="slot-title"
+              value={titleDraft}
+              onChange={(event) => setTitleDraft(event.target.value)}
               rows={3}
               className="w-full rounded-xl border border-input px-3 py-2 text-sm text-[#0d2b45] focus:border-[#0d2b45] focus:outline-none"
             />
@@ -620,7 +620,7 @@ export const SlotDetail = ({
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={updateTopic.isPending || topicDraft.trim() === ''}
+                disabled={updateTitle.isPending || titleDraft.trim() === ''}
                 className="rounded-xl bg-[#0d2b45] px-4 py-2 text-sm font-semibold text-white hover:bg-[#123a5e] disabled:opacity-50"
               >
                 {t('posts.save')}
@@ -629,9 +629,9 @@ export const SlotDetail = ({
                 type="button"
                 onClick={() => {
                   setEditing(false);
-                  setTopicDraft(slot.topic ?? '');
+                  setTitleDraft(slot.title ?? '');
                 }}
-                disabled={updateTopic.isPending}
+                disabled={updateTitle.isPending}
                 className="rounded-xl border border-input px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
               >
                 {t('posts.cancel')}
@@ -640,7 +640,7 @@ export const SlotDetail = ({
           </div>
         ) : (
           <p className="mt-2 rounded-xl border border-input bg-secondary px-3 py-2 text-sm text-[#0d2b45]">
-            {slot.topic ?? t('posts.unknownCaption')}
+            {slot.title ?? t('posts.unknownCaption')}
           </p>
         )}
       </div>
@@ -703,7 +703,7 @@ export const SlotDetail = ({
             <button
               type="button"
               onClick={handleDelete}
-              disabled={deleteSlot.isPending || updateTopic.isPending}
+              disabled={deleteSlot.isPending || updateTitle.isPending}
               className={`rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
                 armed ? 'bg-[#a1250f] hover:bg-[#8c1f0d]' : 'bg-destructive hover:bg-[#a1250f]'
               }`}

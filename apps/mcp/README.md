@@ -97,31 +97,30 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `delete_cloned_voice`: delete a voice clone by id.
 - `preview_cloned_voice`: synthesize a short MP3 preview for a ready clone (returns base64 audio).
 - `list_faces`: list default/stock persona faces (live catalog from `/api/persona/faces`). Each item has `id`, `url`, `name`, `gender`, `age` (single number, e.g. 23), `ethnicity`, `hair`, and `description` (English) so agents can choose without the photo; pass a face `url` as `avatarUrl` on `create_persona`.
-- `create_persona`: create an AI persona (avatar, voice, language, niche). `avatarUrl` is REQUIRED — every persona has a face; "no face" is a per-video choice (`options.faceless` on `generate_persona_videos`).
+- `create_persona`: create an AI persona (avatar, voice, language, niche). `avatarUrl` is REQUIRED — every persona has a face; "no face" is a per-video choice (`options.faceless` on `generate_persona_video`).
 - `update_persona`: update an existing persona (only the provided fields change).
 - `get_token_balance`: get the prepaid token wallet balance. Check before generating videos, which cost tokens.
-- `generate_persona_videos`: generate and schedule 1-10 persona videos in ONE operation — generation is always tied to publishing (one call = generate + schedule + auto-publish; no orphan videos, no separate schedule step). `personaId` is optional: omit it for a faceless post with no persona, in which case set `options.faceless` and `options.voiceId` (or `options.audioUrl`), plus `options.scriptPrompt` / `videoAspect` / `language` / `niche` as needed — a persona is not only a face, it is where voice, script, aspect and niche come from. With a persona, `options.faceless: true` drops only the face and the persona still supplies the rest. `topics` is one topic per video; the server assigns publish slots across `startAt` + `times` (daily `HH:MM` publish times in `timezone`). Set `mode: 'asap'` to publish each video the moment its generation finishes instead of scheduling it — `startAt` and `times` must NOT be set then. Pass `providers` plus per-provider account IDs (see the account ID table below). Every slot must be 3h–30d ahead. `idempotencyKey` is generated automatically; reuse it to retry without generating twice (`replayed: true`). Poll each slot's `taskId` with `get_video_task_progress`.
 - `validate_script`: validate a segments script mechanically, without spending tokens — hook first, CTA last, exactly one of each, word limits (total 60-200, body at least 30, CTA 5-20, hook 15-40 words before TTS). Returns the word counts and the hook window (8-12 seconds spoken). Measured hook duration is pending a hook-only TTS endpoint and is reported as pending, never invented.
 - `upload_media`: upload a local image for a video segment and get a `mediaId` to use in a segment's `media` field. JPG/JPEG, PNG, or WebP, max 8MB (the engine photo limit, not the 10MB library limit); the real content type is validated, not the extension. The file is stored as a temporary engine asset (1 hour TTL): upload shortly before generating, since a scheduled slot far in the future may outlive the asset and the segment then renders without it. Returns only the `mediaId`.
 - `check_media`: mechanically check one public image URL for a segment, without an LLM and without judging relevance (the agent, who sees the image, decides relevance). Returns exactly one code: `ok`, `blocked_403`, `not_image`, `too_small`, `too_large`, `timeout`, or `face_detected`. No fake User-Agent or Referer is sent to bypass hotlink blocks, and private addresses are never fetched.
-- `generate_persona_video`: generate and schedule ONE persona video from a complete script — generation is always tied to publishing (one call = generate + schedule + auto-publish; no orphan videos, no separate schedule step). Send the full script as `segments` (first `hook`, then body segments, last `cta`; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation) — no LLM expands it. `title` is the single topic for this video. `personaId` is optional, same faceless rules as `generate_persona_videos`. Pass `providers` plus per-provider account IDs (see the account ID table below), `startAt` + `times` in `timezone` (or `mode: 'asap'` with no `startAt`/`times`). The slot must be 3h–30d ahead. `idempotencyKey` is generated automatically; reuse it to retry without generating twice (`replayed: true`). Poll the slot's `taskId` with `get_video_task_progress`.
+- `generate_persona_video`: generate and schedule ONE persona video from a complete script — generation is always tied to publishing (one call = generate + schedule + auto-publish; no orphan videos, no separate schedule step). Send the full script as `segments` (first `hook`, then body segments, last `cta`; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation) — no LLM expands it. `title` is the slot label for this video. `personaId` is optional: omit it for a faceless post with no persona, in which case set `options.faceless` and `options.voiceId` (or `options.audioUrl`), plus `options.scriptPrompt` / `videoAspect` / `language` / `niche` as needed. Pass `providers` plus per-provider account IDs (see the account ID table below), `startAt` + `times` in `timezone` (or `mode: 'asap'` with no `startAt`/`times`). The slot must be 3h–30d ahead. `idempotencyKey` is generated automatically; reuse it to retry without generating twice (`replayed: true`). Poll the slot's `taskId` with `get_video_task_progress`.
 - `get_video_status`: check generation status and get the final video URL.
-- `get_video_task_progress`: poll one video task for machine-readable progress: returns `{task_id, state, progress, stage, error}`. `error` is the engine failure reason when `state` is `-1` (failed), `null` otherwise. Use per-video (1/6, 2/6, ...) after `generate_persona_videos`; prefer this over `get_video_status` when only progress matters.
+- `get_video_task_progress`: poll one video task for machine-readable progress: returns `{task_id, state, progress, stage, error}`. `error` is the engine failure reason when `state` is `-1` (failed), `null` otherwise. Use per-video after `generate_persona_video`; prefer this over `get_video_status` when only progress matters.
 - `cancel_video_task`: cancel/remove one of your video tasks on the engine by `taskId` (from `get_video_status`, `get_video_task_progress`, `get_post` or `list_posts`). Only your own task can be cancelled; a persona-scoped API key can only cancel tasks belonging to its personas. Unknown or already-finished tasks return an error; no token refund is issued by this call.
-- `list_persona_images`: list a persona's image library (id, tag, description, is_primary). Use the ids with `generate_persona_videos` `options.imageId` to force a specific image for every video in one call.
+- `list_persona_images`: list a persona's image library (id, tag, description, is_primary). Use the ids with `generate_persona_video` `options.imageId` to force a specific image for every video in one call.
 - `add_persona_image`: add an image to a persona image library from a local file path (JPG/JPEG, PNG, or WebP, max 9MB). Optional tag and description drive the deterministic per-video image selection.
 - `update_persona_image`: update a persona library image tag, description, or primary flag.
 - `remove_persona_image`: remove an image from a persona image library.
 - `publish_video_direct`: publish a ready-made video file directly to social accounts — no generation, no schedule (local .mp4/.mov, max 2GB; YouTube needs title, description, tags, privacyStatus; others need caption).
 - `list_social_accounts`: list connected social accounts with the account IDs needed for scheduling.
-- `get_persona_publishing_accounts`: list a persona's default publishing accounts per provider. `generate_persona_videos` falls back to these when no account IDs are passed; explicit IDs always win.
+- `get_persona_publishing_accounts`: list a persona's default publishing accounts per provider. `generate_persona_video` falls back to these when no account IDs are passed; explicit IDs always win.
 - `set_persona_publishing_accounts`: replace a persona's default publishing accounts per provider (account IDs from `list_social_accounts`; providers mapped to `[]` keep no defaults).
 - `connect_account`: connect a social account. For youtube/instagram/linkedin: returns an authorization URL — the user must open it in a browser and authorize, then the account connects automatically (verify with `list_social_accounts`). For bluesky: connects directly with handle + app password.
 - `list_schedules`: list automation schedules.
 - `list_posts`: list upcoming (scheduled) and past (published/failed) posts across all connected accounts.
 - `cancel_schedule`: cancel a schedule by its ID.
-- `get_slot`: get one scheduled post's full detail by slot ID (status, topic, scheduled time, progress, schedule, persona).
-- `update_slot_topic`: edit the topic of a scheduled post that has not started generating yet.
+- `get_slot`: get one scheduled post's full detail by slot ID (status, title, scheduled time, progress, schedule, persona).
+- `update_slot_title`: edit the title of a scheduled post that has not started generating yet.
 - `delete_slot`: delete one scheduled post slot (only pending/awaiting or failed slots; never the schedule's last slot).
 - `list_video_generations`: list the video generation history, newest first (status, error code, token refunds).
 - `get_video_generation`: get one video generation's detail by generation ID.
@@ -132,13 +131,13 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `delete_persona`: DESTRUCTIVE — delete a persona with all its schedules, slots, videos, and image library. No token refunds.
 - `disconnect_account`: disconnect a social account by provider and account ID.
 
-### Social account IDs for `generate_persona_videos`
+### Social account IDs for `generate_persona_video`
 
 Each provider's `*AccountIds` field expects the provider's account identifier
 from `list_social_accounts` — **not** the `recordId` (that is the internal
 database row id and is rejected):
 
-| Provider | `generate_persona_videos` field | Use this `list_social_accounts` field |
+| Provider | `generate_persona_video` field | Use this `list_social_accounts` field |
 |---|---|---|
 | YouTube | `youtubeAccountIds` | `channelId` |
 | Instagram | `instagramAccountIds` | `igUserId` |

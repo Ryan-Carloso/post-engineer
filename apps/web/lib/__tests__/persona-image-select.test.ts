@@ -33,13 +33,13 @@ const LIBRARY: PersonaLibraryImage[] = [
 
 describe('selectPersonaImage', () => {
   it('returns null for an empty library', () => {
-    expect(selectPersonaImage([], { topic: 'business' }, [])).toBeNull();
+    expect(selectPersonaImage([], { title: 'business' }, [])).toBeNull();
   });
 
   it('explicit imageId wins over tag matching', () => {
     const picked = selectPersonaImage(
       LIBRARY,
-      { topic: 'business meeting at the office', imageId: 'img-beach' },
+      { title: 'business meeting at the office', imageId: 'img-beach' },
       [],
     );
     expect(picked?.id).toBe('img-beach');
@@ -52,7 +52,7 @@ describe('selectPersonaImage', () => {
     // didn't pick.
     const picked = selectPersonaImage(
       LIBRARY,
-      { topic: 'business meeting at the office', imageId: 'nope' },
+      { title: 'business meeting at the office', imageId: 'nope' },
       [],
     );
     expect(picked).toBeNull();
@@ -64,30 +64,30 @@ describe('selectPersonaImage', () => {
     // must go through the exact-match path like any other id.
     const picked = selectPersonaImage(
       LIBRARY,
-      { topic: 'business meeting at the office', imageId: '' },
+      { title: 'business meeting at the office', imageId: '' },
       [],
     );
     expect(picked).toBeNull();
   });
 
-  it('picks the image whose tag matches the topic keywords', () => {
+  it('picks the image whose tag matches the title keywords', () => {
     const picked = selectPersonaImage(
       LIBRARY,
-      { topic: 'quarterly business review', niche: 'finance' },
+      { title: 'quarterly business review', niche: 'finance' },
       [],
     );
     expect(picked?.id).toBe('img-formal');
   });
 
   it('matches keywords from the description too', () => {
-    const picked = selectPersonaImage(LIBRARY, { topic: 'summer vacation' }, []);
+    const picked = selectPersonaImage(LIBRARY, { title: 'summer vacation' }, []);
     expect(picked?.id).toBe('img-beach');
   });
 
   it('excludes recently used images', () => {
     const picked = selectPersonaImage(
       LIBRARY,
-      { topic: 'business meeting' },
+      { title: 'business meeting' },
       ['img-formal'],
     );
     // img-formal would win on tags, but it was used recently.
@@ -98,21 +98,21 @@ describe('selectPersonaImage', () => {
   it('falls back to the full set when every image is recent (never fails)', () => {
     const picked = selectPersonaImage(
       LIBRARY,
-      { topic: 'business meeting' },
+      { title: 'business meeting' },
       ['img-casual', 'img-formal', 'img-beach'],
     );
     expect(picked?.id).toBe('img-formal');
   });
 
   it('primary image wins ties on equal scores', () => {
-    const picked = selectPersonaImage(LIBRARY, { topic: 'unrelated xyz' }, []);
+    const picked = selectPersonaImage(LIBRARY, { title: 'unrelated xyz' }, []);
     expect(picked?.id).toBe('img-casual');
   });
 
   it('higher relevance beats the primary flag', () => {
     const picked = selectPersonaImage(
       LIBRARY,
-      { topic: 'beach day' },
+      { title: 'beach day' },
       [],
     );
     expect(picked?.id).toBe('img-beach');
@@ -130,7 +130,7 @@ describe('selectPersonaImage', () => {
       img('img-ru', 'повседневный', 'женщина в джинсах в парке', true),
       img('img-en', 'formal', 'business woman in a suit'),
     ];
-    const picked = selectPersonaImage(library, { topic: 'женщина в парке' }, []);
+    const picked = selectPersonaImage(library, { title: 'женщина в парке' }, []);
     expect(picked?.id).toBe('img-ru');
   });
 });

@@ -106,7 +106,7 @@ async function saveDefaults(
 }
 
 //---------------
-// Account id extraction — mirrors NewPostAccountsField (posts/new): the id
+// Account id extraction — mirrors the post creation accounts field: the id
 // field differs per provider (channelId / igUserId / did / providerAccountId).
 //---------------
 

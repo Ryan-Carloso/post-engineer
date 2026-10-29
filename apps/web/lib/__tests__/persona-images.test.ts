@@ -134,9 +134,9 @@ beforeEach(() => {
 });
 
 describe('resolveVideoImage', () => {
-  it('resolves to null for an empty library (legacy fallback)', async () => {
+  it('resolves to null for an empty library (empty-library fallback)', async () => {
     const { calls, client } = mockClient({ library: [] });
-    const result = await resolveVideoImage(client, 'persona-1', 'user-1', [], { topic: 'business' });
+    const result = await resolveVideoImage(client, 'persona-1', 'user-1', [], { title: 'business' });
     expect(result).toEqual({ ok: true, image: null });    expect(calls.rpcCalls).toHaveLength(0);
   });
 
@@ -157,7 +157,7 @@ describe('resolveVideoImage', () => {
       Promise.resolve({ data: [], error: null }).then(resolve);
     const client = { from: vi.fn(() => chain) };
 
-    await resolveVideoImage(client as never, 'persona-1', 'user-1', [], { topic: 'x' });
+    await resolveVideoImage(client as never, 'persona-1', 'user-1', [], { title: 'x' });
 
     expect(orderCalls).toEqual([
       { column: 'created_at', ascending: true },
@@ -192,7 +192,7 @@ describe('resolveVideoImage', () => {
     const client = { from: vi.fn(() => chain) };
     const { resolveVideoImage } = await import('../persona-images');
     await resolveVideoImage(client as never, 'persona-1', 'user-1', [], {
-      topic: null,
+      title: null,
       niche: null,
       script: null,
     });
@@ -207,7 +207,7 @@ describe('resolveVideoImage', () => {
       'persona-1',
       'user-1',
       ['img-casual'],
-      { topic: 'business', imageId: 'img-formal' },
+      { title: 'business', imageId: 'img-formal' },
     );
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.image?.id).toBe('img-formal');
@@ -239,14 +239,14 @@ describe('resolveVideoImage', () => {
     });
   });
 
-  it('matches tags against the video topic and excludes recent images', async () => {
+  it('matches tags against the video title and excludes recent images', async () => {
     const { client } = mockClient();
     const result = await resolveVideoImage(
       client,
       'persona-1',
       'user-1',
       ['img-formal'],
-      { topic: 'business meeting at the office', niche: 'finance' },
+      { title: 'business meeting at the office', niche: 'finance' },
     );
     expect(result.ok).toBe(true);
     // img-formal would win on tags but was used recently: falls to img-casual.
@@ -265,7 +265,7 @@ describe('resolveVideoImage', () => {
 
   it('never touches the rotation history (the caller records after the gate)', async () => {
     const { calls, client } = mockClient();
-    const result = await resolveVideoImage(client, 'persona-1', 'user-1', [], { topic: 'business' });
+    const result = await resolveVideoImage(client, 'persona-1', 'user-1', [], { title: 'business' });
     expect(result.ok).toBe(true);
     expect(calls.rpcCalls).toHaveLength(0);
   });

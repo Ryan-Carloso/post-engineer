@@ -45,7 +45,7 @@ function detailPublishedSlotRow() {
     schedule_id: DETAIL_SCHEDULE_ID,
     slot_at: '2026-10-01T20:00:00.000Z',
     status: 'published',
-    topic: DETAIL_TOPIC,
+    title: DETAIL_TOPIC,
     error: null,
     published_at: '2026-10-01T20:05:00.000Z',
     task_id: DETAIL_TASK_ID,
@@ -65,7 +65,7 @@ function detailSlotPayload() {
       scheduleId: DETAIL_SCHEDULE_ID,
       slotAt: '2026-10-01T20:00:00.000Z',
       status: 'published',
-      topic: DETAIL_TOPIC,
+      title: DETAIL_TOPIC,
       error: null,
       publishedAt: '2026-10-01T20:05:00.000Z',
       taskId: DETAIL_TASK_ID,
@@ -140,7 +140,7 @@ describe('Posts video detail', () => {
     cy.contains('button', /Histórico|History/).click();
 
     // Open the post card by exact href — a bare `a[href^="/posts/"]`
-    // matches /posts/new first and lands on the creation page instead.
+    // would also match the list page itself.
     cy.get(`a[href="/posts/${DETAIL_SLOT_ID}"]`).first().click();
     cy.url().should('match', new RegExp(`/posts/${DETAIL_SLOT_ID}$`));
 

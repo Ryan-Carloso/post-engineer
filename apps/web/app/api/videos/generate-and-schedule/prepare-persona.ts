@@ -33,7 +33,7 @@ export const ROUTE = 'POST /api/videos/generate-and-schedule';
 
 /** Persona niche cap, mirroring the persona's own validation. Shared with
  *  route.ts's input validation so both spell one limit. */
-export const MAX_TOPIC_CHARS = 300;
+export const MAX_TITLE_CHARS = 300;
 
 /** Structured failure: stable code + human message + optional field. */
 export function coded(
@@ -113,7 +113,7 @@ export async function preparePersona(
   // Stored persona values reach the engine verbatim: validate the caps here,
   // before the token gate, so a legacy row fails fast instead of opaque-502.
   const niche = (persona.niche as string | null) ?? null;
-  if (niche && niche.trim().length > 0 && niche.length > MAX_TOPIC_CHARS) {
+  if (niche && niche.trim().length > 0 && niche.length > MAX_TITLE_CHARS) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona niche must be at most 300 characters: update the persona.', 'personaId');
   }
   const language = (persona.language as string | null) ?? null;

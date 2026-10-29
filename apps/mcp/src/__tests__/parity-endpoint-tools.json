@@ -79,7 +79,7 @@
     "get_slot"
   ],
   "PATCH /api/schedule/slots/[slotId]": [
-    "update_slot_topic"
+    "update_slot_title"
   ],
   "DELETE /api/schedule/slots/[slotId]": [
     "delete_slot"
@@ -118,7 +118,6 @@
     "publish_video_direct"
   ],
   "POST /api/videos/generate-and-schedule": [
-    "generate_persona_videos",
     "generate_persona_video"
   ],
   "POST /api/videos/validate-script": [

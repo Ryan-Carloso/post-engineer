@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n/provider';
 
 //---------------
 // PersonaTokensSection — face quality + estimated cost per video.
-// Every persona has a face ("no face" is chosen per post, in /posts/new), so
+// Every persona has a face ("no face" is chosen per post, at creation), so
 // there is no 0-100% mix here anymore: the cost is always the whole face,
 // weighted by the chosen quality.
 //---------------

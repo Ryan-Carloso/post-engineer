@@ -430,10 +430,10 @@ describe('api', () => {
         return jsonResponse({
           success: true,
           upcoming: [
-            { id: 'up-1', schedule_id: 's-1', slot_at: '2026-09-24T10:00:00Z', status: 'awaiting', topic: 'T', task_id: 'task-1', progress: 45, stage: null, queuePosition: 2, queueTotal: 3, retryable: null },
+            { id: 'up-1', schedule_id: 's-1', slot_at: '2026-09-24T10:00:00Z', status: 'awaiting', title: 'T', task_id: 'task-1', progress: 45, stage: null, queuePosition: 2, queueTotal: 3, retryable: null },
           ],
           recent: [
-            { id: 're-1', schedule_id: 's-1', slot_at: '2026-09-20T10:00:00Z', status: 'failed', topic: 'O', progress: 80, stage: null, queuePosition: null, queueTotal: null, retryable: true, error: 'boom' },
+            { id: 're-1', schedule_id: 's-1', slot_at: '2026-09-20T10:00:00Z', status: 'failed', title: 'O', progress: 80, stage: null, queuePosition: null, queueTotal: null, retryable: true, error: 'boom' },
           ],
         });
       }
@@ -455,37 +455,37 @@ describe('api', () => {
   });
 
   //---------------
-  // Per-slot operations (Posts page: edit topic, delete scheduled slot).
+  // Per-slot operations (Posts page: edit title, delete scheduled slot).
   //---------------
 
-  it('updateSlotTopic PATCHes /api/schedule/slots/:id with the topic', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ success: true, topic: 'Novo tema' }));
-    const { updateSlotTopic } = await import('@/lib/api');
-    const topic = await updateSlotTopic('slot-1', 'Novo tema');
-    expect(topic).toBe('Novo tema');
+  it('updateSlotTitle PATCHes /api/schedule/slots/:id with the title', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ success: true, title: 'Novo tema' }));
+    const { updateSlotTitle } = await import('@/lib/api');
+    const title = await updateSlotTitle('slot-1', 'Novo tema');
+    expect(title).toBe('Novo tema');
     expect(fetch).toHaveBeenCalledWith(
       '/api/schedule/slots/slot-1',
       expect.objectContaining({ method: 'PATCH' }),
     );
   });
 
-  it('updateSlotTopic throws on failure', async () => {
+  it('updateSlotTitle throws on failure', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonResponse({ success: false, error: 'Only a slot that has not started generating can be edited.' }, false, 409),
     );
-    const { updateSlotTopic } = await import('@/lib/api');
-    await expect(updateSlotTopic('slot-1', 'x')).rejects.toThrow('Only a slot that has not started generating can be edited.');
+    const { updateSlotTitle } = await import('@/lib/api');
+    await expect(updateSlotTitle('slot-1', 'x')).rejects.toThrow('Only a slot that has not started generating can be edited.');
   });
 
-  it('updateSlotTopic throws a clean error (not parse noise) on a non-JSON error body', async () => {
+  it('updateSlotTitle throws a clean error (not parse noise) on a non-JSON error body', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response('<html><body>Bad Gateway</body></html>', {
         status: 502,
         headers: { 'content-type': 'text/html' },
       }),
     );
-    const { updateSlotTopic } = await import('@/lib/api');
-    await expect(updateSlotTopic('slot-1', 'x')).rejects.toThrow('Failed to update slot');
+    const { updateSlotTitle } = await import('@/lib/api');
+    await expect(updateSlotTitle('slot-1', 'x')).rejects.toThrow('Failed to update slot');
   });
 
   it('deleteSlot calls DELETE /api/schedule/slots/:id and throws on failure', async () => {
@@ -514,7 +514,7 @@ describe('api', () => {
 
     const { result: updateResult } = renderHook(() => useUpdateSlotMutation(), { wrapper });
     await act(async () => {
-      await updateResult.current.mutateAsync({ slotId: 'slot-1', topic: 'Novo tema' });
+      await updateResult.current.mutateAsync({ slotId: 'slot-1', title: 'Novo tema' });
     });
     const { result: deleteResult } = renderHook(() => useDeleteSlotMutation(), { wrapper });
     await act(async () => {
@@ -524,7 +524,7 @@ describe('api', () => {
     const invalidatedKeys = invalidateSpy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] })?.queryKey);
     expect(invalidatedKeys).toContainEqual(['fill-schedule-status']);
     // The detail page reads ['post-detail', slotId] with a 30s staleTime —
-    // a topic save must invalidate it too or the page shows the old topic.
+    // a title save must invalidate it too or the page shows the old title.
     expect(invalidatedKeys).toContainEqual(['post-detail', 'slot-1']);
     invalidateSpy.mockRestore();
   });
@@ -540,7 +540,7 @@ describe('api', () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,
       kind: 'slot',
-      slot: { id: 'slot-1', scheduleId: 's1', slotAt: '2030-06-01T10:00:00.000Z', status: 'awaiting', topic: 'T', error: null, publishedAt: null, taskId: null, progress: 0, stage: null, retryable: null },
+      slot: { id: 'slot-1', scheduleId: 's1', slotAt: '2030-06-01T10:00:00.000Z', status: 'awaiting', title: 'T', error: null, publishedAt: null, taskId: null, progress: 0, stage: null, retryable: null },
       schedule: { id: 's1', personaId: 'p1', providers: ['youtube'], youtubeAccountIds: ['ch1'], instagramAccountIds: [], linkedinAccountIds: [] },
       persona: { id: 'p1', name: 'Viva Leve' },
     }));

@@ -11,7 +11,7 @@ import { handleLibraryCall, type McpToolResponse } from './tools.js';
 //
 // Extracted from tools.ts so the tools module stays under the file-size
 // ratchet. Since issue #212, omitting all four provider account-id fields
-// in generate_persona_videos falls back to the persona's default publishing
+// in generate_persona_video falls back to the persona's default publishing
 // accounts (set via set_persona_publishing_accounts); explicit ids always
 // win.
 //---------------

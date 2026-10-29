@@ -23,7 +23,7 @@ export const GetPostShape = {
     .string()
     .min(1, 'id is required')
     .describe(
-      'A post id of either kind: a slot id (slotId from list_posts / generate_persona_videos) or a generation id (generationId from list_video_generations). The server resolves which one it is.',
+      'A post id of either kind: a slot id (slotId from list_posts / generate_persona_video) or a generation id (generationId from list_video_generations). The server resolves which one it is.',
     ),
 };
 

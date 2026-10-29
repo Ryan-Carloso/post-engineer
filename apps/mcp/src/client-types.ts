@@ -47,7 +47,7 @@ export interface CreatePersonaInput {
   imagePrimaryIndex?: number;
 }
 
-export interface GeneratePersonaVideosInput {
+export interface GeneratePersonaVideoInput {
   /**
    * Optional. Omit it for a faceless post defined entirely by `options` —
    * the persona is then not just a face: it is where the voice, the script
@@ -55,21 +55,20 @@ export interface GeneratePersonaVideosInput {
    * MUST set options.faceless and one of options.voiceId / options.audioUrl.
    */
   personaId?: string;
-  /** One topic per video, 1-10. */
-  topics: string[];
+  /** The slot label for the single video. */
+  title: string;
   providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky')[];
   youtubeAccountIds?: string[];
   instagramAccountIds?: string[];
   linkedinAccountIds?: string[];
   blueskyAccountIds?: string[];
   /**
-   * Publish mode. 'scheduled' (default) distributes publish slots across
-   * startAt + times; 'asap' publishes each video the moment generation
-   * finishes, with no scheduled time. In 'asap' mode startAt/times must not
-   * be set.
+   * Publish mode. 'scheduled' (default) slots the video at startAt + times;
+   * 'asap' publishes it the moment generation finishes, with no scheduled
+   * time. In 'asap' mode startAt/times must not be set.
    */
   mode?: 'scheduled' | 'asap';
-  /** ISO datetime when the first publish slot may start; naive values are wall-clock in timezone. Required unless mode is 'asap'. */
+  /** ISO datetime when the publish slot may start; naive values are wall-clock in timezone. Required unless mode is 'asap'. */
   startAt?: string;
   /** Daily publish times (HH:MM, 24h). Required unless mode is 'asap'. */
   times?: string[];

@@ -108,9 +108,8 @@ in it is invented beyond the PR input above.
 - `generate_persona_video` (the one call that debits tokens).
 - `get_video_task_progress`, `get_video_status` (polling and final URL).
 
-No new MCP tool is introduced by this prompt. The batch tool
-`generate_persona_videos` is deliberately not used: one PR is one video,
-one singular call.
+No new MCP tool is introduced by this prompt. There is no batch tool:
+one PR is one video, one singular call.
 
 ## Discovery
 

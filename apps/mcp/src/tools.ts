@@ -5,15 +5,15 @@ import {
   CancelScheduleShape,
   DeleteSlotSchema,
   DeleteSlotShape,
-  GeneratePersonaVideosOptionsShape,
+  GeneratePersonaVideoOptionsShape,
   GetSlotSchema,
   GetSlotShape,
   ListPostsSchema,
   ListPostsShape,
   ListSchedulesSchema,
   ListSchedulesShape,
-  UpdateSlotTopicSchema,
-  UpdateSlotTopicShape,
+  UpdateSlotTitleSchema,
+  UpdateSlotTitleShape,
 } from './schedule-shapes.js';
 
 // Re-exported so existing import sites (`./tools.js`) keep working.
@@ -22,15 +22,15 @@ export {
   CancelScheduleShape,
   DeleteSlotSchema,
   DeleteSlotShape,
-  GeneratePersonaVideosOptionsShape,
+  GeneratePersonaVideoOptionsShape,
   GetSlotSchema,
   GetSlotShape,
   ListPostsSchema,
   ListPostsShape,
   ListSchedulesSchema,
   ListSchedulesShape,
-  UpdateSlotTopicSchema,
-  UpdateSlotTopicShape,
+  UpdateSlotTitleSchema,
+  UpdateSlotTitleShape,
 };
 import type { PostEngineerClient } from './client.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
@@ -63,12 +63,12 @@ const PersonaLibraryImageInputShape = z.object(LibraryImageFields);
 export const CreatePersonaShape = {
   name: z.string().min(1, 'Name is required').describe('Name of the persona'),
   // REQUIRED: every persona has a face. A video without one is a per-video
-  // choice (generate_persona_videos options.faceless), never a persona one.
+  // choice (generate_persona_video options.faceless), never a persona one.
   avatarUrl: z
     .string()
     .url()
     .describe(
-      'REQUIRED. Public URL to the persona avatar image (use list_faces for stock face URLs). Every persona has a face; "no face" is chosen per video with generate_persona_videos options.faceless.',
+      'REQUIRED. Public URL to the persona avatar image (use list_faces for stock face URLs). Every persona has a face; "no face" is chosen per video with generate_persona_video options.faceless.',
     ),
   voiceId: z.string().min(1, 'voiceId is required').describe('Voice ID to use (see list_voices)'),
   language: z
@@ -85,7 +85,7 @@ export const CreatePersonaShape = {
     ),
   scriptPrompt: z.string().optional().default('').describe('System prompt instructions for video scripts'),
   paragraphNumber: z.number().int().min(1).max(10).default(1).describe('Number of paragraphs'),
-  niche: z.string().optional().default('General').describe('Content niche topic'),
+  niche: z.string().optional().default('General').describe('Content niche'),
   faceQuality: z.enum(['ok', 'very_good']).default('very_good').describe('Face resolution of the rendered videos: ok (480p, 2 tokens/video) or very_good (720p, 3 tokens/video)'),
   images: z.array(PersonaLibraryImageInputShape).max(MAX_LIBRARY_IMAGES).optional().describe(`Up to ${MAX_LIBRARY_IMAGES} local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag.`),
   imagePrimaryIndex: z.number().int().min(0).max(MAX_LIBRARY_IMAGES - 1).optional().describe('Index into images[] marking the primary library image (no primary is set when omitted)'),
@@ -129,7 +129,7 @@ export const UpdatePersonaShape = {
   videoLayout: z.enum(VIDEO_LAYOUTS).optional().describe('New persona-hook layout (standard or react)'),
   scriptPrompt: z.string().optional().describe('New system prompt instructions for video scripts'),
   paragraphNumber: z.number().int().min(1).max(10).optional().describe('New number of paragraphs'),
-  niche: z.string().max(300).optional().describe('New content niche topic'),
+  niche: z.string().max(300).optional().describe('New content niche'),
 };
 
 export const UpdatePersonaSchema = z.object(UpdatePersonaShape);
@@ -145,7 +145,6 @@ export const ConnectAccountShape = {
 };
 
 export const ConnectAccountSchema = z.object(ConnectAccountShape);
-
 
 export const ListVideoGenerationsShape = {
   limit: z
@@ -223,70 +222,6 @@ export const DisconnectAccountSchema = z.object(DisconnectAccountShape);
 export const GetTokenBalanceShape = {};
 
 export const GetTokenBalanceSchema = z.object(GetTokenBalanceShape);
-
-// Shared per-provider account-id fields for generate_persona_videos.
-// Defined once so the four provider blocks can't drift apart; the server
-// enforces which providers need accounts, the client only maps them.
-const PublishingAccountIdsShape = {
-  youtubeAccountIds: z.array(z.string().min(1)).optional().describe('YouTube channel IDs (the channelId field from list_social_accounts). Required when providers includes youtube, unless the persona has default publishing accounts.'),
-  instagramAccountIds: z.array(z.string().min(1)).optional().describe('Instagram account IDs (the igUserId field from list_social_accounts). Required when providers includes instagram, unless the persona has default publishing accounts.'),
-  linkedinAccountIds: z.array(z.string().min(1)).optional().describe('LinkedIn account IDs (the providerAccountId field from list_social_accounts). Required when providers includes linkedin, unless the persona has default publishing accounts.'),
-  blueskyAccountIds: z.array(z.string().min(1)).optional().describe('Bluesky DIDs (the did field from list_social_accounts). Required when providers includes bluesky, unless the persona has default publishing accounts.'),
-};
-
-export const GeneratePersonaVideosShape = {
-  // Optional since migration 012: a faceless post can be defined entirely by
-  // options. A persona is not only a face — it is where the voice, the script
-  // prompt, the aspect ratio and the niche come from, so a post without one
-  // must supply them (or at least a voice) via options.
-  personaId: z
-    .string()
-    .min(1, 'personaId must be a non-empty string when provided')
-    .optional()
-    .describe('The persona to generate videos with. Omit for a faceless post with no persona: in that case set options.faceless and options.voiceId (or options.audioUrl), plus options.scriptPrompt / videoAspect / language / niche as needed. With a persona these options still override it.'),
-  // The array bounds live in the shape (not a .refine): the MCP SDK parses
-  // tool args against the raw shape, so a whole-object refine would be a
-  // hollow claim on the tool path (round 26 learning).
-  topics: z
-    .array(z.string().min(1, 'Each topic must be a non-empty string'))
-    .min(1, 'Provide at least one video topic')
-    .max(10, 'At most 10 topics per call')
-    .describe('Video topics, one per video (1-10). In scheduled mode the server assigns each topic a publish slot: topic i goes to day startAt\'s date + floor(i/times.length) at the i-th sorted time. In asap mode each video publishes the moment its generation finishes.'),
-  providers: z
-    .array(z.enum(['youtube', 'instagram', 'linkedin', 'bluesky']))
-    .min(1, 'Provide at least one provider')
-    .describe('Where to publish the videos.'),
-  ...PublishingAccountIdsShape,
-  // Publish mode: 'scheduled' (default) distributes publish slots across
-  // startAt + times; 'asap' publishes each video the moment generation
-  // finishes, with no scheduled time. In asap mode startAt and times must
-  // NOT be set (the handler fails fast on a stray plan).
-  mode: z
-    .enum(['scheduled', 'asap'])
-    .default('scheduled')
-    .describe("Publish mode: 'scheduled' (default) slots each video across startAt + times; 'asap' publishes each video the moment generation finishes, with no scheduled time — do not set startAt or times."),
-  startAt: z
-    .string()
-    .refine((value) => !Number.isNaN(Date.parse(value)), {
-      message: 'startAt must be a valid ISO datetime (e.g. "2026-10-02T20:00:00")',
-    })
-    .optional()
-    .describe('When the first publish slot may start: ISO datetime. A naive "2026-10-02T20:00:00" is wall-clock in timezone. Required unless mode is \'asap\'. Slots before startAt are skipped; every slot must be 3h–30d ahead.'),
-  times: z
-    .array(
-      z
-        .string()
-        .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Each time must be HH:MM in 24-hour format (e.g. "09:30", "20:00")')
-    )
-    .min(1, 'Provide at least one publish time')
-    .optional()
-    .describe('Daily publish times in HH:MM 24-hour format. Required unless mode is \'asap\'.'),
-  timezone: z.string().min(1).default('UTC').describe('IANA timezone for a naive startAt and the HH:MM times, e.g. "Europe/Lisbon". Defaults to UTC. Display-only when mode is \'asap\'.'),
-  options: z.object(GeneratePersonaVideosOptionsShape).optional().describe('Generation options applied to the videos in this call.'),
-  idempotencyKey: z.string().min(1).optional().describe('Idempotency key: retrying the call with the same key returns the original schedule (replayed: true) instead of generating again. A UUID is generated automatically when omitted.'),
-};
-
-export const GeneratePersonaVideosSchema = z.object(GeneratePersonaVideosShape);
 
 export const ListPersonaImagesShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona whose image library to list'),
@@ -534,7 +469,7 @@ export async function handleGetSlot(
   try {
     const narrowed = narrowSlotDetail(await client.getSlot(args.slotId));
     const slot = narrowed.slot;
-    const humanSummary = `Slot ${slot.id ?? args.slotId}: "${slot.topic ?? '(untitled)'}" — ${slot.status ?? 'unknown'}, scheduled for ${slot.slotAt ?? '(unscheduled)'}.`;
+    const humanSummary = `Slot ${slot.id ?? args.slotId}: "${slot.title ?? '(untitled)'}" — ${slot.status ?? 'unknown'}, scheduled for ${slot.slotAt ?? '(unscheduled)'}.`;
     return {
       content: [
         {
@@ -571,20 +506,20 @@ export async function handleGetSlot(
   }
 }
 
-export async function handleUpdateSlotTopic(
+export async function handleUpdateSlotTitle(
   client: PostEngineerClient,
-  args: z.infer<typeof UpdateSlotTopicSchema>
+  args: z.infer<typeof UpdateSlotTitleSchema>
 ): Promise<McpToolResponse> {
   try {
-    const result = (await client.updateSlotTopic(args.slotId, args.topic)) as {
-      topic?: unknown;
+    const result = (await client.updateSlotTitle(args.slotId, args.title)) as {
+      title?: unknown;
     };
-    const topic = typeof result.topic === 'string' ? result.topic : args.topic;
+    const title = typeof result.title === 'string' ? result.title : args.title;
     return {
       content: [
         {
           type: 'text',
-          text: `Slot ${args.slotId} topic updated to "${topic}".\n${JSON.stringify({ success: true, topic }, null, 2)}`,
+          text: `Slot ${args.slotId} title updated to "${title}".\n${JSON.stringify({ success: true, title }, null, 2)}`,
         },
       ],
     };
@@ -594,7 +529,7 @@ export async function handleUpdateSlotTopic(
         content: [
           {
             type: 'text',
-            text: `Error updating slot topic: ${JSON.stringify({
+            text: `Error updating slot title: ${JSON.stringify({
               code: error.code,
               message: sanitizeEngineError(getErrorMessage(error)),
               field: error.field,
@@ -608,7 +543,7 @@ export async function handleUpdateSlotTopic(
       content: [
         {
           type: 'text',
-          text: `Error updating slot topic: ${getErrorMessage(error)}`,
+          text: `Error updating slot title: ${getErrorMessage(error)}`,
         },
       ],
       isError: true,
@@ -961,7 +896,7 @@ function narrowDeletePreview(result: unknown): {
   };
   videos: Array<{
     taskId: string | null;
-    topic: string | null;
+    title: string | null;
     status: string | null;
     downloadUrl: string | null;
   }>;
@@ -1004,7 +939,7 @@ function narrowDeletePreview(result: unknown): {
           : {};
       return {
         taskId: str(v.taskId),
-        topic: str(v.topic),
+        title: str(v.title),
         status: str(v.status),
         downloadUrl: str(v.downloadUrl),
       };
@@ -1073,7 +1008,7 @@ function narrowSlotDetail(result: unknown): {
     scheduleId: string | null;
     slotAt: string | null;
     status: string | null;
-    topic: string | null;
+    title: string | null;
     taskId: string | null;
     progress: number | null;
     stage: string | null;
@@ -1117,7 +1052,7 @@ function narrowSlotDetail(result: unknown): {
       scheduleId: str(slot.scheduleId),
       slotAt: str(slot.slotAt),
       status: str(slot.status),
-      topic: str(slot.topic),
+      title: str(slot.title),
       taskId: str(slot.taskId),
       progress: num(slot.progress),
       stage: str(slot.stage),
@@ -1275,142 +1210,6 @@ export async function handleGetVideoTaskProgress(
     async () => narrowTaskProgress(await client.getVideoStatus(args.taskId)),
     'fetching video task progress'
   );
-}
-
-export async function handleGeneratePersonaVideos(
-  client: PostEngineerClient,
-  args: z.infer<typeof GeneratePersonaVideosSchema>
-): Promise<McpToolResponse> {
-  try {
-    // The MCP SDK parses tool args against the raw shape, so a whole-object
-    // refine would be a hollow claim on the tool path (round 26 learning):
-    // the mode/plan consistency rule lives here instead, where it always
-    // runs. A stray schedule plan 400s server-side; name the rule before
-    // the client fires.
-    const mode = args.mode ?? 'scheduled';
-    if (mode === 'asap' && (args.startAt !== undefined || args.times !== undefined)) {
-      throw new Error("startAt and times must not be set when mode is 'asap'.");
-    }
-    if (mode === 'scheduled' && (args.startAt === undefined || args.times === undefined)) {
-      throw new Error("startAt and times are required when mode is 'scheduled'.");
-    }
-    const narrowed = narrowScheduledVideos(
-      await client.generatePersonaVideos({
-        personaId: args.personaId,
-        topics: args.topics,
-        providers: args.providers,
-        youtubeAccountIds: args.youtubeAccountIds,
-        instagramAccountIds: args.instagramAccountIds,
-        linkedinAccountIds: args.linkedinAccountIds,
-        blueskyAccountIds: args.blueskyAccountIds,
-        mode,
-        startAt: args.startAt,
-        times: args.times,
-        timezone: args.timezone,
-        options: args.options,
-        idempotencyKey: args.idempotencyKey,
-      })
-    );
-    // Keeps its own try/catch (like handleConnectAccount): success renders a
-    // concise human summary plus the machine JSON, and API errors surface
-    // the structured { code, message, field } — the handleLibraryCall
-    // wrapper covers neither.
-    const slotCount = narrowed.slots.length;
-    const scheduleId = narrowed.schedule.id ?? '(unknown id)';
-    const humanSummary = narrowed.replayed
-      ? `Replayed idempotent schedule ${scheduleId}: ${slotCount} publish slot(s) (no new videos generated).`
-      : narrowed.schedule.mode === 'asap'
-        ? `Generating ${slotCount} video(s) in schedule ${scheduleId}: each video publishes as soon as its generation finishes (ASAP mode).`
-        : `Scheduled ${slotCount} video(s) in schedule ${scheduleId}: each video is generated and auto-published at its slot.`;
-    const slotLines = narrowed.slots.map(
-      (slot, i) =>
-        `${i + 1}. ${slot.topic ?? '(untitled)'} → ${slot.slotAt ?? '(unscheduled)'} [${slot.status ?? 'unknown'}${slot.taskId ? `, task ${slot.taskId}` : ''}]`
-    );
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `${humanSummary}\n${slotLines.join('\n')}\n${JSON.stringify(narrowed, null, 2)}`,
-        },
-      ],
-    };
-  } catch (error) {
-    // The API error contract carries a stable code: surface it as
-    // { code, message, field } JSON instead of rewording the platform's
-    // own human message — never a bare "Tool execution failed". The
-    // message is capped at 200 chars by the client and credential-shaped
-    // fragments are redacted before reaching the agent.
-    if (error instanceof ApiError && error.code !== null) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error generating and scheduling videos: ${JSON.stringify({
-              code: error.code,
-              message: sanitizeEngineError(getErrorMessage(error)),
-              field: error.field,
-            })}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error generating and scheduling videos: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/** Narrows the generate-and-schedule success envelope to the fields the
- * tool contract promises: the schedule id and publish mode, one row per
- * publish slot, and the replayed flag. Anything the API adds later rides
- * through unparsed — the projection only pins what the tool renders and
- * documents. */
-function narrowScheduledVideos(result: unknown): {
-  schedule: { id: string | null; mode: string | null };
-  slots: Array<{
-    slotId: string | null;
-    slotAt: string | null;
-    topic: string | null;
-    taskId: string | null;
-    status: string | null;
-  }>;
-  replayed: boolean | null;
-} {
-  const record =
-    typeof result === 'object' && result !== null
-      ? (result as Record<string, unknown>)
-      : {};
-  const schedule =
-    typeof record.schedule === 'object' && record.schedule !== null
-      ? (record.schedule as Record<string, unknown>)
-      : {};
-  const rawSlots = Array.isArray(record.slots) ? record.slots : [];
-  const str = (value: unknown): string | null =>
-    typeof value === 'string' ? value : null;
-  return {
-    schedule: { id: str(schedule.id), mode: str(schedule.mode) },
-    slots: rawSlots.map((slot) => {
-      const s =
-        typeof slot === 'object' && slot !== null
-          ? (slot as Record<string, unknown>)
-          : {};
-      return {
-        slotId: str(s.slotId),
-        slotAt: str(s.slotAt),
-        topic: str(s.topic),
-        taskId: str(s.taskId),
-        status: str(s.status),
-      };
-    }),
-    replayed: typeof record.replayed === 'boolean' ? record.replayed : null,
-  };
 }
 
 export const PublishVideoDirectShape = {

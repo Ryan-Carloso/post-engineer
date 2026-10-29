@@ -76,7 +76,7 @@ function mockSupabase(handlers: {
   const rpcCalls: { name: string; params: unknown }[] = [];
   const selectArgs: string[] = [];
   // Column list requested by the scheduled_posts insert's .select() —
-  // pins that the route reads back id, topic AND slot_at (MINOR 7).
+  // pins that the route reads back id, title AND slot_at (MINOR 7).
   const slotSelectArgs: string[] = [];
   const slotDeleteFilters: Record<string, unknown>[] = [];
   let slotReads = 0;

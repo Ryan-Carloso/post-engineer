@@ -2,10 +2,10 @@
 // Video full flow — the complete journey the product owner described:
 //  1. the user creates a persona (real /persona UI),
 //  2. the user connects a social network (mocked Bluesky form, no OAuth),
-//  3. the user creates a video via /posts/new — creation REQUIRES scheduling,
-//     so the schedule is mocked for "tomorrow",
-//  4. the generation progress screen appears and the user waits,
-//  5. the "video generated" screen shows the video to the user.
+//  3. the generation progress screen appears and the user waits,
+//  4. the "video generated" screen shows the video to the user.
+//  (Creation itself is API/MCP-only since Phase 4 removed /posts/new,
+//  so the flow starts from an already-created slot's detail screens.)
 //
 // Only what cannot run in CI is mocked: the social connection, the
 // generate-and-schedule call (it would spend tokens and hit the real
@@ -80,7 +80,7 @@ function slotRow(overrides: Record<string, unknown> = {}) {
     schedule_id: SCHEDULE_ID,
     slot_at: `${tomorrowDateInput()}T20:00:00.000Z`,
     status: 'generating',
-    topic: TOPIC,
+    title: TOPIC,
     error: null,
     published_at: null,
     task_id: E2E_TASK_ID,
@@ -106,7 +106,7 @@ function slotDetail(status: 'generating' | 'ready', progress: number, stage: str
       scheduleId: SCHEDULE_ID,
       slotAt: `${tomorrowDateInput()}T20:00:00.000Z`,
       status,
-      topic: TOPIC,
+      title: TOPIC,
       error: null,
       publishedAt: null,
       taskId: E2E_TASK_ID,
@@ -159,7 +159,7 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
       body: { authenticated: true, personas: [PERSONA] },
     }).as('personaList');
 
-    // Social accounts for /accounts and /posts/new (filtered per provider
+    // Social accounts for /accounts (filtered per provider
     // by fetchProviderAccounts from this single response).
     cy.intercept('GET', '/api/account', (req) => {
       req.reply({
@@ -237,100 +237,7 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     cy.contains(BLUESKY_ACCOUNT.handle).should('be.visible');
   });
 
-  it('3 — cria e agenda o vídeo para amanhã (agendar é obrigatório)', () => {
-    const startAtDate = tomorrowDateInput();
-    cy.intercept('POST', '/api/videos/generate-and-schedule', (req) => {
-      console.log('[DEBUG] Create and schedule request body:', req.body);
-      req.reply({
-        statusCode: 200,
-        body: {
-          success: true,
-          schedule: { id: SCHEDULE_ID },
-          slots: [
-            {
-              slotId: SLOT_ID,
-              slotAt: `${startAtDate}T20:00:00.000Z`,
-              topic: TOPIC,
-              taskId: E2E_TASK_ID,
-              status: 'generating',
-            },
-          ],
-          replayed: false,
-          error: null,
-          code: null,
-          need: null,
-          have: null,
-        },
-      });
-    }).as('createPost');
-
-    // The success navigation lands on the new post's own page, whose detail
-    // query must be stubbed like the later tests do — the create above is
-    // stubbed, so no real slot exists for the real backend to return.
-    cy.intercept('GET', `/api/posts/${SLOT_ID}`, {
-      statusCode: 200,
-      body: { ...slotDetail('generating', 0, null), kind: 'slot' },
-    }).as('slotDetail');
-
-    // From here on the account is connected for this test.
-    blueskyConnected = true;
-
-    cy.visit('/posts/new');
-    cy.wait('@personaList');
-
-    // Real UI: pick the persona card, type one topic, select the Bluesky
-    // account, set the first publication for tomorrow 20:00.
-    cy.contains('label', PERSONA.name).click();
-    // The click must actually select: assert the store-backed selected state
-    // instead of discovering a silent no-op at the submit wait.
-    cy.get('label[data-selected="true"]').should('contain', PERSONA.name);
-    cy.get('input[aria-label="Tema"]').type(TOPIC);
-    cy.contains('[data-testid="account-card"]', BLUESKY_ACCOUNT.handle).click();
-    cy.get('[data-testid="account-card-select"]').should('be.checked');
-    // A datetime-local input does not take .type() reliably (its segments
-    // are filled per keystroke). Set the value through the native prototype
-    // setter and dispatch a native 'input' event: React's onChange listens
-    // to 'input' (not 'change'), and assigning .value directly trips React's
-    // value tracker, which then swallows the event and the store never
-    // updates — the submit validation rejects with no request fired.
-    cy.get('input[type="datetime-local"]').then(($input) => {
-      const el = $input[0] as HTMLInputElement;
-      const view = el.ownerDocument.defaultView;
-      if (!view) throw new Error('datetime input has no defaultView');
-      const setter = Object.getOwnPropertyDescriptor(view.HTMLInputElement.prototype, 'value')?.set;
-      if (!setter) throw new Error('native input value setter not found');
-      setter.call(el, `${startAtDate}T20:00`);
-      el.dispatchEvent(new view.Event('input', { bubbles: true }));
-    });
-    cy.get('input[type="datetime-local"]').should('have.value', `${startAtDate}T20:00`);
-    // The schedule preview renders only once persona, topics and date are
-    // all in the store — the honest gate before submitting.
-    cy.contains('Preencha persona, temas e data para ver a prévia.').should('not.exist');
-
-    cy.contains('button', 'Agendar posts').click();
-
-    cy.wait('@createPost').then((interception) => {
-      const body = interception.request.body as Record<string, unknown>;
-      const publishing = body.publishing as Record<string, unknown>;
-      const schedule = publishing.schedule as Record<string, unknown>;
-      expect(body.personaId, 'persona').to.eq(PERSONA.id);
-      expect(body.topics, 'topics').to.deep.eq([TOPIC]);
-      expect(publishing.providers, 'providers').to.deep.eq(['bluesky']);
-      expect(
-        (publishing.accounts as Record<string, string[]>).bluesky,
-        'accounts',
-      ).to.deep.eq([BLUESKY_ACCOUNT.did]);
-      // The schedule is mocked for "tomorrow": the request must carry it.
-      expect(String(schedule.startAt), 'schedule startAt').to.contain(startAtDate);
-    });
-
-    // Success opens the created post's own page (single-topic form, #116),
-    // where the video and its live progress live.
-    cy.url().should('match', /\/posts\/slot-e2e-1$/);
-    cy.contains(TOPIC).should('be.visible');
-  });
-
-  it('4 — mostra a tela de progresso enquanto o vídeo está sendo gerado', () => {
+  it('3 — mostra a tela de progresso enquanto o vídeo está sendo gerado', () => {
     // First poll: still generating. The detail endpoint 404s on the
     // generations route, so the slot view is the one rendered.
     cy.intercept('GET', `/api/posts/${SLOT_ID}`, {
@@ -348,7 +255,7 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     cy.contains('O vídeo está sendo gerado agora.').should('be.visible');
   });
 
-  it('5 — mostra o vídeo quando a geração completa', () => {
+  it('4 — mostra o vídeo quando a geração completa', () => {
     // Later poll: ready with a task id — the mocked engine progress.
     cy.intercept('GET', `/api/posts/${SLOT_ID}`, {
       statusCode: 200,

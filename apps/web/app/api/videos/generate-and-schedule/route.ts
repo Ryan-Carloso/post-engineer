@@ -2,15 +2,15 @@
 // POST /api/videos/generate-and-schedule — the single generate+schedule operation.
 //
 // Product rule: a video and its publishing schedule are always born together.
-// One request carries 1–10 topics, a persona, publishing destinations and a
-// publish-time plan. The API validates everything, charges the total token
-// cost atomically, creates the schedule + slots, dispatches one engine
-// generation per slot and binds each task_id to its slot.
+// One request carries a title, a complete segments script, a persona and a
+// publish-time plan. The API validates everything, charges the single video,
+// creates the schedule + its one slot and dispatches one engine generation.
+// The topics input is rejected with a 400 naming the field — never mapped.
 //
 // Backend flow: validate input -> auth -> rate limit -> persona scope +
 // ownership -> providers + accounts -> distribute slots -> window check
 // -> cost -> idempotency pre-checks -> ONE atomic spend_tokens -> insert
-// schedule -> insert slots -> dispatch engine tasks per slot.
+// schedule -> insert slot -> dispatch engine task.
 //---------------
 
 import { NextResponse } from 'next/server';
@@ -33,10 +33,10 @@ import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber } from '@/lib/tokens';
 import { buildSlotRows } from './slot-rows';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
-import { validateTopics } from './topics-validation';
 import { validateSegmentsRequest } from './segments-validation';
+import { rejectTopicsKey, resolveTitle } from './request-title';
 import {
-  MAX_TOPIC_CHARS,
+  MAX_TITLE_CHARS,
   persistVoiceSwap,
   preparePost,
   SlotDispatchError,
@@ -64,7 +64,6 @@ import { VOICE_FALLBACK_WARNING_CODE } from '@/lib/voice-fallback';
 import { ensureEngineImageUrl } from '@/lib/engine-image-url';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-// Shared with the /posts/new form so the UI cap and the API cap can't drift.
 const ROUTE = 'POST /api/videos/generate-and-schedule';
 const MAX_SCRIPT_PROMPT_CHARS = 2000;
 // Mirrors the engine's PersonaParams caps (apps/engine/app/models/schema.py):
@@ -136,9 +135,12 @@ const OptionsSchema = z
   .optional();
 
 const BodySchema = z.object({
-  // Optional: a faceless post can be defined entirely by options + topic.
+  // Optional: a faceless post can be defined entirely by options + title.
   personaId: z.string().optional(),
-  topics: z.array(z.string()),
+  // The slot label. A `topics` key is rejected explicitly in
+  // postHandler before this parse (a plain zod object would strip it
+  // silently and the caller would think videos were created).
+  title: z.string(),
   publishing: PublishingSchema,
   options: OptionsSchema,
   idempotencyKey: z.string().optional(),
@@ -150,7 +152,7 @@ type Provider = (typeof VALID_SCHEDULE_PROVIDERS)[number];
 interface SlotResult {
   slotId: string;
   slotAt: string;
-  topic: string;
+  title: string;
   taskId: string | null;
   status: string;
   /** Machine code for a failed slot (image_sign_failed, engine_rejected, ...). */
@@ -168,7 +170,7 @@ interface SlotResult {
 interface ValidatedInput {
   /** Null for a post created without a persona (migration 012). */
   personaId: string | null;
-  topics: string[];
+  title: string;
   providers: Provider[];
   accountIds: Record<Provider, string[]>;
   startAt: string;
@@ -212,8 +214,7 @@ function validateProviders(rawProviders: string[]): Provider[] | NextResponse {
 
 function validateOptions(
   options: NonNullable<ParsedBody['options']>,
-  topicCount: number,
-): Omit<ValidatedInput, 'personaId' | 'topics' | 'providers' | 'accountIds' | 'startAt' | 'times' | 'timezone'> | NextResponse {
+): Omit<ValidatedInput, 'personaId' | 'title' | 'providers' | 'accountIds' | 'startAt' | 'times' | 'timezone'> | NextResponse {
   const {
     faceless = false,
     facelessMaterial,
@@ -268,10 +269,10 @@ function validateOptions(
       'options.language',
     );
   }
-  if (niche !== undefined && niche.length > MAX_TOPIC_CHARS) {
+  if (niche !== undefined && niche.length > MAX_TITLE_CHARS) {
     return validationFailed(
       ERROR_CODES.VALIDATION_FAILED,
-      `options.niche must be at most ${MAX_TOPIC_CHARS} characters.`,
+      `options.niche must be at most ${MAX_TITLE_CHARS} characters.`,
       'options.niche',
     );
   }
@@ -283,10 +284,11 @@ function validateOptions(
     );
   }
   if (scriptPrompts !== undefined) {
-    if (scriptPrompts.length !== topicCount) {
+    // One request is one video, so at most one per-video prompt override.
+    if (scriptPrompts.length !== 1) {
       return validationFailed(
         ERROR_CODES.VALIDATION_FAILED,
-        `options.scriptPrompts must have one entry per topic (${topicCount}).`,
+        'options.scriptPrompts must have exactly one entry (one video per request).',
         'options.scriptPrompts',
       );
     }
@@ -334,7 +336,7 @@ function validateSlots(
             ? 'publishing.schedule.timezone'
             : error.field === 'startAt'
               ? 'publishing.schedule.startAt'
-              : 'topics';
+              : 'publishing.schedule';
       const code = error.field === 'times' ? ERROR_CODES.INVALID_SCHEDULE_TIME : ERROR_CODES.VALIDATION_FAILED;
       const message =
         code === ERROR_CODES.INVALID_SCHEDULE_TIME ? formatErrorMessage(code) : error.message;
@@ -379,7 +381,6 @@ interface ResolvedPublishPlan {
 
 function validatePublishMode(
   publishing: ParsedBody['publishing'],
-  topicCount: number,
   now: Date,
 ): ResolvedPublishPlan | NextResponse {
   const mode: PublishMode = publishing.mode ?? 'scheduled';
@@ -399,11 +400,9 @@ function validatePublishMode(
         'publishing.timezone',
       );
     }
-    const slots: DistributedSlot[] = Array.from({ length: topicCount }, (_, i) => ({
-      slotAtISO: now.toISOString(),
-      dayIndex: 0,
-      timeIndex: i,
-    }));
+    const slots: DistributedSlot[] = [
+      { slotAtISO: now.toISOString(), dayIndex: 0, timeIndex: 0 },
+    ];
     return { mode, slots, times: [], timezone };
   }
   if (publishing.schedule === undefined) {
@@ -414,7 +413,7 @@ function validatePublishMode(
     );
   }
   const { schedule } = publishing;
-  const slots = validateSlots(schedule.startAt, schedule.times, schedule.timezone, topicCount);
+  const slots = validateSlots(schedule.startAt, schedule.times, schedule.timezone, 1);
   if (slots instanceof NextResponse) return slots;
   return {
     mode,
@@ -506,7 +505,7 @@ async function fetchReplay(
 ): Promise<NextResponse | null> {
   const { data: slots, error } = await supabase
     .from('scheduled_posts')
-    .select('id, slot_at, topic, task_id, status')
+    .select('id, slot_at, title, task_id, status')
     .eq('schedule_id', scheduleId)
     .eq('user_id', userId)
     .order('slot_at', { ascending: true });
@@ -529,7 +528,7 @@ async function fetchReplay(
     slots: slots.map((row) => ({
       slotId: (row as { id: string }).id,
       slotAt: (row as { slot_at: string }).slot_at,
-      topic: (row as { topic: string }).topic,
+      title: (row as { title: string }).title,
       taskId: (row as { task_id: string | null }).task_id,
       status: (row as { status: string }).status,
     })),
@@ -548,6 +547,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
   } catch {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Invalid JSON payload.');
   }
+  const topicsError = rejectTopicsKey(body);
+  if (topicsError) return topicsError;
   const parsed = BodySchema.safeParse(body);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -560,14 +561,15 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // Null is the only accepted spelling so a caller cannot half-intend a
   // persona by sending an empty string.
   const personaId = parsed.data.personaId?.trim() || null;
-  const topics = validateTopics(parsed.data.topics);
-  if (topics instanceof NextResponse) return topics;
+  const title = resolveTitle(parsed.data.title);
+  if (title instanceof NextResponse) return title;
   // Segments validation runs here, before auth and before any charge.
-  const segmentsScript = validateSegmentsRequest(options?.segments, topics.length);
+  // Segments are required: without a script there is nothing to generate.
+  const segmentsScript = validateSegmentsRequest(options?.segments);
   if (segmentsScript instanceof NextResponse) return segmentsScript;
   const providers = validateProviders(publishing.providers);
   if (providers instanceof NextResponse) return providers;
-  const validatedOptions = validateOptions(options ?? {}, topics.length);
+  const validatedOptions = validateOptions(options ?? {});
   if (validatedOptions instanceof NextResponse) return validatedOptions;
 
   // A post without a persona has no face to render and no voice to speak
@@ -594,7 +596,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // times; asap skips the schedule entirely and lands every slot at the
   // request time, so the engine's tick publishes each video the moment its
   // generation finishes.
-  const plan = validatePublishMode(publishing, topics.length, new Date());
+  const plan = validatePublishMode(publishing, new Date());
   if (plan instanceof NextResponse) return plan;
   const { mode, slots, times, timezone } = plan;
 
@@ -613,8 +615,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (authError || !auth) return authError;
   const userId = auth.userId;
 
-  // 3. Rate limit: one call can mint up to 10 videos, so the profile is
-  // lower than the single video-job one, keyed by user id.
+  // 3. Rate limit: one call mints one video, keyed by user id.
   const limited = await applyRateLimit(request, RATE_LIMITS.generateAndSchedule, userId);
   if (limited) {
     const retryAfter = limited.headers.get('Retry-After') ?? '60';
@@ -633,7 +634,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   trackApiEvent('video_creation_started', {
     userId,
     personaId,
-    numberOfVideos: topics.length,
+    numberOfVideos: 1,
     providers,
     faceless: validatedOptions.faceless,
   });
@@ -670,12 +671,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (accountIds instanceof NextResponse) return accountIds;
 
   // Pinned library image: fail fast when the id does not resolve, before
-  // any charge. Per-topic resolution still happens at dispatch time.
+  // any charge. Per-video resolution still happens at dispatch time.
   const requestedImageId =
     personaId !== null ? (validatedOptions.imageId?.trim() || null) : null;
   if (requestedImageId && personaId !== null) {
     const imageCheck = await resolveVideoImage(supabase, personaId, userId, [], {
-      topic: topics[0],
+      title,
       niche: prep.niche,
       script: prep.scriptPrompt,
       imageId: requestedImageId,
@@ -685,20 +686,20 @@ async function postHandler(request: Request): Promise<NextResponse> {
     }
   }
 
-  // 6. Cost for the whole operation, computed BEFORE the charge.
+  // 6. Cost for the single video, computed BEFORE the charge.
   const perVideoCost = computeVideoTokens(prep.faceless, prep.faceQuality);
-  const totalCost = perVideoCost * topics.length;
+  const totalCost = perVideoCost;
   trackApiEvent('video_creation_validated', {
     userId,
     personaId,
-    numberOfVideos: topics.length,
+    numberOfVideos: 1,
     providers,
     faceless: validatedOptions.faceless,
   });
   trackApiEvent('video_tokens_calculated', {
     userId,
     personaId,
-    numberOfVideos: topics.length,
+    numberOfVideos: 1,
     perVideoCost,
     tokenCost: totalCost,
   });
@@ -793,7 +794,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       p_user_id: userId,
       p_amount: totalCost,
       p_generation_id: idem.generationId,
-      p_reason: `Unified generate+schedule (${topics.length} videos)`,
+      p_reason: 'Unified generate+schedule (1 video)',
     });
     if (spendError) {
       if (violatedConstraint(spendError) !== null) {
@@ -827,7 +828,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   trackApiEvent('video_tokens_spent', {
     userId,
     personaId,
-    numberOfVideos: topics.length,
+    numberOfVideos: 1,
     tokenCost: totalCost,
     generationId: idem.generationId,
   });
@@ -858,7 +859,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     days_of_week: null,
     start_hour: null,
     end_hour: null,
-    posts_per_day: topics.length,
+    posts_per_day: 1,
     times: sortedTimes,
     timezone,
     scheduled_at: null,
@@ -996,18 +997,18 @@ async function postHandler(request: Request): Promise<NextResponse> {
     userId,
     personaId,
     scheduleId: idem.scheduleId,
-    numberOfVideos: topics.length,
+    numberOfVideos: 1,
     providers,
     publishMode: mode,
   });
 
-  // 10. Insert the slots (pending); see slot-rows.ts for the row shape.
+  // 10. Insert the slot (pending); see slot-rows.ts for the row shape.
   const { data: slotRows, error: slotsError } = await supabase
     .from('scheduled_posts')
     .insert(
       buildSlotRows({
         slots,
-        topics,
+        title,
         scheduleId: idem.scheduleId,
         userId,
         faceless: prep.faceless,
@@ -1015,8 +1016,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
         segments: options?.segments,
       }),
     )
-    .select('id, slot_at, topic');
-  if (slotsError || !slotRows || slotRows.length !== topics.length) {
+    .select('id, slot_at, title');
+  if (slotsError || !slotRows || slotRows.length !== 1) {
     // Compensating rollback: nothing may survive half-created. Loud logs;
     // the refund makes the user whole.
     logger.error('[generate-and-schedule] slot insert failed; rolling back schedule', slotsError, {
@@ -1033,27 +1034,26 @@ async function postHandler(request: Request): Promise<NextResponse> {
     trackApiEvent('video_creation_failed', { userId, scheduleId: idem.scheduleId, errorCode: ERROR_CODES.INTERNAL_ERROR, failureStage: 'slot_insert' });
     return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
   }
-  trackApiEvent('video_slots_created', { userId, scheduleId: idem.scheduleId, numberOfVideos: topics.length });
+  trackApiEvent('video_slots_created', { userId, scheduleId: idem.scheduleId, numberOfVideos: 1 });
 
-  // 11. Dispatch one engine generation per slot and bind the task_id.
+  // 11. Dispatch the one engine generation and bind the task_id.
   // A failed slot is an explicit terminal state (failed + refunded), never
-  // an orphan; remaining slots still dispatch.
+  // an orphan.
   const results: SlotResult[] = [];
   let accepted = 0;
   let failed = 0;
   const recentIds: string[] = [];
   for (let i = 0; i < slotRows.length; i += 1) {
-    const slot = slotRows[i] as { id: string; slot_at: string; topic: string };
-    const topic = topics[i];
+    const slot = slotRows[i] as { id: string; slot_at: string; title: string };
     const slotGenerationId = `${idem.generationId}:slot:${slot.id}`;
     try {
-      // Per-topic photo: pinned override or library selection matched to
-      // this topic (faceless skips the face entirely).
+      // Photo for this video: pinned override or library selection matched
+      // to its title (faceless skips the face entirely).
       let photoUrl: string | undefined;
       let pickedImageId: string | null = null;
       if (!validatedOptions.faceless && personaId !== null) {
         const selection = await resolveVideoImage(supabase, personaId, userId, recentIds, {
-          topic,
+          title,
           niche: prep.niche,
           script: prep.scriptPrompt,
           imageId: requestedImageId,
@@ -1106,9 +1106,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
         face_quality: prep.faceQuality,
       };
       const payload = buildJobPayload(jobPersona, {
-        video_subject: topic,
+        video_subject: title,
         video_script: segmentsScript,
-        video_script_prompt: validatedOptions.scriptPrompts?.[i] ?? validatedOptions.scriptPrompt,
+        video_script_prompt: validatedOptions.scriptPrompts?.[0] ?? validatedOptions.scriptPrompt,
         webhook_url: validatedOptions.webhookUrl,
         // generation_id: web-side correlation id for PostHog event joins;
         // slot_id: lets boot orphan triage requeue (not fail) on engine restart.
@@ -1133,7 +1133,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         generationId: slotGenerationId,
         personaId,
         personaName: prep.personaName,
-        videoSubject: topic,
+        videoSubject: title,
         persistence: { params: payload, mode, slotAt: slot.slot_at },
       });
 
@@ -1179,7 +1179,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         recentIds.push(pickedImageId);
       }
 
-      results.push({ slotId: slot.id, slotAt: slot.slot_at, topic, taskId: engineTask.taskId, status: 'generating' });
+      results.push({ slotId: slot.id, slotAt: slot.slot_at, title, taskId: engineTask.taskId, status: 'generating' });
       accepted += 1;
     } catch (error) {
       const dispatchError = error instanceof SlotDispatchError ? error : new SlotDispatchError('slot_failed', 'Video generation failed for this slot.');
@@ -1211,11 +1211,11 @@ async function postHandler(request: Request): Promise<NextResponse> {
       });
       logger.error('[generate-and-schedule] slot dispatch failed', error, {
         slotId: slot.id,
-        topic,
+        title,
         scheduleId: idem.scheduleId,
         errorCode: dispatchError.errorCode,
       });
-      results.push({ slotId: slot.id, slotAt: slot.slot_at, topic, taskId: null, status: 'failed', errorCode: dispatchError.errorCode });
+      results.push({ slotId: slot.id, slotAt: slot.slot_at, title, taskId: null, status: 'failed', errorCode: dispatchError.errorCode });
       failed += 1;
     }
   }
@@ -1248,7 +1248,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       scheduleId: idem.scheduleId,
       errorCode: code,
       failureStage: 'dispatch',
-      numberOfVideos: topics.length,
+      numberOfVideos: 1,
       durationMs,
     });
     return NextResponse.json(
@@ -1261,7 +1261,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     userId,
     personaId,
     scheduleId: idem.scheduleId,
-    numberOfVideos: topics.length,
+    numberOfVideos: 1,
     tasksAccepted: accepted,
     tasksFailed: failed,
     tokenCost: totalCost,

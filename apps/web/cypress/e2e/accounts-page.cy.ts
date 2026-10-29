@@ -152,8 +152,8 @@ describe('Accounts — UI', () => {
     cy.get('[data-testid=account-card]').should('have.length', 1);
     cy.contains('Canal Alpha').should('be.visible');
 
-    // A seleção de contas para publicação vive em /posts/new; em /accounts o
-    // card é somente leitura e o checkbox não é renderizado
+    // A seleção de contas para publicação vive na criação (API/MCP); em
+    // /accounts o card é somente leitura e o checkbox não é renderizado
     // (account-card.tsx só o exibe sem `showDisconnect`).
     cy.get('[data-testid=account-card-select]').should('not.exist');
     cy.get('[data-testid=youtube-disconnect-button]').should('be.visible');

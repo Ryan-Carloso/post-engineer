@@ -99,7 +99,7 @@ describe('GET /api/posts/[id]', () => {
         scheduleId: 'sched-1',
         slotAt: '2026-10-18T10:00:00.000Z',
         status: 'generating',
-        topic: 'myth busting',
+        title: 'myth busting',
         error: null,
         publishedAt: null,
         taskId: 'task-1',

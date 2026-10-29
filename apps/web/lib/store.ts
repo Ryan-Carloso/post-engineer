@@ -10,7 +10,6 @@ import type {
 import { isEnglishLanguage } from '@/lib/language-gate';
 import { SOCIAL_PROVIDERS } from '@/lib/types';
 import type { FaceQuality } from '@/lib/tokens';
-import type { TranslationKey } from '@/lib/i18n';
 
 //---------------
 // UploadStore — global state shared between screens
@@ -199,7 +198,7 @@ export function resolveScriptLanguage(locale: string): ScriptLanguage {
 // PersonaFormState — persona creation screen state
 // (always faced: an uploaded photo OR a chosen character/AI avatar,
 // name, house voice). A video without a face is a per-post choice
-// (NewPostState.faceless), not a persona attribute.
+// (the faceless flag on the generate request), not a persona attribute.
 //---------------
 
 interface PersonaFormState {
@@ -306,166 +305,5 @@ export const usePersonaStore = create<PersonaFormState>()(
       if (videoSubject) formData.append('video_subject', videoSubject);
       return formData;
     },
-  }),
-);
-
-//---------------
-// NewPostState — /posts/new draft (persona, topics, publish plan).
-//
-// Account selection is NOT duplicated here: it lives in useUploadStore
-// (selectedAccountIds), which the accounts screen already writes and the
-// creation screen reads — one selection for the whole app.
-//---------------
-
-export interface NewPostState {
-  /** The selected persona; '' means "none chosen yet", NOT "no persona". */
-  personaId: string;
-  /**
-   * The user explicitly chose "no persona" (migration 012): a faceless post
-   * carrying its own voice. Kept apart from an empty personaId so the form
-   * does not open in persona-less mode before anyone chose anything, and so
-   * "not chosen yet" can still be reported as a missing field.
-   */
-  withoutPersona: boolean;
-  /**
-   * Voice for a post created WITHOUT a persona: with no persona there is no
-   * voice to inherit, and the engine rejects a job that speaks with none.
-   * Unused when a persona is selected — that one supplies its own voice.
-   */
-  voiceId: string;
-  /**
-   * The single video topic. One post mints one video and one publish slot,
-   * so the draft is a string, not a list: a second topic would mean a second
-   * video at another time, which is a second post. The API still takes an
-   * array (`topics: [topic]`) because the MCP tool schedules up to 10 per
-   * call — the form simply does not offer the range.
-   */
-  topic: string;
-  /** Naive "YYYY-MM-DDTHH:mm" wall clock, resolved against `timezone`. */
-  startAt: string;
-  /** Daily publish times as "HH:MM". */
-  times: string[];
-  timezone: string;
-  /**
-   * How the post publishes: 'scheduled' (default) publishes at the slot
-   * times above; 'asap' publishes the video the moment generation finishes,
-   * with no scheduled time (the 3h lead-time window does not apply).
-   */
-  publishMode: 'scheduled' | 'asap';
-  /**
-   * Generate this batch WITHOUT a face: no lipsync, and no persona image
-   * in the library (the persona still supplies the voice, niche and script
-   * prompt — and is still required). Personas are always faced; this is
-   * the only place "no face" lives now.
-   */
-  faceless: boolean;
-  /**
-   * What fills the video, with or without a face: 'broll' (stock footage
-   * only) or 'svg' (catalog illustrations only). Sent on every post; the
-   * two never mix.
-   */
-  facelessMaterial: 'broll' | 'svg';
-  /** Last create outcome, so every local component can render it without
-      props. A projection of api.ts' CreatePostResult (only the fields the UI
-      reads) — declared here so lib/store.ts never imports lib/api.ts, which
-      imports this store (accounts selection) back. */
-  result: NewPostOutcome | null;
-  /** Localized failure key for a client-side rejection (never sent). */
-  validationKey: TranslationKey | null;
-  /** True while the create request is in flight. */
-  pending: boolean;
-  setPersonaId: (personaId: string) => void;
-  /** The persona choice and the persona-less choice are exclusive. */
-  setWithoutPersona: (withoutPersona: boolean) => void;
-  setVoiceId: (voiceId: string) => void;
-  setTopic: (value: string) => void;
-  setStartAt: (value: string) => void;
-  setTime: (index: number, value: string) => void;
-  addTime: () => void;
-  removeTime: (index: number) => void;
-  setTimezone: (value: string) => void;
-  setPublishMode: (mode: 'scheduled' | 'asap') => void;
-  setFaceless: (faceless: boolean) => void;
-  setFacelessMaterial: (facelessMaterial: 'broll' | 'svg') => void;
-  setResult: (result: NewPostOutcome | null) => void;
-  setValidationKey: (key: TranslationKey | null) => void;
-  setPending: (pending: boolean) => void;
-  reset: () => void;
-}
-
-/** The slice of the create response the screen renders. */
-export interface NewPostOutcome {
-  success: boolean;
-  /** Null when the request failed before a schedule existed. */
-  scheduleId: string | null;
-  /** The schedule's publish mode, so the banner can speak the right copy. */
-  scheduleMode: 'scheduled' | 'asap' | null;
-  /**
-   * The created slot the screen navigates to (`/posts/[slotId]`). Null only
-   * on a failure that produced no slot; the form never mints an empty
-   * successful batch, so a successful outcome always carries one.
-   */
-  slotId: string | null;
-  /** Number of slots the server created (drives the success copy). */
-  slotCount: number;
-  code: string | null;
-  need: number | null;
-  have: number | null;
-  /**
-   * The applied persona-voice swap (issue #277), when the dispatch replaced
-   * an unavailable voice. Rendered as an amber note on the success banner.
-   * `fromVoice` is '' when the persona had no stored voice at all.
-   */
-  voiceFallback: { fromVoice: string; toVoice: string } | null;
-}
-
-const initialNewPostState = {
-  personaId: '',
-  withoutPersona: false,
-  voiceId: '',
-  topic: '',
-  startAt: '',
-  times: ['18:00'],
-  timezone: 'UTC',
-  publishMode: 'scheduled' as 'scheduled' | 'asap',
-  // Default is WITH the persona's face; "no face" is the opt-in.
-  faceless: false,
-  // Default material is broll: the previous behaviour, stock first.
-  facelessMaterial: 'broll' as 'broll' | 'svg',
-  result: null as NewPostOutcome | null,
-  validationKey: null as TranslationKey | null,
-  pending: false,
-};
-
-function replaceAt(list: string[], index: number, value: string): string[] {
-  if (index < 0 || index >= list.length) return list;
-  const next = [...list];
-  next[index] = value;
-  return next;
-}
-
-export const useNewPostStore = create<NewPostState>()(
-  (set) => ({
-    ...initialNewPostState,
-    setPersonaId: (personaId) => set({ personaId, withoutPersona: false }),
-    setWithoutPersona: (withoutPersona) => set({ withoutPersona, personaId: '' }),
-    setVoiceId: (voiceId) => set({ voiceId }),
-    setTopic: (topic) => set({ topic }),
-    setStartAt: (startAt) => set({ startAt }),
-    setTime: (index, value) => set((state) => ({ times: replaceAt(state.times, index, value) })),
-    addTime: () => set((state) => ({ times: [...state.times, ''] })),
-    removeTime: (index) =>
-      set((state) => {
-        if (state.times.length <= 1) return state;
-        return { times: state.times.filter((_, i) => i !== index) };
-      }),
-    setTimezone: (timezone) => set({ timezone }),
-    setPublishMode: (publishMode) => set({ publishMode }),
-    setFaceless: (faceless) => set({ faceless }),
-    setFacelessMaterial: (facelessMaterial) => set({ facelessMaterial }),
-    setResult: (result) => set({ result }),
-    setValidationKey: (validationKey) => set({ validationKey }),
-    setPending: (pending) => set({ pending }),
-    reset: () => set({ ...initialNewPostState, times: ['18:00'] }),
   }),
 );

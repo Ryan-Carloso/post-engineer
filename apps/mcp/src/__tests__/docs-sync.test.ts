@@ -49,9 +49,13 @@ describe('MCP schedule window copy sync', () => {
   // same 3h minimum: a one-sided edit (or a bad conflict resolution) would
   // silently teach agents the old rule while the server enforces the real
   // one. Change all three surfaces together, or update this test.
+  // The schedule-window copy lives in the file that defines the schedule
+  // shape: since Phase 4 the single-video shape (with its startAt window)
+  // lives in single-video-shape.ts, not tools.ts, so that is the surface
+  // that must advertise the window.
   const windowSurfaces = [
     { label: 'apps/mcp/src/index.ts', rel: '../index.ts' },
-    { label: 'apps/mcp/src/tools.ts', rel: '../tools.ts' },
+    { label: 'apps/mcp/src/single-video-shape.ts', rel: '../single-video-shape.ts' },
     { label: 'apps/mcp/README.md', rel: '../../README.md' },
   ].map(({ label, rel }) => ({
     label,

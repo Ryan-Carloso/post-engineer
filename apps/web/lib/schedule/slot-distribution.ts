@@ -6,11 +6,11 @@
 // this module must stay importable from client components.
 //
 // Rules:
-// - Topic order is preserved: the k-th publishable slot goes to topic k.
+// - Slot order is preserved: slots fill in (day, time) order.
 // - Slots iterate over (day, time): day = startAt's calendar date in
 //   `timezone` + floor(k / times.length), time = sortedTimes[k % times.length].
 // - Slots strictly before `startAt` are skipped; iteration keeps moving
-//   forward (a single global cursor, so two topics never share a slot).
+//   forward (a single global cursor, so two slots never share a time).
 // - No recurrence: the times only distribute this operation's videos.
 //---------------
 
@@ -27,16 +27,9 @@ export interface DistributeSlotsInput {
   times: string[];
   /** IANA timezone the times are wall-clock in. */
   timezone: string;
-  /** Number of topics (slots to produce). */
+  /** Number of slots to produce. */
   count: number;
 }
-
-//---------------
-// MAX_POST_TOPICS — one create mints one video + slot per topic, so this is
-// both the API's per-request limit and the /posts/new form's cap (one source
-// for the route, the UI hint and the "add topic" button state).
-//---------------
-export const MAX_POST_TOPICS = 10;
 
 export interface DistributedSlot {
   /** UTC instant of the slot, ISO string. */
@@ -85,7 +78,7 @@ function parseTimes(times: string[]): ParsedTime[] {
     }
     return { hour, minute, label: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}` };
   });
-  // Sort ascending and drop exact duplicates so two topics never share a slot.
+  // Sort ascending and drop exact duplicates so two slots never share a time.
   const seen = new Set<string>();
   return parsed
     .sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute))
@@ -100,7 +93,7 @@ export function distributeSlots(input: DistributeSlotsInput): DistributedSlot[] 
   const { startAtISO, times, timezone, count } = input;
 
   if (!Number.isInteger(count) || count < 1) {
-    throw new SlotDistributionError('count', 'At least one topic is required.');
+    throw new SlotDistributionError('count', 'At least one slot is required.');
   }
   if (typeof timezone !== 'string' || !isValidTimezone(timezone)) {
     throw new SlotDistributionError('timezone', `Invalid timezone: "${timezone}".`);

@@ -223,9 +223,8 @@ uses these segments unchanged, plus `title`, `language: "en"`,
 - `generate_persona_video` (the one call that debits tokens).
 - `get_video_task_progress`, `get_video_status` (polling and final URL).
 
-No new MCP tool is introduced by this recipe. The batch tool
-`generate_persona_videos` is deliberately not used: one story is one video,
-one singular call.
+No new MCP tool is introduced by this recipe. There is no batch tool:
+one story is one video, one singular call.
 
 ## Verification
 

@@ -55,7 +55,7 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
     def _slot(self, providers=("youtube", "bluesky")):
         return {
             "id": "slot-1",
-            "topic": "Porto food",
+            "title": "Porto food",
             "task_id": "t-1",
             "schedules": {
                 "id": "sched-1",

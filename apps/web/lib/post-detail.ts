@@ -46,7 +46,7 @@ export interface SlotPostDetail {
     scheduleId: string;
     slotAt: string;
     status: string;
-    topic: string | null;
+    title: string | null;
     error: string | null;
     publishedAt: string | null;
     taskId: string | null;
@@ -177,7 +177,7 @@ export async function getSlotPost(
 ): Promise<SlotPostDetail | null> {
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, slot_at, status, topic, error, published_at, task_id, faceless, faceless_material')
+    .select('id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, faceless_material')
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();
@@ -190,7 +190,7 @@ export async function getSlotPost(
     schedule_id: string;
     slot_at: string;
     status: string;
-    topic: string | null;
+    title: string | null;
     error: string | null;
     published_at: string | null;
     task_id: string | null;
@@ -328,7 +328,7 @@ export async function getSlotPost(
   const scheduleIdOut = row.schedule_id;
   const slotAtOut = row.slot_at;
   const statusOut = enrichment.status;
-  const topicOut = row.topic;
+  const titleOut = row.title;
   const errorOut = row.error;
   const publishedAtOut = row.published_at;
   const taskIdOut = row.task_id;
@@ -351,7 +351,7 @@ export async function getSlotPost(
       scheduleId: scheduleIdOut,
       slotAt: slotAtOut,
       status: statusOut,
-      topic: topicOut,
+      title: titleOut,
       error: errorOut,
       publishedAt: publishedAtOut,
       taskId: taskIdOut,

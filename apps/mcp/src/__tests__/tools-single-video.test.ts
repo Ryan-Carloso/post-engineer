@@ -26,9 +26,9 @@ const segments = [
 
 function mockClient() {
   return {
-    generatePersonaVideos: vi.fn().mockResolvedValue({
+    generatePersonaVideo: vi.fn().mockResolvedValue({
       schedule: { id: 'sch-1', mode: 'scheduled' },
-      slots: [{ slotId: 's1', slotAt: '2026-10-30T18:00:00Z', topic: 'Porto trip', taskId: 'task-1', status: 'scheduled' }],
+      slots: [{ slotId: 's1', slotAt: '2026-10-30T18:00:00Z', title: 'Porto trip', taskId: 'task-1', status: 'scheduled' }],
       replayed: false,
     }),
     validateScript: vi.fn().mockResolvedValue({
@@ -47,7 +47,7 @@ function mockClient() {
 }
 
 describe('generate_persona_video tool', () => {
-  it('calls the web route once with a single topic and the segments, and renders the slot', async () => {
+  it('calls the web route once with a title and the segments (never a topics key), and renders the slot', async () => {
     const client = mockClient();
     const response = await handleGeneratePersonaVideo(client, {
       personaId: 'persona-1',
@@ -62,10 +62,11 @@ describe('generate_persona_video tool', () => {
       timezone: 'Europe/Lisbon',
     });
     expect(response.isError).toBeUndefined();
-    const generate = vi.mocked(client.generatePersonaVideos);
+    const generate = vi.mocked(client.generatePersonaVideo);
     expect(generate).toHaveBeenCalledTimes(1);
     const input = generate.mock.calls[0][0];
-    expect(input.topics).toEqual(['Porto trip']);
+    expect(input.title).toBe('Porto trip');
+    expect(input).not.toHaveProperty('topics');
     expect(input.options).toMatchObject({ segments, language: 'en-US' });
     expect(textOf(response)).toContain('Porto trip');
   });
@@ -83,7 +84,7 @@ describe('generate_persona_video tool', () => {
       timezone: 'Europe/Lisbon',
     });
     expect(response.isError).toBeUndefined();
-    const input = vi.mocked(client.generatePersonaVideos).mock.calls[0][0];
+    const input = vi.mocked(client.generatePersonaVideo).mock.calls[0][0];
     expect(input.options).toMatchObject({ language: 'en-GB' });
   });
 
@@ -103,13 +104,13 @@ describe('generate_persona_video tool', () => {
       timezone: 'Europe/Lisbon',
     });
     expect(response.isError).toBe(true);
-    expect(vi.mocked(client.generatePersonaVideos)).not.toHaveBeenCalled();
+    expect(vi.mocked(client.generatePersonaVideo)).not.toHaveBeenCalled();
     expect(textOf(response)).toContain('segments');
   });
 
   it('redacts credential-shaped material from a thrown endpoint error', async () => {
     const client = mockClient();
-    vi.mocked(client.generatePersonaVideos).mockRejectedValue(
+    vi.mocked(client.generatePersonaVideo).mockRejectedValue(
       new ApiError('Failed to generate: 500 Bearer abc123token https://admin:s3cret@example.com/x', null, null),
     );
     const response = await handleGeneratePersonaVideo(client, {

@@ -98,7 +98,7 @@ class BatchPublisher:
         published = 0
         for slot in self.store.ready_due_slots(now):
             schedule = slot.get("schedules") or {}
-            topic = slot.get("topic") or "Scheduled post"
+            title = slot.get("title") or "Scheduled post"
             persona_name = (schedule.get("personas") or {}).get("name", "Persona")
             if not self.store.claim_ready_slot(str(slot["id"])):
                 # another tick/process already claimed (or published) this slot
@@ -152,7 +152,7 @@ class BatchPublisher:
                                 base_url=self.base_url,
                                 api_secret=self.api_secret,
                                 owner_user_id=schedule["user_id"],
-                                metadata=metadata_for(provider_name, topic, schedule),
+                                metadata=metadata_for(provider_name, title, schedule),
                                 video_path=os.path.basename(video_path),
                                 video_bytes=video_bytes,
                                 content_type="video/mp4",
@@ -261,7 +261,7 @@ class BatchPublisher:
                     self.notify,
                     notify_module.slot_published_msg(
                         persona_name,
-                        topic,
+                        title,
                         published_providers,
                     ),
                 )
@@ -360,7 +360,7 @@ class BatchPublisher:
                     self.notify,
                     notify_module.slot_failed_msg(
                         persona_name,
-                        topic,
+                        title,
                         notify_module.safe_reason(exc),
                     ),
                 )

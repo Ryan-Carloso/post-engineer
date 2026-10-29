@@ -1,4 +1,4 @@
-// Schedule/slot tool shapes, plus the generate_persona_videos options
+// Schedule/slot tool shapes, plus the generate_persona_video options
 // shape and the URL-field helpers only it uses.
 //
 // Extracted from tools.ts so the tools module stays under the file-size
@@ -34,23 +34,23 @@ export const GetSlotShape = {
   slotId: z
     .string()
     .min(1, 'slotId is required')
-    .describe('The slot ID (the slotId field from list_posts or generate_persona_videos).'),
+    .describe('The slot ID (the slotId field from list_posts or generate_persona_video).'),
 };
 
 export const GetSlotSchema = z.object(GetSlotShape);
 
-export const UpdateSlotTopicShape = {
+export const UpdateSlotTitleShape = {
   slotId: z
     .string()
     .min(1, 'slotId is required')
-    .describe('The slot ID (the slotId field from list_posts or generate_persona_videos).'),
-  topic: z
+    .describe('The slot ID (the slotId field from list_posts or generate_persona_video).'),
+  title: z
     .string()
-    .min(1, 'topic is required')
-    .describe('The new topic text for the slot. Only a slot that has not started generating (status pending/awaiting) can be edited; published or mid-flight slots are rejected.'),
+    .min(1, 'title is required')
+    .describe('The new title text for the slot. Only a slot that has not started generating (status pending/awaiting) can be edited; published or mid-flight slots are rejected.'),
 };
 
-export const UpdateSlotTopicSchema = z.object(UpdateSlotTopicShape);
+export const UpdateSlotTitleSchema = z.object(UpdateSlotTitleShape);
 
 export const DeleteSlotShape = {
   slotId: z
@@ -89,7 +89,7 @@ function httpsUrlField(fieldName: string) {
     });
 }
 
-export const GeneratePersonaVideosOptionsShape = {
+export const GeneratePersonaVideoOptionsShape = {
   faceless: z.boolean().optional().describe('Generate faceless (no face). With a persona this drops only the face — the persona voice, niche and script prompt still apply. Without a persona it is REQUIRED.'),
   facelessMaterial: z
     .enum(['broll', 'svg'])
@@ -97,8 +97,8 @@ export const GeneratePersonaVideosOptionsShape = {
     .describe('What fills the video, with or without a face: "broll" = real stock footage only, "svg" = drawn illustrations only. The two never mix. Defaults to "broll".'),
   audioUrl: httpsUrlField('audioUrl').optional().describe('Public URL of custom audio for the videos (overrides the persona voice).'),
   imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to use for every video (overrides the deterministic per-video selection; see list_persona_images).'),
-  scriptPrompt: z.string().optional().describe('Script prompt override applied to every video in this call.'),
-  scriptPrompts: z.array(z.string().min(1)).optional().describe('Per-topic script prompt overrides; must have one entry per topic.'),
+  scriptPrompt: z.string().optional().describe('Script prompt override applied to this video.'),
+  scriptPrompts: z.array(z.string().min(1)).optional().describe('Script prompt override for the single video; at most one entry.'),
   voiceId: z.string().min(1, 'voiceId must be a non-empty string').optional().describe('Voice ID override (see list_voices).'),
   webhookUrl: httpsUrlField('webhookUrl').optional().describe('Callback URL the server POSTs to when each video reaches a terminal state (completed/failed).'),
   videoAspect: z.enum(['9:16', '16:9']).optional().describe('Frame shape. Overrides the persona when one is given; a post without a persona defaults to 9:16.'),

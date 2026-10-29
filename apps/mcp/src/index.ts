@@ -21,7 +21,7 @@ import {
   ListPostsShape,
   CancelScheduleShape,
   GetSlotShape,
-  UpdateSlotTopicShape,
+  UpdateSlotTitleShape,
   DeleteSlotShape,
   ListVideoGenerationsShape,
   GetVideoGenerationShape,
@@ -29,7 +29,6 @@ import {
   GetPersonaDeletePreviewShape,
   DeletePersonaShape,
   DisconnectAccountShape,
-  GeneratePersonaVideosShape,
   GetVideoStatusShape,
   GetVideoTaskProgressShape,
   ListPersonaImagesShape,
@@ -52,7 +51,7 @@ import {
   handleListPosts,
   handleCancelSchedule,
   handleGetSlot,
-  handleUpdateSlotTopic,
+  handleUpdateSlotTitle,
   handleDeleteSlot,
   handleListVideoGenerations,
   handleGetVideoGeneration,
@@ -61,7 +60,6 @@ import {
   handleDeletePersona,
   handleDisconnectAccount,
   handleGetTokenBalance,
-  handleGeneratePersonaVideos,
   handleGetVideoStatus,
   handleGetVideoTaskProgress,
   handleListPersonaImages,
@@ -112,7 +110,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'create_persona',
-    'Create a new AI persona with avatar, voice, language, and niche prompt. avatarUrl is REQUIRED: every persona has a face. A video without a face is a per-video choice — set options.faceless on generate_persona_videos.',
+    'Create a new AI persona with avatar, voice, language, and niche prompt. avatarUrl is REQUIRED: every persona has a face. A video without a face is a per-video choice — set options.faceless on generate_persona_video.',
     CreatePersonaShape,
     withTracking('create_persona', async (args) => {
       return handleCreatePersona(apiClient, args);
@@ -202,7 +200,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'list_social_accounts',
-    'List connected social accounts (YouTube, Instagram, LinkedIn, Bluesky) with the account IDs needed for batch posting.',
+    'List connected social accounts (YouTube, Instagram, LinkedIn, Bluesky) with the account IDs needed for posting.',
     ListSocialAccountsShape,
     withTracking('list_social_accounts', async () => {
       return handleListSocialAccounts(apiClient);
@@ -211,7 +209,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'get_persona_publishing_accounts',
-    "List a persona's default publishing accounts per provider. generate_persona_videos falls back to these when no account IDs are passed; explicit IDs always win.",
+    "List a persona's default publishing accounts per provider. generate_persona_video falls back to these when no account IDs are passed; explicit IDs always win.",
     GetPersonaPublishingAccountsShape,
     withTracking('get_persona_publishing_accounts', async (args) => {
       return handleGetPersonaPublishingAccounts(apiClient, args);
@@ -247,7 +245,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'list_posts',
-    'List upcoming (scheduled) and past (published/failed) posts across all connected accounts. Returns two lists: upcoming slots and recent results, each with id, slot_at, status (awaiting|generating|ready|publishing|published|failed), topic, schedule_id, task_id, progress (0-100: 0 for awaiting, 100 for ready/publishing/published, live engine progress for generating, last known for failed), stage (engine pipeline stage like "lipsync" while generating, "done" when complete, null otherwise), queuePosition/queueTotal (1-based position among the schedule\'s awaiting+generating slots; awaiting slots only, null otherwise). Failed slots also carry error and retryable (boolean: true when the failure looks transient). Use when the user asks about their posts — what is coming next, what already went out, how far a video has generated, where it sits in the queue, or why a post failed. Combine with list_schedules or list_social_accounts when persona/account names are needed.',
+    'List upcoming (scheduled) and past (published/failed) posts across all connected accounts. Returns two lists: upcoming slots and recent results, each with id, slot_at, status (awaiting|generating|ready|publishing|published|failed), title, schedule_id, task_id, progress (0-100: 0 for awaiting, 100 for ready/publishing/published, live engine progress for generating, last known for failed), stage (engine pipeline stage like "lipsync" while generating, "done" when complete, null otherwise), queuePosition/queueTotal (1-based position among the schedule\'s awaiting+generating slots; awaiting slots only, null otherwise). Failed slots also carry error and retryable (boolean: true when the failure looks transient). Use when the user asks about their posts — what is coming next, what already went out, how far a video has generated, where it sits in the queue, or why a post failed. Combine with list_schedules or list_social_accounts when persona/account names are needed.',
     ListPostsShape,
     withTracking('list_posts', async (args) => {
       return handleListPosts(apiClient, args);
@@ -265,7 +263,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'get_slot',
-    'Get one scheduled post\'s full detail by slot ID: status, topic, scheduled time, generation progress, its schedule (providers, publish mode) and persona. Use the slotId from list_posts.',
+    'Get one scheduled post\'s full detail by slot ID: status, title, scheduled time, generation progress, its schedule (providers, publish mode) and persona. Use the slotId from list_posts.',
     GetSlotShape,
     withTracking('get_slot', async (args) => {
       return handleGetSlot(apiClient, args);
@@ -273,11 +271,11 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
   );
 
   server.tool(
-    'update_slot_topic',
-    'Edit the topic text of one scheduled post. Only a slot that has not started generating (status pending/awaiting) can be edited — published or mid-flight slots are rejected.',
-    UpdateSlotTopicShape,
-    withTracking('update_slot_topic', async (args) => {
-      return handleUpdateSlotTopic(apiClient, args);
+    'update_slot_title',
+    'Edit the title text of one scheduled post. Only a slot that has not started generating (status pending/awaiting) can be edited — published or mid-flight slots are rejected.',
+    UpdateSlotTitleShape,
+    withTracking('update_slot_title', async (args) => {
+      return handleUpdateSlotTitle(apiClient, args);
     })
   );
 
@@ -381,17 +379,8 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
   );
 
   server.tool(
-    'generate_persona_videos',
-    'Generate and schedule 1-10 persona videos in ONE operation. Product rule: generation is always tied to publishing — one call generates each video AND schedules its automatic publish; there is no separate schedule step and no orphan generation. personaId is REQUIRED even for faceless videos (set options.faceless: true to drop the face; the persona voice, niche, and script prompt still apply). topics is one topic per video; the server assigns publish slots (topic i lands on day startAt\'s date + floor(i/times.length) at the i-th sorted time in times). Pass providers plus per-provider account IDs (see list_social_accounts), startAt (ISO datetime, wall-clock in timezone when naive), times (HH:MM, 24h), and timezone. Set mode to \'asap\' to publish each video the moment its generation finishes instead of scheduling it — startAt and times must NOT be set then. Every slot must be 3h-30d ahead. idempotencyKey is generated automatically; reuse it to retry without generating twice (replayed: true). Poll each slot\'s taskId with get_video_task_progress.',
-    GeneratePersonaVideosShape,
-    withTracking('generate_persona_videos', async (args) => {
-      return handleGeneratePersonaVideos(apiClient, args);
-    })
-  );
-
-  server.tool(
     'generate_persona_video',
-    'Generate and schedule ONE persona video from a complete script. Product rule: generation is always tied to publishing — one call generates the video AND schedules its automatic publish; there is no orphan generation. Send the full script as segments (first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation) — no LLM expands it. title is the single topic for this video. Pass providers plus per-provider account IDs (see list_social_accounts), startAt (ISO datetime, wall-clock in timezone when naive), times (HH:MM, 24h), and timezone. Set mode to \'asap\' to publish the video the moment its generation finishes instead of scheduling it — startAt and times must NOT be set then. The slot must be 3h-30d ahead. idempotencyKey is generated automatically; reuse it to retry without generating twice (replayed: true). Poll the slot\'s taskId with get_video_task_progress.',
+    'Generate and schedule ONE persona video from a complete script. Product rule: generation is always tied to publishing — one call generates the video AND schedules its automatic publish; there is no orphan generation. Send the full script as segments (first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation) — no LLM expands it. title is the slot label for this video. Pass providers plus per-provider account IDs (see list_social_accounts), startAt (ISO datetime, wall-clock in timezone when naive), times (HH:MM, 24h), and timezone. Set mode to \'asap\' to publish the video the moment its generation finishes instead of scheduling it — startAt and times must NOT be set then. The slot must be 3h-30d ahead. idempotencyKey is generated automatically; reuse it to retry without generating twice (replayed: true). Poll the slot\'s taskId with get_video_task_progress.',
     GeneratePersonaVideoShape,
     withTracking('generate_persona_video', async (args) => handleGeneratePersonaVideo(apiClient, args)),
   );
@@ -410,7 +399,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'get_video_task_progress',
-    'Poll one video task for its machine-readable progress: returns {task_id, state, progress, stage, error}. error is the engine failure reason when state is -1 (failed), null otherwise. Use per-video (1/6, 2/6, ...) after generate_persona_videos; prefer this over get_video_status when only progress matters.',
+    'Poll one video task for its machine-readable progress: returns {task_id, state, progress, stage, error}. error is the engine failure reason when state is -1 (failed), null otherwise. Use for the video after generate_persona_video; prefer this over get_video_status when only progress matters.',
     GetVideoTaskProgressShape,
     withTracking('get_video_task_progress', async (args) => {
       return handleGetVideoTaskProgress(apiClient, args);
@@ -419,7 +408,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'list_persona_images',
-    `List the image library of a persona (up to ${MAX_LIBRARY_IMAGES} tagged images). Each entry has id, tag, description, and is_primary. Use the ids with generate_persona_videos options.imageId to force a specific image for every video in one call.`,
+    `List the image library of a persona (up to ${MAX_LIBRARY_IMAGES} tagged images). Each entry has id, tag, description, and is_primary. Use the ids with generate_persona_video options.imageId to force a specific image for the video.`,
     ListPersonaImagesShape,
     withTracking('list_persona_images', async (args) => {
       return handleListPersonaImages(apiClient, args);

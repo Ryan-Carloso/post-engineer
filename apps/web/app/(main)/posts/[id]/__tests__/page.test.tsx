@@ -92,7 +92,7 @@ function slotPayload(
       scheduleId: 's1',
       slotAt: '2030-06-01T10:00:00.000Z',
       status: 'awaiting',
-      topic: 'Upcoming topic',
+      title: 'Upcoming topic',
       error: null,
       publishedAt: null,
       taskId: null,
@@ -112,7 +112,7 @@ function slotPayload(
 const PUBLISHED_PAYLOAD = slotPayload({
   id: 'r1',
   status: 'published',
-  topic: 'Past topic',
+  title: 'Past topic',
   publishedAt: '2020-01-01T10:05:00.000Z',
   taskId: 'task-9',
   progress: 100,
@@ -122,7 +122,7 @@ const PUBLISHED_PAYLOAD = slotPayload({
 const GENERATING_PAYLOAD = slotPayload({
   id: 'gen-slot',
   status: 'generating',
-  topic: 'Cooking topic',
+  title: 'Cooking topic',
   taskId: 'task-7',
   progress: 45,
   stage: 'lipsync',
@@ -131,7 +131,7 @@ const GENERATING_PAYLOAD = slotPayload({
 const FAILED_PAYLOAD = slotPayload({
   id: 'r2',
   status: 'failed',
-  topic: 'Failed topic',
+  title: 'Failed topic',
   taskId: 'task-8',
   error: 'Upload failed',
   progress: 80,
@@ -251,11 +251,11 @@ describe('PostDetailPage', () => {
     await user.click(screen.getByRole('button', { name: 'posts.editCaption' }));
     const textarea = screen.getByLabelText('posts.captionLabel');
     await user.clear(textarea);
-    await user.type(textarea, 'New topic');
+    await user.type(textarea, 'New title');
     await user.click(screen.getByRole('button', { name: 'posts.save' }));
 
     const mutate = vi.mocked(useUpdateSlotMutation).mock.results[0].value.mutate as ReturnType<typeof vi.fn>;
-    expect(mutate).toHaveBeenCalledWith({ slotId: 'u1', topic: 'New topic' }, expect.anything());
+    expect(mutate).toHaveBeenCalledWith({ slotId: 'u1', title: 'New title' }, expect.anything());
   });
 
   it('lists where the post was published, one link per provider', () => {
@@ -389,14 +389,14 @@ describe('PostDetailPage', () => {
   it('swaps the progress UI for the player when a refetch flips generating to ready', () => {
     const generating = slotPayload({
       status: 'generating',
-      topic: 'Cooking topic',
+      title: 'Cooking topic',
       taskId: 'task-7',
       progress: 45,
       stage: 'lipsync',
     });
     const ready = slotPayload({
       status: 'ready',
-      topic: 'Cooking topic',
+      title: 'Cooking topic',
       taskId: 'task-7',
       progress: 100,
       stage: 'done',
@@ -960,7 +960,7 @@ describe('PostDetailPage — direct generation progress', () => {
     expect(screen.getByText('posts.errorUnknown')).toBeInTheDocument();
   });
 
-  it('uses the persona and topic fallbacks when those fields are null', () => {
+  it('uses the persona and title fallbacks when those fields are null', () => {
     mockQueries({
       generation: directGeneration({ personaName: null, videoSubject: null, status: 'completed' }),
     });
@@ -968,7 +968,7 @@ describe('PostDetailPage — direct generation progress', () => {
     render(<DetailPage />);
 
     expect(screen.getByRole('heading', { name: 'posts.personaFallback' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'posts.detailsTitle' })).toHaveTextContent('posts.unknownTopic');
+    expect(screen.getByRole('region', { name: 'posts.detailsTitle' })).toHaveTextContent('posts.unknownTitle');
   });
 
   it('does not enter the generation view when the payload has no generation', () => {

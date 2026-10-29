@@ -115,7 +115,7 @@ const GenerationCard = ({
             <p className="line-clamp-3 text-sm leading-snug text-[#0d2b45]">
               <span className="font-semibold">{generation.personaName ?? t('posts.personaFallback')}</span>
               {' — '}
-              <span className="text-muted-foreground">{generation.videoSubject ?? t('posts.unknownTopic')}</span>
+              <span className="text-muted-foreground">{generation.videoSubject ?? t('posts.unknownTitle')}</span>
             </p>
             {generation.status === 'failed' && (
               <p className="mt-2 line-clamp-2 text-xs text-destructive">
@@ -126,7 +126,7 @@ const GenerationCard = ({
           <PostThumb src={hasThumb ? videoUrl : null} />
         </div>
         <CardFooter className="mt-auto items-center justify-between p-0 pt-4">
-          <span className="min-w-0 truncate text-xs text-muted-foreground">{generation.videoSubject ?? t('posts.unknownTopic')}</span>
+          <span className="min-w-0 truncate text-xs text-muted-foreground">{generation.videoSubject ?? t('posts.unknownTitle')}</span>
           <div className="flex shrink-0 items-center gap-2">
             {generation.tokensRefunded && (
               <Badge variant="outline" className="border-transparent bg-[#cff5df] text-[#167246]">
@@ -214,7 +214,7 @@ const PostCard = ({
           <p className="line-clamp-3 flex-1 text-sm leading-snug text-[#0d2b45]">
             <span className="font-semibold">{personaName}</span>
             {' — '}
-            <span className="text-muted-foreground">{slot.topic ?? t('posts.unknownTopic')}</span>
+            <span className="text-muted-foreground">{slot.title ?? t('posts.unknownTitle')}</span>
           </p>
           <PostThumb src={hasThumb ? videoUrl : null} />
         </div>
@@ -427,9 +427,6 @@ export default function PostsPage() {
           {/* The mobile bottom bar has no Metrics tab (pinned at four tabs in layout.test.tsx); this button is how phones reach /metrics. */}
           <Link href="/metrics" className="rounded-xl border border-input bg-white px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]">
             {t('nav.metrics')}
-          </Link>
-          <Link href="/posts/new" className="rounded-xl bg-[#0d2b45] px-4 py-2 text-sm font-semibold text-white hover:bg-[#123a5e]">
-            {t('posts.newPost')}
           </Link>
         </div>
       </div>
