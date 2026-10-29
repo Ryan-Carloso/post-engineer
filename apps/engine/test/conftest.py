@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.config import config
-from app.services import analytics, llm, stock_term_judge, web_search_facts
+from app.services import analytics, stock_term_judge, web_search_facts
 
 
 TEST_ROOT = Path(__file__).resolve().parent.parent
@@ -72,16 +72,3 @@ def _no_real_stock_judge_call(request: pytest.FixtureRequest, monkeypatch: pytes
         monkeypatch.setattr(stock_term_judge, "_ask_judge", lambda *args, **kwargs: None)
     yield
 
-
-@pytest.fixture(autouse=True)
-def _no_real_script_angle_call(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
-    """Never let a pipeline test reach the real LLM for the script angle.
-
-    task.generate_script asks the LLM for an angle before scripting; tests
-    that only patch llm.generate_script would otherwise hit a real provider.
-    The stub returns "" (bare-topic fallback). Tests of the angle itself opt
-    out with @pytest.mark.real_script_angle; test-level patches still stack.
-    """
-    if request.node.get_closest_marker("real_script_angle") is None:
-        monkeypatch.setattr(llm, "generate_script_angle", MagicMock(name="generate_script_angle", return_value=""))
-    yield

@@ -1,15 +1,12 @@
-"""The hook and the angle must be concrete, picturable and clear at once.
+"""The script hook must be concrete, picturable and clear at once.
 
 "Stop chasing the 90-year-old institution if you hate waiting two hours"
 named nothing: the viewer cannot tell which place, and no drawing can
-show it. The script hook rule and the angle prompt now demand the concrete
-thing (dish, place, object, number), ban vague stand-ins, and never let the
-model invent names or facts to sound concrete.
+show it. The script hook rule demands the concrete thing (dish, place,
+object, number), bans vague stand-ins, and never lets the model invent
+names or facts to sound concrete.
 """
 
-from unittest.mock import patch
-
-from app.services import script_angle
 from app.services.script_prompts import DEFAULT_SCRIPT_SYSTEM_PROMPT
 
 
@@ -41,18 +38,6 @@ def test_hook_never_invents_names_or_facts():
     ) in rule
 
 
-def test_angle_prompt_demands_concrete_visual_angles():
-    with patch.object(
-        script_angle, "logger"
-    ), patch("app.services.llm._generate_response_with_fallback", return_value="x") as generate:
-        script_angle.generate_script_angle("francesinha in porto")
-    prompt = generate.call_args.kwargs["prompt"]
-    assert "concrete and visual" in prompt
-    assert "the famous institution" in prompt
-    assert "Never invent" in prompt
-    assert "Use a proper name (place, brand, person) only when the topic or the web search results give it" in prompt
-
-
 def test_whole_script_never_invents_numbers():
     # "twenty euros" and "ten euros less" reached the body: the rule covers it all.
     assert "never invent names, prices, times, numbers, dates or facts anywhere in the script" in (
@@ -76,12 +61,3 @@ def test_script_adds_nothing_about_a_place_beyond_its_search_result():
         DEFAULT_SCRIPT_SYSTEM_PROMPT
     )
 
-
-def test_angle_prompt_has_the_same_two_limits():
-    with patch.object(script_angle, "logger"), patch(
-        "app.services.llm._generate_response_with_fallback", return_value="x"
-    ) as generate:
-        script_angle.generate_script_angle("francesinha in porto")
-    prompt = generate.call_args.kwargs["prompt"]
-    assert "Do not mention street addresses or phone numbers" in prompt
-    assert "no waiting times, crowds or ratings" in prompt

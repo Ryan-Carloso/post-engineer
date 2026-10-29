@@ -1,14 +1,10 @@
 """End-to-end video pipeline test — real ffmpeg, minimal mocking.
 
 Runs the full faceless generation pipeline (script -> audio -> materials ->
-combine -> mux) with the REAL pipeline code and REAL ffmpeg. The ONLY thing
-mocked is the LLM itself: the pipeline still builds the real script prompt
-and calls ``app.services.llm.generate_script``, but that seam returns a
-canned script instead of spending AI tokens — the mock lives inside the
-engine, at the paid-API boundary, not in the web layer.
-
-Materials are generated locally by ffmpeg as three distinct solid colors
-and the audio is a real sine-wave file — no API keys, no network. The
+combine -> mux) with the REAL pipeline code and REAL ffmpeg. The script
+arrives with the job (no LLM call anywhere in the pipeline), and the
+materials are generated locally by ffmpeg as three distinct solid colors
+while the audio is a real sine-wave file — no API keys, no network. The
 final video must visibly contain DIFFERENT segments (regression test for
 "the same clip repeats forever"): frames sampled across the timeline must
 show different dominant colors.
@@ -22,7 +18,6 @@ import uuid
 from pathlib import Path
 
 from app.models.schema import MaterialInfo, TaskVideoRequest
-from app.services import llm as llm_service
 from app.services import task as tm
 
 MATERIAL_COLORS = {
@@ -30,9 +25,7 @@ MATERIAL_COLORS = {
     "green": "0x00FF00",
     "blue": "0x0000FF",
 }
-# The script the mocked LLM returns: two sentences, matching what the
-# real prompt asks for. The pipeline builds the real prompt and calls the
-# real llm.generate_script seam — only the response text is canned.
+# The script supplied with the job: two sentences of validation copy.
 MOCKED_SCRIPT = (
     "First paragraph of the validation script. "
     "Second paragraph of the validation script."
@@ -137,12 +130,6 @@ def test_faceless_pipeline_renders_multi_material_video(tmp_path, monkeypatch):
     local_videos = storage / "local_videos"
     local_videos.mkdir(parents=True)
 
-    # Mock the LLM inside the engine, at the paid-API boundary: the
-    # pipeline builds the real prompt and calls llm.generate_script, but
-    # gets a canned script back instead of spending AI tokens.
-    monkeypatch.setattr(
-        llm_service, "generate_script", lambda **kwargs: MOCKED_SCRIPT
-    )
     # This rendering test validates local media composition, not R2. Keep the
     # final file locally so ffprobe can inspect it after the pipeline returns.
     monkeypatch.setattr(tm.video_storage, "require_r2_configuration", lambda: None)
@@ -153,6 +140,7 @@ def test_faceless_pipeline_renders_multi_material_video(tmp_path, monkeypatch):
 
     params = TaskVideoRequest(
         video_subject="E2E validation",
+        video_script=MOCKED_SCRIPT,
         video_materials=[
             MaterialInfo(provider="local", url=name, duration=0)
             for name in material_names

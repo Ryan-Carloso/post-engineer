@@ -132,30 +132,6 @@ class TestResolvePersonaAudio:
 
 
 class TestPersonaHookBoundary:
-    def test_invalid_generated_script_is_regenerated_once(self):
-        params = _params(name="Ana", voice_id="calm")
-        params.video_script_prompt = "Create a short story."
-        with patch.object(
-            task_service.llm,
-            "generate_script",
-            side_effect=[
-                "One paragraph only.",
-                "Hook is complete.",
-                "Details follow.",
-            ],
-        ) as generate:
-            result = generate_script("persona-hook-retry", params)
-
-        assert result == "Hook is complete.\n\nDetails follow."
-        assert generate.call_count == 3
-        initial_prompt = generate.call_args_list[0].kwargs["video_script_prompt"]
-        assert "8 to 12 seconds" in initial_prompt
-        assert "20 to 30 words" in initial_prompt
-        assert generate.call_args_list[1].kwargs["target_words_min"] == 20
-        assert generate.call_args_list[1].kwargs["target_words_max"] == 30
-        assert generate.call_args_list[2].kwargs["target_words_min"] == 72
-        assert generate.call_args_list[2].kwargs["target_words_max"] == 94
-
     def test_video_composition_uses_the_exact_hook_boundary(self):
         class SourceClip:
             w = 1080
@@ -218,20 +194,20 @@ class TestPersonaLipsyncGate:
 
 class TestPersonaHookGate:
     """With lipsync disabled the script skips the persona hook contract:
-    no paragraph constraints and no extra LLM regeneration calls."""
+    no paragraph constraints, no hook validation, and no LLM calls."""
 
-    def test_lipsync_disabled_skips_hook_regeneration(self):
+    def test_lipsync_disabled_skips_hook_validation(self):
         params = _params(name="Ana", voice_id="calm")
         params.lipsync_enabled = False
+        params.video_script = "A single paragraph without hook rules."
         with patch.object(
             task_service.llm,
             "generate_script",
-            return_value="A single paragraph without hook rules.",
         ) as generate:
             result = generate_script("normal-video", params)
 
         assert result == "A single paragraph without hook rules."
-        assert generate.call_count == 1
+        generate.assert_not_called()
 
 
 class TestPersonaHookRetry:

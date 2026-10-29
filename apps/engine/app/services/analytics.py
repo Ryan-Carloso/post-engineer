@@ -35,10 +35,12 @@ scrub_error_text (secrets + machine-local paths) at the call site before
 capture and never reaches the exception message, Discord, or the task
 error string.
 
-Deliberate exception (PR #250): the script_angle_generated event carries
-angle, LLM output derived from the user's own topic and already persisted
-as product data on the task record (the user sees it in post detail). The
-call site passes it through scrub_secret_values before capture.
+Historical exception (PR #250, removed in Phase 5 PR 1): the
+script_angle_generated event carried angle, LLM output derived from the
+user's own topic and already persisted as product data on the task
+record. The script angle was removed with LLM script generation, so no
+new event carries model output; the scrubber itself stays in use
+elsewhere.
 
 AI observability (PR parity with the PostHog wizard's ai-observability
 program): track_ai_request also emits the standard PostHog `$ai_generation`

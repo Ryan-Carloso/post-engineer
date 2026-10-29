@@ -31,41 +31,6 @@ class TestTaskService(unittest.TestCase):
         pass
 
 
-    def test_generate_script_forwards_advanced_prompt_options(self):
-        """
-        The task generation entry and the WebUI/API share VideoParams. This
-        verifies advanced prompt params still reach the LLM service layer
-        when copy is auto-generated, instead of only taking effect on the
-        /scripts endpoint.
-        """
-        params = VideoParams(
-            video_subject="咖啡",
-            video_script="",
-            video_language="zh-CN",
-            paragraph_number=2,
-            video_script_prompt="语气轻松",
-            custom_system_prompt="Only write short narration.",
-        )
-
-        with (
-            patch.object(tm.llm, "generate_script_angle", return_value="Coffee angle") as angle,
-            patch.object(tm.llm, "generate_script", return_value="生成的文案") as generate,
-        ):
-            result = tm.generate_script("task-id", params)
-
-        self.assertEqual(result, "生成的文案")
-        angle.assert_called_once_with(video_subject="咖啡", language="zh-CN", niche="", facts=[])
-        generate.assert_called_once_with(
-            video_subject="咖啡",
-            language="zh-CN",
-            paragraph_number=2,
-            video_script_prompt="语气轻松",
-            custom_system_prompt="Only write short narration.",
-            angle="Coffee angle",
-            cta="",
-            facts=[],
-        )
-
     def test_generate_final_videos_does_not_rerecord_old_bgm(self):
         task_id = "bgm-history-no-selection"
         params = VideoParams(video_subject="test")

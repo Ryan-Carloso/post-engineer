@@ -5,7 +5,7 @@ import os
 import pathlib
 import shutil
 import time
-from typing import Optional, Union
+from typing import Union
 
 from fastapi import BackgroundTasks, Depends, Path, Query, Request, UploadFile
 from fastapi.params import File
@@ -29,9 +29,7 @@ from app.models.schema import (
     TaskQueryRequest,
     TaskQueryResponse,
     TaskResponse,
-    PersonaParams,
     TaskVideoRequest,
-    LipSyncQuality,
     VideoMaterialUploadResponse,
     VideoMaterialRetrieveResponse
 )
@@ -262,49 +260,6 @@ def create_video(
     background_tasks: BackgroundTasks, request: Request, body: TaskVideoRequest
 ):
     return create_task(request, body, stop_at="video")
-
-
-def _persona_video_params(
-    persona: PersonaParams,
-    topic: str,
-    goal: Optional[str],
-    platform_ids: Optional[list],
-    video_quality: LipSyncQuality,
-    webhook_url: Optional[str] = None,
-) -> TaskVideoRequest:
-    """THE single builder for persona-video task params.
-
-    Both the single-video endpoint (as a batch of one) and the batch
-    endpoint go through this; there is no separate params construction
-    for the single path.
-    """
-    max_script_characters = int(config.app.get("max_video_script_characters", 700))
-    max_duration_seconds = int(config.app.get("max_video_duration_seconds", 40))
-    # goal/platform_ids are optional per batch item; fall back to neutral
-    # defaults so the prompt stays well-formed for the script LLM.
-    goal_text = goal or "Create an engaging video about the topic."
-    persona_prompt = (
-        f"Create the script in {persona.language}. "
-        f"Persona niche: {persona.niche}. "
-        f"Speaking style: {persona.speaking_style}. "
-        f"Audience: {persona.audience}. "
-        f"Goal: {goal_text}. "
-        "Write only the spoken words, with no headings or stage directions. "
-        "The hook paragraph instruction is appended by the script generator "
-        "from the configured persona pacing — never inline here. "
-        f"Keep the script under {max_script_characters} characters and below "
-        f"{max_duration_seconds} seconds when spoken."
-    )
-    return TaskVideoRequest(
-        video_subject=topic,
-        video_language=persona.language,
-        persona=persona,
-        platform_ids=platform_ids or [],
-        video_quality=video_quality,
-        paragraph_number=None,
-        video_script_prompt=persona_prompt,
-        webhook_url=webhook_url,
-    )
 
 
 @router.post("/subtitle", response_model=TaskResponse, summary="Generate subtitle only")

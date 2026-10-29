@@ -1562,8 +1562,3 @@ def generate_social_metadata(
 
     logger.warning("falling back to heuristic social metadata")
     return _fallback_social_metadata(video_subject, video_script, platform)
-
-
-# Re-exported for existing callers/tests: the implementation lives in
-# script_angle.py so this grandfathered module stays under its baseline.
-from app.services.script_angle import generate_script_angle  # noqa: E402,F401
