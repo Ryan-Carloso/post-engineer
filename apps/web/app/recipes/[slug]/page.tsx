@@ -1,11 +1,10 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { useI18n } from '@/lib/i18n/provider';
-import SiteFooter from '@/components/site-footer';
-import { getPrompt } from '../prompts';
-import PromptDetail from '../prompt-detail';
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useI18n } from "@/lib/i18n/provider";
+import { getPrompt } from "../prompts";
+import PromptDetail from "../prompt-detail";
 
 //---------------
 // Prompt detail route (/recipes/[slug]) — resolves the slug
@@ -19,27 +18,26 @@ import PromptDetail from '../prompt-detail';
 export default function PromptDetailPage() {
   const { t } = useI18n();
   const params = useParams();
-  const slug = typeof params.slug === 'string' ? params.slug : '';
+  const slug = typeof params.slug === "string" ? params.slug : "";
   const prompt = getPrompt(slug);
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f7f8fa]">
-      <main className="mx-auto w-full max-w-4xl flex-1 px-5 py-16 sm:py-20">
-        {prompt ? (
-          <PromptDetail prompt={prompt} />
-        ) : (
-          <div>
-            <p className="leading-relaxed text-[#414d63]">{t('recipes.notFound')}</p>
-            <Link
-              href="/recipes"
-              className="mt-4 inline-block font-medium text-[#ff544c] hover:underline"
-            >
-              ← {t('recipes.backToPrompts')}
-            </Link>
-          </div>
-        )}
-      </main>
-      <SiteFooter />
+    <div className="mx-auto w-full max-w-4xl">
+      {prompt ? (
+        <PromptDetail prompt={prompt} />
+      ) : (
+        <div>
+          <p className="leading-relaxed text-[#414d63]">
+            {t("recipes.notFound")}
+          </p>
+          <Link
+            href="/recipes"
+            className="mt-4 inline-block font-medium text-[#ff544c] hover:underline"
+          >
+            ← {t("recipes.backToPrompts")}
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

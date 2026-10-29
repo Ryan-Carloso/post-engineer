@@ -57,4 +57,10 @@ export const recipesI18nEn = {
   kindPrompt: 'Prompt',
   copyPrompt: 'Copy prompt',
   viewRecipe: 'View recipe',
+  filterAll: 'All',
+  searchLabel: 'Search prompts',
+  searchPlaceholder: 'Search by title or goal…',
+  emptyState: 'No prompt matches your search.',
+  stepCount: '{count} steps',
+  promptCount: '{count} prompts',
 } as const;

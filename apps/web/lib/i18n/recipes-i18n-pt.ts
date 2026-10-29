@@ -57,4 +57,10 @@ export const recipesI18nPt = {
   kindPrompt: 'Prompt',
   copyPrompt: 'Copiar prompt',
   viewRecipe: 'Ver receita',
+  filterAll: 'Todos',
+  searchLabel: 'Buscar prompts',
+  searchPlaceholder: 'Busque por título ou objetivo…',
+  emptyState: 'Nenhum prompt corresponde à sua busca.',
+  stepCount: '{count} passos',
+  promptCount: '{count} prompts',
 } as const;
