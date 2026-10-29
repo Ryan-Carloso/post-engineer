@@ -97,6 +97,12 @@ describe('parseHttpTransportOptions', () => {
     expect(() => parseHttpTransportOptions(['--http-transport', '--http-port', 'abc'], {})).toThrow(/port/);
   });
 
+  it('rejects an empty port instead of silently binding port 0', () => {
+    expect(() => parseHttpTransportOptions(['--http-transport', '--http-port='], {})).toThrow(/port/);
+    expect(() => parseHttpTransportOptions(['--http-transport'], { MCP_HTTP_PORT: '' })).toThrow(/port/);
+    expect(() => parseHttpTransportOptions(['--http-transport'], { MCP_HTTP_PORT: '   ' })).toThrow(/port/);
+  });
+
   it('rejects a missing --http-port value', () => {
     expect(() => parseHttpTransportOptions(['--http-transport', '--http-port'], {})).toThrow(/port/);
   });

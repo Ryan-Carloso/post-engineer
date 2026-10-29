@@ -56,6 +56,14 @@ function isLoopbackHost(host: string): boolean {
 }
 
 function parsePort(value: string): number {
+  // Number('') is 0: without this guard an empty --http-port= or
+  // MCP_HTTP_PORT='' would silently bind an ephemeral port instead of
+  // failing fast on the invalid value.
+  if (value.trim() === '') {
+    throw new Error(
+      `Invalid MCP HTTP port: "${value}" — pass --http-port <0-65535> or set MCP_HTTP_PORT.`,
+    );
+  }
   const port = Number(value);
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new Error(
