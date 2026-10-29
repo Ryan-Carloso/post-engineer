@@ -9,7 +9,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import { LOCALES } from '@/lib/i18n';
 import { TokenBalance } from '@/app/(main)/token-balance';
 import VersionBadge from '@/components/ui/version-badge';
-import { KeyIcon, ProfileIcon } from '@/lib/ui';
+import { CoinsIcon, KeyIcon, ProfileIcon } from '@/lib/ui';
 
 //---------------
 // AccountPanel — shared account area content ("Perfil"/"Profile").
@@ -360,6 +360,7 @@ export function AccountPanel({ showVersionBadge = false }: { showVersionBadge?: 
             </div>
           </Link>
           <ApiKeysRow />
+          <BillingRow />
           <SignOutButton />
           <SignOutAllButton />
         </div>
@@ -385,6 +386,28 @@ export function ApiKeysRow() {
         <KeyIcon />
       </span>
       {t('nav.apiKeys')}
+    </Link>
+  );
+}
+
+//---------------
+// BillingRow — link to /billing inside the profile area. The Billing
+// tab was removed from the navs to curb tab sprawl; the route itself
+// is unchanged, and buying tokens plus viewing history stay one tap
+// away from the account panel, exactly like API Keys above.
+//---------------
+export function BillingRow() {
+  const { t } = useI18n();
+  return (
+    <Link
+      href="/billing"
+      data-testid="profile-billing-link"
+      className="flex w-full items-center gap-3.5 rounded-[18px] bg-[#f8fafc] px-4 py-3 text-left text-[15px] text-[#718096] transition-colors hover:bg-[#f1f4f7] hover:text-[#101728] lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
+    >
+      <span className="[&>svg]:size-5 lg:[&>svg]:size-7">
+        <CoinsIcon />
+      </span>
+      {t('account.billingLink')}
     </Link>
   );
 }

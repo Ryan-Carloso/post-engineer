@@ -54,6 +54,13 @@ describe('i18n dictionaries', () => {
     expect(enDictionary).not.toHaveProperty('fillSchedule');
   });
 
+  it('carries the prompts tab copy in both locales', () => {
+    expect(ptDictionary.nav.prompts).toBe('Pegue seus prompts');
+    expect(enDictionary.nav.prompts).toBe('Get your prompts');
+    expect(ptDictionary.nav.promptsHint).toBeTruthy();
+    expect(enDictionary.nav.promptsHint).toBeTruthy();
+  });
+
   it('carries no home tab copy', () => {
     for (const key of ['home', 'homeHint'] as const) {
       expect(ptDictionary.nav).not.toHaveProperty(key);

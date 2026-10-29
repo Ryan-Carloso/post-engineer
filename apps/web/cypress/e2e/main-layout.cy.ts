@@ -109,10 +109,12 @@ describe('Main Layout — Sidebar', () => {
     cy.contains('a', 'Contas').should('be.visible');
     cy.contains('a', 'Personas').should('be.visible');
     cy.contains('a', 'Métricas').should('be.visible');
-    cy.contains('a', 'Tokens').should('be.visible');
-    // API Keys is no longer a nav tab — it lives in the profile area
-    // (sidebar footer), reachable from every page.
+    cy.contains('a', 'Pegue seus prompts').should('be.visible');
+    // Billing is no longer a nav tab — it lives in the profile area
+    // (sidebar footer), reachable from every page, like API Keys.
+    cy.contains('a', 'Tokens').should('not.exist');
     cy.get('[data-testid=profile-api-keys-link]').should('be.visible');
+    cy.get('[data-testid=profile-billing-link]').should('be.visible');
   });
 
   it('navega entre as páginas clicando nas abas da sidebar', () => {
