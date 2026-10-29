@@ -472,14 +472,12 @@ export function isMainModule(): boolean {
 }
 
 async function main() {
-  // Explicit opt-in only: without --http-transport the server stays
-  // on stdio and opens no port. With OAuth configured (http-auth.ts)
-  // the HTTP endpoint authenticates every request; without it, loopback only.
+  // Without --http-transport the server stays on stdio, no port.
+  // With OAuth configured (http-auth.ts) HTTP requests authenticate; without it, loopback only.
   const httpOptions = parseHttpTransportOptions(process.argv.slice(2), process.env);
   const authOptions = parseHttpAuthOptions(process.env);
   if (httpOptions !== null) {
-    // OAuth mode needs no local key (each request carries its own
-    // verified bearer); loopback mode still fails fast without one.
+    // OAuth mode needs no local key; loopback mode still fails fast without one.
     // Fresh server per request; the bearer is forwarded as this request's web API credential.
     const apiKey = authOptions !== null ? process.env.POST_ENGINEER_API_KEY : requireApiKey();
     await serveHttpTransport(
