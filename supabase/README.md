@@ -12,7 +12,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 004 | `migrations/004_billing_reconcile.sql`        | Billing reconciliation: zombie/stuck detectors, daily pg_cron trigger (fully automatic, no review queue) (the pg_cron trigger is superseded by 027: the daily run now happens in the web app) |
 | 005 | `migrations/005_persona-visual-identity.sql` | CHECK: a persona never has both `photo_path` and `avatar_url` |
 | 006 | `migrations/006_test-deploy-supabase.sql`    | Test-deploy schema verification (CI/dev only)    |
-| 007 | `migrations/007_personas-drop-face-mix.sql`  | `scheduled_posts.faceless` (per-post "no face") + `drop column personas.face_mix_percent`: personas are always faced. **Destructive** — needs the `db:destructive-approved` PR label |
+| 007 | `migrations/007_personas-drop-face-mix.sql`  | `scheduled_posts.faceless` (per-post "no face") + `drop column personas.face_mix_percent`: personas are always faced. **Destructive** — shipped under the former `db:destructive-approved` PR label gate (removed in BETA; approval is now the owner's merge tap) |
 | 008 | `migrations/008_video-generations-engine-task-id-idx.sql` | Index `video_generations.engine_task_id`: generation_id ↔ task_id correlation for debugging. No FK (engine_task_state is ephemeral) |
 | 009 | `migrations/009_batch-charge-task-correlation.sql` | Backfill `token_transactions.engine_task_id` for **single-slot** batch charges, so a scheduled post's prepaid charge can be resolved from its engine task id (fixes history rows stuck in `running` when the engine drops a task). Multi-slot batches are deliberately left NULL — one charge covers several videos. Plus two indexes for the gone-task reconciliation |
 | 010 | `migrations/010_scheduled-post-progress-history.sql` | `scheduled_post_progress_history`: every observed (progress, stage) transition per post, recorded change-only by `GET /api/schedule/status`; cascade-deletes with the post |
@@ -36,7 +36,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 028 | `migrations/028_publish_retry_backoff.sql` | Publish retry backoff: `scheduled_posts.publish_not_before`, skipped by `ready_due_slots` until the delay elapses |
 | 029 | `migrations/029_scheduled-posts-material.sql` | Per-post video material (`scheduled_posts.faceless_material`, `'broll'` or `'svg'`, default `'broll'`), forwarded by the engine batch pipeline |
 | 030 | `migrations/030_scheduled-posts-segments.sql` | Per-post script segments (`scheduled_posts.segments`, nullable jsonb), forwarded by the engine batch pipeline so a requeued slot keeps its script and user photos |
-| 031 | `migrations/031_scheduled-posts-title-drop-topic.sql` | BREAKING: `scheduled_posts.title` (slot label) replaces `scheduled_posts.topic` — existing labels are backfilled from `topic`, then the `topic` column is dropped (requires the `db:destructive-approved` label). Segments-NULL rows have no script and fail under the engine's generic scriptless rule |
+| 031 | `migrations/031_scheduled-posts-title-drop-topic.sql` | BREAKING: `scheduled_posts.title` (slot label) replaces `scheduled_posts.topic` — existing labels are backfilled from `topic`, then the `topic` column is dropped (destructive; shipped under the former `db:destructive-approved` label gate, removed in BETA). Segments-NULL rows have no script and fail under the engine's generic scriptless rule |
 
 ## How to apply
 
