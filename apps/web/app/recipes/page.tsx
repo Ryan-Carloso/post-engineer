@@ -8,14 +8,17 @@ import PromptsHero from './components/prompts-hero';
 import PromptsToolbar, { type KindOption } from './components/prompts-toolbar';
 import PromptCard from './components/prompt-card';
 import PromptsEmpty from './components/prompts-empty';
+import AddPromptLink from './components/add-prompt-link';
 
 //---------------
 // Prompts hub list — rendered inside the AppShell for signed-in
 // users and the public frame otherwise (see layout.tsx). Hero, a search + kind filter toolbar, and a
 // responsive card grid (1 column on phones, 2 on tablets, 3 on
 // desktop) so the page keeps its shape as prompts are added. The
-// full prompt lives on the detail page, not here, and the list
-// never links straight to GitHub. Route stays /recipes; only the
+// full prompt lives on the detail page, not here; cards link
+// internally to that detail page (never straight to GitHub), and
+// only the footer below the grid carries a secondary GitHub link
+// for submitting a new prompt. Route stays /recipes; only the
 // display name is "Get your prompts" (via i18n), so existing
 // links and the public middleware path keep working. Solid colors
 // only, from the existing palette: ink #101728, paper #f7f8fa,
@@ -63,6 +66,7 @@ export default function RecipesPage() {
           </ul>
         )}
       </div>
+      <AddPromptLink />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 
 vi.mock('@/lib/i18n/provider', () => {
   const translations: Record<string, string> = {
@@ -17,6 +17,8 @@ vi.mock('@/lib/i18n/provider', () => {
     'recipes.filterAll': 'All',
     'recipes.searchLabel': 'Search prompts',
     'recipes.emptyState': 'No prompt matches your search.',
+    'recipes.addYourPrompt': 'Add your prompt',
+    'recipes.addYourPromptHint': 'Got a prompt that works? Send it in.',
   };
   return {
     useI18n: () => ({
@@ -86,5 +88,37 @@ describe('/recipes prompts hub list', () => {
   it('shows the step count on each card', () => {
     render(<RecipesPage />);
     expect(screen.getAllByText('recipes.stepCount:{"count":5}')).toHaveLength(2);
+  });
+
+  it('offers a secondary "Add your prompt" link to the prompt_request template after the grid', () => {
+    const { container } = render(<RecipesPage />);
+    const link = screen.getByRole('link', { name: 'Add your prompt' });
+    expect(link).toHaveAttribute(
+      'href',
+      'https://github.com/Ryan-Carloso/post-engineer/issues/new?template=prompt_request.md',
+    );
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    const grid = container.querySelector('ul');
+    if (!grid) throw new Error('prompt grid not rendered');
+    // The link sits outside and after the card grid, never inside it.
+    expect(grid.contains(link)).toBe(false);
+    expect(
+      within(grid).queryByRole('link', { name: 'Add your prompt' }),
+    ).toBeNull();
+    expect(
+      grid.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('keeps the "Add your prompt" link visible in the empty state', () => {
+    render(<RecipesPage />);
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search prompts' }), {
+      target: { value: 'zzz-no-match' },
+    });
+    expect(screen.getByText('No prompt matches your search.')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Add your prompt' }),
+    ).toBeInTheDocument();
   });
 });
