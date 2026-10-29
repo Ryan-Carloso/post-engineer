@@ -5,7 +5,12 @@
 > YouTube, Instagram, LinkedIn and Bluesky. Generation is always tied to
 > publishing: one call generates, schedules and auto-publishes — no orphan
 > videos. Faceless videos are supported without a persona. Videos cost
-> prepaid tokens; check the balance before generating.
+> prepaid tokens; check the balance before generating. Post Engineer is open
+> source under the Apache-2.0 license
+> (https://github.com/Ryan-Carloso/post-engineer): self-host it on your own
+> VPS or use the hosted platform and buy tokens. Lip sync runs on Modal.com,
+> whose Starter plan includes $30/month in compute credits — we are not
+> Modal, and this free-credit offer is theirs and can end at any time.
 
 ## Platform
 
