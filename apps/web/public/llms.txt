@@ -48,4 +48,4 @@
   `get_post_metrics`, `list_token_transactions`,
   `get_persona_delete_preview`.
 - Prompts: `/daily-news` (daily news becomes a video), `/github-prs`
-  (GitHub PRs become videos).
+  (GitHub PRs become videos), `/full-setup` (full setup becomes videos).
