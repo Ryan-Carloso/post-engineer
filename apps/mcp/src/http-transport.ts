@@ -5,12 +5,14 @@
 // added, removed, or changed here: the HTTP endpoint serves exactly the
 // tools the stdio server serves, with the same handlers.
 //
-// Local-only skeleton: the listener binds loopback by default and refuses
-// to bind any other host unless --allow-remote is passed explicitly.
-// There is NO authentication in this PR — that is P6-2. Even with
-// --allow-remote, the endpoint accepts unauthenticated requests, so it
-// must only be used on a trusted network until P6-2 lands. The stdio
-// default is unchanged: without --http-transport, no port is opened.
+// Authentication (Phase 6, P6-2): when OAuth is configured
+// (MCP_OAUTH_ISSUER + MCP_RESOURCE, see http-auth.ts), every /mcp
+// request must present a valid Bearer access token with the mcp:tools
+// scope, and the listener may bind a non-loopback host. Without OAuth
+// configured the P6-1 behaviour stands: loopback only, and a remote
+// bind is refused at startup — an unauthenticated remote endpoint is
+// no longer possible, not merely warned about. The stdio default is
+// unchanged: without --http-transport, no port is opened.
 //
 // Because the endpoint is unauthenticated, it also validates request
 // origin and host against DNS rebinding: the SDK's own rebinding
@@ -34,6 +36,15 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import {
+  authenticateHttpRequest,
+  createHttpAuthenticator,
+  protectedResourceDocument,
+  unauthorizedHttpResponse,
+  type AuthContext,
+  type HttpAuthConfig,
+} from './http-auth.js';
+import { createHttpRateLimiter, type HttpRateLimiter } from './http-rate-limit.js';
 
 export interface HttpTransportOptions {
   host: string;
@@ -198,17 +209,35 @@ async function readBody(req: IncomingMessage, res: ServerResponse): Promise<unkn
 
 // Start the HTTP server. serverFactory builds one McpServer per /mcp
 // request (see the stateless note above); the HTTP listener itself holds
-// no server or tool state. Serves POST /mcp plus a plain GET /health probe.
+// no server or tool state. Serves POST /mcp, a plain GET /health probe,
+// and GET /.well-known/oauth-protected-resource when auth is configured.
+// When auth is null the P6-1 loopback-only behaviour applies and any
+// remote bind is refused here, before listening: --allow-remote without
+// OAuth configured is a startup error, not a warning, since P6-2.
 export async function serveHttpTransport(
-  serverFactory: () => McpServer,
+  serverFactory: (auth?: AuthContext) => McpServer,
   options: HttpTransportOptions,
+  auth: HttpAuthConfig | null = null,
 ): Promise<HttpTransportHandle> {
-  if (options.allowRemote) {
-    console.error(
-      'WARNING: MCP HTTP server bound with --allow-remote but no authentication is configured yet ' +
-        '(P6-2 adds OAuth token validation). Do not expose this endpoint beyond a trusted network.',
-    );
+  if (auth === null) {
+    if (!isLoopbackHost(options.host)) {
+      throw new Error(
+        `Refusing to bind the MCP HTTP server to non-loopback host "${options.host}" without OAuth ` +
+          'authentication configured (set MCP_OAUTH_ISSUER and MCP_RESOURCE). Bind loopback, or configure OAuth first.',
+      );
+    }
+    if (options.allowRemote) {
+      throw new Error(
+        'Refusing to start the MCP HTTP server with --allow-remote without OAuth authentication ' +
+          'configured (set MCP_OAUTH_ISSUER and MCP_RESOURCE). An unauthenticated remote endpoint is not allowed.',
+      );
+    }
   }
+  const authenticator = auth === null ? null : createHttpAuthenticator(auth);
+  const rateLimiter: HttpRateLimiter | null =
+    auth === null
+      ? null
+      : createHttpRateLimiter({ limit: auth.rateLimitPerMinute, windowMs: 60_000 });
 
   const httpServer: Server = createServer(async (req, res) => {
     try {
@@ -223,14 +252,50 @@ export async function serveHttpTransport(
         res.end(JSON.stringify({ ok: true }));
         return;
       }
+      if (pathname === '/.well-known/oauth-protected-resource' && req.method === 'GET') {
+        if (auth === null) {
+          res.writeHead(404, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Not found' }));
+          return;
+        }
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(protectedResourceDocument(auth)));
+        return;
+      }
       if (pathname !== '/mcp') {
         res.writeHead(404, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ error: 'Not found' }));
         return;
       }
+      // Authenticate before any tool is built or dispatched: an
+      // unauthenticated request never learns the tool list, and a
+      // request authenticated as one subject never runs as another.
+      // The rate limit is per verified subject, checked after auth so
+      // unauthenticated traffic cannot burn another subject's budget.
+      let authContext: AuthContext | undefined;
+      if (auth !== null && authenticator !== null && rateLimiter !== null) {
+        const verified = await authenticateHttpRequest(req, authenticator);
+        if (verified === null) {
+          unauthorizedHttpResponse(res, auth);
+          return;
+        }
+        const limited = rateLimiter.check(verified.sub);
+        if (!limited.allowed) {
+          res.writeHead(429, {
+            'content-type': 'application/json',
+            'retry-after': String(limited.retryAfterSeconds),
+          });
+          res.end(JSON.stringify({ error: 'Too many requests.' }));
+          return;
+        }
+        authContext = verified;
+      }
       // Fresh server + transport per request: the SDK's stateless
       // transport cannot be reused, and a server binds to one transport.
-      const server = serverFactory();
+      // The factory receives the verified context so the per-request
+      // client forwards this subject's bearer to the web API — the
+      // server never falls back to another subject's credential.
+      const server = serverFactory(authContext);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       let cleanedUp = false;
       const cleanup = (): void => {

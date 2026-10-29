@@ -247,19 +247,17 @@ describe('serveHttpTransport', () => {
     expect(response.status).toBe(404);
   });
 
-  it('warns on stderr when started with --allow-remote (no auth yet)', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    try {
-      const handle = await serveHttpTransport(() => createPostEngineerMcpServer(mockClient()), {
+  // P6-2 changed this behaviour deliberately: --allow-remote without
+  // OAuth configured is a startup error, not a warning — an
+  // unauthenticated remote endpoint is no longer possible.
+  it('refuses to start with --allow-remote and no OAuth configured', async () => {
+    await expect(
+      serveHttpTransport(() => createPostEngineerMcpServer(mockClient()), {
         host: '127.0.0.1',
         port: 0,
         allowRemote: true,
-      });
-      handles.push(handle);
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('WARNING'));
-    } finally {
-      errorSpy.mockRestore();
-    }
+      }),
+    ).rejects.toThrow(/OAuth authentication/);
   });
 
   // Raw requests: fetch forbids setting Origin and Host headers, and
@@ -314,20 +312,27 @@ describe('serveHttpTransport', () => {
     expect(await rawStatus(healthUrl, { host: '::1' })).toBe(200);
   });
 
-  it('skips the Host check when explicitly bound non-loopback with --allow-remote', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    try {
-      const handle = await serveHttpTransport(() => createPostEngineerMcpServer(mockClient()), {
+  // P6-2: a non-loopback bind now requires OAuth configured; the Host
+  // check is still skipped for that bind. /health needs no token, so a
+  // dummy auth config suffices here — no JWKS fetch happens for it.
+  it('skips the Host check when bound non-loopback with auth configured', async () => {
+    const handle = await serveHttpTransport(
+      () => createPostEngineerMcpServer(mockClient()),
+      {
         host: '0.0.0.0',
         port: 0,
         allowRemote: true,
-      });
-      handles.push(handle);
-      const healthUrl = handle.url.replace(/\/mcp$/, '/health').replace('0.0.0.0', '127.0.0.1');
-      expect(await rawStatus(healthUrl, { host: 'example.internal' })).toBe(200);
-    } finally {
-      errorSpy.mockRestore();
-    }
+      },
+      {
+        issuer: 'https://auth.example.test',
+        resource: 'https://api.example.test/mcp',
+        jwksUrl: 'http://127.0.0.1:1/.well-known/jwks.json',
+        rateLimitPerMinute: 120,
+      },
+    );
+    handles.push(handle);
+    const healthUrl = handle.url.replace(/\/mcp$/, '/health').replace('0.0.0.0', '127.0.0.1');
+    expect(await rawStatus(healthUrl, { host: 'example.internal' })).toBe(200);
   });
 
   it('answers 500 when the server factory throws instead of crashing the listener', async () => {
