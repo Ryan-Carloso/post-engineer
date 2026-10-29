@@ -60,12 +60,16 @@ const DEFAULT_RATE_LIMIT_PER_MINUTE = 120;
 // malformed rate limit so the process fails fast instead of running
 // with an unintended limit.
 export function parseHttpAuthOptions(env: NodeJS.ProcessEnv): HttpAuthConfig | null {
-  const issuer = env.MCP_OAUTH_ISSUER?.trim();
-  const resource = env.MCP_RESOURCE?.trim();
+  // Mirror apps/web/lib/oauth/config.ts: the web strips trailing slashes
+  // before these values become expected token claims, so the MCP side
+  // must expect the normalized forms or a trailing slash in env would
+  // reject every otherwise-valid token.
+  const issuer = env.MCP_OAUTH_ISSUER?.trim().replace(/\/+$/, '');
+  const resource = env.MCP_RESOURCE?.trim().replace(/\/+$/, '');
   if (issuer === undefined || issuer === '' || resource === undefined || resource === '') {
     return null;
   }
-  const jwksUrl = env.MCP_OAUTH_JWKS_URL?.trim() || `${issuer.replace(/\/$/, '')}/.well-known/jwks.json`;
+  const jwksUrl = env.MCP_OAUTH_JWKS_URL?.trim() || `${issuer}/.well-known/jwks.json`;
   const rateLimitRaw = env.MCP_HTTP_RATE_LIMIT_PER_MINUTE?.trim();
   let rateLimitPerMinute = DEFAULT_RATE_LIMIT_PER_MINUTE;
   if (rateLimitRaw !== undefined && rateLimitRaw !== '') {

@@ -97,6 +97,18 @@ describe('parseHttpAuthOptions', () => {
     });
   });
 
+  it('strips trailing slashes like the web, so a slashed env still matches minted tokens', () => {
+    expect(
+      parseHttpAuthOptions({ MCP_OAUTH_ISSUER: `${ISSUER}/`, MCP_RESOURCE: `${RESOURCE}///` }),
+    ).toEqual({
+      issuer: ISSUER,
+      resource: RESOURCE,
+      jwksUrl: `${ISSUER}/.well-known/jwks.json`,
+      rateLimitPerMinute: 120,
+    });
+    expect(parseHttpAuthOptions({ MCP_OAUTH_ISSUER: '///', MCP_RESOURCE: RESOURCE })).toBeNull();
+  });
+
   it('honours an explicit JWKS URL and rate limit override', () => {
     expect(
       parseHttpAuthOptions({
