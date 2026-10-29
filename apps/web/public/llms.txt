@@ -1,0 +1,51 @@
+# Post Engineer
+
+> Post Engineer lets AI agents create AI personas (avatar, voice, language,
+> niche), generate videos with them, and schedule automated posting to
+> YouTube, Instagram, LinkedIn and Bluesky. Generation is always tied to
+> publishing: one call generates, schedules and auto-publishes — no orphan
+> videos. Faceless videos are supported without a persona. Videos cost
+> prepaid tokens; check the balance before generating.
+
+## Platform
+
+- [Post Engineer](https://post-engineer.com/): create an account, create AI
+  personas, generate videos, connect social accounts, schedule automated posting.
+- [API keys](https://post-engineer.com/api-keys): generate the API key used by
+  the MCP server.
+- [Prompts and recipes](https://post-engineer.com/recipes): ready-made prompts
+  for the MCP server, including daily news becomes a video and GitHub PRs
+  become videos.
+
+## MCP server
+
+- [npm package](https://www.npmjs.com/package/post-engineer-mcp): run locally
+  with `npx -y post-engineer-mcp@latest` and `POST_ENGINEER_API_KEY`.
+  Requires Node.js 20.10+.
+- [MCP server docs](https://github.com/Ryan-Carloso/post-engineer/tree/main/apps/mcp):
+  setup, tool list, prompts, and social account ID mapping.
+- [Repository](https://github.com/Ryan-Carloso/post-engineer): the Post Engineer
+  monorepo (web, engine, MCP server).
+
+## MCP tools
+
+- Personas and voices: `list_personas`, `create_persona`, `update_persona`,
+  `delete_persona`, `list_voices`, `list_cloned_voices`,
+  `create_cloned_voice`, `get_cloned_voice`, `delete_cloned_voice`,
+  `preview_cloned_voice`, `list_faces`, `list_persona_images`,
+  `add_persona_image`, `update_persona_image`, `remove_persona_image`.
+- Video: `validate_script` (mechanical validation, no tokens spent),
+  `generate_persona_video` (one video per call; script as segments — hook
+  first, body, CTA last, 60–200 words total; slot 3h–30d ahead or
+  `mode: 'asap'`), `get_video_status`, `get_video_task_progress`,
+  `cancel_video_task`, `upload_media`, `check_media`,
+  `publish_video_direct`.
+- Accounts and schedule: `connect_account`, `list_social_accounts`,
+  `get_persona_publishing_accounts`, `set_persona_publishing_accounts`,
+  `disconnect_account`, `list_schedules`, `list_posts`, `get_slot`,
+  `update_slot_title`, `delete_slot`, `cancel_schedule`,
+  `list_video_generations`, `get_video_generation`, `get_post`,
+  `get_post_metrics`, `list_token_transactions`,
+  `get_persona_delete_preview`.
+- Prompts: `/daily-news` (daily news becomes a video), `/github-prs`
+  (GitHub PRs become videos), `/full-setup` (full setup becomes videos).

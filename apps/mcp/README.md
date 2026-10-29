@@ -157,6 +157,7 @@ hub by a sync test (`prompts-sync.test.ts`).
 
 - `/daily-news`: Daily news becomes a video — turn one top GNews story of the day into one persona video, validated before any token is spent.
 - `/github-prs`: GitHub PRs become videos — turn a GitHub pull request into one persona video.
+- `/full-setup`: Full setup becomes videos — connect accounts, create a persona, validate the script, and publish your first video without skipping a step.
 
 Add a new prompt to the web hub (`apps/web/app/recipes/prompts.ts` + its
 i18n title/description), then copy the same slug, title, description, and

@@ -170,7 +170,7 @@ describe('prompts hub over MCP (slash commands)', () => {
     await withClient(async (client) => {
       const { prompts } = await client.listPrompts();
       const slugs = prompts.map((p) => p.name);
-      expect(slugs).toEqual(['daily-news', 'github-prs']);
+      expect(slugs).toEqual(['daily-news', 'github-prs', 'full-setup']);
       for (const prompt of prompts) {
         expect(prompt.title, `prompt ${prompt.name} has a title`).toBeTruthy();
         expect(prompt.description, `prompt ${prompt.name} has a description`).toBeTruthy();
