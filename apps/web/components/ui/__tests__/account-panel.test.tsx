@@ -44,6 +44,7 @@ vi.mock('@/lib/supabase/client', () => ({
 vi.mock('@/lib/ui', () => ({
   ProfileIcon: () => <span data-testid="icon-profile" />,
   KeyIcon: () => <span data-testid="icon-key" />,
+  CoinsIcon: () => <span data-testid="icon-coins" />,
 }));
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -165,6 +166,14 @@ describe('AccountPanel', () => {
     expect(link).toHaveAttribute('href', '/api-keys');
     expect(link).toHaveTextContent('nav.apiKeys');
     expect(within(link).getByTestId('icon-key')).toBeInTheDocument();
+  });
+
+  it('renders the Billing row linking to /billing', () => {
+    render(<AccountPanel />, { wrapper: createWrapper() });
+    const link = screen.getByTestId('profile-billing-link');
+    expect(link).toHaveAttribute('href', '/billing');
+    expect(link).toHaveTextContent('account.billingLink');
+    expect(within(link).getByTestId('icon-coins')).toBeInTheDocument();
   });
 
   it('signs out and routes to /login when the sign-out button is clicked', async () => {

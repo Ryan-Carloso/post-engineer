@@ -32,6 +32,7 @@ vi.mock('@/lib/ui', () => ({
   KeyIcon: () => <span data-testid="icon-key" />,
   GlobeIcon: () => <span data-testid="icon-globe" />,
   CoinsIcon: () => <span data-testid="icon-coins" />,
+  ComposeIcon: () => <span data-testid="icon-compose" />,
   ProfileIcon: () => <span data-testid="icon-profile" />,
   HistoryIcon: () => <span data-testid="icon-history" />,
   ChartIcon: () => <span data-testid="icon-chart" />,
@@ -165,14 +166,14 @@ describe('app/(main)/layout — MainLayout', () => {
     }
   });
 
-  it('renders the sidebar tabs in order: Posts, Accounts, Personas, Metrics, Tokens', () => {
+  it('renders the sidebar tabs in order: Posts, Accounts, Personas, Metrics, Prompts', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const sidebar = screen.getByTestId('nav-brand').closest('aside');
     const nav = within(sidebar as HTMLElement).getByRole('navigation');
     const titles = within(nav)
       .getAllByRole('link')
       .map((link) => link.getAttribute('title'));
-    expect(titles).toEqual(['nav.posts', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.billing']);
+    expect(titles).toEqual(['nav.posts', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.prompts']);
   });
 
   it('lists Posts as the first navigation tab, linking to /posts', () => {
@@ -196,10 +197,32 @@ describe('app/(main)/layout — MainLayout', () => {
     expect(postsLink?.getAttribute('href')).toBe('/posts');
   });
 
-  it('billing tab links to /billing', () => {
+  it('prompts tab links to /recipes', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const billingLink = screen.getAllByText('nav.billing')[0].closest('a');
-    expect(billingLink?.getAttribute('href')).toBe('/billing');
+    const promptsLink = screen.getAllByText('nav.prompts')[0].closest('a');
+    expect(promptsLink?.getAttribute('href')).toBe('/recipes');
+  });
+
+  it('does not render a Billing tab in the sidebar nav (moved to the profile area)', () => {
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const sidebar = screen.getByTestId('nav-brand').closest('aside');
+    const nav = within(sidebar as HTMLElement).getByRole('navigation');
+    expect(within(nav).queryByText('nav.billing')).toBeNull();
+  });
+
+  it('billing is reachable from the profile panel, not from a tab', () => {
+    vi.mocked(useSessionQuery).mockReturnValue({
+      data: {
+        id: 'u1',
+        email: 'test@example.com',
+        user_metadata: { name: 'User' },
+      },
+      isLoading: false,
+    } as never);
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const panelLink = screen.getByTestId('profile-billing-link');
+    expect(panelLink).toHaveAttribute('href', '/billing');
+    expect(panelLink).toHaveTextContent('account.billingLink');
   });
 
   it('api keys are reachable from the profile panel, not from a tab', () => {
@@ -348,17 +371,22 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(postsLink?.getAttribute('href')).toBe('/posts');
     });
 
-    it('renders tabs in order: Posts, Personas, Accounts, Billing', () => {
+    it('renders tabs in order: Posts, Personas, Accounts, Prompts', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       const labels = within(getMobileNav())
         .getAllByRole('link')
         .map((link) => link.textContent);
-      expect(labels).toEqual(['nav.posts', 'nav.persona', 'nav.accounts', 'nav.billing']);
+      expect(labels).toEqual(['nav.posts', 'nav.persona', 'nav.accounts', 'nav.prompts']);
     });
 
     it('has no API Keys tab in the mobile nav (moved to the profile area)', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       expect(within(getMobileNav()).queryByText('nav.apiKeys')).toBeNull();
+    });
+
+    it('has no Billing tab in the mobile nav (moved to the profile area)', () => {
+      render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+      expect(within(getMobileNav()).queryByText('nav.billing')).toBeNull();
     });
 
     it('has no central create/+ button', () => {
@@ -397,7 +425,7 @@ describe('app/(main)/layout — MainLayout', () => {
       ['/posts/abc', '/posts'],
       ['/personas/abc', '/personas'],
       ['/accounts/abc', '/accounts'],
-      ['/billing/abc', '/billing'],
+      ['/recipes/daily-news', '/recipes'],
     ])('on %s marks only the %s tab as current in both navs', (pathname, href) => {
       vi.mocked(usePathname).mockReturnValue(pathname);
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });

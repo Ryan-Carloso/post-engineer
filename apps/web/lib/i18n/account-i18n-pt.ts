@@ -2,6 +2,7 @@ export const accountI18nPt = {
   title: 'Perfil',
   subtitle: 'Suas informações, tokens e preferências.',
   version: 'Versão',
+  billingLink: 'Comprar tokens e ver histórico',
   signOutAllDevices: 'Sair de todos os dispositivos',
   signOutAllDevicesTitle: 'Sair de todos os dispositivos?',
   signOutAllDevicesDesc:
