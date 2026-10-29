@@ -5,10 +5,40 @@ name: Release MCP (auto)
 # existing release-mcp.yml workflow picks up the tag and publishes via
 # trusted publishing (GitHub OIDC, no token).
 #
-# Versioning note: the MCP package version is maintained by hand in
-# apps/mcp/package.json (bumped only when cutting an MCP release — there is
-# no automatic per-PR bump). This workflow only creates the tag, and only
-# when the merge actually touched apps/mcp/.
+# Why a version is never forgotten anymore (2026-10-29: npm @latest was
+# stuck at 1.31.0 while main already contained the Phase 4/5/6 MCP changes,
+# because the old workflow SKIPPED when mcp-v<VERSION> already existed and
+# the version in apps/mcp/package.json is only bumped by hand):
+#
+# - Merge touches apps/mcp/ code (package.json excluded) and the tag for
+#   the current version does NOT exist yet -> tag it and push it (as before).
+# - Merge touches apps/mcp/ code but the tag already exists -> the workflow
+#   opens a version-bump PR (chore(mcp): auto-bump to X.Y.0) and enables
+#   auto-merge on it. When that PR merges, the bump-only path below tags
+#   the new version and release-mcp.yml publishes it.
+# - Merge touches ONLY apps/mcp/package.json (a version-bump merge) ->
+#   tag the new version if it is not tagged yet. This is what publishes
+#   1.32.0 when the bump PR merges: its merge changes package.json, so the
+#   bump-only path tags mcp-v1.32.0 with no manual tag push needed.
+#
+# The bump NEVER goes to main as a direct bot commit: the main ruleset
+# requires pull requests and has no bypass actors, so a direct push would
+# be rejected. The bump-PR + auto-merge route is the ruleset-compliant
+# automatic path. If auto-merge cannot be enabled (or the merge is blocked),
+# the workflow still leaves a visible bump PR for a one-tap manual merge,
+# and that manual merge triggers the same bump-only tagging path above —
+# so a version can be delayed, but never silently forgotten.
+#
+# Safeguards: this workflow only runs after CI succeeds on main
+# (workflow_run conclusion == success); the publish job in release-mcp.yml
+# still builds, lints, typechecks and tests before publishing, so a bad
+# bump cannot publish broken code; the auto-bump is MINOR only, never
+# major, and resets patch to 0; a docs-only change under apps/mcp/
+# (e.g. README) still counts as an apps/mcp/ change, because the trigger
+# cannot cleanly distinguish code from docs without risking a missed
+# release — the cost is an occasional version bump for a docs merge.
+# One workflow run at a time (concurrency group) so two merges cannot
+# open competing bump PRs for the same version.
 
 on:
   workflow_run:
@@ -16,38 +46,113 @@ on:
     types: [completed]
     branches: [main]
 
+concurrency:
+  group: mcp-auto-release
+  cancel-in-progress: false
+
 jobs:
   tag-and-release:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
-      contents: write # needed to push the release tag
+      contents: write # needed to push release tags and bump branches
+      pull-requests: write # needed to open the auto-bump PR and enable auto-merge
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 2 # need the parent commit to diff the merge
 
-      - name: Tag MCP release when apps/mcp changed
+      - name: Tag or auto-bump the MCP release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # NOTE: apps/mcp/package.json is excluded — a version bump alone
-          # must not trigger a release. Cut releases by pushing an mcp-v*
-          # tag (manually, or automatically when code under apps/mcp/
-          # changed).
-          if ! git diff --name-only HEAD~1 HEAD -- apps/mcp/ | grep -v '^apps/mcp/package.json$' | grep -q .; then
-            echo "apps/mcp/ unchanged in this merge (besides the version bump) — nothing to release."
-            exit 0
-          fi
-          MCP_VERSION="$(node -p "require('./apps/mcp/package.json').version")"
-          TAG="mcp-v${MCP_VERSION}"
-          if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
-            echo "Tag ${TAG} already exists — skipping."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${TAG}" -m "post-engineer-mcp v${MCP_VERSION}"
-          git push origin "${TAG}"
-          echo "Pushed ${TAG} — release-mcp.yml will publish it to npm."
+
+          # Tag the given version if it is not tagged yet. Returns 0 when
+          # a new tag was pushed, 1 when the tag already existed.
+          tag_if_missing() {
+            local tag="$1"
+            if git ls-remote --tags origin "refs/tags/${tag}" | grep -q .; then
+              echo "Tag ${tag} already exists — nothing to tag."
+              return 1
+            fi
+            git tag -a "${tag}" -m "post-engineer-mcp v${tag#mcp-v}"
+            git push origin "${tag}"
+            echo "Pushed ${tag} — release-mcp.yml will publish it to npm."
+            return 0
+          }
+
+          # Changed files in this merge, restricted to apps/mcp/.
+          CHANGED="$(git diff --name-only HEAD~1 HEAD -- apps/mcp/ || true)"
+          CODE_CHANGED=no
+          PKG_CHANGED=no
+          if printf '%s\n' "$CHANGED" | grep -v '^apps/mcp/package.json$' | grep -q .; then
+            CODE_CHANGED=yes
+          fi
+          if printf '%s\n' "$CHANGED" | grep -qx 'apps/mcp/package.json'; then
+            PKG_CHANGED=yes
+          fi
+
+          if [ "$CODE_CHANGED" = "no" ] && [ "$PKG_CHANGED" = "no" ]; then
+            echo "apps/mcp/ unchanged in this merge — nothing to release."
+            exit 0
+          fi
+
+          VERSION="$(node -p "require('./apps/mcp/package.json').version")"
+          TAG="mcp-v${VERSION}"
+
+          # Bump-only merge (a version-bump PR merged): tag the new version
+          # if it is not tagged yet. This path never bumps, so it cannot loop.
+          if [ "$CODE_CHANGED" = "no" ]; then
+            tag_if_missing "$TAG" || true
+            exit 0
+          fi
+
+          # Code merge, tag missing: today's behaviour — tag and publish.
+          if tag_if_missing "$TAG"; then
+            exit 0
+          fi
+
+          # Code merge, tag already exists: auto-bump MINOR (never major).
+          NEW_VERSION="$(node -e "
+            const v = process.argv[1];
+            const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v);
+            if (!m) { console.error('Not a semver X.Y.Z version: ' + v); process.exit(1); }
+            console.log(m[1] + '.' + (Number(m[2]) + 1) + '.0');
+          " "$VERSION")"
+          NEW_TAG="mcp-v${NEW_VERSION}"
+          if git ls-remote --tags origin "refs/tags/${NEW_TAG}" | grep -q .; then
+            echo "Tag ${NEW_TAG} already exists — a bump already happened; nothing to do."
+            exit 0
+          fi
+
+          BRANCH="chore/mcp-auto-bump-${NEW_VERSION}"
+          EXISTING_PR="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Auto-bump PR #${EXISTING_PR} already open — enabling auto-merge."
+            gh pr merge --auto --squash "$EXISTING_PR" || echo "Auto-merge could not be enabled; PR stays open for a manual tap."
+            exit 0
+          fi
+
+          git fetch origin main
+          git checkout -B "$BRANCH" origin/main
+          node -e "
+            const fs = require('fs');
+            const p = 'apps/mcp/package.json';
+            const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+            d.version = process.argv[1];
+            fs.writeFileSync(p, JSON.stringify(d, null, 2) + '\n');
+          " "$NEW_VERSION"
+          git add apps/mcp/package.json
+          git commit -m "chore(mcp): auto-bump to ${NEW_VERSION} for release"
+          git push origin "$BRANCH"
+          PR_URL="$(gh pr create \
+            --title "chore(mcp): auto-bump to ${NEW_VERSION} for release" \
+            --body "Auto-created by release-mcp-auto.yml: a merge to main touched apps/mcp/ code, but mcp-v${VERSION} was already published, so this PR bumps the package to ${NEW_VERSION} (minor only, never major). No code changes — version only. Merging this PR triggers the bump-only tagging path in the same workflow, which tags ${NEW_TAG} and release-mcp.yml publishes it to npm. Auto-merge is enabled; if it cannot merge, a manual tap on this PR has the same effect." \
+            --base main --head "$BRANCH")"
+          gh pr merge --auto --squash "$PR_URL" || echo "Auto-merge could not be enabled; PR stays open for a manual tap."
+          echo "Opened ${PR_URL}; merging it tags ${NEW_TAG} and publishes via release-mcp.yml."
