@@ -457,8 +457,10 @@ catalog_file = "resource/songs/catalog.toml"
 [search]
 # Search client kept for place photos only (Phase 5 PR 5: the pre-script
 # fact lookup is deleted). Off by default: turning it on needs
-# TAVILY_API_KEY or EXA_API_KEY in the environment (never in this file), and
-# with enabled = true and no key at all the engine refuses to start.
+# TAVILY_API_KEY in the environment (never in this file) — place photos
+# use Tavily only; Exa stays in the provider map for the boot check but
+# backs no feature. With enabled = true and no key at all the engine
+# refuses to start.
 enabled = false
 providers = ["tavily", "exa"]
 timeout_seconds = 8.0
