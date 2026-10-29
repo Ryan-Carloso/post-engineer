@@ -23,7 +23,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
 
 //---------------
-// In-memory stand-in for the 0026 migration RPCs, mirroring their SQL
+// In-memory stand-in for the 033 migration RPCs, mirroring their SQL
 // semantics: single-use jtis, unknown/expired/consumed → rotation fails.
 //---------------
 interface RefreshRecord {
@@ -276,6 +276,85 @@ describe('POST /oauth/token', () => {
       }),
     );
     expect(second.status).toBe(200);
+  });
+
+  it('fails closed with 500 when refresh token registration fails', async () => {
+    // The route must never hand out an untracked refresh token: a store
+    // error here is a 500 with no refresh_token in the response, not a
+    // best-effort grant. (This is the fail-closed path migration 033
+    // exists to unblock: without the RPCs, every offline_access grant
+    // died here.)
+    vi.mocked(createSupabaseServiceClient).mockReturnValue({
+      rpc: vi.fn(async (fn: string) => {
+        if (fn === 'register_mcp_refresh_token') {
+          return { data: null, error: { message: 'store down' } };
+        }
+        return { data: null, error: null };
+      }),
+    } as never);
+    const response = await POST(
+      form({
+        grant_type: 'authorization_code',
+        code: await freshCode(),
+        redirect_uri: 'https://chatgpt.com/connector/callback',
+        client_id: 'mcp_client_abc',
+        code_verifier: VERIFIER,
+      }),
+    );
+    expect(response.status).toBe(500);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body.error).toBe('server_error');
+    expect(body).not.toHaveProperty('refresh_token');
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('registration'),
+      expect.anything(),
+    );
+  });
+
+  it('fails closed with 500 when the rotation store errors', async () => {
+    const first = (await (
+      await POST(
+        form({
+          grant_type: 'authorization_code',
+          code: await freshCode(),
+          redirect_uri: 'https://chatgpt.com/connector/callback',
+          client_id: 'mcp_client_abc',
+          code_verifier: VERIFIER,
+        }),
+      )
+    ).json()) as Record<string, unknown>;
+    vi.mocked(createSupabaseServiceClient).mockReturnValue({
+      rpc: vi.fn(async (fn: string) => {
+        if (fn === 'rotate_mcp_refresh_token') {
+          return { data: null, error: { message: 'store down' } };
+        }
+        return { data: null, error: null };
+      }),
+    } as never);
+    const response = await POST(
+      form({
+        grant_type: 'refresh_token',
+        refresh_token: first.refresh_token as string,
+        client_id: 'mcp_client_abc',
+      }),
+    );
+    expect(response.status).toBe(500);
+    expect(((await response.json()) as Record<string, unknown>).error).toBe(
+      'server_error',
+    );
+  });
+
+  it('rejects a refresh_token grant without a refresh token', async () => {
+    const response = await POST(
+      form({
+        grant_type: 'refresh_token',
+        client_id: 'mcp_client_abc',
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as Record<string, unknown>).error).toBe(
+      'invalid_grant',
+    );
   });
 
   it('rejects a validly-signed but unregistered refresh token with invalid_grant', async () => {

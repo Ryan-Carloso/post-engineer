@@ -19,7 +19,7 @@ import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 // application/json (modern client practice, e.g. ChatGPT).
 //
 // Refresh tokens are single-use: every issued token registers its jti in
-// the mcp_oauth_refresh_tokens allowlist (migration 0026, identifier only —
+// the mcp_oauth_refresh_tokens allowlist (migration 033, identifier only —
 // never the token value), and rotation consumes the old jti while
 // registering the replacement in one atomic RPC. Replays, unknown or
 // expired jtis are rejected with invalid_grant.

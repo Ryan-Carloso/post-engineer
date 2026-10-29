@@ -38,6 +38,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 030 | `migrations/030_scheduled-posts-segments.sql` | Per-post script segments (`scheduled_posts.segments`, nullable jsonb), forwarded by the engine batch pipeline so a requeued slot keeps its script and user photos |
 | 031 | `migrations/031_scheduled-posts-title-drop-topic.sql` | BREAKING: `scheduled_posts.title` (slot label) replaces `scheduled_posts.topic` — existing labels are backfilled from `topic`, then the `topic` column is dropped (destructive; shipped under the former `db:destructive-approved` label gate, removed in BETA). Segments-NULL rows have no script and fail under the engine's generic scriptless rule |
 | 032 | `migrations/032_schedules-drop-post-script-prompt.sql` | BREAKING: drop `schedules.post_script_prompt` — scripts come from segments only since Phase 5 PR 4, so the snapshot column is write-dead with no reads (destructive; the former `db:destructive-approved` label gate was removed in BETA). No backfill: the value fed only the deleted LLM script path |
+| 033 | `migrations/033_mcp-refresh-tokens.sql` | MCP OAuth refresh-token allowlist (`mcp_oauth_refresh_tokens`, jti only, never the token value) + `register_mcp_refresh_token` / `rotate_mcp_refresh_token` RPCs (service-role only, single-use rotation, replay returns false) — the objects `apps/web/app/oauth/token/route.ts` already calls and fails closed without; the route comment cited 0026, which never contained them |
 
 ## How to apply
 
