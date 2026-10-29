@@ -61,6 +61,8 @@ export const recipesI18nPt = {
   searchLabel: 'Buscar prompts',
   searchPlaceholder: 'Busque por título ou objetivo…',
   emptyState: 'Nenhum prompt corresponde à sua busca.',
+  addYourPrompt: 'Envie seu prompt',
+  addYourPromptHint: 'Tem um prompt que funciona? Manda pra gente.',
   stepCount: '{count} passos',
   promptCount: '{count} prompts',
 } as const;
