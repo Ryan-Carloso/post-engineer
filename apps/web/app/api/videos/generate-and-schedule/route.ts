@@ -34,7 +34,7 @@ import { computeVideoTokens, toFiniteNumber } from '@/lib/tokens';
 import { buildSlotRows } from './slot-rows';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
 import { validateSegmentsRequest } from './segments-validation';
-import { rejectTopicsKey, resolveTitle } from './request-title';
+import { rejectScriptPromptKeys, rejectTopicsKey, resolveTitle } from './request-title';
 import {
   MAX_TITLE_CHARS,
   persistVoiceSwap,
@@ -65,7 +65,6 @@ import { ensureEngineImageUrl } from '@/lib/engine-image-url';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 const ROUTE = 'POST /api/videos/generate-and-schedule';
-const MAX_SCRIPT_PROMPT_CHARS = 2000;
 // Mirrors the engine's PersonaParams caps (apps/engine/app/models/schema.py):
 // rejecting at the same boundary here is what turns an opaque engine
 // validation error into a 400 that names the field.
@@ -101,8 +100,6 @@ const OptionsSchema = z
     facelessMaterial: z.enum(['broll', 'svg']).optional(),
     audioUrl: z.string().optional(),
     imageId: z.string().optional(),
-    scriptPrompt: z.string().optional(),
-    scriptPrompts: z.array(z.string()).optional(),
     // Segments contract (MCP first, Phase 1): one call = one video. The
     // joined script becomes the video script; no LLM expands it. The
     // engine's existing persona script budget and duration trim still
@@ -182,8 +179,6 @@ interface ValidatedInput {
   facelessMaterial: 'broll' | 'svg';
   audioUrl?: string;
   imageId?: string;
-  scriptPrompt?: string;
-  scriptPrompts?: string[];
   webhookUrl?: string;
   voiceId?: string;
   videoAspect?: '9:16' | '16:9';
@@ -220,8 +215,6 @@ function validateOptions(
     facelessMaterial,
     audioUrl,
     imageId,
-    scriptPrompt,
-    scriptPrompts,
     webhookUrl,
     voiceId,
     videoAspect,
@@ -276,39 +269,11 @@ function validateOptions(
       'options.niche',
     );
   }
-  if (scriptPrompt !== undefined && scriptPrompt.length > MAX_SCRIPT_PROMPT_CHARS) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      `options.scriptPrompt must be at most ${MAX_SCRIPT_PROMPT_CHARS} characters.`,
-      'options.scriptPrompt',
-    );
-  }
-  if (scriptPrompts !== undefined) {
-    // One request is one video, so at most one per-video prompt override.
-    if (scriptPrompts.length !== 1) {
-      return validationFailed(
-        ERROR_CODES.VALIDATION_FAILED,
-        'options.scriptPrompts must have exactly one entry (one video per request).',
-        'options.scriptPrompts',
-      );
-    }
-    for (let i = 0; i < scriptPrompts.length; i += 1) {
-      if (scriptPrompts[i].length > MAX_SCRIPT_PROMPT_CHARS) {
-        return validationFailed(
-          ERROR_CODES.VALIDATION_FAILED,
-          `options.scriptPrompts[${i}] must be at most ${MAX_SCRIPT_PROMPT_CHARS} characters.`,
-          `options.scriptPrompts.${i}`,
-        );
-      }
-    }
-  }
   return {
     faceless,
     facelessMaterial: facelessMaterial ?? 'broll',
     audioUrl,
     imageId: imageId?.trim(),
-    scriptPrompt,
-    scriptPrompts,
     webhookUrl,
     voiceId: voiceId?.trim(),
     videoAspect,
@@ -549,6 +514,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
   const topicsError = rejectTopicsKey(body);
   if (topicsError) return topicsError;
+  const scriptPromptError = rejectScriptPromptKeys(body);
+  if (scriptPromptError) return scriptPromptError;
   const parsed = BodySchema.safeParse(body);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -649,7 +616,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     audioUrl: validatedOptions.audioUrl,
     imageId: validatedOptions.imageId,
     voiceId: validatedOptions.voiceId,
-    scriptPrompt: validatedOptions.scriptPrompt,
     videoAspect: validatedOptions.videoAspect,
     videoLayout: validatedOptions.videoLayout,
     paragraphNumber: validatedOptions.paragraphNumber,
@@ -678,7 +644,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
     const imageCheck = await resolveVideoImage(supabase, personaId, userId, [], {
       title,
       niche: prep.niche,
-      script: prep.scriptPrompt,
+      // Image keyword matching uses the actual segments script now, not
+      // the removed prompt: the prompt was only ever a proxy for it.
+      script: segmentsScript,
       imageId: requestedImageId,
     });
     if (!imageCheck.ok) {
@@ -878,7 +846,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     // shadows the fresh re-signing at tick time. The raw URL is only ever a
     // stable remote URL (validated + SSRF-checked above).
     post_voice_audio_url: validatedOptions.audioUrl ?? null,
-    post_script_prompt: prep.scriptPrompt,
     post_cta_text: prep.ctaText,
     post_niche: prep.niche,
     post_language: prep.language,
@@ -1055,7 +1022,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
         const selection = await resolveVideoImage(supabase, personaId, userId, recentIds, {
           title,
           niche: prep.niche,
-          script: prep.scriptPrompt,
+          // Image keyword matching uses the actual segments script now, not
+          // the removed prompt: the prompt was only ever a proxy for it.
+          script: segmentsScript,
           imageId: requestedImageId,
         });
         if (!selection.ok) {
@@ -1099,7 +1068,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
         language: prep.language,
         video_aspect: prep.videoAspect,
         video_layout: prep.videoLayout,
-        script_prompt: prep.scriptPrompt,
         cta_text: prep.ctaText,
         paragraph_number: prep.paragraphNumber,
         niche: prep.niche,
@@ -1108,7 +1076,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
       const payload = buildJobPayload(jobPersona, {
         video_subject: title,
         video_script: segmentsScript,
-        video_script_prompt: validatedOptions.scriptPrompts?.[0] ?? validatedOptions.scriptPrompt,
         webhook_url: validatedOptions.webhookUrl,
         // generation_id: web-side correlation id for PostHog event joins;
         // slot_id: lets boot orphan triage requeue (not fail) on engine restart.

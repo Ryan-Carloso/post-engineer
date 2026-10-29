@@ -44,7 +44,6 @@ def persona_for(schedule: dict[str, Any]) -> dict[str, Any]:
 _SNAPSHOT_FIELDS = (
     ("voice_id", "post_voice_id"),
     ("voice_audio_url", "post_voice_audio_url"),
-    ("script_prompt", "post_script_prompt"),
     ("cta_text", "post_cta_text"),
     ("niche", "post_niche"),
     ("language", "post_language"),

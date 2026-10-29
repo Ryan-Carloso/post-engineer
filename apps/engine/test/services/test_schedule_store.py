@@ -89,8 +89,10 @@ class StoreRequestsTests(unittest.TestCase):
         _, _, kwargs = self._last_call()
         select = kwargs["params"]["select"]
         self.assertIn("personas(", select)
-        for field in ("niche", "script_prompt", "language", "video_aspect", "voice_id"):
+        for field in ("niche", "language", "video_aspect", "voice_id"):
             self.assertIn(field, select)
+        # Phase 5-4: the script prompt no longer rides the identity select.
+        self.assertNotIn("script_prompt", select)
 
     def test_ready_due_slots_embeds_personas_for_notification(self):
         # The Discord publish message needs the persona name.

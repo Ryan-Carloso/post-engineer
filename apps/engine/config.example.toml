@@ -484,13 +484,9 @@ redis_password = ""
 # 文生视频时的最大并发任务数
 max_concurrent_tasks = 1
 
-# Default "additional requirements" injected into every LLM script-generation
-# call when the task doesn't override video_script_prompt. Written in English
-# (the instruction language) so it applies regardless of the output language
-# (the output language is passed separately as `language: <code>`). This version
-# pushes the model toward storytelling with a random emotion and a random
-# narrative angle so the output feels less generic and more varied across runs.
-# Set to "" to disable and let the LLM write long-form paragraphs.
+# Phase 5-4: UNUSED — scripts come from segments only and the task can no
+# longer override video_script_prompt (the field is gone from VideoParams).
+# The key itself is removed with the other LLM keys in P5-5.
 default_video_script_prompt = "Use a storytelling style. For each script, choose one emotion at random and one narrative angle at random, then write a unique, human-sounding story around them. Keep the pacing tight, the hook strong, and the language specific instead of generic. Avoid clichés, vague motivation, and predictable structure. End every script with a short call to action like 'Follow us for more gains.'"
 
 # 并发任务已满后的最大排队任务数，超过后接口返回 429，避免匿名请求无限堆积

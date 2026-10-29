@@ -23,6 +23,32 @@ export function rejectTopicsKey(body: unknown): NextResponse | null {
   return null;
 }
 
+// Phase 5-4: scriptPrompt/scriptPrompts are no longer generation inputs —
+// scripts come from options.segments only. Rejected explicitly, before the
+// zod parse: a plain zod object strips unknown keys silently, so without
+// this check an old caller would get a video built from segments while
+// believing its prompt applied. The 400 names the field and the replacement.
+export function rejectScriptPromptKeys(body: unknown): NextResponse | null {
+  if (typeof body !== 'object' || body === null || !('options' in body)) return null;
+  const options = (body as { options?: unknown }).options;
+  if (typeof options !== 'object' || options === null) return null;
+  if ('scriptPrompt' in options) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      'options.scriptPrompt is no longer accepted: scripts come from options.segments only.',
+      'options.scriptPrompt',
+    );
+  }
+  if ('scriptPrompts' in options) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      'options.scriptPrompts is no longer accepted: scripts come from options.segments only.',
+      'options.scriptPrompts',
+    );
+  }
+  return null;
+}
+
 export function resolveTitle(rawTitle: string): string | NextResponse {
   const title = rawTitle.trim();
   if (title.length === 0) {

@@ -674,16 +674,36 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(serialized.persona).not.toHaveProperty('photo_url');
     });
 
-    it('forwards webhook_url and the single script prompt to the engine payload', async () => {
+    it('forwards webhook_url to the engine payload and carries no script prompt', async () => {
       const res = await post(
-        baseBody({ options: { webhookUrl: 'https://example.com/hook', scriptPrompts: ['First script'] } }),
+        baseBody({ options: { webhookUrl: 'https://example.com/hook' } }),
       );
       expect(res.status).toBe(200);
       const calls = vi.mocked(startEngineVideoTask).mock.calls;
       expect(calls).toHaveLength(1);
       expect((calls[0][1] as Record<string, unknown>).webhook_url).toBe('https://example.com/hook');
       expect((calls[0][1] as Record<string, unknown>).video_subject).toBe('Porto trip');
-      expect((calls[0][1] as Record<string, unknown>).video_script_prompt).toBe('First script');
+      // Phase 5-4: scripts come from options.segments only — no prompt
+      // rides the engine payload anymore.
+      expect(calls[0][1] as Record<string, unknown>).not.toHaveProperty('video_script_prompt');
+    });
+
+    it('rejects options.scriptPrompt outright (scripts come from segments only)', async () => {
+      const res = await post(baseBody({ options: { scriptPrompt: 'Be funny' } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('options.scriptPrompt is no longer accepted: scripts come from options.segments only.');
+      expect(json.field).toBe('options.scriptPrompt');
+    });
+
+    it('rejects options.scriptPrompts outright (scripts come from segments only)', async () => {
+      const res = await post(baseBody({ options: { scriptPrompts: ['First script'] } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('options.scriptPrompts is no longer accepted: scripts come from options.segments only.');
+      expect(json.field).toBe('options.scriptPrompts');
     });
 
     it('forwards the persona language, video_aspect and paragraph_number to the engine payload', async () => {
@@ -787,7 +807,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(400);
     });
 
-    it('rejects scriptPrompts with more than one entry (one call is one video)', async () => {
+    it('rejects scriptPrompts with more than one entry (scripts come from segments only)', async () => {
       const res = await post(baseBody({ options: { scriptPrompts: ['one', 'two'] } }));
       const json = await res.json();
       expect(res.status).toBe(400);
@@ -1352,22 +1372,22 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.field).toBe('options.voiceId');
     });
 
-    it('rejects an over-long scriptPrompt', async () => {
+    it('rejects an over-long scriptPrompt outright (no length cap anymore)', async () => {
       const res = await post(baseBody({ options: { scriptPrompt: 'x'.repeat(2001) } }));
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.code).toBe('VALIDATION_FAILED');
-      expect(json.error).toBe('options.scriptPrompt must be at most 2000 characters.');
+      expect(json.error).toBe('options.scriptPrompt is no longer accepted: scripts come from options.segments only.');
       expect(json.field).toBe('options.scriptPrompt');
     });
 
-    it('rejects an over-long scriptPrompts entry with the indexed field', async () => {
+    it('rejects an over-long scriptPrompts entry outright (no length cap anymore)', async () => {
       const res = await post(baseBody({ options: { scriptPrompts: ['x'.repeat(2001)] } }));
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.code).toBe('VALIDATION_FAILED');
-      expect(json.error).toBe('options.scriptPrompts[0] must be at most 2000 characters.');
-      expect(json.field).toBe('options.scriptPrompts.0');
+      expect(json.error).toBe('options.scriptPrompts is no longer accepted: scripts come from options.segments only.');
+      expect(json.field).toBe('options.scriptPrompts');
     });
 
     it('rejects a failing custom-audio SSRF check', async () => {
@@ -2404,7 +2424,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
             niche: 'comedy',
             videoAspect: '16:9',
             paragraphNumber: 3,
-            scriptPrompt: 'Be funny',
           },
         }),
       );
@@ -2422,7 +2441,9 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(scheduleRows[0].post_niche).toBe('comedy');
       expect(scheduleRows[0].post_video_aspect).toBe('16:9');
       expect(scheduleRows[0].post_paragraph_number).toBe(3);
-      expect(scheduleRows[0].post_script_prompt).toBe('Be funny');
+      // Phase 5-4: no script prompt is snapshotted onto the schedule —
+      // the script lives on the slot's segments.
+      expect(scheduleRows[0]).not.toHaveProperty('post_script_prompt');
       // No persona, no persona call to action: the engine picks a generic one.
       expect(scheduleRows[0].post_cta_text).toBeNull();
       expect(scheduleRows[0].post_face_quality).toBe('ok');
@@ -2509,7 +2530,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
     it('prefers per-request editorial fields over the persona values', async () => {
       const res = await post(
         baseBody({
-          options: { niche: 'tech', language: 'en-US', videoAspect: '16:9', paragraphNumber: 2, scriptPrompt: 'Custom script' },
+          options: { niche: 'tech', language: 'en-US', videoAspect: '16:9', paragraphNumber: 2 },
         }),
       );
       expect(res.status).toBe(200);
@@ -2520,7 +2541,8 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(scheduleRows[0].post_language).toBe('en-US');
       expect(scheduleRows[0].post_video_aspect).toBe('16:9');
       expect(scheduleRows[0].post_paragraph_number).toBe(2);
-      expect(scheduleRows[0].post_script_prompt).toBe('Custom script');
+      // Phase 5-4: no script prompt is snapshotted onto the schedule.
+      expect(scheduleRows[0]).not.toHaveProperty('post_script_prompt');
       // And the engine payload carries the same resolved values.
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
       expect(payload.video_language).toBe('en-US');
