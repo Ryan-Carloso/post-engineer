@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 // network port — not with no flags, and not with the legacy --http flag,
 // which is ignored. The ONLY port-opening path is the explicit
 // --http-transport opt-in, which binds loopback unless --allow-remote
-// is passed. The HTTP skeleton has no authentication yet (P6-2 adds it).
+// is passed. Loopback HTTP without OAuth stays unauthenticated; a
+// remote bind requires OAuth configured (P6-2) and still refuses unauthenticated requests.
 
 async function reserveEphemeralPort(): Promise<number> {
   // Bind port 0 and read back the assigned port instead of hard-coding one:

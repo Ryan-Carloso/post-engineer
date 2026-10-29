@@ -14,7 +14,7 @@
 // no longer possible, not merely warned about. The stdio default is
 // unchanged: without --http-transport, no port is opened.
 //
-// Because the endpoint is unauthenticated, it also validates request
+// Regardless of authentication, it also validates request
 // origin and host against DNS rebinding: the SDK's own rebinding
 // protection defaults to off and validates nothing without configured
 // allowlists, so this module enforces it directly. A request with a
@@ -121,7 +121,7 @@ export function parseHttpTransportOptions(
   if (!isLoopbackHost(host) && !allowRemote) {
     throw new Error(
       `Refusing to bind the MCP HTTP server to non-loopback host "${host}" without --allow-remote. ` +
-        'This skeleton has no authentication yet (P6-2 adds it): bind loopback, or pass --allow-remote explicitly on a trusted network.',
+        'Bind loopback, or pass --allow-remote explicitly; when OAuth is configured, requests are authenticated per request (see http-auth.ts).',
     );
   }
   return { host, port, allowRemote };
