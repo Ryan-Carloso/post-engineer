@@ -136,20 +136,55 @@ export async function authenticateHttpRequest(
   }
 }
 
+// Whether the request presented a Bearer token at all (scheme
+// case-insensitive, non-empty value), regardless of whether it
+// verifies. Used only to decide the 401 challenge's error code.
+export function bearerTokenPresented(req: IncomingMessage): boolean {
+  const authorization = req.headers.authorization;
+  if (authorization === undefined) return false;
+  const parts = authorization.split(' ');
+  return parts.length === 2 && parts[0]?.toLowerCase() === 'bearer' && parts[1] !== '';
+}
+
 // Strip characters that would break out of a quoted header value.
 function headerSafe(value: string): string {
   return value.replace(/["\r\n]/g, '');
 }
 
-// Answer 401 for an unauthenticated /mcp request, with the
-// WWW-Authenticate header an MCP-spec client uses to discover the
-// authorization server. The body names no tool and no token.
-export function unauthorizedHttpResponse(res: ServerResponse, config: HttpAuthConfig): void {
+// The protected-resource metadata URL for a resource identifier, when
+// the identifier is a URL: the origin serves the RFC 9728 document at
+// /.well-known/oauth-protected-resource. Null for opaque identifiers,
+// where no metadata URL can be derived.
+export function protectedResourceMetadataUrl(resource: string): string | null {
+  try {
+    return `${new URL(resource).origin}/.well-known/oauth-protected-resource`;
+  } catch {
+    return null;
+  }
+}
+
+// Answer 401 for an unauthenticated /mcp request. The WWW-Authenticate
+// header carries realm, resource, and (when derivable) resource_metadata
+// so an MCP-spec client can discover the authorization server; the
+// error="invalid_token" code is included only when a token was actually
+// presented (RFC 6750: no error code for a request lacking credentials).
+// The body names no tool and no token.
+export function unauthorizedHttpResponse(
+  res: ServerResponse,
+  config: HttpAuthConfig,
+  tokenPresented = false,
+): void {
+  const params = [
+    'Bearer realm="post-engineer-mcp"',
+    `resource="${headerSafe(config.resource)}"`,
+  ];
+  const metadataUrl = protectedResourceMetadataUrl(config.resource);
+  if (metadataUrl !== null) params.push(`resource_metadata="${headerSafe(metadataUrl)}"`);
+  if (tokenPresented) params.push('error="invalid_token"');
+  params.push('error_description="A valid OAuth access token is required."');
   res.writeHead(401, {
     'content-type': 'application/json',
-    'www-authenticate':
-      `Bearer realm="post-engineer-mcp", resource="${headerSafe(config.resource)}", ` +
-      'error="invalid_token", error_description="A valid OAuth access token is required."',
+    'www-authenticate': params.join(', '),
   });
   res.end(JSON.stringify({ error: 'Authentication required.' }));
 }

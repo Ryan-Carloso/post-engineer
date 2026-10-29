@@ -155,6 +155,8 @@ describe('HTTP transport with OAuth authentication (P6-2)', () => {
     const wwwAuthenticate = response.headers.get('www-authenticate') ?? '';
     expect(wwwAuthenticate).toContain('Bearer');
     expect(wwwAuthenticate).toContain(RESOURCE);
+    expect(wwwAuthenticate).toContain('resource_metadata="https://api.example.test/.well-known/oauth-protected-resource"');
+    expect(wwwAuthenticate).not.toContain('error="invalid_token"');
     expect(await response.text()).not.toContain('validate_script');
   });
 
@@ -177,6 +179,7 @@ describe('HTTP transport with OAuth authentication (P6-2)', () => {
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
     });
     expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate') ?? '').toContain('error="invalid_token"');
   });
 
   it('serves tools to a valid token and hands the factory the verified subject and bearer', async () => {

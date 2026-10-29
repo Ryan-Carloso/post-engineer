@@ -38,6 +38,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
   authenticateHttpRequest,
+  bearerTokenPresented,
   createHttpAuthenticator,
   protectedResourceDocument,
   unauthorizedHttpResponse,
@@ -276,7 +277,7 @@ export async function serveHttpTransport(
       if (auth !== null && authenticator !== null && rateLimiter !== null) {
         const verified = await authenticateHttpRequest(req, authenticator);
         if (verified === null) {
-          unauthorizedHttpResponse(res, auth);
+          unauthorizedHttpResponse(res, auth, bearerTokenPresented(req));
           return;
         }
         const limited = rateLimiter.check(verified.sub);

@@ -118,4 +118,60 @@ describe('local-only transport', () => {
       child.kill('SIGKILL');
     }
   }, 15000);
+
+  it('stdio startup ignores a malformed HTTP-only rate-limit env var', async () => {
+    // Regression pin (P6-2 review): parseHttpAuthOptions throws on a bad
+    // MCP_HTTP_RATE_LIMIT_PER_MINUTE, so it must run only on the HTTP
+    // branch — a stdio session with that var set must still answer.
+    const entry = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      'dist',
+      'index.js',
+    );
+    if (!existsSync(entry)) {
+      throw new Error(`dist/index.js not found — run 'pnpm build' before 'pnpm test' (got ${entry})`);
+    }
+    const child = spawn(process.execPath, [entry], {
+      env: { ...process.env, POST_ENGINEER_API_KEY: 'test-key', MCP_HTTP_RATE_LIMIT_PER_MINUTE: 'bogus' },
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+    try {
+      const answered = new Promise<boolean>((resolve) => {
+        let buffer = '';
+        const timer = setTimeout(() => resolve(false), 10000);
+        child.stdout?.on('data', (chunk: Buffer) => {
+          buffer += chunk.toString();
+          for (const line of buffer.split('\n')) {
+            try {
+              const msg = JSON.parse(line) as { id?: unknown; result?: unknown };
+              if (msg.id === 1 && msg.result !== undefined) {
+                clearTimeout(timer);
+                resolve(true);
+              }
+            } catch {
+              // Partial line; wait for the rest.
+            }
+          }
+        });
+        child.on('exit', () => {
+          clearTimeout(timer);
+          resolve(false);
+        });
+      });
+      child.stdin?.write(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } },
+        }) + '\n',
+      );
+      expect(await answered).toBe(true);
+      expect(child.exitCode).toBeNull();
+    } finally {
+      child.kill('SIGKILL');
+    }
+  }, 20000);
 });

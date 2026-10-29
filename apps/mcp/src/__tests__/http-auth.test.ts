@@ -1,11 +1,14 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { generateKeyPair, SignJWT, exportJWK } from 'jose';
 import {
   parseHttpAuthOptions,
   createHttpAuthenticator,
   authenticateHttpRequest,
+  bearerTokenPresented,
   protectedResourceDocument,
+  protectedResourceMetadataUrl,
+  unauthorizedHttpResponse,
   type HttpAuthConfig,
 } from '../http-auth.js';
 
@@ -252,5 +255,51 @@ describe('protectedResourceDocument', () => {
       authorization_servers: [ISSUER],
       scopes_supported: ['mcp:tools', 'offline_access'],
     });
+  });
+});
+
+describe('bearerTokenPresented', () => {
+  it('is true only for a non-empty Bearer value', () => {
+    expect(bearerTokenPresented({ headers: {} } as never)).toBe(false);
+    expect(bearerTokenPresented({ headers: { authorization: 'Basic xyz' } } as never)).toBe(false);
+    expect(bearerTokenPresented({ headers: { authorization: 'Bearer ' } } as never)).toBe(false);
+    expect(bearerTokenPresented({ headers: { authorization: 'Bearer abc.def.ghi' } } as never)).toBe(true);
+    expect(bearerTokenPresented({ headers: { authorization: 'bearer abc.def.ghi' } } as never)).toBe(true);
+  });
+});
+
+describe('protectedResourceMetadataUrl', () => {
+  it('derives the well-known URL from a URL resource and null otherwise', () => {
+    expect(protectedResourceMetadataUrl('https://api.example.test/mcp')).toBe(
+      'https://api.example.test/.well-known/oauth-protected-resource',
+    );
+    expect(protectedResourceMetadataUrl('opaque-resource-id')).toBeNull();
+  });
+});
+
+describe('unauthorizedHttpResponse', () => {
+  function capture(config: HttpAuthConfig, tokenPresented: boolean) {
+    const res = { writeHead: vi.fn(), end: vi.fn() };
+    unauthorizedHttpResponse(res as never, config, tokenPresented);
+    return { status: res.writeHead.mock.calls[0]?.[0], headers: res.writeHead.mock.calls[0]?.[1] };
+  }
+
+  it('omits error= when no token was presented but keeps resource_metadata', () => {
+    const { status, headers } = capture(authConfig(), false);
+    expect(status).toBe(401);
+    const challenge = (headers as Record<string, string>)['www-authenticate'] ?? '';
+    expect(challenge).toContain('resource="https://api.example.test/mcp"');
+    expect(challenge).toContain('resource_metadata="https://api.example.test/.well-known/oauth-protected-resource"');
+    expect(challenge).not.toContain('error="invalid_token"');
+  });
+
+  it('includes error=invalid_token when a token was presented and rejected', () => {
+    const { headers } = capture(authConfig(), true);
+    expect((headers as Record<string, string>)['www-authenticate']).toContain('error="invalid_token"');
+  });
+
+  it('omits resource_metadata for an opaque resource identifier', () => {
+    const { headers } = capture({ ...authConfig(), resource: 'opaque-resource-id' }, false);
+    expect((headers as Record<string, string>)['www-authenticate']).not.toContain('resource_metadata');
   });
 });
