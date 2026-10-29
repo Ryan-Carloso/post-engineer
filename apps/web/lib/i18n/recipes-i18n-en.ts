@@ -65,4 +65,22 @@ export const recipesI18nEn = {
   addYourPromptHint: 'Got a prompt that works? Send it in.',
   stepCount: '{count} steps',
   promptCount: '{count} prompts',
+  fullSetupTitle: 'Full setup becomes videos',
+  fullSetupObjective:
+      'Connect accounts, create a persona, validate the script, and publish your first video without skipping a step.',
+  fullSetupStep1:
+      'For anyone starting from zero, with no accounts or persona connected.',
+  fullSetupStep2:
+      'It walks accounts, persona, a validated script, and real publishing in one flow.',
+  fullSetupStep3: 'Connect your accounts and create your persona.',
+  fullSetupStep4:
+      'Write the script, validate before any token is spent, and confirm how it publishes.',
+  fullSetupStep5: 'Generate one video and publish it where you asked.',
+  fullSetupDeliver1: 'The accounts you chose connected and a persona created.',
+  fullSetupDeliver2:
+      'A validated script: 60–200 words, hook first, CTA last.',
+  fullSetupDeliver3: 'Your first video published on your accounts.',
+  fullSetupExampleInput: 'Starting with zero accounts and no persona.',
+  fullSetupExampleOutput:
+      'Accounts connected, persona created, script validated, one video published.',
 } as const;

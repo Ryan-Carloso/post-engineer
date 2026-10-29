@@ -11,6 +11,7 @@ vi.mock('@/lib/i18n/provider', () => {
     'recipes.dailyNewsObjective': 'Turn one news story of the day into one persona video.',
     'recipes.githubPrsTitle': 'GitHub PRs become videos',
     'recipes.githubPrsObjective': 'Turn your GitHub pull requests into persona videos.',
+    'recipes.fullSetupTitle': 'Full setup becomes videos',
     'recipes.kindRecipe': 'Recipe',
     'recipes.kindPrompt': 'Prompt',
     'recipes.openPrompt': 'Open prompt',
@@ -53,14 +54,23 @@ describe('/recipes prompts hub list', () => {
       'href',
       '/recipes/github-prs',
     );
+    expect(screen.getByRole('link', { name: /Full setup becomes videos/ })).toHaveAttribute(
+      'href',
+      '/recipes/full-setup',
+    );
     expect(
       screen.queryByText(/Turn this GitHub pull request into one persona video/),
     ).not.toBeInTheDocument();
   });
 
+  it('shows three prompts in the hero count', () => {
+    render(<RecipesPage />);
+    expect(screen.getByText('recipes.promptCount:{"count":3}')).toBeInTheDocument();
+  });
+
   it('labels entries by kind, not by sequence number', () => {
     render(<RecipesPage />);
-    expect(screen.getAllByText('Recipe')).toHaveLength(2);
+    expect(screen.getAllByText('Recipe')).toHaveLength(3);
     expect(screen.getAllByText('Prompt')).toHaveLength(2);
     expect(screen.queryByText('01')).not.toBeInTheDocument();
     expect(screen.queryByText('02')).not.toBeInTheDocument();
@@ -87,7 +97,7 @@ describe('/recipes prompts hub list', () => {
 
   it('shows the step count on each card', () => {
     render(<RecipesPage />);
-    expect(screen.getAllByText('recipes.stepCount:{"count":5}')).toHaveLength(2);
+    expect(screen.getAllByText('recipes.stepCount:{"count":5}')).toHaveLength(3);
   });
 
   it('offers a secondary "Add your prompt" link to the prompt_request template after the grid', () => {
