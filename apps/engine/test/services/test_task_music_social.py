@@ -24,15 +24,15 @@ from app.services import task as tm
 from app.services.intro_cost import IntroCostReport
 
 
-def _params():
+def _params(subject="Lisbon trams"):
     return VideoParams(
-        video_subject="Lisbon trams",
+        video_subject=subject,
         video_materials=[MaterialInfo(provider="local", url="/tmp/a.mp4", duration=0)],
     )
 
 
 class StartMusicSocialTests(unittest.TestCase):
-    def _run_start(self, platforms):
+    def _run_start(self, platforms, subject="Lisbon trams"):
         """Run start() to the cross-post stage; return (result, mocks)."""
         service = tm.upload_post.upload_post_service
         with ExitStack() as stack:
@@ -129,7 +129,7 @@ class StartMusicSocialTests(unittest.TestCase):
                 )
             )
             complete = tm._complete_task
-            result = tm.start(task_id="task-music-social", params=_params())
+            result = tm.start(task_id="task-music-social", params=_params(subject))
             return result, complete, cross_post, music_mood_llm, social_llm, moods_catalog
 
     def test_music_mood_is_none_without_any_llm_call(self):
@@ -155,6 +155,17 @@ class StartMusicSocialTests(unittest.TestCase):
                 "containsSyntheticMedia": True,
             },
         )
+
+    def test_empty_subject_youtube_title_uses_generic_fallback(self):
+        # OpenCode review on this PR: the schema allows an empty subject
+        # and the upload service sends youtube_title verbatim, so the
+        # mechanical metadata must never carry an empty title. (The
+        # generic `title` argument's own whitespace hole is pre-existing
+        # and out of this PR's scope, so only youtube_title is pinned.)
+        _, _, cross_post, _, _, _ = self._run_start(["youtube"], subject="   ")
+        cross_post.assert_called_once()
+        youtube_extra = cross_post.call_args.kwargs["youtube_extra"]
+        self.assertEqual(youtube_extra["youtube_title"], "Check out this video! #shorts #viral")
 
     def test_cross_post_without_youtube_gets_no_youtube_extra(self):
         # The mechanical fallback applies only to the YouTube metadata

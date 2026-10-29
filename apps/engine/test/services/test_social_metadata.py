@@ -27,12 +27,24 @@ class MechanicalSocialMetadataTests(unittest.TestCase):
         result = social_metadata.mechanical_social_metadata(video_subject="  Lisbon trams  ")
         self.assertEqual(result["title"], "Lisbon trams")
 
-    def test_empty_subject_stays_empty(self):
-        # Mechanical means no invention: with no subject there is no
-        # title to fall back to (the cross-post caller keeps its own
-        # title fallback for the video itself).
+    def test_empty_subject_uses_generic_fallback(self):
+        # The schema allows an empty subject, and the upload service
+        # sends youtube_title verbatim: the helper must never return an
+        # empty title. The fallback is the fixed generic string, not
+        # the first script sentence the old LLM fallback used.
         result = social_metadata.mechanical_social_metadata(video_subject="")
-        self.assertEqual(result, {"title": "", "caption": "", "hashtags": []})
+        self.assertEqual(
+            result,
+            {
+                "title": "Check out this video! #shorts #viral",
+                "caption": "",
+                "hashtags": [],
+            },
+        )
+
+    def test_whitespace_only_subject_uses_generic_fallback(self):
+        result = social_metadata.mechanical_social_metadata(video_subject="   ")
+        self.assertEqual(result["title"], "Check out this video! #shorts #viral")
 
     def test_each_call_returns_fresh_containers(self):
         first = social_metadata.mechanical_social_metadata(video_subject="Lisbon trams")
