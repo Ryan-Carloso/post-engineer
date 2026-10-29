@@ -142,7 +142,6 @@ testpaths = ["test"]
 norecursedirs = ["mutants"]
 markers = [
     "real_script_angle: run the real llm.generate_script_angle instead of the autouse stub",
-    "real_stock_judge: run the real stock_term_judge LLM call instead of the autouse stub",
 ]
 
 [tool.mutmut]
