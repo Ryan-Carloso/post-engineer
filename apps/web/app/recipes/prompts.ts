@@ -6,9 +6,10 @@
 // hand-built page per prompt. Prompt text is English by design:
 // generation language is en. The copy-ready texts are the source
 // content of the recipe docs in docs/recipes/, rendered here as
-// structured components, not as a raw markdown dump and not as
-// a link out to GitHub (the doc link is only a small secondary
-// link at the bottom of the detail page).
+// structured components, not as a raw markdown dump. Cards link
+// to the internal detail page; the list footer's "Add your
+// prompt" link (add-prompt-link.tsx) and the detail page's doc
+// link are the only GitHub links.
 //---------------
 
 import type { TranslationKey } from '@/lib/i18n';
