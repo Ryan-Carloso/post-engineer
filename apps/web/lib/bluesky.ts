@@ -11,8 +11,41 @@
 //---------------
 type AtpLoginResponse = {
   success: boolean;
-  data?: { did: string; handle?: string; accessJwt?: string };
+  data?: {
+    did: string;
+    handle?: string;
+    accessJwt?: string;
+    emailConfirmed?: boolean;
+    didDoc?: unknown;
+  };
 };
+
+export type BlueskySession = {
+  did: string;
+  handle: string;
+  accessJwt: string;
+  pdsHost: string;
+  emailConfirmed: boolean | undefined;
+};
+
+export function pdsHostFromDidDoc(didDoc: unknown): string | null {
+  if (typeof didDoc !== 'object' || didDoc === null) return null;
+  const service = (didDoc as { service?: unknown }).service;
+  if (!Array.isArray(service)) return null;
+  for (const item of service) {
+    if (typeof item !== 'object' || item === null) continue;
+    const rec = item as { id?: unknown; serviceEndpoint?: unknown };
+    if (typeof rec.id !== 'string' || !rec.id.endsWith('#atproto_pds')) continue;
+    if (typeof rec.serviceEndpoint !== 'string') continue;
+    try {
+      const host = new URL(rec.serviceEndpoint).hostname;
+      return host === '' ? null : host;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 type AtpAgentLike = {
   login: (args: { identifier: string; password: string }) => Promise<AtpLoginResponse>;
 };
@@ -138,7 +171,7 @@ export async function loginToBluesky(
 export async function loginToBlueskySession(
   handle: string,
   appPassword: string,
-): Promise<{ did: string; handle: string; accessJwt: string }> {
+): Promise<BlueskySession> {
   const agent = await createAtpAgent('https://bsky.social');
   try {
     const response = await agent.login({
@@ -148,7 +181,19 @@ export async function loginToBlueskySession(
     if (!response.success || !response.data?.did || !response.data.accessJwt) {
       throw new BlueskyError('invalid_credentials', 'Bluesky login failed.');
     }
-    return { did: response.data.did, handle: response.data.handle ?? handle, accessJwt: response.data.accessJwt };
+    const pdsHost = pdsHostFromDidDoc(response.data.didDoc);
+    if (pdsHost === null) {
+      throw new BlueskyError('unknown', 'Bluesky session is missing the PDS host.');
+    }
+    const emailConfirmed =
+      typeof response.data.emailConfirmed === 'boolean' ? response.data.emailConfirmed : undefined;
+    return {
+      did: response.data.did,
+      handle: response.data.handle ?? handle,
+      accessJwt: response.data.accessJwt,
+      pdsHost,
+      emailConfirmed,
+    };
   } catch (error) {
     if (error instanceof BlueskyError) throw error;
     const message = error instanceof Error ? error.message : String(error);

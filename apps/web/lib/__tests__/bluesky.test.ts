@@ -37,7 +37,19 @@ import {
   BLUESKY_VIDEO_MAX_SECONDS,
   validateVideoForBluesky,
   loginToBluesky,
+  loginToBlueskySession,
 } from '@/lib/bluesky';
+
+const PDS_HOST = 'pds.example.host.bsky.network';
+const DID_DOC = {
+  service: [
+    {
+      id: '#atproto_pds',
+      type: 'AtprotoPersonalDataServer',
+      serviceEndpoint: `https://${PDS_HOST}`,
+    },
+  ],
+};
 
 describe('bluesky — limites', () => {
   it('exposes documented limit constants', () => {
@@ -118,13 +130,53 @@ describe('loginToBluesky', () => {
   it('returns did and handle on success', async () => {
     mockAgentInstance.login.mockResolvedValueOnce({
       success: true,
-      data: { did: 'did:plc:abc', handle: 'eu.bsky.social', accessJwt: 'jwt-1' },
+      data: {
+        did: 'did:plc:abc',
+        handle: 'eu.bsky.social',
+        accessJwt: 'jwt-1',
+        emailConfirmed: true,
+        didDoc: DID_DOC,
+      },
     });
     const result = await loginToBluesky('eu.bsky.social', 'app-pass-1');
     expect(result).toEqual({ did: 'did:plc:abc', handle: 'eu.bsky.social' });
     expect(mockAgentInstance.login).toHaveBeenCalledWith({
       identifier: 'eu.bsky.social',
       password: 'app-pass-1',
+    });
+  });
+
+  it('loginToBlueskySession returns the PDS host and emailConfirmed from didDoc', async () => {
+    mockAgentInstance.login.mockResolvedValueOnce({
+      success: true,
+      data: {
+        did: 'did:plc:abc',
+        handle: 'eu.bsky.social',
+        accessJwt: 'jwt-1',
+        emailConfirmed: false,
+        didDoc: DID_DOC,
+      },
+    });
+    const result = await loginToBlueskySession('eu.bsky.social', 'app-pass-1');
+    expect(result.pdsHost).toBe(PDS_HOST);
+    expect(result.emailConfirmed).toBe(false);
+    expect(result.did).toBe('did:plc:abc');
+    expect(result.accessJwt).toBe('jwt-1');
+  });
+
+  it('loginToBlueskySession fails when didDoc has no PDS', async () => {
+    mockAgentInstance.login.mockResolvedValueOnce({
+      success: true,
+      data: {
+        did: 'did:plc:abc',
+        handle: 'eu.bsky.social',
+        accessJwt: 'jwt-1',
+        emailConfirmed: true,
+        didDoc: { service: [] },
+      },
+    });
+    await expect(loginToBlueskySession('eu.bsky.social', 'app-pass-1')).rejects.toMatchObject({
+      name: 'BlueskyError',
     });
   });
 

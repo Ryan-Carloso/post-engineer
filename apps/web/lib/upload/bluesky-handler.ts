@@ -2,6 +2,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import {
+  BlueskyError,
   countBlueskyGraphemes,
   loginToBlueskySession,
   truncateBlueskyCaption,
@@ -14,7 +15,7 @@ import {
 // job up to the BlobRef → post with a video embed. The app password comes
 // encrypted blob in social_accounts (encrypted_tokens).
 // FormData (multipart, coming from the engine or the UI):
-//   provider=bluesky, video (File mp4), caption, did (repetido),
+//   provider=bluesky, video (File mp4), caption, did (repeated),
 //   userId (internal engine call only).
 //---------------
 
@@ -96,7 +97,14 @@ export async function handleBlueskyUpload(
         continue;
       }
 
-      const postId = await publishVideoToBluesky({ appPassword, handle, did, caption, buffer, mimeType: rawFile.type || 'video/mp4' });
+      const postId = await publishVideoToBluesky({
+        appPassword,
+        handle,
+        did,
+        caption,
+        buffer,
+        mimeType: rawFile.type || 'video/mp4',
+      });
 
       await touchSocialAccount(supabase, ownerUserId, 'bluesky', did);
       results.push({ accountId: did, success: true, postId });
@@ -110,11 +118,11 @@ export async function handleBlueskyUpload(
 }
 
 //---------------
-// getServiceToken — short-lived token (aud=video service) for the upload
+// getServiceToken — short-lived token (aud=did:web:<pds>) for the upload
 //---------------
-async function getServiceToken(accessJwt: string): Promise<string> {
+async function getServiceToken(accessJwt: string, pdsHost: string): Promise<string> {
   const url = new URL(`${BSKY_SERVICE}/xrpc/com.atproto.server.getServiceAuth`);
-  url.searchParams.set('aud', 'did:web:video.bsky.app');
+  url.searchParams.set('aud', `did:web:${pdsHost}`);
   url.searchParams.set('lxm', 'com.atproto.repo.uploadBlob');
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${accessJwt}` },
@@ -131,9 +139,16 @@ async function getServiceToken(accessJwt: string): Promise<string> {
 // until the BlobRef is ready. already_exists returns the previous blob.
 //---------------
 async function uploadVideoBlob(
-  args: { accessJwt: string; did: string; buffer: Buffer; mimeType: string; filename: string },
+  args: {
+    accessJwt: string;
+    pdsHost: string;
+    did: string;
+    buffer: Buffer;
+    mimeType: string;
+    filename: string;
+  },
 ): Promise<unknown> {
-  const serviceToken = await getServiceToken(args.accessJwt);
+  const serviceToken = await getServiceToken(args.accessJwt, args.pdsHost);
 
   const uploadUrl = new URL(`${VIDEO_SERVICE}/xrpc/app.bsky.video.uploadVideo`);
   uploadUrl.searchParams.set('did', args.did);
@@ -149,9 +164,16 @@ async function uploadVideoBlob(
     body: new Uint8Array(args.buffer),
   });
 
-  const uploadBody = (await uploadResponse.json().catch(() => ({}))) as { jobId?: string };
+  const uploadBody = (await uploadResponse.json().catch(() => ({}))) as {
+    jobId?: string;
+    error?: unknown;
+  };
   if (!uploadResponse.ok || !uploadBody.jobId) {
-    throw new Error(`Bluesky video upload failed (${uploadResponse.status})`);
+    const errorName =
+      typeof uploadBody.error === 'string' ? uploadBody.error.replace(/\s+/g, ' ').slice(0, 80) : '';
+    throw new Error(
+      `Bluesky video upload failed (${uploadResponse.status}${errorName ? `: ${errorName}` : ''})`,
+    );
   }
 
   const deadline = Date.now() + POLL_MAX_MS;
@@ -187,8 +209,12 @@ async function publishVideoToBluesky(args: {
   mimeType: string;
 }): Promise<string> {
   const session = await loginToBlueskySession(args.handle, args.appPassword);
+  if (session.emailConfirmed === false) {
+    throw new BlueskyError('email_not_verified', 'Bluesky email is not verified.');
+  }
   const blob = await uploadVideoBlob({
     accessJwt: session.accessJwt,
+    pdsHost: session.pdsHost,
     did: session.did,
     buffer: args.buffer,
     mimeType: args.mimeType,
@@ -206,16 +232,18 @@ async function publishVideoToBluesky(args: {
     },
   };
 
-  const postUrl = new URL(`${BSKY_SERVICE}/xrpc/com.atproto.repo.createRecord`);
-  postUrl.searchParams.set('repo', session.did);
-  postUrl.searchParams.set('collection', 'app.bsky.feed.post');
+  const postUrl = `${BSKY_SERVICE}/xrpc/com.atproto.repo.createRecord`;
   const postResponse = await fetch(postUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${session.accessJwt}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(record),
+    body: JSON.stringify({
+      repo: session.did,
+      collection: 'app.bsky.feed.post',
+      record,
+    }),
   });
   if (!postResponse.ok) {
     throw new Error(`Bluesky post failed (${postResponse.status})`);
