@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { request as httpRequest } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -250,6 +251,71 @@ describe('serveHttpTransport', () => {
       });
       handles.push(handle);
       expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('WARNING'));
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  // Raw requests: fetch forbids setting Origin and Host headers, and
+  // these tests need exactly those headers to exercise the rebinding guard.
+  async function rawStatus(url: string, headers: Record<string, string>): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const req = httpRequest(url, { method: 'GET', headers }, (res) => {
+        res.resume();
+        res.on('end', () => resolve(res.statusCode ?? 0));
+      });
+      req.on('error', reject);
+      req.end();
+    });
+  }
+
+  it('rejects a non-loopback Origin with 403 (DNS rebinding guard)', async () => {
+    const handle = await serveHttpTransport(() => createPostEngineerMcpServer(mockClient()), { host: '127.0.0.1', port: 0, allowRemote: false });
+    handles.push(handle);
+    const healthUrl = handle.url.replace(/\/mcp$/, '/health');
+    expect(await rawStatus(healthUrl, { origin: 'https://evil.example' })).toBe(403);
+  });
+
+  it('rejects an unparseable Origin with 403', async () => {
+    const handle = await serveHttpTransport(() => createPostEngineerMcpServer(mockClient()), { host: '127.0.0.1', port: 0, allowRemote: false });
+    handles.push(handle);
+    const healthUrl = handle.url.replace(/\/mcp$/, '/health');
+    expect(await rawStatus(healthUrl, { origin: 'not a url' })).toBe(403);
+  });
+
+  it('accepts a loopback Origin', async () => {
+    const handle = await serveHttpTransport(() => createPostEngineerMcpServer(mockClient()), { host: '127.0.0.1', port: 0, allowRemote: false });
+    handles.push(handle);
+    const healthUrl = handle.url.replace(/\/mcp$/, '/health');
+    expect(await rawStatus(healthUrl, { origin: 'http://localhost:5173' })).toBe(200);
+  });
+
+  it('rejects a non-loopback Host header with 403 while bound to loopback', async () => {
+    const handle = await serveHttpTransport(() => createPostEngineerMcpServer(mockClient()), { host: '127.0.0.1', port: 0, allowRemote: false });
+    handles.push(handle);
+    const healthUrl = handle.url.replace(/\/mcp$/, '/health');
+    expect(await rawStatus(healthUrl, { host: 'evil.example' })).toBe(403);
+  });
+
+  it('accepts bracketed and bare IPv6 loopback Host headers', async () => {
+    const handle = await serveHttpTransport(() => createPostEngineerMcpServer(mockClient()), { host: '127.0.0.1', port: 0, allowRemote: false });
+    handles.push(handle);
+    const healthUrl = handle.url.replace(/\/mcp$/, '/health');
+    expect(await rawStatus(healthUrl, { host: '[::1]:9999' })).toBe(200);
+    expect(await rawStatus(healthUrl, { host: '::1' })).toBe(200);
+  });
+
+  it('skips the Host check when explicitly bound non-loopback with --allow-remote', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const handle = await serveHttpTransport(() => createPostEngineerMcpServer(mockClient()), {
+        host: '0.0.0.0',
+        port: 0,
+        allowRemote: true,
+      });
+      handles.push(handle);
+      const healthUrl = handle.url.replace(/\/mcp$/, '/health').replace('0.0.0.0', '127.0.0.1');
+      expect(await rawStatus(healthUrl, { host: 'example.internal' })).toBe(200);
     } finally {
       errorSpy.mockRestore();
     }

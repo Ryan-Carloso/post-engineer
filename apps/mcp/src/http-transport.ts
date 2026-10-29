@@ -12,6 +12,17 @@
 // must only be used on a trusted network until P6-2 lands. The stdio
 // default is unchanged: without --http-transport, no port is opened.
 //
+// Because the endpoint is unauthenticated, it also validates request
+// origin and host against DNS rebinding: the SDK's own rebinding
+// protection defaults to off and validates nothing without configured
+// allowlists, so this module enforces it directly. A request with a
+// non-loopback Origin is rejected with 403 (non-browser clients send no
+// Origin and are unaffected), and while the listener is bound to
+// loopback, a non-loopback Host header is rejected too — a rebinding
+// request from a malicious page arrives with the attacker's domain as
+// Host, and binding 127.0.0.1 alone does not stop the browser on the
+// same machine from reaching it.
+//
 // The transport is stateless (sessionIdGenerator: undefined): the SDK
 // keeps no session state in memory, no Mcp-Session-Id header is issued,
 // and no tool state is shared between requests beyond what the protocol
@@ -101,18 +112,60 @@ function formatHostForUrl(host: string): string {
   return host.includes(':') ? `[${host}]` : host;
 }
 
+// Hostname from a Host header: strips a trailing :port, unwraps [::1]
+// brackets, and tolerates a bare IPv6 literal (which has several colons
+// and no brackets). Returns undefined for a missing or malformed value.
+function hostHostname(host: string | undefined): string | undefined {
+  if (host === undefined || host.length === 0) return undefined;
+  if (host.startsWith('[')) {
+    const end = host.indexOf(']');
+    return end === -1 ? undefined : host.slice(1, end);
+  }
+  const colon = host.indexOf(':');
+  if (colon !== -1 && host.indexOf(':', colon + 1) !== -1) return host;
+  return colon === -1 ? host : host.slice(0, colon);
+}
+
+// DNS-rebinding guard (see the module header). Non-browser clients send
+// no Origin and pass; a browser Origin must name a loopback host. While
+// the listener is bound to loopback, the Host header must name one too.
+function isAllowedRequest(req: IncomingMessage, options: HttpTransportOptions): boolean {
+  const origin = req.headers.origin;
+  if (origin !== undefined) {
+    try {
+      if (!LOOPBACK_HOSTS.has(new URL(origin).hostname)) return false;
+    } catch {
+      return false;
+    }
+  }
+  if (isLoopbackHost(options.host)) {
+    const hostname = hostHostname(req.headers.host);
+    if (hostname === undefined || !LOOPBACK_HOSTS.has(hostname)) return false;
+  }
+  return true;
+}
+
 async function readBody(req: IncomingMessage, res: ServerResponse): Promise<unknown | undefined> {
   const chunks: Buffer[] = [];
   let totalBytes = 0;
+  let tooLarge = false;
   for await (const chunk of req) {
     const buffer = chunk as Buffer;
     totalBytes += buffer.length;
     if (totalBytes > MAX_BODY_BYTES) {
-      res.writeHead(413, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Request body too large' }));
-      return undefined;
+      // Do not return mid-stream: leaving a for-await loop destroys the
+      // request stream, which can reset the connection before the 413
+      // response flushes. Drain instead (discarding, never storing), and
+      // answer 413 after the body ends.
+      tooLarge = true;
+      continue;
     }
     chunks.push(buffer);
+  }
+  if (tooLarge) {
+    res.writeHead(413, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Request body too large' }));
+    return undefined;
   }
   if (chunks.length === 0) return undefined;
   const text = Buffer.concat(chunks).toString('utf-8');
@@ -147,6 +200,11 @@ export async function serveHttpTransport(
 
   const httpServer: Server = createServer(async (req, res) => {
     try {
+      if (!isAllowedRequest(req, options)) {
+        res.writeHead(403, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Forbidden: non-loopback origin or host' }));
+        return;
+      }
       const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
       if (pathname === '/health' && req.method === 'GET') {
         res.writeHead(200, { 'content-type': 'application/json' });
@@ -185,9 +243,14 @@ export async function serveHttpTransport(
       }
       cleanup();
     } catch (error) {
-      if (!res.writableEnded) {
+      // Guard on headersSent, not writableEnded: if the handler already
+      // wrote response headers, writeHead would throw ERR_HTTP_HEADERS_SENT
+      // out of this catch and kill the process on an unhandled rejection.
+      if (!res.headersSent) {
         res.writeHead(500, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ error: 'Internal server error' }));
+      } else if (!res.writableEnded) {
+        res.end();
       }
       console.error('MCP HTTP request failed:', error);
     }
