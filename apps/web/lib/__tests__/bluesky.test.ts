@@ -38,6 +38,7 @@ import {
   validateVideoForBluesky,
   loginToBluesky,
   loginToBlueskySession,
+  pdsHostFromDidDoc,
 } from '@/lib/bluesky';
 
 const PDS_HOST = 'pds.example.host.bsky.network';
@@ -180,6 +181,21 @@ describe('loginToBluesky', () => {
     });
   });
 
+  it('loginToBlueskySession falls back to the input handle and undefined emailConfirmed when the login data omits both', async () => {
+    mockAgentInstance.login.mockResolvedValueOnce({
+      success: true,
+      data: {
+        did: 'did:plc:abc',
+        accessJwt: 'jwt-1',
+        didDoc: DID_DOC,
+      },
+    });
+    const result = await loginToBlueskySession('eu.bsky.social', 'app-pass-1');
+    expect(result.handle).toBe('eu.bsky.social');
+    expect(result.emailConfirmed).toBe(undefined);
+    expect(result.pdsHost).toBe(PDS_HOST);
+  });
+
   it('a credential error becomes BlueskyError without leaking the password', async () => {
     mockAgentInstance.login.mockRejectedValueOnce(new Error('Invalid identifier or password'));
     await expect(loginToBluesky('errado.bsky.social', 'senha-secreta')).rejects.toMatchObject({
@@ -190,5 +206,48 @@ describe('loginToBluesky', () => {
     } catch (error) {
       expect((error as Error).message).not.toContain('senha-secreta');
     }
+  });
+});
+
+describe('pdsHostFromDidDoc', () => {
+  it('returns null for a non-object didDoc', () => {
+    expect(pdsHostFromDidDoc(null)).toBe(null);
+    expect(pdsHostFromDidDoc('did-doc')).toBe(null);
+    expect(pdsHostFromDidDoc(42)).toBe(null);
+  });
+
+  it('returns null when the service list is missing or not an array', () => {
+    expect(pdsHostFromDidDoc({})).toBe(null);
+    expect(pdsHostFromDidDoc({ service: 'https://pds.example' })).toBe(null);
+  });
+
+  it('skips non-PDS and malformed service entries and returns the PDS host', () => {
+    expect(
+      pdsHostFromDidDoc({
+        service: [
+          null,
+          'not-an-entry',
+          { id: '#other', serviceEndpoint: 'https://other.example' },
+          { id: '#atproto_pds', serviceEndpoint: 123 },
+          { id: '#atproto_pds', serviceEndpoint: `https://${PDS_HOST}` },
+        ],
+      }),
+    ).toBe(PDS_HOST);
+  });
+
+  it('returns null for an unparseable PDS endpoint', () => {
+    expect(
+      pdsHostFromDidDoc({
+        service: [{ id: '#atproto_pds', serviceEndpoint: 'not a url' }],
+      }),
+    ).toBe(null);
+  });
+
+  it('returns null when the PDS endpoint has an empty hostname', () => {
+    expect(
+      pdsHostFromDidDoc({
+        service: [{ id: '#atproto_pds', serviceEndpoint: 'about:blank' }],
+      }),
+    ).toBe(null);
   });
 });

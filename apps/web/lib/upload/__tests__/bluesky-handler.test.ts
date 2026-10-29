@@ -217,6 +217,25 @@ describe('handleBlueskyUpload', () => {
     expect(result?.error).not.toContain('app-pass-1');
   });
 
+  it('uploadVideo 401 without an error name reports only the status, never the jwt or app password', async () => {
+    mockSession();
+    mockFetch.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      savedCalls.push({ url, method: init?.method, headers: init?.headers, body: init?.body });
+      if (url.includes('uploadVideo')) {
+        return new Response(JSON.stringify({}), { status: 401 });
+      }
+      return responseFor(url);
+    });
+    const res = await handleBlueskyUpload(formData(), USER_ID);
+    const result = res.results[0];
+    expect(result?.success).toBe(false);
+    expect(result?.accountId).toBe(DID);
+    expect(result?.error).toBe('Bluesky video upload failed (401)');
+    expect(result?.error).not.toContain('jwt-1');
+    expect(result?.error).not.toContain('app-pass-1');
+  });
+
   it('unverified email fails before any video.bsky.app request', async () => {
     mockSession({ emailConfirmed: false });
     mockFetch.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
