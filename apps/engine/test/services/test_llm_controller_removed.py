@@ -83,6 +83,18 @@ class SearchTrimmedToPlacePhotosTests(unittest.TestCase):
         self.assertTrue(any("santiago.jpg" in hit.get("url", "") for hit in hits))
 
 
+class PromptBuilderSurvivesSearchTrimTests(unittest.TestCase):
+    def test_build_script_prompt_needs_no_search_facts(self):
+        # Main added test_script_prompt_cta.py after P5-5 branched: it calls
+        # build_script_prompt, which used to append a web-search facts block.
+        # The facts feature is deleted in P5-5, so the builder must work
+        # with no facts and no search module reference.
+        from app.services import llm
+
+        prompt = llm.build_script_prompt(video_subject="café", facts=None)
+        assert "1. hook: the very first sentence." in prompt
+
+
 class PromptConstantsKeptUntilCoreDeletionTests(unittest.TestCase):
     def test_script_prompt_modules_still_importable_for_llm_core(self):
         # P5-6 deletes these with llm.py; deleting them here would break
