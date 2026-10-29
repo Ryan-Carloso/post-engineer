@@ -26,7 +26,10 @@ from app.services.cloned_voices.constants import (
     MAX_REFERENCE_BYTES,
     MAX_REFERENCE_SECONDS,
 )
-from app.services.cloned_voices.preview_text import validate_preview_text
+from app.services.cloned_voices.preview_text import (
+    PREVIEW_TEXT_INVALID_MESSAGE,
+    validate_preview_text,
+)
 from app.services.cloned_voices.service import ClonedVoiceService
 from app.services.language_gate import ENGLISH_ONLY_CLONE_MESSAGE, is_english_language
 from app.utils import utils
@@ -292,10 +295,12 @@ def preview_cloned_voice(
     # submitted text.
     try:
         preview_text = validate_preview_text(body.text if body is not None else None)
-    except ValueError as exc:
+    except ValueError:
+        # Return the module's fixed message, never str(exc): an exception
+        # string must not flow to the client (CodeQL py/stack-trace-exposure).
         return JSONResponse(
             status_code=400,
-            content=utils.get_response(status=400, message=str(exc)),
+            content=utils.get_response(status=400, message=PREVIEW_TEXT_INVALID_MESSAGE),
         )
     service = ClonedVoiceService()
     try:

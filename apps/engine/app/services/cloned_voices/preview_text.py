@@ -12,7 +12,7 @@ CLONE_PREVIEW_TEXT_MAX_CHARS = 300
 
 # Stable client-facing message: it carries only the bound, never the
 # submitted text, so a rejection can never echo what was typed.
-_PREVIEW_TEXT_INVALID = (
+PREVIEW_TEXT_INVALID_MESSAGE = (
     "preview text must be 1 to "
     f"{CLONE_PREVIEW_TEXT_MAX_CHARS} characters after trimming"
 )
@@ -30,5 +30,5 @@ def validate_preview_text(raw: str | None) -> str | None:
         return None
     text = raw.strip()
     if not text or len(text) > CLONE_PREVIEW_TEXT_MAX_CHARS:
-        raise ValueError(_PREVIEW_TEXT_INVALID)
+        raise ValueError(PREVIEW_TEXT_INVALID_MESSAGE)
     return text
