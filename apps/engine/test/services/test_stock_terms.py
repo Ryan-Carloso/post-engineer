@@ -3,12 +3,18 @@
 Svg terms carry "a | b | c" alternatives that score against the subject
 token by token; filtering them as stock terms would drop exactly the
 generic fallbacks ("food") that keep a sparse catalog on topic.
+
+The LLM term judge is gone: task.generate_terms now calls this filter
+directly. It was already the judge's fallback when the model failed, so
+the mechanical path is unchanged — only the model call goes.
 """
 
+import inspect
 from unittest.mock import patch
 
 from app.models.schema import VideoParams
 from app.services import llm, stock_terms
+from app.services import task as tm
 
 
 def _params(material):
@@ -152,6 +158,41 @@ def test_unordered_prompt_has_the_same_constraints_without_the_ordering_rule():
     assert "search terms for stock videos" in prompt
     assert "same order as the script narration" not in prompt
     assert "never use abstract or meta words" in prompt
+
+
+# ---- the task filters its terms through this filter, never an LLM judge
+
+
+def test_task_generate_terms_calls_the_mechanical_filter_directly():
+    source = inspect.getsource(tm.generate_terms)
+    assert "stock_terms.filter_weak_stock_terms(params, video_terms, video_script)" in source
+    assert "stock_term_judge" not in source
+
+
+def test_the_task_module_no_longer_imports_the_judge():
+    assert not hasattr(tm, "stock_term_judge")
+
+
+def test_the_filter_never_reaches_the_llm():
+    params = VideoParams(video_subject="Where to eat the best francesinha in Porto")
+    with patch.object(llm, "_generate_response_with_fallback", side_effect=AssertionError("an LLM call")):
+        kept = stock_terms.filter_weak_stock_terms(
+            params, ["francesinha plate", "gato selado"], "script"
+        )
+    assert kept == ["francesinha plate"]
+
+
+def test_weak_terms_are_filtered_without_any_llm_and_all_filtered_keeps_the_list():
+    # The judge's old fallback contract, now the only path: weak terms go,
+    # and a list filtered to nothing keeps the pre-filter candidates.
+    params = VideoParams(video_subject="Where to eat the best francesinha in Porto")
+    assert stock_terms.filter_weak_stock_terms(params, ["Porto street", "gato selado"]) == [
+        "Porto street"
+    ]
+    assert stock_terms.filter_weak_stock_terms(params, ["gato selado", "xyzzy plugh"]) == [
+        "gato selado",
+        "xyzzy plugh",
+    ]
 
 
 def test_generate_terms_builds_its_prompt_through_the_stock_terms_module():

@@ -21,7 +21,7 @@ from app.services import (
     material,
     persona_hook,
     place_photos,
-    stock_term_judge,
+    stock_terms,
     subtitle,
     svg_terms,
     twelvelabs,
@@ -544,7 +544,7 @@ def generate_terms(task_id, params, video_script):
     # Always on, ALL video kinds (not persona-specific): weak terms never
     # reach the download queue. If every term is filtered the original list
     # is kept, so the worst case is the pre-filter behavior.
-    video_terms = stock_term_judge.select_terms(params, video_terms, video_script)
+    video_terms = stock_terms.filter_weak_stock_terms(params, video_terms, video_script)
 
     return video_terms
 
