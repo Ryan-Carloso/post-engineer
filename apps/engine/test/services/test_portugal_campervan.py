@@ -2,11 +2,14 @@
 End-to-end flow test for the Portugal campervan theme.
 
 Runs the FULL Post Engineer pipeline in-process (no HTTP server, no Docker):
-    subject → z.ai GLM-5.2 script → search terms → Pexels footage download
-            → edge-tts narration → subtitles → moviepy/ffmpeg render → final .mp4
+    subject → supplied script → search terms → Pexels footage download
+            → narration → subtitles → moviepy/ffmpeg render → final .mp4
+
+The script arrives with the job (LLM script generation was removed in
+Phase 5 PR 1); the test still exercises the real downstream providers.
 
 Gated behind MPT_RUN_INTEGRATION_TESTS=1 because it calls real providers
-(z.ai, Pexels, edge-tts) and takes several minutes. Run with:
+(Pexels, TTS) and takes several minutes. Run with:
 
     MPT_RUN_INTEGRATION_TESTS=1 uv run python -m unittest \
         test.services.test_portugal_campervan -v
@@ -36,6 +39,14 @@ RUN_INTEGRATION_TESTS = os.environ.get("MPT_RUN_INTEGRATION_TESTS", "").lower() 
 # Configurable test parameters — edit these to retarget the test.
 # ────────────────────────────────────────────────────────────────────────── #
 SUBJECT = "Viagem de Portugal com campervan"
+# Script supplied with the job: hook paragraph, then body. The pipeline
+# takes it as-is and never generates one.
+SCRIPT = (
+    "Portugal de campervan é a forma mais livre de conhecer o país, "
+    "do Douro ao Algarve, sem horários e sem hotéis.\n\n"
+    "Acordas junto ao mar, almoças numa aldeia do interior e terminas o "
+    "dia num miradouro sobre o Atlântico, com a casa sempre contigo."
+)
 LANGUAGE = "pt-BR"                     # script + narration language
 VOICE = "pt-BR-FranciscaNeural"        # Brazilian female voice.
 ASPECT = "9:16"             
@@ -65,7 +76,7 @@ class TestPortugalCampervanE2E(unittest.TestCase):
 
         params = VideoParams(
             video_subject=SUBJECT,
-            video_script="",                 # let GLM-5.2 generate the script
+            video_script=SCRIPT,
             video_language=LANGUAGE,
             video_aspect=ASPECT,
             voice_name=VOICE,

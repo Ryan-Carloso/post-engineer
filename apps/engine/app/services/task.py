@@ -21,7 +21,6 @@ from app.services import (
     material,
     persona_hook,
     place_photos,
-    script_angle,
     stock_term_judge,
     subtitle,
     svg_terms,
@@ -30,7 +29,6 @@ from app.services import (
     video_storage,
     voice,
     upload_post,
-    web_search_facts,
 )
 from app.services import state as sm
 from app.services import persona_image
@@ -42,8 +40,8 @@ from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cos
 from app.services.persona_hook import (
     PERSONA_HOOK_MAX_SECONDS,
     PERSONA_HOOK_MIN_SECONDS,
-    PERSONA_HOOK_TARGET_WORDS_MAX,
-    PERSONA_HOOK_TARGET_WORDS_MIN,
+    PERSONA_HOOK_TARGET_WORDS_MAX,  # noqa: F401 - pinned by tests
+    PERSONA_HOOK_TARGET_WORDS_MIN,  # noqa: F401 - pinned by tests
     _find_hook_end_seconds,
     _limit_generated_script,
 )
@@ -467,52 +465,20 @@ def _ensure_persona_hook_fits(
     return video_script, audio_file, audio_duration, sub_maker, subtitle_path
 
 
-def _resolve_script_angle(task_id: str, params: VideoParams, facts=None) -> str:
-    """Pick a specific angle for the topic, or "" to script the bare topic.
-
-    The implementation lives in script_angle.py (this module is
-    grandfathered over the file-size cap and may not grow); the event sink
-    and tracking context stay bound here so callers/tests keep patching
-    them on this module.
-    """
-    return script_angle.resolve_script_angle(
-        task_id, params, track_event=track_event, tracking_context=_task_tracking_context(task_id),
-        facts=facts,
-    )
-
-
 def generate_script(task_id, params):
     logger.info("\n\n## generating video script")
     video_script = params.video_script.strip()
-    angle = ""
-    facts = None  # one web search per video, shared by the angle and every script call
     if not video_script:
-        facts = web_search_facts.fetch_facts(params.video_subject, language=params.video_language)
-        angle = _resolve_script_angle(task_id, params, facts)
-        script_prompt = params.video_script_prompt
-        if persona_lipsync_active(params):
-            # The lip-sync intro paragraph doubles as the retention hook, so
-            # the timing contract and the scroll-stopping opener coincide.
-            script_prompt = (
-                f"Start with a standalone hook paragraph of "
-                f"{PERSONA_HOOK_TARGET_WORDS_MIN} to {PERSONA_HOOK_TARGET_WORDS_MAX} words, "
-                f"designed to take {PERSONA_HOOK_MIN_SECONDS:g} to {PERSONA_HOOK_MAX_SECONDS:g} "
-                "seconds when spoken. This paragraph is the scroll-stopping hook. "
-                "End the hook with terminal "
-                f"punctuation, then add exactly one blank line before the main content. {script_prompt}"
-            ).strip()
-        video_script = llm.generate_script(
-            video_subject=params.video_subject,
-            language=params.video_language,
-            paragraph_number=params.paragraph_number,
-            video_script_prompt=script_prompt,
-            custom_system_prompt=params.custom_system_prompt,
-            angle=angle, cta=params.video_cta, facts=facts,
-        )
-    else:
-        # Log only the size — the script itself is user content and must not
-        # reach the logs.
-        logger.debug(f"video script received: {len(video_script)} characters")
+        # The script arrives with the job (segments joined by the caller);
+        # there is no LLM fallback here. An empty script fails the task
+        # loudly, before any generation or token spend.
+        _fail_task(task_id, "failed to generate video script", params, stage="script")
+        logger.error("failed to generate video script.")
+        return None
+
+    # Log only the size — the script itself is user content and must not
+    # reach the logs.
+    logger.debug(f"video script received: {len(video_script)} characters")
 
     if persona_lipsync_active(params):
         video_script = _limit_generated_script(video_script)
@@ -522,46 +488,11 @@ def generate_script(task_id, params):
             if paragraph.strip()
         ]
         if len(paragraphs) < 2 or not re.search(r"[.!?。！？]$", paragraphs[0]):
-            logger.warning("persona script has no valid hook; generating hook and body separately")
-            hook = llm.generate_script(
-                video_subject=params.video_subject,
-                language=params.video_language,
-                paragraph_number=1,
-                video_script_prompt=(
-                    f"Regenerate the entire script. "
-                    "Return only the standalone first paragraph: a complete "
-                    f"{PERSONA_HOOK_MIN_SECONDS:g} to {PERSONA_HOOK_MAX_SECONDS:g} second hook "
-                    f"of {PERSONA_HOOK_TARGET_WORDS_MIN} to {PERSONA_HOOK_TARGET_WORDS_MAX} words "
-                    f"ending with terminal punctuation. {params.video_script_prompt}"
-                ),
-                custom_system_prompt=params.custom_system_prompt,
-                target_words_min=PERSONA_HOOK_TARGET_WORDS_MIN,
-                target_words_max=PERSONA_HOOK_TARGET_WORDS_MAX,
-                angle=angle, include_cta=False, facts=facts,
-            )
-            body = llm.generate_script(
-                video_subject=params.video_subject,
-                language=params.video_language,
-                paragraph_number=1,
-                video_script_prompt=(
-                    f"Return only the main content "
-                    "paragraph that follows the hook. Do not include a heading or "
-                    f"repeat the hook. {params.video_script_prompt}"
-                ),
-                custom_system_prompt=params.custom_system_prompt,
-                target_words_min=72,
-                target_words_max=94,
-                angle=angle, cta=params.video_cta, facts=facts,
-            )
-            video_script = _limit_generated_script(f"{hook.strip()}\n\n{body.strip()}")
-            paragraphs = [paragraph.strip() for paragraph in re.split(r"\n\s*\n", video_script) if paragraph.strip()]
-            if len(paragraphs) < 2 or not re.search(r"[.!?。！？]$", paragraphs[0]):
-                raise ValueError("persona script failed hook validation after separate regeneration")
-
-    if not video_script:
-        _fail_task(task_id, "failed to generate video script", params, stage="script")
-        logger.error("failed to generate video script.")
-        return None
+            # The script already passed mechanical segment validation
+            # upstream; a missing hook is bad input, not a reason to
+            # regenerate by LLM. Fail loudly — the task runner turns the
+            # raise into a failed task.
+            raise ValueError("persona script has no valid hook")
 
     return video_script
 
