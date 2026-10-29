@@ -50,8 +50,8 @@ export interface CreatePersonaInput {
 export interface GeneratePersonaVideoInput {
   /**
    * Optional. Omit it for a faceless post defined entirely by `options` —
-   * the persona is then not just a face: it is where the voice, the script
-   * prompt, the aspect ratio and the niche come from. A post without one
+   * the persona is then not just a face: it is where the voice, the
+   * aspect ratio and the niche come from. A post without one
    * MUST set options.faceless and one of options.voiceId / options.audioUrl.
    */
   personaId?: string;
@@ -80,8 +80,6 @@ export interface GeneratePersonaVideoInput {
     facelessMaterial?: 'broll' | 'svg';
     audioUrl?: string;
     imageId?: string;
-    scriptPrompt?: string;
-    scriptPrompts?: string[];
     voiceId?: string;
     webhookUrl?: string;
     videoAspect?: '9:16' | '16:9';

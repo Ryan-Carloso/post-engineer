@@ -46,7 +46,6 @@ export interface PersonaPrep {
   avatarUrl: string | null;
   photoPath: string | null;
   niche: string | null;
-  scriptPrompt: string | null;
   /** The persona's call to action (null = the engine picks a generic one). */
   ctaText: string | null;
   language: string | null;
@@ -87,7 +86,6 @@ export function resolvePostWithoutPersona(opts: {
   faceless: boolean;
   audioUrl?: string;
   voiceId?: string;
-  scriptPrompt?: string;
   videoAspect?: '9:16' | '16:9';
   videoLayout?: 'standard' | 'react';
   paragraphNumber?: number;
@@ -107,7 +105,6 @@ export function resolvePostWithoutPersona(opts: {
     avatarUrl: null,
     photoPath: null,
     niche: opts.niche ?? null,
-    scriptPrompt: opts.scriptPrompt ?? null,
     // No persona, no persona call to action: the engine picks a generic one.
     ctaText: null,
     language: opts.language ?? null,

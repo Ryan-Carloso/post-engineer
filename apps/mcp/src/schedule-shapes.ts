@@ -90,15 +90,13 @@ function httpsUrlField(fieldName: string) {
 }
 
 export const GeneratePersonaVideoOptionsShape = {
-  faceless: z.boolean().optional().describe('Generate faceless (no face). With a persona this drops only the face — the persona voice, niche and script prompt still apply. Without a persona it is REQUIRED.'),
+  faceless: z.boolean().optional().describe('Generate faceless (no face). With a persona this drops only the face — the persona voice and niche still apply. Without a persona it is REQUIRED.'),
   facelessMaterial: z
     .enum(['broll', 'svg'])
     .optional()
     .describe('What fills the video, with or without a face: "broll" = real stock footage only, "svg" = drawn illustrations only. The two never mix. Defaults to "broll".'),
   audioUrl: httpsUrlField('audioUrl').optional().describe('Public URL of custom audio for the videos (overrides the persona voice).'),
   imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to use for every video (overrides the deterministic per-video selection; see list_persona_images).'),
-  scriptPrompt: z.string().optional().describe('Script prompt override applied to this video.'),
-  scriptPrompts: z.array(z.string().min(1)).optional().describe('Script prompt override for the single video; at most one entry.'),
   voiceId: z.string().min(1, 'voiceId must be a non-empty string').optional().describe('Voice ID override (see list_voices).'),
   webhookUrl: httpsUrlField('webhookUrl').optional().describe('Callback URL the server POSTs to when each video reaches a terminal state (completed/failed).'),
   videoAspect: z.enum(['9:16', '16:9']).optional().describe('Frame shape. Overrides the persona when one is given; a post without a persona defaults to 9:16.'),

@@ -89,16 +89,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="script paragraph count, 1-10",
     )
     parser.add_argument(
-        "--video-script-prompt",
-        default=None,
-        help="custom script requirements prompt",
-    )
-    parser.add_argument(
-        "--custom-system-prompt",
-        default=None,
-        help="custom system prompt for script generation",
-    )
-    parser.add_argument(
         "--video-materials",
         default="",
         help="comma-separated local material paths",
@@ -252,8 +242,6 @@ def build_video_params(args: argparse.Namespace) -> VideoParams:
     optional_arg_names = [
         "video_language",
         "paragraph_number",
-        "video_script_prompt",
-        "custom_system_prompt",
         "video_concat_mode",
         "video_transition_mode",
         "video_clip_duration",

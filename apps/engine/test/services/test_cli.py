@@ -75,6 +75,22 @@ class TestCli(unittest.TestCase):
                 ["--video-subject", "test", "--video-source-mix", "pexels,pixabay"]
             )
 
+    def test_script_prompt_flags_are_removed(self):
+        """
+        Phase 5-4: scripts come from segments only — the
+        --video-script-prompt and --custom-system-prompt flags no longer
+        exist in the CLI, so a stale invocation fails loudly instead of
+        silently dropping the prompt.
+        """
+        with self.assertRaises(SystemExit):
+            cli.parse_args(
+                ["--video-subject", "test", "--video-script-prompt", "be punchy"]
+            )
+        with self.assertRaises(SystemExit):
+            cli.parse_args(
+                ["--video-subject", "test", "--custom-system-prompt", "be concise"]
+            )
+
     def test_materials_with_stop_at_terms_is_rejected(self):
         """
         Local materials don't generate search terms — --stop-at terms
@@ -101,10 +117,6 @@ class TestCli(unittest.TestCase):
                 "en",
                 "--paragraph-number",
                 "3",
-                "--video-script-prompt",
-                "use a lighter tone",
-                "--custom-system-prompt",
-                "write concise short-form scripts",
                 "--video-concat-mode",
                 "sequential",
                 "--video-transition-mode",
@@ -125,8 +137,6 @@ class TestCli(unittest.TestCase):
 
         self.assertEqual(params.video_language, "en")
         self.assertEqual(params.paragraph_number, 3)
-        self.assertEqual(params.video_script_prompt, "use a lighter tone")
-        self.assertEqual(params.custom_system_prompt, "write concise short-form scripts")
         self.assertEqual(params.video_concat_mode, "sequential")
         self.assertEqual(params.video_transition_mode, "FadeIn")
         self.assertEqual(params.video_clip_duration, 4)

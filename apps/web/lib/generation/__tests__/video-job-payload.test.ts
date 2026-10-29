@@ -129,8 +129,7 @@ describe('buildJobPayload — request allowlist', () => {
       photo_url: 'https://cdn.test/photo.png',
       voice_id: 'voice-1',
       voice_audio_url: 'https://cdn.test/voice.mp3',
-      // The niche rides the persona record: the engine's script-angle step
-      // reads PersonaParams.niche as its channel context.
+      // The niche rides the persona record as channel context.
       niche: 'finance',
     });
   });
@@ -144,13 +143,23 @@ describe('buildJobPayload — request allowlist', () => {
 describe('buildJobPayload — persona preference defaults', () => {
   it('applies persona preferences when the request omits them', () => {
     const payload = buildJobPayload(
-      persona({ language: 'pt', video_aspect: '9:16', script_prompt: 'be punchy', paragraph_number: 4 }),
+      persona({ language: 'pt', video_aspect: '9:16', paragraph_number: 4 }),
       {},
     );
     expect(payload.video_language).toBe('pt');
     expect(payload.video_aspect).toBe('9:16');
-    expect(payload.video_script_prompt).toBe('be punchy');
     expect(payload.paragraph_number).toBe(4);
+  });
+
+  it('never maps a persona script prompt onto the engine payload', () => {
+    // Phase 5-4: the script_prompt -> video_script_prompt mapping is gone.
+    // A persona object that still carries script_prompt (legacy shape)
+    // must not leak it into the payload.
+    const payload = buildJobPayload(
+      persona({ script_prompt: 'be punchy' } as Partial<JobPersona>),
+      {},
+    );
+    expect(payload).not.toHaveProperty('video_script_prompt');
   });
 
   it('lets an explicit request value win over the persona', () => {
@@ -179,7 +188,7 @@ describe('buildJobPayload — persona preference defaults', () => {
 
   it('never forwards null or empty persona preferences verbatim', () => {
     const payload = buildJobPayload(
-      persona({ language: null, video_aspect: '', script_prompt: undefined }),
+      persona({ language: null, video_aspect: '' }),
       { video_language: null },
     );
     expect(payload).not.toHaveProperty('video_language');
@@ -228,18 +237,20 @@ describe('buildJobPayload — face quality and lipsync', () => {
 });
 
 describe('buildJobPayload — niche and subject defaults', () => {
-  it('derives the script prompt and subject from the niche when missing', () => {
+  it('derives the subject from the niche when missing, and no script prompt', () => {
+    // Phase 5-4: the "The content niche is: ..." LLM prompt default is
+    // gone. The niche still defaults the subject, never a prompt.
     const payload = buildJobPayload(persona({ niche: '  finance  ' }), {});
-    expect(payload.video_script_prompt).toBe('The content niche is: finance.');
+    expect(payload).not.toHaveProperty('video_script_prompt');
     expect(payload.video_subject).toBe('finance');
   });
 
-  it('does not overwrite an existing script prompt or subject with the niche', () => {
+  it('drops a stale request script prompt and keeps an existing subject', () => {
     const payload = buildJobPayload(persona({ niche: 'finance' }), {
       video_script_prompt: 'custom script',
       video_subject: 'custom subject',
     });
-    expect(payload.video_script_prompt).toBe('custom script');
+    expect(payload).not.toHaveProperty('video_script_prompt');
     expect(payload.video_subject).toBe('custom subject');
   });
 

@@ -189,7 +189,6 @@ class BatchScheduleTests(unittest.TestCase):
             {
                 "post_voice_id": "energetic",
                 "post_language": "en-GB",
-                "post_script_prompt": "Be direct and short.",
                 "post_video_aspect": "16:9",
                 "post_face_quality": "ok",
             }
@@ -285,8 +284,8 @@ class BatchScheduleTests(unittest.TestCase):
 
     def test_generate_persona_less_slot_from_the_snapshot_generates(self):
         # The post created WITHOUT a persona (migration 012): no embed, but
-        # the snapshot columns carry the voice and the script, so the slot must
-        # dispatch instead of failing. Pinned end to end because the whole
+        # the snapshot columns carry the voice, so the slot must dispatch
+        # instead of failing. Pinned end to end because the whole
         # feature is this path.
         slot = self._batch_slot()
         del slot["schedules"]["personas"]
@@ -294,7 +293,6 @@ class BatchScheduleTests(unittest.TestCase):
         slot["schedules"].update(
             {
                 "post_voice_id": "energetic",
-                "post_script_prompt": "Be direct and short.",
                 "post_video_aspect": "16:9",
                 "post_face_quality": "ok",
             }
@@ -317,7 +315,10 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertIsNone(request.persona.avatar_url)
         self.assertIsNone(request.persona.photo_url)
         self.assertEqual(request.video_aspect, "16:9")
-        self.assertEqual(request.video_script_prompt, "Be direct and short.")
+        # Phase 5-4: no script prompt rides the job — the script comes
+        # from the slot's segments.
+        self.assertNotIn("video_script_prompt", request.model_dump())
+        self.assertFalse(hasattr(request, "video_script_prompt"))
 
     def test_generate_slot_forwards_the_snapshot_call_to_action(self):
         slot = self._batch_slot()
@@ -2616,7 +2617,7 @@ class PostIdentityTests(unittest.TestCase):
     """post_identity — the persona is optional; the schedule snapshot is not.
 
     A persona-less post (migration 012) has no embed at all, so the engine has
-    to read voice/script/aspect from the ``post_*`` columns. And when both
+    to read voice/aspect from the ``post_*`` columns. And when both
     exist, the snapshot wins: it is the value the web resolved and charged
     for at creation, so editing a persona must not rewrite a scheduled video.
     """
@@ -2639,21 +2640,22 @@ class PostIdentityTests(unittest.TestCase):
                 "id": "sched-2",
                 "personas": None,
                 "post_voice_id": "energetic",
-                "post_script_prompt": "Be direct.",
                 "post_video_aspect": "16:9",
                 "post_paragraph_number": 3,
                 "post_face_quality": "ok",
             }
         )
         self.assertEqual(identity["voice_id"], "energetic")
-        self.assertEqual(identity["script_prompt"], "Be direct.")
         self.assertEqual(identity["video_aspect"], "16:9")
         self.assertEqual(identity["paragraph_number"], 3)
         self.assertEqual(identity["face_quality"], "ok")
+        # Phase 5-4: the script prompt no longer rides the identity — the
+        # script comes from the slot's segments.
+        self.assertNotIn("script_prompt", identity)
 
     def test_snapshot_overrides_the_persona_embed(self):
         # The pin that makes a scheduled post reproducible: editing the
-        # persona afterwards cannot change the aspect ratio or the script of a
+        # persona afterwards cannot change the aspect ratio of a
         # video that is already queued.
         identity = fs.post_identity(
             {
@@ -2661,16 +2663,13 @@ class PostIdentityTests(unittest.TestCase):
                 "personas": {
                     "voice_id": "calm",
                     "video_aspect": "9:16",
-                    "script_prompt": "old",
                 },
                 "post_voice_id": "energetic",
                 "post_video_aspect": "16:9",
-                "post_script_prompt": "new",
             }
         )
         self.assertEqual(identity["voice_id"], "energetic")
         self.assertEqual(identity["video_aspect"], "16:9")
-        self.assertEqual(identity["script_prompt"], "new")
 
     def test_snapshot_call_to_action_overrides_the_persona_embed(self):
         identity = fs.post_identity(
@@ -2684,7 +2683,9 @@ class PostIdentityTests(unittest.TestCase):
 
     def test_slot_select_reads_the_call_to_action_columns(self):
         self.assertIn("post_cta_text", ScheduleStore.SLOT_IDENTITY_SELECT)
-        self.assertIn("personas(name,niche,script_prompt,cta_text,", ScheduleStore.SLOT_IDENTITY_SELECT)
+        self.assertIn("personas(name,niche,cta_text,", ScheduleStore.SLOT_IDENTITY_SELECT)
+        # Phase 5-4: the script prompt no longer rides the identity select.
+        self.assertNotIn("script_prompt", ScheduleStore.SLOT_IDENTITY_SELECT)
 
     def test_a_null_snapshot_column_does_not_erase_the_persona_value(self):
         # NULL on a snapshot means "not provided", never "inherit blank":

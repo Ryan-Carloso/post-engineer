@@ -134,12 +134,10 @@ class BatchGenerator:
                 # malformed row, so a corrupt row fails the slot loudly
                 # instead of rendering a different video.
                 segments=segments,
-                video_script_prompt=identity.get("script_prompt") or "",
                 video_cta=identity.get("cta_text") or "",
                 # Snapshot (post_language) already resolved by post_identity();
-                # without this the prompt carries no "- language:" line and
-                # the script language falls back to the LLM's guess from the
-                # title (DEFAULT_SCRIPT_SYSTEM_PROMPT rule 7).
+                # without this the job carries no language for TTS and the
+                # English-only gate below.
                 video_language=str(identity.get("language") or ""),
                 paragraph_number=(
                     int(identity["paragraph_number"])

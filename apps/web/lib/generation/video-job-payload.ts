@@ -16,7 +16,6 @@ const PERSONA_PREFERENCE_FIELDS: ReadonlyArray<{
   { personaKey: 'language', jobKey: 'video_language' },
   { personaKey: 'video_aspect', jobKey: 'video_aspect' },
   { personaKey: 'video_layout', jobKey: 'video_layout' },
-  { personaKey: 'script_prompt', jobKey: 'video_script_prompt' },
   { personaKey: 'cta_text', jobKey: 'video_cta' },
   { personaKey: 'paragraph_number', jobKey: 'paragraph_number' },
 ];
@@ -36,7 +35,6 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<string> = [
   'video_language',
   'video_aspect',
   'video_layout',
-  'video_script_prompt',
   // video_script is a first-class engine field (VideoParams carries it as
   // the supplied script); a segments request joins its segments into this
   // field so the engine takes the supplied-script path, never the LLM one.
@@ -73,7 +71,6 @@ export interface JobPersona {
   language?: string | null;
   video_aspect?: string | null;
   video_layout?: string | null;
-  script_prompt?: string | null;
   cta_text?: string | null;
   paragraph_number?: number | null;
   niche?: string | null;
@@ -118,8 +115,7 @@ export function buildJobPayload(
     logger.warn(`[video-job] dropping ${droppedKeys.length} unknown request field(s): ${shown}${remainder}`);
   }
   const personaRecord: Record<string, unknown> = { ...persona };
-  // The niche rides the engine-facing persona record: the engine's
-  // script-angle step reads PersonaParams.niche as its channel context.
+  // The niche rides the engine-facing persona record as channel context.
   // Absent/blank niches are omitted, never forwarded verbatim.
   const enginePersona: Record<string, unknown> = {
     name: persona.name,
@@ -157,11 +153,6 @@ export function buildJobPayload(
   // absent request flag stays absent rather than being invented here.
   if (typeof request.lipsync === 'boolean') {
     jobPayload.lipsync_enabled = request.lipsync;
-  } else if (typeof persona.niche === 'string' && persona.niche.trim().length > 0) {
-    // Without a defined script (neither request nor persona), the niche guides the script.
-    if (!hasNonEmptyString(jobPayload.video_script_prompt)) {
-      jobPayload.video_script_prompt = `The content niche is: ${persona.niche.trim()}.`;
-    }
   }
 
   // The engine requires video_subject; default it from the persona niche when

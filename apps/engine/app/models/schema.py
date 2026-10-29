@@ -192,10 +192,9 @@ class VideoParams(BaseModel):
     stroke_width: float = Field(default=config.ui.get("stroke_width", 1.5), ge=0, le=20)
     n_threads: Optional[int] = Field(default=2, ge=1, le=64)
     paragraph_number: Optional[int] = Field(default=None, ge=1, le=10)
-    video_script_prompt: str = Field(
-        default=config.app.get("default_video_script_prompt", ""), max_length=2000
-    )
-    custom_system_prompt: str = Field(default="", max_length=8000)
+    # Phase 5-4: no script prompt fields — scripts come from segments only.
+    # The /scripts controller's own request model (VideoScriptRequest) still
+    # carries them until Phase 5-5 deletes that controller with its model.
     # The persona's call to action ("" = generic); 200 mirrors MAX_SCRIPT_CTA_LENGTH + migration 024.
     video_cta: str = Field(default="", max_length=200)
 
