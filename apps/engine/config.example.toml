@@ -27,10 +27,9 @@
 [app]
 max_video_duration_seconds = 40
 max_video_script_characters = 600
-# Target script length for roughly 30-40 seconds of speech. Paragraph count
-# comes from the supplied segments; paragraph_number is a legacy caller override.
-script_target_words_min = 80
-script_target_words_max = 110
+# The script comes from the supplied segments; paragraph_number on the
+# job is a legacy caller override. (script_target_words_min/max were
+# removed with the LLM core: nothing read them.)
 # Persistent per-user BGM history database. Keep this on durable storage.
 bgm_history_db = "storage/bgm_history.sqlite3"
 
