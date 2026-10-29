@@ -195,7 +195,7 @@ class VideoParams(BaseModel):
     # Phase 5-5: the /scripts controller is deleted, so no script prompt
     # fields remain anywhere in the request models — scripts come from
     # segments only.
-    # The persona's call to action ("" = generic); 200 mirrors MAX_SCRIPT_CTA_LENGTH + migration 024.
+    # The persona's call to action ("" = generic); 200 mirrors migration 024.
     video_cta: str = Field(default="", max_length=200)
 
 

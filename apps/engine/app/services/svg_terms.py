@@ -8,7 +8,7 @@ catalog tries them in order (svg_catalog.search_best), so a right generic
 drawing beats a wrong specific one. The persona niche and the subject close
 the list, so a sparse catalog still has an on-topic drawing to show.
 
-Lives in its own module because task.py and llm.py are grandfathered over
+Lives in its own module because task.py is grandfathered over
 the file-size cap.
 """
 

@@ -1,10 +1,10 @@
 """Phase 5 PR 5: the LLM controller is gone, the search module is trimmed
 to its place-photos client, and the controller's schema models are gone.
 
-The prompt-constant modules (script_prompts, script_language_rules) are
-deliberately KEPT here: llm.py still imports them at module level and
-task.py still imports llm for generate_terms (the live broll path, blocked
-on decision D1). They die with llm.py in P5-6, not here.
+Phase 5 PR 6: the LLM core itself is gone — llm.py, llm_providers.py,
+script_prompts.py and script_language_rules.py are deleted, and task.py
+no longer imports llm: broll terms come from the calling agent or from
+the mechanical terms_fallback expansion of the script itself.
 """
 
 import sys
@@ -83,43 +83,33 @@ class SearchTrimmedToPlacePhotosTests(unittest.TestCase):
         self.assertTrue(any("santiago.jpg" in hit.get("url", "") for hit in hits))
 
 
-class PromptBuilderSurvivesSearchTrimTests(unittest.TestCase):
-    def test_build_script_prompt_needs_no_search_facts(self):
-        # Main added test_script_prompt_cta.py after P5-5 branched: it calls
-        # build_script_prompt, which used to append a web-search facts block.
-        # The facts feature is deleted in P5-5, so the builder must work
-        # with no facts and no search module reference.
-        from app.services import llm
+class LlmCoreDeletedTests(unittest.TestCase):
+    def test_llm_core_modules_are_gone(self):
+        # P5-6 deletes the core with its prompt-constant modules: importing
+        # any of them must fail, and task.py must not carry an llm attr.
+        from app.services import task as tm
 
-        prompt = llm.build_script_prompt(video_subject="café", facts=None)
-        assert "1. hook: the very first sentence." in prompt
+        for module in (
+            "app.services.llm",
+            "app.services.llm_providers",
+            "app.services.script_prompts",
+            "app.services.script_language_rules",
+        ):
+            with self.assertRaises(ModuleNotFoundError):
+                __import__(module)
+        self.assertFalse(hasattr(tm, "llm"))
 
-    def test_generate_script_with_no_facts_searches_nothing(self):
-        # facts=None used to trigger a live web search; in P5-5 it must
-        # mean "no facts". Patching the provider proves the None branch is
-        # taken (any search attempt would raise AttributeError: the search
-        # functions are deleted) and covers the branch for codecov/patch.
-        from unittest.mock import patch
+    def test_task_still_serves_the_live_videos_pipeline(self):
+        # Deleting the core must not take the live pipeline with it:
+        # POST /videos stays, and generate_terms is mechanical.
+        from app.controllers.v1 import video as video_controller
+        from app.services import task as tm, terms_fallback
 
-        from app.services import llm
-
-        with patch.object(
-            llm,
-            "_generate_response_with_fallback",
-            return_value="Hook sentence.\n\nBody sentence.",
-        ) as generate:
-            script = llm.generate_script(
-                video_subject="café", language="en", facts=None
-            )
-        generate.assert_called_once()
-        assert "Hook sentence." in script
-
-
-class PromptConstantsKeptUntilCoreDeletionTests(unittest.TestCase):
-    def test_script_prompt_modules_still_importable_for_llm_core(self):
-        # P5-6 deletes these with llm.py; deleting them here would break
-        # `import task` (task imports llm, llm imports these at module level).
-        from app.services import script_language_rules, script_prompts
-
-        self.assertTrue(script_prompts.DEFAULT_SCRIPT_SYSTEM_PROMPT)
-        self.assertTrue(callable(script_language_rules._uses_latin_script))
+        paths = {
+            (getattr(route, "path", None), method)
+            for route in video_controller.router.routes
+            for method in (getattr(route, "methods", None) or set())
+        }
+        self.assertIn(("/api/v1/videos", "POST"), paths)
+        self.assertTrue(callable(tm.generate_terms))
+        self.assertTrue(callable(terms_fallback.expand_terms))

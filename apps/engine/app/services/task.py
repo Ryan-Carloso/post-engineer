@@ -16,7 +16,6 @@ from app.models.schema import VideoConcatMode, VideoParams
 from app.services import (
     audio_trim,
     faceless_material,
-    llm,
     social_metadata,
     longcat,
     material,
@@ -25,6 +24,7 @@ from app.services import (
     stock_terms,
     subtitle,
     svg_terms,
+    terms_fallback,
     twelvelabs,
     video,
     video_storage,
@@ -504,25 +504,17 @@ def generate_terms(task_id, params, video_script):
     if params.faceless_material == "svg":
         # Catalog terms carry specific-to-generic alternatives (svg_terms).
         video_terms = svg_terms.resolve_svg_terms(params, video_script)
-    elif not video_terms:
-        # With ordered material matching enabled, the keywords themselves must
-        # also be generated in script narrative order; otherwise later ordered
-        # download and ordered concat can only reuse one global theme set and
-        # can't fix "later content's visuals appearing early".
-        video_terms = llm.generate_terms(
-            video_subject=params.video_subject,
-            video_script=video_script,
-            amount=8 if params.match_materials_to_script else 5,
-            match_script_order=params.match_materials_to_script,
-        )
     else:
-        if isinstance(video_terms, str):
-            video_terms = [term.strip() for term in re.split(r"[,，]", video_terms)]
-        elif isinstance(video_terms, list):
-            video_terms = [term.strip() for term in video_terms]
-        else:
-            raise ValueError("video_terms must be a string or a list of strings.")
-
+        # Mechanical fallback, no LLM: agent terms verbatim at 20+, else
+        # expanded from the script itself in script narrative order, so
+        # later ordered download and ordered concat keep working. A
+        # warning is recorded in the task status when terms were
+        # auto-generated or expanded.
+        persona_niche = params.persona.niche if params.persona else ""
+        video_terms, terms_warning = terms_fallback.expand_terms(
+            video_terms, video_script, params.video_subject, persona_niche
+        )
+        _update_task(task_id, terms_warning=terms_warning)
         # Log only the count — the terms themselves are user content and must
         # not reach the logs.
         logger.debug(f"video terms: {len(video_terms)} terms")

@@ -10,6 +10,7 @@ from unittest.mock import ANY, patch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import task as tm
+from app.services import terms_fallback
 from app.services import voice as vs
 from app.services.intro_cost import IntroCostReport, completion_cost_kwargs
 from app.services import intro_cost as intro_cost_module
@@ -45,28 +46,94 @@ class TestTaskService(unittest.TestCase):
 
         record.assert_not_called()
 
-    def test_generate_terms_uses_script_order_mode_when_enabled(self):
+    _SCRIPT = (
+        "Morning light over Porto riverside cafes. "
+        "We taste warm francesinha sandwiches near busy Bolhao market stalls. "
+        "Afternoon walks along Douro river bridges end with sweet custard tarts."
+    )
+
+    def test_generate_terms_expands_missing_agent_terms_mechanically_in_script_order(self):
         """
-        Default mode is unaffected; only when the user explicitly enables
-        script-order material matching does the task layer ask the LLM for
-        ordered keywords, bumping the keyword count to cover more script
-        segments.
+        With no agent terms, generate_terms expands mechanically from the
+        script itself, in script narrative order, and records an
+        auto-generated warning in the task status. No LLM is involved:
+        the task module has no llm attribute at all.
         """
+        self.assertFalse(hasattr(tm, "llm"))
         params = VideoParams(
-            video_subject="城市通勤",
+            video_subject="Porto food tour",
             video_script="",
             match_materials_to_script=True,
         )
 
-        with patch.object(tm.llm, "generate_terms", return_value=["city", "train"]) as generate:
-            result = tm.generate_terms("task-id", params, "先城市，再地铁")
+        with patch.object(tm, "_update_task") as update:
+            result = tm.generate_terms("task-id", params, self._SCRIPT)
 
-        self.assertEqual(result, ["city", "train"])
-        generate.assert_called_once_with(
-            video_subject="城市通勤",
-            video_script="先城市，再地铁",
-            amount=8,
-            match_script_order=True,
+        self.assertEqual(len(result), 20)
+        self.assertEqual(result[0], "morning light")
+        update.assert_called_once_with(
+            "task-id", terms_warning=terms_fallback.TERMS_AUTO_GENERATED_WARNING
+        )
+
+    def test_generate_terms_expands_few_agent_terms_and_records_warning(self):
+        params = VideoParams(
+            video_subject="Porto food tour",
+            video_script="",
+            video_terms=["Porto street"],
+            match_materials_to_script=True,
+        )
+
+        with patch.object(tm, "_update_task") as update:
+            result = tm.generate_terms("task-id", params, self._SCRIPT)
+
+        self.assertEqual(len(result), 20)
+        self.assertEqual(result[0], "Porto street")
+        update.assert_called_once_with(
+            "task-id", terms_warning=terms_fallback.TERMS_EXPANDED_WARNING
+        )
+
+    def test_generate_terms_uses_twenty_agent_terms_untouched_and_clears_stale_warning(self):
+        # 20+ agent terms are used verbatim with no new warning — but the
+        # key is still written (as None) so a retry clears a stale warning
+        # recorded by an earlier run, the same contract as media_warnings.
+        words = [
+            "morning", "light", "riverside", "cafes", "taste", "warm",
+            "francesinha", "sandwiches", "busy", "bolhao", "market", "stalls",
+            "afternoon", "walks", "douro", "river", "bridges", "sweet",
+            "custard", "tarts",
+        ]
+        supplied = [f"Porto {word}" for word in words]
+        params = VideoParams(
+            video_subject="Porto food tour",
+            video_script="",
+            video_terms=supplied,
+            match_materials_to_script=True,
+        )
+
+        with patch.object(tm, "_update_task") as update:
+            result = tm.generate_terms("task-id", params, self._SCRIPT)
+
+        self.assertEqual(result, supplied)
+        update.assert_called_once_with("task-id", terms_warning=None)
+
+    def test_generate_terms_with_empty_expansion_fails_loudly(self):
+        # A script with no distinctive words yields no terms at all: the
+        # task fails at the terms stage instead of inventing topics.
+        params = VideoParams(
+            video_subject="Porto food tour",
+            video_script="",
+            match_materials_to_script=True,
+        )
+
+        with (
+            patch.object(tm, "_update_task"),
+            patch.object(tm, "_fail_task") as fail_task,
+        ):
+            result = tm.generate_terms("task-id", params, "the and of")
+
+        self.assertIsNone(result)
+        fail_task.assert_called_once_with(
+            "task-id", "failed to generate video terms", params, stage="terms"
         )
     
     def test_generate_audio_uses_custom_file_inside_task_directory(self):

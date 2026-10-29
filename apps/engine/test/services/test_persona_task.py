@@ -200,14 +200,10 @@ class TestPersonaHookGate:
         params = _params(name="Ana", voice_id="calm")
         params.lipsync_enabled = False
         params.video_script = "A single paragraph without hook rules."
-        with patch.object(
-            task_service.llm,
-            "generate_script",
-        ) as generate:
-            result = generate_script("normal-video", params)
+        assert not hasattr(task_service, "llm")
+        result = generate_script("normal-video", params)
 
         assert result == "A single paragraph without hook rules."
-        generate.assert_not_called()
 
 
 class TestPersonaHookFits:

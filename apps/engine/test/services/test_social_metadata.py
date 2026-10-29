@@ -82,8 +82,9 @@ class MechanicalSocialMetadataTests(unittest.TestCase):
 class LlmImportScanTests(unittest.TestCase):
     # Regression tests for the OpenCode MINOR on this PR: the first
     # version of the pin inspected only ImportFrom.module, so
-    # `from app.services import llm` — the form task.py itself uses —
-    # passed the pin while importing the LLM core.
+    # `from app.services import llm` — the form task.py itself used
+    # before Phase 5 PR 6 deleted the LLM core — passed the pin while
+    # importing the LLM core.
 
     def test_from_package_import_llm_is_flagged(self):
         offenders = _llm_imports_in_source("from app.services import llm\n")

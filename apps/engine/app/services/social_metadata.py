@@ -11,8 +11,8 @@ title), so the upload service never receives an empty YouTube title.
 That mirrors the old LLM fallback's non-empty-title guarantee, with a
 fixed string instead of the first script sentence.
 
-This module must never import the LLM core: a later Phase 5 PR deletes
-``llm.py`` without touching this code again.
+This module never imported the LLM core: deleting ``llm.py``
+(Phase 5 PR 6) left this code untouched.
 """
 
 GENERIC_VIDEO_TITLE = "Check out this video! #shorts #viral"

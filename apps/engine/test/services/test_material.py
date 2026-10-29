@@ -207,6 +207,49 @@ class TestMaterialTlsVerification(unittest.TestCase):
         )
         self.assertEqual(result, ["/tmp/a1.mp4", "/tmp/b1.mp4", "/tmp/a2.mp4"])
 
+    def test_download_videos_never_reuses_the_same_clip_twice(self):
+        """
+        Two search terms returning the same stock URL must download that
+        clip once, while the pool still has other clips: a repeated clip
+        in one video reads as a rendering bug, not variety.
+        """
+        shared = material.MaterialInfo(provider="pexels", url="https://v.example/shared.mp4", duration=3)
+        search_results = {
+            "morning light": [
+                shared,
+                material.MaterialInfo(provider="pexels", url="https://v.example/a.mp4", duration=3),
+            ],
+            "porto riverside": [
+                shared,
+                material.MaterialInfo(provider="pexels", url="https://v.example/b.mp4", duration=3),
+            ],
+        }
+        downloaded_urls = []
+
+        def fake_search(search_term, minimum_duration, video_aspect):
+            return search_results[search_term]
+
+        def fake_save_video(video_url, save_dir=""):
+            downloaded_urls.append(video_url)
+            return f"/tmp/{video_url.rsplit('/', 1)[-1]}"
+
+        with (
+            patch.dict(config.app, {"material_directory": ""}),
+            patch.object(material, "search_videos_pexels", side_effect=fake_search),
+            patch.object(video_download, "save_video", side_effect=fake_save_video),
+        ):
+            result = material.download_videos(
+                task_id="no-clip-reuse",
+                search_terms=["morning light", "porto riverside"],
+                source="pexels",
+                audio_duration=60,
+                max_clip_duration=3,
+                video_concat_mode="sequential",
+            )
+
+        self.assertEqual(downloaded_urls.count("https://v.example/shared.mp4"), 1)
+        self.assertEqual(result, ["/tmp/shared.mp4", "/tmp/a.mp4", "/tmp/b.mp4"])
+
 
 class TestBrollVerificationDropsRejectedSegments(unittest.TestCase):
     """

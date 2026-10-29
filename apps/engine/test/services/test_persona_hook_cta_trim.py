@@ -5,7 +5,8 @@ was deleted with the dead LLM prompt-structure tests, but its
 TestCtaSafeTrim class and the CTA-length literal sync pin cover code that
 stays — persona_hook._limit_generated_script runs on the persona-lipsync
 path (task.py), and the 200 cap is mirrored across the DB check, the web
-form cap, the engine schema, and the llm constant. Only the
+form cap, and the engine schema. The LLM prompt cap went with the
+deleted LLM core (Phase 5 PR 6); only the
 build_script_prompt tests went with the deleted controller.
 """
 
@@ -17,7 +18,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.config import config  # noqa: E402
-from app.services import llm, persona_hook  # noqa: E402
+from app.services import persona_hook  # noqa: E402
 
 
 class TestCtaSafeTrim:
@@ -84,7 +85,7 @@ def _repo_root() -> Path:
 
 
 def test_cta_max_length_is_the_same_literal_everywhere():
-    """DB check, web form cap, engine schema and prompt cap must agree."""
+    """DB check, web form cap and engine schema must agree."""
     repo = _repo_root()
     sql = (repo / "supabase/migrations/024_persona-cta.sql").read_text()
     web = (repo / "apps/web/lib/persona-schema.ts").read_text()
@@ -94,4 +95,3 @@ def test_cta_max_length_is_the_same_literal_everywhere():
     assert "char_length(post_cta_text) <= 200" in sql
     assert "export const PERSONA_CTA_MAX_LENGTH = 200;" in web
     assert 'video_cta: str = Field(default="", max_length=200)' in schema
-    assert llm.MAX_SCRIPT_CTA_LENGTH == 200
