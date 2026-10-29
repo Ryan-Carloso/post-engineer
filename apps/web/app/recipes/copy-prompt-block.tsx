@@ -1,8 +1,9 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useI18n } from "@/lib/i18n/provider";
-import { Button } from "@/components/ui/button";
+import { useState } from 'react';
+import { useI18n } from '@/lib/i18n/provider';
+import { Button } from '@/components/ui/button';
+import AgentLogos from '@/components/ui/agent-logos';
 
 //---------------
 // CopyPromptBlock — the detail page's signature element and its
@@ -22,7 +23,7 @@ export default function CopyPromptBlock({ prompt }: { prompt: string }) {
     // Outside a secure context navigator.clipboard has no writeText;
     // in that case keep the "Copy this prompt" label instead of
     // claiming a copy that never happened.
-    if (typeof navigator.clipboard?.writeText !== "function") {
+    if (typeof navigator.clipboard?.writeText !== 'function') {
       return;
     }
     navigator.clipboard
@@ -39,32 +40,31 @@ export default function CopyPromptBlock({ prompt }: { prompt: string }) {
 
   return (
     <section className="mt-12">
-      <p className="leading-relaxed text-[#414d63]">
-        {t("recipes.copyExplanation")}
-      </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <AgentLogos agents={['cursor', 'claude', 'opencode']} size="sm" />
+        <p className="leading-relaxed text-[#414d63]">{t('recipes.copyExplanation')}</p>
+      </div>
       <div className="mt-6 overflow-hidden rounded-xl bg-[#101728] shadow-[0_8px_24px_rgba(16,23,40,0.25)]">
         <div className="flex items-center justify-between gap-4 border-b border-white/10 px-4 py-3">
           <span className="text-xs font-semibold text-slate-300">
-            {t("recipes.copyFullPrompt")}
+            {t('recipes.copyFullPrompt')}
           </span>
           <Button
             type="button"
             onClick={handleCopy}
             className="rounded-lg bg-[#ff544c] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#ff544c]/90"
           >
-            {copied ? t("recipes.copiedPrompt") : t("recipes.copyFullPrompt")}
+            {copied ? t('recipes.copiedPrompt') : t('recipes.copyFullPrompt')}
           </Button>
         </div>
         <pre
           data-testid="full-prompt"
-          className="max-h-128 overflow-auto p-4 font-mono text-xs leading-5 whitespace-pre-wrap text-slate-300 select-text"
+          className="max-h-[32rem] overflow-auto p-4 font-mono text-xs leading-5 whitespace-pre-wrap text-slate-300 select-text"
         >
           {prompt}
         </pre>
       </div>
-      <p className="mt-4 leading-relaxed text-[#414d63]">
-        {t("recipes.copyNext")}
-      </p>
+      <p className="mt-4 leading-relaxed text-[#414d63]">{t('recipes.copyNext')}</p>
     </section>
   );
 }

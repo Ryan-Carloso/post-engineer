@@ -1,5 +1,5 @@
-import { cn } from "@/lib/utils";
-import { INPUT_CLASS } from "@/lib/ui";
+import { cn } from '@/lib/utils';
+import { INPUT_CLASS } from '@/lib/ui';
 
 //---------------
 // PromptsToolbar — search field plus kind filter chips. Chips
@@ -37,7 +37,7 @@ export default function PromptsToolbar<T extends string>({
         onChange={(event) => onQueryChange(event.target.value)}
         aria-label={searchLabel}
         placeholder={searchPlaceholder}
-        className={cn(INPUT_CLASS, "mt-0 md:max-w-sm")}
+        className={cn(INPUT_CLASS, 'mt-0 md:max-w-sm')}
       />
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0 md:pb-0">
         {kinds.map((kind) => {
@@ -49,10 +49,10 @@ export default function PromptsToolbar<T extends string>({
               aria-pressed={active}
               onClick={() => onKindChange(kind.value)}
               className={cn(
-                "shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
+                'shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium transition-colors',
                 active
-                  ? "border-[#101728] bg-[#101728] text-white"
-                  : "border-[#e3e8ef] bg-white text-[#414d63] hover:border-[#101728]",
+                  ? 'border-[#101728] bg-[#101728] text-white'
+                  : 'border-[#e3e8ef] bg-white text-[#414d63] hover:border-[#101728]',
               )}
             >
               {kind.label}

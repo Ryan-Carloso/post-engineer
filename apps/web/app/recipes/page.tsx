@@ -1,13 +1,13 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useI18n } from "@/lib/i18n/provider";
-import { PROMPTS } from "./prompts";
-import { filterPrompts, promptKinds, type KindFilter } from "./prompts-filter";
-import PromptsHero from "./components/prompts-hero";
-import PromptsToolbar, { type KindOption } from "./components/prompts-toolbar";
-import PromptCard from "./components/prompt-card";
-import PromptsEmpty from "./components/prompts-empty";
+import { useState } from 'react';
+import { useI18n } from '@/lib/i18n/provider';
+import { PROMPTS } from './prompts';
+import { filterPrompts, promptKinds, type KindFilter } from './prompts-filter';
+import PromptsHero from './components/prompts-hero';
+import PromptsToolbar, { type KindOption } from './components/prompts-toolbar';
+import PromptCard from './components/prompt-card';
+import PromptsEmpty from './components/prompts-empty';
 
 //---------------
 // Prompts hub list — rendered inside the AppShell for signed-in
@@ -25,34 +25,34 @@ import PromptsEmpty from "./components/prompts-empty";
 
 export default function RecipesPage() {
   const { t } = useI18n();
-  const [query, setQuery] = useState("");
-  const [kind, setKind] = useState<KindFilter>("all");
+  const [query, setQuery] = useState('');
+  const [kind, setKind] = useState<KindFilter>('all');
 
   const visible = filterPrompts(PROMPTS, kind, query, t);
   const kinds: KindOption<KindFilter>[] = [
-    { value: "all", label: t("recipes.filterAll") },
+    { value: 'all', label: t('recipes.filterAll') },
     ...promptKinds(PROMPTS).map((key) => ({ value: key, label: t(key) })),
   ];
 
   return (
     <div className="mx-auto flex w-full max-w-375 flex-col gap-5 lg:gap-6">
       <PromptsHero
-        title={t("recipes.title")}
-        subtitle={t("recipes.subtitle")}
-        countLabel={t("recipes.promptCount", { count: PROMPTS.length })}
+        title={t('recipes.title')}
+        subtitle={t('recipes.subtitle')}
+        countLabel={t('recipes.promptCount', { count: PROMPTS.length })}
       />
       <PromptsToolbar
         query={query}
         onQueryChange={setQuery}
-        searchLabel={t("recipes.searchLabel")}
-        searchPlaceholder={t("recipes.searchPlaceholder")}
+        searchLabel={t('recipes.searchLabel')}
+        searchPlaceholder={t('recipes.searchPlaceholder')}
         kinds={kinds}
         activeKind={kind}
         onKindChange={setKind}
       />
       <div>
         {visible.length === 0 ? (
-          <PromptsEmpty message={t("recipes.emptyState")} />
+          <PromptsEmpty message={t('recipes.emptyState')} />
         ) : (
           <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
             {visible.map((prompt) => (

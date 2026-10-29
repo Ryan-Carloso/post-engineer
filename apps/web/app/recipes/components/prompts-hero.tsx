@@ -1,4 +1,4 @@
-import { ComposeIcon } from "@/lib/ui";
+import { ComposeIcon } from '@/lib/ui';
 
 //---------------
 // PromptsHero — hub header in the same shape as every dashboard
@@ -22,12 +22,8 @@ export default function PromptsHero({
           <ComposeIcon />
         </span>
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-[-0.035em] text-[#101728]">
-            {title}
-          </h1>
-          <p className="mt-0.5 text-sm text-[#718096] lg:text-base">
-            {subtitle}
-          </p>
+          <h1 className="text-2xl font-bold tracking-[-0.035em] text-[#101728]">{title}</h1>
+          <p className="mt-0.5 text-sm text-[#718096] lg:text-base">{subtitle}</p>
         </div>
       </div>
       <span className="inline-flex w-fit shrink-0 items-center rounded-full border border-[#edf0f4] bg-white px-3.5 py-1 text-sm font-semibold text-[#414d63]">

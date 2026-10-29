@@ -1,6 +1,6 @@
-import { AppShell } from "@/components/ui/app-shell";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import PublicPromptsFrame from "./components/public-prompts-frame";
+import { AppShell } from '@/components/ui/app-shell';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
+import PublicPromptsFrame from './components/public-prompts-frame';
 
 //---------------
 // Prompts hub layout — /recipes is public (middleware), but it is
@@ -9,15 +9,11 @@ import PublicPromptsFrame from "./components/public-prompts-frame";
 // a signed-out visitor gets the public frame (back link + footer).
 //---------------
 
-export default async function RecipesLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function RecipesLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getUser();
-  if (error !== null && error.name !== "AuthSessionMissingError") {
-    console.error("[recipes] getUser failed, rendering public frame", {
+  if (error !== null && error.name !== 'AuthSessionMissingError') {
+    console.error('[recipes] getUser failed, rendering public frame', {
       message: error.message,
     });
   }

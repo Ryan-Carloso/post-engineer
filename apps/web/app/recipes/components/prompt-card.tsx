@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useI18n } from "@/lib/i18n/provider";
-import { ComposeIcon, GlobeIcon } from "@/lib/ui";
-import type { PromptEntry } from "../prompts";
+import Link from 'next/link';
+import { useI18n } from '@/lib/i18n/provider';
+import { ComposeIcon, GlobeIcon } from '@/lib/ui';
+import type { PromptEntry } from '../prompts';
 
 //---------------
 // PromptCard — one grid card in the prompts hub: an icon tile
@@ -16,7 +16,7 @@ import type { PromptEntry } from "../prompts";
 
 export default function PromptCard({ prompt }: { prompt: PromptEntry }) {
   const { t } = useI18n();
-  const Icon = prompt.icon === "globe" ? GlobeIcon : ComposeIcon;
+  const Icon = prompt.icon === 'globe' ? GlobeIcon : ComposeIcon;
 
   return (
     <Link
@@ -39,13 +39,11 @@ export default function PromptCard({ prompt }: { prompt: PromptEntry }) {
       </span>
       <span className="mt-6 flex items-center justify-between border-t border-[#e3e8ef] pt-4 text-sm">
         <span className="text-[#718096]">
-          {t("recipes.stepCount", { count: prompt.stepKeys.length })}
+          {t('recipes.stepCount', { count: prompt.stepKeys.length })}
         </span>
         <span className="font-semibold text-[#ff544c]">
-          {t("recipes.openPrompt")}{" "}
-          <span className="inline-block transition-transform group-hover:translate-x-1">
-            →
-          </span>
+          {t('recipes.openPrompt')}{' '}
+          <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
         </span>
       </span>
     </Link>

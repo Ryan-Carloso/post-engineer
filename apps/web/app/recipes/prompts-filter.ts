@@ -5,13 +5,13 @@
 // case- and accent-insensitive, so it works in both locales.
 //---------------
 
-import type { TranslationKey } from "@/lib/i18n";
-import type { PromptEntry } from "./prompts";
+import type { TranslationKey } from '@/lib/i18n';
+import type { PromptEntry } from './prompts';
 
-export type KindFilter = "all" | TranslationKey;
+export type KindFilter = 'all' | TranslationKey;
 
 function normalize(text: string): string {
-  return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
 export function filterPrompts(
@@ -22,11 +22,9 @@ export function filterPrompts(
 ): PromptEntry[] {
   const needle = normalize(query.trim());
   return prompts.filter((prompt) => {
-    if (kind !== "all" && prompt.kindKey !== kind) return false;
-    if (needle === "") return true;
-    const haystack = normalize(
-      `${t(prompt.titleKey)} ${t(prompt.objectiveKey)}`,
-    );
+    if (kind !== 'all' && prompt.kindKey !== kind) return false;
+    if (needle === '') return true;
+    const haystack = normalize(`${t(prompt.titleKey)} ${t(prompt.objectiveKey)}`);
     return haystack.includes(needle);
   });
 }

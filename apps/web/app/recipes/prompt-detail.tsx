@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useI18n } from "@/lib/i18n/provider";
-import type { PromptEntry } from "./prompts";
-import CopyPromptBlock from "./copy-prompt-block";
+import Link from 'next/link';
+import { useI18n } from '@/lib/i18n/provider';
+import type { PromptEntry } from './prompts';
+import CopyPromptBlock from './copy-prompt-block';
 
 //---------------
 // PromptDetail — one prompt's detail page content, rendered from
@@ -24,11 +24,8 @@ export default function PromptDetail({ prompt }: { prompt: PromptEntry }) {
 
   return (
     <div>
-      <Link
-        href="/recipes"
-        className="text-sm text-[#718096] hover:text-[#101728]"
-      >
-        ← {t("recipes.backToPrompts")}
+      <Link href="/recipes" className="text-sm text-[#718096] hover:text-[#101728]">
+        ← {t('recipes.backToPrompts')}
       </Link>
       <p className="mt-10 text-xs font-bold tracking-[0.2em] text-[#ff544c] uppercase">
         {t(prompt.kindKey)}
@@ -42,7 +39,7 @@ export default function PromptDetail({ prompt }: { prompt: PromptEntry }) {
 
       <section className="mt-12">
         <h2 className="text-2xl font-bold tracking-tight text-[#101728]">
-          {t("recipes.stepsTitle")}
+          {t('recipes.stepsTitle')}
         </h2>
         <ol className="mt-4 list-decimal space-y-3 pl-5">
           {prompt.stepKeys.map((stepKey) => (
@@ -55,7 +52,7 @@ export default function PromptDetail({ prompt }: { prompt: PromptEntry }) {
 
       <section className="mt-12">
         <h2 className="text-2xl font-bold tracking-tight text-[#101728]">
-          {t("recipes.deliversTitle")}
+          {t('recipes.deliversTitle')}
         </h2>
         <ul className="mt-4 list-disc space-y-3 pl-5">
           {prompt.deliverKeys.map((deliverKey) => (
@@ -68,12 +65,12 @@ export default function PromptDetail({ prompt }: { prompt: PromptEntry }) {
 
       <section className="mt-12">
         <h2 className="text-2xl font-bold tracking-tight text-[#101728]">
-          {t("recipes.examplesTitle")}
+          {t('recipes.examplesTitle')}
         </h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="rounded-xl border border-[#e3e8ef] bg-white p-4">
             <p className="text-xs font-bold tracking-[0.2em] text-[#718096] uppercase">
-              {t("recipes.exampleInputLabel")}
+              {t('recipes.exampleInputLabel')}
             </p>
             <p className="mt-2 leading-relaxed text-[#414d63]">
               {t(prompt.exampleInputKey)}
@@ -81,7 +78,7 @@ export default function PromptDetail({ prompt }: { prompt: PromptEntry }) {
           </div>
           <div className="rounded-xl border border-[#e3e8ef] bg-white p-4">
             <p className="text-xs font-bold tracking-[0.2em] text-[#718096] uppercase">
-              {t("recipes.exampleOutputLabel")}
+              {t('recipes.exampleOutputLabel')}
             </p>
             <p className="mt-2 leading-relaxed text-[#414d63]">
               {t(prompt.exampleOutputKey)}
@@ -99,7 +96,7 @@ export default function PromptDetail({ prompt }: { prompt: PromptEntry }) {
           rel="noreferrer"
           className="text-sm text-[#718096] hover:text-[#101728] hover:underline"
         >
-          {t("recipes.viewOnGithub")}
+          {t('recipes.viewOnGithub')}
         </a>
       </div>
     </div>
