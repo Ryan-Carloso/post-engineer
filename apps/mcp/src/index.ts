@@ -90,6 +90,7 @@ import { GeneratePersonaVideoShape, ValidateScriptShape, ValidateScriptDescripti
 import { CheckMediaDescription, CheckMediaShape, UploadMediaDescription, UploadMediaShape, handleCheckMedia, handleUploadMedia } from './tools-user-media.js';
 import { withTracking } from './analytics.js';
 import { parseHttpTransportOptions, serveHttpTransport } from './http-transport.js';
+import { parseHttpAuthOptions } from './http-auth.js';
 
 // The server advertises the package version: import it so a version bump in
 // package.json flows through without touching this file.
@@ -471,23 +472,22 @@ export function isMainModule(): boolean {
 }
 
 async function main() {
-  // Fail fast: without a key every tool call would fail with an opaque 401.
-  const apiKey = requireApiKey();
-  // Explicit opt-in only: without --http-transport (and with the legacy
-  // --http flag, which is ignored) the server stays on stdio and opens
-  // no port. The HTTP skeleton binds loopback unless --allow-remote
-  // is passed, and has no authentication yet — P6-2 adds it.
+  // Without --http-transport the server stays on stdio, no port; with OAuth, HTTP requests authenticate, else loopback only.
   const httpOptions = parseHttpTransportOptions(process.argv.slice(2), process.env);
   if (httpOptions !== null) {
-    // A fresh server per HTTP request: the SDK's stateless transport
-    // cannot be reused across requests (see http-transport.ts).
+    // HTTP-only parse: stdio startup must never fail on a malformed HTTP limit.
+    const authOptions = parseHttpAuthOptions(process.env);
+    // OAuth mode needs no local key; loopback mode still fails fast without one.
+    // Fresh server per request; the bearer is forwarded as this request's web API credential.
+    const apiKey = authOptions !== null ? process.env.POST_ENGINEER_API_KEY : requireApiKey();
     await serveHttpTransport(
-      () => createPostEngineerMcpServer(new PostEngineerClient({ apiKey })),
+      (auth) => createPostEngineerMcpServer(new PostEngineerClient({ apiKey: auth?.bearer ?? apiKey })),
       httpOptions,
+      authOptions,
     );
     return;
   }
-  const server = createPostEngineerMcpServer(new PostEngineerClient({ apiKey }));
+  const server = createPostEngineerMcpServer(new PostEngineerClient({ apiKey: requireApiKey() }));
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
