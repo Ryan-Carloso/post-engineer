@@ -86,7 +86,7 @@ import {
   CancelVideoTaskShape,
   handleCancelVideoTask,
 } from './video-task-tools.js';
-import { GeneratePersonaVideoShape, ValidateScriptShape, ValidateScriptDescription, handleGeneratePersonaVideo, handleValidateScript } from './tools-single-video.js';
+import { GeneratePersonaVideoShape, ValidateScriptShape, ValidateScriptDescription, ScoreDraftShape, ScoreDraftDescription, handleGeneratePersonaVideo, handleValidateScript, handleScoreDraft } from './tools-single-video.js';
 import { CheckMediaDescription, CheckMediaShape, UploadMediaDescription, UploadMediaShape, handleCheckMedia, handleUploadMedia } from './tools-user-media.js';
 import { withTracking } from './analytics.js';
 import { parseHttpTransportOptions, serveHttpTransport } from './http-transport.js';
@@ -389,17 +389,11 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     withTracking('generate_persona_video', async (args) => handleGeneratePersonaVideo(apiClient, args)),
   );
   server.tool('validate_script', ValidateScriptDescription, ValidateScriptShape, withTracking('validate_script', async (args) => handleValidateScript(apiClient, args)));
+  server.tool('score_draft', ScoreDraftDescription, ScoreDraftShape, withTracking('score_draft', async (args) => handleScoreDraft(apiClient, args)));
   server.tool('upload_media', UploadMediaDescription, UploadMediaShape, withTracking('upload_media', async (args) => handleUploadMedia(apiClient, args)));
   server.tool('check_media', CheckMediaDescription, CheckMediaShape, withTracking('check_media', async (args) => handleCheckMedia(apiClient, args)));
 
-  server.tool(
-    'get_video_status',
-    'Check the generation status and fetch final video URLs for a taskId.',
-    GetVideoStatusShape,
-    withTracking('get_video_status', async (args) => {
-      return handleGetVideoStatus(apiClient, args);
-    })
-  );
+  server.tool('get_video_status', 'Check the generation status and fetch final video URLs for a taskId.', GetVideoStatusShape, withTracking('get_video_status', async (args) => handleGetVideoStatus(apiClient, args)));
 
   server.tool(
     'get_video_task_progress',

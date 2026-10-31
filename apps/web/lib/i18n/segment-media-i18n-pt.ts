@@ -3,6 +3,7 @@
 export const segmentMediaToolDescPt = {
   toolDescGeneratePersonaVideo: 'Gerar e agendar um vídeo de persona a partir de um roteiro',
   toolDescValidateScript: 'Validar um roteiro mecanicamente, sem gastar tokens',
+  toolDescScoreDraft: 'Pontuar um rascunho de LinkedIn mecanicamente contra seus próprios posts medidos',
   toolDescUploadMedia: 'Enviar uma imagem de segmento (JPG, PNG, WebP, máx. 8MB)',
   toolDescCheckMedia: 'Verificar uma URL de imagem de segmento mecanicamente',
 } as const;

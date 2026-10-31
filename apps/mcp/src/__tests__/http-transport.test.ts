@@ -131,7 +131,7 @@ describe('parseHttpTransportOptions', () => {
 });
 
 describe('serveHttpTransport', () => {
-  it('serves the same 41 tools over Streamable HTTP and answers validate_script without tokens', async () => {
+  it('serves the same 42 tools over Streamable HTTP and answers validate_script without tokens', async () => {
     const client = mockClient();
     const handle = await serveHttpTransport(() => createPostEngineerMcpServer(client), { host: '127.0.0.1', port: 0, allowRemote: false });
     handles.push(handle);
@@ -155,7 +155,7 @@ describe('serveHttpTransport', () => {
       const memoryNames = memoryTools.tools.map((tool) => tool.name).sort();
 
       expect(httpNames).toEqual(memoryNames);
-      expect(httpNames).toHaveLength(41);
+      expect(httpNames).toHaveLength(42);
       expect(httpNames).toContain('validate_script');
 
       const result = await mcpClient.callTool({ name: 'validate_script', arguments: { segments } });
