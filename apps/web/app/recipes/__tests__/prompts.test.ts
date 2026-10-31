@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PROMPTS, getPrompt } from '../prompts';
+import { SHARED_PROMPT_BASE } from '@/lib/generation/prompt-base';
 
 describe('prompts hub data', () => {
   it('has one data entry per prompt, and adding a prompt is adding one entry', () => {
@@ -60,7 +61,15 @@ describe('prompts hub data', () => {
   });
 
   it('orders the full-setup flow: accounts, app password, persona, balance/validate, confirm publish, generate', () => {
-    const text = getPrompt('full-setup')?.prompt ?? '';
+    // The composed prompt starts with the shared base, which already
+    // mentions validate_script and the 3h-30d window; the flow order
+    // below is checked on the specific part only, after stripping that
+    // base prefix. The specific generate step keeps the bare startAt
+    // placeholder; the 3h-30d window itself lives in the base.
+    const fullText = getPrompt('full-setup')?.prompt ?? '';
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(fullText.startsWith(baseText)).toBe(true);
+    const text = fullText.slice(baseText.length + 2);
     const positions = [
       'list_social_accounts',
       'connect_account',
@@ -78,7 +87,7 @@ describe('prompts hub data', () => {
       'generate_persona_video',
       'title [VIDEO_TITLE]',
       'account IDs',
-      'startAt [ISO_DATETIME, 3h-30d ahead]',
+      'startAt [ISO_DATETIME]',
       'get_video_task_progress',
       'get_video_status',
     ].map((needle) => text.indexOf(needle));
@@ -95,6 +104,18 @@ describe('prompts hub data', () => {
       expect(prompt.prompt).toContain('60–200 words');
       expect(prompt.prompt).toContain('hook');
       expect(prompt.prompt).toContain('CTA');
+    }
+  });
+
+  it('starts every prompt with the shared base and carries humanizer + anti-slop in all of them', () => {
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(baseText).toContain('No em dashes');
+    expect(baseText).toContain('3h-30d ahead');
+    expect(baseText).toContain('mode "asap"');
+    for (const prompt of PROMPTS) {
+      expect(prompt.prompt.startsWith(baseText)).toBe(true);
+      expect(prompt.prompt).toContain('Write like a human');
+      expect(prompt.prompt).toContain('No em dashes');
     }
   });
 });

@@ -4,12 +4,18 @@
 // text, apps/web/lib/i18n/recipes-i18n-en.ts for title + description).
 // This test fails loudly whenever the MCP copy drifts from the sources.
 // It never imports apps/web at runtime: the published MCP tarball must be
-// self-contained (see scripts/sync-script-segments.mjs).
+// self-contained (see scripts/sync-prompt-base.mjs).
+// Composition: every web prompt is [...SHARED_PROMPT_BASE, '', ...specific]
+// joined with newlines. The parser below expands that spread with the
+// MCP's own generated base copy, so the equality check below compares
+// fully composed texts, and the base pins further down prove no prompt
+// bypasses the shared base.
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HUB_PROMPTS } from '../prompts.js';
+import { SHARED_PROMPT_BASE } from '../prompt-base.js';
 
 function findRepoRoot(fromUrl: string): string {
   let dir = dirname(fileURLToPath(fromUrl));
@@ -53,12 +59,21 @@ function literals(chunk: string): string[] {
   return out;
 }
 
-// export const SOME_NAME_PROMPT = [ ... ].join('\n')
+// export const SOME_NAME_PROMPT = [ ... ].join('\n'), where the array
+// may start with the shared-base spread ...SHARED_PROMPT_BASE followed
+// by a blank-line separator and the prompt-specific lines.
 const textExports = new Map<string, string>();
+const promptUsesBase = new Map<string, boolean>();
 for (const m of webPromptsSource.matchAll(
   /export const ([A-Z0-9_]+_PROMPT) = \[([\s\S]*?)\]\.join\('\\n'\)/g,
 )) {
-    textExports.set(m[1], literals(m[2]).join('\n'));
+  const parts = literals(m[2]);
+  const usesBase = m[2].includes('...SHARED_PROMPT_BASE');
+  promptUsesBase.set(m[1], usesBase);
+  textExports.set(
+    m[1],
+    usesBase ? [...SHARED_PROMPT_BASE, ...parts].join('\n') : parts.join('\n'),
+  );
 }
 
 // Prompt entries in the PROMPTS array: slug, titleKey, objectiveKey, prompt.
@@ -116,4 +131,27 @@ describe('MCP prompts sync with the web hub', () => {
       expect(mcpPrompt?.prompt).toBe(webText);
     });
   }
+
+  it('every web prompt composes from the shared base, none bypasses it', () => {
+    expect(webEntries.length).toBeGreaterThan(0);
+    for (const entry of webEntries) {
+      expect(
+        promptUsesBase.get(entry.promptConst),
+        `${entry.slug} must spread SHARED_PROMPT_BASE`,
+      ).toBe(true);
+    }
+  });
+
+  it('every composed prompt starts with the shared base and carries humanizer + anti-slop', () => {
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(baseText).toContain('No em dashes');
+    for (const entry of webEntries) {
+      const webText = textExports.get(entry.promptConst) ?? '';
+      expect(webText.startsWith(baseText)).toBe(true);
+      expect(webText).toContain('Write like a human');
+      const mcpPrompt = HUB_PROMPTS.find((p) => p.slug === entry.slug);
+      expect(mcpPrompt?.prompt.startsWith(baseText)).toBe(true);
+      expect(mcpPrompt?.prompt).toContain('No em dashes');
+    }
+  });
 });

@@ -39,3 +39,41 @@ Both apps also run the sync from their `prebuild` and `pretest` scripts,
 and each app has a `script-segments-shared.test.ts` suite that fails
 loudly if a generated copy ever drifts from the shared source. Never
 edit a generated copy by hand.
+
+## prompt-base
+
+`prompt-base/prompt-base.ts` is the shared opening of every prompt in
+the prompts hub: humanizer + anti-slop rules, the segments contract
+(hook first, CTA last, 60–200 words, title mandatory, validate before
+any token is spent), and the scheduling rules (generation always tied
+to publishing; scheduled mode needs a 3h–30d-ahead start; asap mode
+needs no start). Only rules that are truly universal belong here; a
+prompt's own topic rules stay in that prompt, so the base stays short.
+
+Every served prompt is composed as
+`[...SHARED_PROMPT_BASE, '', ...specificLines].join('\n')`, so the
+delivered text is complete and standalone when copied: the agent
+receives the whole prompt in one paste, never a bare "see the base
+prompt" reference.
+
+The consumers use byte-identical generated copies, committed to git:
+
+- `apps/web/lib/generation/prompt-base.ts`
+- `apps/mcp/src/prompt-base.ts`
+
+The shared file has no imports, so the same bytes compile under the
+web's bundler resolution and the MCP's NodeNext resolution.
+
+To change the base, edit only the shared file, then regenerate:
+
+```sh
+node scripts/sync-prompt-base.mjs
+```
+
+The sync script is deliberately NOT wired into the apps'
+`prebuild`/`pretest` scripts: both apps' `package.json` files are
+guard-protected paths, and auto-regeneration is a convenience, not a
+correctness requirement. Each app has a `prompt-base-shared.test.ts`
+suite that fails loudly if a generated copy ever drifts from the
+shared source, and `prompts-sync.test.ts` fails if any web or MCP
+prompt bypasses the base. Never edit a generated copy by hand.

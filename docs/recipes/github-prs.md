@@ -62,6 +62,22 @@ guessing.
 Paste this into your agent (Cursor, Claude, Muse, OpenCode, or any agent):
 
 ```text
+Write like a human, never like generic AI:
+Use concrete detail from the source: names, places, numbers, and one specific moment. Swap any generic line for your own detail.
+No em dashes, no hedging (delve, moreover, it is important to note), no filler, no corporate speak.
+Short sentences. Plain words. If a line could belong to any topic, rewrite it until it could only belong to this one.
+
+Script contract — every video script follows it:
+Segments: first hook, last CTA, exactly one of each, at most 12 segments.
+Length: 60–200 words total; hook 20–30 words (8–12 seconds) ending with terminal punctuation; body at least 30 words; CTA 5–20 words.
+Spoken English only, language "en": no links, hashtags, markdown, emoji, or stage directions in any segment.
+Title is mandatory with every generate_persona_video call.
+Call validate_script with the segments and fix any named error until it passes. Validate before any token is spent; never generate from an unvalidated script.
+
+Generation is always tied to publishing:
+One generate_persona_video call generates and publishes the video; there is no orphan video and no separate schedule step.
+mode "scheduled" needs startAt [ISO_DATETIME, 3h-30d ahead] + times [HH:MM] in timezone [TIMEZONE]; mode "asap" needs no startAt/times.
+
 Turn this GitHub pull request into one persona video.
 
 PR to use (paste the PR title, description, and a short change summary, plus any linked issues):
@@ -72,11 +88,6 @@ PR to use (paste the PR title, description, and a short change summary, plus any
 
 Rules:
 - Use the Post Engineer MCP server and the singular video tool, generate_persona_video.
-- First, call validate_script with your script and only proceed when it is valid — validate before any token is debited.
-- Script: spoken text only, no links, hashtags, markdown, emojis, or stage directions.
-- Structure: first segment is the hook, last segment is the CTA, exactly one of each.
-- Length: 60–200 words total, hook 20–30 words (8–12 seconds), body at least 30 words, CTA 5–20 words, at most 12 segments.
-- Language: en only.
 - Media: at most 6, only if they match the PR (screenshots, diagrams, or repo visuals); otherwise generate without media.
 - Then generate one video for this PR and publish it where the user asked, scheduled or asap.
 - Never invent PR details: if the title, description, or change summary is missing, ask for it instead of guessing.
