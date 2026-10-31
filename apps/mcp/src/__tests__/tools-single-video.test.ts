@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   handleGeneratePersonaVideo,
+  handleScoreDraft,
   handleValidateScript,
 } from '../tools-single-video.js';
 import type { PostEngineerClient } from '../client.js';
@@ -193,5 +194,69 @@ describe('validate_script tool', () => {
     expect(text).toContain('https://[redacted]@example.com');
     expect(text).not.toContain('abc123token');
     expect(text).not.toContain('s3cret');
+  });
+});
+
+describe('score_draft tool', () => {
+  const HEADERS = { Authorization: 'Bearer <redacted>' };
+
+  function fakeClient(request: ReturnType<typeof vi.fn>) {
+    return {
+      request,
+      getHeaders: vi.fn().mockReturnValue(HEADERS),
+    } as unknown as PostEngineerClient;
+  }
+
+  it('POSTs the draft to /api/videos/score-draft and renders the score JSON', async () => {
+    const payload = {
+      success: true,
+      score: 100,
+      reasons: [{ rule: 'hook', detail: 'First line is 10 words.', points: 20 }],
+      counts: { chars: 400, words: 54, hashtags: 2, links: 0, firstLineWords: 10, slopHits: [], topThemeMatch: 'Porto mornings' },
+      baseline: { postsMeasured: 2, topAngles: [], medianEngagement: 82.5, bestEngagement: 115 },
+      publishCheck: { ok: true, failures: [], warnings: [] },
+    };
+    const request = vi.fn().mockResolvedValue(payload);
+    const response = await handleScoreDraft(fakeClient(request), { draft: 'The best Porto mornings start before the tourists wake up.' });
+    expect(request).toHaveBeenCalledWith(
+      '/api/videos/score-draft',
+      {
+        method: 'POST',
+        headers: HEADERS,
+        body: JSON.stringify({ draft: 'The best Porto mornings start before the tourists wake up.' }),
+      },
+      'score draft',
+    );
+    expect(response.isError).not.toBe(true);
+    expect(textOf(response)).toContain('"score": 100');
+  });
+
+  it('sends only the set optionals', async () => {
+    const request = vi.fn().mockResolvedValue({ success: true, score: 50 });
+    await handleScoreDraft(fakeClient(request), {
+      draft: 'Draft.',
+      provider: 'linkedin',
+      personaId: '11111111-2222-4333-8444-555555555555',
+    });
+    expect(request).toHaveBeenCalledWith(
+      '/api/videos/score-draft',
+      {
+        method: 'POST',
+        headers: HEADERS,
+        body: JSON.stringify({
+          draft: 'Draft.',
+          provider: 'linkedin',
+          personaId: '11111111-2222-4333-8444-555555555555',
+        }),
+      },
+      'score draft',
+    );
+  });
+
+  it('returns an error when the web endpoint rejects the draft', async () => {
+    const request = vi.fn().mockRejectedValue(new Error('Failed to score draft: 500 boom'));
+    const response = await handleScoreDraft(fakeClient(request), { draft: 'Draft.' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('Error scoring draft');
   });
 });

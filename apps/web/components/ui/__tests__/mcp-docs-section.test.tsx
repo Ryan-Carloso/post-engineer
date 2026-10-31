@@ -108,7 +108,7 @@ describe('McpDocsSection', () => {
     expect(screen.queryByTestId('mcp-docs-help-cta')).toBeNull();
   });
 
-  it('renders the tools grid with all 41 tools', () => {
+  it('renders the tools grid with all 42 tools', () => {
     render(<McpDocsSection />);
 
     const grid = screen.getByTestId('mcp-tools-grid');
@@ -137,6 +137,7 @@ describe('McpDocsSection', () => {
       'get_token_balance',
       'generate_persona_video',
       'validate_script',
+      'score_draft',
       'upload_media',
       'check_media',
       'get_video_status',
@@ -399,6 +400,7 @@ const EXPECTED_EN_PROMPT: string[] = [
   "- get_token_balance: get my prepaid token wallet balance.",
   "- generate_persona_video: generate AND schedule ONE persona video from a complete script (segments: first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation — no LLM expands it; title is the slot label; personaId optional — omit it for a faceless post with no persona, then set options.faceless and options.voiceId; providers plus per-provider account IDs from list_social_accounts; mode 'scheduled' (default) slots the video across startAt ISO datetime + times [\"HH:MM\"] in timezone, mode 'asap' publishes it the moment its generation finishes with no startAt/times; slot must be 3h-30d ahead). The video is generated then auto-published at its slot; there is no separate schedule step. Poll the slot's taskId with get_video_task_progress. Costs tokens.",
   "- validate_script: validate a segments script mechanically, without spending tokens (segments: first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation). Returns the word counts and the hook window (8-12 seconds spoken). Measured hook duration is pending a hook-only TTS endpoint and is reported as pending, never invented.",
+  "- score_draft: score a LinkedIn draft mechanically against your own measured posts, without spending tokens. Returns a 0-100 score where every point is explained, the baseline it was scored against, and the LinkedIn publish check (fails only on an empty draft or the 3000-character post limit). A failing publish check means: fix the draft before scheduling it for LinkedIn.",
   "- upload_media: upload a local image for a video segment and get a mediaId for the segment media field (JPG, PNG, or WebP, max 8MB — the engine photo limit; temporary asset, 1 hour TTL, so upload shortly before generating).",
   "- check_media: mechanically check one public image URL for a segment, without an LLM and without judging relevance (returns exactly one code: ok, blocked_403, not_image, too_small, too_large, timeout, or face_detected).",
   "- Recipes: daily news becomes a video — see docs/recipes/daily-news.md in the post-engineer repo for the copy-ready prompt and worked example.",
@@ -465,6 +467,7 @@ const EXPECTED_PT_PROMPT: string[] = [
   "- get_token_balance: ver o saldo da minha carteira de tokens.",
   "- generate_persona_video: gerar E agendar UM vídeo de persona a partir de um roteiro completo (segments: primeiro hook, depois body, por último CTA; 60-200 palavras no total, body no mínimo 30, CTA 5-20, hook 15-40 palavras terminando com pontuação final — nenhum LLM expande o roteiro; title é o rótulo do slot; personaId opcional — omita para um post faceless sem persona e informe options.faceless e options.voiceId; providers mais account IDs por provider do list_social_accounts; mode 'scheduled' (padrão) agenda o vídeo com startAt datetime ISO + times [\"HH:MM\"] em timezone, mode 'asap' publica no momento em que a geração termina sem startAt/times; slot deve estar de 3h a 30 dias à frente). O vídeo é gerado e publicado automaticamente no seu slot; não há etapa separada de agendamento. Acompanhe o taskId do slot com get_video_task_progress. Custa tokens.",
   "- validate_script: validar um roteiro em segments mecanicamente, sem gastar tokens (segments: primeiro hook, depois body, por último CTA; 60-200 palavras no total, body no mínimo 30, CTA 5-20, hook 15-40 palavras terminando com pontuação final). Retorna as contagens de palavras e a janela do hook (8-12 segundos falados). A duração medida do hook está pendente de um endpoint TTS só do hook e é informada como pendente, nunca inventada.",
+  "- score_draft: pontuar um rascunho de LinkedIn mecanicamente contra seus próprios posts medidos, sem gastar tokens. Retorna uma nota 0-100 com cada ponto explicado, a base usada e o check de publicação LinkedIn (falha só com rascunho vazio ou acima do limite de 3000 caracteres). Um check com falha significa: corrija o rascunho antes de agendar para o LinkedIn.",
   "- upload_media: enviar uma imagem local para um segmento de vídeo e obter um mediaId para o campo media do segmento (JPG, PNG ou WebP, máx. 8MB — o limite de foto do engine; asset temporário, TTL de 1 hora, então envie pouco antes de gerar).",
   "- check_media: verificar mecanicamente uma URL pública de imagem para um segmento, sem LLM e sem julgar relevância (retorna exatamente um código: ok, blocked_403, not_image, too_small, too_large, timeout ou face_detected).",
   "- Receitas: notícias do dia viram vídeo — ver docs/recipes/daily-news.md no repo post-engineer para o prompt pronto e o exemplo.",

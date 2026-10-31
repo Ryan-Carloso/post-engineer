@@ -122,5 +122,8 @@
   ],
   "POST /api/videos/validate-script": [
     "validate_script"
+  ],
+  "POST /api/videos/score-draft": [
+    "score_draft"
   ]
 }
