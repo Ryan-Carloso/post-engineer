@@ -273,6 +273,13 @@ class GenerateAvatar:
     what makes a warm clip roughly half the price of a cold one.
     """
 
+    @modal.enter()
+    def load_renderer(self) -> None:
+        """Load the model once per container; every job after reuses it."""
+        from modal_longcat_resident import ResidentRenderer
+
+        self.renderer = ResidentRenderer(AVATAR_WEIGHTS_DIR, BASE_WEIGHTS_DIR)
+
     @modal.method()
     def generate_bytes(
         self,
@@ -306,6 +313,7 @@ class GenerateAvatar:
                  "num_segments": num_segments},
             )
             video_bytes, phase_timings = run_longcat(
+                self.renderer,
                 image_bytes, audio_bytes, resolution, num_segments
             )
             output_path.parent.mkdir(parents=True, exist_ok=True)
