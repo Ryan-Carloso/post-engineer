@@ -41,8 +41,12 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
   return { ...actual, applyRateLimit: vi.fn(async () => null) };
 });
+vi.mock('@/lib/voice-catalog-fetch', () => ({
+  fetchPersonaVoiceCatalogIds: vi.fn(async () => undefined),
+}));
 
 import { POST, PATCH, DELETE } from '../route';
+import { fetchPersonaVoiceCatalogIds } from '@/lib/voice-catalog-fetch';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -143,7 +147,7 @@ describe('POST /api/persona — toda persona tem rosto', () => {
       formRequest({
         name: 'Canal Ninja',
         avatarUrl: 'data:image/png;base64,IA',
-        voiceId: 'voz-1',
+        voiceId: 'chatterbox:kokoro_af_heart',
       }),
     );
     const body = (await res.json()) as { success: boolean; personaId?: string };
@@ -156,7 +160,7 @@ describe('POST /api/persona — toda persona tem rosto', () => {
       name: 'Canal Ninja',
       photo_path: null,
       avatar_url: 'data:image/png;base64,IA',
-      voice_id: 'voz-1',
+      voice_id: 'chatterbox:kokoro_af_heart',
     });
   });
 
@@ -173,7 +177,7 @@ describe('POST /api/persona — toda persona tem rosto', () => {
       formRequest({
         name: 'Canal Ninja',
         avatarUrl: 'data:image/png;base64,IA',
-        voiceId: 'voz-1',
+        voiceId: 'chatterbox:kokoro_af_heart',
       }),
     );
 
@@ -184,7 +188,7 @@ describe('POST /api/persona — toda persona tem rosto', () => {
   it('rejects a persona with no visual identity (neither photo nor avatarUrl)', async () => {
     mockSupabase();
 
-    const res = await POST(formRequest({ name: 'Canal Ninja', voiceId: 'voz-1' }));
+    const res = await POST(formRequest({ name: 'Canal Ninja', voiceId: 'chatterbox:kokoro_af_heart' }));
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as { success: boolean; error: string };
@@ -204,7 +208,7 @@ describe('POST /api/persona — toda persona tem rosto', () => {
       formRequest({
         name: 'Canal Ninja',
         avatarUrl: 'data:image/png;base64,IA',
-        voiceId: 'voz-1',
+        voiceId: 'chatterbox:kokoro_af_heart',
       }),
     );
 
@@ -302,7 +306,7 @@ describe('POST /api/persona — toda persona tem rosto', () => {
       formRequest({
         name: 'Canal Ninja',
         avatarUrl: 'data:image/png;base64,IA',
-        voiceId: 'voz-1',
+        voiceId: 'chatterbox:kokoro_af_heart',
       }),
     );
 
@@ -362,7 +366,7 @@ describe('POST /api/persona — toda persona tem rosto', () => {
       formRequest({
         name: 'Ana',
         avatarUrl: 'data:image/png;base64,IA',
-        voiceId: 'voz-1',
+        voiceId: 'chatterbox:kokoro_af_heart',
         faceQuality: 'very_good',
       }),
     );
@@ -384,7 +388,7 @@ describe('POST /api/persona', () => {
       error: NextResponse.json({ success: false }, { status: 401 }),
     });
 
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
     const body = (await res.json()) as { success: boolean };
 
     expect(res.status).toBe(401);
@@ -394,7 +398,7 @@ describe('POST /api/persona', () => {
   it('retorna 400 sem nome', async () => {
     mockSupabase();
 
-    const res = await POST(formRequest({ voiceId: 'voz-1' }, [photo()]));
+    const res = await POST(formRequest({ voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as { success: boolean; error: string };
@@ -405,7 +409,7 @@ describe('POST /api/persona', () => {
   it('retorna 400 sem identidade visual (nem foto nem avatarUrl)', async () => {
     mockSupabase();
 
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }));
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }));
 
     expect(res.status).toBe(400);
   });
@@ -418,11 +422,25 @@ describe('POST /api/persona', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejeita uma voz desconhecida com 400 antes de upload ou insert (issue #353)', async () => {
+    const { uploaded, inserted } = mockSupabase();
+
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'energetic' }, [photo()]));
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toContain('Unknown voice "energetic"');
+    expect(body.error).toContain('GET /api/persona/voices');
+    expect(uploaded).toEqual([]);
+    expect(inserted).toEqual([]);
+  });
+
   it('returns 400 with an unsupported photo format', async () => {
     mockSupabase();
     const gif = new File(['gif'], 'foto.gif', { type: 'image/gif' });
 
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [gif]));
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [gif]));
 
     expect(res.status).toBe(400);
   });
@@ -430,7 +448,7 @@ describe('POST /api/persona', () => {
   it('creates a persona with an uploaded photo: uploads to Storage and inserts the row', async () => {
     const { uploaded, inserted } = mockSupabase();
 
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
     const body = (await res.json()) as { success: boolean; personaId?: string };
 
     expect(res.status).toBe(200);
@@ -451,7 +469,7 @@ describe('POST /api/persona', () => {
       user_id: USER_ID,
       name: 'Ana',
       photo_path: `${USER_ID}/${body.personaId}/photo.png`,
-      voice_id: 'voz-1',
+      voice_id: 'chatterbox:kokoro_af_heart',
     });
   });
 
@@ -462,7 +480,7 @@ describe('POST /api/persona', () => {
       formRequest({
         name: 'Robo',
         avatarUrl: 'data:image/png;base64,IA',
-        voiceId: 'voz-1',
+        voiceId: 'chatterbox:kokoro_af_heart',
       }),
     );
     const body = (await res.json()) as { success: boolean };
@@ -473,14 +491,14 @@ describe('POST /api/persona', () => {
     expect(inserted[0]).toMatchObject({
       name: 'Robo',
       avatar_url: 'data:image/png;base64,IA',
-      voice_id: 'voz-1',
+      voice_id: 'chatterbox:kokoro_af_heart',
     });
   });
 
   it('tracks persona_created on success (2xx product analytics)', async () => {
     mockSupabase();
 
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
     const body = (await res.json()) as { success: boolean; personaId?: string };
 
     expect(res.status).toBe(200);
@@ -495,7 +513,7 @@ describe('POST /api/persona', () => {
   it('does not track persona_created when creation fails', async () => {
     mockSupabase({ insertError: { message: 'db down' } });
 
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
 
     expect(res.status).toBe(500);
     expect(trackApiEvent).not.toHaveBeenCalled();
@@ -504,7 +522,7 @@ describe('POST /api/persona', () => {
   it('retorna 500 quando o upload no Storage falha', async () => {
     mockSupabase({ uploadError: { message: 'bucket down' } });
 
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
 
     expect(res.status).toBe(500);
     const body = (await res.json()) as { success: boolean; error: string };
@@ -515,7 +533,7 @@ describe('POST /api/persona', () => {
   it('retorna 500 quando o insert na tabela falha', async () => {
     mockSupabase({ insertError: { message: 'check violation' } });
 
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
 
     expect(res.status).toBe(500);
     const body = (await res.json()) as { success: boolean; error: string };
@@ -534,7 +552,7 @@ describe('POST /api/persona', () => {
     const res = await POST(
       formRequest({
         name: 'Ana',
-        voiceId: 'voz-1',
+        voiceId: 'chatterbox:kokoro_af_heart',
         language: 'en',
         videoAspect: '16:9',
         scriptPrompt: 'Storytelling com hook forte.',
@@ -559,7 +577,7 @@ describe('POST /api/persona', () => {
     const res = await POST(
       formRequest({
         name: 'Ana',
-        voiceId: 'voz-1',
+        voiceId: 'chatterbox:kokoro_af_heart',
         language: 'pt',
       }, [photo()]),
     );
@@ -574,7 +592,7 @@ describe('POST /api/persona', () => {
   it('creates a persona without preferences: columns stay null (house default)', async () => {
     const { inserted } = mockSupabase();
 
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
 
     expect(res.status).toBe(200);
     expect(inserted[0]).toMatchObject({
@@ -589,7 +607,7 @@ describe('POST /api/persona', () => {
   it('returns 400 when ctaText is over 200 characters on create', async () => {
     const { inserted } = mockSupabase();
 
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1', ctaText: 'a'.repeat(201) }, [photo()]));
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', ctaText: 'a'.repeat(201) }, [photo()]));
 
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toBe('Invalid ctaText: use at most 200 characters.');
@@ -600,7 +618,7 @@ describe('POST /api/persona', () => {
     mockSupabase();
 
     const res = await POST(
-      formRequest({ name: 'Ana', voiceId: 'voz-1', videoAspect: '4:3' }, [photo()]),
+      formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', videoAspect: '4:3' }, [photo()]),
     );
 
     expect(res.status).toBe(400);
@@ -612,7 +630,7 @@ describe('POST /api/persona', () => {
     const { inserted } = mockSupabase();
 
     const res = await POST(
-      formRequest({ name: 'Ana', voiceId: 'voz-1', videoLayout: 'react' }, [photo()]),
+      formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', videoLayout: 'react' }, [photo()]),
     );
 
     expect(res.status).toBe(200);
@@ -623,7 +641,7 @@ describe('POST /api/persona', () => {
     const { inserted } = mockSupabase();
 
     const res = await POST(
-      formRequest({ name: 'Ana', voiceId: 'voz-1', niche: 'finanças pessoais' }, [photo()]),
+      formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', niche: 'finanças pessoais' }, [photo()]),
     );
 
     expect(res.status).toBe(200);
@@ -633,7 +651,7 @@ describe('POST /api/persona', () => {
   it('cria persona sem nicho: coluna fica null', async () => {
     const { inserted } = mockSupabase();
 
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'voz-1' }, [photo()]));
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
 
     expect(res.status).toBe(200);
     expect(inserted[0]).toMatchObject({ niche: null });
@@ -643,7 +661,7 @@ describe('POST /api/persona', () => {
     mockSupabase();
 
     const res = await POST(
-      formRequest({ name: 'Ana', voiceId: 'voz-1', niche: 'x'.repeat(301) }, [photo()]),
+      formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', niche: 'x'.repeat(301) }, [photo()]),
     );
 
     expect(res.status).toBe(400);
@@ -655,7 +673,7 @@ describe('POST /api/persona', () => {
     mockSupabase();
 
     const res = await POST(
-      formRequest({ name: 'Ana', voiceId: 'voz-1', paragraphNumber: '11' }, [photo()]),
+      formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', paragraphNumber: '11' }, [photo()]),
     );
 
     expect(res.status).toBe(400);
@@ -667,7 +685,7 @@ describe('POST /api/persona', () => {
     mockSupabase();
 
     const res = await POST(
-      formRequest({ name: 'Ana', voiceId: 'voz-1', paragraphNumber: 'muito' }, [photo()]),
+      formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', paragraphNumber: 'muito' }, [photo()]),
     );
 
     expect(res.status).toBe(400);
@@ -685,7 +703,7 @@ describe('POST /api/persona — face quality (no mix, no mode)', () => {
     const res = await POST(
       formRequest({
         name: 'Ana',
-        voiceId: 'voz-1',
+        voiceId: 'chatterbox:kokoro_af_heart',
         faceQuality: 'very_good',
       }, [photo()]),
     );
@@ -700,7 +718,7 @@ describe('POST /api/persona — face quality (no mix, no mode)', () => {
     const res = await POST(
       formRequest({
         name: 'Ana',
-        voiceId: 'voz-1',
+        voiceId: 'chatterbox:kokoro_af_heart',
         faceQuality: 'ultra',
       }, [photo()]),
     );
@@ -717,7 +735,7 @@ describe('POST /api/persona — face quality (no mix, no mode)', () => {
       formRequest({
         name: 'Remote',
         avatarUrl: 'https://cdn.example/face.png',
-        voiceId: 'voz-1',
+        voiceId: 'chatterbox:kokoro_af_heart',
       }),
     );
     const body = (await res.json()) as { success: boolean; personaId?: string };
@@ -739,7 +757,7 @@ describe('POST /api/persona — face quality (no mix, no mode)', () => {
       formRequest({
         name: 'Sample',
         avatarUrl: '/caracter-samples/file-3.png',
-        voiceId: 'voz-1',
+        voiceId: 'chatterbox:kokoro_af_heart',
       }),
     );
     expect(res.status).toBe(200);
@@ -759,7 +777,7 @@ describe('POST /api/persona — face quality (no mix, no mode)', () => {
       formRequest({
         name: 'Dead',
         avatarUrl: 'https://muse.ai/missing.jpg',
-        voiceId: 'voz-1',
+        voiceId: 'chatterbox:kokoro_af_heart',
       }),
     );
     expect(res.status).toBe(400);
@@ -1067,11 +1085,55 @@ describe('PATCH /api/persona', () => {
       },
     });
 
-    const res = await PATCH(patchRequest('persona-uuid-1', { voiceId: 'voz-nova' }));
+    const res = await PATCH(patchRequest('persona-uuid-1', { voiceId: 'chatterbox:kokoro_af_heart' }));
 
     expect(res.status).toBe(200);
-    expect(updated[0]).toMatchObject({ voice_id: 'voz-nova', voice_audio_path: null });
+    expect(updated[0]).toMatchObject({ voice_id: 'chatterbox:kokoro_af_heart', voice_audio_path: null });
     expect(removed).toContain(`${USER_ID}/voz-antiga.mp3`);
+  });
+
+  it('rejeita uma voz nova desconhecida com 400 sem gravar nada (#353)', async () => {
+    const { updated, removed } = mockSupabaseForPatch({
+      existing: {
+        id: 'persona-uuid-1',
+        user_id: USER_ID,
+        name: 'Antiga',
+        photo_path: null,
+        avatar_url: null,
+        voice_id: null,
+        voice_audio_path: null,
+      },
+    });
+
+    const res = await PATCH(patchRequest('persona-uuid-1', { voiceId: 'energetic' }));
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: boolean; error: string };
+    expect(body.error).toContain('Unknown voice "energetic"');
+    expect(updated).toEqual([]);
+    expect(removed).toEqual([]);
+  });
+
+  it('edita um persona que guarda nome Bare legacy sem revalidar a voz (#353)', async () => {
+    const { updated } = mockSupabaseForPatch({
+      existing: {
+        id: 'persona-uuid-1',
+        user_id: USER_ID,
+        name: 'Antiga',
+        photo_path: null,
+        avatar_url: null,
+        voice_id: 'energetic',
+        voice_audio_path: null,
+      },
+    });
+
+    const res = await PATCH(
+      patchRequest('persona-uuid-1', { name: 'Nova', voiceId: 'energetic' }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(updated[0]).toMatchObject({ name: 'Nova' });
+    expect(vi.mocked(fetchPersonaVoiceCatalogIds)).not.toHaveBeenCalled();
   });
 
   it('returns 400 with an unsupported photo format', async () => {
@@ -1122,11 +1184,11 @@ describe('PATCH /api/persona', () => {
     it('changing only the voice preserves name and photo: update omits photo fields', async () => {
       const { updated, removed } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
-      const res = await PATCH(patchRequest('persona-uuid-1', { voiceId: 'voz-nova' }));
+      const res = await PATCH(patchRequest('persona-uuid-1', { voiceId: 'chatterbox:kokoro_af_heart' }));
 
       expect(res.status).toBe(200);
       expect(Object.keys(updated[0]).sort()).toEqual(['voice_audio_path', 'voice_id']);
-      expect(updated[0].voice_id).toBe('voz-nova');
+      expect(updated[0].voice_id).toBe('chatterbox:kokoro_af_heart');
       expect(removed).toEqual([]);
     });
 
@@ -1144,7 +1206,7 @@ describe('PATCH /api/persona', () => {
       const { uploaded, updated, removed } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
       const res = await PATCH(
-        patchRequest('persona-uuid-1', { name: 'Ana Editada', voiceId: 'voz-nova' }),
+        patchRequest('persona-uuid-1', { name: 'Ana Editada', voiceId: 'chatterbox:kokoro_af_heart' }),
       );
 
       expect(res.status).toBe(200);

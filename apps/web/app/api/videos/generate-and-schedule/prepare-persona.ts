@@ -27,6 +27,11 @@ import {
   type VoiceResolution,
 } from '@/lib/voice-fallback';
 import { fetchPersonaVoiceCatalogIds } from '@/lib/voice-catalog-fetch';
+// cloneVoiceAvailable moved to lib/persona-voice-validate.ts for the persona
+// POST/PATCH voice validation (issue #353); re-exported so existing import
+// sites keep working.
+import { cloneVoiceAvailable } from '@/lib/persona-voice-validate';
+export { cloneVoiceAvailable } from '@/lib/persona-voice-validate';
 import { signedUrl, resolvePostWithoutPersona, type PersonaPrep } from './persona-prep';
 
 export const ROUTE = 'POST /api/videos/generate-and-schedule';
@@ -243,37 +248,7 @@ export async function preparePersona(
   };
 }
 
-//---------------
-// cloneVoiceAvailable — whether the persona's clone id still names one of
-// this user's READY clones (cloned_voices, migration 023). The engine_key
-// is the persona id's key half without the routing prefix. A failed lookup
-// resolves true (fail open): the engine's ownership guard at TTS time is
-// the last line of defense, and a transient DB error must not fail a
-// dispatch the engine would accept.
-//---------------
-export async function cloneVoiceAvailable(
-  supabase: SupabaseClient,
-  userId: string,
-  key: string,
-): Promise<boolean> {
-  try {
-    const { data, error } = await supabase
-      .from('cloned_voices')
-      .select('engine_voice_key')
-      .eq('user_id', userId)
-      .eq('engine_voice_key', key)
-      .eq('status', 'ready')
-      .limit(1);
-    if (error) {
-      logger.error('[generate-and-schedule] cloned voice availability lookup failed', error, { userId });
-      return true;
-    }
-    return (data ?? []).length > 0;
-  } catch (error) {
-    logger.error('[generate-and-schedule] cloned voice availability lookup threw', error, { userId });
-    return true;
-  }
-}
+// cloneVoiceAvailability has moved to lib/persona-voice-validate.ts.
 
 //---------------
 // persistVoiceSwap — writes the fallback voice onto the persona row and

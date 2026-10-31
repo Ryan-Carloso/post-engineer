@@ -68,15 +68,20 @@ function isVoiceEntry(value: unknown): value is VoiceEntry {
 }
 
 export function filterVoicesPayload(payload: unknown, args: ListVoicesArgs): unknown {
-  if (args.gender === undefined && args.origin === undefined && args.search === undefined) {
-    return payload;
-  }
   if (typeof payload !== 'object' || payload === null || !('voices' in payload) || !Array.isArray(payload.voices)) {
     throw new Error('Invalid voices response: expected { voices: [...] }');
   }
   const voices = payload.voices.filter((voice: unknown) => {
     if (!isVoiceEntry(voice)) {
       throw new Error('Invalid voices response: voice entry without id/kind');
+    }
+    // Issue #353: provider prefixes are never taught, so they never reach
+    // the picker — house voices + the caller's clones only, filters or not.
+    if (
+      typeof voice.id === 'string' &&
+      (voice.id.startsWith('openrouter:') || voice.id.startsWith('elevenlabs:'))
+    ) {
+      return false;
     }
     if (args.gender !== undefined && voice.gender !== args.gender) {
       return false;

@@ -8,8 +8,8 @@ import { isPersonaAllowed, isScopedApiKey } from '@/lib/api-keys';
 import {
   parsePersonaForm,
   validateVisualCues,
-  validateVoiceSource,
 } from '@/lib/persona-schema';
+import { applyPersonaVoicePatch, validatePersonaVoiceInput } from '@/lib/persona-voice-validate';
 import {
   addLibraryImages,
   IMAGE_BUCKET,
@@ -87,7 +87,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return errorResponse(400, visualError, 'POST /api/persona');
   }
 
-  const voiceError = validateVoiceSource(body.values.voiceId);
+  const voiceError = await validatePersonaVoiceInput(supabase, user.id, body.values.voiceId);
   if (voiceError) {
     return errorResponse(400, voiceError, 'POST /api/persona');
   }
@@ -375,13 +375,10 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     }
   }
 
-  if (patch.voiceId !== null) {
-    updates.voice_id = patch.voiceId;
-    updates.voice_audio_path = null;
-    if (typeof persona.voice_audio_path === 'string' && persona.voice_audio_path) {
-      stalePaths.push(persona.voice_audio_path);
-    }
-  }
+  const voicePatchError = await applyPersonaVoicePatch(
+    supabase, user.id, persona, patch.voiceId, updates, stalePaths,
+  );
+  if (voicePatchError) return errorResponse(400, voicePatchError, 'PATCH /api/persona');
 
   if (patch.language !== null) updates.language = patch.language;
   if (patch.videoAspect !== null) updates.video_aspect = patch.videoAspect;

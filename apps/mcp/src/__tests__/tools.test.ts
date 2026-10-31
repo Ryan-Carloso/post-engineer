@@ -75,14 +75,36 @@ describe('MCP Tool Handlers', () => {
     );
 
     expect(mockClient.createPersona).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'Alex AI' })
+      expect.objectContaining({ name: 'Alex AI', voiceId: 'chatterbox:kokoro_af_alloy' })
     );
     expect(textOf(response)).toContain('persona-123');
   });
 
+  it('handleCreatePersona rejects an unknown voice with the exact message and never calls the client', async () => {
+    vi.mocked(mockClient.createPersona).mockClear();
+    vi.mocked(mockClient.listVoices).mockResolvedValue({ voices: [] });
+
+    const response = await handleCreatePersona(
+      mockClient,
+      CreatePersonaSchema.parse({
+        name: 'Alex AI',
+        avatarUrl: 'https://example.com/alex.png',
+        voiceId: 'energetic',
+        language: 'en-US',
+      })
+    );
+
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain(
+      'Unknown voice. Call list_voices and pass the id or label from that list (house voices and your clones).',
+    );
+    expect(mockClient.createPersona).not.toHaveBeenCalled();
+  });
+
   it('handleListVoices returns the voice catalog', async () => {
+    vi.mocked(mockClient.listVoices).mockClear();
     vi.mocked(mockClient.listVoices).mockResolvedValue({
-      voices: [{ id: 'calm' }, { id: 'energetic' }],
+      voices: [{ id: 'calm', kind: 'standard' }, { id: 'energetic', kind: 'standard' }],
     });
 
     const response = await handleListVoices(mockClient);
@@ -103,21 +125,35 @@ describe('MCP Tool Handlers', () => {
     expect(textOf(response)).toContain('file-1');
   });
 
-  it('handleUpdatePersona updates only provided fields', async () => {
+  it('handleUpdatePersona routes a house voice name to its id before the client call', async () => {
     vi.mocked(mockClient.updatePersona).mockResolvedValue({ success: true });
 
     const response = await handleUpdatePersona(mockClient, {
       personaId: 'persona-123',
-      voiceId: 'energetic',
+      voiceId: 'phonon_zoey',
       niche: 'Finanças',
     });
 
     expect(mockClient.updatePersona).toHaveBeenCalledWith({
       personaId: 'persona-123',
-      voiceId: 'energetic',
+      voiceId: 'chatterbox:phonon_zoey',
       niche: 'Finanças',
     });
     expect(textOf(response)).toContain('updated successfully');
+  });
+
+  it('handleUpdatePersona rejects an unknown voice with the exact message and never calls the client', async () => {
+    vi.mocked(mockClient.updatePersona).mockClear();
+    vi.mocked(mockClient.listVoices).mockResolvedValue({ voices: [] });
+
+    const response = await handleUpdatePersona(mockClient, {
+      personaId: 'persona-123',
+      voiceId: 'energetic',
+    });
+
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('Unknown voice. Call list_voices');
+    expect(mockClient.updatePersona).not.toHaveBeenCalled();
   });
 
   it('handleUpdatePersona returns error when the API fails', async () => {
@@ -338,7 +374,7 @@ describe('schema bounds', () => {
   it('CreatePersonaSchema accepts paragraphNumber up to 10 (matches the API)', () => {
     const result = CreatePersonaSchema.safeParse({
       name: 'x',
-      avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
+      avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:kokoro_am_michael',
       paragraphNumber: 10,
     });
     expect(result.success).toBe(true);
@@ -355,7 +391,7 @@ describe('schema bounds', () => {
   it('persona schemas reject non-English languages (English-only launch)', () => {
     const created = CreatePersonaSchema.safeParse({
       name: 'x',
-      avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
+      avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:kokoro_am_michael',
       language: 'pt-BR',
     });
     expect(created.success).toBe(false);
@@ -374,7 +410,7 @@ describe('schema bounds', () => {
   it('persona schemas accept the full English language name', () => {
     const created = CreatePersonaSchema.safeParse({
       name: 'x',
-      avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
+      avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:kokoro_am_michael',
       language: 'English',
     });
     expect(created.success).toBe(true);
@@ -383,7 +419,7 @@ describe('schema bounds', () => {
   it('persona schemas accept English regional variants', () => {
     const created = CreatePersonaSchema.safeParse({
       name: 'x',
-      avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
+      avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:kokoro_am_michael',
       language: 'en-GB',
     });
     expect(created.success).toBe(true);
@@ -422,7 +458,7 @@ describe('persona image library tools', () => {
     vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1' });
     const args = CreatePersonaSchema.parse({
       name: 'Alex AI',
-      avatarUrl: 'https://example.com/alex.png', voiceId: 'chatterbox:en_us_male_01',
+      avatarUrl: 'https://example.com/alex.png', voiceId: 'chatterbox:kokoro_am_michael',
       images: [
         { path: '/tmp/a.jpg', tag: 'casual', description: 'at the beach' },
         { path: '/tmp/b.png' },
@@ -439,7 +475,7 @@ describe('persona image library tools', () => {
   it('create_persona rejects more than 10 images at the schema level', () => {
     const images = Array.from({ length: 11 }, (_, i) => ({ path: `/tmp/img-${i}.jpg` }));
     expect(() =>
-      CreatePersonaSchema.parse({ name: 'X', avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01', images })
+      CreatePersonaSchema.parse({ name: 'X', avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:kokoro_am_michael', images })
     ).toThrow();
   });
 
@@ -458,14 +494,14 @@ describe('persona image library tools', () => {
     expect(() =>
       CreatePersonaSchema.parse({
         name: 'X',
-        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
+        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:kokoro_am_michael',
         images: [{ path: '/tmp/a.jpg' }],
       })
     ).not.toThrow();
     expect(() =>
       CreatePersonaSchema.parse({
         name: 'X',
-        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
+        avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:kokoro_am_michael',
         images: [],
       })
     ).not.toThrow();
@@ -756,7 +792,7 @@ describe('handleLibraryCall message contracts', () => {
       mockClient,
       CreatePersonaSchema.parse({
         name: 'Alex AI',
-        avatarUrl: 'https://example.com/alex.png', voiceId: 'chatterbox:en_us_male_01',
+        avatarUrl: 'https://example.com/alex.png', voiceId: 'chatterbox:kokoro_am_michael',
       })
     );
     expect(response.isError).toBe(true);
@@ -769,7 +805,7 @@ describe('handleLibraryCall message contracts', () => {
       mockClient,
       CreatePersonaSchema.parse({
         name: 'Alex AI',
-        avatarUrl: 'https://example.com/alex.png', voiceId: 'chatterbox:en_us_male_01',
+        avatarUrl: 'https://example.com/alex.png', voiceId: 'chatterbox:kokoro_am_michael',
       })
     );
     expect(response.isError).toBeUndefined();

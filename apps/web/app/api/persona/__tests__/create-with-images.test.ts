@@ -20,6 +20,9 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
   return { ...actual, applyRateLimit: vi.fn(async () => null) };
 });
+vi.mock('@/lib/voice-catalog-fetch', () => ({
+  fetchPersonaVoiceCatalogIds: vi.fn(async () => undefined),
+}));
 
 import { POST } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -130,7 +133,7 @@ function createRequest(fields: Record<string, string>, images: File[] = []): Req
 
 const BASE_FIELDS = {
   name: 'Ana',
-  voiceId: 'voice-1',
+  voiceId: 'chatterbox:kokoro_af_heart',
 };
 
 beforeEach(() => {
@@ -253,7 +256,7 @@ describe('POST /api/persona with image library', () => {
     const calls = mockClient();
     const form = new FormData();
     form.append('name', 'Ana');
-    form.append('voiceId', 'voice-1');
+    form.append('voiceId', 'chatterbox:kokoro_af_heart');
     form.append('photo', png('main.png'));
     const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
     expect(res.status).toBe(200);
@@ -341,7 +344,7 @@ describe('POST /api/persona with image library', () => {
     }
     const form = new StubFormData();
     form.append('name', 'Ana');
-    form.append('voiceId', 'voice-1');
+    form.append('voiceId', 'chatterbox:kokoro_af_heart');
     form.append('photo', png('main.png'));
     const request = { formData: async () => form } as unknown as Request;
 

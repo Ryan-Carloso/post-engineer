@@ -24,6 +24,7 @@ import {
   validateSegments,
 } from './script-segments.js';
 import { GeneratePersonaVideoSchema, ValidateScriptSchema } from './single-video-shape.js';
+import { resolvePersonaVoiceId } from './persona-voice.js';
 
 export { GeneratePersonaVideoShape, ValidateScriptShape } from './single-video-shape.js';
 
@@ -140,6 +141,7 @@ export async function handleGeneratePersonaVideo(
         timezone: args.timezone,
         options: {
           ...args.options,
+          voiceId: await resolvePersonaVoiceId(client, args.options?.voiceId),
           segments: args.segments,
           ...(language === undefined ? {} : { language }),
         },

@@ -10,6 +10,8 @@ const PAYLOAD = {
     { id: 'chatterbox:kokoro_bm_george', label: 'George', gender: 'male', accent: 'gb', kind: 'standard', description: 'British male voice, mid-range pitch.' },
     { id: 'chatterbox:phonon_azgorath', label: 'Azgorath', gender: 'male', accent: null, kind: 'character', description: 'An enormous ancient demon. Cavernous, deep bass.' },
     { id: 'chatterbox:u0123_clone', gender: null, accent: null, kind: 'cloned' },
+    { id: 'openrouter:cohere/wave-1:alloy', gender: null, accent: null, kind: 'standard' },
+    { id: 'elevenlabs:xyz789', gender: null, accent: null, kind: 'membership' },
   ],
 };
 
@@ -17,8 +19,14 @@ const ids = (payload: unknown): string[] =>
   (payload as { voices: { id: string }[] }).voices.map((voice) => voice.id);
 
 describe('filterVoicesPayload', () => {
-  it('returns the payload untouched without filters', () => {
-    expect(filterVoicesPayload(PAYLOAD, {})).toBe(PAYLOAD);
+  it('always drops provider-prefixed ids (openrouter:, elevenlabs:) — the picker is house voices + clones only', () => {
+    const filtered = filterVoicesPayload(PAYLOAD, {});
+    expect(ids(filtered)).toEqual([
+      'chatterbox:kokoro_af_heart',
+      'chatterbox:kokoro_bm_george',
+      'chatterbox:phonon_azgorath',
+      'chatterbox:u0123_clone',
+    ]);
   });
 
   it('filters by gender, origin, and both', () => {
