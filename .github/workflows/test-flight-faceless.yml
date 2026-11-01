@@ -42,12 +42,13 @@ name: test-flight-faceless
 #                                        the test_flight_failed alert; when
 #                                        unset the alert step logs a warning
 #                                        and the job failure still stands.
-#     TEST_FLIGHT_LLM_API_KEY    REQUIRED OpenAI-compatible key for the
-#                                script writer; falls back to
-#                                API_NAMING_LLM_API_KEY when unset. Point
-#                                TEST_FLIGHT_LLM_BASE_URL at
-#                                https://opencode.ai/zen/v1 with an
-#                                OpenCode Zen key to use OpenCode tokens.
+#     OPENCODE_ZEN_API_KEY       (repo secret, already set for the
+#                                OpenCode review) used as the script
+#                                writer key, with base URL
+#                                https://opencode.ai/zen/v1 and free
+#                                models first: glm-5.3-flash-free, then
+#                                deepseek-v4.1-flash-free, before any paid
+#                                model set via TEST_FLIGHT_LLM_MODEL.
 #   Variables (or Secrets — both are accepted as fallback):
 #     TEST_FLIGHT_PERSONA_ID         persona UUID used by manual flights
 #                                    without an explicit persona_id and by
@@ -137,9 +138,10 @@ jobs:
           TEST_FLIGHT_TOPIC: ${{ inputs.topic || vars.TEST_FLIGHT_TOPIC || secrets.TEST_FLIGHT_TOPIC }}
           TEST_FLIGHT_RUN_ID: ${{ github.run_id }}
           TEST_FLIGHT_SCRIPT_PATH: test-flight-script.json
-          TEST_FLIGHT_LLM_API_KEY: ${{ secrets.TEST_FLIGHT_LLM_API_KEY || secrets.API_NAMING_LLM_API_KEY }}
-          TEST_FLIGHT_LLM_BASE_URL: ${{ vars.TEST_FLIGHT_LLM_BASE_URL }}
+          TEST_FLIGHT_LLM_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY || secrets.TEST_FLIGHT_LLM_API_KEY || secrets.API_NAMING_LLM_API_KEY }}
+          TEST_FLIGHT_LLM_BASE_URL: ${{ vars.TEST_FLIGHT_LLM_BASE_URL || 'https://opencode.ai/zen/v1' }}
           TEST_FLIGHT_LLM_MODEL: ${{ vars.TEST_FLIGHT_LLM_MODEL }}
+          TEST_FLIGHT_LLM_MODELS: ${{ vars.TEST_FLIGHT_LLM_MODELS || 'glm-5.3-flash-free,deepseek-v4.1-flash-free' }}
           TEST_FLIGHT_TAVILY_API_KEY: ${{ secrets.TEST_FLIGHT_TAVILY_API_KEY }}
           TEST_FLIGHT_EXA_API_KEY: ${{ secrets.TEST_FLIGHT_EXA_API_KEY }}
 

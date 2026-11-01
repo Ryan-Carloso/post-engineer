@@ -30,12 +30,16 @@
 //   TEST_FLIGHT_EXA_API_KEY     reserve search key.
 // LLM configuration (the key is required; missing key means failure):
 //   TEST_FLIGHT_LLM_API_KEY   OpenAI-compatible API key. The workflow
-//                             passes TEST_FLIGHT_LLM_API_KEY, falling back
-//                             to the repo API_NAMING_LLM_API_KEY.
-//   TEST_FLIGHT_LLM_BASE_URL  default https://api.openai.com/v1. Point it
-//                             at https://opencode.ai/zen/v1 with an
-//                             OpenCode Zen key to use OpenCode tokens.
-//   TEST_FLIGHT_LLM_MODEL     default gpt-4o-mini.
+//                             passes OPENCODE_ZEN_API_KEY here (the repo
+//                             secret already used by the OpenCode review).
+//   TEST_FLIGHT_LLM_BASE_URL  default https://api.openai.com/v1; the
+//                             workflow passes https://opencode.ai/zen/v1
+//                             so the Zen key is used.
+//   TEST_FLIGHT_LLM_MODELS    comma-separated chain, default
+//                             glm-5.3-flash-free,deepseek-v4.1-flash-free
+//                             (free first, before any paid model set via
+//                             TEST_FLIGHT_LLM_MODEL, which is appended
+//                             last, never first).
 //   TEST_FLIGHT_TOPIC         optional fixed topic; empty rotates topics.
 //   TEST_FLIGHT_RUN_ID        seed for the angle, so reruns differ.
 //   TEST_FLIGHT_SCRIPT_PATH   required output path for the script JSON.
@@ -62,7 +66,13 @@ export const MAX_CTA_WORDS = 20;
 export const MAX_SEGMENTS = 12;
 export const LLM_TIMEOUT_MS = 60000;
 export const DEFAULT_LLM_BASE_URL = 'https://api.openai.com/v1';
-export const DEFAULT_LLM_MODEL = 'gpt-4o-mini';
+// Free-first model chain, same ids as the OpenCode review workflow
+// (opencode/glm-5.3-flash-free primary, opencode/deepseek-v4.1-flash-free
+// verify), minus the provider prefix, which is how OpenCode Zen names
+// them. Paid models come only after the free ones, and only when the
+// caller sets TEST_FLIGHT_LLM_MODEL explicitly — no paid model id is
+// hardcoded here, so no paid spend happens by default.
+export const DEFAULT_LLM_MODELS = ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free'];
 
 // Evergreen topics for the scheduled monitor (manual flights pass their own).
 export const MONITOR_TOPICS = [
@@ -296,7 +306,7 @@ function stripFences(text) {
     .trim();
 }
 
-async function callLlm({ topic, angle, llm, fetchFn, attemptError, facts = '' }) {
+async function callLlm({ topic, angle, llm, model, fetchFn, attemptError, facts = '' }) {
   const prompt = buildPrompt({ topic, angle, facts });
   const userContent = attemptError
     ? `${prompt}\n\nPrevious output failed validation: ${attemptError.rule} Fix: ${attemptError.fix} Return JSON only, with the fix applied.`
@@ -305,7 +315,7 @@ async function callLlm({ topic, angle, llm, fetchFn, attemptError, facts = '' })
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${llm.apiKey}` },
     body: JSON.stringify({
-      model: llm.model,
+      model,
       temperature: 0.7,
       messages: [
         { role: 'system', content: 'You write short spoken video scripts. Respond with JSON only.' },
@@ -332,30 +342,44 @@ async function callLlm({ topic, angle, llm, fetchFn, attemptError, facts = '' })
   return parsed;
 }
 
+export function resolveLlmModels(env) {
+  const fromList = optionalEnv(env, 'TEST_FLIGHT_LLM_MODELS');
+  if (fromList !== '') return fromList.split(',').map((m) => m.trim()).filter(Boolean);
+  const single = optionalEnv(env, 'TEST_FLIGHT_LLM_MODEL');
+  if (single !== '') return [...DEFAULT_LLM_MODELS.filter((m) => m !== single), single];
+  return [...DEFAULT_LLM_MODELS];
+}
+
 export async function generateScript({ topic, angle, llm, fetchFn = fetch, facts = '' }) {
   if (!llm || !llm.apiKey) {
     throw new ScriptError('write-script: missing TEST_FLIGHT_LLM_API_KEY — refusing to publish a fallback script');
   }
-  let lastError = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const parsed = await callLlm({ topic, angle, llm, fetchFn, attemptError: lastError, facts });
-      const checked = validateScript(parsed);
-      if (!checked.ok) {
-        lastError = checked.error;
-        continue;
+  const models = Array.isArray(llm.models) && llm.models.length > 0
+    ? llm.models
+    : (llm.model ? [llm.model] : DEFAULT_LLM_MODELS);
+  const failures = [];
+  for (const model of models) {
+    // One validation retry per model, with the named error fed back;
+    // a call failure moves straight to the next model in the chain.
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const parsed = await callLlm({ topic, angle, llm, model, fetchFn, attemptError: lastError, facts });
+        const checked = validateScript(parsed);
+        if (!checked.ok) {
+          lastError = checked.error;
+          continue;
+        }
+        return { title: checked.value.title, segments: checked.value.segments, source: 'llm', model };
+      } catch (error) {
+        failures.push(`${model}: ${error instanceof Error ? error.message : String(error)}`);
+        break;
       }
-      return { title: checked.value.title, segments: checked.value.segments, source: 'llm' };
-    } catch (error) {
-      lastError = null;
-      const message = error instanceof Error ? error.message : String(error);
-      if (attempt === 1) {
-        throw new ScriptError(`write-script: LLM failed twice (${message}) — failing the job instead of publishing a repeat script`);
-      }
-      console.log(`write-script: LLM attempt 1 failed (${message}), retrying once`);
     }
+    if (lastError) failures.push(`${model}: validation failed twice (${lastError.rule})`);
+    console.log(`write-script: LLM model ${model} failed, trying next model in the chain`);
   }
-  throw new ScriptError(`write-script: LLM validation failed twice (${lastError ? lastError.rule : 'unknown'}) — failing the job instead of publishing a repeat script`);
+  throw new ScriptError(`write-script: all LLM models failed (${failures.join('; ')}) — failing the job instead of publishing a repeat script`);
 }
 
 export function resolveLlm(env) {
@@ -364,7 +388,7 @@ export function resolveLlm(env) {
   return {
     apiKey,
     baseUrl: optionalEnv(env, 'TEST_FLIGHT_LLM_BASE_URL') || DEFAULT_LLM_BASE_URL,
-    model: optionalEnv(env, 'TEST_FLIGHT_LLM_MODEL') || DEFAULT_LLM_MODEL,
+    models: resolveLlmModels(env),
   };
 }
 
@@ -396,11 +420,12 @@ export async function writeScriptFile(env = process.env, options = {}) {
     segments: script.segments,
     source: script.source,
     searchProvider: search.provider,
+    llmModel: script.model,
     runId,
   };
   const write = options.writeFile ?? writeFile;
   await write(outPath, `${JSON.stringify(out, null, 2)}\n`, 'utf8');
-  console.log(`write-script: topic="${topic}" angle="${angle}" source=${script.source} search=${search.provider} title="${script.title}"`);
+  console.log(`write-script: topic="${topic}" angle="${angle}" source=${script.source} model=${script.model} search=${search.provider} title="${script.title}"`);
   return out;
 }
 
