@@ -9,7 +9,7 @@ import {
   parsePersonaForm,
   validateVisualCues,
 } from '@/lib/persona-schema';
-import { applyPersonaVoicePatch, validatePersonaVoiceInput } from '@/lib/persona-voice-validate';
+import { applyPersonaVoicePatch, personaVoiceRejectionOptions, validatePersonaVoiceInput } from '@/lib/persona-voice-validate';
 import {
   addLibraryImages,
   IMAGE_BUCKET,
@@ -39,7 +39,7 @@ function errorResponse(
   status: number,
   error: string,
   route: string,
-  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown> },
+  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown>; code?: string },
 ): NextResponse {
   return apiErrorResponse(status, error, { route, ...options });
 }
@@ -89,7 +89,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const voiceError = await validatePersonaVoiceInput(supabase, user.id, body.values.voiceId);
   if (voiceError) {
-    return errorResponse(400, voiceError, 'POST /api/persona');
+    return errorResponse(400, voiceError, 'POST /api/persona', personaVoiceRejectionOptions(body.values.voiceId));
   }
 
   // Optional image library at creation: `images` (files) with parallel
@@ -378,7 +378,9 @@ async function patchHandler(request: Request): Promise<NextResponse> {
   const voicePatchError = await applyPersonaVoicePatch(
     supabase, user.id, persona, patch.voiceId, updates, stalePaths,
   );
-  if (voicePatchError) return errorResponse(400, voicePatchError, 'PATCH /api/persona');
+  if (voicePatchError) {
+    return errorResponse(400, voicePatchError, 'PATCH /api/persona', personaVoiceRejectionOptions(patch.voiceId));
+  }
 
   if (patch.language !== null) updates.language = patch.language;
   if (patch.videoAspect !== null) updates.video_aspect = patch.videoAspect;

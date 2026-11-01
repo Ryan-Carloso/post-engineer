@@ -49,8 +49,43 @@ export async function cloneVoiceAvailable(
   }
 }
 
+//---------------
+// UNKNOWN_VOICE copy + rejection options (issue #353 amendment 2/3). The
+// exact web copy is shared with the enumerable default in error-codes.ts
+// ({attempt} = truncated attempted value, so a looping agent can see what
+// it keeps passing and telemetry always agrees with the message).
+// personaVoiceRejectionOptions feeds the route errorResponse: the stable
+// code travels to the client (parseErrorResponse passes it through) and the
+// logMessage keeps the PostHog message keyed by route+code (#301), with the
+// attempted voice as a scrubbed property. An empty/absent attempt (the
+// 'Provide voiceId.' contract) carries no code.
+//---------------
+
+import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
+
+// Telemetry and copy share one truncation so both always agree.
+const MAX_VOICE_ATTEMPT = 100;
+
+export interface VoiceRejectionOptions {
+  readonly code: string;
+  readonly logMessage: string;
+  readonly metadata: Record<string, string>;
+}
+
+export function personaVoiceRejectionOptions(
+  voiceId: string | null | undefined,
+): VoiceRejectionOptions | undefined {
+  const attempt = (voiceId ?? '').trim().slice(0, MAX_VOICE_ATTEMPT);
+  if (attempt.length === 0) return undefined;
+  return {
+    code: ERROR_CODES.UNKNOWN_VOICE,
+    logMessage: ERROR_CODES.UNKNOWN_VOICE,
+    metadata: { voice: attempt },
+  };
+}
+
 const unknownVoiceMessage = (voiceId: string) =>
-  `Unknown voice "${voiceId}": pick an id or label from GET /api/persona/voices (house voices and your clones).`;
+  formatErrorMessage(ERROR_CODES.UNKNOWN_VOICE, { attempt: voiceId.slice(0, MAX_VOICE_ATTEMPT) });
 
 /** validatePersonaVoiceInput — null when the voice is acceptable, else the
  *  400 message. Creation requires a voiceId: the empty value keeps the

@@ -24,7 +24,7 @@ import {
   validateSegments,
 } from './script-segments.js';
 import { GeneratePersonaVideoSchema, ValidateScriptSchema } from './single-video-shape.js';
-import { resolvePersonaVoiceId } from './persona-voice.js';
+import { resolvePersonaVoiceId } from './voice-filters.js';
 
 export { GeneratePersonaVideoShape, ValidateScriptShape } from './single-video-shape.js';
 
@@ -122,6 +122,15 @@ export async function handleGeneratePersonaVideo(
       throw new Error(`${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`);
     }
     const script = joinSegments(args.segments);
+    // Voice resolution is an explicit pre-step after mechanical validation
+    // and before the generating call: an unknown voice fails without
+    // debiting tokens. A bare name/label resolves here (issue #353); with
+    // no voiceId (or options with only audioUrl) there is nothing to
+    // resolve — the persona's stored voice is used.
+    let voiceId = args.options?.voiceId;
+    if (voiceId !== undefined) {
+      voiceId = await resolvePersonaVoiceId(client, voiceId, 'generate_persona_video');
+    }
     // The shape advertises a top-level language, but the web route only
     // reads options.language: forward it there unless options already
     // sets one, or the top-level value is silently dropped.
@@ -141,7 +150,7 @@ export async function handleGeneratePersonaVideo(
         timezone: args.timezone,
         options: {
           ...args.options,
-          voiceId: await resolvePersonaVoiceId(client, args.options?.voiceId),
+          voiceId,
           segments: args.segments,
           ...(language === undefined ? {} : { language }),
         },

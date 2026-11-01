@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { HOUSE_VOICES } from '../persona-voice.js';
+import { HOUSE_VOICES } from '../voice-filters.js';
 
 function findRepoRoot(fromUrl: string): string {
   let dir = dirname(fileURLToPath(fromUrl));

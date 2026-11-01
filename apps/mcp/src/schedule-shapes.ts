@@ -8,7 +8,7 @@ import { z } from 'zod';
 
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { VIDEO_LAYOUTS } from './limits.js';
-import { personaVoiceField } from './persona-voice.js';
+import { personaVoiceField } from './voice-filters.js';
 
 export const ListSchedulesShape = {};
 

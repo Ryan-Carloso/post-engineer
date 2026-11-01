@@ -1,8 +1,28 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockTrackEvent = vi.hoisted(() => vi.fn());
+vi.mock('../analytics.js', () => ({
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+  withTracking: (toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
+    mockTrackEvent('mcp_tool_called', { toolName });
+    return handler(args);
+  },
+}));
 
 import type { PostEngineerClient } from '../client.js';
 import { handleListVoices } from '../tools.js';
-import { filterVoicesPayload, ListVoicesSchema } from '../voice-filters.js';
+import {
+  filterVoicesPayload,
+  HOUSE_VOICES,
+  ListVoicesSchema,
+  personaVoiceField,
+  PersonaVoiceIdSchema,
+  resolvePersonaVoiceId,
+  withResolvedPersonaVoice,
+} from '../voice-filters.js';
+
+const UNKNOWN_VOICE = (attempt: string) =>
+  `Unknown voice "${attempt}". Not a house voice and not one of your clones. Call list_voices and pass the id or label from that list.`;
 
 const PAYLOAD = {
   voices: [
@@ -17,6 +37,221 @@ const PAYLOAD = {
 
 const ids = (payload: unknown): string[] =>
   (payload as { voices: { id: string }[] }).voices.map((voice) => voice.id);
+
+function clientWith(listVoices: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue({ voices: [] })) {
+  return { listVoices } as unknown as PostEngineerClient;
+}
+
+const CATALOG = {
+  voices: [
+    { id: 'chatterbox:kokoro_af_heart', kind: 'standard', label: 'Heart' },
+    {
+      id: 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb',
+      kind: 'cloned',
+      label: 'My Clone',
+    },
+  ],
+};
+
+describe('HOUSE_VOICES', () => {
+  it('is the 65 house voices from the engine catalog', () => {
+    expect(HOUSE_VOICES).toHaveLength(65);
+    expect(HOUSE_VOICES[0]).toEqual({ name: 'phonon_zoey', label: 'Zoey' });
+  });
+});
+
+describe('PersonaVoiceIdSchema', () => {
+  it('create: requires a non-empty value (keeps "voiceId is required")', () => {
+    const field = personaVoiceField('voiceId is required');
+    const empty = field.safeParse('');
+    expect(empty.success).toBe(false);
+    if (!empty.success) {
+      expect(empty.error.issues[0]?.message).toBe('voiceId is required');
+    }
+    expect(field.safeParse('phonon_zoey').success).toBe(true);
+    expect(field.safeParse('chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb').success).toBe(true);
+    expect(field.safeParse('no-voice').success).toBe(true);
+    expect(field.safeParse('none').success).toBe(true);
+  });
+
+  it('update/options: optional, and a provided value must be non-empty', () => {
+    expect(PersonaVoiceIdSchema.optional().safeParse(undefined).success).toBe(true);
+    expect(PersonaVoiceIdSchema.safeParse('').success).toBe(false);
+    expect(PersonaVoiceIdSchema.safeParse('zoey').success).toBe(true);
+  });
+});
+
+describe('resolvePersonaVoiceId', () => {
+  beforeEach(() => {
+    mockTrackEvent.mockClear();
+  });
+
+  it('passes sentinels through with zero HTTP', async () => {
+    const client = clientWith();
+    await expect(resolvePersonaVoiceId(client, 'no-voice', 'update_persona')).resolves.toBe('no-voice');
+    await expect(resolvePersonaVoiceId(client, 'none', 'update_persona')).resolves.toBe('none');
+    expect(client.listVoices).not.toHaveBeenCalled();
+    expect(mockTrackEvent).not.toHaveBeenCalledWith('server_warning', expect.anything());
+  });
+
+  it('resolves a bare house name with zero HTTP', async () => {
+    const client = clientWith();
+    await expect(resolvePersonaVoiceId(client, 'phonon_zoey', 'create_persona')).resolves.toBe('chatterbox:phonon_zoey');
+    expect(client.listVoices).not.toHaveBeenCalled();
+  });
+
+  it('resolves a house label with zero HTTP', async () => {
+    const client = clientWith();
+    await expect(resolvePersonaVoiceId(client, 'Zoey', 'create_persona')).resolves.toBe('chatterbox:phonon_zoey');
+    expect(client.listVoices).not.toHaveBeenCalled();
+  });
+
+  it('passes `chatterbox:<name>` through with zero HTTP', async () => {
+    const client = clientWith();
+    await expect(resolvePersonaVoiceId(client, 'chatterbox:phonon_zoey', 'create_persona')).resolves.toBe(
+      'chatterbox:phonon_zoey',
+    );
+    expect(client.listVoices).not.toHaveBeenCalled();
+  });
+
+  it('matches house names and labels case-insensitively', async () => {
+    const client = clientWith();
+    await expect(resolvePersonaVoiceId(client, 'PHONON_ZOEY', 'create_persona')).resolves.toBe('chatterbox:phonon_zoey');
+    await expect(resolvePersonaVoiceId(client, 'zoey', 'create_persona')).resolves.toBe('chatterbox:phonon_zoey');
+    await expect(resolvePersonaVoiceId(client, 'ZOEY', 'create_persona')).resolves.toBe('chatterbox:phonon_zoey');
+    expect(client.listVoices).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown bare voice with the exact message, warns PostHog, and never mutates', async () => {
+    const listVoices = vi.fn().mockResolvedValue({ voices: [] });
+    const client = clientWith(listVoices);
+    await expect(resolvePersonaVoiceId(client, 'energetic', 'update_persona')).rejects.toThrow(
+      UNKNOWN_VOICE('energetic'),
+    );
+    await expect(resolvePersonaVoiceId(client, 'en-US-AriaNeural', 'update_persona')).rejects.toThrow(
+      UNKNOWN_VOICE('en-US-AriaNeural'),
+    );
+    expect(listVoices).toHaveBeenCalledTimes(2);
+    expect(mockTrackEvent).toHaveBeenCalledWith('server_warning', {
+      code: 'UNKNOWN_VOICE',
+      tool: 'update_persona',
+      voice: 'en-US-AriaNeural',
+    });
+  });
+
+  it('rejects a provider-prefixed voice that the list does not carry', async () => {
+    const client = clientWith(vi.fn().mockResolvedValue(CATALOG));
+    await expect(resolvePersonaVoiceId(client, 'elevenlabs:xyz', 'create_persona')).rejects.toThrow(
+      UNKNOWN_VOICE('elevenlabs:xyz'),
+    );
+    await expect(resolvePersonaVoiceId(client, 'openrouter:cohere:alloy', 'create_persona')).rejects.toThrow(
+      UNKNOWN_VOICE('openrouter:cohere:alloy'),
+    );
+  });
+
+  it('matches a clone by full id from list_voices', async () => {
+    const client = clientWith(vi.fn().mockResolvedValue(CATALOG));
+    await expect(
+      resolvePersonaVoiceId(client, 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb', 'update_persona'),
+    ).resolves.toBe('chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb');
+  });
+
+  it('matches a clone by key without prefix', async () => {
+    const client = clientWith(vi.fn().mockResolvedValue(CATALOG));
+    await expect(resolvePersonaVoiceId(client, 'uaaaaaaaaaaaa_bbbbbbbbbbbb', 'update_persona')).resolves.toBe(
+      'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb',
+    );
+  });
+
+  it('matches the old `chatterbox:<key>` clone spelling to the real id', async () => {
+    const client = clientWith(vi.fn().mockResolvedValue(CATALOG));
+    await expect(resolvePersonaVoiceId(client, 'chatterbox:uaaaaaaaaaaaa_bbbbbbbbbbbb', 'update_persona')).resolves.toBe(
+      'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb',
+    );
+  });
+
+  it('matches a clone by label (fixture-only; prod clones have label null)', async () => {
+    const client = clientWith(vi.fn().mockResolvedValue(CATALOG));
+    await expect(resolvePersonaVoiceId(client, 'My Clone', 'update_persona')).resolves.toBe(
+      'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb',
+    );
+  });
+
+  it('never matches non-cloned entries or clone look-alikes', async () => {
+    const client = clientWith(vi.fn().mockResolvedValue(CATALOG));
+    await expect(resolvePersonaVoiceId(client, 'chatterbox:kokoro_af_heart', 'update_persona')).resolves.toBe(
+      'chatterbox:kokoro_af_heart',
+    );
+    await expect(resolvePersonaVoiceId(client, 'eaaaaaaaaaaaa_bbbbbbbbbb', 'update_persona')).rejects.toThrow(
+      UNKNOWN_VOICE('eaaaaaaaaaaaa_bbbbbbbbbb'),
+    );
+  });
+
+  it('rejects an ambiguous clone label with the exact message', async () => {
+    const client = clientWith(
+      vi.fn().mockResolvedValue({
+        voices: [
+          { id: 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb', kind: 'cloned', label: 'Twin' },
+          { id: 'chatterbox_nano:ucccccccccccc_bbbbbbbbbbbb', kind: 'cloned', label: 'Twin' },
+        ],
+      }),
+    );
+    await expect(resolvePersonaVoiceId(client, 'Twin', 'update_persona')).rejects.toThrow(
+      UNKNOWN_VOICE('Twin'),
+    );
+  });
+
+  it('propagates a list_voices failure instead of the Unknown message (no server_warning)', async () => {
+    const client = clientWith(vi.fn().mockRejectedValue(new Error('boom: 502')));
+    await expect(resolvePersonaVoiceId(client, 'energetic', 'update_persona')).rejects.toThrow('boom: 502');
+    expect(mockTrackEvent).not.toHaveBeenCalledWith('server_warning', expect.anything());
+  });
+
+  it('truncates the attempt in the message and the telemetry property', async () => {
+    const client = clientWith();
+    const attempt = 'chatterbox:' + 'x'.repeat(200);
+    await expect(resolvePersonaVoiceId(client, attempt, 'create_persona')).rejects.toThrow(
+      UNKNOWN_VOICE(attempt.slice(0, 100)),
+    );
+    expect(mockTrackEvent).toHaveBeenCalledWith('server_warning', {
+      code: 'UNKNOWN_VOICE',
+      tool: 'create_persona',
+      voice: attempt.slice(0, 100),
+    });
+  });
+
+  it('never breaks when telemetry itself throws', async () => {
+    mockTrackEvent.mockImplementation(() => {
+      throw new Error('posthog down');
+    });
+    const client = clientWith();
+    await expect(resolvePersonaVoiceId(client, 'energetic', 'update_persona')).rejects.toThrow(
+      UNKNOWN_VOICE('energetic'),
+    );
+    mockTrackEvent.mockImplementation(() => undefined);
+  });
+});
+
+describe('withResolvedPersonaVoice', () => {
+  beforeEach(() => {
+    mockTrackEvent.mockClear();
+  });
+
+  it('routes a house name to its id inside the passed input', async () => {
+    const client = clientWith();
+    await expect(
+      withResolvedPersonaVoice(client, { voiceId: 'phonon_zoey' }, 'create_persona'),
+    ).resolves.toEqual({ voiceId: 'chatterbox:phonon_zoey' });
+    expect(client.listVoices).not.toHaveBeenCalled();
+  });
+
+  it('leaves inputs without a voiceId untouched (update skips)', async () => {
+    const client = clientWith();
+    const input = { personaId: 'p1' };
+    await expect(withResolvedPersonaVoice(client, input, 'update_persona')).resolves.toBe(input);
+    expect(client.listVoices).not.toHaveBeenCalled();
+  });
+});
 
 describe('filterVoicesPayload', () => {
   it('always drops provider-prefixed ids (openrouter:, elevenlabs:) — the picker is house voices + clones only', () => {

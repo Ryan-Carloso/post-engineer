@@ -15,7 +15,7 @@ import {
 const USER_ID = 'user-uuid-1';
 
 const unknownMessage = (id: string) =>
-  `Unknown voice "${id}": pick an id or label from GET /api/persona/voices (house voices and your clones).`;
+  `Unknown voice "${id}". Not a house voice and not one of your clones. Pick one from GET /api/persona/voices.`;
 
 function supabaseMock(readyClones: number = 0) {
   return {
@@ -89,6 +89,12 @@ describe('validatePersonaVoiceInput', () => {
     await expect(
       validatePersonaVoiceInput(supabaseMock(), USER_ID, 'energetic'),
     ).resolves.toBe(unknownMessage('energetic'));
+  });
+
+  it('truncates a very long attempt inside the message', async () => {
+    const attempt = 'energetic' + 'x'.repeat(200);
+    const message = await validatePersonaVoiceInput(supabaseMock(), USER_ID, attempt);
+    expect(message).toBe(unknownMessage(attempt.slice(0, 100)));
   });
 
   it('accepts a clone the served catalog lists', async () => {

@@ -44,6 +44,17 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
 vi.mock('@/lib/voice-catalog-fetch', () => ({
   fetchPersonaVoiceCatalogIds: vi.fn(async () => undefined),
 }));
+// PostHog capture seam: the route's 4xx reports via logger.warn →
+// server_warning; these asserts pin the UNKNOWN_VOICE rejection capture.
+const posthogMock = vi.hoisted(() => ({
+  capture: vi.fn(),
+  captureAs: vi.fn(),
+  captureException: vi.fn(),
+  captureExceptionAs: vi.fn(),
+}));
+vi.mock('@/lib/posthog-server', () => ({
+  getPostHogServer: vi.fn(() => posthogMock),
+}));
 
 import { POST, PATCH, DELETE } from '../route';
 import { fetchPersonaVoiceCatalogIds } from '@/lib/voice-catalog-fetch';
@@ -428,12 +439,24 @@ describe('POST /api/persona', () => {
     const res = await POST(formRequest({ name: 'Ana', voiceId: 'energetic' }, [photo()]));
 
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string };
+    const body = (await res.json()) as { success: boolean; error: string; code?: string };
     expect(body.success).toBe(false);
-    expect(body.error).toContain('Unknown voice "energetic"');
-    expect(body.error).toContain('GET /api/persona/voices');
+    expect(body.error).toBe(
+      'Unknown voice "energetic". Not a house voice and not one of your clones. Pick one from GET /api/persona/voices.',
+    );
+    expect(body.code).toBe('UNKNOWN_VOICE');
     expect(uploaded).toEqual([]);
     expect(inserted).toEqual([]);
+    // Rejection capture: stable message by route+code, the attempted value
+    // (scrubbed) as a property — Ryan sees the loop in PostHog (#301).
+    expect(posthogMock.capture).toHaveBeenCalledWith(
+      'server_warning',
+      expect.objectContaining({
+        message: '[POST /api/persona] 400 UNKNOWN_VOICE',
+        code: 'UNKNOWN_VOICE',
+        voice: 'energetic',
+      }),
+    );
   });
 
   it('returns 400 with an unsupported photo format', async () => {
@@ -1108,8 +1131,19 @@ describe('PATCH /api/persona', () => {
     const res = await PATCH(patchRequest('persona-uuid-1', { voiceId: 'energetic' }));
 
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string };
-    expect(body.error).toContain('Unknown voice "energetic"');
+    const body = (await res.json()) as { success: boolean; error: string; code?: string };
+    expect(body.error).toBe(
+      'Unknown voice "energetic". Not a house voice and not one of your clones. Pick one from GET /api/persona/voices.',
+    );
+    expect(body.code).toBe('UNKNOWN_VOICE');
+    expect(posthogMock.capture).toHaveBeenCalledWith(
+      'server_warning',
+      expect.objectContaining({
+        message: '[PATCH /api/persona] 400 UNKNOWN_VOICE',
+        code: 'UNKNOWN_VOICE',
+        voice: 'energetic',
+      }),
+    );
     expect(updated).toEqual([]);
     expect(removed).toEqual([]);
   });

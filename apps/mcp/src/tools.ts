@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { filterVoicesPayload, ListVoicesSchema, type ListVoicesArgs } from './voice-filters.js';
-import { personaVoiceField, withResolvedPersonaVoice } from './persona-voice.js';
+import { personaVoiceField, withResolvedPersonaVoice } from './voice-filters.js';
 import {
   CancelScheduleSchema,
   CancelScheduleShape,
@@ -302,7 +302,7 @@ export async function handleCreatePersona(
   // shape only), then routes the voice BEFORE any POST: an unknown voice
   // never debits tokens (issue #353).
   return handleLibraryCall(
-    async () => client.createPersona(await withResolvedPersonaVoice(client, CreatePersonaSchema.parse(args))),
+    async () => client.createPersona(await withResolvedPersonaVoice(client, CreatePersonaSchema.parse(args), 'create_persona')),
     'creating persona',
     'Persona created successfully'
   );
@@ -343,7 +343,7 @@ export async function handleUpdatePersona(
 ): Promise<McpToolResponse> {
   // Full-schema parse, then voice routing BEFORE the POST; no voiceId keeps the stored voice (#353).
   return handleLibraryCall(
-    async () => client.updatePersona(await withResolvedPersonaVoice(client, UpdatePersonaSchema.parse(args))),
+    async () => client.updatePersona(await withResolvedPersonaVoice(client, UpdatePersonaSchema.parse(args), 'update_persona')),
     'updating persona', 'Persona updated successfully'
   );
 }
