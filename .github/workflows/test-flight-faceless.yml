@@ -71,8 +71,9 @@ name: test-flight-faceless
 #                                    the script writer's evergreen list.
 #     TEST_FLIGHT_LLM_BASE_URL / TEST_FLIGHT_LLM_MODEL
 #                                    (optional) script-writer endpoint and
-#                                    model; defaults are api.openai.com/v1
-#                                    and gpt-4o-mini.
+#                                    single-model override; defaults are
+#                                    https://opencode.ai/zen/v1 and the
+#                                    TEST_FLIGHT_LLM_MODELS chain above.
 #
 # Manual flight: Actions > test-flight-faceless > Run workflow — fill topic,
 # persona_id and the account ids to post to. scheduled_action=leave keeps
