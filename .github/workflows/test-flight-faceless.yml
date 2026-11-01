@@ -14,6 +14,20 @@ name: test-flight-faceless
 # accounts, so it only runs when a human asks for it (or once a day as a
 # prod-health monitor).
 #
+# Script first, flight second. Since MCP-first the server generates no
+# script: it rejects `topics` and requires `title` plus the full script in
+# `options.segments`. The "Write test-flight script" step writes that
+# script (title + segments, validated) and the
+# flight sends it unchanged. Before the LLM call, a web search grounds
+# the script: Tavily first, Exa as reserve (see search.mjs). The LLM
+# may use ONLY facts from those results. The script writer is an LLM
+# call with a complete standalone prompt, retried once on a
+# validation failure.
+# There is NO fallback script: if the LLM fails or no key is set, the
+# step fails, the flight never runs, and a test_flight_failed event
+# is sent to PostHog (see the Report failure step). A failed job is
+# better than publishing the same videos over and over.
+#
 # Setup (repo Settings > Secrets and variables > Actions) — done once by
 # the repo owner, never hardcoded here, never shared in chat:
 #   Secrets:
@@ -22,6 +36,19 @@ name: test-flight-faceless
 #                                        post-engineer.com/api-keys, scoped
 #                                        to the test persona).
 #     TEST_FLIGHT_DISCORD_WEBHOOK_URL    (optional) failure alert target.
+#     TEST_FLIGHT_TAVILY_API_KEY       primary search key for grounding.
+#     TEST_FLIGHT_EXA_API_KEY          reserve search key for grounding.
+#     TEST_FLIGHT_POSTHOG_KEY          (optional) PostHog project key for
+#                                        the test_flight_failed alert; when
+#                                        unset the alert step logs a warning
+#                                        and the job failure still stands.
+#     OPENCODE_ZEN_API_KEY       (repo secret, already set for the
+#                                OpenCode review) used as the script
+#                                writer key, with base URL
+#                                https://opencode.ai/zen/v1 and free
+#                                models first: glm-5.3-flash-free, then
+#                                deepseek-v4.1-flash-free, before any paid
+#                                model set via TEST_FLIGHT_LLM_MODEL.
 #   Variables (or Secrets — both are accepted as fallback):
 #     TEST_FLIGHT_PERSONA_ID         persona UUID used by manual flights
 #                                    without an explicit persona_id and by
@@ -37,7 +64,11 @@ name: test-flight-faceless
 #     TEST_FLIGHT_API_BASE_URL       (optional) default https://post-engineer.com.
 #     TEST_FLIGHT_TOPIC              (optional) fixed topic for the daily
 #                                    monitor; when empty it rotates through
-#                                    the script's evergreen list.
+#                                    the script writer's evergreen list.
+#     TEST_FLIGHT_LLM_BASE_URL / TEST_FLIGHT_LLM_MODEL
+#                                    (optional) script-writer endpoint and
+#                                    model; defaults are api.openai.com/v1
+#                                    and gpt-4o-mini.
 #
 # Manual flight: Actions > test-flight-faceless > Run workflow — fill topic,
 # persona_id and the account ids to post to. scheduled_action=leave keeps
@@ -101,13 +132,26 @@ jobs:
       - name: Unit tests (test-flight script)
         run: node --test .github/scripts/test-flight/*.test.mjs
 
+      - name: Write test-flight script
+        run: node .github/scripts/test-flight/write-script.mjs
+        env:
+          TEST_FLIGHT_TOPIC: ${{ inputs.topic || vars.TEST_FLIGHT_TOPIC || secrets.TEST_FLIGHT_TOPIC }}
+          TEST_FLIGHT_RUN_ID: ${{ github.run_id }}
+          TEST_FLIGHT_SCRIPT_PATH: test-flight-script.json
+          TEST_FLIGHT_LLM_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY || secrets.TEST_FLIGHT_LLM_API_KEY || secrets.API_NAMING_LLM_API_KEY }}
+          TEST_FLIGHT_LLM_BASE_URL: ${{ vars.TEST_FLIGHT_LLM_BASE_URL || 'https://opencode.ai/zen/v1' }}
+          TEST_FLIGHT_LLM_MODEL: ${{ vars.TEST_FLIGHT_LLM_MODEL }}
+          TEST_FLIGHT_LLM_MODELS: ${{ vars.TEST_FLIGHT_LLM_MODELS || 'glm-5.3-flash-free,deepseek-v4.1-flash-free' }}
+          TEST_FLIGHT_TAVILY_API_KEY: ${{ secrets.TEST_FLIGHT_TAVILY_API_KEY }}
+          TEST_FLIGHT_EXA_API_KEY: ${{ secrets.TEST_FLIGHT_EXA_API_KEY }}
+
       - name: Run faceless test flight
         run: node .github/scripts/test-flight/flight.mjs
         env:
           TEST_FLIGHT_API_BASE_URL: ${{ vars.TEST_FLIGHT_API_BASE_URL }}
           TEST_FLIGHT_POST_ENGINEER_API_KEY: ${{ secrets.TEST_FLIGHT_POST_ENGINEER_API_KEY }}
           TEST_FLIGHT_PERSONA_ID: ${{ inputs.persona_id || vars.TEST_FLIGHT_PERSONA_ID || secrets.TEST_FLIGHT_PERSONA_ID }}
-          TEST_FLIGHT_TOPIC: ${{ inputs.topic || vars.TEST_FLIGHT_TOPIC || secrets.TEST_FLIGHT_TOPIC }}
+          TEST_FLIGHT_SCRIPT_PATH: test-flight-script.json
           TEST_FLIGHT_BLUESKY_ACCOUNT_ID: ${{ inputs.bluesky_account_id || vars.TEST_FLIGHT_BLUESKY_ACCOUNT_ID || secrets.TEST_FLIGHT_BLUESKY_ACCOUNT_ID }}
           TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID: ${{ inputs.instagram_account_id || vars.TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID || secrets.TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID }}
           TEST_FLIGHT_YOUTUBE_ACCOUNT_ID: ${{ inputs.youtube_account_id || vars.TEST_FLIGHT_YOUTUBE_ACCOUNT_ID || secrets.TEST_FLIGHT_YOUTUBE_ACCOUNT_ID }}
@@ -130,3 +174,10 @@ jobs:
           curl -fsS -X POST -H 'content-type: application/json' \
             --data "{\"content\":\"🚨 test-flight-faceless FAILED — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
             "${DISCORD_WEBHOOK_URL}"
+
+      - name: Report failure to PostHog
+        if: failure()
+        env:
+          TEST_FLIGHT_POSTHOG_KEY: ${{ secrets.TEST_FLIGHT_POSTHOG_KEY }}
+          TEST_FLIGHT_FACELESS: 'true'
+        run: node .github/scripts/test-flight/report-posthog.mjs
