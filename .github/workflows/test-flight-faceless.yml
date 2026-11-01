@@ -42,15 +42,15 @@ name: test-flight-faceless
 #                                        the test_flight_failed alert; when
 #                                        unset the alert step logs a warning
 #                                        and the job failure still stands.
-#     OPENCODE_ZEN_API_KEY       (repo secret, already set for the
-#                                OpenCode review) used as the script
+#     OPENROUTER_API_KEY         (repo secret) used as the script
 #                                writer key, with base URL
-#                                https://opencode.ai/zen/v1 and free
-#                                models first: glm-5.3-flash-free, then
-#                                deepseek-v4.1-flash-free, then paid
-#                                glm-5.3-flash as last resort only, billed
-#                                to the user's OpenCode Go account via the
-#                                same Zen key. A single model set via
+#                                https://openrouter.ai/api/v1 and the
+#                                chain openrouter/free first (Free Models
+#                                Router, picks a free model automatically),
+#                                then paid z-ai/glm-5.3-flash via OpenRouter
+#                                as last resort only. Zen is NOT used:
+#                                paid Zen failed live with HTTP 402
+#                                (run 41323409879). A single model set via
 #                                TEST_FLIGHT_LLM_MODEL is appended last,
 #                                never first.
 #   Variables (or Secrets — both are accepted as fallback):
@@ -72,7 +72,7 @@ name: test-flight-faceless
 #     TEST_FLIGHT_LLM_BASE_URL / TEST_FLIGHT_LLM_MODEL
 #                                    (optional) script-writer endpoint and
 #                                    single-model override; defaults are
-#                                    https://opencode.ai/zen/v1 and the
+#                                    https://openrouter.ai/api/v1 and the
 #                                    TEST_FLIGHT_LLM_MODELS chain above.
 #
 # Manual flight: Actions > test-flight-faceless > Run workflow — fill topic,
@@ -143,10 +143,10 @@ jobs:
           TEST_FLIGHT_TOPIC: ${{ inputs.topic || vars.TEST_FLIGHT_TOPIC || secrets.TEST_FLIGHT_TOPIC }}
           TEST_FLIGHT_RUN_ID: ${{ github.run_id }}
           TEST_FLIGHT_SCRIPT_PATH: test-flight-script.json
-          TEST_FLIGHT_LLM_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY || secrets.TEST_FLIGHT_LLM_API_KEY || secrets.API_NAMING_LLM_API_KEY }}
-          TEST_FLIGHT_LLM_BASE_URL: ${{ vars.TEST_FLIGHT_LLM_BASE_URL || 'https://opencode.ai/zen/v1' }}
+          TEST_FLIGHT_LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          TEST_FLIGHT_LLM_BASE_URL: ${{ vars.TEST_FLIGHT_LLM_BASE_URL || 'https://openrouter.ai/api/v1' }}
           TEST_FLIGHT_LLM_MODEL: ${{ vars.TEST_FLIGHT_LLM_MODEL }}
-          TEST_FLIGHT_LLM_MODELS: ${{ vars.TEST_FLIGHT_LLM_MODELS || 'glm-5.3-flash-free,deepseek-v4.1-flash-free,glm-5.3-flash' }}
+          TEST_FLIGHT_LLM_MODELS: ${{ vars.TEST_FLIGHT_LLM_MODELS || 'openrouter/free,z-ai/glm-5.3-flash' }}
           TEST_FLIGHT_TAVILY_API_KEY: ${{ secrets.TEST_FLIGHT_TAVILY_API_KEY }}
           TEST_FLIGHT_EXA_API_KEY: ${{ secrets.TEST_FLIGHT_EXA_API_KEY }}
 

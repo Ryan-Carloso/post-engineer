@@ -144,22 +144,22 @@ test('generateScript retries once after a validation failure, then throws instea
   assert.equal(calls, 2);
 });
 
-test('resolveLlmModels defaults to free models first with paid glm-5.3-flash last, and puts an explicit model last without duplicating it', () => {
-  assert.deepEqual(resolveLlmModels({}), ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free', 'glm-5.3-flash']);
-  assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODEL: 'paid-model' }), ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free', 'glm-5.3-flash', 'paid-model']);
-  assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODEL: 'glm-5.3-flash' }), ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free', 'glm-5.3-flash']);
+test('resolveLlmModels defaults to OpenRouter free router first with paid GLM last, and puts an explicit model last without duplicating it', () => {
+  assert.deepEqual(resolveLlmModels({}), ['openrouter/free', 'z-ai/glm-5.3-flash']);
+  assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODEL: 'paid-model' }), ['openrouter/free', 'z-ai/glm-5.3-flash', 'paid-model']);
+  assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODEL: 'z-ai/glm-5.3-flash' }), ['openrouter/free', 'z-ai/glm-5.3-flash']);
   assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODELS: 'a-model, b-model' }), ['a-model', 'b-model']);
 });
 
-test('generateScript falls through two free 429s to paid glm-5.3-flash and returns it as the model used', async () => {
+test('generateScript falls through a free-router failure to paid GLM and returns it as the model used', async () => {
   const calls = [];
   const fetchFn = async (url, options) => {
     const model = JSON.parse(options.body).model;
     calls.push(model);
-    if (model === 'glm-5.3-flash') {
+    if (model === 'z-ai/glm-5.3-flash') {
       return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(goodScript()) } }] }) };
     }
-    return { ok: false, status: 429, text: async () => '{"error": {"type": "FreeUsageLimitError", "message": "Free usage limit reached."}}' };
+    return { ok: false, status: 429, text: async () => '{"error": {"message": "No free model available."}}' };
   };
   const script = await generateScript({
     topic: 'Porto in one day: what to visit first',
@@ -167,12 +167,12 @@ test('generateScript falls through two free 429s to paid glm-5.3-flash and retur
     llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: resolveLlmModels({}) },
     fetchFn,
   });
-  assert.deepEqual(calls, ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free', 'glm-5.3-flash']);
+  assert.deepEqual(calls, ['openrouter/free', 'z-ai/glm-5.3-flash']);
   assert.equal(script.source, 'llm');
-  assert.equal(script.model, 'glm-5.3-flash');
+  assert.equal(script.model, 'z-ai/glm-5.3-flash');
 });
 
-test('generateScript throws when free and paid models all fail, instead of publishing a repeat script', async () => {
+test('generateScript throws when free router and paid GLM both fail, instead of publishing a repeat script', async () => {
   const failing = async () => ({ ok: false, status: 429, text: async () => '{"error": {"type": "FreeUsageLimitError"}}' });
   await assert.rejects(() => generateScript({
     topic: 'Porto in one day: what to visit first',
@@ -182,22 +182,22 @@ test('generateScript throws when free and paid models all fail, instead of publi
   }), /failing the job instead of publishing a repeat script/);
 });
 
-test('generateScript tries the free chain in order and reports the model used', async () => {
+test('generateScript tries the chain in order and reports the model used', async () => {
   const calls = [];
   const fetchFn = async (url, options) => {
     const model = JSON.parse(options.body).model;
     calls.push(model);
-    if (model === 'glm-5.3-flash-free') return { ok: false, status: 500, text: async () => 'down' };
+    if (model === 'openrouter/free') return { ok: false, status: 500, text: async () => 'down' };
     return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(goodScript()) } }] }) };
   };
   const script = await generateScript({
     topic: 'Porto in one day: what to visit first',
     angle: 'budget',
-    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free'] },
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: ['openrouter/free', 'z-ai/glm-5.3-flash'] },
     fetchFn,
   });
-  assert.deepEqual(calls, ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free']);
-  assert.equal(script.model, 'deepseek-v4.1-flash-free');
+  assert.deepEqual(calls, ['openrouter/free', 'z-ai/glm-5.3-flash']);
+  assert.equal(script.model, 'z-ai/glm-5.3-flash');
 });
 
 test('generateScript throws when the LLM endpoint fails or no key is configured', async () => {

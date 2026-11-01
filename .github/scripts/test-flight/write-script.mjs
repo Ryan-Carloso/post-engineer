@@ -30,19 +30,23 @@
 //   TEST_FLIGHT_EXA_API_KEY     reserve search key.
 // LLM configuration (the key is required; missing key means failure):
 //   TEST_FLIGHT_LLM_API_KEY   OpenAI-compatible API key. The workflow
-//                             passes OPENCODE_ZEN_API_KEY here (the repo
-//                             secret already used by the OpenCode review).
-//   TEST_FLIGHT_LLM_BASE_URL  default https://api.openai.com/v1; the
-//                             workflow passes https://opencode.ai/zen/v1
-//                             so the Zen key is used.
+//                             passes OPENROUTER_API_KEY here (repo secret).
+//                             Zen is NOT used: paid Zen was proven live
+//                             to fail with HTTP 402 (Insufficient account
+//                             funds, run 41323409879), and no OpenCode Go
+//                             key exists in repo secrets.
+//   TEST_FLIGHT_LLM_BASE_URL  default https://openrouter.ai/api/v1; the
+//                             workflow passes that same URL.
 //   TEST_FLIGHT_LLM_MODELS    comma-separated chain, default
-//                             glm-5.3-flash-free,deepseek-v4.1-flash-free,
-//                             glm-5.3-flash (free first; paid glm-5.3-flash
-//                             is last-resort only, billed to the user's
-//                             OpenCode Go account via the same Zen key.
-//                             A single model set via TEST_FLIGHT_LLM_MODEL
-//                             is appended last, never first, never
-//                             duplicated).
+//                             openrouter/free,z-ai/glm-5.3-flash.
+//                             openrouter/free is OpenRouter's Free Models
+//                             Router: it picks a free model automatically
+//                             (openrouter/auto would be paid routing, not
+//                             free). z-ai/glm-5.3-flash is paid GLM 5.3
+//                             Flash via OpenRouter only — not the direct
+//                             ZAI API and not Zen. A single model set via
+//                             TEST_FLIGHT_LLM_MODEL is appended last, never
+//                             first, never duplicated).
 //   TEST_FLIGHT_TOPIC         optional fixed topic; empty rotates topics.
 //   TEST_FLIGHT_RUN_ID        seed for the angle, so reruns differ.
 //   TEST_FLIGHT_SCRIPT_PATH   required output path for the script JSON.
@@ -68,16 +72,15 @@ export const MIN_CTA_WORDS = 5;
 export const MAX_CTA_WORDS = 20;
 export const MAX_SEGMENTS = 12;
 export const LLM_TIMEOUT_MS = 60000;
-export const DEFAULT_LLM_BASE_URL = 'https://api.openai.com/v1';
-// Free-first model chain, same ids as the OpenCode review workflow
-// (opencode/glm-5.3-flash-free primary, opencode/deepseek-v4.1-flash-free
-// verify), minus the provider prefix, which is how OpenCode Zen names
-// them. Paid glm-5.3-flash is last-resort only: it runs only after both
-// free models fail (for example on a free-usage 429), and its cost is
-// billed to the user's OpenCode Go account via the same Zen key. A
-// single model set via TEST_FLIGHT_LLM_MODEL is still appended last,
-// never first, and never duplicated if it is already in this chain.
-export const DEFAULT_LLM_MODELS = ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free', 'glm-5.3-flash'];
+export const DEFAULT_LLM_BASE_URL = 'https://openrouter.ai/api/v1';
+// OpenRouter-only model chain. openrouter/free is OpenRouter's Free
+// Models Router and picks a free model automatically; which free model
+// it picks varies, so the script is still gated by the segment
+// validation below and the paid fallback catches a bad or failed free
+// attempt. Paid z-ai/glm-5.3-flash runs only after the free router
+// fails. A single model set via TEST_FLIGHT_LLM_MODEL is still appended
+// last, never first, and never duplicated if it is already in this chain.
+export const DEFAULT_LLM_MODELS = ['openrouter/free', 'z-ai/glm-5.3-flash'];
 
 // Evergreen topics for the scheduled monitor (manual flights pass their own).
 export const MONITOR_TOPICS = [
