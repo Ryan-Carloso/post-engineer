@@ -20,10 +20,16 @@ vi.mock('@/lib/i18n/provider', () => ({
   }),
 }));
 
-import { PricingContactCard, SUPPORT_EMAIL, GITHUB_URL } from '../pricing-contact';
+import { PricingContactCard } from '../pricing-contact';
 
 const WHATSAPP_ENV = 'NEXT_PUBLIC_WHATSAPP_NUMBER';
 const TEST_NUMBER = '15551234567';
+// Literal expectations, never the module's own exports: asserting
+// `mailto:${SUPPORT_EMAIL}` against the imported SUPPORT_EMAIL passes
+// even when the export itself is mutated to '' (the expectation moves
+// with the mutant). The same self-reference hid the GITHUB_URL mutant.
+const SUPPORT_EMAIL_LITERAL = 'madebyryandev@gmail.com';
+const GITHUB_URL_LITERAL = 'https://github.com/Ryan-Carloso/post-engineer';
 const origWhatsappEnv = process.env[WHATSAPP_ENV];
 
 describe('PricingContactCard', () => {
@@ -42,12 +48,29 @@ describe('PricingContactCard', () => {
       'href',
       `https://wa.me/${TEST_NUMBER}?text=${encodeURIComponent('Hi! I would like tokens.')}`,
     );
+    expect(screen.getByTestId('pricing-whatsapp-cta').textContent).toBe(
+      'Message us on WhatsApp ↗',
+    );
     expect(screen.getByTestId('pricing-email-cta')).toHaveAttribute(
       'href',
-      `mailto:${SUPPORT_EMAIL}`,
+      `mailto:${SUPPORT_EMAIL_LITERAL}`,
     );
-    expect(screen.getByTestId('pricing-email-cta').textContent).toContain(SUPPORT_EMAIL);
-    expect(screen.getByTestId('pricing-github-cta')).toHaveAttribute('href', GITHUB_URL);
+    expect(screen.getByTestId('pricing-email-cta').textContent).toBe(
+      `Email us · ${SUPPORT_EMAIL_LITERAL}`,
+    );
+    expect(screen.getByTestId('pricing-github-cta')).toHaveAttribute(
+      'href',
+      GITHUB_URL_LITERAL,
+    );
+    expect(screen.getByTestId('pricing-github-cta').textContent).toBe('View on GitHub ↗');
+    expect(
+      screen.getByRole('heading', { name: 'Talk to us to get tokens' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Contact us while in beta.')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Prefer to self-host?' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Open source.')).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/\$\d/);
   });
 
