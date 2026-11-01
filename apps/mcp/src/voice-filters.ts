@@ -122,8 +122,9 @@ export interface HouseVoice {
   readonly label: string;
 }
 
-// GENERATED — begin (node gen-house-voices.mjs). Do not hand-edit:
-// regenerate from the engine catalog or the sync test will fail.
+// GENERATED — begin. Do not hand-edit: regenerate from
+// apps/engine/app/services/voice_catalog.json (name + label, same order)
+// or the sync test will fail.
 export const HOUSE_VOICES: readonly HouseVoice[] = [
   { name: "phonon_zoey", label: "Zoey" },
   { name: "phonon_juniper", label: "Juniper" },
