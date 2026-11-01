@@ -16,6 +16,7 @@ import { fetchPersonaVoiceCatalogIds } from '@/lib/voice-catalog-fetch';
 import { cloneKeyOf, isCloneVoiceId } from '@/lib/voice-catalog';
 import { resolvePersonaVoice } from '@/lib/voice-fallback';
 import { logger } from '@/lib/logger';
+import { redactCredentialFragments } from '@/lib/scrub';
 
 //---------------
 // cloneVoiceAvailable — whether the persona's clone id still names one of
@@ -83,7 +84,11 @@ export function personaVoiceRejectionOptions(
     // Stable by design (#301): the PostHog message must not embed the
     // free user text; the template lives in error-codes.ts.
     logMessage: 'Unknown voice',
-    metadata: { voice: attempt },
+    // The attempt is caller-typed free text: key-name scrubbing in the
+    // reporting path never touches the value, so credential fragments
+    // (a pasted Bearer token, an sk- key) are redacted here, at the
+    // call site, before the property can reach PostHog.
+    metadata: { voice: redactCredentialFragments(attempt) },
     // The 401/403 pattern: apiErrorResponse logs console-only and stays
     // unmarked, so withApiErrorReporting emits the route's semantic
     // persona_created_rejected / persona_updated_rejected event — exactly

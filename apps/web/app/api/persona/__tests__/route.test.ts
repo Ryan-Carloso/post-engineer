@@ -1047,6 +1047,18 @@ describe('PATCH /api/persona', () => {
     expect(removed).toContain(`${USER_ID}/foto-antiga.png`);
   });
 
+  it('rejects an unknown voice before uploading a new photo: no orphan in Storage, no write', async () => {
+    const { uploaded, updated } = mockSupabaseForPatch();
+
+    const res = await PATCH(
+      patchRequest('persona-uuid-1', { voiceId: 'energetic' }, [photo()]),
+    );
+
+    expect(res.status).toBe(400);
+    expect(uploaded).toEqual([]);
+    expect(updated).toEqual([]);
+  });
+
   //---------------
   // personas_visual_identity_check: photo_path + avatar_url = at most one.
   // Setting avatar_url without clearing photo_path left the row with BOTH,

@@ -19,6 +19,7 @@ import {
   PersonaVoiceIdSchema,
   resolvePersonaVoiceId,
   withResolvedPersonaVoice,
+  withResolvedPersonaVoiceForUpdate,
 } from '../voice-filters.js';
 
 const UNKNOWN_VOICE = (attempt: string) =>
@@ -38,8 +39,11 @@ const PAYLOAD = {
 const ids = (payload: unknown): string[] =>
   (payload as { voices: { id: string }[] }).voices.map((voice) => voice.id);
 
-function clientWith(listVoices: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue({ voices: [] })) {
-  return { listVoices } as unknown as PostEngineerClient;
+function clientWith(
+  listVoices: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue({ voices: [] }),
+  listPersonas: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue({ personas: [] }),
+) {
+  return { listVoices, listPersonas } as unknown as PostEngineerClient;
 }
 
 const CATALOG = {
@@ -152,6 +156,28 @@ describe('resolvePersonaVoiceId', () => {
     });
   });
 
+  it('redacts credential fragments in the PostHog property but keeps the raw attempt in the thrown message', async () => {
+    const listVoices = vi.fn().mockResolvedValue({ voices: [] });
+    const client = clientWith(listVoices);
+    const attempt = 'Bearer abc123token';
+    await expect(resolvePersonaVoiceId(client, attempt, 'update_persona')).rejects.toThrow(
+      UNKNOWN_VOICE(attempt),
+    );
+    expect(mockTrackEvent).toHaveBeenCalledWith('server_warning', {
+      code: 'UNKNOWN_VOICE',
+      tool: 'update_persona',
+      voice: 'Bearer [redacted]',
+    });
+    await expect(
+      resolvePersonaVoiceId(client, 'sk-abcdefghij1234567890', 'create_persona'),
+    ).rejects.toThrow(UNKNOWN_VOICE('sk-abcdefghij1234567890'));
+    expect(mockTrackEvent).toHaveBeenCalledWith('server_warning', {
+      code: 'UNKNOWN_VOICE',
+      tool: 'create_persona',
+      voice: '[redacted]',
+    });
+  });
+
   it('rejects a provider-prefixed voice that the list does not carry', async () => {
     const client = clientWith(vi.fn().mockResolvedValue(CATALOG));
     await expect(resolvePersonaVoiceId(client, 'elevenlabs:xyz', 'create_persona')).rejects.toThrow(
@@ -255,6 +281,65 @@ describe('resolvePersonaVoiceId', () => {
       tool: 'update_persona',
       voice: attempt.slice(0, 80),
     });
+  });
+});
+
+describe('withResolvedPersonaVoiceForUpdate', () => {
+  beforeEach(() => {
+    mockTrackEvent.mockClear();
+  });
+
+  it('passes an unchanged legacy stored voice through without consulting list_voices', async () => {
+    const listVoices = vi.fn().mockResolvedValue({ voices: [] });
+    const listPersonas = vi
+      .fn()
+      .mockResolvedValue({ personas: [{ id: 'p1', voiceId: 'energetic' }] });
+    const client = clientWith(listVoices, listPersonas);
+    const input = { personaId: 'p1', voiceId: 'energetic' };
+    await expect(
+      withResolvedPersonaVoiceForUpdate(client, input, 'update_persona'),
+    ).resolves.toBe(input);
+    expect(listVoices).not.toHaveBeenCalled();
+    expect(mockTrackEvent).not.toHaveBeenCalledWith('server_warning', expect.anything());
+  });
+
+  it('still resolves a changed voice after reading the stored one', async () => {
+    const listPersonas = vi
+      .fn()
+      .mockResolvedValue({ personas: [{ id: 'p1', voiceId: 'chatterbox:kokoro_af_heart' }] });
+    const client = clientWith(vi.fn().mockResolvedValue({ voices: [] }), listPersonas);
+    await expect(
+      withResolvedPersonaVoiceForUpdate(
+        client,
+        { personaId: 'p1', voiceId: 'phonon_zoey' },
+        'update_persona',
+      ),
+    ).resolves.toEqual({ personaId: 'p1', voiceId: 'chatterbox:phonon_zoey' });
+    expect(listPersonas).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips the persona list entirely when no voiceId was sent', async () => {
+    const listPersonas = vi.fn();
+    const client = clientWith(vi.fn(), listPersonas);
+    const input = { personaId: 'p1' };
+    await expect(
+      withResolvedPersonaVoiceForUpdate(client, input, 'update_persona'),
+    ).resolves.toBe(input);
+    expect(listPersonas).not.toHaveBeenCalled();
+  });
+
+  it('falls back to normal resolution when the persona list fails', async () => {
+    const listVoices = vi.fn().mockResolvedValue({ voices: [] });
+    const listPersonas = vi.fn().mockRejectedValue(new Error('list down'));
+    const client = clientWith(listVoices, listPersonas);
+    await expect(
+      withResolvedPersonaVoiceForUpdate(
+        client,
+        { personaId: 'p1', voiceId: 'energetic' },
+        'update_persona',
+      ),
+    ).rejects.toThrow(UNKNOWN_VOICE('energetic'));
+    expect(listVoices).toHaveBeenCalledTimes(1);
   });
 });
 

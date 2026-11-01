@@ -9,6 +9,7 @@ import { fetchPersonaVoiceCatalogIds } from '@/lib/voice-catalog-fetch';
 import {
   applyPersonaVoicePatch,
   cloneVoiceAvailable,
+  personaVoiceRejectionOptions,
   validatePersonaVoiceInput,
 } from '@/lib/persona-voice-validate';
 
@@ -125,6 +126,27 @@ describe('validatePersonaVoiceInput', () => {
     await expect(
       validatePersonaVoiceInput(supabaseMock(0), USER_ID, 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb'),
     ).resolves.toBe(unknownMessage('chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb'));
+  });
+});
+
+describe('personaVoiceRejectionOptions', () => {
+  it('returns undefined for an empty or absent attempt', () => {
+    expect(personaVoiceRejectionOptions(null)).toBeUndefined();
+    expect(personaVoiceRejectionOptions('   ')).toBeUndefined();
+  });
+
+  it('carries a plain attempt unchanged in the PostHog metadata', () => {
+    expect(personaVoiceRejectionOptions('energetic')?.metadata).toEqual({ voice: 'energetic' });
+    expect(personaVoiceRejectionOptions('energetic')?.code).toBe('UNKNOWN_VOICE');
+  });
+
+  it('redacts credential fragments in the PostHog metadata, never the raw paste', () => {
+    expect(personaVoiceRejectionOptions('Bearer abc123token')?.metadata).toEqual({
+      voice: 'Bearer [redacted]',
+    });
+    expect(
+      personaVoiceRejectionOptions('sk-abcdefghij1234567890')?.metadata,
+    ).toEqual({ voice: '[redacted]' });
   });
 });
 

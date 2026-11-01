@@ -208,6 +208,20 @@ function truncateVoice(attempt: string): string {
   return attempt.slice(0, MAX_VOICE_ATTEMPT);
 }
 
+// redactCredentialFragments — the value-level scrubber for the PostHog
+// property below, mirroring the web's scrub.ts patterns. trackEvent only
+// redacts by property KEY name, so a `voice` value carrying a pasted
+// credential would otherwise reach PostHog verbatim. The thrown message
+// keeps the raw attempt: it goes back to the agent that typed it, never
+// to telemetry.
+function redactCredentialFragments(text: string): string {
+  return text
+    .replace(/\bBearer\s+[^\s]+/gi, 'Bearer [redacted]')
+    .replace(/(https?:\/\/)[^\s/@]+@/gi, '$1[redacted]@')
+    .replace(/([?&](?:api[_-]?key|access[_-]?token|token)=)[^\s&]+/gi, '$1[redacted]')
+    .replace(/\bsk-[A-Za-z0-9_-]{20,}/g, '[redacted]');
+}
+
 /** throwUnknownVoice — first the PostHog `server_warning` under the EXISTING
  *  event name and the shared UNKNOWN_VOICE code (issue #301: no new event
  *  names), then the loud, exact rejection. The rejection is what the agent
@@ -216,7 +230,11 @@ function truncateVoice(attempt: string): string {
 function throwUnknownVoice(tool: string, attempt: string): never {
   const voice = truncateVoice(attempt);
   try {
-    trackEvent('server_warning', { code: 'UNKNOWN_VOICE', tool, voice });
+    trackEvent('server_warning', {
+      code: 'UNKNOWN_VOICE',
+      tool,
+      voice: redactCredentialFragments(voice),
+    });
   } catch {
     // Telemetry must never break the rejection: the agent still gets the
     // exact Unknown-voice message below.
@@ -306,6 +324,45 @@ export async function withResolvedPersonaVoice<T extends { voiceId?: string }>(
   const voiceId = await resolvePersonaVoiceId(client, input.voiceId, tool);
   if (voiceId === undefined || voiceId === input.voiceId) return input;
   return { ...input, voiceId };
+}
+
+// storedPersonaVoice — the voiceId a persona currently stores, read from
+// GET /api/persona/list ({ personas: [{ id, voiceId }] }). Undefined when
+// the persona is absent, stores no voice, or the payload is malformed:
+// callers fall back to normal resolution instead of inventing a skip.
+function storedPersonaVoice(payload: unknown, personaId: string): string | undefined {
+  if (typeof payload !== 'object' || payload === null || !('personas' in payload)) return undefined;
+  const personas = (payload as { personas: unknown }).personas;
+  if (!Array.isArray(personas)) return undefined;
+  for (const persona of personas) {
+    if (typeof persona !== 'object' || persona === null) continue;
+    const record = persona as { id?: unknown; voiceId?: unknown };
+    if (record.id === personaId && typeof record.voiceId === 'string') return record.voiceId;
+  }
+  return undefined;
+}
+
+/** withResolvedPersonaVoiceForUpdate — like withResolvedPersonaVoice, but
+ *  an update_persona that resends the persona's own stored voice skips
+ *  resolution entirely (trim-exact, mirroring the web PATCH carve-out):
+ *  the 16 personas storing legacy bare names must survive a name-only
+ *  read-modify-write through the agent interface instead of 400ing on
+ *  their own stored voice. A list failure falls back to normal
+ *  resolution — a broken list must not silently pass a changed voice
+ *  through. */
+export async function withResolvedPersonaVoiceForUpdate<
+  T extends { personaId: string; voiceId?: string },
+>(client: PostEngineerClient, input: T, tool: string): Promise<T> {
+  const voiceId = input.voiceId;
+  if (voiceId !== undefined) {
+    try {
+      const stored = storedPersonaVoice(await client.listPersonas(), input.personaId);
+      if (stored !== undefined && stored.trim() === voiceId.trim()) return input;
+    } catch {
+      // Fall through to normal resolution below.
+    }
+  }
+  return withResolvedPersonaVoice(client, input, tool);
 }
 
 /** PersonaVoiceIdSchema — the voiceId field family: the 65 house names plus

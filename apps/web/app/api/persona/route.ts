@@ -347,6 +347,13 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     updates.name = patch.name.trim();
   }
 
+  const voicePatchError = await applyPersonaVoicePatch(
+    supabase, user.id, persona, patch.voiceId, updates, stalePaths,
+  );
+  if (voicePatchError) {
+    return errorResponse(400, voicePatchError, 'PATCH /api/persona', personaVoiceRejectionOptions(patch.voiceId));
+  }
+
   if (patch.photo && patch.photoExtension) {
     const photoPath = await uploadFile(supabase, user.id, personaId, patch.photo, patch.photoExtension);
     if (!photoPath) return errorResponse(500, 'Failed to upload photo.', 'PATCH /api/persona');
@@ -373,13 +380,6 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     ) {
       stalePaths.push(persona.photo_path);
     }
-  }
-
-  const voicePatchError = await applyPersonaVoicePatch(
-    supabase, user.id, persona, patch.voiceId, updates, stalePaths,
-  );
-  if (voicePatchError) {
-    return errorResponse(400, voicePatchError, 'PATCH /api/persona', personaVoiceRejectionOptions(patch.voiceId));
   }
 
   if (patch.language !== null) updates.language = patch.language;
