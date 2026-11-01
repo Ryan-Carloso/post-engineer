@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { findRepoRoot } from '@/test/repo-root';
-import { DAILY_NEWS_PROMPT, FULL_SETUP_PROMPT, GITHUB_PRS_PROMPT, PROMPTS, getPrompt } from '../prompts';
+import { PROMPTS, getPrompt } from '../prompts';
 import { SHARED_PROMPT_BASE } from '@/lib/generation/prompt-base';
 
 describe('prompts hub data', () => {
@@ -125,94 +122,6 @@ describe('prompts hub data', () => {
       expect(prompt.prompt).toContain('No em dashes');
       expect(prompt.prompt).not.toMatch(/\[[A-Z_]+\]/);
     }
-  });
-
-  it('keeps the copy-ready doc blocks identical to the served prompts', () => {
-    const root = findRepoRoot(import.meta.url);
-    for (const [doc, text] of [
-      ['daily-news.md', DAILY_NEWS_PROMPT],
-      ['github-prs.md', GITHUB_PRS_PROMPT],
-    ] as const) {
-      const body = readFileSync(join(root, 'docs', 'recipes', doc), 'utf8');
-      expect(body).toContain(`\`\`\`text\n${text}\n\`\`\``);
-    }
-  });
-
-  it('pins the exact composed text of every prompt', () => {
-    // Exact-text pins: any mutated line, separator, or blank line in the
-    // composed prompts changes the output and fails here. The specific
-    // lines are pinned deliberately; the shared base comes along via
-    // SHARED_PROMPT_BASE, so a base change fails loudly too.
-    const FULL_SETUP_SPECIFIC = [
-      'Set up Post Engineer end to end and publish your first video. Follow the',
-      'steps in order; do not skip ahead of validation or the publish confirmation.',
-      '',
-      '1. Call list_social_accounts. Ask which of youtube, instagram, linkedin',
-      '   the user wants; for each one that is missing, call connect_account with',
-      '   that provider and hand the returned https OAuth link to the user to',
-      '   finish in the browser, then re-check with list_social_accounts.',
-      '2. Bluesky is optional. If the user wants it, ask for the handle and the',
-      '   app password (never the main password); use the app password only in',
-      '   connect_account and never repeat, print, or log it.',
-      '3. Ask what the channel is about and what to call the persona. Call',
-      '   list_faces and list_voices, let the user pick a face and a voice,',
-      '   then call create_persona with name, avatarUrl, voiceId,',
-      '   language "en-US" (English only for now) and niche. Remember the personaId.',
-      '4. Call get_token_balance first, ask what the first video is about, then',
-      '   write the script as segments following the contract above and call',
-      '   validate_script until it passes.',
-      '5. Before generating, tell the user the video IS published as a',
-      '   real post, and confirm the providers/accounts and the mode (scheduled|asap)',
-      '   with the user. Also ask if they want a routine after this first video.',
-      '   Warning: Bluesky video publishing is',
-      '   currently being fixed (issue #327); Bluesky is optional and can be',
-      '   skipped.',
-      '6. Call generate_persona_video once with that personaId, the validated',
-      '   segments unchanged, the confirmed title, language "en", the confirmed',
-      '   providers with their account IDs from list_social_accounts, and the',
-      '   confirmed mode. Then call get_video_task_progress until done and share the',
-      '   get_video_status URL.',
-    ];
-    expect(FULL_SETUP_PROMPT).toBe([...SHARED_PROMPT_BASE, '', ...FULL_SETUP_SPECIFIC].join('\n'));
-    const DAILY_NEWS_SPECIFIC = [
-      "Turn one top story from today's GNews headlines (lang=en, country=us) into",
-      'one Post Engineer video. My GNews key is in your own environment as',
-      'YOUR_GNEWS_KEY: never print it, never paste it anywhere else. If it is',
-      'missing, tell me to set it; never ask me to paste it in chat.',
-      '',
-      '1. Pick one clear single event with a named place. Skip round-ups, opinion',
-      '   pieces, and stories sourced only from a social post. Attribute',
-      '   single-sourced claims.',
-      '2. Write the script as segments following the contract above and call',
-      '   validate_script until it passes.',
-      '3. For media, prefer a photo of the actual place in the story. Check a',
-      '   public URL with check_media first and attach it only on ok; or upload',
-      '   a local file with upload_media shortly before generating and use the',
-      '   mediaId. At most 6 medias. Skip a failed photo, never force it.',
-      '4. Call generate_persona_video with the confirmed personaId, the validated',
-      '   segments unchanged, the confirmed title, language "en", the confirmed',
-      '   providers with account IDs from list_social_accounts, and the confirmed',
-      '   mode.',
-      '5. Poll get_video_task_progress on the taskId until done, then share the',
-      '   final video URL from get_video_status.',
-    ];
-    expect(DAILY_NEWS_PROMPT).toBe([...SHARED_PROMPT_BASE, '', ...DAILY_NEWS_SPECIFIC].join('\n'));
-    const GITHUB_PRS_SPECIFIC = [
-      'Turn one GitHub pull request into one persona video.',
-      '',
-      '1. Ask me which PR. If you can read the repo, fetch its title, description,',
-      '   and changes yourself; otherwise ask me for them.',
-      '2. Write the script as segments following the contract above and call',
-      '   validate_script until it passes.',
-      '3. Media: at most 6, only if they match the PR (screenshots, diagrams, or',
-      '   repo visuals); otherwise generate without media.',
-      '4. Call generate_persona_video, the singular video tool, once with the',
-      '   confirmed personaId, the validated segments unchanged, the confirmed',
-      '   title, language "en", the confirmed accounts, and the confirmed mode.',
-      '5. Never invent PR details: if the title, description, or change summary is',
-      '   missing, ask for it instead of guessing.',
-    ];
-    expect(GITHUB_PRS_PROMPT).toBe([...SHARED_PROMPT_BASE, '', ...GITHUB_PRS_SPECIFIC].join('\n'));
   });
 
   it('pins the exact entry fields for daily-news and github-prs', () => {

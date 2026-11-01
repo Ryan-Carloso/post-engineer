@@ -20,6 +20,7 @@ function findRepoRoot(fromUrl: string): string {
     dir = parent;
   }
 }
+import * as generatedModule from '../prompt-base.js';
 
 const SHARED_RELATIVE = join('shared', 'prompt-base', 'prompt-base.ts');
 const GENERATED_RELATIVE = join('apps', 'mcp', 'src', 'prompt-base.ts');
@@ -31,5 +32,12 @@ describe('prompt-base shared source', () => {
     const generated = readFileSync(join(root, GENERATED_RELATIVE), 'utf8');
     expect(shared).toContain('DO NOT EDIT this copy directly');
     expect(generated).toBe(shared);
+  });
+
+  it('exports the same values as the shared source at runtime', async () => {
+    const root = findRepoRoot(import.meta.url);
+    const sharedModule: Record<string, unknown> = await import(/* @vite-ignore */ join(root, SHARED_RELATIVE));
+    expect({ ...sharedModule }).toEqual({ ...generatedModule });
+    expect(generatedModule.SHARED_PROMPT_BASE.length).toBeGreaterThan(0);
   });
 });

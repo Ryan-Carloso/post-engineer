@@ -42,19 +42,11 @@ edit a generated copy by hand.
 
 ## prompt-base
 
-`prompt-base/prompt-base.ts` is the shared opening of every prompt in
-the prompts hub: humanizer + anti-slop rules, the segments contract
-(hook first, CTA last, 60–200 words, title mandatory, validate before
-any token is spent), and the scheduling rules (generation always tied
-to publishing; scheduled mode needs a 3h–30d-ahead start; asap mode
-needs no start). Only rules that are truly universal belong here; a
-prompt's own topic rules stay in that prompt, so the base stays short.
-
-Every served prompt is composed as
-`[...SHARED_PROMPT_BASE, '', ...specificLines].join('\n')`, so the
-delivered text is complete and standalone when copied: the agent
-receives the whole prompt in one paste, never a bare "see the base
-prompt" reference.
+`prompt-base/prompt-base.ts` holds the text of every prompt in the prompts
+hub: `SHARED_PROMPT_BASE` (rules for all prompts) plus each composed prompt
+(`[...SHARED_PROMPT_BASE, '', ...specificLines].join('\n')`). A new prompt
+gets every shared rule by spreading the base. Web, MCP, and docs never repeat
+this text: docs link to the hub.
 
 The consumers use byte-identical generated copies, committed to git:
 

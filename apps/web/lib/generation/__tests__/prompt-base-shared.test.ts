@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
+import * as generatedModule from '../prompt-base';
 
 const SHARED_RELATIVE = join('shared', 'prompt-base', 'prompt-base.ts');
 const GENERATED_RELATIVE = join('apps', 'web', 'lib', 'generation', 'prompt-base.ts');
@@ -23,5 +24,12 @@ describe('prompt-base shared source', () => {
     const generated = readFileSync(join(root, GENERATED_RELATIVE), 'utf8');
     expect(shared).toContain('DO NOT EDIT this copy directly');
     expect(generated).toBe(shared);
+  });
+
+  it('exports the same values as the shared source at runtime', async () => {
+    const root = findRepoRoot(import.meta.url);
+    const sharedModule: Record<string, unknown> = await import(/* @vite-ignore */ join(root, SHARED_RELATIVE));
+    expect({ ...sharedModule }).toEqual({ ...generatedModule });
+    expect(generatedModule.SHARED_PROMPT_BASE.length).toBeGreaterThan(0);
   });
 });
