@@ -327,8 +327,6 @@ export const enDictionary: Dictionary = {
     photoUpload: 'Upload photo',
     photoCurrent: 'Current photo',
     photoHint: 'For best results, upload clear, front-facing photos framed from the shoulders up. Avoid full-body photos. Select several at once, up to {max}. Accepted formats: JPG or PNG.',
-    photoRemove: 'Remove',
-    photoAddMore: 'Add more photos ({count}/{max})',
     libraryLabel: 'Image library',
     libraryHint: 'Up to {max} photos of the same person. Each video picks the best match by tag, so variety improves results. Accepted formats: JPG/JPEG, PNG, or WebP (max {sizeMb}MB).',
     libraryCount: '{count} of {max} images',

@@ -146,11 +146,11 @@ export const PersonaPhotoPicker = ({ personaId }: { personaId?: string }) => {
                 onClick={() => usePersonaStore.getState().removePhoto(index)}
                 className="text-xs font-medium text-neutral-500 hover:text-neutral-800 hover:underline"
               >
-                {t('persona.photoRemove')}
+                {t('persona.libraryRemove')}
               </button>
             </li>
           ))}
-          <li>{pickButton(t('persona.photoAddMore', { count: staged.length, max: MAX_PERSONA_IMAGES }), staged.length >= MAX_PERSONA_IMAGES)}</li>
+          <li>{pickButton(t('persona.photoUpload'), staged.length >= MAX_PERSONA_IMAGES)}</li>
         </ul>
       ) : (
         <button

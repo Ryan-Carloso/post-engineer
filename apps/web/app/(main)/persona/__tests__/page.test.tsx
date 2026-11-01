@@ -1405,7 +1405,7 @@ describe('app/(main)/persona/page — seletor de foto', () => {
       new File(['a'], 'a.png', { type: 'image/png' }),
       new File(['b'], 'b.png', { type: 'image/png' }),
     ]);
-    await user.click(screen.getAllByRole('button', { name: 'persona.photoRemove' })[0]);
+    await user.click(screen.getAllByRole('button', { name: 'persona.libraryRemove' })[0]);
 
     expect(usePersonaStore.getState().photo?.name).toBe('b.png');
     expect(usePersonaStore.getState().extraPhotos).toEqual([]);

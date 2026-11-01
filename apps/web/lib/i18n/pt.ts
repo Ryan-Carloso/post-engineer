@@ -327,8 +327,6 @@ export const ptDictionary = {
     photoUpload: 'Enviar foto',
     photoCurrent: 'Foto atual',
     photoHint: 'Para melhores resultados, envie fotos nítidas, de frente e enquadradas dos ombros para cima. Evite fotos de corpo inteiro. Selecione várias de uma vez, até {max}. Formatos aceitos: JPG ou PNG.',
-    photoRemove: 'Remover',
-    photoAddMore: 'Adicionar mais fotos ({count}/{max})',
     libraryLabel: 'Biblioteca de imagens',
     libraryHint: 'Até {max} fotos da mesma pessoa. Cada vídeo escolhe a melhor pela tag, então variedade melhora os resultados. Formatos aceitos: JPG/JPEG, PNG ou WebP (máx. {sizeMb}MB).',
     libraryCount: '{count} de {max} imagens',
