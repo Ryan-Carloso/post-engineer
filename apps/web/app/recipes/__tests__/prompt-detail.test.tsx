@@ -222,34 +222,3 @@ describe('full-setup detail page', () => {
     }
   });
 });
-
-describe('search-first detail page', () => {
-  const prompt = getPrompt('search-first');
-  if (prompt === undefined) {
-    throw new Error('search-first prompt entry is missing');
-  }
-
-  it('points the doc link at docs/recipes/search-first.md', () => {
-    render(<PromptDetail prompt={prompt} />);
-    expect(
-      screen.getByRole('link', { name: 'View this prompt on GitHub' }),
-    ).toHaveAttribute(
-      'href',
-      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/search-first.md',
-    );
-  });
-
-  it('shows the search-first flow: search, only-facts, stop, validate, generate', () => {
-    render(<PromptDetail prompt={prompt} />);
-    for (const marker of [
-      'YOUR_TAVILY_API_KEY',
-      'at most 5 results',
-      'using ONLY facts from those results',
-      'Never generate an ungrounded script',
-      'validate_script',
-      'generate_persona_video',
-    ]) {
-      expect(screen.getByText(new RegExp(marker.replace(/[.[\\(\\)|*+?^$]/g, '\\$&')))).toBeInTheDocument();
-    }
-  });
-});

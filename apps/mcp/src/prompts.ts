@@ -8,7 +8,7 @@
 //---------------
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { DAILY_NEWS_PROMPT, FULL_SETUP_PROMPT, GITHUB_PRS_PROMPT, SEARCH_FIRST_PROMPT } from './prompt-base.js';
+import { DAILY_NEWS_PROMPT, FULL_SETUP_PROMPT, GITHUB_PRS_PROMPT } from './prompt-base.js';
 
 export interface HubPrompt {
   slug: string;
@@ -41,14 +41,6 @@ export const HUB_PROMPTS: HubPrompt[] = [
       "Connect accounts, create a persona, validate the script, and publish your first video without skipping a step.",
     ].join("\n"),
     prompt: FULL_SETUP_PROMPT,
-  },
-  {
-    slug: "search-first",
-    title: "Search first, then video",
-    description: [
-      "Search the web first, then turn one searched topic into one persona video, using only facts the search returned.",
-    ].join("\n"),
-    prompt: SEARCH_FIRST_PROMPT,
   },
 ];
 
