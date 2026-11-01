@@ -63,15 +63,15 @@ describe('/recipes prompts hub list', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('shows three prompts in the hero count', () => {
+  it('shows four prompts in the hero count', () => {
     render(<RecipesPage />);
-    expect(screen.getByText('recipes.promptCount:{"count":3}')).toBeInTheDocument();
+    expect(screen.getByText('recipes.promptCount:{"count":4}')).toBeInTheDocument();
   });
 
   it('labels entries by kind, not by sequence number', () => {
     render(<RecipesPage />);
     expect(screen.getAllByText('Recipe')).toHaveLength(3);
-    expect(screen.getAllByText('Prompt')).toHaveLength(2);
+    expect(screen.getAllByText('Prompt')).toHaveLength(3);
     expect(screen.queryByText('01')).not.toBeInTheDocument();
     expect(screen.queryByText('02')).not.toBeInTheDocument();
   });
@@ -97,7 +97,7 @@ describe('/recipes prompts hub list', () => {
 
   it('shows the step count on each card', () => {
     render(<RecipesPage />);
-    expect(screen.getAllByText('recipes.stepCount:{"count":5}')).toHaveLength(3);
+    expect(screen.getAllByText('recipes.stepCount:{"count":5}')).toHaveLength(4);
   });
 
   it('offers a secondary "Add your prompt" link to the prompt_request template after the grid', () => {

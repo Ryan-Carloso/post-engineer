@@ -14,11 +14,11 @@ const slugs = (list: typeof PROMPTS): string[] => list.map((prompt) => prompt.sl
 
 describe('filterPrompts', () => {
   it('returns every prompt with no kind and an empty query', () => {
-    expect(slugs(filterPrompts(PROMPTS, 'all', '  ', t))).toEqual(['daily-news', 'github-prs', 'full-setup']);
+    expect(slugs(filterPrompts(PROMPTS, 'all', '  ', t))).toEqual(['daily-news', 'github-prs', 'full-setup', 'search-first']);
   });
 
   it('keeps only the chosen kind', () => {
-    expect(slugs(filterPrompts(PROMPTS, 'recipes.kindPrompt', '', t))).toEqual(['github-prs']);
+    expect(slugs(filterPrompts(PROMPTS, 'recipes.kindPrompt', '', t))).toEqual(['github-prs', 'search-first']);
   });
 
   it('matches the localized title ignoring case and accents', () => {

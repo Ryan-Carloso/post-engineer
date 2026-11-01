@@ -21,9 +21,10 @@ import {
   DAILY_NEWS_PROMPT,
   FULL_SETUP_PROMPT,
   GITHUB_PRS_PROMPT,
+  SEARCH_FIRST_PROMPT,
 } from '@/lib/generation/prompt-base';
 
-export { DAILY_NEWS_PROMPT, FULL_SETUP_PROMPT, GITHUB_PRS_PROMPT };
+export { DAILY_NEWS_PROMPT, FULL_SETUP_PROMPT, GITHUB_PRS_PROMPT, SEARCH_FIRST_PROMPT };
 
 export type PromptIcon = 'globe' | 'compose';
 
@@ -113,6 +114,30 @@ export const PROMPTS: PromptEntry[] = [
     docHref:
       'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/full-setup.md',
     prompt: FULL_SETUP_PROMPT,
+  },
+  {
+    slug: 'search-first',
+    icon: 'globe',
+    titleKey: 'recipes.searchFirstTitle',
+    objectiveKey: 'recipes.searchFirstObjective',
+    kindKey: 'recipes.kindPrompt',
+    stepKeys: [
+      'recipes.searchFirstStep1',
+      'recipes.searchFirstStep2',
+      'recipes.searchFirstStep3',
+      'recipes.searchFirstStep4',
+      'recipes.searchFirstStep5',
+    ],
+    deliverKeys: [
+      'recipes.searchFirstDeliver1',
+      'recipes.searchFirstDeliver2',
+      'recipes.searchFirstDeliver3',
+    ],
+    exampleInputKey: 'recipes.searchFirstExampleInput',
+    exampleOutputKey: 'recipes.searchFirstExampleOutput',
+    docHref:
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/search-first.md',
+    prompt: SEARCH_FIRST_PROMPT,
   },
 ];
 

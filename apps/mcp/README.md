@@ -169,6 +169,7 @@ hub by a sync test (`prompts-sync.test.ts`).
 - `/daily-news`: Daily news becomes a video — turn one top GNews story of the day into one persona video, validated before any token is spent.
 - `/github-prs`: GitHub PRs become videos — turn a GitHub pull request into one persona video.
 - `/full-setup`: Full setup becomes videos — connect accounts, create a persona, validate the script, and publish your first video without skipping a step.
+- `/search-first`: Search first, then video — search the web first, then turn one searched topic into one persona video, using only facts the search returned.
 
 Add a new prompt's text to `shared/prompt-base/prompt-base.ts` and run
 `node scripts/sync-prompt-base.mjs`. Then add its entry to the web hub

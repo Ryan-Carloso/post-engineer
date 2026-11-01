@@ -108,6 +108,38 @@ export const DAILY_NEWS_PROMPT = [
   '   final video URL from get_video_status.',
 ].join('\n');
 
+export const SEARCH_FIRST_PROMPT = [
+  ...SHARED_PROMPT_BASE,
+  '',
+  'Search first, then video: turn one searched topic into one persona video.',
+  '',
+  '1. Ask me for the topic, then confirm the persona, accounts, and mode',
+  '   from the questions above. One topic, one video, one',
+  '   generate_persona_video call.',
+  '2. Ask me which search tool I already have: Tavily, Exa, or your own',
+  '   web or MCP search tool. Use that one only. If it needs a key, the',
+  '   key lives in your own environment as YOUR_TAVILY_API_KEY or',
+  '   YOUR_EXA_API_KEY: never print it, never paste it anywhere else,',
+  '   never log it, and never ask me to paste it in chat. If it is',
+  '   missing, tell me to set it and stop.',
+  '3. Search the topic once and keep at most 5 results. For each result,',
+  '   keep its title, its URL, and its snippet for reasoning only. The',
+  '   spoken segments never carry links.',
+  '4. Write the script using ONLY facts from those results. If a fact is',
+  '   not in the results, leave it out. Never invent a name, a price, an',
+  '   opening hour, or any other claim, and never invent replacement',
+  '   facts to fill a gap.',
+  '5. If the search returns nothing, or the search tool fails, STOP and',
+  '   tell me. Never generate an ungrounded script, and never guess a',
+  '   script instead.',
+  '6. Then follow the contract above: call validate_script until it',
+  '   passes, call score_draft and fix what it names, confirm with me',
+  '   that the post is real and spends tokens, call',
+  '   generate_persona_video once with the validated segments unchanged,',
+  '   poll get_video_task_progress until done, and share the final video',
+  '   URL from get_video_status.',
+].join('\n');
+
 export const GITHUB_PRS_PROMPT = [
   ...SHARED_PROMPT_BASE,
   '',

@@ -84,4 +84,24 @@ export const recipesI18nEn = {
   fullSetupExampleInput: 'Starting with zero accounts and no persona.',
   fullSetupExampleOutput:
       'Accounts connected, persona created, script validated, one video published.',
+  searchFirstTitle: 'Search first, then video',
+  searchFirstObjective:
+      'Search the web first, then turn one searched topic into one persona video, using only facts the search returned.',
+  searchFirstStep1:
+      'For anyone who wants a video about a topic they have not researched yet.',
+  searchFirstStep2:
+      'It searches the web first, so the script uses real results instead of guesses.',
+  searchFirstStep3:
+      'Pick a topic and the search tool you already have; it asks for anything missing.',
+  searchFirstStep4:
+      'Write the script from search results only, then validate before any token is spent.',
+  searchFirstStep5: 'Generate one video and publish it where you asked.',
+  searchFirstDeliver1: 'One persona video from one searched topic.',
+  searchFirstDeliver2:
+      'A validated script from search results only, nothing invented.',
+  searchFirstDeliver3: 'A published post on your connected accounts.',
+  searchFirstExampleInput:
+      'Why do some cities close their old town to cars?',
+  searchFirstExampleOutput:
+      'Search results kept, script from those results only, one video published.',
 } as const;

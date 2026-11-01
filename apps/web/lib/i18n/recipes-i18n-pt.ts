@@ -84,4 +84,24 @@ export const recipesI18nPt = {
   fullSetupExampleInput: 'Começando sem nenhuma conta e sem persona.',
   fullSetupExampleOutput:
       'Contas conectadas, persona criada, roteiro validado, um vídeo publicado.',
+  searchFirstTitle: 'Pesquise primeiro, depois o vídeo',
+  searchFirstObjective:
+      'Pesquise na web primeiro e transforme um tema pesquisado em um vídeo de persona, usando só fatos que a pesquisa retornou.',
+  searchFirstStep1:
+      'Para quem quer um vídeo sobre um tema que ainda não pesquisou.',
+  searchFirstStep2:
+      'Ele pesquisa na web primeiro, para o roteiro usar resultados reais em vez de adivinhar.',
+  searchFirstStep3:
+      'Escolha um tema e a ferramenta de pesquisa que você já tem; ele pergunta o que faltar.',
+  searchFirstStep4:
+      'Escreva o roteiro só com os resultados da pesquisa e valide antes de gastar qualquer token.',
+  searchFirstStep5: 'Gere um vídeo e publique onde você pediu.',
+  searchFirstDeliver1: 'Um vídeo de persona a partir de um tema pesquisado.',
+  searchFirstDeliver2:
+      'Um roteiro validado só com os resultados da pesquisa, nada inventado.',
+  searchFirstDeliver3: 'Um post publicado nas suas contas conectadas.',
+  searchFirstExampleInput:
+      'Por que algumas cidades fecham o centro histórico para carros?',
+  searchFirstExampleOutput:
+      'Resultados da pesquisa guardados, roteiro só com esses resultados, um vídeo publicado.',
 } as const;

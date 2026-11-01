@@ -8,6 +8,7 @@ describe('prompts hub data', () => {
       'daily-news',
       'github-prs',
       'full-setup',
+      'search-first',
     ]);
     for (const prompt of PROMPTS) {
       expect(prompt.titleKey).toMatch(/^recipes\./);
@@ -34,6 +35,7 @@ describe('prompts hub data', () => {
       'daily-news',
       'github-prs',
       'full-setup',
+      'search-first',
     ]);
     const fullSetup = getPrompt('full-setup');
     if (fullSetup === undefined) {
@@ -123,6 +125,58 @@ describe('prompts hub data', () => {
       expect(prompt.prompt).toContain('No em dashes');
       expect(prompt.prompt).not.toMatch(/\[[A-Z_]+\]/);
     }
+  });
+
+  it('adds search-first as the fourth entry with the globe icon and a search-only flow', () => {
+    const searchFirst = getPrompt('search-first');
+    if (searchFirst === undefined) {
+      throw new Error('search-first prompt entry is missing');
+    }
+    expect(searchFirst.icon).toBe('globe');
+    expect(searchFirst.kindKey).toBe('recipes.kindPrompt');
+    expect(searchFirst.objectiveKey).toBe('recipes.searchFirstObjective');
+    expect(searchFirst.stepKeys).toEqual([
+      'recipes.searchFirstStep1',
+      'recipes.searchFirstStep2',
+      'recipes.searchFirstStep3',
+      'recipes.searchFirstStep4',
+      'recipes.searchFirstStep5',
+    ]);
+    expect(searchFirst.deliverKeys).toEqual([
+      'recipes.searchFirstDeliver1',
+      'recipes.searchFirstDeliver2',
+      'recipes.searchFirstDeliver3',
+    ]);
+    expect(searchFirst.exampleInputKey).toBe('recipes.searchFirstExampleInput');
+    expect(searchFirst.exampleOutputKey).toBe('recipes.searchFirstExampleOutput');
+    expect(searchFirst.docHref).toEqual(
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/search-first.md',
+    );
+    const fullText = searchFirst.prompt;
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(fullText.startsWith(baseText)).toBe(true);
+    const text = fullText.slice(baseText.length + 2);
+    const positions = [
+      'Ask me for the topic',
+      'YOUR_TAVILY_API_KEY',
+      'YOUR_EXA_API_KEY',
+      'never print it',
+      'never log it',
+      'at most 5 results',
+      'using ONLY facts from those results',
+      'Never invent a name, a price, an',
+      'If the search returns nothing',
+      'Never generate an ungrounded script',
+      'validate_script until it',
+      'score_draft',
+      'generate_persona_video once',
+      'get_video_task_progress',
+      'get_video_status',
+    ].map((needle) => text.indexOf(needle));
+    expect(positions.every((i) => i >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    expect(text).not.toMatch(/\[[A-Z_]+\]/);
+    expect(text).not.toContain('Porto');
   });
 
   it('pins the exact entry fields for daily-news and github-prs', () => {
