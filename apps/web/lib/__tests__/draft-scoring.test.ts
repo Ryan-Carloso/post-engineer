@@ -6,12 +6,15 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  INSTAGRAM_CAPTION_MAX_CHARS,
   LINKEDIN_POST_MAX_CHARS,
-  checkLinkedinPublish,
+  YOUTUBE_DESCRIPTION_MAX_CHARS,
+  checkPublish,
   scoreDraft,
   summarizeBaseline,
   type DraftBaseline,
 } from '../draft-scoring';
+import { BLUESKY_CAPTION_MAX_GRAPHEMES } from '../bluesky';
 
 const EMPTY_BASELINE: DraftBaseline = {
   postsMeasured: 0,
@@ -95,15 +98,22 @@ describe('scoreDraft', () => {
   it('scores an empty draft 30 and fails the publish check', () => {
     const result = scoreDraft('', EMPTY_BASELINE);
     expect(result.score).toBe(30);
+    expect(result.publishCheck.network).toBe('linkedin');
     expect(result.publishCheck.ok).toBe(false);
     expect(result.publishCheck.failures).toEqual(['Draft is empty.']);
   });
+
+  it('runs the publish check for the requested network, defaulting to linkedin', () => {
+    expect(scoreDraft(strongDraft(), EMPTY_BASELINE).publishCheck.network).toBe('linkedin');
+    expect(scoreDraft(strongDraft(), EMPTY_BASELINE, 'bluesky').publishCheck.network).toBe('bluesky');
+  });
 });
 
-describe('checkLinkedinPublish', () => {
+describe('checkPublish', () => {
   it('fails a draft over the LinkedIn character limit', () => {
     const draft = 'x'.repeat(LINKEDIN_POST_MAX_CHARS + 1);
-    const check = checkLinkedinPublish(draft);
+    const check = checkPublish(draft, 'linkedin');
+    expect(check.network).toBe('linkedin');
     expect(check.ok).toBe(false);
     expect(check.failures).toHaveLength(1);
     expect(check.failures[0]).toContain('3000-character');
@@ -111,9 +121,38 @@ describe('checkLinkedinPublish', () => {
 
   it('warns when the first line passes the see-more fold', () => {
     const draft = `${'y'.repeat(211)}\nSecond line.`;
-    const check = checkLinkedinPublish(draft);
+    const check = checkPublish(draft, 'linkedin');
     expect(check.ok).toBe(true);
     expect(check.warnings).toHaveLength(1);
     expect(check.warnings[0]).toContain('see-more');
+  });
+
+  it('fails a Bluesky draft over 300 graphemes, counting composed emoji as one', () => {
+    const family = '👨‍👩‍👧‍👦';
+    expect(checkPublish(family.repeat(BLUESKY_CAPTION_MAX_GRAPHEMES), 'bluesky').ok).toBe(true);
+    const check = checkPublish(family.repeat(BLUESKY_CAPTION_MAX_GRAPHEMES + 1), 'bluesky');
+    expect(check.ok).toBe(false);
+    expect(check.failures).toHaveLength(1);
+    expect(check.failures[0]).toContain('300-grapheme');
+  });
+
+  it('warns, never fails, a YouTube draft over the description limit', () => {
+    const check = checkPublish('x'.repeat(YOUTUBE_DESCRIPTION_MAX_CHARS + 1), 'youtube');
+    expect(check.ok).toBe(true);
+    expect(check.warnings).toHaveLength(1);
+    expect(check.warnings[0]).toContain('5000-character');
+  });
+
+  it('warns, never fails, an Instagram draft over the caption limit', () => {
+    const check = checkPublish('x'.repeat(INSTAGRAM_CAPTION_MAX_CHARS + 1), 'instagram');
+    expect(check.ok).toBe(true);
+    expect(check.warnings).toHaveLength(1);
+    expect(check.warnings[0]).toContain('2200-character');
+  });
+
+  it('fails an empty draft on every network', () => {
+    for (const network of ['linkedin', 'youtube', 'instagram', 'bluesky'] as const) {
+      expect(checkPublish('   ', network).failures).toEqual(['Draft is empty.']);
+    }
   });
 });

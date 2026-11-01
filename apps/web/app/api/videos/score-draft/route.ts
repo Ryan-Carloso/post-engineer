@@ -1,8 +1,9 @@
 //---------------
-// POST /api/videos/score-draft — mechanical LinkedIn draft scoring.
+// POST /api/videos/score-draft — mechanical draft scoring.
 //
 // Scores one draft against the caller's own measured posts (post_metrics)
-// and runs the LinkedIn publish check. It never debits tokens, never
+// and runs the publish check for the requested network (linkedin,
+// youtube, instagram, bluesky). It never debits tokens, never
 // schedules, never calls the engine: there is no database write and no
 // external call on this path at all — the baseline is one capped read
 // of the caller's own rows.
@@ -27,9 +28,11 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 import {
   BASELINE_ROW_LIMIT,
   DRAFT_MAX_INPUT_CHARS,
+  PUBLISH_NETWORKS,
   scoreDraft,
   summarizeBaseline,
   type BaselineRow,
+  type PublishNetwork,
 } from '@/lib/draft-scoring';
 
 const ROUTE = 'POST /api/videos/score-draft';
@@ -37,7 +40,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ScoreDraftBody {
   draft: string;
-  provider?: string;
+  network?: PublishNetwork;
   personaId?: string;
 }
 
@@ -64,11 +67,14 @@ function parseBody(body: unknown): ScoreDraftBody | NextResponse {
       route: ROUTE,
     });
   }
-  const provider = record.provider;
-  if (provider !== undefined && provider !== 'linkedin') {
-    return apiErrorResponse(400, 'provider must be "linkedin" when given; only LinkedIn drafts are scored.', {
+  const network = record.network;
+  if (
+    network !== undefined
+    && (typeof network !== 'string' || !(PUBLISH_NETWORKS as string[]).includes(network))
+  ) {
+    return apiErrorResponse(400, 'network must be one of "linkedin", "youtube", "instagram", "bluesky" when given.', {
       code: ERROR_CODES.VALIDATION_FAILED,
-      field: 'provider',
+      field: 'network',
       route: ROUTE,
     });
   }
@@ -82,7 +88,7 @@ function parseBody(body: unknown): ScoreDraftBody | NextResponse {
   }
   return {
     draft,
-    provider: provider === 'linkedin' ? 'linkedin' : undefined,
+    network: typeof network === 'string' ? (network as PublishNetwork) : undefined,
     personaId: typeof personaId === 'string' ? personaId : undefined,
   };
 }
@@ -90,6 +96,7 @@ function parseBody(body: unknown): ScoreDraftBody | NextResponse {
 async function loadBaseline(
   userId: string,
   personaId: string | undefined,
+  network: PublishNetwork | undefined,
   isScoped: boolean,
   scopedPersonaIds: string[],
 ): Promise<BaselineRow[] | null> {
@@ -111,6 +118,9 @@ async function loadBaseline(
         : select.is('persona_id', null);
     }
     if (personaId !== undefined) select = select.eq('persona_id', personaId);
+    // Filter by network only when one was requested: omitting it keeps
+    // the all-networks baseline the route had before.
+    if (network !== undefined) select = select.eq('provider', network);
     const { data, error } = await select
       .order('collected_at', { ascending: false })
       .limit(BASELINE_ROW_LIMIT);
@@ -153,6 +163,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const rows = await loadBaseline(
     auth.userId,
     parsed.personaId,
+    parsed.network,
     isScopedApiKey(auth),
     auth.personaIds ?? [],
   );
@@ -162,7 +173,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       cause: new Error('post_metrics query failed'),
     });
   }
-  const result = scoreDraft(parsed.draft, summarizeBaseline(rows));
+  const result = scoreDraft(parsed.draft, summarizeBaseline(rows), parsed.network);
   return NextResponse.json({ success: true, ...result });
 }
 

@@ -44,7 +44,7 @@ export async function getPostMetrics(
 
 export interface ScoreDraftInput {
   draft: string;
-  provider?: string;
+  network?: string;
   personaId?: string;
 }
 
@@ -55,7 +55,7 @@ export async function scoreDraft(
   // Same parameter names as the route's body; omitted optionals are not
   // sent (the route rejects empty parameters).
   const body: Record<string, unknown> = { draft: input.draft };
-  if (input.provider !== undefined) body.provider = input.provider;
+  if (input.network !== undefined) body.network = input.network;
   if (input.personaId !== undefined) body.personaId = input.personaId;
   return client.request(
     '/api/videos/score-draft',

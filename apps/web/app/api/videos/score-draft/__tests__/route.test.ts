@@ -81,7 +81,7 @@ beforeEach(() => {
 describe('POST /api/videos/score-draft', () => {
   it('scores a strong draft 100 against the 7d baseline', async () => {
     const { calls, from } = mockQuery([{ data: [row(), row({ views: 50, likes: 0, comments: 0 })], error: null }]);
-    const response = await post({ draft: strongDraft(), provider: 'linkedin' });
+    const response = await post({ draft: strongDraft(), network: 'linkedin' });
 
     expect(response.status).toBe(200);
     expect(from).toHaveBeenCalledWith('post_metrics');
@@ -90,7 +90,7 @@ describe('POST /api/videos/score-draft', () => {
     const payload = (await response.json()) as Record<string, unknown>;
     expect(payload.success).toBe(true);
     expect(payload.score).toBe(100);
-    expect(payload.publishCheck).toEqual({ ok: true, failures: [], warnings: [] });
+    expect(payload.publishCheck).toEqual({ network: 'linkedin', ok: true, failures: [], warnings: [] });
     const baseline = payload.baseline as Record<string, unknown>;
     expect(baseline.postsMeasured).toBe(2);
     expect(baseline.topAngles).toEqual([{ angle: 'Porto mornings', engagement: 165, posts: 2 }]);
@@ -117,15 +117,26 @@ describe('POST /api/videos/score-draft', () => {
     expect(calls).toContainEqual(['eq', 'persona_id', PERSONA]);
   });
 
-  it('rejects an empty draft, an unknown provider and a bad persona id', async () => {
+  it('filters the baseline by network when network is given, and not otherwise', async () => {
+    const { calls } = mockQuery([{ data: [row()], error: null }]);
+    await post({ draft: strongDraft(), network: 'bluesky' });
+    expect(calls).toContainEqual(['eq', 'provider', 'bluesky']);
+
+    const unfiltered = mockQuery([{ data: [row()], error: null }]);
+    await post({ draft: strongDraft() });
+    expect(unfiltered.calls).not.toContainEqual(['eq', 'provider', 'bluesky']);
+    expect(unfiltered.calls).not.toContainEqual(['eq', 'provider', 'linkedin']);
+  });
+
+  it('rejects an empty draft, an unknown network and a bad persona id', async () => {
     mockQuery([]);
     const empty = await post({ draft: '   ' });
     expect(empty.status).toBe(400);
     expect(((await empty.json()) as Record<string, unknown>).field).toBe('draft');
 
-    const provider = await post({ draft: strongDraft(), provider: 'youtube' });
-    expect(provider.status).toBe(400);
-    expect(((await provider.json()) as Record<string, unknown>).field).toBe('provider');
+    const network = await post({ draft: strongDraft(), network: 'tiktok' });
+    expect(network.status).toBe(400);
+    expect(((await network.json()) as Record<string, unknown>).field).toBe('network');
 
     const persona = await post({ draft: strongDraft(), personaId: 'not-a-uuid' });
     expect(persona.status).toBe(400);

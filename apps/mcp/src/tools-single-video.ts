@@ -197,7 +197,7 @@ export const ValidateScriptDescription =
   'Validate a segments script mechanically, without spending tokens: hook first, CTA last, exactly one of each, no placeholders/links/markdown/emoji/stage directions, hook terminal punctuation, word limits (total 60-200, body at least 30, CTA 5-20, hook 15-40 words before TTS). Returns the word counts and the hook window (8-12 seconds spoken). Measured hook duration is pending a hook-only TTS endpoint and is reported as pending, never invented.';
 
 //---------------
-// score_draft — mechanical LinkedIn draft scoring, no tokens spent.
+// score_draft — mechanical draft scoring, no tokens spent.
 //
 // The shape mirrors the web route's body (same names, same caps); the
 // handler does no local pre-check beyond the schema because every signal
@@ -212,11 +212,11 @@ export const ScoreDraftShape = {
     .string()
     .min(1, 'draft is required')
     .max(10000, 'draft must be at most 10000 characters')
-    .describe('The LinkedIn draft text to score (the post body, not a video script).'),
-  provider: z
-    .enum(['linkedin'])
+    .describe('The draft text to score (the post body, not a video script).'),
+  network: z
+    .enum(['linkedin', 'youtube', 'instagram', 'bluesky'])
     .optional()
-    .describe('Only LinkedIn drafts are scored; omit it or pass "linkedin".'),
+    .describe('Network the draft is for; the publish check uses that network\'s rules. Defaults to linkedin.'),
   personaId: z
     .string()
     .refine((value) => SCORE_DRAFT_UUID.test(value), { message: 'personaId must be a uuid' })
@@ -227,7 +227,7 @@ export const ScoreDraftShape = {
 export const ScoreDraftSchema = z.object(ScoreDraftShape);
 
 export const ScoreDraftDescription =
-  'Score a LinkedIn draft mechanically against the caller\'s own measured posts, without spending tokens. Returns a 0-100 score where every point is explained (hook, length, hashtags, slop markers, links, top-theme match, call to action), the baseline it was scored against (top angles by engagement), and the LinkedIn publish check (fails only on an empty draft or the 3000-character post limit; hashtag count, links in the body and the see-more fold are warnings). A failing publish check means: fix the draft before scheduling it for LinkedIn.';
+  'Score a draft mechanically against the caller\'s own measured posts, without spending tokens. Returns a 0-100 score where every point is explained (hook, length, hashtags, slop markers, links, top-theme match, call to action), the baseline it was scored against (top angles by engagement), and the publish check for the requested network (linkedin, youtube, instagram, bluesky): it fails only on an empty draft or the network\'s own ceiling where this repo has evidence for it (LinkedIn 3000 characters, Bluesky 300 graphemes); the rest are warnings. A failing publish check means: fix the draft before scheduling it for that network.';
 
 export async function handleScoreDraft(
   client: PostEngineerClient,
@@ -236,7 +236,7 @@ export async function handleScoreDraft(
   try {
     const result = await scoreDraft(client, {
       draft: args.draft,
-      provider: args.provider,
+      network: args.network,
       personaId: args.personaId,
     });
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };

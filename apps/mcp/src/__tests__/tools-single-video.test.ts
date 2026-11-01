@@ -235,7 +235,7 @@ describe('score_draft tool', () => {
     const request = vi.fn().mockResolvedValue({ success: true, score: 50 });
     await handleScoreDraft(fakeClient(request), {
       draft: 'Draft.',
-      provider: 'linkedin',
+      network: 'linkedin',
       personaId: '11111111-2222-4333-8444-555555555555',
     });
     expect(request).toHaveBeenCalledWith(
@@ -245,7 +245,7 @@ describe('score_draft tool', () => {
         headers: HEADERS,
         body: JSON.stringify({
           draft: 'Draft.',
-          provider: 'linkedin',
+          network: 'linkedin',
           personaId: '11111111-2222-4333-8444-555555555555',
         }),
       },

@@ -1,5 +1,5 @@
 //---------------
-// draft-scoring — mechanical LinkedIn draft scoring + publish check.
+// draft-scoring — mechanical draft scoring + multi-network publish check.
 //
 // No LLM, no paid service, no external call: every signal is computed
 // from the draft text itself plus the caller's own stored post metrics.
@@ -14,6 +14,23 @@
 // the theme bucket scores 0 and says so; it never invents a baseline.
 //---------------
 
+import {
+  BLUESKY_CAPTION_MAX_GRAPHEMES,
+  countBlueskyGraphemes,
+} from './bluesky';
+
+// The four networks Post Engineer publishes to (post_metrics.provider
+// check constraint, migration 025). The scorer buckets are universal;
+// only the publish check varies by network.
+export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky';
+
+export const PUBLISH_NETWORKS: PublishNetwork[] = [
+  'linkedin',
+  'youtube',
+  'instagram',
+  'bluesky',
+];
+
 // LinkedIn's documented standard-post ceiling (LinkedIn Help, via its
 // public limits pages): a standard feed post holds at most 3000
 // characters. Images, video and documents attached to the post do not
@@ -23,6 +40,13 @@ export const LINKEDIN_POST_MAX_CHARS = 3000;
 // mobile) before the "see more" fold: a first line longer than this is
 // a warning, never a failure — the fold is a display cut, not a cap.
 export const LINKEDIN_SEE_MORE_FOLD_CHARS = 210;
+// YouTube and Instagram have no text cap in this repo's publishing
+// code, so their ceilings below are the platforms' documented limits
+// (YouTube video descriptions, Instagram captions) and are warnings
+// only — never invented blocks. Only caps with in-repo evidence
+// (LinkedIn, Bluesky) fail the check.
+export const YOUTUBE_DESCRIPTION_MAX_CHARS = 5000;
+export const INSTAGRAM_CAPTION_MAX_CHARS = 2200;
 // The route rejects drafts over this input cap with a 400 instead of
 // silently truncating (repo rule: never silently truncate/coerce).
 export const DRAFT_MAX_INPUT_CHARS = 10000;
@@ -78,7 +102,8 @@ export interface BaselineRow {
   saves: number | null;
 }
 
-export interface LinkedinPublishCheck {
+export interface PublishCheck {
+  network: PublishNetwork;
   ok: boolean;
   failures: string[];
   warnings: string[];
@@ -99,7 +124,7 @@ export interface DraftScore {
   reasons: DraftScoreReason[];
   counts: DraftCounts;
   baseline: DraftBaseline;
-  publishCheck: LinkedinPublishCheck;
+  publishCheck: PublishCheck;
 }
 
 function countChars(text: string): number {
@@ -204,44 +229,68 @@ export function summarizeBaseline(rows: BaselineRow[]): DraftBaseline {
 }
 
 //---------------
-// checkLinkedinPublish — the blocking LinkedIn gate.
+// checkPublish — the blocking gate, per network.
 //
-// Only platform-enforced facts block: an empty draft and the 3000-char
-// ceiling. Everything else (hashtag count, links in the body, the
-// see-more fold) is a warning: real guidance, but the platform accepts
-// the post, so the gate must not pretend otherwise.
+// Only platform-enforced facts block: an empty draft everywhere, plus
+// the network's own ceiling where this repo has evidence for it
+// (LinkedIn 3000 chars, Bluesky 300 graphemes — the Bluesky publisher
+// truncates past its cap, so an over-long draft would be cut, not
+// posted whole). Everything else is a warning: real guidance, but the
+// platform accepts the post, so the gate must not pretend otherwise.
+// YouTube/Instagram ceilings are warnings only: no in-repo publisher
+// cap exists for them, so a block would be invented.
 //---------------
-export function checkLinkedinPublish(draft: string): LinkedinPublishCheck {
+export function checkPublish(draft: string, network: PublishNetwork): PublishCheck {
   const failures: string[] = [];
   const warnings: string[] = [];
   const chars = countChars(draft);
   if (draft.trim().length === 0) {
     failures.push('Draft is empty.');
   }
-  if (chars > LINKEDIN_POST_MAX_CHARS) {
-    failures.push(
-      `Draft is ${chars} characters, over the LinkedIn ${LINKEDIN_POST_MAX_CHARS}-character post limit.`,
-    );
+  if (network === 'linkedin') {
+    if (chars > LINKEDIN_POST_MAX_CHARS) {
+      failures.push(
+        `Draft is ${chars} characters, over the LinkedIn ${LINKEDIN_POST_MAX_CHARS}-character post limit.`,
+      );
+    }
+    const hashtags = extractHashtags(draft);
+    if (hashtags.length > 10) {
+      warnings.push(
+        `Draft has ${hashtags.length} hashtags; posts with more than 10 read as spam.`,
+      );
+    }
+    const links = extractLinks(draft);
+    if (links.length > 0) {
+      warnings.push(
+        'Draft has a link in the body; LinkedIn demotes link posts — put the link in the first comment instead.',
+      );
+    }
+    const firstLine = draft.split('\n').find((line) => line.trim().length > 0) ?? '';
+    if (countChars(firstLine) > LINKEDIN_SEE_MORE_FOLD_CHARS) {
+      warnings.push(
+        `First line is ${countChars(firstLine)} characters, past the ~${LINKEDIN_SEE_MORE_FOLD_CHARS}-character see-more fold — the hook may be cut in the feed.`,
+      );
+    }
   }
-  const hashtags = extractHashtags(draft);
-  if (hashtags.length > 10) {
+  if (network === 'bluesky') {
+    const graphemes = countBlueskyGraphemes(draft);
+    if (graphemes > BLUESKY_CAPTION_MAX_GRAPHEMES) {
+      failures.push(
+        `Draft is ${graphemes} graphemes, over the Bluesky ${BLUESKY_CAPTION_MAX_GRAPHEMES}-grapheme caption limit — the caption would be cut.`,
+      );
+    }
+  }
+  if (network === 'youtube' && chars > YOUTUBE_DESCRIPTION_MAX_CHARS) {
     warnings.push(
-      `Draft has ${hashtags.length} hashtags; posts with more than 10 read as spam.`,
+      `Draft is ${chars} characters, over YouTube's ${YOUTUBE_DESCRIPTION_MAX_CHARS}-character description limit — the description would be cut.`,
     );
   }
-  const links = extractLinks(draft);
-  if (links.length > 0) {
+  if (network === 'instagram' && chars > INSTAGRAM_CAPTION_MAX_CHARS) {
     warnings.push(
-      'Draft has a link in the body; LinkedIn demotes link posts — put the link in the first comment instead.',
+      `Draft is ${chars} characters, over Instagram's ${INSTAGRAM_CAPTION_MAX_CHARS}-character caption limit — the caption would be cut.`,
     );
   }
-  const firstLine = draft.split('\n').find((line) => line.trim().length > 0) ?? '';
-  if (countChars(firstLine) > LINKEDIN_SEE_MORE_FOLD_CHARS) {
-    warnings.push(
-      `First line is ${countChars(firstLine)} characters, past the ~${LINKEDIN_SEE_MORE_FOLD_CHARS}-character see-more fold — the hook may be cut in the feed.`,
-    );
-  }
-  return { ok: failures.length === 0, failures, warnings };
+  return { network, ok: failures.length === 0, failures, warnings };
 }
 
 //---------------
@@ -252,7 +301,11 @@ export function checkLinkedinPublish(draft: string): LinkedinPublishCheck {
 // returned score: when the raw sum leaves 0-100, a floor/ceiling reason
 // carries the exact adjustment instead of silently clamping.
 //---------------
-export function scoreDraft(draft: string, baseline: DraftBaseline): DraftScore {
+export function scoreDraft(
+  draft: string,
+  baseline: DraftBaseline,
+  network: PublishNetwork = 'linkedin',
+): DraftScore {
   const reasons: DraftScoreReason[] = [];
   const chars = countChars(draft);
   const words = countWords(draft);
@@ -356,6 +409,6 @@ export function scoreDraft(draft: string, baseline: DraftBaseline): DraftScore {
       topThemeMatch,
     },
     baseline,
-    publishCheck: checkLinkedinPublish(draft),
+    publishCheck: checkPublish(draft, network),
   };
 }
