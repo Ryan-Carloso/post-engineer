@@ -80,7 +80,7 @@ describe('scoreDraft', () => {
     expect(result.counts.links).toBe(0);
     expect(result.counts.slopHits).toEqual([]);
     expect(result.counts.topThemeMatch).toBe('Porto mornings');
-    expect(result.publishCheck.ok).toBe(true);
+    expect(result.publishCheck?.ok).toBe(true);
     expect(result.reasons.reduce((sum, reason) => sum + reason.points, 0)).toBe(100);
   });
 
@@ -95,21 +95,21 @@ describe('scoreDraft', () => {
     expect(result.counts.links).toBe(1);
     expect(result.score).toBe(38);
     expect(result.reasons.reduce((sum, reason) => sum + reason.points, 0)).toBe(38);
-    expect(result.publishCheck.ok).toBe(true);
-    expect(result.publishCheck.warnings.length).toBe(2);
+    expect(result.publishCheck?.ok).toBe(true);
+    expect(result.publishCheck?.warnings.length).toBe(2);
   });
 
   it('scores an empty draft 30 and fails the publish check', () => {
     const result = scoreDraft('', EMPTY_BASELINE);
     expect(result.score).toBe(30);
-    expect(result.publishCheck.network).toBe('linkedin');
-    expect(result.publishCheck.ok).toBe(false);
-    expect(result.publishCheck.failures).toEqual(['Draft is empty.']);
+    expect(result.publishCheck?.network).toBe('linkedin');
+    expect(result.publishCheck?.ok).toBe(false);
+    expect(result.publishCheck?.failures).toEqual(['Draft is empty.']);
   });
 
   it('runs the publish check for the requested network, defaulting to linkedin', () => {
-    expect(scoreDraft(strongDraft(), EMPTY_BASELINE).publishCheck.network).toBe('linkedin');
-    expect(scoreDraft(strongDraft(), EMPTY_BASELINE, 'bluesky').publishCheck.network).toBe('bluesky');
+    expect(scoreDraft(strongDraft(), EMPTY_BASELINE).publishCheck?.network).toBe('linkedin');
+    expect(scoreDraft(strongDraft(), EMPTY_BASELINE, 'bluesky').publishCheck?.network).toBe('bluesky');
   });
 });
 
@@ -201,6 +201,58 @@ describe('scoreDraft bucket details', () => {
       'Measured posts have no script angle yet, so no top theme to match.',
     );
     expect(detailOf('Some draft text', 'top_theme')).toBe('No measured posts yet, so no top theme to match.');
+  });
+});
+
+describe('scoreDraft for a video script', () => {
+  function script(hookWords: number, bodyWords: number, cta: string): string {
+    return ['word '.repeat(hookWords).trim() + '.', 'body '.repeat(bodyWords).trim() + '.', cta].join('\n');
+  }
+  const STRONG = script(20, 40, 'Comment below with your favorite morning ritual today');
+  const THEMED: DraftBaseline = {
+    ...EMPTY_BASELINE,
+    postsMeasured: 1,
+    topAngles: [{ angle: 'Morning ritual', engagement: 10, posts: 1 }],
+  };
+
+  it('scores a contract-perfect script 100 without hashtags, with no hashtag reason', () => {
+    const result = scoreDraft(STRONG, THEMED, 'linkedin', 'script');
+    expect(result.score).toBe(100);
+    expect(result.reasons.map((reason) => [reason.rule, reason.points])).toEqual([
+      ['hook', 25], ['length', 20], ['slop_free', 25], ['links', 10], ['top_theme', 15], ['call_to_action', 5],
+    ]);
+    expect(result.reasons.some((reason) => reason.rule === 'hashtags')).toBe(false);
+  });
+
+  it('caps the same text at 85 as a post, which is why scripts have their own profile', () => {
+    expect(scoreDraft(STRONG, THEMED).reasons.find((reason) => reason.rule === 'hashtags')?.points).toBe(0);
+  });
+
+  it('returns a null publish check for a script and a real one for a post', () => {
+    expect(scoreDraft(STRONG, THEMED, 'bluesky', 'script').publishCheck).toBeNull();
+    expect(scoreDraft(STRONG, THEMED, 'bluesky', 'post').publishCheck?.network).toBe('bluesky');
+  });
+
+  it.each([
+    [14, 5], [15, 25], [40, 25], [41, 5],
+  ])('scores a %i-word hook %i points', (hookWords, points) => {
+    const result = scoreDraft(script(hookWords, 40, 'Share this.'), EMPTY_BASELINE, 'linkedin', 'script');
+    expect(result.reasons.find((reason) => reason.rule === 'hook')?.points).toBe(points);
+  });
+
+  it.each([
+    [39, 0], [40, 8], [59, 8], [60, 20], [200, 20], [201, 8], [250, 8], [251, 0],
+  ])('scores %i total words %i length points', (total, points) => {
+    const result = scoreDraft(script(20, total - 22, 'Share this.'), EMPTY_BASELINE, 'linkedin', 'script');
+    expect(result.counts.words).toBe(total);
+    expect(result.reasons.find((reason) => reason.rule === 'length')?.points).toBe(points);
+  });
+
+  it('takes slop points from the script weight and floors at 0', () => {
+    const points = (text: string): number | undefined =>
+      scoreDraft(text, EMPTY_BASELINE, 'linkedin', 'script').reasons.find((reason) => reason.rule === 'slop_free')?.points;
+    expect(points('Let us delve here')).toBe(20);
+    expect(points('delve moreover furthermore additionally ultimately crucial')).toBe(0);
   });
 });
 

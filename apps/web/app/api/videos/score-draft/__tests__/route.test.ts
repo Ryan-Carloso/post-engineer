@@ -24,7 +24,7 @@ vi.mock('@/lib/posthog-server', () => ({
 import { POST } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { BASELINE_ROW_LIMIT, DRAFT_MAX_INPUT_CHARS, PUBLISH_NETWORKS } from '@/lib/draft-scoring';
+import { BASELINE_ROW_LIMIT, DRAFT_KINDS, DRAFT_MAX_INPUT_CHARS, PUBLISH_NETWORKS } from '@/lib/draft-scoring';
 import { findRepoRoot } from '@/test/repo-root';
 
 const PERSONA = '11111111-2222-4333-8444-555555555555';
@@ -184,6 +184,7 @@ describe('POST /api/videos/score-draft', () => {
       'utf8',
     );
     expect(mcpSource).toContain(`.max(${DRAFT_MAX_INPUT_CHARS}, 'draft must be at most ${DRAFT_MAX_INPUT_CHARS} characters')`);
+    expect(mcpSource).toContain(`.enum([${DRAFT_KINDS.map((kind) => `'${kind}'`).join(', ')}])`);
     expect(mcpSource).toContain(`.enum([${PUBLISH_NETWORKS.map((network) => `'${network}'`).join(', ')}])`);
   });
 
@@ -211,6 +212,28 @@ describe('POST /api/videos/score-draft', () => {
     const persona = await post({ draft: strongDraft(), personaId: 'not-a-uuid' });
     expect(persona.status).toBe(400);
     expect(((await persona.json()) as Record<string, unknown>).field).toBe('personaId');
+  });
+
+  it('scores a script with kind script and returns a null publish check', async () => {
+    mockQuery([{ data: [row()], error: null }]);
+    const response = await post({ draft: strongDraft(), kind: 'script' });
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as { publishCheck: unknown; reasons: Array<{ rule: string }> };
+    expect(payload.publishCheck).toBeNull();
+    expect(payload.reasons.some((reason) => reason.rule === 'hashtags')).toBe(false);
+  });
+
+  it('defaults to a post when kind is omitted', async () => {
+    mockQuery([{ data: [row()], error: null }]);
+    const payload = (await (await post({ draft: strongDraft() })).json()) as { publishCheck: unknown };
+    expect(payload.publishCheck).not.toBeNull();
+  });
+
+  it('rejects an unknown kind', async () => {
+    mockQuery([]);
+    const response = await post({ draft: strongDraft(), kind: 'caption' });
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as Record<string, unknown>).field).toBe('kind');
   });
 
   it('returns 500 when the baseline query fails', async () => {

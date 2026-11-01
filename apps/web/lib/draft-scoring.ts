@@ -24,6 +24,20 @@ import {
 // only the publish check varies by network.
 export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky';
 
+// What the text is: a post body, or a video script (segments joined by
+// newlines, hook first, CTA last). A script is spoken, so hashtags do not
+// apply and the caption publish check would be vacuous.
+export type DraftKind = 'post' | 'script';
+export const DRAFT_KINDS: DraftKind[] = ['post', 'script'];
+
+// Script ranges mirror the segments contract (hook 15-40 words, 60-200 in
+// total). The freed hashtag points go to hook, length and slop, so both
+// profiles still top out at exactly 100.
+const SCORE_PROFILES = {
+  post: { hook: 20, hookWords: [3, 30], length: 15, words: [40, 400], nearWords: [20, 600], slop: 20 },
+  script: { hook: 25, hookWords: [15, 40], length: 20, words: [60, 200], nearWords: [40, 250], slop: 25 },
+} as const;
+
 export const PUBLISH_NETWORKS: PublishNetwork[] = [
   'linkedin',
   'youtube',
@@ -127,7 +141,8 @@ export interface DraftScore {
   reasons: DraftScoreReason[];
   counts: DraftCounts;
   baseline: DraftBaseline;
-  publishCheck: PublishCheck;
+  // Null for a script: caption limits do not apply to spoken text.
+  publishCheck: PublishCheck | null;
 }
 
 function countChars(text: string): number {
@@ -344,8 +359,9 @@ export function checkPublish(draft: string, network: PublishNetwork): PublishChe
 //---------------
 // scoreDraft — 0-100 from mechanical signals, every point explained.
 //
-// Buckets: hook 20, length 15, hashtags 15, slop-free 20, links 10,
-// top-theme match 15, call to action 5. Each bucket emits exactly one
+// Post buckets: hook 20, length 15, hashtags 15, slop-free 20, links 10,
+// top-theme match 15, call to action 5. Script buckets: hook 25, length 20,
+// slop-free 25, links 10, top-theme match 15, call to action 5. Each bucket emits exactly one
 // reason inside its own range, so the reasons always sum to the score and
 // the score cannot leave 0-100.
 //---------------
@@ -353,7 +369,9 @@ export function scoreDraft(
   draft: string,
   baseline: DraftBaseline,
   network: PublishNetwork = 'linkedin',
+  kind: DraftKind = 'post',
 ): DraftScore {
+  const profile = SCORE_PROFILES[kind];
   const reasons: DraftScoreReason[] = [];
   const chars = countChars(draft);
   const words = countWords(draft);
@@ -365,27 +383,30 @@ export function scoreDraft(
   const firstLineWords = countWords(firstLine);
   const lastLine = closingText(lines);
 
-  if (firstLineWords >= 3 && firstLineWords <= 30) {
-    reasons.push({ rule: 'hook', detail: `First line is ${firstLineWords} words.`, points: 20 });
+  if (firstLineWords >= profile.hookWords[0] && firstLineWords <= profile.hookWords[1]) {
+    reasons.push({ rule: 'hook', detail: `First line is ${firstLineWords} words.`, points: profile.hook });
   } else if (firstLineWords >= 1) {
     reasons.push({
       rule: 'hook',
-      detail: `First line is ${firstLineWords} words; hooks land best at 3-30 words.`,
+      detail: `First line is ${firstLineWords} words; hooks land best at ${profile.hookWords.join('-')} words.`,
       points: 5,
     });
   } else {
     reasons.push({ rule: 'hook', detail: 'No first line to hook with.', points: 0 });
   }
 
-  if (words >= 40 && words <= 400) {
-    reasons.push({ rule: 'length', detail: `Draft is ${words} words.`, points: 15 });
-  } else if ((words >= 20 && words < 40) || (words > 400 && words <= 600)) {
-    reasons.push({ rule: 'length', detail: `Draft is ${words} words; 40-400 reads best.`, points: 8 });
+  const lengthHint = `Draft is ${words} words; ${profile.words.join('-')} reads best.`;
+  if (words >= profile.words[0] && words <= profile.words[1]) {
+    reasons.push({ rule: 'length', detail: `Draft is ${words} words.`, points: profile.length });
+  } else if (words >= profile.nearWords[0] && words <= profile.nearWords[1]) {
+    reasons.push({ rule: 'length', detail: lengthHint, points: 8 });
   } else {
-    reasons.push({ rule: 'length', detail: `Draft is ${words} words; 40-400 reads best.`, points: 0 });
+    reasons.push({ rule: 'length', detail: lengthHint, points: 0 });
   }
 
-  if (hashtags.length >= 1 && hashtags.length <= 5) {
+  if (kind === 'script') {
+    // No hashtag bucket: the script contract forbids them (validate_script).
+  } else if (hashtags.length >= 1 && hashtags.length <= 5) {
     reasons.push({ rule: 'hashtags', detail: `Draft has ${hashtags.length} hashtags.`, points: 15 });
   } else if (hashtags.length >= 6 && hashtags.length <= 10) {
     reasons.push({ rule: 'hashtags', detail: `Draft has ${hashtags.length} hashtags; 1-5 reads best.`, points: 8 });
@@ -396,13 +417,13 @@ export function scoreDraft(
   }
 
   if (slopHits.length === 0) {
-    reasons.push({ rule: 'slop_free', detail: 'No slop markers found.', points: 20 });
+    reasons.push({ rule: 'slop_free', detail: 'No slop markers found.', points: profile.slop });
   } else {
     reasons.push({
       rule: 'slop_free',
       detail: `Slop markers found: ${slopHits.map((hit) => `"${hit}"`).join(', ')}.`,
       // -5 per marker, floored at 0 so slop cannot eat other buckets' points.
-      points: Math.max(0, 20 - slopHits.length * 5),
+      points: Math.max(0, profile.slop - slopHits.length * 5),
     });
   }
 
@@ -457,6 +478,6 @@ export function scoreDraft(
       topThemeMatch,
     },
     baseline,
-    publishCheck: checkPublish(draft, network),
+    publishCheck: kind === 'script' ? null : checkPublish(draft, network),
   };
 }

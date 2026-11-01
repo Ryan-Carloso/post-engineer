@@ -46,6 +46,7 @@ export interface ScoreDraftInput {
   draft: string;
   network?: string;
   personaId?: string;
+  kind?: string;
 }
 
 export async function scoreDraft(
@@ -57,6 +58,7 @@ export async function scoreDraft(
   const body: Record<string, unknown> = { draft: input.draft };
   if (input.network !== undefined) body.network = input.network;
   if (input.personaId !== undefined) body.personaId = input.personaId;
+  if (input.kind !== undefined) body.kind = input.kind;
   return client.request(
     '/api/videos/score-draft',
     { method: 'POST', headers: client.getHeaders(), body: JSON.stringify(body) },

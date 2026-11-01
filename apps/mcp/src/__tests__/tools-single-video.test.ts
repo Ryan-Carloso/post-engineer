@@ -237,6 +237,7 @@ describe('score_draft tool', () => {
       draft: 'Draft.',
       network: 'linkedin',
       personaId: '11111111-2222-4333-8444-555555555555',
+      kind: 'script',
     });
     expect(request).toHaveBeenCalledWith(
       '/api/videos/score-draft',
@@ -247,6 +248,7 @@ describe('score_draft tool', () => {
           draft: 'Draft.',
           network: 'linkedin',
           personaId: '11111111-2222-4333-8444-555555555555',
+          kind: 'script',
         }),
       },
       'score draft',

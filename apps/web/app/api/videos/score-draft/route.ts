@@ -8,7 +8,8 @@
 // external call on this path at all — the baseline is one capped read
 // of the caller's own rows, plus one ownership read when personaId is given.
 //
-// A failing publish check does NOT make this route 400: scoring is
+// A script (kind: 'script') gets `publishCheck: null`: caption limits do not
+// apply to spoken text. A failing publish check does NOT make this route 400: scoring is
 // advisory, and the caller (agent or UI) decides whether to fix the
 // draft. The check result is in the response as `publishCheck`, with
 // `ok: false` and the exact failures, so a pre-publish gate can block
@@ -28,11 +29,13 @@ import { UUID } from '@/lib/metrics/metrics-query';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import {
   BASELINE_ROW_LIMIT,
+  DRAFT_KINDS,
   DRAFT_MAX_INPUT_CHARS,
   PUBLISH_NETWORKS,
   scoreDraft,
   summarizeBaseline,
   type BaselineRow,
+  type DraftKind,
   type PublishNetwork,
 } from '@/lib/draft-scoring';
 
@@ -42,6 +45,7 @@ interface ScoreDraftBody {
   draft: string;
   network?: PublishNetwork;
   personaId?: string;
+  kind?: DraftKind;
 }
 
 function parseBody(body: unknown): ScoreDraftBody | NextResponse {
@@ -86,8 +90,17 @@ function parseBody(body: unknown): ScoreDraftBody | NextResponse {
       route: ROUTE,
     });
   }
+  const kind = record.kind;
+  if (kind !== undefined && (typeof kind !== 'string' || !(DRAFT_KINDS as string[]).includes(kind))) {
+    return apiErrorResponse(400, 'kind must be "post" or "script" when given.', {
+      code: ERROR_CODES.VALIDATION_FAILED,
+      field: 'kind',
+      route: ROUTE,
+    });
+  }
   return {
     draft,
+    kind: typeof kind === 'string' ? (kind as DraftKind) : undefined,
     network: typeof network === 'string' ? (network as PublishNetwork) : undefined,
     personaId: typeof personaId === 'string' ? personaId : undefined,
   };
@@ -206,7 +219,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       cause: new Error('post_metrics query failed'),
     });
   }
-  const result = scoreDraft(parsed.draft, summarizeBaseline(loaded.rows, loaded.truncated), parsed.network);
+  const result = scoreDraft(parsed.draft, summarizeBaseline(loaded.rows, loaded.truncated), parsed.network, parsed.kind);
   return NextResponse.json({ success: true, ...result });
 }
 

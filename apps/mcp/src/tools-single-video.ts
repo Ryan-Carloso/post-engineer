@@ -212,7 +212,7 @@ export const ScoreDraftShape = {
     .string()
     .min(1, 'draft is required')
     .max(10000, 'draft must be at most 10000 characters')
-    .describe('The draft text to score (the post body, not a video script).'),
+    .describe('The text to score: a post body, or with kind "script" the video segments joined by newlines, hook first, CTA last.'),
   network: z
     .enum(['linkedin', 'youtube', 'instagram', 'bluesky'])
     .optional()
@@ -222,12 +222,13 @@ export const ScoreDraftShape = {
     .refine((value) => SCORE_DRAFT_UUID.test(value), { message: 'personaId must be a uuid' })
     .optional()
     .describe('Optional persona id: score against that persona\'s measured posts only.'),
+  kind: z.enum(['post', 'script']).optional().describe('What the text is. Defaults to post.'),
 };
 
 export const ScoreDraftSchema = z.object(ScoreDraftShape);
 
 export const ScoreDraftDescription =
-  'Score a draft mechanically against the caller\'s own measured posts, without spending tokens. Returns a 0-100 score where every point is explained (hook, length, hashtags, slop markers, links, top-theme match, call to action), the baseline it was scored against (top angles by engagement), and the publish check for the requested network (linkedin, youtube, instagram, bluesky): it fails only on an empty draft or the network\'s own ceiling where this repo has evidence for it (LinkedIn 3000 characters, Bluesky 300 graphemes); the rest are warnings. A failing publish check means: fix the draft before scheduling it for that network.';
+  'Score a draft mechanically against the caller\'s own measured posts, without spending tokens. Returns a 0-100 score where every point is explained (hook, length, hashtags, slop markers, links, top-theme match, call to action), the baseline it was scored against (top angles by engagement), and the publish check for the requested network (linkedin, youtube, instagram, bluesky): it fails only on an empty draft or the network\'s own ceiling where this repo has evidence for it (LinkedIn 3000 characters, Bluesky 300 graphemes); the rest are warnings. A failing publish check means: fix the draft before scheduling it for that network. Pass kind \'script\' for a video script (segments joined by newlines, hook first, CTA last): hashtags are not scored and publishCheck is null.';
 
 export async function handleScoreDraft(
   client: PostEngineerClient,
@@ -238,6 +239,7 @@ export async function handleScoreDraft(
       draft: args.draft,
       network: args.network,
       personaId: args.personaId,
+      kind: args.kind,
     });
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
   } catch (error) {
