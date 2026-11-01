@@ -42,7 +42,7 @@ import {
   SetPersonaPublishingAccountsShape,
 } from '../tools-publishing-accounts.js';
 import { GetClonedVoiceShape } from '../cloned-voice-tools.js';
-import { GeneratePersonaVideoShape, ValidateScriptShape } from '../tools-single-video.js';
+import { GeneratePersonaVideoShape, ValidateScriptShape, ScoreDraftShape } from '../tools-single-video.js';
 import { CheckMediaShape, UploadMediaShape } from '../tools-user-media.js';
 import { GetPostShape, GetPostMetricsShape } from '../tools-posts.js';
 import { CancelVideoTaskShape } from '../video-task-tools.js';
@@ -91,6 +91,7 @@ const EXPECTED_TOOLS = [
   'get_token_balance',
   'generate_persona_video',
   'validate_script',
+  'score_draft',
   'upload_media',
   'check_media',
   'get_video_status',
@@ -283,6 +284,7 @@ describe('registered tool schemas (single source of truth)', () => {
       get_token_balance: GetTokenBalanceShape,
       generate_persona_video: GeneratePersonaVideoShape,
       validate_script: ValidateScriptShape,
+      score_draft: ScoreDraftShape,
       upload_media: UploadMediaShape,
       check_media: CheckMediaShape,
       get_video_status: GetVideoStatusShape,

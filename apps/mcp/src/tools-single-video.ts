@@ -12,6 +12,7 @@
 // duration and does not call Modal.
 import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
+import { scoreDraft } from './client-posts.js';
 import { getErrorMessage } from './errors.js';
 import { sanitizeEngineError } from './tools.js';
 import type { McpToolResponse } from './tools-call.js';
@@ -194,3 +195,57 @@ function narrowScheduledVideos(result: unknown): {
 // /api/videos/generate-and-schedule.
 export const ValidateScriptDescription =
   'Validate a segments script mechanically, without spending tokens: hook first, CTA last, exactly one of each, no placeholders/links/markdown/emoji/stage directions, hook terminal punctuation, word limits (total 60-200, body at least 30, CTA 5-20, hook 15-40 words before TTS). Returns the word counts and the hook window (8-12 seconds spoken). Measured hook duration is pending a hook-only TTS endpoint and is reported as pending, never invented.';
+
+//---------------
+// score_draft — mechanical draft scoring, no tokens spent.
+//
+// The shape mirrors the web route's body (same names, same caps); the
+// handler does no local pre-check beyond the schema because every signal
+// needs the server-side baseline (the caller's own stored post metrics).
+// The route really is called through the client, so the parity graph
+// maps score_draft to POST /api/videos/score-draft.
+//---------------
+const SCORE_DRAFT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const ScoreDraftShape = {
+  draft: z
+    .string()
+    .min(1, 'draft is required')
+    .max(10000, 'draft must be at most 10000 characters')
+    .describe('The text to score: a post body, or with kind "script" the video segments joined by newlines, hook first, CTA last.'),
+  network: z
+    .enum(['linkedin', 'youtube', 'instagram', 'bluesky'])
+    .optional()
+    .describe('Network the draft is for; the publish check uses that network\'s rules. Defaults to linkedin.'),
+  personaId: z
+    .string()
+    .refine((value) => SCORE_DRAFT_UUID.test(value), { message: 'personaId must be a uuid' })
+    .optional()
+    .describe('Optional persona id: score against that persona\'s measured posts only.'),
+  kind: z.enum(['post', 'script']).optional().describe('What the text is. Defaults to post.'),
+};
+
+export const ScoreDraftSchema = z.object(ScoreDraftShape);
+
+export const ScoreDraftDescription =
+  'Score a draft mechanically against the caller\'s own measured posts, without spending tokens. Returns a 0-100 score where every point is explained (hook, length, hashtags, slop markers, links, top-theme match, call to action), the baseline it was scored against (top angles by engagement), and the publish check for the requested network (linkedin, youtube, instagram, bluesky): it fails only on an empty draft or the network\'s own ceiling where this repo has evidence for it (LinkedIn 3000 characters, Bluesky 300 graphemes); the rest are warnings. A failing publish check means: fix the draft before scheduling it for that network. Pass kind \'script\' for a video script (segments joined by newlines, hook first, CTA last): hashtags are not scored and publishCheck is null.';
+
+export async function handleScoreDraft(
+  client: PostEngineerClient,
+  args: z.infer<typeof ScoreDraftSchema>,
+): Promise<McpToolResponse> {
+  try {
+    const result = await scoreDraft(client, {
+      draft: args.draft,
+      network: args.network,
+      personaId: args.personaId,
+      kind: args.kind,
+    });
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+  } catch (error) {
+    // Same sanitizing error path as handleValidateScript: a thrown
+    // endpoint error must never carry credential-shaped material to the
+    // agent.
+    return errorResponse(`Error scoring draft: ${sanitizeEngineError(getErrorMessage(error))}`);
+  }
+}
