@@ -8,7 +8,7 @@ import { resolveScriptLanguage, useUploadStore } from '@/lib/store';
 describe('useUploadStore', () => {
   beforeEach(() => {
     useUploadStore.setState({
-      selectedAccountIds: { youtube: [], instagram: [], bluesky: [], linkedin: [] },
+      selectedAccountIds: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [] },
       mode: 'youtube',
       file: null,
       title: '',
@@ -59,6 +59,7 @@ describe('useUploadStore', () => {
         instagram: ['ig-1'],
         bluesky: [],
         linkedin: [],
+        threads: [],
       });
     });
 
@@ -72,6 +73,7 @@ describe('useUploadStore', () => {
         instagram: ['ig-1'],
         bluesky: [],
         linkedin: [],
+        threads: [],
       });
     });
 
@@ -84,6 +86,7 @@ describe('useUploadStore', () => {
         instagram: [],
         bluesky: [],
         linkedin: [],
+        threads: [],
       });
     });
   });
@@ -114,6 +117,7 @@ describe('useUploadStore', () => {
         instagram: ['ig-1'],
         bluesky: [],
         linkedin: [],
+        threads: [],
       });
     });
 
@@ -128,6 +132,7 @@ describe('useUploadStore', () => {
         instagram: [],
         bluesky: [],
         linkedin: [],
+        threads: [],
       });
     });
   });
@@ -227,6 +232,7 @@ describe('useUploadStore', () => {
         instagram: [],
         bluesky: [],
         linkedin: [],
+        threads: [],
       });
     });
 
@@ -240,6 +246,7 @@ describe('useUploadStore', () => {
         instagram: ['ig-1'],
         bluesky: [],
         linkedin: [],
+        threads: [],
       });
     });
 
@@ -253,6 +260,7 @@ describe('useUploadStore', () => {
         instagram: [],
         bluesky: [],
         linkedin: [],
+        threads: [],
       });
     });
   });

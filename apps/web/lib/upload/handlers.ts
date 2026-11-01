@@ -287,7 +287,7 @@ function cleanupOldUploads(): void {
   })();
 }
 
-async function uploadToStorage(
+export async function uploadToStorage(
   buffer: Buffer,
   filename: string,
   contentType: string,

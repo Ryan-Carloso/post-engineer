@@ -2,7 +2,7 @@
 // POST /api/videos/score-draft — mechanical draft scoring.
 //
 // Scores one draft against the caller's own measured posts (post_metrics)
-// and runs the publish check for the requested network (linkedin,
+// and runs the publish check for the requested network (linkedin, threads,
 // youtube, instagram, bluesky). It never debits tokens, never
 // schedules, never calls the engine: there is no database write and no
 // external call on this path at all — the baseline is one capped read
@@ -76,7 +76,7 @@ function parseBody(body: unknown): ScoreDraftBody | NextResponse {
     network !== undefined
     && (typeof network !== 'string' || !(PUBLISH_NETWORKS as string[]).includes(network))
   ) {
-    return apiErrorResponse(400, 'network must be one of "linkedin", "youtube", "instagram", "bluesky" when given.', {
+    return apiErrorResponse(400, 'network must be one of "linkedin", "youtube", "instagram", "bluesky", "threads" when given.', {
       code: ERROR_CODES.VALIDATION_FAILED,
       field: 'network',
       route: ROUTE,

@@ -16,10 +16,10 @@
 
 import { BLUESKY_CAPTION_MAX_GRAPHEMES, countBlueskyGraphemes } from './bluesky';
 
-// The four networks Post Engineer publishes to (post_metrics.provider
-// check constraint, migration 025). The scorer buckets are universal;
+// The five networks Post Engineer publishes to (post_metrics.provider
+// check constraint, migration 034). The scorer buckets are universal;
 // only the publish check varies by network.
-export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky';
+export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky' | 'threads';
 
 // What the text is: a post body, or a video script (segments joined by
 // newlines, hook first, CTA last). A script is spoken, so hashtags do not
@@ -35,13 +35,15 @@ const SCORE_PROFILES = {
   script: { hook: 25, hookWords: [15, 40], length: 20, words: [60, 200], nearWords: [40, 250], slop: 25 },
 } as const;
 
-export const PUBLISH_NETWORKS: PublishNetwork[] = ['linkedin', 'youtube', 'instagram', 'bluesky'];
+export const PUBLISH_NETWORKS: PublishNetwork[] = ['linkedin', 'youtube', 'instagram', 'bluesky', 'threads'];
 
 // LinkedIn's documented standard-post ceiling (LinkedIn Help, via its
 // public limits pages): a standard feed post holds at most 3000
 // characters. Images, video and documents attached to the post do not
 // consume characters.
 export const LINKEDIN_POST_MAX_CHARS = 3000;
+// Threads' documented text ceiling; lib/threads.ts and the engine pin the same value.
+export const THREADS_POST_MAX_CHARS = 500;
 // The feed shows roughly the first 210 characters on desktop (~140 on
 // mobile) before the "see more" fold: a first line longer than this is
 // a warning, never a failure — the fold is a display cut, not a cap.
@@ -50,7 +52,7 @@ export const LINKEDIN_SEE_MORE_FOLD_CHARS = 210;
 // code, so their ceilings below are the platforms' documented limits
 // (YouTube video descriptions, Instagram captions) and are warnings
 // only — never invented blocks. Only caps with in-repo evidence
-// (LinkedIn, Bluesky) fail the check.
+// (LinkedIn, Bluesky, Threads) fail the check.
 export const YOUTUBE_DESCRIPTION_MAX_CHARS = 5000;
 export const INSTAGRAM_CAPTION_MAX_CHARS = 2200;
 // The route rejects drafts over this input cap with a 400 instead of
@@ -288,7 +290,7 @@ export function summarizeBaseline(rows: BaselineRow[], truncated: boolean): Draf
 //
 // Only platform-enforced facts block: an empty draft everywhere, plus
 // the network's own ceiling where this repo has evidence for it
-// (LinkedIn 3000 chars, Bluesky 300 graphemes — the Bluesky publisher
+// (LinkedIn 3000 chars, Threads 500 chars, Bluesky 300 graphemes — the Bluesky publisher
 // truncates past its cap, so an over-long draft would be cut, not
 // posted whole). Everything else is a warning: real guidance, but the
 // platform accepts the post, so the gate must not pretend otherwise.
@@ -334,6 +336,11 @@ export function checkPublish(draft: string, network: PublishNetwork): PublishChe
         `Draft is ${graphemes} graphemes, over the Bluesky ${BLUESKY_CAPTION_MAX_GRAPHEMES}-grapheme caption limit — the caption would be cut.`,
       );
     }
+  }
+  if (network === 'threads' && chars > THREADS_POST_MAX_CHARS) {
+    failures.push(
+      `Draft is ${chars} characters, over the Threads ${THREADS_POST_MAX_CHARS}-character post limit.`,
+    );
   }
   if (network === 'youtube' && chars > YOUTUBE_DESCRIPTION_MAX_CHARS) {
     warnings.push(

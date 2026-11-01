@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { createSupabaseClient } from '@/lib/supabase/client';
 import { useUploadStore } from '@/lib/store';
-import type { PublicAccountItem, BlueskyAccountData, LinkedinAccountData } from '@/lib/providers/registry';
+import type { PublicAccountItem, BlueskyAccountData, LinkedinAccountData, ThreadsAccountData } from '@/lib/providers/registry';
+import { mapSchedule, type ScheduleRow } from '@/lib/schedule-row';
 import type {
   AccountResponse,
   AccountData,
@@ -574,6 +575,7 @@ const selectYouTubeAccounts = selectProviderAccounts<AccountData>('youtube');
 const selectInstagramAccounts = selectProviderAccounts<InstagramAccountData>('instagram');
 const selectBlueskyAccounts = selectProviderAccounts<BlueskyAccountData>('bluesky');
 const selectLinkedinAccounts = selectProviderAccounts<LinkedinAccountData>('linkedin');
+const selectThreadsAccounts = selectProviderAccounts<ThreadsAccountData>('threads');
 export function useYouTubeAccountsQuery(): UseQueryResult<AccountResponse, Error> {
   return useSocialAccountsQuery(selectYouTubeAccounts);
 }
@@ -593,6 +595,15 @@ export interface LinkedinAccountResponse {
 
 export function useLinkedinAccountsQuery(): UseQueryResult<LinkedinAccountResponse, Error> {
   return useSocialAccountsQuery(selectLinkedinAccounts);
+}
+
+export interface ThreadsAccountResponse {
+  authenticated: boolean;
+  accounts: ThreadsAccountData[];
+}
+
+export function useThreadsAccountsQuery(): UseQueryResult<ThreadsAccountResponse, Error> {
+  return useSocialAccountsQuery(selectThreadsAccounts);
 }
 
 //---------------
@@ -670,6 +681,7 @@ export interface ScheduleConfig {
   instagramAccountIds: string[];
   linkedinAccountIds: string[];
   blueskyAccountIds: string[];
+  threadsAccountIds: string[];
   daysOfWeek: number[];
   startHour: number | null;
   endHour: number | null;
@@ -706,25 +718,6 @@ export interface ScheduledSlot {
   retryable: boolean | null;
 }
 
-interface ScheduleRow {
-  id: string;
-  /** Null for a schedule created without a persona (migration 012). */
-  persona_id: string | null;
-  providers: string[];
-  youtube_account_ids: string[];
-  instagram_account_ids: string[];
-  linkedin_account_ids: string[];
-  bluesky_account_ids: string[];
-  days_of_week: number[] | null;
-  start_hour: number | null;
-  end_hour: number | null;
-  posts_per_day: number;
-  timezone: string;
-  active: boolean;
-  /** Migration 015. Read defensively: only the literal 'asap' counts. */
-  publish_mode: string | null;
-}
-
 interface SlotRow {
   id: string;
   schedule_id: string;
@@ -739,25 +732,6 @@ interface SlotRow {
   queuePosition?: number | null;
   queueTotal?: number | null;
   retryable?: boolean | null;
-}
-
-function mapSchedule(row: ScheduleRow): ScheduleConfig {
-  return {
-    id: row.id,
-    personaId: row.persona_id,
-    providers: row.providers,
-    youtubeAccountIds: row.youtube_account_ids ?? [],
-    instagramAccountIds: row.instagram_account_ids ?? [],
-    linkedinAccountIds: row.linkedin_account_ids ?? [],
-    blueskyAccountIds: row.bluesky_account_ids ?? [],
-    daysOfWeek: row.days_of_week ?? [],
-    startHour: row.start_hour ?? null,
-    endHour: row.end_hour ?? null,
-    postsPerDay: row.posts_per_day,
-    timezone: row.timezone,
-    active: row.active,
-    publishMode: row.publish_mode === 'asap' ? 'asap' : 'scheduled',
-  };
 }
 
 async function fetchSchedules(): Promise<ScheduleConfig[]> {
@@ -1037,6 +1011,7 @@ export interface SlotDetailPayload {
     instagramAccountIds: string[];
     linkedinAccountIds: string[];
     blueskyAccountIds: string[];
+    threadsAccountIds: string[];
     // The schedule's IANA timezone — the detail page renders the slot time
     // in this zone so "10:00" is never ambiguous about whose 10:00 it is.
     timezone: string;

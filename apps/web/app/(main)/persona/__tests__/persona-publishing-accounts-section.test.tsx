@@ -68,6 +68,7 @@ vi.mock('@/lib/api', () => ({
   useInstagramAccountsQuery: () => mockQueries.instagram,
   useBlueskyAccountsQuery: () => mockQueries.bluesky,
   useLinkedinAccountsQuery: () => mockQueries.linkedin,
+  useThreadsAccountsQuery: () => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null }),
 }));
 
 import { PersonaPublishingAccountsSection } from '../persona-publishing-accounts-section';
@@ -98,7 +99,7 @@ const connectedAccounts = {
 
 const serverDefaults = {
   success: true,
-  defaults: { youtube: ['UC-1'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [] },
+  defaults: { youtube: ['UC-1'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [] },
 };
 
 function mockFetchOnce(body: unknown, ok = true, status = 200) {
@@ -221,7 +222,7 @@ describe('PersonaPublishingAccountsSection', () => {
       json: () =>
         Promise.resolve({
           success: true,
-          defaults: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [] },
+          defaults: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [] },
         }),
     });
     fireEvent.click(screen.getByTestId('publishing-accounts-save'));
@@ -232,7 +233,7 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [] },
+            accounts: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [] },
           }),
         }),
       );
@@ -261,8 +262,10 @@ describe('PersonaPublishingAccountsSection', () => {
     await screen.findByTestId('publishing-accounts-save');
 
     expect(screen.getByText('No LinkedIn accounts connected.')).toBeInTheDocument();
-    const link = screen.getByRole('link', { name: 'Connect accounts' });
-    expect(link).toHaveAttribute('href', '/accounts');
+    expect(screen.getByText('No Threads accounts connected.')).toBeInTheDocument();
+    for (const link of screen.getAllByRole('link', { name: 'Connect accounts' })) {
+      expect(link).toHaveAttribute('href', '/accounts');
+    }
   });
 
   it('disables Save while the connected accounts are still loading', async () => {
@@ -281,7 +284,7 @@ describe('PersonaPublishingAccountsSection', () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: () => Promise.resolve({ success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [] } }),
+      json: () => Promise.resolve({ success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [] } }),
     });
     rerender(<PersonaPublishingAccountsSection personaId="22222222-3333-4444-5555-666666666666" />);
     await waitFor(() => {
@@ -290,7 +293,7 @@ describe('PersonaPublishingAccountsSection', () => {
   });
 
   it('renders and toggles linkedin accounts', async () => {
-    mockFetchOnce({ success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [] } });
+    mockFetchOnce({ success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [] } });
     mockQueries.linkedin = {
       data: { accounts: [{ provider: 'linkedin', providerAccountId: 'li-1', accountName: 'Li One' }] },
       isLoading: false,
@@ -309,7 +312,7 @@ describe('PersonaPublishingAccountsSection', () => {
   it('ignores non-string ids in the server defaults', async () => {
     mockFetchOnce({
       success: true,
-      defaults: { youtube: ['UC-1', 42, null], instagram: [], bluesky: [], linkedin: [] },
+      defaults: { youtube: ['UC-1', 42, null], instagram: [], bluesky: [], linkedin: [], threads: [] },
     });
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
     await screen.findByTestId('publishing-accounts-save');

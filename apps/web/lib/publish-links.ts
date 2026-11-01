@@ -10,8 +10,9 @@
 //   instagram → permalink  ready-made post URL
 //   bluesky   → postId     at://<did>/app.bsky.feed.post/<rkey>
 //   linkedin  → postId     urn:li:share:<id>  (no public URL is returned)
+//   threads   → permalink  ready-made post URL (best-effort; no URL can be derived from the id)
 //
-// So two providers arrive with a URL and two need one derived. A provider
+// So three providers arrive with a URL and two need one derived. A provider
 // entry with neither is omitted rather than rendered as a dead link.
 // An entry whose status is "failed" is omitted even when it also carries
 // a URL: that publish did not happen.
@@ -20,7 +21,7 @@
 // and it must stay safe to import from a client component.
 //---------------
 
-export type PublishProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin';
+export type PublishProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads';
 
 export interface PublishLink {
   provider: PublishProvider;
@@ -32,6 +33,7 @@ const PROVIDERS: ReadonlySet<string> = new Set<PublishProvider>([
   'instagram',
   'bluesky',
   'linkedin',
+  'threads',
 ]);
 
 //---------------

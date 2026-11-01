@@ -67,6 +67,7 @@ export interface SlotPostDetail {
     instagramAccountIds: string[];
     linkedinAccountIds: string[];
     blueskyAccountIds: string[];
+    threadsAccountIds: string[];
     timezone: string;
     publishMode: 'scheduled' | 'asap';
   };
@@ -200,7 +201,7 @@ export async function getSlotPost(
 
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
-    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode')
+    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode')
     .eq('id', row.schedule_id)
     .eq('user_id', userId)
     .maybeSingle();
@@ -213,6 +214,7 @@ export async function getSlotPost(
     instagram_account_ids: string[] | null;
     linkedin_account_ids: string[] | null;
     bluesky_account_ids: string[] | null;
+    threads_account_ids: string[] | null;
     timezone: string;
     post_language: string | null;
     post_voice_id: string | null;
@@ -342,6 +344,7 @@ export async function getSlotPost(
   const instagramAccountIdsOut = scheduleRow.instagram_account_ids ?? [];
   const linkedinAccountIdsOut = scheduleRow.linkedin_account_ids ?? [];
   const blueskyAccountIdsOut = scheduleRow.bluesky_account_ids ?? [];
+  const threadsAccountIdsOut = scheduleRow.threads_account_ids ?? [];
   const timezoneOut = scheduleRow.timezone;
   const publishModeOut = scheduleRow.publish_mode === 'asap' ? 'asap' : 'scheduled';
 
@@ -374,6 +377,7 @@ export async function getSlotPost(
       instagramAccountIds: instagramAccountIdsOut,
       linkedinAccountIds: linkedinAccountIdsOut,
       blueskyAccountIds: blueskyAccountIdsOut,
+      threadsAccountIds: threadsAccountIdsOut,
       timezone: timezoneOut,
       publishMode: publishModeOut,
     },

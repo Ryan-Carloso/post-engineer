@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { logger } from '@/lib/logger';
 import { ValidationError } from '@/lib/errors';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -17,11 +18,12 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 //---------------
 // Unified content upload — POST /api/upload-content
 // FormData:
-//   provider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin'
+//   provider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads'
 //   youtube:    video, title, description, tags, privacyStatus, accountIds (repeatable)
 //   instagram:  file, caption, igAccountIds (repeatable)
 //   bluesky:    video, caption, did (repeatable)
 //   linkedin:   video, caption, linkedinAccountIds (repeatable; member id or org URN)
+//   threads:    video, caption, threadsAccountIds (repeatable)
 //   engine:     userId (MONEYPRINT_API_SECRET only — internal publish-back)
 // Auth = Supabase session (UI), personal API key (pe_live_...), or
 // Authorization: Bearer <MONEYPRINT_API_SECRET> (engine). Per-user rate limit.
@@ -120,7 +122,9 @@ async function postHandler(request: NextRequest) {
           ? await handleBlueskyUpload(formData, userId)
           : provider === 'linkedin'
             ? await handleLinkedinUpload(formData, userId)
-            : await handleInstagramUpload(formData, userId, logId, startTime);
+            : provider === 'threads'
+              ? await handleThreadsUpload(formData, userId)
+              : await handleInstagramUpload(formData, userId, logId, startTime);
 
     logger.info('[upload-content] handler finalizado', { provider, success: response.success, logId });
     return NextResponse.json(response);

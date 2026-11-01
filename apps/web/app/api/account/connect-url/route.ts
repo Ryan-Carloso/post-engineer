@@ -19,7 +19,7 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 // a new social account. Built for the MCP flow: authenticates via API key
 // (or session), without depending on the browser's httpOnly nonce cookie.
 // The state is stored server-side (oauth_states table) and the callback
-// consumes it as a fallback. Body: { provider: 'youtube' | 'instagram' | 'linkedin' }.
+// consumes it as a fallback. Body: { provider: 'youtube' | 'instagram' | 'linkedin' | 'threads' }.
 // Bluesky uses an app password: POST /api/bluesky-connect.
 //
 // Error contract (agent/MCP-consumed API): failures return
@@ -60,6 +60,7 @@ const REDIRECT_ENV: Record<OAuthConnectProvider, [string, string]> = {
   instagram: ['INSTAGRAM_REDIRECT_URI_LOCAL', 'INSTAGRAM_REDIRECT_URI'],
   youtube: ['GOOGLE_REDIRECT_URI_LOCAL', 'GOOGLE_REDIRECT_URI'],
   linkedin: ['LINKEDIN_REDIRECT_URI_LOCAL', 'LINKEDIN_REDIRECT_URI'],
+  threads: ['THREADS_REDIRECT_URI_LOCAL', 'THREADS_REDIRECT_URI'],
 };
 
 async function postHandler(request: NextRequest): Promise<NextResponse> {

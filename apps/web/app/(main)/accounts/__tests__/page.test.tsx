@@ -21,6 +21,7 @@ vi.mock('@/lib/api', () => ({
   useInstagramAccountsQuery: vi.fn(),
   useBlueskyAccountsQuery: vi.fn(),
   useLinkedinAccountsQuery: vi.fn(),
+  useThreadsAccountsQuery: vi.fn(),
   useDisconnectAccountMutation: vi.fn(),
 }));
 
@@ -55,6 +56,9 @@ vi.mock('@/lib/oauth/instagram-handler', () => ({
   })),
 }));
 
+vi.mock('@/lib/oauth/threads-handler', () => ({
+  useThreadsOAuth: vi.fn(),
+}));
 vi.mock('@/lib/oauth/linkedin-handler', () => ({
   useLinkedInOAuth: vi.fn(() => ({
     startOAuth: vi.fn().mockResolvedValue(undefined),
@@ -109,10 +113,11 @@ vi.mock('@/components/account-card', () => ({
 }));
 
 import AccountsPage from '../page';
-import { useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery, useDisconnectAccountMutation } from '@/lib/api';
+import { useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery, useThreadsAccountsQuery, useDisconnectAccountMutation } from '@/lib/api';
 import { useYouTubeOAuth } from '@/lib/oauth/google-handler';
 import { useInstagramOAuth } from '@/lib/oauth/instagram-handler';
 import { useLinkedInOAuth } from '@/lib/oauth/linkedin-handler';
+import { useThreadsOAuth } from '@/lib/oauth/threads-handler';
 
 function createWrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -151,6 +156,8 @@ beforeEach(() => {
     isLoading: false,
     error: null,
   });
+  vi.mocked(useThreadsAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
+  vi.mocked(useThreadsOAuth).mockReturnValue(threadsOAuth);
   vi.mocked(useLinkedInOAuth).mockReturnValue({
     startOAuth: vi.fn().mockResolvedValue(undefined),
     isLoading: false,
@@ -161,6 +168,8 @@ beforeEach(() => {
     isPending: false,
   } as never);
 });
+
+const threadsOAuth = { isLoading: false, error: null, startOAuth: vi.fn() } as unknown as ReturnType<typeof useThreadsOAuth>;
 
 describe('app/(main)/accounts/page — AccountsPage', () => {
   it('renders page header', () => {
@@ -181,12 +190,12 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
 
   it('shows the shared connection slot when YouTube has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(4);
+    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(5);
   });
 
   it('shows the shared connection slot when Instagram has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(4);
+    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(5);
   });
 
   it('shows loading skeletons while loading', () => {
@@ -448,5 +457,27 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     fireEvent.click(screen.getByTestId('linkedin-disconnect-button'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'member-123' }));
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('linkedin');
+  });
+});
+
+describe('Threads accounts section', () => {
+  it('renders the section with its localized copy and starts OAuth from its button', () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(screen.getByText('accounts.threadsLabel')).toBeTruthy();
+    expect(screen.getByText('accounts.threadsDescription')).toBeTruthy();
+    // Threads is the last section on the page, so its connect button is last.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    expect(threadsOAuth.startOAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists a connected account by its handle', () => {
+    vi.mocked(useThreadsAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [{ provider: 'threads', recordId: 'r1', providerAccountId: '42', accountName: 'ana', connectedAt: 0, lastUsed: 0 }] },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(screen.getByText('ana')).toBeTruthy();
   });
 });

@@ -204,7 +204,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'list_social_accounts',
-    'List connected social accounts (YouTube, Instagram, LinkedIn, Bluesky) with the account IDs needed for posting.',
+    'List connected social accounts (YouTube, Instagram, LinkedIn, Threads, Bluesky) with the account IDs needed for posting.',
     ListSocialAccountsShape,
     withTracking('list_social_accounts', async () => {
       return handleListSocialAccounts(apiClient);
@@ -231,7 +231,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'connect_account',
-    'Connect a social account. For youtube/instagram/linkedin: returns an authorization URL — the user must open it in a browser and authorize, then the account connects automatically (verify with list_social_accounts). For bluesky: connects directly with handle + appPassword (app password, not the main account password).',
+    'Connect a social account. For youtube/instagram/linkedin/threads: returns an authorization URL — the user must open it in a browser and authorize, then the account connects automatically (verify with list_social_accounts). For bluesky: connects directly with handle + appPassword (app password, not the main account password).',
     ConnectAccountShape,
     withTracking('connect_account', async (args) => {
       return handleConnectAccount(apiClient, args);
@@ -442,7 +442,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'publish_video_direct',
-    `Publish a ready-made video file directly to social accounts — no generation, no schedule. Reads a local video (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB) and posts it immediately via POST /api/upload-content. YouTube requires title, description, tags, and privacyStatus; Instagram/Bluesky/LinkedIn require caption.`,
+    `Publish a ready-made video file directly to social accounts — no generation, no schedule. Reads a local video (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB) and posts it immediately via POST /api/upload-content. YouTube requires title, description, tags, and privacyStatus; Instagram/Bluesky/LinkedIn/Threads require caption.`,
     PublishVideoDirectShape,
     withTracking('publish_video_direct', async (args) => {
       return handlePublishVideoDirect(apiClient, args);
