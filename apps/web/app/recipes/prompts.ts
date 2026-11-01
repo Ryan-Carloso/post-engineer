@@ -4,8 +4,8 @@
 // deliverables, and example keys in both locales. The list page
 // and the detail page render from this array, never from a
 // hand-built page per prompt. Prompt text is English by design:
-// generation language is en. The copy-ready texts are the source
-// content of the recipe docs in docs/recipes/, rendered here as
+// generation language is en. The recipe docs in docs/recipes/ link
+// to this hub instead of repeating the text, which renders here as
 // structured components, not as a raw markdown dump. Cards link
 // to the internal detail page; the list footer's "Add your
 // prompt" link (add-prompt-link.tsx) and the detail page's doc
