@@ -63,6 +63,9 @@ export default function PersonaAvatar({
     loggedEmptyChain.current = false;
   }, [avatarUrl, photoUrl, libraryUrl]);
   const imageUrl = candidates[failedCount];
+  // The circle is a shimmer skeleton until the browser has decoded the photo:
+  // a signed URL takes seconds, and a bare gradient read as "no photo".
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const imageFailed = failedCount >= candidates.length;
 
   //---------------
@@ -88,6 +91,10 @@ export default function PersonaAvatar({
   // initials take over), so it is a warning: still logged and reported, but
   // not a console.error, which the Next dev overlay shows as an "Issue".
   //---------------
+  const handleImageLoad = () => {
+    if (imageUrl !== undefined) setLoadedUrl(imageUrl);
+  };
+
   const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
     if (!event.currentTarget.isConnected) return;
     setFailedCount((count) => count + 1);
@@ -97,8 +104,11 @@ export default function PersonaAvatar({
     });
   };
 
+  const imageLoading = imageUrl !== undefined && !imageFailed && loadedUrl !== imageUrl;
+
   return (
     <span
+      aria-busy={imageLoading || undefined}
       className={cn(
         'relative flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-neutral-100 to-neutral-200 text-neutral-500 ring-2 ring-neutral-100',
         className,
@@ -106,15 +116,21 @@ export default function PersonaAvatar({
       style={{ width: size, height: size }}
     >
       {imageUrl && !imageFailed ? (
-        <Image
-          src={imageUrl}
-          alt={name}
-          width={size}
-          height={size}
-          unoptimized
-          onError={handleImageError}
-          className="size-full object-cover"
-        />
+        <>
+          {imageLoading ? (
+            <span data-testid="persona-avatar-skeleton" className="skeleton-shimmer absolute inset-0" />
+          ) : null}
+          <Image
+            src={imageUrl}
+            alt={name}
+            width={size}
+            height={size}
+            unoptimized
+            onLoad={handleImageLoad}
+            onError={handleImageError}
+            className={cn('size-full object-cover', imageLoading && 'opacity-0')}
+          />
+        </>
       ) : initials.length > 0 ? (
         <span className="text-sm font-bold" aria-hidden="true">
           {initials}

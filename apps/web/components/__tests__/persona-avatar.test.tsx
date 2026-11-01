@@ -39,6 +39,30 @@ beforeEach(() => {
 });
 
 describe('PersonaAvatar', () => {
+  it('shows a skeleton until the photo loads, then reveals it', () => {
+    render(<PersonaAvatar photoUrl="https://x.test/p.png" name="Viva Leve" />);
+
+    expect(screen.getByTestId('persona-avatar-skeleton')).toBeInTheDocument();
+    expect(screen.getByAltText('Viva Leve')).toHaveClass('opacity-0');
+
+    fireEvent.load(screen.getByAltText('Viva Leve'));
+
+    expect(screen.queryByTestId('persona-avatar-skeleton')).not.toBeInTheDocument();
+    expect(screen.getByAltText('Viva Leve')).not.toHaveClass('opacity-0');
+  });
+
+  it('shows the skeleton again while the next candidate loads after a failure', () => {
+    render(<PersonaAvatar photoUrl="https://x.test/p.png" libraryUrl="https://x.test/l.png" name="Viva Leve" />);
+
+    fireEvent.load(screen.getByAltText('Viva Leve'));
+    expect(screen.queryByTestId('persona-avatar-skeleton')).not.toBeInTheDocument();
+
+    fireEvent.error(screen.getByAltText('Viva Leve'));
+
+    expect(screen.getByAltText('Viva Leve')).toHaveAttribute('src', 'https://x.test/l.png');
+    expect(screen.getByTestId('persona-avatar-skeleton')).toBeInTheDocument();
+  });
+
   it('prefers the avatar over the photo', () => {
     render(<PersonaAvatar avatarUrl="https://x.test/a.png" photoUrl="https://x.test/p.png" name="Viva Leve" />);
 
