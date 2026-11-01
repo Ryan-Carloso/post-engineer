@@ -49,7 +49,17 @@
 //                             not the direct ZAI API and not Zen. A single
 //                             model set via TEST_FLIGHT_LLM_MODEL is
 //                             appended last, never first, never duplicated).
-//   TEST_FLIGHT_TOPIC         optional fixed topic; empty rotates topics.
+//   TEST_FLIGHT_TOPIC         optional fixed topic; when set it wins
+//                             and the LLM topic step is skipped. When
+//                             empty, the LLM proposes a new topic from
+//                             the last 30 days of published titles (see
+//                             topic-llm.mjs): there is no hard-coded
+//                             topic list, because a day-rotated list
+//                             repeats the same topic all day.
+//   TEST_FLIGHT_POST_ENGINEER_API_KEY  test API key, used only to fetch
+//                             the 30-day title history for the topic
+//                             step (same key flight.mjs uses).
+//   TEST_FLIGHT_API_BASE_URL  default https://post-engineer.com.
 //   TEST_FLIGHT_RUN_ID        seed for the angle, so reruns differ.
 //   TEST_FLIGHT_SCRIPT_PATH   required output path for the script JSON.
 // The key never appears in logs or in the output file.
@@ -58,7 +68,8 @@
 import { writeFile } from 'node:fs/promises';
 import { searchFacts } from './search.mjs';
 import { pathToFileURL } from 'node:url';
-import { accumulateLlmStream } from './llm-stream.mjs';
+import { streamLlmJson } from './llm-stream.mjs';
+import { fetchRecentTitles, generateTopic, resolveHistoryConfig } from './topic-llm.mjs';
 
 export class ScriptError extends Error {}
 
@@ -92,17 +103,6 @@ export const DEFAULT_LLM_BASE_URL = 'https://openrouter.ai/api/v1';
 // A single model set via TEST_FLIGHT_LLM_MODEL is still appended last,
 // never first, and never duplicated if it is already in this chain.
 export const DEFAULT_LLM_MODELS = ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash'];
-
-// Evergreen topics for the scheduled monitor (manual flights pass their own).
-export const MONITOR_TOPICS = [
-  'Where to eat francesinha in Porto like a local',
-  'The best viewpoints in Porto you can visit for free',
-  'Porto in one day: what to visit first',
-  'Where locals actually eat in Porto (not tourist traps)',
-  'The hidden streets of Porto worth getting lost in',
-  'Port wine cellars in Vila Nova de Gaia: what to know before you go',
-  'Morning in Porto: the perfect riverside walk',
-];
 
 // One angle per run, picked from the run seed. The same topic on two runs
 // still gets a different script, because the angle changes what the
@@ -250,21 +250,6 @@ export function validateScript(script) {
   return { ok: true, value: { title, segments, totalWords, bodyWords, hookWords, ctaWords } };
 }
 
-export function rotateTopic(topics, now = new Date()) {
-  if (!Array.isArray(topics) || topics.length === 0) {
-    throw new ScriptError('write-script: topic rotation needs a non-empty list');
-  }
-  const startOfYear = Date.UTC(now.getUTCFullYear(), 0, 1);
-  const dayIndex = Math.floor((now.getTime() - startOfYear) / (24 * 3600 * 1000));
-  return topics[((dayIndex % topics.length) + topics.length) % topics.length];
-}
-
-export function resolveTopic(env, now = new Date()) {
-  const topic = optionalEnv(env, 'TEST_FLIGHT_TOPIC');
-  if (topic !== '') return topic;
-  return rotateTopic(MONITOR_TOPICS, now);
-}
-
 // Deterministic angle from the run seed, so the same topic still gets a
 // different script on different runs. The seed is the workflow run id
 // plus the date, never a random value the tests cannot reproduce.
@@ -318,70 +303,33 @@ export function buildPrompt({ topic, angle, facts = '' }) {
 // LLM call
 //---------------
 
-function stripFences(text) {
-  return text
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/, '')
-    .trim();
-}
-
+// Thin wrapper over the shared streaming client in llm-stream.mjs:
+// thinking arrives as delta.reasoning chunks in real time, the final
+// script as delta.content chunks. Reasoning text is internal thinking
+// and is never logged, never parsed, and never used as the script. A
+// non-SSE body or an unparseable chunk throws here, so the attempt
+// fails and the next model in the chain catches it. The shared client
+// throws StreamError with the same messages the old inline call used,
+// so generateScript's failure reporting is unchanged.
 async function callLlm({ topic, angle, llm, model, fetchFn, attemptError, facts = '', streamTimeouts = {} }) {
   const prompt = buildPrompt({ topic, angle, facts });
   const userContent = attemptError
     ? `${prompt}\n\nPrevious output failed validation: ${attemptError.rule} Fix: ${attemptError.fix} Return JSON only, with the fix applied.`
     : prompt;
-  const startedAt = Date.now();
-  const silenceMs = streamTimeouts.silenceMs ?? LLM_SILENCE_TIMEOUT_MS;
-  const totalMs = streamTimeouts.totalMs ?? LLM_TOTAL_TIMEOUT_MS;
-  const controller = new AbortController();
-  const fetchTimer = setTimeout(() => controller.abort(), totalMs);
-  let res;
-  try {
-    res = await fetchFn(`${llm.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${llm.apiKey}` },
-      body: JSON.stringify({
-        model,
-        temperature: 0.7,
-        stream: true,
-        messages: [
-          { role: 'system', content: 'You write short spoken video scripts. Respond with JSON only.' },
-          { role: 'user', content: userContent },
-        ],
-      }),
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(fetchTimer);
-  }
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new ScriptError(`write-script: LLM endpoint returned HTTP ${res.status}${body ? `: ${body.slice(0, 200)}` : ''}`);
-  }
-  // Streaming: thinking arrives as delta.reasoning chunks in real time,
-  // and the final script arrives as delta.content chunks. Count only
-  // lengths and presence here: reasoning text is internal thinking and
-  // is never logged, never parsed, and never used as the script. A
-  // non-SSE body or an unparseable chunk throws here, so the attempt
-  // fails and the next model in the chain catches it.
-  const remainingMs = totalMs - (Date.now() - startedAt);
-  if (remainingMs <= 0) {
-    throw new ScriptError(`write-script: LLM stream total timeout (${totalMs}ms)`);
-  }
-  const streamed = await accumulateLlmStream(res.body, { silenceMs, totalMs: remainingMs, startedAt });
-  const content = streamed.content;
-  const reasoningChars = streamed.reasoningChars;
-  const responseModel = streamed.model !== '' ? streamed.model : model;
-  console.log(`write-script: LLM response model=${responseModel} reasoning=${reasoningChars === 0 ? 'none' : `${reasoningChars} chars`} content=${content.length} chars timeout=streaming-silence-${silenceMs}ms-total-${totalMs}ms`);
-  if (content.trim() === '') {
-    throw new ScriptError(`write-script: LLM returned an empty completion (${reasoningChars > 0 ? `reasoning present, ${reasoningChars} chars` : 'no reasoning'})`);
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(stripFences(content));
-  } catch {
-    throw new ScriptError(`write-script: LLM returned non-JSON: ${content.slice(0, 120)}`);
-  }
+  const { parsed } = await streamLlmJson({
+    baseUrl: llm.baseUrl,
+    apiKey: llm.apiKey,
+    model,
+    messages: [
+      { role: 'system', content: 'You write short spoken video scripts. Respond with JSON only.' },
+      { role: 'user', content: userContent },
+    ],
+    fetchFn,
+    streamTimeouts: {
+      silenceMs: streamTimeouts.silenceMs ?? LLM_SILENCE_TIMEOUT_MS,
+      totalMs: streamTimeouts.totalMs ?? LLM_TOTAL_TIMEOUT_MS,
+    },
+  });
   return parsed;
 }
 
@@ -444,9 +392,29 @@ export function resolveSearch(env) {
 
 export async function writeScriptFile(env = process.env, options = {}) {
   const now = options.now ?? new Date();
-  const topic = resolveTopic(env, now);
   const runId = optionalEnv(env, 'TEST_FLIGHT_RUN_ID') || `manual-${Date.now()}`;
   const angle = pickAngle(`${runId}-${now.toISOString().slice(0, 10)}`);
+  // Topic, in order: an explicit TEST_FLIGHT_TOPIC wins and skips
+  // everything below; otherwise the LLM proposes a new topic from the
+  // last 30 days of published titles (topic-llm.mjs). A history fetch
+  // failure throws here, before search or script, so the job fails
+  // instead of proposing a topic blind and publishing a repeat.
+  const explicitTopic = optionalEnv(env, 'TEST_FLIGHT_TOPIC');
+  let topic;
+  let topicSource;
+  let topicModel = '';
+  if (explicitTopic !== '') {
+    topic = explicitTopic;
+    topicSource = 'explicit';
+  } else {
+    const historyConfig = resolveHistoryConfig(env);
+    const recentTitles = options.history ?? await fetchRecentTitles({ ...historyConfig, fetchFn: options.fetchFn ?? fetch, now });
+    const generated = await generateTopic({ llm: resolveLlm(env), recentTitles, fetchFn: options.fetchFn, streamTimeouts: options.streamTimeouts ?? {} });
+    topic = generated.topic;
+    topicModel = generated.model;
+    topicSource = 'llm';
+    console.log(`write-script: topic source=llm model=${topicModel} recentTitles=${recentTitles.length} topic="${topic}"`);
+  }
   // Search first, Tavily primary with Exa as reserve; a search failure
   // fails the job before any LLM call, so no ungrounded script is ever
   // written. The search step is skipped only by tests that pass a
@@ -458,6 +426,7 @@ export async function writeScriptFile(env = process.env, options = {}) {
   if (outPath === '') throw new ScriptError('write-script: missing required TEST_FLIGHT_SCRIPT_PATH');
   const out = {
     topic,
+    topicSource,
     angle,
     title: script.title,
     segments: script.segments,
@@ -468,7 +437,7 @@ export async function writeScriptFile(env = process.env, options = {}) {
   };
   const write = options.writeFile ?? writeFile;
   await write(outPath, `${JSON.stringify(out, null, 2)}\n`, 'utf8');
-  console.log(`write-script: topic="${topic}" angle="${angle}" source=${script.source} model=${script.model} search=${search.provider} title="${script.title}"`);
+  console.log(`write-script: topic="${topic}" topicSource=${topicSource} angle="${angle}" source=${script.source} model=${script.model} search=${search.provider} title="${script.title}"`);
   return out;
 }
 
