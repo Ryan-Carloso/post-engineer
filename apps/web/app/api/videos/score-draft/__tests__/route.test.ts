@@ -236,6 +236,36 @@ describe('POST /api/videos/score-draft', () => {
     expect(((await response.json()) as Record<string, unknown>).field).toBe('kind');
   });
 
+  it('limits a persona-scoped API key to its personas plus persona-less rows', async () => {
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: 'user-1', accessToken: 't', isApiKey: true, personaIds: [PERSONA] },
+      error: null,
+    } as never);
+    const { calls } = mockQuery([{ data: [row()], error: null }]);
+    await post({ draft: strongDraft() });
+    expect(calls).toContainEqual(['or', `persona_id.in.(${PERSONA}),persona_id.is.null`]);
+  });
+
+  it('limits a persona-scoped API key with no personas to persona-less rows', async () => {
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: 'user-1', accessToken: 't', isApiKey: true, personaIds: [] },
+      error: null,
+    } as never);
+    const { calls } = mockQuery([{ data: [row()], error: null }]);
+    await post({ draft: strongDraft() });
+    expect(calls).toContainEqual(['is', 'persona_id', null]);
+  });
+
+  it('drops malformed stored persona ids before building the scope filter', async () => {
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: 'user-1', accessToken: 't', isApiKey: true, personaIds: ['bad,id)', PERSONA] },
+      error: null,
+    } as never);
+    const { calls } = mockQuery([{ data: [row()], error: null }]);
+    await post({ draft: strongDraft() });
+    expect(calls).toContainEqual(['or', `persona_id.in.(${PERSONA}),persona_id.is.null`]);
+  });
+
   it('returns 500 when the baseline query fails', async () => {
     mockQuery([{ data: null, error: { message: 'boom' } }]);
     const response = await post({ draft: strongDraft() });

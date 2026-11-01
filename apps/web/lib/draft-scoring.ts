@@ -14,10 +14,7 @@
 // the theme bucket scores 0 and says so; it never invents a baseline.
 //---------------
 
-import {
-  BLUESKY_CAPTION_MAX_GRAPHEMES,
-  countBlueskyGraphemes,
-} from './bluesky';
+import { BLUESKY_CAPTION_MAX_GRAPHEMES, countBlueskyGraphemes } from './bluesky';
 
 // The four networks Post Engineer publishes to (post_metrics.provider
 // check constraint, migration 025). The scorer buckets are universal;
@@ -38,12 +35,7 @@ const SCORE_PROFILES = {
   script: { hook: 25, hookWords: [15, 40], length: 20, words: [60, 200], nearWords: [40, 250], slop: 25 },
 } as const;
 
-export const PUBLISH_NETWORKS: PublishNetwork[] = [
-  'linkedin',
-  'youtube',
-  'instagram',
-  'bluesky',
-];
+export const PUBLISH_NETWORKS: PublishNetwork[] = ['linkedin', 'youtube', 'instagram', 'bluesky'];
 
 // LinkedIn's documented standard-post ceiling (LinkedIn Help, via its
 // public limits pages): a standard feed post holds at most 3000

@@ -63,6 +63,15 @@ describe('summarizeBaseline', () => {
       truncated: false,
     });
   });
+
+  it('surfaces a partial baseline through the truncated flag', () => {
+    const baseline = summarizeBaseline(
+      [{ scriptAngle: 'Porto mornings', views: 100, likes: 0, comments: 0, saves: 0 }],
+      true,
+    );
+    expect(baseline.truncated).toBe(true);
+    expect(baseline.postsMeasured).toBe(1);
+  });
 });
 
 describe('scoreDraft', () => {
