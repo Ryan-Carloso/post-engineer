@@ -20,7 +20,7 @@
 import { NextResponse } from 'next/server';
 import { logger } from './logger';
 import { scrubSecrets, redactCredentialFragments } from './scrub';
-import { markApiErrorReported } from './api-error-reporting';
+import { markApiErrorReported, attachApiErrorProperties } from './api-error-reporting';
 
 export interface ApiErrorOptions {
   // Route identifier for debugging, e.g. 'POST /api/schedule'.
@@ -48,6 +48,13 @@ export interface ApiErrorOptions {
   // as a top-level `code` field so API, MCP and UI share one contract.
   // `error` stays the human-readable message (backwards compatible).
   code?: string;
+  // Leave PostHog reporting to the outer withApiErrorReporting wrapper
+  // (which emits the route's semantic `<name>_rejected` event, e.g.
+  // persona_created_rejected) instead of reporting here as the generic
+  // server_warning. Mirrors the built-in 401/403 pattern for 4xx codes
+  // that must stay grouped under their route's semantic event. The
+  // scrubbed metadata is attached to the response as event properties.
+  leaveReportingToWrapper?: boolean;
   // Request field the error belongs to (e.g. 'publishing.accounts.youtube'),
   // so the UI can highlight the right input. Omitted when not field-specific.
   field?: string;
@@ -102,14 +109,18 @@ export function apiErrorResponse(
   const message = `[${route}] ${status} ${logMessage}`;
 
   let errorId: string;
+  const leaveReportingToWrapper =
+    options?.leaveReportingToWrapper === true && status < 500;
   try {
     if (status >= 500) {
       errorId = logger.error(message, options?.cause, metadata);
-    } else if (status === 401 || status === 403) {
-      // Auth failures log console-only here (no logger.warn): the
-      // withApiErrorReporting wrapper reports them to PostHog as the
-      // route's `<semantic_name>_rejected` event instead, so there is
-      // still exactly one event.
+    } else if (status === 401 || status === 403 || leaveReportingToWrapper) {
+      // Auth failures and wrapper-reported responses (opt-in via
+      // leaveReportingToWrapper, e.g. the UNKNOWN_VOICE voice rejection)
+      // log console-only here (no logger.warn): the withApiErrorReporting
+      // wrapper reports them to PostHog as the route's
+      // `<semantic_name>_rejected` event instead, so there is still
+      // exactly one event.
       // The errorId is still returned so clients get a consistent shape.
       // Use %s format to avoid CodeQL format-string warning on the
       // interpolated route/status/message.
@@ -131,8 +142,11 @@ export function apiErrorResponse(
   const response = NextResponse.json({ success: false, error, errorId, ...extra }, { status });
   // logger.error (5xx) and logger.warn (other 4xx) above already reported to
   // PostHog: mark the response so withApiErrorReporting skips it instead of
-  // emitting a duplicate. 401/403 are console-only here — leave them
-  // unmarked so the wrapper reports them (as `<semantic_name>_rejected`).
-  if (status >= 400 && status !== 401 && status !== 403) markApiErrorReported(response);
+  // emitting a duplicate. 401/403 and leaveReportingToWrapper responses are
+  // console-only here — leave them unmarked so the wrapper reports them (as
+  // `<semantic_name>_rejected`), carrying the attached scrubbed metadata.
+  if (leaveReportingToWrapper) {
+    attachApiErrorProperties(response, metadata);
+  } else if (status >= 400 && status !== 401 && status !== 403) markApiErrorReported(response);
   return response;
 }

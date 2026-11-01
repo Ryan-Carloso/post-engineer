@@ -435,6 +435,8 @@ describe('POST /api/persona', () => {
 
   it('rejeita uma voz desconhecida com 400 antes de upload ou insert (issue #353)', async () => {
     const { uploaded, inserted } = mockSupabase();
+    posthogMock.capture.mockClear();
+    posthogMock.captureAs.mockClear();
 
     const res = await POST(formRequest({ name: 'Ana', voiceId: 'energetic' }, [photo()]));
 
@@ -447,16 +449,25 @@ describe('POST /api/persona', () => {
     expect(body.code).toBe('UNKNOWN_VOICE');
     expect(uploaded).toEqual([]);
     expect(inserted).toEqual([]);
-    // Rejection capture: stable message by route+code, the attempted value
-    // (scrubbed) as a property — Ryan sees the loop in PostHog (#301).
-    expect(posthogMock.capture).toHaveBeenCalledWith(
-      'server_warning',
-      expect.objectContaining({
-        message: '[POST /api/persona] 400 UNKNOWN_VOICE',
-        code: 'UNKNOWN_VOICE',
-        voice: 'energetic',
-      }),
-    );
+    // Rejection telemetry: exactly ONE event — the wrapper's semantic
+    // `_rejected` (not the logger's server_warning), with the stable code
+    // and the attempted voice (#301, #353). Fire-and-forget, so wait.
+    await vi.waitFor(() => expect(posthogMock.captureAs).toHaveBeenCalledTimes(1));
+    const [userId, event, properties] = posthogMock.captureAs.mock.calls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ];
+    expect(userId).toBe(USER_ID);
+    expect(event).toBe('persona_created_rejected');
+    expect(properties).toMatchObject({
+      code: 'UNKNOWN_VOICE',
+      voice: 'energetic',
+      route: 'POST /api/persona',
+      status: 400,
+    });
+    expect(posthogMock.capture).not.toHaveBeenCalled();
+    expect(posthogMock.captureException).not.toHaveBeenCalled();
   });
 
   it('returns 400 with an unsupported photo format', async () => {
@@ -1127,6 +1138,8 @@ describe('PATCH /api/persona', () => {
         voice_audio_path: null,
       },
     });
+    posthogMock.capture.mockClear();
+    posthogMock.captureAs.mockClear();
 
     const res = await PATCH(patchRequest('persona-uuid-1', { voiceId: 'energetic' }));
 
@@ -1136,14 +1149,23 @@ describe('PATCH /api/persona', () => {
       'Unknown voice "energetic". Not a house voice and not one of your clones. Pick one from GET /api/persona/voices.',
     );
     expect(body.code).toBe('UNKNOWN_VOICE');
-    expect(posthogMock.capture).toHaveBeenCalledWith(
-      'server_warning',
-      expect.objectContaining({
-        message: '[PATCH /api/persona] 400 UNKNOWN_VOICE',
-        code: 'UNKNOWN_VOICE',
-        voice: 'energetic',
-      }),
-    );
+    // Rejection telemetry: the wrapper's semantic _rejected event with the
+    // code and attempted voice (#353).
+    await vi.waitFor(() => expect(posthogMock.captureAs).toHaveBeenCalledTimes(1));
+    const [userId, event, properties] = posthogMock.captureAs.mock.calls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ];
+    expect(userId).toBe(USER_ID);
+    expect(event).toBe('persona_updated_rejected');
+    expect(properties).toMatchObject({
+      code: 'UNKNOWN_VOICE',
+      voice: 'energetic',
+      route: 'PATCH /api/persona',
+      status: 400,
+    });
+    expect(posthogMock.capture).not.toHaveBeenCalled();
     expect(updated).toEqual([]);
     expect(removed).toEqual([]);
   });

@@ -24,6 +24,7 @@ vi.mock('@/lib/request-auth', () => ({
 
 import { getPostHogServer } from '@/lib/posthog-server';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { logger } from '@/lib/logger';
 import {
   withApiErrorReporting,
   markApiErrorReported,
@@ -661,6 +662,59 @@ describe('withApiErrorReporting semantic event names', () => {
     expect(event).toBe('persona_created_rejected');
     expect(properties).toMatchObject({ route: 'POST /api/persona', status: 400 });
     expect(client.captureException).not.toHaveBeenCalled();
+  });
+
+  it('wrapper-reported 4xx (leaveReportingToWrapper): exactly one event with code and attached properties (#353), never a second logger.warn event', async () => {
+    expect.assertions(9);
+    const { apiErrorResponse } = await import('@/lib/api-error');
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => 'spy-log-id');
+    const handler = () =>
+      apiErrorResponse(400, 'Unknown voice "energetic". Not a house voice.', {
+        route: 'POST /api/persona',
+        code: 'UNKNOWN_VOICE',
+        logMessage: 'Unknown voice',
+        metadata: { voice: 'energetic' },
+        leaveReportingToWrapper: true,
+      });
+    const wrapped = withApiErrorReporting('POST /api/persona', handler, {
+      getUserId: resolveReportingUserId,
+    });
+
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: 'user-uuid-1' },
+    } as never);
+    const res = await wrapped(getRequest('http://localhost/api/persona', 'POST'));
+
+    // The response goes out untouched; NO logger.warn here (that path
+    // reports server_warning itself) — the wrapper is the single reporter.
+    expect(res.status).toBe(400);
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(console.warn).toHaveBeenCalledWith(
+      '%s',
+      '[POST /api/persona] 400 Unknown voice',
+      expect.objectContaining({ voice: 'energetic' }),
+    );
+    // The wrapper emits the route's semantic _rejected event attributed to
+    // the user (captureAs), with the code from the body AND the attached
+    // attempted-voice property. Exactly one event: no server_warning.
+    await vi.waitFor(() => expect(client.captureAs).toHaveBeenCalledTimes(1));
+    const [userId, event, properties] = client.captureAs.mock.calls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ];
+    expect(userId).toBe('user-uuid-1');
+    expect(event).toBe('persona_created_rejected');
+    expect(properties).toMatchObject({
+      code: 'UNKNOWN_VOICE',
+      voice: 'energetic',
+      route: 'POST /api/persona',
+      status: 400,
+    });
+    expect(client.capture).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+    warnSpy.mockRestore();
   });
 
   it('falls back to server_success for a 2xx on an unmapped label (telemetry never breaks)', async () => {

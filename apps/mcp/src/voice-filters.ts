@@ -202,7 +202,7 @@ const UNKNOWN_VOICE_COPY = (attempt: string) =>
   `Unknown voice "${attempt}". Not a house voice and not one of your clones. Call list_voices and pass the id or label from that list.`;
 
 // Telemetry and copy share one truncation so both always agree.
-const MAX_VOICE_ATTEMPT = 100;
+const MAX_VOICE_ATTEMPT = 80;
 
 function truncateVoice(attempt: string): string {
   return attempt.slice(0, MAX_VOICE_ATTEMPT);

@@ -99,6 +99,21 @@ export async function resolveReportingUserId(request: Request): Promise<Reportin
 // logger.warn).
 const reportedResponses = new WeakSet<object>();
 
+// Attached event properties for wrapper-reported responses: apiErrorResponse
+// passes the scrubbed metadata (e.g. the attempted voice of an
+// UNKNOWN_VOICE rejection) so the wrapper's single `<semantic_name>_rejected`
+// event still carries it — the body only ever carries code/errorId.
+const attachedProperties = new WeakMap<object, Record<string, unknown>>();
+
+/**
+ * attachApiErrorProperties — called by apiErrorResponse for responses it
+ * does NOT report itself (leaveReportingToWrapper) so the wrapper merges
+ * these into the event properties. Values must already be scrubbed.
+ */
+export function attachApiErrorProperties(response: object, properties: Record<string, unknown>): void {
+  attachedProperties.set(response, properties);
+}
+
 /**
  * Mark a response as already reported so the wrapper skips it.
  * Called by apiErrorResponse, whose logger call already reported it.
@@ -202,6 +217,12 @@ async function reportApiIssue(
     if (codeStr !== undefined) properties.code = codeStr;
     if (errorIdStr !== undefined) properties.errorId = errorIdStr;
     if (user !== undefined) withUserProperties(properties, user);
+    // Metadata attached on the response (leaveReportingToWrapper path, e.g.
+    // the UNKNOWN_VOICE attempted voice) merges last so it always lands in
+    // the single reported event.
+    if (attachedProperties.has(response)) {
+      Object.assign(properties, attachedProperties.get(response));
+    }
 
     // Stable, low-cardinality message so PostHog groups by route + code,
     // never by user-controlled text.

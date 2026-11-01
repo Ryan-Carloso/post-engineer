@@ -94,7 +94,7 @@ describe('validatePersonaVoiceInput', () => {
   it('truncates a very long attempt inside the message', async () => {
     const attempt = 'energetic' + 'x'.repeat(200);
     const message = await validatePersonaVoiceInput(supabaseMock(), USER_ID, attempt);
-    expect(message).toBe(unknownMessage(attempt.slice(0, 100)));
+    expect(message).toBe(unknownMessage(attempt.slice(0, 80)));
   });
 
   it('accepts a clone the served catalog lists', async () => {

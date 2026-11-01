@@ -64,12 +64,13 @@ export async function cloneVoiceAvailable(
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 
 // Telemetry and copy share one truncation so both always agree.
-const MAX_VOICE_ATTEMPT = 100;
+const MAX_VOICE_ATTEMPT = 80;
 
 export interface VoiceRejectionOptions {
   readonly code: string;
   readonly logMessage: string;
   readonly metadata: Record<string, string>;
+  readonly leaveReportingToWrapper: true;
 }
 
 export function personaVoiceRejectionOptions(
@@ -79,8 +80,15 @@ export function personaVoiceRejectionOptions(
   if (attempt.length === 0) return undefined;
   return {
     code: ERROR_CODES.UNKNOWN_VOICE,
-    logMessage: ERROR_CODES.UNKNOWN_VOICE,
+    // Stable by design (#301): the PostHog message must not embed the
+    // free user text; the template lives in error-codes.ts.
+    logMessage: 'Unknown voice',
     metadata: { voice: attempt },
+    // The 401/403 pattern: apiErrorResponse logs console-only and stays
+    // unmarked, so withApiErrorReporting emits the route's semantic
+    // persona_created_rejected / persona_updated_rejected event — exactly
+    // one event, with the code and the attempted voice attached.
+    leaveReportingToWrapper: true,
   };
 }
 

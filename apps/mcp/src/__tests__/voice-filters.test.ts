@@ -211,12 +211,12 @@ describe('resolvePersonaVoiceId', () => {
     const client = clientWith();
     const attempt = 'chatterbox:' + 'x'.repeat(200);
     await expect(resolvePersonaVoiceId(client, attempt, 'create_persona')).rejects.toThrow(
-      UNKNOWN_VOICE(attempt.slice(0, 100)),
+      UNKNOWN_VOICE(attempt.slice(0, 80)),
     );
     expect(mockTrackEvent).toHaveBeenCalledWith('server_warning', {
       code: 'UNKNOWN_VOICE',
       tool: 'create_persona',
-      voice: attempt.slice(0, 100),
+      voice: attempt.slice(0, 80),
     });
   });
 
@@ -229,6 +229,19 @@ describe('resolvePersonaVoiceId', () => {
       UNKNOWN_VOICE('energetic'),
     );
     mockTrackEvent.mockImplementation(() => undefined);
+  });
+
+  it('truncates the voice property to 80 chars in the telemetry', async () => {
+    const attempt = 'chatterbox:' + 'x'.repeat(200);
+    const client = clientWith();
+    await expect(resolvePersonaVoiceId(client, attempt, 'update_persona')).rejects.toThrow(
+      UNKNOWN_VOICE(attempt.slice(0, 80)),
+    );
+    expect(mockTrackEvent).toHaveBeenCalledWith('server_warning', {
+      code: 'UNKNOWN_VOICE',
+      tool: 'update_persona',
+      voice: attempt.slice(0, 80),
+    });
   });
 });
 
