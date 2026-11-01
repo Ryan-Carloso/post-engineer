@@ -17,10 +17,13 @@ name: test-flight-faceless
 # Script first, flight second. Since MCP-first the server generates no
 # script: it rejects `topics` and requires `title` plus the full script in
 # `options.segments`. The "Write test-flight script" step writes that
-# script (title + segments, validated, with its source logged) and the
+# script (title + segments, validated) and the
 # flight sends it unchanged. The script writer is an LLM call with a
-# complete standalone prompt, retried once on a validation failure, with
-# a hand-written fallback script if the LLM fails or no key is set.
+# complete standalone prompt, retried once on a validation failure.
+# There is NO fallback script: if the LLM fails or no key is set, the
+# step fails, the flight never runs, and a test_flight_failed event
+# is sent to PostHog (see the Report failure step). A failed job is
+# better than publishing the same videos over and over.
 #
 # Setup (repo Settings > Secrets and variables > Actions) — done once by
 # the repo owner, never hardcoded here, never shared in chat:
@@ -30,7 +33,11 @@ name: test-flight-faceless
 #                                        post-engineer.com/api-keys, scoped
 #                                        to the test persona).
 #     TEST_FLIGHT_DISCORD_WEBHOOK_URL    (optional) failure alert target.
-#     TEST_FLIGHT_LLM_API_KEY    (optional) OpenAI-compatible key for the
+#     TEST_FLIGHT_POSTHOG_KEY          (optional) PostHog project key for
+#                                        the test_flight_failed alert; when
+#                                        unset the alert step logs a warning
+#                                        and the job failure still stands.
+#     TEST_FLIGHT_LLM_API_KEY    REQUIRED OpenAI-compatible key for the
 #                                script writer; falls back to
 #                                API_NAMING_LLM_API_KEY when unset. Point
 #                                TEST_FLIGHT_LLM_BASE_URL at
@@ -158,3 +165,10 @@ jobs:
           curl -fsS -X POST -H 'content-type: application/json' \
             --data "{\"content\":\"🚨 test-flight-faceless FAILED — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
             "${DISCORD_WEBHOOK_URL}"
+
+      - name: Report failure to PostHog
+        if: failure()
+        env:
+          TEST_FLIGHT_POSTHOG_KEY: ${{ secrets.TEST_FLIGHT_POSTHOG_KEY }}
+          TEST_FLIGHT_FACELESS: 'true'
+        run: node .github/scripts/test-flight/report-posthog.mjs

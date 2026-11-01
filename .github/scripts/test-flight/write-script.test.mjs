@@ -2,10 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   BANNED_PHRASES,
-  FALLBACK_SCRIPTS,
   MONITOR_TOPICS,
   buildPrompt,
-  fallbackScript,
   generateScript,
   pickAngle,
   resolveTopic,
@@ -73,15 +71,6 @@ test('validateScript rejects every banned phrase in the prompt base', () => {
   }
 });
 
-test('every fallback script passes validation, including custom topics', () => {
-  for (const topic of MONITOR_TOPICS) {
-    const result = validateScript(FALLBACK_SCRIPTS[topic]);
-    assert.equal(result.ok, true, topic);
-    assert.equal(FALLBACK_SCRIPTS[topic].title, topic);
-  }
-  assert.equal(validateScript(fallbackScript('Where to drink coffee in Porto on a rainy day')).ok, true);
-});
-
 test('rotateTopic is deterministic for a date and cycles through the list', () => {
   const a = rotateTopic(['a', 'b', 'c'], new Date('2026-03-01T12:00:00Z'));
   const b = rotateTopic(['a', 'b', 'c'], new Date('2026-03-01T23:59:59Z'));
@@ -131,7 +120,7 @@ test('generateScript uses a valid LLM script and never returns the key in the ou
   assert.equal(JSON.stringify(script).includes('llm-key'), false);
 });
 
-test('generateScript retries once after a validation failure, then uses the fallback', async () => {
+test('generateScript retries once after a validation failure, then throws instead of publishing a repeat script', async () => {
   let calls = 0;
   const fetchFn = async () => {
     calls += 1;
@@ -139,26 +128,22 @@ test('generateScript retries once after a validation failure, then uses the fall
     bad.segments[0] = { kind: 'hook', text: 'Porto is nice.' };
     return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(bad) } }] }) };
   };
-  const script = await generateScript({
+  await assert.rejects(() => generateScript({
     topic: 'Porto in one day: what to visit first',
     angle: 'budget',
     llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', model: 'm' },
     fetchFn,
-  });
+  }), /failing the job instead of publishing a repeat script/);
   assert.equal(calls, 2);
-  assert.equal(script.source, 'fallback');
-  assert.equal(validateScript(script).ok, true);
 });
 
-test('generateScript falls back when the LLM endpoint fails or no key is configured', async () => {
+test('generateScript throws when the LLM endpoint fails or no key is configured', async () => {
   const failing = async () => ({ ok: false, status: 500, text: async () => 'down' });
-  const script = await generateScript({
+  await assert.rejects(() => generateScript({
     topic: 'Morning in Porto: the perfect riverside walk',
     angle: 'walking-route',
     llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', model: 'm' },
     fetchFn: failing,
-  });
-  assert.equal(script.source, 'fallback');
-  const noKey = await generateScript({ topic: 'Morning in Porto: the perfect riverside walk', angle: 'walking-route', llm: null });
-  assert.equal(noKey.source, 'fallback');
+  }), /failing the job instead of publishing a repeat script/);
+  await assert.rejects(() => generateScript({ topic: 'Morning in Porto: the perfect riverside walk', angle: 'walking-route', llm: null }), /missing TEST_FLIGHT_LLM_API_KEY/);
 });

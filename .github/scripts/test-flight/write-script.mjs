@@ -8,20 +8,22 @@
 // flight.mjs then sends unchanged.
 //
 // Quality matters because the ASAP leg publishes for real, on YouTube and
-// Instagram. The primary path is an LLM call with a complete, standalone
+// Instagram. The path is an LLM call with a complete, standalone
 // prompt: human voice, concrete Porto facts, anti-slop rules, and the
 // exact server segment contract. The prompt is standalone on purpose: it
 // must work from this file alone, never as a bare reference to another
 // prompt. The LLM output is validated with the same rules the server
-// enforces, retried once with the named error, and only then replaced.
+// enforces and retried once with the named error.
 //
-// The fallback is a hand-written script, never a generated placeholder.
-// A smoke test must not die because the script writer died, but it must
-// also never publish a script that fails validation or reads like filler.
-// Every fallback script below passes validateScript, and the flight log
-// records which source was used, so a fallback publish is visible.
+// There is deliberately NO hand-written fallback script. A fallback
+// would publish the same videos over and over, which is worse than a
+// failed job: a failed job is loud (GitHub failure plus a PostHog
+// test_flight_failed event, see report-posthog.mjs), while a fallback
+// publish looks green and quietly fills the channels with repeats.
+// When the LLM fails, this step fails, the flight never runs, and
+// nothing is published.
 //
-// LLM configuration (all optional; missing key means fallback, not failure):
+// LLM configuration (the key is required; missing key means failure):
 //   TEST_FLIGHT_LLM_API_KEY   OpenAI-compatible API key. The workflow
 //                             passes TEST_FLIGHT_LLM_API_KEY, falling back
 //                             to the repo API_NAMING_LLM_API_KEY.
@@ -273,103 +275,6 @@ export function buildPrompt({ topic, angle }) {
 }
 
 //---------------
-// Fallback scripts: hand-written, one per monitor topic.
-// Each one passes validateScript. They are the safety net, not filler:
-// if the LLM fails, the flight still publishes a script a human wrote.
-//---------------
-
-function fallbackEntry(title, hook, bodies, cta) {
-  return {
-    title,
-    segments: [
-      { kind: 'hook', text: hook },
-      ...bodies.map((text) => ({ kind: 'body', text })),
-      { kind: 'cta', text: cta },
-    ],
-  };
-}
-
-export const FALLBACK_SCRIPTS = {
-  'Where to eat francesinha in Porto like a local': fallbackEntry(
-    'Where to eat francesinha in Porto like a local',
-    'If you eat francesinha on the Ribeira tourist strip, you will pay more for a worse sandwich and miss the whole point of Porto.',
-    [
-      'Locals eat it in small taverns a few streets back from the river, where the bread is toasted, the cheese melts over the edges, and the sauce is made in the kitchen that morning, not poured from a bottle.',
-      'Order it the way it comes, with a fried egg on top if you want the full version, and take your time, because this is a heavy lunch and nobody in Porto rushes it.',
-    ],
-    'Save this for Porto and tell me where you had your best francesinha.',
-  ),
-  'The best viewpoints in Porto you can visit for free': fallbackEntry(
-    'The best viewpoints in Porto you can visit for free',
-    'Porto charges nothing for its best views, and the free viewpoints are often better than the ones with a ticket and a queue.',
-    [
-      'Start at the Jardim do Morro in Vila Nova de Gaia, across the Dom Luis bridge from the old town, where the whole riverfront and the tiled roofs of Ribeira open in front of you.',
-      'Then walk up to the Miradouro da Vitoria, a small terrace above the rooftops where you can watch the river bend and the sun drop behind the bridge in the evening.',
-    ],
-    'Save these two viewpoints for your Porto trip and go at sunset if you can.',
-  ),
-  'Porto in one day: what to visit first': fallbackEntry(
-    'Porto in one day: what to visit first',
-    'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly.',
-    [
-      'Start in Ribeira in the morning, walk along the water, cross the Dom Luis I bridge on the lower deck, and look back at the coloured houses from the Gaia side.',
-      'Spend the afternoon in one cellar in Vila Nova de Gaia, taste a ruby and a tawny port, and finish back in Ribeira for dinner when the lights come on over the river.',
-    ],
-    'Save this one day plan and tell me which stop you would skip first.',
-  ),
-  'Where locals actually eat in Porto (not tourist traps)': fallbackEntry(
-    'Where locals actually eat in Porto (not tourist traps)',
-    'The restaurants with photos on the menu and a waiter calling you in from the street are not where Porto eats dinner.',
-    [
-      'Walk two streets back from Ribeira and look for small tascas with a handwritten daily dish, a short menu, and tables full of people speaking Portuguese at lunch.',
-      'Order the dish of the day, ask what is fresh, and eat at Portuguese lunch time, because the best food in Porto is simple, seasonal, and served without a show for tourists.',
-    ],
-    'Save this rule for Porto and walk past any menu with photos on it.',
-  ),
-  'The hidden streets of Porto worth getting lost in': fallbackEntry(
-    'The hidden streets of Porto worth getting lost in',
-    'The best part of Porto is not on the main postcard street, it is in the narrow lanes where the laundry hangs and the stairs never go straight.',
-    [
-      'Get lost in Miragaia, west of Ribeira, where steep lanes drop toward the river, old houses lean over the street, and every turn opens onto a small square or a view you did not expect.',
-      'Walk slowly, look up at the tiles and the balconies, and stop when a lane ends at the water, because in Porto a dead end is often the best viewpoint in the neighbourhood.',
-    ],
-    'Save Miragaia for your next Porto walk and get lost there on purpose.',
-  ),
-  'Port wine cellars in Vila Nova de Gaia: what to know before you go': fallbackEntry(
-    'Port wine cellars in Vila Nova de Gaia: what to know before you go',
-    'Every port cellar in Gaia will sell you a tour, so go in knowing the difference between ruby and tawny before you taste anything.',
-    [
-      'Ruby port is young, fruity, and aged in bottles or tanks, while tawny port ages in wooden barrels, turns brown with time, and tastes of nuts and dried fruit.',
-      'Visit one or two cellars on the Gaia riverfront, not five in one afternoon, taste slowly, and buy only the bottle you actually enjoyed, not the biggest gift box in the shop.',
-    ],
-    'Save this before your Gaia visit and tell me if you prefer ruby or tawny.',
-  ),
-  'Morning in Porto: the perfect riverside walk': fallbackEntry(
-    'Morning in Porto: the perfect riverside walk',
-    'Porto is quietest and prettiest in the morning, before the day trippers arrive and the riverside fills with queues and cameras.',
-    [
-      'Start in Ribeira just after sunrise, walk west along the Douro past the old warehouses and fishing boats, and watch the city wake up as shops open their shutters.',
-      'Keep walking toward Foz where the river meets the sea, stop for coffee on the way, and turn back when the light gets hard, because the walk back along the water is just as good.',
-    ],
-    'Save this morning walk for Porto and start it before nine if you can.',
-  ),
-};
-
-export function fallbackScript(topic) {
-  const known = FALLBACK_SCRIPTS[topic];
-  if (known) return known;
-  return fallbackEntry(
-    topic,
-    `If you only remember one thing about ${topic}, remember this: the best version is the local one, not the one sold to tourists.`,
-    [
-      'Plan around one clear idea, start early, walk instead of rushing between sights, and leave time to stop, look, and eat where the locals eat.',
-      'Use the morning for the busiest places, the afternoon for one place done properly, and the evening for the river, because Porto rewards a slow day more than a checklist.',
-    ],
-    'Save this plan and tell me which part you would try first.',
-  );
-}
-
-//---------------
 // LLM call
 //---------------
 
@@ -418,7 +323,7 @@ async function callLlm({ topic, angle, llm, fetchFn, attemptError }) {
 
 export async function generateScript({ topic, angle, llm, fetchFn = fetch }) {
   if (!llm || !llm.apiKey) {
-    return { ...fallbackScript(topic), source: 'fallback', reason: 'no LLM key configured' };
+    throw new ScriptError('write-script: missing TEST_FLIGHT_LLM_API_KEY — refusing to publish a fallback script');
   }
   let lastError = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -434,13 +339,12 @@ export async function generateScript({ topic, angle, llm, fetchFn = fetch }) {
       lastError = null;
       const message = error instanceof Error ? error.message : String(error);
       if (attempt === 1) {
-        console.log(`write-script: LLM attempt 2 failed (${message}), using fallback`);
-        return { ...fallbackScript(topic), source: 'fallback', reason: message };
+        throw new ScriptError(`write-script: LLM failed twice (${message}) — failing the job instead of publishing a repeat script`);
       }
       console.log(`write-script: LLM attempt 1 failed (${message}), retrying once`);
     }
   }
-  return { ...fallbackScript(topic), source: 'fallback', reason: lastError ? lastError.rule : 'LLM validation failed' };
+  throw new ScriptError(`write-script: LLM validation failed twice (${lastError ? lastError.rule : 'unknown'}) — failing the job instead of publishing a repeat script`);
 }
 
 export function resolveLlm(env) {
@@ -472,9 +376,6 @@ export async function writeScriptFile(env = process.env, options = {}) {
   const write = options.writeFile ?? writeFile;
   await write(outPath, `${JSON.stringify(out, null, 2)}\n`, 'utf8');
   console.log(`write-script: topic="${topic}" angle="${angle}" source=${script.source} title="${script.title}"`);
-  if (script.source === 'fallback' && script.reason) {
-    console.log(`write-script: fallback used because: ${script.reason}`);
-  }
   return out;
 }
 
