@@ -77,8 +77,8 @@ name: test-flight
 #                                    ids always win (e.g. Bluesky-only runs).
 #     TEST_FLIGHT_API_BASE_URL       (optional) default https://post-engineer.com.
 #     TEST_FLIGHT_TOPIC              (optional) fixed topic for the daily
-#                                    monitor; when empty it rotates through
-#                                    the script writer's evergreen list.
+#                                    monitor; when empty the LLM proposes a new
+#                                    topic from the last 30 days of titles.
 #     TEST_FLIGHT_LLM_BASE_URL / TEST_FLIGHT_LLM_MODEL
 #                                    (optional) script-writer endpoint and
 #                                    single-model override; defaults are
@@ -160,6 +160,8 @@ jobs:
           TEST_FLIGHT_TOPIC: ${{ inputs.topic || vars.TEST_FLIGHT_TOPIC || secrets.TEST_FLIGHT_TOPIC }}
           TEST_FLIGHT_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
           TEST_FLIGHT_SCRIPT_PATH: test-flight-script.json
+          TEST_FLIGHT_API_BASE_URL: ${{ vars.TEST_FLIGHT_API_BASE_URL }}
+          TEST_FLIGHT_POST_ENGINEER_API_KEY: ${{ secrets.TEST_FLIGHT_POST_ENGINEER_API_KEY }}
           TEST_FLIGHT_LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           TEST_FLIGHT_LLM_BASE_URL: ${{ vars.TEST_FLIGHT_LLM_BASE_URL || 'https://openrouter.ai/api/v1' }}
           TEST_FLIGHT_LLM_MODEL: ${{ vars.TEST_FLIGHT_LLM_MODEL }}
