@@ -260,7 +260,10 @@ describe('withResolvedPersonaVoice', () => {
 
   it('leaves inputs without a voiceId untouched (update skips)', async () => {
     const client = clientWith();
-    const input = { personaId: 'p1' };
+    // Typed with the optional voiceId: a bare { personaId } fails the
+    // weak-type check on withResolvedPersonaVoice's { voiceId?: string }
+    // constraint (TS2559), even though the runtime input has no voice.
+    const input: { personaId: string; voiceId?: string } = { personaId: 'p1' };
     await expect(withResolvedPersonaVoice(client, input, 'update_persona')).resolves.toBe(input);
     expect(client.listVoices).not.toHaveBeenCalled();
   });
