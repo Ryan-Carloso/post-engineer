@@ -10,7 +10,6 @@ import { fileURLToPath } from 'node:url';
 
 import {
   FlightError,
-  MONITOR_TOPICS,
   PROVIDER_ORDER,
   assertPublishedSlot,
   assertScheduledSlot,
@@ -19,14 +18,24 @@ import {
   discoverAccounts,
   resolveConfig,
   resolveFlightAccounts,
-  resolveTopic,
-  rotateTopic,
+  resolveScript,
   runFlight,
   scheduledTarget,
   singleSlot,
   waitForPublished,
   SCHEDULE_LEAD_MS,
 } from './flight.mjs';
+
+const TEST_SCRIPT = {
+  title: 'Porto in one day: what to visit first',
+  topic: 'Porto in one day: what to visit first',
+  source: 'llm',
+  segments: [
+    { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly.' },
+    { kind: 'body', text: 'Start in Ribeira in the morning, walk along the water, cross the Dom Luis I bridge on the lower deck, and look back at the coloured houses from the Gaia side.' },
+    { kind: 'cta', text: 'Save this one day plan and tell me which stop you would skip first.' },
+  ],
+};
 
 function baseEnv(overrides = {}) {
   return {
@@ -230,68 +239,69 @@ describe('resolveFlightAccounts', () => {
   });
 });
 
-describe('resolveTopic', () => {
-  it('prefers the explicit topic', () => {
-    assert.equal(resolveTopic(baseEnv({ TEST_FLIGHT_TOPIC: '  hello world ' })), 'hello world');
+describe('resolveScript', () => {
+  it('reads the script from inline JSON', () => {
+    const script = resolveScript(baseEnv({ TEST_FLIGHT_SCRIPT_JSON: JSON.stringify(TEST_SCRIPT) }));
+    assert.equal(script.title, TEST_SCRIPT.title);
+    assert.equal(script.source, 'llm');
+    assert.deepEqual(script.segments, TEST_SCRIPT.segments);
   });
 
-  it('rotates monitor topics when empty', () => {
-    const topic = resolveTopic(baseEnv({ TEST_FLIGHT_TOPIC: '' }), new Date('2026-01-15T00:00:00Z'));
-    assert.ok(MONITOR_TOPICS.includes(topic));
-  });
-});
-
-describe('rotateTopic', () => {
-  it('is deterministic for a date and cycles through the list', () => {
-    const a = rotateTopic(['a', 'b', 'c'], new Date('2026-03-01T12:00:00Z'));
-    const b = rotateTopic(['a', 'b', 'c'], new Date('2026-03-01T23:59:59Z'));
-    assert.equal(a, b);
-    const seen = new Set();
-    for (let day = 1; day <= 9; day++) {
-      seen.add(rotateTopic(['a', 'b', 'c'], new Date(`2026-01-${String(day).padStart(2, '0')}T00:00:00Z`)));
-    }
-    assert.deepEqual([...seen].sort(), ['a', 'b', 'c']);
+  it('reads the script from a file when no inline JSON is set', () => {
+    const script = resolveScript(baseEnv({ TEST_FLIGHT_SCRIPT_PATH: '/tmp/test-flight-script.json' }), {
+      readFile: (path) => {
+        assert.equal(path, '/tmp/test-flight-script.json');
+        return JSON.stringify(TEST_SCRIPT);
+      },
+    });
+    assert.equal(script.title, TEST_SCRIPT.title);
   });
 
-  it('rejects an empty list', () => {
-    assert.throws(() => rotateTopic([], new Date()), FlightError);
+  it('fails fast when no script was written, and on bad JSON or bad segments', () => {
+    assert.throws(() => resolveScript(baseEnv()), /run write-script first/);
+    assert.throws(() => resolveScript(baseEnv({ TEST_FLIGHT_SCRIPT_JSON: 'not json' })), /not valid JSON/);
+    assert.throws(
+      () => resolveScript(baseEnv({ TEST_FLIGHT_SCRIPT_JSON: JSON.stringify({ title: '', segments: [] }) })),
+      /non-empty title/,
+    );
+    assert.throws(
+      () =>
+        resolveScript(
+          baseEnv({ TEST_FLIGHT_SCRIPT_JSON: JSON.stringify({ title: 't', segments: [{ kind: 'hook', text: '' }] }) }),
+        ),
+      /every script segment/,
+    );
   });
 });
 
 describe('buildAsapPayload', () => {
-  it('sends mode=asap with no schedule key (a stray schedule is a 400)', () => {
+  it('sends mode=asap with title and segments, never topics (topics is a 400)', () => {
     const payload = buildAsapPayload({
       personaId: 'p1',
-      topic: 't',
+      title: 'Porto in one day',
+      segments: TEST_SCRIPT.segments,
       accounts: { bluesky: ['b1'] },
       idempotencyKey: 'k1',
     });
     assert.equal(payload.publishing.mode, 'asap');
     assert.ok(!('schedule' in payload.publishing));
-    assert.deepEqual(payload.topics, ['t']);
+    assert.ok(!('topics' in payload));
+    assert.equal(payload.title, 'Porto in one day');
+    assert.deepEqual(payload.options, { segments: TEST_SCRIPT.segments });
     assert.equal(payload.idempotencyKey, 'k1');
   });
 
-  it('omits options when faceless is false (default persona flight)', () => {
+  it('sets options.faceless=true alongside segments when faceless (persona kept for voice + accounts)', () => {
     const payload = buildAsapPayload({
       personaId: 'p1',
-      topic: 't',
-      accounts: { bluesky: ['b1'] },
-      idempotencyKey: 'k1',
-    });
-    assert.ok(!('options' in payload));
-  });
-
-  it('sets options.faceless=true when faceless (persona kept for voice + accounts)', () => {
-    const payload = buildAsapPayload({
-      personaId: 'p1',
-      topic: 't',
+      title: 'Porto in one day',
+      segments: TEST_SCRIPT.segments,
       accounts: { bluesky: ['b1'] },
       idempotencyKey: 'k1',
       faceless: true,
     });
     assert.equal(payload.personaId, 'p1');
-    assert.deepEqual(payload.options, { faceless: true });
+    assert.deepEqual(payload.options, { segments: TEST_SCRIPT.segments, faceless: true });
     assert.equal(payload.publishing.mode, 'asap');
   });
 });
@@ -310,10 +320,11 @@ describe('scheduledTarget', () => {
 });
 
 describe('buildScheduledPayload', () => {
-  it('sends mode=scheduled with the schedule plan', () => {
+  it('sends mode=scheduled with the schedule plan, title, and segments', () => {
     const payload = buildScheduledPayload({
       personaId: 'p1',
-      topic: 't',
+      title: 'Porto in one day',
+      segments: TEST_SCRIPT.segments,
       accounts: { youtube: ['y1'] },
       idempotencyKey: 'k2',
       schedule: { startAt: '2026-10-17', times: ['13:10'], timezone: 'UTC' },
@@ -324,30 +335,22 @@ describe('buildScheduledPayload', () => {
       times: ['13:10'],
       timezone: 'UTC',
     });
+    assert.ok(!('topics' in payload));
+    assert.deepEqual(payload.options, { segments: TEST_SCRIPT.segments });
   });
 
-  it('omits options when faceless is false (default persona flight)', () => {
+  it('sets options.faceless=true alongside segments when faceless', () => {
     const payload = buildScheduledPayload({
       personaId: 'p1',
-      topic: 't',
-      accounts: { youtube: ['y1'] },
-      idempotencyKey: 'k2',
-      schedule: { startAt: '2026-10-17', times: ['13:10'], timezone: 'UTC' },
-    });
-    assert.ok(!('options' in payload));
-  });
-
-  it('sets options.faceless=true when faceless', () => {
-    const payload = buildScheduledPayload({
-      personaId: 'p1',
-      topic: 't',
+      title: 'Porto in one day',
+      segments: TEST_SCRIPT.segments,
       accounts: { youtube: ['y1'] },
       idempotencyKey: 'k2',
       schedule: { startAt: '2026-10-17', times: ['13:10'], timezone: 'UTC' },
       faceless: true,
     });
     assert.equal(payload.personaId, 'p1');
-    assert.deepEqual(payload.options, { faceless: true });
+    assert.deepEqual(payload.options, { segments: TEST_SCRIPT.segments, faceless: true });
     assert.equal(payload.publishing.mode, 'scheduled');
   });
 });
@@ -540,7 +543,7 @@ describe('runFlight', () => {
     return baseEnv({
       TEST_FLIGHT_API_BASE_URL: 'https://post-engineer.test',
       TEST_FLIGHT_RUN_ID: '99-2',
-      TEST_FLIGHT_TOPIC: 'Porto riverside',
+      TEST_FLIGHT_SCRIPT_JSON: JSON.stringify(TEST_SCRIPT),
       TEST_FLIGHT_POLL_TIMEOUT_MIN: '1',
       TEST_FLIGHT_POLL_INTERVAL_SEC: '1',
       ...overrides,
@@ -638,6 +641,10 @@ describe('runFlight', () => {
     assert.equal(scheduledPost.body.idempotencyKey, 'test-flight-99-2-scheduled');
     const asapPost = calls.find((call) => call.method === 'POST' && call.body?.publishing?.mode === 'asap');
     assert.equal(asapPost.body.idempotencyKey, 'test-flight-99-2-asap');
+    assert.ok(!('topics' in asapPost.body));
+    assert.equal(asapPost.body.title, TEST_SCRIPT.title);
+    assert.deepEqual(asapPost.body.options.segments, TEST_SCRIPT.segments);
+    assert.equal(summary.some((line) => line.includes('script source: llm')), true);
     assert.equal(summary.some((line) => line.includes('will not publish')), true);
   });
 
@@ -798,10 +805,17 @@ describe('test-flight workflow pins', () => {
   it('runs in the test-flight environment and keys retries by run attempt', () => {
     assert.equal(workflow.includes('environment: test-flight'), true);
     assert.equal(workflow.includes('${{ github.run_id }}-${{ github.run_attempt }}'), true);
+    // A scheduled health monitor must never skip silently: a missing
+    // persona fails fast in flight.mjs instead of concluding "skipped".
     assert.equal(
       workflow.includes("github.event_name != 'schedule' || vars.TEST_FLIGHT_PERSONA_ID != ''"),
-      true,
+      false,
     );
+  });
+
+  it('writes the script before flying, so flight.mjs never sends topics', () => {
+    assert.equal(workflow.includes('node .github/scripts/test-flight/write-script.mjs'), true);
+    assert.equal(workflow.includes('TEST_FLIGHT_SCRIPT_PATH'), true);
   });
 
   it('leaves persona_id and topic optional so the variable default works', () => {
