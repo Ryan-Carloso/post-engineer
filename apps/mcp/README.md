@@ -161,8 +161,8 @@ Passing a `recordId` fails fast with an error naming the right field.
 The server serves the prompts hub from the Post Engineer web platform over
 the MCP [prompts capability](https://modelcontextprotocol.io/docs/concepts/prompts),
 so MCP clients (Cursor, Claude) list them as slash commands. Each prompt is
-zero-arg; placeholders (`[PERSONA_ID]`, `[STORY_TITLE]`, …) stay in the text
-for you to fill in when you run it. The copy is kept in sync with the web
+zero-arg: the agent asks you for the persona, accounts, and timing when you
+run it. The copy is kept in sync with the web
 hub by a sync test (`prompts-sync.test.ts`).
 
 - `/daily-news`: Daily news becomes a video — turn one top GNews story of the day into one persona video, validated before any token is spent.

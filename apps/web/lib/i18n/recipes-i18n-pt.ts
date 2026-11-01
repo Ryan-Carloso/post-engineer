@@ -26,7 +26,8 @@ export const recipesI18nPt = {
   githubPrsStep1: 'Para desenvolvedores que entregam código e querem cada PR explicado em vídeo.',
   githubPrsStep2:
       'Transforma título, descrição e resumo de mudanças de um PR em roteiro, sem inventar detalhes.',
-  githubPrsStep3: 'Cole o título, a descrição e o que mudou no PR.',
+  githubPrsStep3:
+      'Diga ao agente qual PR usar; ele pergunta o que faltar.',
   githubPrsStep4:
       'Escreva o gancho primeiro, o CTA por último, e valide antes de gastar qualquer token.',
   githubPrsStep5: 'Gere um vídeo e publique onde você pediu.',
@@ -46,7 +47,7 @@ export const recipesI18nPt = {
   copyFullPrompt: 'Copie este prompt',
   copiedPrompt: 'Copiado!',
   copyExplanation:
-      'Copiar coloca o prompt completo na sua área de transferência. Cole no seu agente — Cursor, Claude, Muse, OpenCode ou qualquer agente — substitua os valores entre colchetes e o agente executa com o servidor MCP do Post Engineer.',
+      'Copiar coloca o prompt completo na sua área de transferência. Cole no seu agente — Cursor, Claude, Muse, OpenCode ou qualquer agente — e ele pergunta o que precisa e roda com o servidor MCP do Post Engineer.',
   copyNext:
       'Depois: seu agente valida o roteiro, depois gera e publica o vídeo. A validação é gratuita; a geração custa tokens.',
   openPrompt: 'Abrir prompt',

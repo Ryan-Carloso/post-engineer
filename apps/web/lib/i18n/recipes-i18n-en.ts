@@ -26,7 +26,8 @@ export const recipesI18nEn = {
   githubPrsStep1: 'For developers who ship code and want each PR explained on video.',
   githubPrsStep2:
       'It turns a PR title, description, and change summary into a script, without inventing details.',
-  githubPrsStep3: 'Paste the PR title, description, and what changed.',
+  githubPrsStep3:
+      'Tell your agent which PR to use; it asks for anything missing.',
   githubPrsStep4:
       'Write hook first, CTA last, then validate before any token is spent.',
   githubPrsStep5: 'Generate one video and publish it where you asked.',
@@ -46,7 +47,7 @@ export const recipesI18nEn = {
   copyFullPrompt: 'Copy this prompt',
   copiedPrompt: 'Copied!',
   copyExplanation:
-      'Copying puts the full prompt on your clipboard. Paste it into your agent — Cursor, Claude, Muse, OpenCode, or any agent — replace the bracketed values, and the agent runs it with the Post Engineer MCP server.',
+      'Copying puts the full prompt on your clipboard. Paste it into your agent — Cursor, Claude, Muse, OpenCode, or any agent — and it asks you what it needs, then runs with the Post Engineer MCP server.',
   copyNext:
       'Next: your agent validates the script, then generates and publishes the video. Validation is free; generation costs tokens.',
   openPrompt: 'Open prompt',
