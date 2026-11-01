@@ -89,6 +89,12 @@ test('pickAngle is deterministic and varies with the run seed', () => {
   assert.ok(angles.size > 1);
 });
 
+test('buildPrompt with facts restricts the LLM to the search results', () => {
+  const prompt = buildPrompt({ topic: 'Porto in one day', angle: 'budget', facts: '- Ribeira (https://example.test/r): Ribeira is the old riverside district.' });
+  assert.ok(prompt.includes('Use ONLY facts from these results'));
+  assert.ok(prompt.includes('Ribeira is the old riverside district'));
+});
+
 test('buildPrompt is standalone: it carries topic, angle, contract, and banned phrases, with no em dash', () => {
   const prompt = buildPrompt({ topic: 'Porto in one day', angle: 'budget: the best version that costs little or nothing' });
   assert.ok(prompt.includes('Porto in one day'));

@@ -18,8 +18,11 @@ name: test-flight-faceless
 # script: it rejects `topics` and requires `title` plus the full script in
 # `options.segments`. The "Write test-flight script" step writes that
 # script (title + segments, validated) and the
-# flight sends it unchanged. The script writer is an LLM call with a
-# complete standalone prompt, retried once on a validation failure.
+# flight sends it unchanged. Before the LLM call, a web search grounds
+# the script: Tavily first, Exa as reserve (see search.mjs). The LLM
+# may use ONLY facts from those results. The script writer is an LLM
+# call with a complete standalone prompt, retried once on a
+# validation failure.
 # There is NO fallback script: if the LLM fails or no key is set, the
 # step fails, the flight never runs, and a test_flight_failed event
 # is sent to PostHog (see the Report failure step). A failed job is
@@ -33,6 +36,8 @@ name: test-flight-faceless
 #                                        post-engineer.com/api-keys, scoped
 #                                        to the test persona).
 #     TEST_FLIGHT_DISCORD_WEBHOOK_URL    (optional) failure alert target.
+#     TEST_FLIGHT_TAVILY_API_KEY       primary search key for grounding.
+#     TEST_FLIGHT_EXA_API_KEY          reserve search key for grounding.
 #     TEST_FLIGHT_POSTHOG_KEY          (optional) PostHog project key for
 #                                        the test_flight_failed alert; when
 #                                        unset the alert step logs a warning
@@ -135,6 +140,8 @@ jobs:
           TEST_FLIGHT_LLM_API_KEY: ${{ secrets.TEST_FLIGHT_LLM_API_KEY || secrets.API_NAMING_LLM_API_KEY }}
           TEST_FLIGHT_LLM_BASE_URL: ${{ vars.TEST_FLIGHT_LLM_BASE_URL }}
           TEST_FLIGHT_LLM_MODEL: ${{ vars.TEST_FLIGHT_LLM_MODEL }}
+          TEST_FLIGHT_TAVILY_API_KEY: ${{ secrets.TEST_FLIGHT_TAVILY_API_KEY }}
+          TEST_FLIGHT_EXA_API_KEY: ${{ secrets.TEST_FLIGHT_EXA_API_KEY }}
 
       - name: Run faceless test flight
         run: node .github/scripts/test-flight/flight.mjs

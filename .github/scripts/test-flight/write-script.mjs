@@ -23,6 +23,11 @@
 // When the LLM fails, this step fails, the flight never runs, and
 // nothing is published.
 //
+// Search grounding runs before the LLM: Tavily first, Exa as reserve
+// (see search.mjs). The LLM may use ONLY facts from those results.
+// Search configuration (keys are required in CI; no key means failure):
+//   TEST_FLIGHT_TAVILY_API_KEY  primary search key.
+//   TEST_FLIGHT_EXA_API_KEY     reserve search key.
 // LLM configuration (the key is required; missing key means failure):
 //   TEST_FLIGHT_LLM_API_KEY   OpenAI-compatible API key. The workflow
 //                             passes TEST_FLIGHT_LLM_API_KEY, falling back
@@ -38,6 +43,7 @@
 //---------------
 
 import { writeFile } from 'node:fs/promises';
+import { searchFacts } from './search.mjs';
 import { pathToFileURL } from 'node:url';
 
 export class ScriptError extends Error {}
@@ -246,15 +252,20 @@ export function pickAngle(seed) {
 // The prompt: complete and standalone.
 //---------------
 
-export function buildPrompt({ topic, angle }) {
+export function buildPrompt({ topic, angle, facts = '' }) {
   return [
     'You are a Porto travel guide writing a short spoken video script in English.',
     'This video will publish for real on YouTube and Instagram, as a faceless video: a voiceover over stock footage of places, not a presenter on camera.',
     `Topic: ${topic}`,
     `Angle for this run: ${angle}. Build the whole script around this angle, not around a generic Porto introduction.`,
     '',
+    ...(facts === '' ? [] : [
+      'Web search results for this topic. Use ONLY facts from these results. If a fact is not in them, leave it out instead of guessing it. Never invent a restaurant name, a price, an opening hour, or a claim you cannot support with these results.',
+      facts,
+      '',
+    ]),
     'Write like a human, never like generic AI:',
-    'Use concrete detail: named places, streets, and things you can see. Only use facts you are sure are true about Porto. Never invent a restaurant name, a price, an opening hour, or a claim you cannot support. If a detail is missing, leave it out instead of guessing it.',
+    'Use concrete detail: named places, streets, and things you can see. Only use facts from the search results above. Never invent a restaurant name, a price, an opening hour, or a claim you cannot support. If a detail is missing, leave it out instead of guessing it.',
     'Voice: plain spoken sentences of mixed length, in the first person plural or second person, as a local guide talking to a traveller. Say who did what. Most lines stay plain, with one or two punchy moments at most.',
     'Hook: its only job is to make the viewer want the next sentence. Open with a specific moment, a surprising true fact, or a choice the viewer has to make. Draft three hooks on different angles in your head and keep the strongest. Never promise more than the video delivers.',
     'Body: one idea, developed in order. Give a route, a comparison, or a rule the viewer can actually follow in Porto. Do not list five unrelated tips.',
@@ -285,8 +296,8 @@ function stripFences(text) {
     .trim();
 }
 
-async function callLlm({ topic, angle, llm, fetchFn, attemptError }) {
-  const prompt = buildPrompt({ topic, angle });
+async function callLlm({ topic, angle, llm, fetchFn, attemptError, facts = '' }) {
+  const prompt = buildPrompt({ topic, angle, facts });
   const userContent = attemptError
     ? `${prompt}\n\nPrevious output failed validation: ${attemptError.rule} Fix: ${attemptError.fix} Return JSON only, with the fix applied.`
     : prompt;
@@ -321,14 +332,14 @@ async function callLlm({ topic, angle, llm, fetchFn, attemptError }) {
   return parsed;
 }
 
-export async function generateScript({ topic, angle, llm, fetchFn = fetch }) {
+export async function generateScript({ topic, angle, llm, fetchFn = fetch, facts = '' }) {
   if (!llm || !llm.apiKey) {
     throw new ScriptError('write-script: missing TEST_FLIGHT_LLM_API_KEY — refusing to publish a fallback script');
   }
   let lastError = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const parsed = await callLlm({ topic, angle, llm, fetchFn, attemptError: lastError });
+      const parsed = await callLlm({ topic, angle, llm, fetchFn, attemptError: lastError, facts });
       const checked = validateScript(parsed);
       if (!checked.ok) {
         lastError = checked.error;
@@ -357,12 +368,25 @@ export function resolveLlm(env) {
   };
 }
 
+export function resolveSearch(env) {
+  return {
+    tavilyKey: optionalEnv(env, 'TEST_FLIGHT_TAVILY_API_KEY'),
+    exaKey: optionalEnv(env, 'TEST_FLIGHT_EXA_API_KEY'),
+  };
+}
+
 export async function writeScriptFile(env = process.env, options = {}) {
   const now = options.now ?? new Date();
   const topic = resolveTopic(env, now);
   const runId = optionalEnv(env, 'TEST_FLIGHT_RUN_ID') || `manual-${Date.now()}`;
   const angle = pickAngle(`${runId}-${now.toISOString().slice(0, 10)}`);
-  const script = await generateScript({ topic, angle, llm: resolveLlm(env), fetchFn: options.fetchFn });
+  // Search first, Tavily primary with Exa as reserve; a search failure
+  // fails the job before any LLM call, so no ungrounded script is ever
+  // written. The search step is skipped only by tests that pass a
+  // pre-built search object through options.
+  const search = options.search ?? await searchFacts({ topic, ...resolveSearch(env), fetchFn: options.fetchFn ?? fetch });
+  console.log(`write-script: search provider=${search.provider} sources=${search.sources.length}`);
+  const script = await generateScript({ topic, angle, llm: resolveLlm(env), fetchFn: options.fetchFn, facts: search.facts });
   const outPath = optionalEnv(env, 'TEST_FLIGHT_SCRIPT_PATH');
   if (outPath === '') throw new ScriptError('write-script: missing required TEST_FLIGHT_SCRIPT_PATH');
   const out = {
@@ -371,11 +395,12 @@ export async function writeScriptFile(env = process.env, options = {}) {
     title: script.title,
     segments: script.segments,
     source: script.source,
+    searchProvider: search.provider,
     runId,
   };
   const write = options.writeFile ?? writeFile;
   await write(outPath, `${JSON.stringify(out, null, 2)}\n`, 'utf8');
-  console.log(`write-script: topic="${topic}" angle="${angle}" source=${script.source} title="${script.title}"`);
+  console.log(`write-script: topic="${topic}" angle="${angle}" source=${script.source} search=${search.provider} title="${script.title}"`);
   return out;
 }
 
