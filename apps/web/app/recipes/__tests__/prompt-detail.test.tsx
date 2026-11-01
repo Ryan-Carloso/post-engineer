@@ -32,7 +32,7 @@ vi.mock('@/lib/i18n/provider', () => {
     'recipes.copyFullPrompt': 'Copy this prompt',
     'recipes.copiedPrompt': 'Copied!',
     'recipes.copyExplanation':
-      'Copying puts the full prompt on your clipboard. Paste it into your agent — Cursor, Claude, Muse, OpenCode, or any agent — replace the bracketed values, and the agent runs it with the Post Engineer MCP server.',
+      'Copying puts the full prompt on your clipboard. Paste it into your agent — Cursor, Claude, Muse, OpenCode, or any agent — and it asks you what it needs, then runs with the Post Engineer MCP server.',
     'recipes.copyNext':
       'Next: your agent validates the script, then generates and publishes the video. Validation is free; generation costs tokens.',
     'recipes.viewOnGithub': 'View this prompt on GitHub',

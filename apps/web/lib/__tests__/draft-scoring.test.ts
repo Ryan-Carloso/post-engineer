@@ -93,6 +93,22 @@ describe('scoreDraft', () => {
     expect(result.reasons.reduce((sum, reason) => sum + reason.points, 0)).toBe(100);
   });
 
+  it('flags the hook and filler phrases the prompt base bans, in either apostrophe form', () => {
+    const result = scoreDraft(
+      "Have you ever wondered why? Did you know this? Let\u2019s dive in. Here's the thing: a seamless, next-level, a new era.",
+      EMPTY_BASELINE,
+    );
+    expect(result.counts.slopHits).toEqual([
+      'seamless',
+      'next-level',
+      'have you ever wondered',
+      'did you know',
+      "let's dive in",
+      "here's the thing",
+      'a new era',
+    ]);
+  });
+
   it('penalizes slop, hashtag stuffing, a link and a short body, and sums its reasons', () => {
     const draft = [
       "Let's delve — into the ever-evolving landscape of work.",
