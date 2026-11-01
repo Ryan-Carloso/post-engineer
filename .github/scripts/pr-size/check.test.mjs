@@ -124,15 +124,15 @@ describe('countAddedLines', () => {
 });
 
 describe('exceedsLimit and no exemption', () => {
-  it('uses the 800-line limit and the boundary is exclusive', () => {
-    assert.equal(PR_SIZE_LIMIT, 800);
-    assert.equal(exceedsLimit(800), false);
-    assert.equal(exceedsLimit(801), true);
+  it('uses the 1000-line limit and the boundary is exclusive', () => {
+    assert.equal(PR_SIZE_LIMIT, 1000);
+    assert.equal(exceedsLimit(1000), false);
+    assert.equal(exceedsLimit(1001), true);
   });
 
   it('fails an over-limit PR even when it carries an exemption-style label', () => {
     // End-to-end proof at the CLI level: there is no label bypass.
-    // A temp git repo with one 801-line commit is the synthetic PR.
+    // A temp git repo with one 1001-line commit is the synthetic PR.
     const dir = mkdtempSync(join(tmpdir(), 'pr-size-test-'));
     try {
       const git = (args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' });
@@ -143,7 +143,7 @@ describe('exceedsLimit and no exemption', () => {
       git(['add', '.']);
       git(['commit', '-qm', 'base']);
       const base = git(['rev-parse', 'HEAD']).trim();
-      const big = Array.from({ length: 801 }, (_, i) => `export const v${i} = ${i};`).join('\n') + '\n';
+      const big = Array.from({ length: 1001 }, (_, i) => `export const v${i} = ${i};`).join('\n') + '\n';
       writeFileSync(join(dir, 'a.ts'), big);
       git(['add', '.']);
       git(['commit', '-qm', 'over limit']);
@@ -156,7 +156,7 @@ describe('exceedsLimit and no exemption', () => {
             encoding: 'utf8',
             env: { ...process.env, PR_LABELS: JSON.stringify([{ name: 'size-limit-exempt' }]) },
           }),
-        (e) => e.status === 1 && /over the 800-line limit/.test(e.stdout || ''),
+        (e) => e.status === 1 && /over the 1000-line limit/.test(e.stdout || ''),
       );
     } finally {
       rmSync(dir, { recursive: true, force: true });

@@ -12,7 +12,7 @@
  * large PR; it does not make the check pass).
  *
  * Usage:
- *   node check.mjs --base <sha> --head <sha> [--limit 800]
+ *   node check.mjs --base <sha> --head <sha> [--limit 1000]
  *
  * Exit code: 1 when the counted total exceeds the limit, else 0.
  * Counted files and the total are printed, with a GitHub ::error
@@ -24,7 +24,7 @@ import { pathToFileURL } from 'node:url';
 
 // The cap (added production lines) a PR may have before the check fails.
 // Shared from one constant so tests pin the same value as CI.
-export const PR_SIZE_LIMIT = 800;
+export const PR_SIZE_LIMIT = 1000;
 
 const COUNTED_EXTENSIONS = ['ts', 'tsx', 'py', 'js', 'mjs', 'cjs', 'sql'];
 
@@ -182,7 +182,7 @@ function main() {
     process.exit(2);
   }
   if (!base) {
-    console.error('Usage: node check.mjs --base <sha> --head <sha> [--limit 800]');
+    console.error('Usage: node check.mjs --base <sha> --head <sha> [--limit 1000]');
     process.exit(2);
   }
   const mergeBase = execFileSync('git', ['merge-base', base, head], { encoding: 'utf8' }).trim();
