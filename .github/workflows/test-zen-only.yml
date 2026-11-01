@@ -1,0 +1,29 @@
+name: test-zen-only (temporary, do not merge)
+# Temporary write-only test: runs ONLY write-script.mjs from the #369
+# paid-fallback chain and prints which model succeeded. It never calls
+# flight.mjs, never publishes, never spends Post Engineer tokens.
+# Delete this file before #369 merges.
+on:
+  workflow_dispatch:
+jobs:
+  zen-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Write test-flight script only
+        run: node .github/scripts/test-flight/write-script.mjs
+        env:
+          TEST_FLIGHT_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          TEST_FLIGHT_SCRIPT_PATH: test-flight-script.json
+          TEST_FLIGHT_LLM_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
+          TEST_FLIGHT_LLM_BASE_URL: ${{ vars.TEST_FLIGHT_LLM_BASE_URL || 'https://opencode.ai/zen/v1' }}
+          TEST_FLIGHT_LLM_MODELS: ${{ vars.TEST_FLIGHT_LLM_MODELS || 'glm-5.3-flash-free,deepseek-v4.1-flash-free,glm-5.3-flash' }}
+          TEST_FLIGHT_TAVILY_API_KEY: ${{ secrets.TEST_FLIGHT_TAVILY_API_KEY }}
+          TEST_FLIGHT_EXA_API_KEY: ${{ secrets.TEST_FLIGHT_EXA_API_KEY }}
+      - name: Show result (title and model only, never the key)
+        run: node -e "const s=require('fs').readFileSync('test-flight-script.json','utf8'); const j=JSON.parse(s); console.log('model=' + j.llmModel + ' search=' + j.searchProvider + ' title=' + j.title);"
