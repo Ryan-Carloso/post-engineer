@@ -21,6 +21,7 @@ const EMPTY_BASELINE: DraftBaseline = {
   topAngles: [],
   medianEngagement: null,
   bestEngagement: null,
+  truncated: false,
 };
 
 function strongDraft(): string {
@@ -42,7 +43,7 @@ describe('summarizeBaseline', () => {
       { scriptAngle: 'Porto mornings', views: 50, likes: 0, comments: 0, saves: null },
       { scriptAngle: 'Remote work', views: 200, likes: 0, comments: 0, saves: 0 },
       { scriptAngle: null, views: 1000, likes: 0, comments: 0, saves: 0 },
-    ]);
+    ], true);
     expect(baseline.postsMeasured).toBe(4);
     expect(baseline.topAngles).toEqual([
       { angle: 'Remote work', engagement: 200, posts: 1 },
@@ -50,14 +51,16 @@ describe('summarizeBaseline', () => {
     ]);
     expect(baseline.medianEngagement).toBe(157.5);
     expect(baseline.bestEngagement).toBe(1000);
+    expect(baseline.truncated).toBe(true);
   });
 
   it('reports null median and best with no rows', () => {
-    expect(summarizeBaseline([])).toEqual({
+    expect(summarizeBaseline([], false)).toEqual({
       postsMeasured: 0,
       topAngles: [],
       medianEngagement: null,
       bestEngagement: null,
+      truncated: false,
     });
   });
 });
@@ -69,6 +72,7 @@ describe('scoreDraft', () => {
       topAngles: [{ angle: 'Porto mornings', engagement: 165, posts: 2 }],
       medianEngagement: 115,
       bestEngagement: 200,
+      truncated: false,
     };
     const result = scoreDraft(strongDraft(), baseline);
     expect(result.score).toBe(100);
@@ -106,6 +110,97 @@ describe('scoreDraft', () => {
   it('runs the publish check for the requested network, defaulting to linkedin', () => {
     expect(scoreDraft(strongDraft(), EMPTY_BASELINE).publishCheck.network).toBe('linkedin');
     expect(scoreDraft(strongDraft(), EMPTY_BASELINE, 'bluesky').publishCheck.network).toBe('bluesky');
+  });
+});
+
+describe('scoreDraft bucket details', () => {
+  const pointsOf = (draft: string, rule: string, baseline = EMPTY_BASELINE): number[] =>
+    scoreDraft(draft, baseline).reasons.filter((reason) => reason.rule === rule).map((reason) => reason.points);
+  const detailOf = (draft: string, rule: string, baseline = EMPTY_BASELINE): string | undefined =>
+    scoreDraft(draft, baseline).reasons.find((reason) => reason.rule === rule)?.detail;
+
+  it('reports found slop markers in one reason and never claims none were found', () => {
+    expect(pointsOf('Let us delve here today friends', 'slop_free')).toEqual([15]);
+    expect(detailOf('Let us delve here today friends', 'slop_free')).toBe('Slop markers found: "delve".');
+    expect(detailOf('Plain honest words here', 'slop_free')).toBe('No slop markers found.');
+  });
+
+  it('floors the slop bucket at 0 and keeps the score equal to the reasons sum', () => {
+    const draft = 'delve moreover furthermore additionally ultimately crucial tapestry unlock elevate — words';
+    const result = scoreDraft(draft, EMPTY_BASELINE);
+    expect(pointsOf(draft, 'slop_free')).toEqual([0]);
+    expect(result.score).toBe(result.reasons.reduce((sum, reason) => sum + reason.points, 0));
+    expect(result.score).toBeGreaterThanOrEqual(0);
+  });
+
+  it('matches slop markers written with a typographic apostrophe', () => {
+    const result = scoreDraft('It\u2019s important to note this works', EMPTY_BASELINE);
+    expect(result.counts.slopHits).toEqual(["it's important to note"]);
+  });
+
+  it('does not count URL fragments as hashtags', () => {
+    expect(scoreDraft('See https://example.com/guide#setup today', EMPTY_BASELINE).counts.hashtags).toBe(0);
+    expect(scoreDraft('See example.com/guide#setup today', EMPTY_BASELINE).counts.hashtags).toBe(0);
+    expect(scoreDraft('Learn C#sharp and #Porto', EMPTY_BASELINE).counts.hashtags).toBe(1);
+  });
+
+  it.each([
+    ['HTTPS://example.com/post', 1],
+    ['www.example.com/post', 1],
+    ['read example.com today', 1],
+    ['site.com.br/x', 1],
+    ['me@example.com', 0],
+    ['Node.js and e.g. this', 0],
+    ['example.company', 0],
+    ['no links here', 0],
+  ])('counts links in %s as %i', (draft, expected) => {
+    expect(scoreDraft(draft, EMPTY_BASELINE).counts.links).toBe(expected);
+  });
+
+  it('reads the closing line past trailing hashtags and links', () => {
+    expect(pointsOf('What is your ritual? #Porto #travel', 'call_to_action')).toEqual([5]);
+    expect(pointsOf('What is your ritual?\n#Porto #travel', 'call_to_action')).toEqual([5]);
+    expect(pointsOf('What is your ritual? https://example.com', 'call_to_action')).toEqual([5]);
+  });
+
+  it.each([
+    ['Read the full guide.', 5],
+    ['It works. Share this with a friend', 5],
+    ['Let me know below', 5],
+    ['Comente abaixo', 5],
+    ['Me conta nos comentários', 5],
+    ['I read this on Sunday', 0],
+    ['We share an office', 0],
+  ])('scores the call to action in %s as %i', (draft, expected) => {
+    expect(pointsOf(draft, 'call_to_action')).toEqual([expected]);
+  });
+
+  it('does not match a top theme on a Portuguese stopword', () => {
+    const baseline: DraftBaseline = {
+      ...EMPTY_BASELINE,
+      postsMeasured: 1,
+      topAngles: [{ angle: 'Dicas para viajar', engagement: 10, posts: 1 }],
+    };
+    expect(pointsOf('Um café para começar o dia', 'top_theme', baseline)).toEqual([0]);
+    expect(pointsOf('Vou viajar amanhã', 'top_theme', baseline)).toEqual([15]);
+  });
+
+  it('matches accented theme words whole', () => {
+    const baseline: DraftBaseline = {
+      ...EMPTY_BASELINE,
+      postsMeasured: 1,
+      topAngles: [{ angle: 'Manhãs no Porto', engagement: 10, posts: 1 }],
+    };
+    expect(pointsOf('Minhas manhãs tranquilas', 'top_theme', baseline)).toEqual([15]);
+    expect(pointsOf('Manhas de programador', 'top_theme', baseline)).toEqual([0]);
+  });
+
+  it('says measured posts lack an angle instead of claiming none were measured', () => {
+    const baseline: DraftBaseline = { ...EMPTY_BASELINE, postsMeasured: 40 };
+    expect(detailOf('Some draft text', 'top_theme', baseline)).toBe(
+      'Measured posts have no script angle yet, so no top theme to match.',
+    );
+    expect(detailOf('Some draft text', 'top_theme')).toBe('No measured posts yet, so no top theme to match.');
   });
 });
 

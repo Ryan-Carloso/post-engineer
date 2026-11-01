@@ -6,7 +6,7 @@
 // youtube, instagram, bluesky). It never debits tokens, never
 // schedules, never calls the engine: there is no database write and no
 // external call on this path at all — the baseline is one capped read
-// of the caller's own rows.
+// of the caller's own rows, plus one ownership read when personaId is given.
 //
 // A failing publish check does NOT make this route 400: scoring is
 // advisory, and the caller (agent or UI) decides whether to fix the
@@ -19,11 +19,12 @@ import { NextResponse } from 'next/server';
 
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { isScopedApiKey } from '@/lib/api-keys';
+import { isPersonaAllowed, isScopedApiKey } from '@/lib/api-keys';
 import { apiErrorResponse } from '@/lib/api-error';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
+import { UUID } from '@/lib/metrics/metrics-query';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import {
   BASELINE_ROW_LIMIT,
@@ -36,7 +37,6 @@ import {
 } from '@/lib/draft-scoring';
 
 const ROUTE = 'POST /api/videos/score-draft';
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ScoreDraftBody {
   draft: string;
@@ -93,13 +93,38 @@ function parseBody(body: unknown): ScoreDraftBody | NextResponse {
   };
 }
 
+// A persona that is out of the key's scope, missing or someone else's must
+// not score as "no measured posts yet": the caller could not tell a bad id
+// from a new persona.
+async function personaAccessError(
+  personaIds: string[] | null | undefined,
+  userId: string,
+  personaId: string,
+): Promise<NextResponse | null> {
+  if (!isPersonaAllowed(personaIds, personaId)) {
+    return apiErrorResponse(403, 'This API key does not have access to this persona.', { route: ROUTE });
+  }
+  const { error } = await createSupabaseServiceClient()
+    .from('personas')
+    .select('id')
+    .eq('id', personaId)
+    // Ownership: service role bypasses RLS.
+    .eq('user_id', userId)
+    .single();
+  if (error === null) return null;
+  if (error.code === 'PGRST116') {
+    return apiErrorResponse(404, 'Persona not found.', { route: ROUTE });
+  }
+  return apiErrorResponse(500, 'Failed to load persona.', { route: ROUTE, cause: error });
+}
+
 async function loadBaseline(
   userId: string,
   personaId: string | undefined,
   network: PublishNetwork | undefined,
   isScoped: boolean,
   scopedPersonaIds: string[],
-): Promise<BaselineRow[] | null> {
+): Promise<{ rows: BaselineRow[]; truncated: boolean } | null> {
   const supabase = createSupabaseServiceClient();
   // Prefer the 7d window (a full week of signal); fall back to 24h only
   // when the week has no measured rows at all, so a new account still
@@ -123,23 +148,26 @@ async function loadBaseline(
     if (network !== undefined) select = select.eq('provider', network);
     const { data, error } = await select
       .order('collected_at', { ascending: false })
-      .limit(BASELINE_ROW_LIMIT);
+      .order('id', { ascending: true })
+      // One extra row reveals whether the cap cut anything.
+      .limit(BASELINE_ROW_LIMIT + 1);
     if (error) {
       logger.error('[score-draft] baseline query failed', error, { userId, window });
       return null;
     }
     const rows = (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>;
     if (rows.length > 0) {
-      return rows.map((row) => ({
+      const kept = rows.slice(0, BASELINE_ROW_LIMIT).map((row) => ({
         scriptAngle: typeof row.script_angle === 'string' ? row.script_angle : null,
         views: typeof row.views === 'number' ? row.views : null,
         likes: typeof row.likes === 'number' ? row.likes : null,
         comments: typeof row.comments === 'number' ? row.comments : null,
         saves: typeof row.saves === 'number' ? row.saves : null,
       }));
+      return { rows: kept, truncated: rows.length > BASELINE_ROW_LIMIT };
     }
   }
-  return [];
+  return { rows: [], truncated: false };
 }
 
 async function postHandler(request: Request): Promise<NextResponse> {
@@ -160,20 +188,25 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const parsed = parseBody(body);
   if (parsed instanceof NextResponse) return parsed;
 
-  const rows = await loadBaseline(
+  if (parsed.personaId !== undefined) {
+    const accessError = await personaAccessError(auth.personaIds, auth.userId, parsed.personaId);
+    if (accessError !== null) return accessError;
+  }
+
+  const loaded = await loadBaseline(
     auth.userId,
     parsed.personaId,
     parsed.network,
     isScopedApiKey(auth),
     auth.personaIds ?? [],
   );
-  if (rows === null) {
+  if (loaded === null) {
     return apiErrorResponse(500, 'Failed to load baseline metrics.', {
       route: ROUTE,
       cause: new Error('post_metrics query failed'),
     });
   }
-  const result = scoreDraft(parsed.draft, summarizeBaseline(rows), parsed.network);
+  const result = scoreDraft(parsed.draft, summarizeBaseline(loaded.rows, loaded.truncated), parsed.network);
   return NextResponse.json({ success: true, ...result });
 }
 

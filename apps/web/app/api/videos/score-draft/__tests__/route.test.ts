@@ -6,6 +6,8 @@
 // 24h fallback); the route test pins the query shape and the fallback.
 //---------------
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn() }));
@@ -22,6 +24,8 @@ vi.mock('@/lib/posthog-server', () => ({
 import { POST } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { BASELINE_ROW_LIMIT, DRAFT_MAX_INPUT_CHARS, PUBLISH_NETWORKS } from '@/lib/draft-scoring';
+import { findRepoRoot } from '@/test/repo-root';
 
 const PERSONA = '11111111-2222-4333-8444-555555555555';
 
@@ -46,7 +50,10 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
 
 // Records every chained filter; `limit` resolves the next queued result,
 // so the 7d-then-24h fallback is pinned by queue order.
-function mockQuery(results: Array<{ data: unknown; error: unknown }>) {
+function mockQuery(
+  results: Array<{ data: unknown; error: unknown }>,
+  personaResult: { data: unknown; error: unknown } = { data: { id: PERSONA }, error: null },
+) {
   const calls: Array<[string, ...unknown[]]> = [];
   const queue = [...results];
   const builder: Record<string, unknown> = {};
@@ -57,7 +64,8 @@ function mockQuery(results: Array<{ data: unknown; error: unknown }>) {
     calls.push(['limit', ...args]);
     return queue.shift() ?? { data: [], error: null };
   });
-  const from = vi.fn(() => builder);
+  builder.single = vi.fn(async () => personaResult);
+  const from = vi.fn((table: string) => { calls.push(['from', table]); return builder; });
   vi.mocked(createSupabaseServiceClient).mockReturnValue({ from } as never);
   return { calls, from };
 }
@@ -115,6 +123,68 @@ describe('POST /api/videos/score-draft', () => {
     const { calls } = mockQuery([{ data: [], error: null }, { data: [], error: null }]);
     await post({ draft: strongDraft(), personaId: PERSONA });
     expect(calls).toContainEqual(['eq', 'persona_id', PERSONA]);
+    // Ownership is re-checked: the service role bypasses RLS.
+    expect(calls).toContainEqual(['from', 'personas']);
+    expect(calls).toContainEqual(['eq', 'id', PERSONA]);
+    expect(calls).toContainEqual(['eq', 'user_id', 'user-1']);
+  });
+
+  it('skips the persona read when no personaId is given', async () => {
+    const { calls } = mockQuery([{ data: [row()], error: null }]);
+    await post({ draft: strongDraft() });
+    expect(calls).not.toContainEqual(['from', 'personas']);
+  });
+
+  it('returns 404 for an unknown persona without reading metrics', async () => {
+    const { calls } = mockQuery([], { data: null, error: { code: 'PGRST116', message: 'none' } });
+    const response = await post({ draft: strongDraft(), personaId: PERSONA });
+    expect(response.status).toBe(404);
+    expect(calls).not.toContainEqual(['from', 'post_metrics']);
+  });
+
+  it('returns 500 when the persona read fails for any other reason', async () => {
+    mockQuery([], { data: null, error: { code: '08006', message: 'down' } });
+    const response = await post({ draft: strongDraft(), personaId: PERSONA });
+    expect(response.status).toBe(500);
+  });
+
+  it('returns 403 when the key is scoped away from the persona, without any read', async () => {
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: 'user-1', accessToken: 't', isApiKey: true, personaIds: ['99999999-2222-4333-8444-555555555555'] },
+      error: null,
+    } as never);
+    const { from } = mockQuery([]);
+    const response = await post({ draft: strongDraft(), personaId: PERSONA });
+    expect(response.status).toBe(403);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('orders deterministically and reads one row past the cap', async () => {
+    const { calls } = mockQuery([{ data: [row()], error: null }]);
+    const response = await post({ draft: strongDraft() });
+    expect(calls).toContainEqual(['order', 'collected_at', { ascending: false }]);
+    expect(calls).toContainEqual(['order', 'id', { ascending: true }]);
+    expect(calls).toContainEqual(['limit', BASELINE_ROW_LIMIT + 1]);
+    const payload = (await response.json()) as { baseline: Record<string, unknown> };
+    expect(payload.baseline.truncated).toBe(false);
+  });
+
+  it('flags a truncated baseline and scores only the capped rows', async () => {
+    const rows = Array.from({ length: BASELINE_ROW_LIMIT + 1 }, () => row());
+    mockQuery([{ data: rows, error: null }]);
+    const response = await post({ draft: strongDraft() });
+    const payload = (await response.json()) as { baseline: Record<string, unknown> };
+    expect(payload.baseline.truncated).toBe(true);
+    expect(payload.baseline.postsMeasured).toBe(BASELINE_ROW_LIMIT);
+  });
+
+  it('keeps the MCP schema caps and networks in sync with the route', () => {
+    const mcpSource = readFileSync(
+      join(findRepoRoot(import.meta.url), 'apps/mcp/src/tools-single-video.ts'),
+      'utf8',
+    );
+    expect(mcpSource).toContain(`.max(${DRAFT_MAX_INPUT_CHARS}, 'draft must be at most ${DRAFT_MAX_INPUT_CHARS} characters')`);
+    expect(mcpSource).toContain(`.enum([${PUBLISH_NETWORKS.map((network) => `'${network}'`).join(', ')}])`);
   });
 
   it('filters the baseline by network when network is given, and not otherwise', async () => {
