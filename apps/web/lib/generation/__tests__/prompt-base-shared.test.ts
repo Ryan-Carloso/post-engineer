@@ -2,34 +2,34 @@
  * @vitest-environment node
  */
 
-// prompt-base shared-source guard: the web copy of the shared prompt
-// base must be a generated copy of shared/prompt-base/prompt-base.ts,
-// never a hand-maintained second copy. This test fails loudly (instead
-// of silently testing stale code) whenever the generated copy drifts
-// from the shared source: run `node scripts/sync-prompt-base.mjs`
-// from the repo root to resync.
+// prompt-base shared-source guard: the web hub must import
+// shared/prompt-base/prompt-base.ts directly — there must be no web
+// copy of it at apps/web/lib/generation/prompt-base.ts anymore.
+// This test fails loudly if a copy ever reappears, instead of letting
+// the hub silently serve stale text.
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
-import * as generatedModule from '../prompt-base';
+import {
+  DAILY_NEWS_PROMPT,
+  FULL_SETUP_PROMPT,
+  GITHUB_PRS_PROMPT,
+} from '@/app/recipes/prompts';
+import * as sharedModule from '../../../../../shared/prompt-base/prompt-base';
 
-const SHARED_RELATIVE = join('shared', 'prompt-base', 'prompt-base.ts');
-const GENERATED_RELATIVE = join('apps', 'web', 'lib', 'generation', 'prompt-base.ts');
+const COPY_RELATIVE = join('apps', 'web', 'lib', 'generation', 'prompt-base.ts');
 
 describe('prompt-base shared source', () => {
-  it('is byte-identical to the shared source of truth', () => {
+  it('has no web copy of the shared prompt base', () => {
     const root = findRepoRoot(import.meta.url);
-    const shared = readFileSync(join(root, SHARED_RELATIVE), 'utf8');
-    const generated = readFileSync(join(root, GENERATED_RELATIVE), 'utf8');
-    expect(shared).toContain('DO NOT EDIT this copy directly');
-    expect(generated).toBe(shared);
+    expect(existsSync(join(root, COPY_RELATIVE))).toBe(false);
   });
 
-  it('exports the same values as the shared source at runtime', async () => {
-    const root = findRepoRoot(import.meta.url);
-    const sharedModule: Record<string, unknown> = await import(/* @vite-ignore */ join(root, SHARED_RELATIVE));
-    expect({ ...sharedModule }).toEqual({ ...generatedModule });
-    expect(generatedModule.SHARED_PROMPT_BASE.length).toBeGreaterThan(0);
+  it('serves the shared source at runtime, unchanged', () => {
+    expect(sharedModule.SHARED_PROMPT_BASE.length).toBeGreaterThan(0);
+    expect(DAILY_NEWS_PROMPT).toBe(sharedModule.DAILY_NEWS_PROMPT);
+    expect(FULL_SETUP_PROMPT).toBe(sharedModule.FULL_SETUP_PROMPT);
+    expect(GITHUB_PRS_PROMPT).toBe(sharedModule.GITHUB_PRS_PROMPT);
   });
 });

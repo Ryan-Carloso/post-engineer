@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PROMPTS, getPrompt } from '../prompts';
-import { SHARED_PROMPT_BASE } from '@/lib/generation/prompt-base';
+import { SHARED_PROMPT_BASE } from '../../../../../shared/prompt-base/prompt-base';
 
 describe('prompts hub data', () => {
   it('has one data entry per prompt, and adding a prompt is adding one entry', () => {
