@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { filterVoicesPayload, ListVoicesSchema, type ListVoicesArgs } from './voice-filters.js';
+import { personaVoiceField, withResolvedPersonaVoice, withResolvedPersonaVoiceForUpdate } from './voice-filters.js';
 import {
   CancelScheduleSchema,
   CancelScheduleShape,
@@ -70,7 +71,7 @@ export const CreatePersonaShape = {
     .describe(
       'REQUIRED. Public URL to the persona avatar image (use list_faces for stock face URLs). Every persona has a face; "no face" is chosen per video with generate_persona_video options.faceless.',
     ),
-  voiceId: z.string().min(1, 'voiceId is required').describe('Voice ID to use (see list_voices)'),
+  voiceId: personaVoiceField('voiceId is required').describe('id or label from list_voices. Never type a provider prefix.'),
   language: z
     .string()
     .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })
@@ -119,7 +120,7 @@ export const UpdatePersonaShape = {
   name: z.string().min(1).optional().describe('New name for the persona'),
   // No .nullable(): the API has no "clear avatar" sentinel — null would be silently ignored.
   avatarUrl: z.string().url().optional().describe('New public avatar image URL'),
-  voiceId: z.string().optional().describe('New voice ID (see list_voices)'),
+  voiceId: personaVoiceField().optional().describe('New voice id or label from list_voices. Never type a provider prefix.'),
   language: z
     .string()
     .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })
@@ -233,9 +234,8 @@ export const AddPersonaImageShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to add the image to'),
   ...LibraryImageFields,
   // Swap-only, symmetric with update_persona_image: isPrimary:false on a new
-  // image is meaningless (it is never primary unless marked), so the schema
-  // accepts only true and surfaces the constraint at parse time instead of
-  // silently dropping the flag.
+  // image is meaningless (never primary unless marked), so the schema accepts
+  // only true and surfaces the constraint at parse time, not as a silent drop.
   isPrimary: z
     .literal(true)
     .optional()
@@ -249,8 +249,7 @@ export const UpdatePersonaImageShape = {
   // Reuse the shared field definitions so tag/description limits can't drift
   // from the create path; PATCH supports clearing via empty string, which the
   // create schema's .min(1) path field doesn't need. Whitespace-only values
-  // trim to '' client-side and therefore clear too (server convention:
-  // undefined = keep, '' = clear) — the descriptions say so explicitly.
+  // trim to '' client-side and therefore clear too (undefined = keep, '' = clear).
   tag: LibraryImageFields.tag.describe(
     'New tag (empty or whitespace-only clears the stored value; omit to keep it)'
   ),
@@ -299,12 +298,11 @@ export async function handleCreatePersona(
   client: PostEngineerClient,
   args: z.infer<typeof CreatePersonaSchema>
 ): Promise<McpToolResponse> {
-  // Re-parse with the full schema: the MCP SDK parses tool args from the
-  // raw shape only, so required-field failures (like a missing avatarUrl)
-  // would otherwise never fire on the tool path. A parse failure becomes a
-  // loud isError via handleLibraryCall, before any file is read.
+  // Re-parses with the full schema (the SDK parses tool args from the raw
+  // shape only), then routes the voice BEFORE any POST: an unknown voice
+  // never debits tokens (issue #353).
   return handleLibraryCall(
-    () => client.createPersona(CreatePersonaSchema.parse(args)),
+    async () => client.createPersona(await withResolvedPersonaVoice(client, CreatePersonaSchema.parse(args), 'create_persona')),
     'creating persona',
     'Persona created successfully'
   );
@@ -343,7 +341,11 @@ export async function handleUpdatePersona(
   client: PostEngineerClient,
   args: z.infer<typeof UpdatePersonaSchema>
 ): Promise<McpToolResponse> {
-  return handleLibraryCall(() => client.updatePersona(args), 'updating persona', 'Persona updated successfully');
+  // Full-schema parse, then voice routing BEFORE the POST; no voiceId keeps the stored voice (#353).
+  return handleLibraryCall(
+    async () => client.updatePersona(await withResolvedPersonaVoiceForUpdate(client, UpdatePersonaSchema.parse(args), 'update_persona')),
+    'updating persona', 'Persona updated successfully'
+  );
 }
 
 export async function handleListSocialAccounts(
@@ -1116,12 +1118,10 @@ export async function handleUpdatePersonaImage(
 ): Promise<McpToolResponse> {
   return handleLibraryCall(
     () => {
-      // Re-parse with the refined schema: the MCP SDK parses tool args
-      // from the raw shape only, so the "at least one of
-      // tag/description/isPrimary" refine would otherwise never fire on
-      // the tool path. Parsing inside the closure turns the failure into
-      // a loud isError, before any client call.
-      // (Same reason handleCreatePersona re-parses.)
+      // Re-parse with the refined schema (the SDK parses tool args from the
+      // raw shape only): the "at least one of tag/description/isPrimary"
+      // refine becomes a loud isError before any client call, and it pairs
+      // with the same reason handleCreatePersona re-parses.
       const parsed = UpdatePersonaImageSchema.parse(args);
       return client.updatePersonaImage({
         id: parsed.id,

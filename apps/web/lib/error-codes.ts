@@ -25,6 +25,7 @@ export const ERROR_CODES = {
   RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
   VALIDATION_FAILED: 'VALIDATION_FAILED',
   VOICE_UNAVAILABLE: 'VOICE_UNAVAILABLE',
+  UNKNOWN_VOICE: 'UNKNOWN_VOICE',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   ENGINE_UNAVAILABLE: 'ENGINE_UNAVAILABLE',
 } as const;
@@ -48,6 +49,8 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   RATE_LIMIT_EXCEEDED: 'Too many video generation requests. Please try again later.',
   VALIDATION_FAILED: 'Request validation failed.',
   VOICE_UNAVAILABLE: 'The persona’s voice is unavailable and there is no default voice for its language. Update the persona.',
+  UNKNOWN_VOICE:
+    'Unknown voice "{attempt}". Not a house voice and not one of your clones. Pick one from GET /api/persona/voices.',
   // Never leak internals: unexpected failures get this safe message; the
   // technical detail goes to server logs (and errorId) only.
   INTERNAL_ERROR: 'Something went wrong. Please try again later.',

@@ -1,4 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
+
+const mockTrackEvent = vi.hoisted(() => vi.fn());
+vi.mock('../analytics.js', () => ({
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+  withTracking: (toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
+    mockTrackEvent('mcp_tool_called', { toolName });
+    return handler(args);
+  },
+}));
+
 import {
   handleGeneratePersonaVideo,
   handleScoreDraft,
@@ -27,6 +37,7 @@ const segments = [
 
 function mockClient() {
   return {
+    listVoices: vi.fn().mockResolvedValue({ voices: [] }),
     generatePersonaVideo: vi.fn().mockResolvedValue({
       schedule: { id: 'sch-1', mode: 'scheduled' },
       slots: [{ slotId: 's1', slotAt: '2026-10-30T18:00:00Z', title: 'Porto trip', taskId: 'task-1', status: 'scheduled' }],
@@ -130,6 +141,45 @@ describe('generate_persona_video tool', () => {
     expect(text).toContain('https://[redacted]@example.com');
     expect(text).not.toContain('abc123token');
     expect(text).not.toContain('s3cret');
+  });
+  it('resolves options.voiceId against the house voices before the client call (zero HTTP for house names)', async () => {
+    const client = mockClient();
+    const response = await handleGeneratePersonaVideo(client, {
+      personaId: 'persona-1',
+      segments,
+      title: 'Porto trip',
+      providers: ['youtube'],
+      mode: 'asap',
+      timezone: 'Europe/Lisbon',
+      options: { voiceId: 'phonon_zoey' },
+    });
+    expect(response.isError).toBeUndefined();
+    const input = vi.mocked(client.generatePersonaVideo).mock.calls[0][0];
+    expect(input.options).toMatchObject({ voiceId: 'chatterbox:phonon_zoey' });
+    expect(client.listVoices).not.toHaveBeenCalled();
+  });
+
+  it('a bare unknown options.voiceId fails with the exact message and never debits a token', async () => {
+    const client = mockClient();
+    const response = await handleGeneratePersonaVideo(client, {
+      personaId: 'persona-1',
+      segments,
+      title: 'Porto trip',
+      providers: ['youtube'],
+      mode: 'asap',
+      timezone: 'Europe/Lisbon',
+      options: { voiceId: 'energetic' },
+    });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain(
+      'Unknown voice "energetic". Not a house voice and not one of your clones.',
+    );
+    expect(client.generatePersonaVideo).not.toHaveBeenCalled();
+    expect(mockTrackEvent).toHaveBeenCalledWith('server_warning', {
+      code: 'UNKNOWN_VOICE',
+      tool: 'generate_persona_video',
+      voice: 'energetic',
+    });
   });
 });
 

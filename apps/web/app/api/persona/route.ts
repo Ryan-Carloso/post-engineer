@@ -8,8 +8,8 @@ import { isPersonaAllowed, isScopedApiKey } from '@/lib/api-keys';
 import {
   parsePersonaForm,
   validateVisualCues,
-  validateVoiceSource,
 } from '@/lib/persona-schema';
+import { applyPersonaVoicePatch, personaVoiceRejectionOptions, validatePersonaVoiceInput } from '@/lib/persona-voice-validate';
 import {
   addLibraryImages,
   IMAGE_BUCKET,
@@ -39,7 +39,7 @@ function errorResponse(
   status: number,
   error: string,
   route: string,
-  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown> },
+  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown>; code?: string; leaveReportingToWrapper?: boolean },
 ): NextResponse {
   return apiErrorResponse(status, error, { route, ...options });
 }
@@ -87,9 +87,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return errorResponse(400, visualError, 'POST /api/persona');
   }
 
-  const voiceError = validateVoiceSource(body.values.voiceId);
+  const voiceError = await validatePersonaVoiceInput(supabase, user.id, body.values.voiceId);
   if (voiceError) {
-    return errorResponse(400, voiceError, 'POST /api/persona');
+    return errorResponse(400, voiceError, 'POST /api/persona', personaVoiceRejectionOptions(body.values.voiceId));
   }
 
   // Optional image library at creation: `images` (files) with parallel
@@ -347,6 +347,13 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     updates.name = patch.name.trim();
   }
 
+  const voicePatchError = await applyPersonaVoicePatch(
+    supabase, user.id, persona, patch.voiceId, updates, stalePaths,
+  );
+  if (voicePatchError) {
+    return errorResponse(400, voicePatchError, 'PATCH /api/persona', personaVoiceRejectionOptions(patch.voiceId));
+  }
+
   if (patch.photo && patch.photoExtension) {
     const photoPath = await uploadFile(supabase, user.id, personaId, patch.photo, patch.photoExtension);
     if (!photoPath) return errorResponse(500, 'Failed to upload photo.', 'PATCH /api/persona');
@@ -372,14 +379,6 @@ async function patchHandler(request: Request): Promise<NextResponse> {
       persona.photo_path !== resolved.photoPath
     ) {
       stalePaths.push(persona.photo_path);
-    }
-  }
-
-  if (patch.voiceId !== null) {
-    updates.voice_id = patch.voiceId;
-    updates.voice_audio_path = null;
-    if (typeof persona.voice_audio_path === 'string' && persona.voice_audio_path) {
-      stalePaths.push(persona.voice_audio_path);
     }
   }
 

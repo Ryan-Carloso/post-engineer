@@ -17,6 +17,9 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
   return { ...actual, applyRateLimit: vi.fn(async () => null) };
 });
+vi.mock('@/lib/voice-catalog-fetch', () => ({
+  fetchPersonaVoiceCatalogIds: vi.fn(async () => undefined),
+}));
 
 import { PATCH, POST } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -57,7 +60,7 @@ describe('POST/PATCH personaWrite coverage', () => {
     vi.mocked(applyRateLimit).mockResolvedValueOnce(limited as never);
     const form = new FormData();
     form.append('name', 'Ana');
-    form.append('voiceId', 'voz-1');
+    form.append('voiceId', 'chatterbox:kokoro_af_heart');
     form.append('photo', png('main.png'));
     const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
     expect(res.status).toBe(429);
@@ -136,7 +139,7 @@ describe('POST/PATCH personaWrite coverage', () => {
     stubPinnedHttp(200, PNG_BYTES);
     const form = new FormData();
     form.append('name', 'Remote');
-    form.append('voiceId', 'voz-1');
+    form.append('voiceId', 'chatterbox:kokoro_af_heart');
     form.append('avatarUrl', 'https://cdn.example/face.png');
     form.append('images', png('lib.png'));
     const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
@@ -168,7 +171,7 @@ describe('POST/PATCH personaWrite coverage', () => {
     stubPinnedHttp(200, PNG_BYTES);
     const form = new FormData();
     form.append('name', 'Remote');
-    form.append('voiceId', 'voz-1');
+    form.append('voiceId', 'chatterbox:kokoro_af_heart');
     form.append('avatarUrl', 'https://cdn.example/face.png');
     const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
     expect(res.status).toBe(500);

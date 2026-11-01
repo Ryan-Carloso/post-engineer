@@ -1911,16 +1911,28 @@ describe('POST /api/videos/generate-and-schedule', () => {
       ]);
     });
 
-    it('never swaps an explicit per-request voice: the engine fails loudly on it', async () => {
+    it('rejects an explicit per-request voice the engine cannot route (400 before any charge)', async () => {
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: 'energetic' } });
       const res = await post(baseBody({ options: { voiceId: 'also-invalid' } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('UNKNOWN_VOICE');
+      expect(json.field).toBe('options.voiceId');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+      expect(vi.mocked(startEngineVideoTask)).not.toHaveBeenCalled();
+      expect(updates.find((u) => u.table === 'personas')).toBeUndefined();
+    });
+
+    it('passes an explicit valid per-request voice through untouched (no swap, no warning)', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: 'energetic' } });
+      const res = await post(baseBody({ options: { voiceId: 'chatterbox:kokoro_af_heart' } }));
       const json = await res.json();
       expect(res.status).toBe(200);
       expect(json.warnings).toBeUndefined();
       // The persona's stored (invalid) voice is NOT swapped either: the
       // explicit request voice is what this post speaks with.
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      expect((payload.persona as Record<string, unknown>).voice_id).toBe('also-invalid');
+      expect((payload.persona as Record<string, unknown>).voice_id).toBe('chatterbox:kokoro_af_heart');
       expect(updates.find((u) => u.table === 'personas')).toBeUndefined();
     });
 
@@ -2406,7 +2418,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // Null is the only accepted spelling: a blank string cannot
       // half-intend a persona, it becomes the persona-less path (and must
       // still satisfy it).
-      const res = await post(baseBody({ personaId: '', options: { faceless: true, voiceId: 'voice-eleven' } }));
+      const res = await post(baseBody({ personaId: '', options: { faceless: true, voiceId: 'chatterbox:kokoro_af_heart' } }));
       expect(res.status).toBe(200);
       const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
       expect(scheduleRows).toHaveLength(1);
@@ -2419,7 +2431,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
           personaId: undefined,
           options: {
             faceless: true,
-            voiceId: 'voice-eleven',
+            voiceId: 'chatterbox:kokoro_af_heart',
             language: 'en',
             niche: 'comedy',
             videoAspect: '16:9',
@@ -2436,7 +2448,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
       expect(scheduleRows).toHaveLength(1);
       expect(scheduleRows[0].persona_id).toBeNull();
-      expect(scheduleRows[0].post_voice_id).toBe('voice-eleven');
+      expect(scheduleRows[0].post_voice_id).toBe('chatterbox:kokoro_af_heart');
       expect(scheduleRows[0].post_language).toBe('en');
       expect(scheduleRows[0].post_niche).toBe('comedy');
       expect(scheduleRows[0].post_video_aspect).toBe('16:9');
@@ -2453,7 +2465,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
       const persona = payload.persona as Record<string, unknown>;
       expect(persona.name).toBe('Post');
-      expect(persona.voice_id).toBe('voice-eleven');
+      expect(persona.voice_id).toBe('chatterbox:kokoro_af_heart');
       expect(payload.video_language).toBe('en');
       expect(payload.video_aspect).toBe('16:9');
       expect(payload.paragraph_number).toBe(3);
@@ -2464,7 +2476,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // A scoped API key that allows nothing still creates a persona-less
       // post: there is no persona to scope against.
       vi.mocked(isPersonaAllowed).mockReturnValue(false);
-      const res = await post(baseBody({ personaId: undefined, options: { faceless: true, voiceId: 'voice-eleven' } }));
+      const res = await post(baseBody({ personaId: undefined, options: { faceless: true, voiceId: 'chatterbox:kokoro_af_heart' } }));
       expect(res.status).toBe(200);
       expect(vi.mocked(isPersonaAllowed)).not.toHaveBeenCalled();
     });
@@ -2500,7 +2512,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('charges the faceless rate and never touches library images for a persona-less post', async () => {
-      const res = await post(baseBody({ personaId: undefined, options: { faceless: true, voiceId: 'voice-eleven' } }));
+      const res = await post(baseBody({ personaId: undefined, options: { faceless: true, voiceId: 'chatterbox:kokoro_af_heart' } }));
       expect(res.status).toBe(200);
       const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
       expect(spends).toHaveLength(1);

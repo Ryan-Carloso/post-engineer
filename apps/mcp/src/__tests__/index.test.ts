@@ -321,6 +321,31 @@ describe('registered tool schemas (single source of truth)', () => {
     const avatarUrl = schemas.get('update_persona')?.properties.avatarUrl;
     expect(avatarUrl?.anyOf).toBeUndefined();
   });
+
+  it('advertises the 65 house voice names and labels as a voiceId enum for MCP UI autocomplete (#353)', async () => {
+    const schemas = await listServerTools(createPostEngineerMcpServer(mockClient));
+    const enumsOf = (field: unknown): string[] =>
+      (Array.isArray((field as { anyOf?: unknown }).anyOf)
+        ? (field as { anyOf: Array<{ enum?: string[] }> }).anyOf
+        : []
+      ).flatMap((part) => part.enum ?? []);
+    for (const key of ['create_persona', 'update_persona']) {
+      const enums = enumsOf(schemas.get(key)?.properties.voiceId);
+      expect(enums).toContain('phonon_zoey');
+      expect(enums).toContain('Zoey');
+      expect(enums).toContain('no-voice');
+      expect(enums).toContain('none');
+      expect(enums).toHaveLength(65 + 65 + 2);
+    }
+    const options = schemas.get('generate_persona_video')?.properties.options as {
+      properties?: { voiceId?: unknown };
+    };
+    expect(enumsOf(options?.properties?.voiceId)).toContain('phonon_zoey');
+    expect(enumsOf(options?.properties?.voiceId)).toContain('Zoey');
+    expect(
+      String((schemas.get('create_persona')?.properties.voiceId as { description?: string }).description ?? ''),
+    ).toContain('Never type a provider prefix');
+  });
 });
 
 describe('withTracking wrapper', () => {
@@ -337,7 +362,7 @@ describe('withTracking wrapper', () => {
   });
 
   it('tracks the tool call and returns the handler result', async () => {
-    vi.mocked(mockClient.listVoices).mockResolvedValue([{ id: 'alloy' }]);
+    vi.mocked(mockClient.listVoices).mockResolvedValue({ voices: [{ id: 'alloy', kind: 'standard' }] });
     const server = createPostEngineerMcpServer(mockClient);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'test-client', version: '0.0.0' });
