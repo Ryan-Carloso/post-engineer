@@ -788,6 +788,21 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.field).toBe('options.audioUrl');
     });
 
+    it('sends full_lipsync to the engine for an opt-in full-mode post', async () => {
+      const res = await post(baseBody({ options: { fullLipsync: true } }));
+      expect(res.status).toBe(200);
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.full_lipsync).toBe(true);
+      expect(payload.lipsync_enabled).toBe(true);
+    });
+
+    it('rejects fullLipsync on faceless requests', async () => {
+      const res = await post(baseBody({ options: { faceless: true, fullLipsync: true } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.field).toBe('options.fullLipsync');
+    });
+
     it('rejects imageId on faceless requests', async () => {
       const res = await post(baseBody({ options: { faceless: true, imageId: 'img-1' } }));
       const json = await res.json();

@@ -98,6 +98,10 @@ const OptionsSchema = z
   .object({
     faceless: z.boolean().optional(),
     facelessMaterial: z.enum(['broll', 'svg']).optional(),
+    // Opt-in full lip-sync: the whole video is the persona talking, with
+    // no b-roll. False (the default) keeps the intro-only lip-sync over
+    // stock material. Rejected with faceless below: no face to render.
+    fullLipsync: z.boolean().optional(),
     audioUrl: z.string().optional(),
     imageId: z.string().optional(),
     // Segments contract (MCP first, Phase 1): one call = one video. The
@@ -177,6 +181,8 @@ interface ValidatedInput {
   /** Resolved in validateOptions: 'broll' when omitted. Applies to every
    *  post, with or without a face (stock only, or illustrations only). */
   facelessMaterial: 'broll' | 'svg';
+  /** Opt-in full lip-sync (whole video talking head, no b-roll). */
+  fullLipsync?: boolean;
   audioUrl?: string;
   imageId?: string;
   webhookUrl?: string;
@@ -213,6 +219,7 @@ function validateOptions(
   const {
     faceless = false,
     facelessMaterial,
+    fullLipsync,
     audioUrl,
     imageId,
     webhookUrl,
@@ -224,6 +231,13 @@ function validateOptions(
   } = options;
   if (typeof faceless !== 'boolean') {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.faceless must be a boolean.', 'options.faceless');
+  }
+  if (fullLipsync === true && faceless) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      'options.fullLipsync cannot be used with faceless videos: there is no face to render.',
+      'options.fullLipsync',
+    );
   }
   if (audioUrl !== undefined && !isHttpUrl(audioUrl)) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.audioUrl must be a valid http(s) URL.', 'options.audioUrl');
@@ -272,6 +286,7 @@ function validateOptions(
   return {
     faceless,
     facelessMaterial: facelessMaterial ?? 'broll',
+    fullLipsync,
     audioUrl,
     imageId: imageId?.trim(),
     webhookUrl,
@@ -1086,6 +1101,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
         lipsync: !prep.faceless,
         // The material choice rides the payload under its snake_case name on every post, face or not.
         faceless_material: validatedOptions.facelessMaterial,
+        // Opt-in full lip-sync rides the same way; omitted when unset so
+        // every existing post keeps the intro-only behaviour exactly.
+        full_lipsync: validatedOptions.fullLipsync,
         segments: options?.segments, // Segment media rides to the engine here, next to the joined script.
       });
       if (!hasNonEmptyString(payload.video_subject)) {
