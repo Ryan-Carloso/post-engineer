@@ -144,10 +144,42 @@ test('generateScript retries once after a validation failure, then throws instea
   assert.equal(calls, 2);
 });
 
-test('resolveLlmModels defaults to the free chain and puts an explicit paid model last', () => {
-  assert.deepEqual(resolveLlmModels({}), ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free']);
-  assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODEL: 'paid-model' }), ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free', 'paid-model']);
+test('resolveLlmModels defaults to free models first with paid glm-5.3-flash last, and puts an explicit model last without duplicating it', () => {
+  assert.deepEqual(resolveLlmModels({}), ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free', 'glm-5.3-flash']);
+  assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODEL: 'paid-model' }), ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free', 'glm-5.3-flash', 'paid-model']);
+  assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODEL: 'glm-5.3-flash' }), ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free', 'glm-5.3-flash']);
   assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODELS: 'a-model, b-model' }), ['a-model', 'b-model']);
+});
+
+test('generateScript falls through two free 429s to paid glm-5.3-flash and returns it as the model used', async () => {
+  const calls = [];
+  const fetchFn = async (url, options) => {
+    const model = JSON.parse(options.body).model;
+    calls.push(model);
+    if (model === 'glm-5.3-flash') {
+      return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(goodScript()) } }] }) };
+    }
+    return { ok: false, status: 429, text: async () => '{"error": {"type": "FreeUsageLimitError", "message": "Free usage limit reached."}}' };
+  };
+  const script = await generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: resolveLlmModels({}) },
+    fetchFn,
+  });
+  assert.deepEqual(calls, ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free', 'glm-5.3-flash']);
+  assert.equal(script.source, 'llm');
+  assert.equal(script.model, 'glm-5.3-flash');
+});
+
+test('generateScript throws when free and paid models all fail, instead of publishing a repeat script', async () => {
+  const failing = async () => ({ ok: false, status: 429, text: async () => '{"error": {"type": "FreeUsageLimitError"}}' });
+  await assert.rejects(() => generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: resolveLlmModels({}) },
+    fetchFn: failing,
+  }), /failing the job instead of publishing a repeat script/);
 });
 
 test('generateScript tries the free chain in order and reports the model used', async () => {

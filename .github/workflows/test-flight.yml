@@ -58,8 +58,12 @@ name: test-flight
 #                                writer key, with base URL
 #                                https://opencode.ai/zen/v1 and free
 #                                models first: glm-5.3-flash-free, then
-#                                deepseek-v4.1-flash-free, before any paid
-#                                model set via TEST_FLIGHT_LLM_MODEL.
+#                                deepseek-v4.1-flash-free, then paid
+#                                glm-5.3-flash as last resort only, billed
+#                                to the user's OpenCode Go account via the
+#                                same Zen key. A single model set via
+#                                TEST_FLIGHT_LLM_MODEL is appended last,
+#                                never first.
 #   Repository variables (or Secrets — both are accepted as fallback):
 #     TEST_FLIGHT_PERSONA_ID         persona UUID used by manual flights
 #                                    without an explicit persona_id and by
@@ -157,7 +161,7 @@ jobs:
           TEST_FLIGHT_LLM_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY || secrets.TEST_FLIGHT_LLM_API_KEY || secrets.API_NAMING_LLM_API_KEY }}
           TEST_FLIGHT_LLM_BASE_URL: ${{ vars.TEST_FLIGHT_LLM_BASE_URL || 'https://opencode.ai/zen/v1' }}
           TEST_FLIGHT_LLM_MODEL: ${{ vars.TEST_FLIGHT_LLM_MODEL }}
-          TEST_FLIGHT_LLM_MODELS: ${{ vars.TEST_FLIGHT_LLM_MODELS || 'glm-5.3-flash-free,deepseek-v4.1-flash-free' }}
+          TEST_FLIGHT_LLM_MODELS: ${{ vars.TEST_FLIGHT_LLM_MODELS || 'glm-5.3-flash-free,deepseek-v4.1-flash-free,glm-5.3-flash' }}
           TEST_FLIGHT_TAVILY_API_KEY: ${{ secrets.TEST_FLIGHT_TAVILY_API_KEY }}
           TEST_FLIGHT_EXA_API_KEY: ${{ secrets.TEST_FLIGHT_EXA_API_KEY }}
 

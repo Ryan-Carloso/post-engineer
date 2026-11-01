@@ -36,10 +36,13 @@
 //                             workflow passes https://opencode.ai/zen/v1
 //                             so the Zen key is used.
 //   TEST_FLIGHT_LLM_MODELS    comma-separated chain, default
-//                             glm-5.3-flash-free,deepseek-v4.1-flash-free
-//                             (free first, before any paid model set via
-//                             TEST_FLIGHT_LLM_MODEL, which is appended
-//                             last, never first).
+//                             glm-5.3-flash-free,deepseek-v4.1-flash-free,
+//                             glm-5.3-flash (free first; paid glm-5.3-flash
+//                             is last-resort only, billed to the user's
+//                             OpenCode Go account via the same Zen key.
+//                             A single model set via TEST_FLIGHT_LLM_MODEL
+//                             is appended last, never first, never
+//                             duplicated).
 //   TEST_FLIGHT_TOPIC         optional fixed topic; empty rotates topics.
 //   TEST_FLIGHT_RUN_ID        seed for the angle, so reruns differ.
 //   TEST_FLIGHT_SCRIPT_PATH   required output path for the script JSON.
@@ -69,10 +72,12 @@ export const DEFAULT_LLM_BASE_URL = 'https://api.openai.com/v1';
 // Free-first model chain, same ids as the OpenCode review workflow
 // (opencode/glm-5.3-flash-free primary, opencode/deepseek-v4.1-flash-free
 // verify), minus the provider prefix, which is how OpenCode Zen names
-// them. Paid models come only after the free ones, and only when the
-// caller sets TEST_FLIGHT_LLM_MODEL explicitly — no paid model id is
-// hardcoded here, so no paid spend happens by default.
-export const DEFAULT_LLM_MODELS = ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free'];
+// them. Paid glm-5.3-flash is last-resort only: it runs only after both
+// free models fail (for example on a free-usage 429), and its cost is
+// billed to the user's OpenCode Go account via the same Zen key. A
+// single model set via TEST_FLIGHT_LLM_MODEL is still appended last,
+// never first, and never duplicated if it is already in this chain.
+export const DEFAULT_LLM_MODELS = ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free', 'glm-5.3-flash'];
 
 // Evergreen topics for the scheduled monitor (manual flights pass their own).
 export const MONITOR_TOPICS = [
