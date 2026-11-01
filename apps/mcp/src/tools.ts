@@ -139,7 +139,7 @@ export const ListSocialAccountsShape = {};
 export const ListSocialAccountsSchema = z.object(ListSocialAccountsShape);
 
 export const ConnectAccountShape = {
-  provider: z.enum(['youtube', 'instagram', 'linkedin', 'bluesky']).describe('The social platform to connect'),
+  provider: z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads']).describe('The social platform to connect'),
   handle: z.string().min(1).optional().describe('Bluesky handle (e.g. user.bsky.social). Required only for bluesky.'),
   appPassword: z.string().min(1).optional().describe('Bluesky app password (Settings > App passwords). Required only for bluesky. Never shared or logged.'),
 };
@@ -207,7 +207,7 @@ export const DeletePersonaSchema = z.object(DeletePersonaShape);
 
 export const DisconnectAccountShape = {
   provider: z
-    .enum(['youtube', 'instagram', 'linkedin', 'bluesky'])
+    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads'])
     .describe('The social platform of the account to disconnect.'),
   providerAccountId: z
     .string()
@@ -1214,7 +1214,7 @@ export async function handleGetVideoTaskProgress(
 
 export const PublishVideoDirectShape = {
   provider: z
-    .enum(['youtube', 'instagram', 'linkedin', 'bluesky'])
+    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads'])
     .describe('The social platform to publish the video to.'),
   videoPath: z
     .string()
@@ -1226,7 +1226,7 @@ export const PublishVideoDirectShape = {
     .array(z.string().min(1))
     .min(1, 'At least one account ID is required')
     .describe(
-      'Target accounts: the IDs from list_social_accounts (channel IDs for YouTube, IG user IDs for Instagram, DIDs for Bluesky, member IDs or org URNs for LinkedIn).',
+      'Target accounts: the IDs from list_social_accounts (channel IDs for YouTube, IG user IDs for Instagram, DIDs for Bluesky, member IDs or org URNs for LinkedIn, user IDs for Threads).',
     ),
   title: z
     .string()
@@ -1247,7 +1247,7 @@ export const PublishVideoDirectShape = {
   caption: z
     .string()
     .optional()
-    .describe('Instagram/Bluesky/LinkedIn: required caption.'),
+    .describe('Instagram/Bluesky/LinkedIn/Threads: required caption.'),
 };
 
 export const PublishVideoDirectSchema = z.object(PublishVideoDirectShape);

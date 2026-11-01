@@ -136,7 +136,7 @@ async function getHandler(request?: Request) {
 
 //---------------
 // DELETE /api/account — disconnects (removes) a social account of the logged-in user.
-// Query params: provider (youtube|instagram|bluesky|linkedin) and providerAccountId.
+// Query params: provider (youtube|instagram|bluesky|linkedin|threads) and providerAccountId.
 // Auth = sessão Supabase (cookie) OU API key pessoal (Bearer/x-api-key, MCP),
 // igual ao GET.
 //---------------

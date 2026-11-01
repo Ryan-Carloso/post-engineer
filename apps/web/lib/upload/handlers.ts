@@ -233,19 +233,19 @@ const STORAGE_BUCKET = 'uploads';
 
 //---------------
 // cleanupOldUploads — deletes bucket objects older than CLEANUP_MAX_AGE_MS,
-// ensuring Instagram had time to fetch the media (async fetch inside the
-// container). Runs fire-and-forget after each publish.
+// ensuring the provider had time to fetch the media. Runs fire-and-forget
+// after each publish; the prefix defaults to Instagram, others pass their own.
 //---------------
 const CLEANUP_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
 const CLEANUP_PREFIX = 'instagram';
 
-function cleanupOldUploads(): void {
+export function cleanupOldUploads(prefix: string = CLEANUP_PREFIX): void {
   void (async (): Promise<void> => {
     try {
       const supabase = createSupabaseServiceClient();
       const { data: objects, error: listError } = await supabase.storage
         .from(STORAGE_BUCKET)
-        .list(CLEANUP_PREFIX, { limit: 1000, sortBy: { column: 'created_at', order: 'asc' } });
+        .list(prefix, { limit: 1000, sortBy: { column: 'created_at', order: 'asc' } });
 
       if (listError) {
         logger.warn('Storage cleanup: failed to list objects', {
@@ -261,7 +261,7 @@ function cleanupOldUploads(): void {
           const createdAt = typeof obj.created_at === 'string' ? Date.parse(obj.created_at) : Number.NaN;
           return !Number.isNaN(createdAt) && createdAt < cutoff;
         })
-        .map((obj) => `${CLEANUP_PREFIX}/${obj.name}`);
+        .map((obj) => `${prefix}/${obj.name}`);
 
       if (stalePaths.length === 0) return;
 
@@ -287,7 +287,7 @@ function cleanupOldUploads(): void {
   })();
 }
 
-async function uploadToStorage(
+export async function uploadToStorage(
   buffer: Buffer,
   filename: string,
   contentType: string,

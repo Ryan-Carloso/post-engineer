@@ -6,6 +6,7 @@ import { ptDictionary as basePtDictionary, type Dictionary as BaseDictionary } f
 import { enDictionary as baseEnDictionary } from './en';
 import { publishingAccountsStrings } from './publishing-accounts';
 import { metricsStrings } from './metrics-i18n';
+import { threadsStrings } from './threads-i18n';
 import { promptsStrings } from './nav-prompts-i18n';
 import { voiceFallbackStrings } from './voice-fallback-i18n';
 import { facelessMaterialStrings } from './faceless-material-i18n';
@@ -29,6 +30,7 @@ export const ptDictionary = {
   newPost: { ...voiceFallbackStrings.pt.newPost, ...facelessMaterialStrings.pt.newPost },
   nav: { ...basePtDictionary.nav, ...metricsStrings.pt.nav, ...promptsStrings.pt.nav },
   metrics: metricsStrings.pt.metrics,
+  accounts: { ...basePtDictionary.accounts, ...threadsStrings.pt.accounts },
   posts: { ...basePtDictionary.posts, ...facelessMaterialStrings.pt.posts },
   personas: { ...basePtDictionary.personas, ...facelessMaterialStrings.pt.personas },
 };
@@ -40,16 +42,22 @@ export const enDictionary = {
   newPost: { ...voiceFallbackStrings.en.newPost, ...facelessMaterialStrings.en.newPost },
   nav: { ...baseEnDictionary.nav, ...metricsStrings.en.nav, ...promptsStrings.en.nav },
   metrics: metricsStrings.en.metrics,
+  accounts: { ...baseEnDictionary.accounts, ...threadsStrings.en.accounts },
   posts: { ...baseEnDictionary.posts, ...facelessMaterialStrings.en.posts },
   personas: { ...baseEnDictionary.personas, ...facelessMaterialStrings.en.personas },
 };
 
 type PublishingAccountsKeys = typeof publishingAccountsStrings.en;
 type MetricsKeys = typeof metricsStrings.en;
+type ThreadsKeys = typeof threadsStrings.en;
 type PromptsKeys = typeof promptsStrings.en;
 type VoiceFallbackKeys = typeof voiceFallbackStrings.en;
 type FacelessMaterialKeys = typeof facelessMaterialStrings.en;
 export type Dictionary = BaseDictionary & {
+  [Section in keyof ThreadsKeys]: {
+    [Key in keyof ThreadsKeys[Section]]: string;
+  };
+} & {
   [Section in keyof PublishingAccountsKeys]: {
     [Key in keyof PublishingAccountsKeys[Section]]: string;
   };

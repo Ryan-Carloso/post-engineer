@@ -1723,6 +1723,20 @@ describe('publishVideoDirect', () => {
     expect(formData.get('video')).toBeInstanceOf(Blob);
   });
 
+  it('maps account ids to the threads field name', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'threads',
+      videoPath,
+      accountIds: ['t-1'],
+      caption: 'hello linkedin',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.getAll('threadsAccountIds')).toEqual(['t-1']);
+    expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
   it('fails fast on an unknown provider without fetching', async () => {
     const videoPath = await writeTempVideo('clip.mp4');
     await expect(

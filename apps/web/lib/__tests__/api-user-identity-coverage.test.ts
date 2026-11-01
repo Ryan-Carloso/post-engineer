@@ -40,6 +40,8 @@ const ANONYMOUS_ROUTES = new Set([
   'instagram-auth/start/route.ts',
   'linkedin-auth/callback/route.ts',
   'linkedin-auth/start/route.ts',
+  'threads-auth/callback/route.ts',
+  'threads-auth/start/route.ts',
   // Public version endpoint: no auth required.
   'version/route.ts',
 ]);

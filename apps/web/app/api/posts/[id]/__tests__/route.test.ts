@@ -120,6 +120,7 @@ describe('GET /api/posts/[id]', () => {
         instagramAccountIds: [],
         linkedinAccountIds: [],
         blueskyAccountIds: [],
+        threadsAccountIds: [],
         timezone: 'UTC',
         publishMode: 'scheduled',
       },

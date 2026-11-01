@@ -121,6 +121,7 @@ const TARGET_EXTRACTORS: Record<MeasuredProvider, (record: Record<string, unknow
   instagram: (record) => readString(record, 'postId'),
   bluesky: (record) => readString(record, 'postId'),
   linkedin: (record) => readString(record, 'postId'),
+  threads: (record) => readString(record, 'postId'),
 };
 
 function isMeasuredProvider(value: unknown): value is MeasuredProvider {

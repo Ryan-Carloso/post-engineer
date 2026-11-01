@@ -12,6 +12,7 @@ import {
   useInstagramAccountsQuery,
   useBlueskyAccountsQuery,
   useLinkedinAccountsQuery,
+  useThreadsAccountsQuery,
 } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import { SpinnerIcon } from '@/lib/ui';
@@ -28,7 +29,7 @@ import { InlineFieldError, SectionDivider } from './persona-section-parts';
 // local state — nothing is sent until Save.
 //---------------
 
-type PublishingProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin';
+type PublishingProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads';
 type PublishingDefaults = Record<PublishingProvider, string[]>;
 
 const PROVIDERS: readonly { provider: PublishingProvider; label: string }[] = [
@@ -36,9 +37,10 @@ const PROVIDERS: readonly { provider: PublishingProvider; label: string }[] = [
   { provider: 'instagram', label: 'Instagram' },
   { provider: 'bluesky', label: 'Bluesky' },
   { provider: 'linkedin', label: 'LinkedIn' },
+  { provider: 'threads', label: 'Threads' },
 ];
 
-const EMPTY_DEFAULTS: PublishingDefaults = { youtube: [], instagram: [], bluesky: [], linkedin: [] };
+const EMPTY_DEFAULTS: PublishingDefaults = { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [] };
 
 //---------------
 // API helpers — the route is built in parallel (issue #212); the contract is
@@ -82,7 +84,7 @@ async function fetchDefaults(personaId: string, loadError: string): Promise<Publ
     logger.warn('[persona-publishing-accounts] non-uuid personaId; skipping defaults fetch', {
       personaId,
     });
-    return { youtube: [], instagram: [], bluesky: [], linkedin: [] };
+    return { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [] };
   }
   const res = await fetch(`/api/persona/publishing-accounts?personaId=${encodeURIComponent(personaId)}`);
   const body = (await res.json()) as DefaultsResponse;
@@ -121,6 +123,7 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
   const instagram = useInstagramAccountsQuery();
   const bluesky = useBlueskyAccountsQuery();
   const linkedin = useLinkedinAccountsQuery();
+  const threads = useThreadsAccountsQuery();
 
   const [selection, setSelection] = useState<PublishingDefaults>(EMPTY_DEFAULTS);
   const [loading, setLoading] = useState(true);
@@ -224,10 +227,23 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
         />
       ),
     })),
+    threads: (threads.data?.accounts ?? []).map((account) => ({
+      id: account.providerAccountId,
+      card: (
+        <AccountCard
+          key={`threads:${account.providerAccountId}`}
+          type="threads"
+          name={account.accountName ?? account.providerAccountId}
+          thumbnail={account.profilePictureUrl}
+          selected={selection.threads.includes(account.providerAccountId)}
+          onSelect={() => toggle('threads', account.providerAccountId)}
+        />
+      ),
+    })),
   };
 
   const accountsLoading =
-    youtube.isLoading || instagram.isLoading || bluesky.isLoading || linkedin.isLoading;
+    youtube.isLoading || instagram.isLoading || bluesky.isLoading || linkedin.isLoading || threads.isLoading;
 
   return (
     <section>

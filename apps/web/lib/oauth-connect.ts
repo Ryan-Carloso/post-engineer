@@ -17,7 +17,7 @@ import {
 // consumes it as a fallback when the cookie does not exist.
 //---------------
 
-export const OAUTH_CONNECT_PROVIDERS = ['youtube', 'instagram', 'linkedin'] as const;
+export const OAUTH_CONNECT_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'threads'] as const;
 export type OAuthConnectProvider = (typeof OAUTH_CONNECT_PROVIDERS)[number];
 
 export function isOAuthConnectProvider(value: unknown): value is OAuthConnectProvider {
@@ -190,6 +190,19 @@ export async function buildOAuthConnectUrl(
       const { state, nonce } = createOAuthState({ provider: 'youtube', redirectUri });
       const oauth2Client = await createGoogleOAuth2Client(redirectUri);
       const authUrl = generateGoogleAuthUrl(oauth2Client, state);
+      return { ok: true, authUrl, state, nonce };
+    }
+    if (provider === 'threads') {
+      if (!process.env.THREADS_CLIENT_ID || !process.env.THREADS_CLIENT_SECRET) {
+        return {
+          ok: false,
+          error:
+            'Threads credentials are not configured (THREADS_CLIENT_ID / THREADS_CLIENT_SECRET).',
+        };
+      }
+      const { buildThreadsAuthorizationUrl } = await import('./threads');
+      const { state, nonce } = createOAuthState({ provider: 'threads', redirectUri });
+      const authUrl = buildThreadsAuthorizationUrl(state, redirectUri);
       return { ok: true, authUrl, state, nonce };
     }
     // linkedin

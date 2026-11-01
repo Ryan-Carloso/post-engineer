@@ -14,6 +14,8 @@ Wire contract (multipart/form-data):
   repeated ``accountIds`` fields.
 - LinkedIn: ``provider=linkedin``, ``video`` (file), ``caption``,
   repeated ``accountIds`` fields.
+- Threads: ``provider=threads``, ``video`` (file), ``caption``,
+  repeated ``threadsAccountIds`` fields.
 
 This module owns only types, validation and multipart part builders; the HTTP
 transport lives in the client function of the same module.
@@ -36,12 +38,20 @@ SERVICE_KEY_ENV: str = "MONEYPRINT_API_SECRET"
 INSTAGRAM_CAPTION_MAX_LENGTH: int = 2200
 BLUESKY_CAPTION_MAX_GRAPHEMES: int = 300
 LINKEDIN_CAPTION_MAX_LENGTH: int = 3000
+THREADS_CAPTION_MAX_LENGTH: int = 500
 
 YOUTUBE_PROVIDER: str = "youtube"
 INSTAGRAM_PROVIDER: str = "instagram"
 BLUESKY_PROVIDER: str = "bluesky"
 LINKEDIN_PROVIDER: str = "linkedin"
-VALID_PROVIDERS: tuple[str, ...] = (YOUTUBE_PROVIDER, INSTAGRAM_PROVIDER, BLUESKY_PROVIDER, LINKEDIN_PROVIDER)
+THREADS_PROVIDER: str = "threads"
+VALID_PROVIDERS: tuple[str, ...] = (
+    YOUTUBE_PROVIDER,
+    INSTAGRAM_PROVIDER,
+    BLUESKY_PROVIDER,
+    LINKEDIN_PROVIDER,
+    THREADS_PROVIDER,
+)
 
 
 @dataclass
@@ -92,6 +102,17 @@ class LinkedInMetadata:
         self.account_ids = tuple(self.account_ids)
 
 
+@dataclass
+class ThreadsMetadata:
+    """Fields required by the internal route for a Threads upload."""
+
+    caption: str
+    account_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        self.account_ids = tuple(self.account_ids)
+
+
 @dataclass(frozen=True)
 class PublishMetadata:
     """Validated publish request for one task."""
@@ -101,6 +122,7 @@ class PublishMetadata:
     instagram: InstagramMetadata | None = None
     bluesky: BlueskyMetadata | None = None
     linkedin: LinkedInMetadata | None = None
+    threads: ThreadsMetadata | None = None
 
 
 @dataclass(frozen=True)
@@ -122,6 +144,7 @@ def validate_publish_metadata(
     instagram: InstagramMetadata | None,
     bluesky: BlueskyMetadata | None = None,
     linkedin: LinkedInMetadata | None = None,
+    threads: ThreadsMetadata | None = None,
 ) -> PublishMetadata:
     """Validate provider selection and per-provider metadata.
 
@@ -180,6 +203,16 @@ def validate_publish_metadata(
                 "linkedin caption exceeds "
                 f"{LINKEDIN_CAPTION_MAX_LENGTH} characters"
             )
+    if THREADS_PROVIDER in providers:
+        if threads is None:
+            raise ValueError("threads provider requires threads metadata")
+        if not threads.account_ids:
+            raise ValueError("threads publish requires at least one account id")
+        if len(threads.caption) > THREADS_CAPTION_MAX_LENGTH:
+            raise ValueError(
+                "threads caption exceeds "
+                f"{THREADS_CAPTION_MAX_LENGTH} characters"
+            )
 
     return PublishMetadata(
         providers=tuple(providers),
@@ -187,6 +220,7 @@ def validate_publish_metadata(
         instagram=instagram,
         bluesky=bluesky,
         linkedin=linkedin,
+        threads=threads,
     )
 
 
@@ -233,6 +267,17 @@ def build_linkedin_parts(metadata: LinkedInMetadata) -> MultipartParts:
             ("provider", LINKEDIN_PROVIDER),
             ("caption", metadata.caption),
             *(("linkedinAccountIds", account_id) for account_id in metadata.account_ids),
+        ],
+    )
+
+
+def build_threads_parts(metadata: ThreadsMetadata) -> MultipartParts:
+    """Build the multipart fields (file excluded) for a Threads request."""
+    return MultipartParts(
+        fields=[
+            ("provider", THREADS_PROVIDER),
+            ("caption", metadata.caption),
+            *(("threadsAccountIds", account_id) for account_id in metadata.account_ids),
         ],
     )
 
@@ -314,6 +359,7 @@ _PART_BUILDERS: _PartBuilders = {
     INSTAGRAM_PROVIDER: (InstagramMetadata, build_instagram_parts),
     BLUESKY_PROVIDER: (BlueskyMetadata, build_bluesky_parts),
     LINKEDIN_PROVIDER: (LinkedInMetadata, build_linkedin_parts),
+    THREADS_PROVIDER: (ThreadsMetadata, build_threads_parts),
 }
 
 
@@ -344,7 +390,7 @@ def publish_video(
     base_url: str,
     api_secret: str,
     owner_user_id: str,
-    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata,
+    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata,
     video_path: str,
     video_bytes: bytes,
     content_type: str,
@@ -408,7 +454,7 @@ def publish_video(
                 result: dict[str, Any] = response.json()
             except ValueError as exc:
                 raise PublishError("upload API returned invalid JSON") from exc
-            # HTTP 200 is not success. Bluesky/LinkedIn answer 200 with
+            # HTTP 200 is not success. Bluesky/LinkedIn/Threads answer 200 with
             # success:false (and often error/errorType). YouTube/Instagram
             # keep success:true and put per-account outcomes in results.
             # Either shape with nothing posted must raise: the message
