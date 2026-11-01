@@ -309,15 +309,19 @@ export async function withResolvedPersonaVoice<T extends { voiceId?: string }>(
 }
 
 /** PersonaVoiceIdSchema — the voiceId field family: the 65 house names plus
- *  the no-voice/none sentinels as one JSON-schema enum (so MCP UIs
- *  autocomplete house names), plus a free string for clone ids/keys. */
+ *  their labels plus the no-voice/none sentinels as one JSON-schema enum
+ *  (so MCP UIs autocomplete house names AND labels — the resolver already
+ *  accepts both, but the enum only suggested names), plus a free string
+ *  for clone ids/keys. */
 export function personaVoiceField(requiredMessage?: string) {
   // z.enum needs a non-empty tuple; the catalog is guaranteed non-empty by
   // the sync test, but the fallback keeps the schema well-formed regardless.
   const houseNames = HOUSE_VOICES.map((voice) => voice.name);
+  const houseLabels = HOUSE_VOICES.map((voice) => voice.label);
   const names = [
     houseNames[0] ?? '',
     ...houseNames.slice(1),
+    ...houseLabels,
     ...NO_VOICE_SENTINELS,
   ] as [string, ...string[]];
   const field = z.union([z.enum(names), z.string()]).superRefine((value, ctx) => {

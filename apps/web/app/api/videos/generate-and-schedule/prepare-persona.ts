@@ -30,7 +30,7 @@ import { fetchPersonaVoiceCatalogIds } from '@/lib/voice-catalog-fetch';
 // cloneVoiceAvailable moved to lib/persona-voice-validate.ts for the persona
 // POST/PATCH voice validation (issue #353); re-exported so existing import
 // sites keep working.
-import { cloneVoiceAvailable } from '@/lib/persona-voice-validate';
+import { cloneVoiceAvailable, validatePersonaVoiceInput } from '@/lib/persona-voice-validate';
 export { cloneVoiceAvailable } from '@/lib/persona-voice-validate';
 import { signedUrl, resolvePostWithoutPersona, type PersonaPrep } from './persona-prep';
 
@@ -332,7 +332,35 @@ export async function preparePost(
   },
 ): Promise<PersonaPrep | NextResponse> {
   if (personaId === null) {
-    return resolvePostWithoutPersona(opts);
+    const prep = resolvePostWithoutPersona(opts);
+    return validateExplicitVoice(supabase, userId, opts, prep);
   }
-  return preparePersona(supabase, userId, personaId, opts);
+  const prep = await preparePersona(supabase, userId, personaId, opts);
+  if (prep instanceof NextResponse) return prep;
+  return validateExplicitVoice(supabase, userId, opts, prep);
+}
+
+/**
+ * Explicit per-request voice (issue #353 follow-up): the stored-voice path
+ * in preparePersona already falls back before any charge, but an explicit
+ * options.voiceId used to pass straight to the engine, which only fails
+ * loudly at TTS time, after the spend. Validate it with the same
+ * persona-voice check (house catalog + the caller's own READY clones)
+ * BEFORE any charge. An explicit choice is never silently swapped: it is
+ * rejected with the same UNKNOWN_VOICE 400. Skipped when a custom audioUrl
+ * wins (the voice is ignored then) and when no explicit voice was sent.
+ */
+async function validateExplicitVoice(
+  supabase: SupabaseClient,
+  userId: string,
+  opts: { voiceId?: string },
+  prep: PersonaPrep,
+): Promise<PersonaPrep | NextResponse> {
+  if (opts.voiceId === undefined || prep.voiceAudioUrl) return prep;
+  if (opts.voiceId.trim().length === 0) return prep;
+  const voiceError = await validatePersonaVoiceInput(supabase, userId, opts.voiceId);
+  if (voiceError) {
+    return validationFailed(ERROR_CODES.UNKNOWN_VOICE, voiceError, 'options.voiceId');
+  }
+  return prep;
 }

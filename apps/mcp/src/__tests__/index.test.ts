@@ -322,7 +322,7 @@ describe('registered tool schemas (single source of truth)', () => {
     expect(avatarUrl?.anyOf).toBeUndefined();
   });
 
-  it('advertises the 65 house voice names as a voiceId enum for MCP UI autocomplete (#353)', async () => {
+  it('advertises the 65 house voice names and labels as a voiceId enum for MCP UI autocomplete (#353)', async () => {
     const schemas = await listServerTools(createPostEngineerMcpServer(mockClient));
     const enumsOf = (field: unknown): string[] =>
       (Array.isArray((field as { anyOf?: unknown }).anyOf)
@@ -332,14 +332,16 @@ describe('registered tool schemas (single source of truth)', () => {
     for (const key of ['create_persona', 'update_persona']) {
       const enums = enumsOf(schemas.get(key)?.properties.voiceId);
       expect(enums).toContain('phonon_zoey');
+      expect(enums).toContain('Zoey');
       expect(enums).toContain('no-voice');
       expect(enums).toContain('none');
-      expect(enums).toHaveLength(67);
+      expect(enums).toHaveLength(65 + 65 + 2);
     }
     const options = schemas.get('generate_persona_video')?.properties.options as {
       properties?: { voiceId?: unknown };
     };
     expect(enumsOf(options?.properties?.voiceId)).toContain('phonon_zoey');
+    expect(enumsOf(options?.properties?.voiceId)).toContain('Zoey');
     expect(
       String((schemas.get('create_persona')?.properties.voiceId as { description?: string }).description ?? ''),
     ).toContain('Never type a provider prefix');

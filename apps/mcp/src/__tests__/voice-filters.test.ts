@@ -79,6 +79,19 @@ describe('PersonaVoiceIdSchema', () => {
     expect(PersonaVoiceIdSchema.safeParse('').success).toBe(false);
     expect(PersonaVoiceIdSchema.safeParse('zoey').success).toBe(true);
   });
+
+  it('autocomplete enum carries the 65 house names AND their labels', () => {
+    const field = personaVoiceField();
+    const inner = (field as unknown as { _def: { schema: unknown } })._def.schema as {
+      _def: { options: { _def: { values: string[] } }[] };
+    };
+    const enumValues = inner._def.options[0]._def.values;
+    expect(enumValues).toHaveLength(65 + 65 + 2);
+    expect(enumValues).toContain('phonon_zoey');
+    expect(enumValues).toContain('Zoey');
+    expect(enumValues).toContain('no-voice');
+    expect(enumValues).toContain('none');
+  });
 });
 
 describe('resolvePersonaVoiceId', () => {
