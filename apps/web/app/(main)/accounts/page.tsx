@@ -10,6 +10,7 @@ import {
   useDisconnectAccountMutation,
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
+  useThreadsAccountsQuery,
   useYouTubeAccountsQuery,
   type DisconnectAccountResult,
 } from '@/lib/api';
@@ -17,6 +18,8 @@ import { useUploadStore } from '@/lib/store';
 import { useYouTubeOAuth } from '@/lib/oauth/google-handler';
 import { useInstagramOAuth } from '@/lib/oauth/instagram-handler';
 import { useLinkedInOAuth } from '@/lib/oauth/linkedin-handler';
+import { useThreadsOAuth } from '@/lib/oauth/threads-handler';
+import { ProviderIcon } from '@/components/provider-icon';
 import { useI18n } from '@/lib/i18n/provider';
 import { AccountsIcon, GoogleIcon, InstagramIcon } from '@/lib/ui';
 
@@ -29,6 +32,7 @@ export default function AccountsPage(): React.ReactElement {
         <InstagramAccountsSection />
         <BlueskyAccountsSection />
         <LinkedinAccountsSection />
+        <ThreadsAccountsSection />
       </main>
     </div>
   );
@@ -256,6 +260,38 @@ async function handleDisconnect(
   } catch {
     onError(t('accounts.disconnectError'));
   }
+}
+
+//---------------
+// Contas Threads: uma query e um fluxo OAuth.
+//---------------
+
+function ThreadsAccountsSection(): ReactNode {
+  const { t } = useI18n();
+  const query = useThreadsAccountsQuery();
+  const oauth = useThreadsOAuth();
+  const disconnect = useDisconnectAccountMutation('threads');
+  const [disconnectError, setDisconnectError] = useState<string | null>(null);
+  const accounts = query.data?.accounts ?? [];
+  return (
+    <SocialAccountsSection
+      icon={<BrandIcon className="bg-muted text-foreground"><ProviderIcon provider="threads" /></BrandIcon>}
+      label={t('accounts.threadsLabel')}
+      description={t('accounts.threadsDescription')}
+      connectedLabel={connectedLabel(t, accounts.length)}
+      count={accounts.length}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="threads" name={account.accountName ?? account.providerAccountId} thumbnail={account.profilePictureUrl} showDisconnect onDisconnect={() => { setDisconnectError(null); void handleDisconnect(t, disconnect, account.providerAccountId, setDisconnectError); }} />)}
+      isLoading={query.isLoading}
+      loadError={query.error?.message ?? null}
+      connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
+      connectError={oauth.error}
+      disconnectError={disconnectError}
+      connectDisabled={oauth.isLoading}
+      retryLabel={t('accounts.tryAgain')}
+      onConnect={() => void oauth.startOAuth()}
+      onRetry={() => void query.refetch()}
+    />
+  );
 }
 
 //---------------

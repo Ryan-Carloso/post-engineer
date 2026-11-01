@@ -10,6 +10,7 @@ import {
   useYouTubeAccountsQuery,
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
+  useThreadsAccountsQuery,
   useBlueskyAccountsQuery,
   useVideoGenerationsQuery,
   type ScheduledSlot,
@@ -24,7 +25,7 @@ import { ProviderIcon } from '@/components/provider-icon';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { SpinnerIcon } from '@/lib/ui';
-import { PROVIDER_LABELS, accountOption, type AccountOption } from '@/lib/account-options';
+import { PROVIDER_LABELS, accountOption, type AccountOption, scheduleAccountIds } from '@/lib/account-options';
 import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 
 //---------------
@@ -35,7 +36,7 @@ import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 //---------------
 
 type Tab = 'upcoming' | 'history';
-type ProviderFilter = 'all' | 'youtube' | 'instagram' | 'linkedin' | 'bluesky';
+type ProviderFilter = 'all' | 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads';
 
 //---------------
 // resolveAccountFilter — a selected account only stays applied when it
@@ -54,7 +55,7 @@ function resolveAccountFilter(
   return accountId;
 }
 
-const PROVIDER_FILTERS: ProviderFilter[] = ['all', 'youtube', 'instagram', 'linkedin', 'bluesky'];
+const PROVIDER_FILTERS: ProviderFilter[] = ['all', 'youtube', 'instagram', 'linkedin', 'bluesky', 'threads'];
 
 const STATUS_STYLE: Record<string, string> = {
   pending: 'bg-[#e8edf1] text-[#60758a]',
@@ -168,12 +169,7 @@ function resolveSlotAccounts(
   accounts: AccountOption[],
 ): AccountOption[] {
   if (!schedule) return [];
-  const ids = new Set([
-    ...(schedule.youtubeAccountIds ?? []),
-    ...(schedule.instagramAccountIds ?? []),
-    ...(schedule.linkedinAccountIds ?? []),
-    ...(schedule.blueskyAccountIds ?? []),
-  ]);
+  const ids = new Set(scheduleAccountIds(schedule));
   return accounts.filter((account) => ids.has(account.id));
 }
 
@@ -326,6 +322,7 @@ export default function PostsPage() {
   const instagramQuery = useInstagramAccountsQuery();
   const linkedinQuery = useLinkedinAccountsQuery();
   const blueskyQuery = useBlueskyAccountsQuery();
+  const threadsQuery = useThreadsAccountsQuery();
 
   const scheduleById = useMemo(
     () => new Map((schedulesQuery.data ?? []).map((schedule) => [schedule.id, schedule])),
@@ -342,8 +339,9 @@ export default function PostsPage() {
       ...(instagramQuery.data?.accounts ?? []).map(accountOption),
       ...(linkedinQuery.data?.accounts ?? []).map(accountOption),
       ...(blueskyQuery.data?.accounts ?? []).map(accountOption),
+      ...(threadsQuery.data?.accounts ?? []).map(accountOption),
     ],
-    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data],
+    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data, threadsQuery.data],
   );
 
   const visibleAccounts = useMemo(
@@ -376,12 +374,7 @@ export default function PostsPage() {
       if (!schedule) return false;
       if (providerFilter !== 'all' && !schedule.providers.includes(providerFilter)) return false;
       if (effectiveAccountFilter !== 'all') {
-        const ids = new Set([
-          ...(schedule.youtubeAccountIds ?? []),
-          ...(schedule.instagramAccountIds ?? []),
-          ...(schedule.linkedinAccountIds ?? []),
-          ...(schedule.blueskyAccountIds ?? []),
-        ]);
+        const ids = new Set(scheduleAccountIds(schedule));
         if (!ids.has(effectiveAccountFilter)) return false;
       }
       return true;

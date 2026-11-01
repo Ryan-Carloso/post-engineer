@@ -9,6 +9,7 @@ import {
   useYouTubeAccountsQuery,
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
+  useThreadsAccountsQuery,
   useBlueskyAccountsQuery,
   useUpdateSlotMutation,
   useDeleteSlotMutation,
@@ -24,6 +25,7 @@ import { DetailProgressBar } from './detail-progress-bar';
 import { ScriptAngleSection } from './script-angle-section';
 import { ExternalLinkIcon } from '@/lib/ui';
 import type { PublishLink } from '@/lib/publish-links';
+import { PROVIDER_LABELS, scheduleAccountIds } from '@/lib/account-options';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 
@@ -36,7 +38,7 @@ import type { TranslationKey } from '@/lib/i18n';
 
 interface AccountCardData {
   id: string;
-  type: 'youtube' | 'instagram' | 'linkedin' | 'bluesky';
+  type: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads';
   name: string;
   email?: string;
   thumbnail?: string;
@@ -85,13 +87,6 @@ const SLOT_VIDEO_STATUSES = new Set<ScheduledSlot['status']>(['ready', 'publishi
 // rather than the raw provider id, so the UI never shows an internal slug
 // or an untranslated new provider.
 //---------------
-const PUBLISH_LINK_LABEL: Record<PublishLink['provider'], string> = {
-  youtube: 'YouTube',
-  instagram: 'Instagram',
-  bluesky: 'Bluesky',
-  linkedin: 'LinkedIn',
-};
-
 function formatDateTime(value: string, locale: 'pt' | 'en', timeZone?: string | null): string {
   const tag = locale === 'pt' ? 'pt-BR' : 'en-US';
   if (timeZone) {
@@ -130,6 +125,7 @@ export default function PostDetailPage() {
   const instagramQuery = useInstagramAccountsQuery();
   const linkedinQuery = useLinkedinAccountsQuery();
   const blueskyQuery = useBlueskyAccountsQuery();
+  const threadsQuery = useThreadsAccountsQuery();
 
   // Target accounts resolved from the same account queries the accounts
   // screen uses, mapped to the shared AccountCard props (real thumbnails
@@ -160,8 +156,14 @@ export default function PostDetailPage() {
         name: account.handle,
         handle: `@${account.handle}`,
       })),
+      ...(threadsQuery.data?.accounts ?? []).map((account) => ({
+        id: account.providerAccountId,
+        type: 'threads' as const,
+        name: account.accountName ?? account.providerAccountId,
+        thumbnail: account.profilePictureUrl,
+      })),
     ],
-    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data],
+    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data, threadsQuery.data],
   );
 
   const post: PostDetail | null = postQuery.data ?? null;
@@ -171,12 +173,7 @@ export default function PostDetailPage() {
 
   const accounts: AccountCardData[] = useMemo(() => {
     if (!slotDetail) return [];
-    const ids = new Set([
-      ...(slotDetail.schedule.youtubeAccountIds ?? []),
-      ...(slotDetail.schedule.instagramAccountIds ?? []),
-      ...(slotDetail.schedule.linkedinAccountIds ?? []),
-      ...(slotDetail.schedule.blueskyAccountIds ?? []),
-    ]);
+    const ids = new Set(scheduleAccountIds(slotDetail.schedule));
     return accountOptions.filter((account) => ids.has(account.id));
   }, [slotDetail, accountOptions]);
 
@@ -524,7 +521,7 @@ const PublishLinks = ({ links }: { links: PublishLink[] }) => {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 rounded-xl border border-input bg-white px-3 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
             >
-              {PUBLISH_LINK_LABEL[link.provider]}
+              {PROVIDER_LABELS[link.provider]}
               <ExternalLinkIcon />
             </a>
           </li>

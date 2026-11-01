@@ -48,6 +48,12 @@
     "GET /api/linkedin-auth/start": {
       "kind": "oauth-redirect"
     },
+    "GET /api/threads-auth/callback": {
+      "kind": "oauth-redirect"
+    },
+    "GET /api/threads-auth/start": {
+      "kind": "oauth-redirect"
+    },
     "POST /api/logout": {
       "kind": "session-only"
     },

@@ -19,6 +19,7 @@ import {
   PERSONA_IMAGE_WARNING_CODES,
 } from '@/lib/persona-image-select';
 import { logClientError } from '@/lib/client-logger';
+import { partitionPickedImages, runUploadsInParallel, type UploadOutcome } from './persona-image-upload-queue';
 
 // Single source of truth for the library cap; the picker limit, the
 // server count check, and the SQL trigger all derive from this value.
@@ -162,22 +163,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
     const all = Array.from(event.target.files ?? []);
     // Rejected files are a silent failure if dropped without feedback: tell
     // the user which picks were skipped and why instead of losing them.
-    const picked: File[] = [];
-    let rejectedCount = 0;
-    for (const file of all) {
-      // The explicit allowlist is the whole check: a bare startsWith('image/')
-      // would also accept image/gif or image/svg+xml, which the server
-      // rejects — keep client and server in agreement.
-      if (
-        ALLOWED_IMAGE_MIME_TYPES.has(file.type) &&
-        file.size > 0 &&
-        file.size <= MAX_IMAGE_BYTES
-      ) {
-        picked.push(file);
-      } else {
-        rejectedCount += 1;
-      }
-    }
+    const { picked, rejectedCount } = partitionPickedImages(all);
     const accepted = picked.slice(0, Math.max(room, 0));
     // Both conditions are reported when they co-occur: otherwise a user
     // whose picks were dropped for type/size reasons only sees the limit
@@ -234,10 +220,10 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
     const uploadedPreviews: string[] = [];
     const warnings: string[] = [];
     try {
-      // Sequential on purpose: stop at the first failure so the user sees
-      // one actionable error instead of N parallel failures, and completed
-      // items can leave the queue while failed/untried ones stay retryable.
-      for (const item of pending) {
+      // Bounded parallel: no new upload starts after the first failure, so
+      // the user sees one actionable error; completed items leave the queue
+      // while failed/untried ones stay retryable.
+      const outcomes = await runUploadsInParallel(pending, async (item): Promise<UploadOutcome<string>> => {
         let result: ImageMutationResult;
         try {
           result = await uploadMutation.mutateAsync({
@@ -247,22 +233,27 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
           });
         } catch (uploadError) {
           logClientError('[persona-image-library] upload failed', uploadError);
-          setError(`${t('persona.libraryUploadError')} (${item.file.name})`);
-          break;
+          return { ok: false, error: t('persona.libraryUploadError') };
         }
         if (!result.success) {
-          setError(
-            `${mapPersonaImageError(result.error, t, 'persona.libraryUploadError')} (${item.file.name})`,
-          );
-          break;
+          return { ok: false, error: mapPersonaImageError(result.error, t, 'persona.libraryUploadError') };
+        }
+        return { ok: true, warnings: result.warnings ?? [] };
+      });
+      pending.forEach((item, index) => {
+        const outcome = outcomes[index];
+        if (outcome === undefined) return;
+        if (!outcome.ok) {
+          setError((prev) => prev ?? `${outcome.error} (${item.file.name})`);
+          return;
         }
         uploadedIds.add(item.id);
         // Collect the preview for revocation AFTER setPending below: the
         // item is still rendered until the queue updates, and revoking
         // early would show a broken image on any re-render in between.
         uploadedPreviews.push(item.preview);
-        if (result.warnings) warnings.push(...result.warnings);
-      }
+        warnings.push(...outcome.warnings);
+      });
       // On partial failure the already-uploaded items leave the queue; only
       // the failed (and not-yet-tried) items stay so the user can retry.
       setPending((prev) => prev.filter((item) => !uploadedIds.has(item.id)));

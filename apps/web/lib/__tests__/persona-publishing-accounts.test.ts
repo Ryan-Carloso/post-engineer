@@ -89,6 +89,7 @@ describe('getPersonaDefaultAccounts', () => {
       instagram: [],
       bluesky: [],
       linkedin: [],
+      threads: [],
     });
   });
 
@@ -208,6 +209,7 @@ describe('emptyPersonaDefaultAccounts', () => {
       instagram: [],
       bluesky: [],
       linkedin: [],
+      threads: [],
     });
   });
 });

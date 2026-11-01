@@ -145,36 +145,9 @@ otherwise. Share the final video URL from `get_video_status` with the user.
 
 ## Copy-ready prompt
 
-Paste this into the user's agent (replace the bracketed values; never paste
-a real key):
-
-```text
-Turn one top story from today's GNews headlines (lang=en, country=us) into
-one Post Engineer video. My GNews key is in your own environment as
-YOUR_GNEWS_KEY — never print it, never paste it anywhere else.
-
-Rules:
-1. Pick one clear single event with a named place. Skip round-ups, opinion
-   pieces, and stories sourced only from a social post.
-2. Write the script as segments: first hook (aim 20-30 words, end with
-   terminal punctuation), then body segments (at least 30 words total),
-   last CTA (5-20 words). Total 60–200 words, spoken English only, no
-   links, hashtags, markdown, emoji, or stage directions. Only facts the
-   source supports; attribute single-sourced claims.
-3. Call validate_script with those segments. Fix any named error and
-   re-validate until it passes. Do not generate before it passes.
-4. For media, prefer a photo of the actual place in the story. Check a
-   public URL with check_media first and attach it only on ok; or upload
-   a local file with upload_media shortly before generating and use the
-   mediaId. At most 6 medias. Skip a failed photo, never force it.
-5. Call generate_persona_video with personaId [PERSONA_ID], the validated
-   segments unchanged, title [STORY_TITLE], language "en", providers
-   [PROVIDERS] with account IDs from list_social_accounts, mode
-   [scheduled|asap] (scheduled needs startAt [ISO_DATETIME] + times
-   [HH:MM] in timezone [TIMEZONE]; asap needs no startAt/times).
-6. Poll get_video_task_progress on the taskId until done, then share the
-   final video URL from get_video_status.
-```
+Copy the current prompt from https://post-engineer.com/recipes/daily-news, or run
+`/daily-news` from the Post Engineer MCP server. Its text lives once in
+`shared/prompt-base/prompt-base.ts`, so this page does not repeat it.
 
 ## Example input (illustrative, not a real story)
 

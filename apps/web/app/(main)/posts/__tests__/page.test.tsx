@@ -16,6 +16,7 @@ vi.mock('@/lib/api', () => ({
   useYouTubeAccountsQuery: vi.fn(),
   useInstagramAccountsQuery: vi.fn(),
   useLinkedinAccountsQuery: vi.fn(),
+  useThreadsAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
   useBlueskyAccountsQuery: vi.fn(),
   useVideoGenerationsQuery: vi.fn(),
 }));
@@ -756,7 +757,7 @@ describe('PostsPage fallbacks', () => {
     const options = within(providerSelect)
       .getAllByRole('option')
       .map((option) => option.textContent);
-    expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'LinkedIn', 'Bluesky']);
+    expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'LinkedIn', 'Bluesky', 'Threads']);
   });
 
   it('disables the refresh button while a refetch is in flight', () => {

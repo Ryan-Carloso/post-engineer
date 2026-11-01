@@ -87,7 +87,7 @@ describe('metricsTargets', () => {
   });
 
   it('extracts a target for every provider in SOCIAL_PROVIDERS', () => {
-    const fixtures: Record<string, unknown> = { youtube: YT_ENTRY, instagram: IG_ENTRY, bluesky: BSKY_ENTRY, linkedin: LI_ENTRY };
+    const fixtures: Record<string, unknown> = { youtube: YT_ENTRY, instagram: IG_ENTRY, bluesky: BSKY_ENTRY, linkedin: LI_ENTRY, threads: { provider: 'threads', status: 'published', accountId: '42', postId: 'p1' } };
     for (const provider of SOCIAL_PROVIDERS) {
       const { targets } = metricsTargets([fixtures[provider]]);
       expect(targets.map((target) => target.provider), provider).toEqual([provider]);
@@ -108,10 +108,10 @@ describe('metricsTargets', () => {
   });
 });
 
-describe('post_metrics provider check (migration 025)', () => {
+describe('post_metrics provider check (migration 034)', () => {
   it('allows exactly the providers in SOCIAL_PROVIDERS', () => {
-    const sql = readFileSync(join(findRepoRoot(import.meta.url), 'supabase/migrations/025_post-metrics.sql'), 'utf8');
-    const line = sql.split('\n').find((candidate) => candidate.includes('provider text not null check'));
+    const sql = readFileSync(join(findRepoRoot(import.meta.url), 'supabase/migrations/034_threads-provider.sql'), 'utf8');
+    const line = sql.split('\n').find((candidate) => candidate.includes('check (provider in'));
     const listed = (line ?? '').split("'").filter((_, index) => index % 2 === 1);
     expect([...listed].sort()).toEqual([...SOCIAL_PROVIDERS].sort());
   });

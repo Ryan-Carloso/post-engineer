@@ -1,15 +1,19 @@
 // Prompts hub copy guard: the prompts served over MCP (slash commands in
 // Cursor / Claude) must be an exact copy of the web hub, the source of
-// truth parsed as text (apps/web/app/recipes/prompts.ts for slugs + prompt
-// text, apps/web/lib/i18n/recipes-i18n-en.ts for title + description).
+// truth parsed as text (apps/web/app/recipes/prompts.ts for slugs,
+// apps/web/lib/i18n/recipes-i18n-en.ts for title + description).
 // This test fails loudly whenever the MCP copy drifts from the sources.
 // It never imports apps/web at runtime: the published MCP tarball must be
-// self-contained (see scripts/sync-script-segments.mjs).
+// self-contained (see shared/README.md).
+// Prompt text itself is not copied: web imports it directly from
+// shared/prompt-base, MCP through a symlink to the same file, and each
+// web entry must name the same export the MCP serves.
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HUB_PROMPTS } from '../prompts.js';
+import * as promptBase from '../prompt-base.js';
 
 function findRepoRoot(fromUrl: string): string {
   let dir = dirname(fileURLToPath(fromUrl));
@@ -40,25 +44,6 @@ function unquote(body: string): string {
     if (ch === 't') return '\t';
     return ch;
   });
-}
-
-// All quoted literals in a source chunk, in order (single or double quotes),
-// with escapes resolved.
-function literals(chunk: string): string[] {
-  const out: string[] = [];
-  const re = /'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\]|\\.)*)"/g;
-  for (const m of chunk.matchAll(re)) {
-    out.push(unquote(m[1] ?? m[2]));
-  }
-  return out;
-}
-
-// export const SOME_NAME_PROMPT = [ ... ].join('\n')
-const textExports = new Map<string, string>();
-for (const m of webPromptsSource.matchAll(
-  /export const ([A-Z0-9_]+_PROMPT) = \[([\s\S]*?)\]\.join\('\\n'\)/g,
-)) {
-    textExports.set(m[1], literals(m[2]).join('\n'));
 }
 
 // Prompt entries in the PROMPTS array: slug, titleKey, objectiveKey, prompt.
@@ -103,7 +88,7 @@ describe('MCP prompts sync with the web hub', () => {
   for (const entry of webEntries) {
     const webTitle = i18nValues.get(entry.titleKey.replace(/^recipes\./, ''));
     const webDescription = i18nValues.get(entry.objectiveKey.replace(/^recipes\./, ''));
-    const webText = textExports.get(entry.promptConst);
+    const webText = new Map<string, unknown>(Object.entries(promptBase)).get(entry.promptConst);
     expect(webTitle, `i18n ${entry.titleKey} parsed`).toBeTruthy();
     expect(webDescription, `i18n ${entry.objectiveKey} parsed`).toBeTruthy();
     expect(webText, `web prompt ${entry.promptConst} parsed`).toBeTruthy();
@@ -116,4 +101,13 @@ describe('MCP prompts sync with the web hub', () => {
       expect(mcpPrompt?.prompt).toBe(webText);
     });
   }
+
+  it('every served prompt starts with the shared base', () => {
+    const baseText = promptBase.SHARED_PROMPT_BASE.join('\n');
+    expect(baseText).toContain('No em dashes');
+    expect(HUB_PROMPTS.length).toBeGreaterThan(0);
+    for (const prompt of HUB_PROMPTS) {
+      expect(prompt.prompt.startsWith(`${baseText}\n\n`)).toBe(true);
+    }
+  });
 });

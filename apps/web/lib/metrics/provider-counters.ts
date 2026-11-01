@@ -5,7 +5,9 @@ import { getAuthenticatedClient } from '@/lib/upload/handlers';
 import { getSocialAccountTokens } from '@/lib/social-accounts';
 import { InstagramService } from '@/lib/instagram';
 import { getLinkedInSocialActions } from '@/lib/linkedin';
+import { getThreadsInsights } from '@/lib/threads';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { PROVIDER_LABELS } from '@/lib/account-options';
 import type { MeasuredProvider, MetricsCounters, MetricsTarget } from './post-metrics';
 
 // Bluesky's public AppView serves post counters without authentication.
@@ -82,9 +84,19 @@ export function linkedinCounters(socialActions: unknown): MetricsCounters {
   };
 }
 
+export function threadsCounters(insights: Record<string, number>): MetricsCounters {
+  return {
+    views: parseCount(insights.views),
+    likes: parseCount(insights.likes),
+    comments: parseCount(insights.replies),
+    // Threads exposes no save count.
+    saves: null,
+  };
+}
+
 // Ownership: getSocialAccountTokens only resolves the user's own accounts.
-async function ownerAccessToken(userId: string, provider: 'instagram' | 'linkedin', accountId: string): Promise<string> {
-  const label = provider === 'instagram' ? 'Instagram' : 'LinkedIn';
+async function ownerAccessToken(userId: string, provider: 'instagram' | 'linkedin' | 'threads', accountId: string): Promise<string> {
+  const label = PROVIDER_LABELS[provider];
   const { tokens } = await getSocialAccountTokens(createSupabaseServiceClient(), userId, provider, accountId);
   if (typeof tokens.access_token !== 'string' || tokens.access_token === '') {
     throw new Error(`${label} token not found`);
@@ -118,6 +130,10 @@ export const COUNTER_FETCHERS: Record<MeasuredProvider, CounterFetcher> = {
   async linkedin(userId, target) {
     const token = await ownerAccessToken(userId, 'linkedin', target.accountId);
     return linkedinCounters(await getLinkedInSocialActions(token, target.externalId));
+  },
+  async threads(userId, target) {
+    const token = await ownerAccessToken(userId, 'threads', target.accountId);
+    return threadsCounters(await getThreadsInsights(token, target.externalId));
   },
 };
 

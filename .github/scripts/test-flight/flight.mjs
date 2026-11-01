@@ -34,8 +34,13 @@
 //   TEST_FLIGHT_YOUTUBE_ACCOUNT_ID optional. When none is set, the flight
 //                                  discovers the key's connected accounts
 //                                  via GET /api/account.
-//   TEST_FLIGHT_TOPIC              optional. When empty, every flight
-//                                  (manual or scheduled) rotates MONITOR_TOPICS.
+//   TEST_FLIGHT_SCRIPT_PATH        path to the script JSON written by
+//                                  write-script.mjs: { title, segments,
+//                                  source }. TEST_FLIGHT_SCRIPT_JSON may
+//                                  hold the same JSON inline instead
+//                                  (tests and local runs). One of them is
+//                                  required: the server no longer accepts
+//                                  `topics` and generates no script itself.
 //   TEST_FLIGHT_API_BASE_URL       default https://post-engineer.com.
 //   TEST_FLIGHT_SCHEDULED_ACTION   'cancel' (default) or 'leave'.
 //   TEST_FLIGHT_FACELESS             'true' to generate faceless videos
@@ -54,6 +59,7 @@
 // Pure logic is unit-tested in flight.test.mjs via `node --test`.
 //---------------
 
+import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
@@ -72,17 +78,6 @@ export const SLOT_AT_TOLERANCE_MS = 10 * 60 * 1000;
 export const DEFAULT_POLL_TIMEOUT_MS = 60 * 60 * 1000;
 export const DEFAULT_POLL_INTERVAL_MS = 30 * 1000;
 export const REQUEST_TIMEOUT_MS = 60 * 1000;
-
-// Evergreen topics for the scheduled monitor (manual flights pass their own).
-export const MONITOR_TOPICS = [
-  'Where to eat francesinha in Porto like a local',
-  'The best viewpoints in Porto you can visit for free',
-  'Porto in one day: what to visit first',
-  'Where locals actually eat in Porto (not tourist traps)',
-  'The hidden streets of Porto worth getting lost in',
-  'Port wine cellars in Vila Nova de Gaia: what to know before you go',
-  'Morning in Porto: the perfect riverside walk',
-];
 
 export class FlightError extends Error {}
 
@@ -155,19 +150,57 @@ export function resolveConfig(env) {
   };
 }
 
-export function resolveTopic(env, now = new Date()) {
-  const topic = optionalEnv(env, 'TEST_FLIGHT_TOPIC');
-  if (topic !== '') return topic;
-  return rotateTopic(MONITOR_TOPICS, now);
-}
-
-export function rotateTopic(topics, now = new Date()) {
-  if (!Array.isArray(topics) || topics.length === 0) {
-    throw new FlightError('test-flight: topic rotation needs a non-empty list');
+// The script comes from write-script.mjs, never from a topic string:
+// the server rejects `topics` and generates no script itself. Fail fast
+// here, before any token is spent, if the script step did not run or
+// wrote something unusable. readFile is injectable so tests can supply
+// the file contents without touching disk.
+export function resolveScript(env, { readFile = readFileSync } = {}) {
+  const inline = optionalEnv(env, 'TEST_FLIGHT_SCRIPT_JSON');
+  const scriptPath = optionalEnv(env, 'TEST_FLIGHT_SCRIPT_PATH');
+  let raw = inline;
+  if (raw === '') {
+    if (scriptPath === '') {
+      throw new FlightError(
+        'test-flight: missing TEST_FLIGHT_SCRIPT_PATH or TEST_FLIGHT_SCRIPT_JSON — run write-script first',
+      );
+    }
+    try {
+      raw = readFile(scriptPath, 'utf8');
+    } catch (error) {
+      throw new FlightError(
+        `test-flight: cannot read script file ${scriptPath}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
-  const startOfYear = Date.UTC(now.getUTCFullYear(), 0, 1);
-  const dayIndex = Math.floor((now.getTime() - startOfYear) / (24 * 3600 * 1000));
-  return topics[((dayIndex % topics.length) + topics.length) % topics.length];
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new FlightError('test-flight: script JSON is not valid JSON');
+  }
+  const title = typeof parsed?.title === 'string' ? parsed.title.trim() : '';
+  const segments = parsed?.segments;
+  if (title === '' || !Array.isArray(segments) || segments.length === 0) {
+    throw new FlightError('test-flight: script must have a non-empty title and a non-empty segments array');
+  }
+  for (const segment of segments) {
+    if (
+      typeof segment !== 'object' ||
+      segment === null ||
+      (segment.kind !== 'hook' && segment.kind !== 'body' && segment.kind !== 'cta') ||
+      typeof segment.text !== 'string' ||
+      segment.text.trim() === ''
+    ) {
+      throw new FlightError('test-flight: every script segment must be { kind: hook|body|cta, text: non-empty }');
+    }
+  }
+  return {
+    title,
+    segments,
+    topic: typeof parsed?.topic === 'string' ? parsed.topic : '',
+    source: typeof parsed?.source === 'string' ? parsed.source : 'unknown',
+  };
 }
 
 //---------------
@@ -228,16 +261,19 @@ export async function resolveFlightAccounts({ explicit, client, discover = disco
 // Payloads
 //---------------
 
-export function buildAsapPayload({ personaId, topic, accounts, idempotencyKey, faceless = false }) {
+export function buildAsapPayload({ personaId, title, segments, accounts, idempotencyKey, faceless = false }) {
   return {
     personaId,
-    topics: [topic],
+    title,
     publishing: {
       mode: 'asap',
       providers: Object.keys(accounts),
       accounts,
     },
-    ...(faceless ? { options: { faceless: true } } : {}),
+    options: {
+      segments,
+      ...(faceless ? { faceless: true } : {}),
+    },
     idempotencyKey,
   };
 }
@@ -253,10 +289,10 @@ export function scheduledTarget(now = new Date()) {
   };
 }
 
-export function buildScheduledPayload({ personaId, topic, accounts, idempotencyKey, schedule, faceless = false }) {
+export function buildScheduledPayload({ personaId, title, segments, accounts, idempotencyKey, schedule, faceless = false }) {
   return {
     personaId,
-    topics: [topic],
+    title,
     publishing: {
       mode: 'scheduled',
       providers: Object.keys(accounts),
@@ -267,7 +303,10 @@ export function buildScheduledPayload({ personaId, topic, accounts, idempotencyK
         timezone: schedule.timezone,
       },
     },
-    ...(faceless ? { options: { faceless: true } } : {}),
+    options: {
+      segments,
+      ...(faceless ? { faceless: true } : {}),
+    },
     idempotencyKey,
   };
 }
@@ -471,7 +510,7 @@ async function confirmScheduleCancelled(client, created) {
 export async function runFlight(env = process.env, options = {}) {
   const now = options.now ?? new Date();
   const cfg = resolveConfig(env);
-  const topic = resolveTopic(env, now);
+  const script = resolveScript(env, { readFile: options.readFile });
   const client = {
     apiBaseUrl: cfg.apiBaseUrl,
     apiKey: cfg.apiKey,
@@ -479,14 +518,15 @@ export async function runFlight(env = process.env, options = {}) {
   };
   const accounts = await resolveFlightAccounts({ explicit: cfg.accounts, client });
   const providers = Object.keys(accounts);
-  const summary = [];
+  const summary = [`script source: ${script.source}${script.topic ? ` (topic: ${script.topic})` : ''}`];
 
-  console.log(`test-flight: leg 1/2 (ASAP) topic="${topic}" providers=${providers.join(',')}${cfg.faceless ? ' faceless' : ''}`);
+  console.log(`test-flight: leg 1/2 (ASAP) title="${script.title}" source=${script.source} providers=${providers.join(',')}${cfg.faceless ? ' faceless' : ''}`);
   const asapBody = await apiJson(client, '/api/videos/generate-and-schedule', {
     method: 'POST',
     body: buildAsapPayload({
       personaId: cfg.personaId,
-      topic,
+      title: script.title,
+      segments: script.segments,
       accounts,
       idempotencyKey: `test-flight-${cfg.runId}-asap`,
       faceless: cfg.faceless,
@@ -511,7 +551,8 @@ export async function runFlight(env = process.env, options = {}) {
       method: 'POST',
       body: buildScheduledPayload({
         personaId: cfg.personaId,
-        topic,
+        title: script.title,
+        segments: script.segments,
         accounts,
         idempotencyKey: `test-flight-${cfg.runId}-scheduled`,
         schedule: target,

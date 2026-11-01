@@ -7,14 +7,14 @@ import { cn } from '@/lib/utils';
 
 //---------------
 // AccountCard — card compartilhado de conta social.
-// Suporta YouTube, Instagram, Bluesky, LinkedIn.
+// Suporta YouTube, Instagram, Bluesky, LinkedIn, Threads.
 // Usado na página de contas (com seleção/desconexão), na criação de API key
 // (com seleção via checkbox) e no schedule de persona (modo compacto:
 // apenas o avatar no tamanho da imagem, com fallback para a primeira letra).
 //---------------
 
 export interface AccountCardProps {
-  type: 'youtube' | 'instagram' | 'bluesky' | 'linkedin';
+  type: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads';
   name: string;
   email?: string;
   thumbnail?: string;

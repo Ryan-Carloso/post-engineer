@@ -19,7 +19,7 @@ credits is billed by Modal.
 - Create an account and log in.
 - Create AI personas (avatar, voice, language, niche).
 - Generate videos with those personas.
-- Connect YouTube / Instagram / LinkedIn accounts.
+- Connect YouTube / Instagram / LinkedIn / Threads accounts.
 - Schedule automated posting.
 - Generate and manage API keys at [https://post-engineer.com/api-keys](https://post-engineer.com/api-keys).
 
@@ -111,7 +111,7 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `update_persona`: update an existing persona (only the provided fields change).
 - `get_token_balance`: get the prepaid token wallet balance. Check before generating videos, which cost tokens.
 - `validate_script`: validate a segments script mechanically, without spending tokens — hook first, CTA last, exactly one of each, word limits (total 60-200, body at least 30, CTA 5-20, hook 15-40 words before TTS). Returns the word counts and the hook window (8-12 seconds spoken). Measured hook duration is pending a hook-only TTS endpoint and is reported as pending, never invented.
-- `score_draft`: score a draft mechanically against the caller's own measured posts, without spending tokens. Returns a 0-100 score where every point is explained (hook, length, hashtags, slop markers, links, top-theme match, call to action), the baseline it was scored against (top angles by engagement), and the publish check for the requested network (linkedin, youtube, instagram, bluesky): it fails only on an empty draft or the network's own ceiling where this repo has evidence for it (LinkedIn 3000 characters, Bluesky 300 graphemes); the rest are warnings. A failing publish check means: fix the draft before scheduling it for that network. Pass kind 'script' for a video script (segments joined by newlines, hook first, CTA last): hashtags are not scored and publishCheck is null.
+- `score_draft`: score a draft mechanically against the caller's own measured posts, without spending tokens. Returns a 0-100 score where every point is explained (hook, length, hashtags, slop markers, links, top-theme match, call to action), the baseline it was scored against (top angles by engagement), and the publish check for the requested network (linkedin, youtube, instagram, bluesky, threads): it fails only on an empty draft or the network's own ceiling where this repo has evidence for it (LinkedIn 3000 characters, Threads 500 characters, Bluesky 300 graphemes); the rest are warnings. A failing publish check means: fix the draft before scheduling it for that network. Pass kind 'script' for a video script (segments joined by newlines, hook first, CTA last): hashtags are not scored and publishCheck is null.
 - `upload_media`: upload a local image for a video segment and get a `mediaId` to use in a segment's `media` field. JPG/JPEG, PNG, or WebP, max 8MB (the engine photo limit, not the 10MB library limit); the real content type is validated, not the extension. The file is stored as a temporary engine asset (1 hour TTL): upload shortly before generating, since a scheduled slot far in the future may outlive the asset and the segment then renders without it. Returns only the `mediaId`.
 - `check_media`: mechanically check one public image URL for a segment, without an LLM and without judging relevance (the agent, who sees the image, decides relevance). Returns exactly one code: `ok`, `blocked_403`, `not_image`, `too_small`, `too_large`, `timeout`, or `face_detected`. No fake User-Agent or Referer is sent to bypass hotlink blocks, and private addresses are never fetched.
 - `generate_persona_video`: generate and schedule ONE persona video from a complete script — generation is always tied to publishing (one call = generate + schedule + auto-publish; no orphan videos, no separate schedule step). Send the full script as `segments` (first `hook`, then body segments, last `cta`; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation) — no LLM expands it. `title` is the slot label for this video. `personaId` is optional: omit it for a faceless post with no persona, in which case set `options.faceless` and `options.voiceId` (or `options.audioUrl`), plus `videoAspect` / `language` / `niche` as needed. `options.voiceId` takes a house name or label from `list_voices` (`phonon_zoey`, `Zoey`) or a clone id/key from `list_voices`; never type a provider prefix — an unknown voice is rejected before generation (no tokens spent). Pass `providers` plus per-provider account IDs (see the account ID table below), `startAt` + `times` in `timezone` (or `mode: 'asap'` with no `startAt`/`times`). The slot must be 3h–30d ahead. `idempotencyKey` is generated automatically; reuse it to retry without generating twice (`replayed: true`). Poll the slot's `taskId` with `get_video_task_progress`.
@@ -126,7 +126,7 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `list_social_accounts`: list connected social accounts with the account IDs needed for scheduling.
 - `get_persona_publishing_accounts`: list a persona's default publishing accounts per provider. `generate_persona_video` falls back to these when no account IDs are passed; explicit IDs always win.
 - `set_persona_publishing_accounts`: replace a persona's default publishing accounts per provider (account IDs from `list_social_accounts`; providers mapped to `[]` keep no defaults).
-- `connect_account`: connect a social account. For youtube/instagram/linkedin: returns an authorization URL — the user must open it in a browser and authorize, then the account connects automatically (verify with `list_social_accounts`). For bluesky: connects directly with handle + app password.
+- `connect_account`: connect a social account. For youtube/instagram/linkedin/threads: returns an authorization URL — the user must open it in a browser and authorize, then the account connects automatically (verify with `list_social_accounts`). For bluesky: connects directly with handle + app password.
 - `list_schedules`: list automation schedules.
 - `list_posts`: list upcoming (scheduled) and past (published/failed) posts across all connected accounts.
 - `cancel_schedule`: cancel a schedule by its ID.
@@ -153,6 +153,7 @@ database row id and is rejected):
 | YouTube | `youtubeAccountIds` | `channelId` |
 | Instagram | `instagramAccountIds` | `igUserId` |
 | LinkedIn | `linkedinAccountIds` | `providerAccountId` |
+| Threads | `threadsAccountIds` | `providerAccountId` |
 | Bluesky | `blueskyAccountIds` | `did` (e.g. `did:plc:...`) |
 
 Passing a `recordId` fails fast with an error naming the right field.
@@ -162,18 +163,20 @@ Passing a `recordId` fails fast with an error naming the right field.
 The server serves the prompts hub from the Post Engineer web platform over
 the MCP [prompts capability](https://modelcontextprotocol.io/docs/concepts/prompts),
 so MCP clients (Cursor, Claude) list them as slash commands. Each prompt is
-zero-arg; placeholders (`[PERSONA_ID]`, `[STORY_TITLE]`, …) stay in the text
-for you to fill in when you run it. The copy is kept in sync with the web
+zero-arg: the agent asks you for the persona, accounts, and timing when you
+run it. The copy is kept in sync with the web
 hub by a sync test (`prompts-sync.test.ts`).
 
 - `/daily-news`: Daily news becomes a video — turn one top GNews story of the day into one persona video, validated before any token is spent.
 - `/github-prs`: GitHub PRs become videos — turn a GitHub pull request into one persona video.
 - `/full-setup`: Full setup becomes videos — connect accounts, create a persona, validate the script, and publish your first video without skipping a step.
 
-Add a new prompt to the web hub (`apps/web/app/recipes/prompts.ts` + its
-i18n title/description), then copy the same slug, title, description, and
-exact prompt text into `src/prompts.ts`; `pnpm test` fails if the copies
-drift.
+Add a new prompt's text to `shared/prompt-base/prompt-base.ts` (the MCP
+hub reads it through a symlink to that file, so no sync step is needed).
+Then add its entry to the web hub
+(`apps/web/app/recipes/prompts.ts` + its i18n title/description) and the same
+slug, title, description, and text export to `src/prompts.ts`; `pnpm test`
+fails if they drift.
 
 ## Links
 

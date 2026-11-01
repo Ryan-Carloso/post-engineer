@@ -620,7 +620,7 @@ export class PostEngineerClient {
   async disconnectAccount(provider: string, providerAccountId: string): Promise<unknown> {
     // The route 400s INVALID_PROVIDER / INVALID_PARAMS — fail fast with the
     // field named before any fetch goes out.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads'];
     if (!validProviders.includes(provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }
@@ -663,6 +663,7 @@ export class PostEngineerClient {
     if (input.instagramAccountIds !== undefined) accounts.instagram = input.instagramAccountIds;
     if (input.linkedinAccountIds !== undefined) accounts.linkedin = input.linkedinAccountIds;
     if (input.blueskyAccountIds !== undefined) accounts.bluesky = input.blueskyAccountIds;
+    if (input.threadsAccountIds !== undefined) accounts.threads = input.threadsAccountIds;
     // A stray schedule plan in ASAP mode is a caller bug: the server 400s
     // ("publishing.schedule must not be set"), so fail fast with the same
     // rule before any fetch goes out. Conversely, scheduled mode without
@@ -816,7 +817,7 @@ export class PostEngineerClient {
     // Direct publish of a user-provided video — no generation, no schedule.
     // Mirrors the server-side 400s: provider-specific required fields and
     // per-provider account-id field names fail fast here, before any fetch.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads'];
     if (!validProviders.includes(input.provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }
@@ -874,17 +875,12 @@ export class PostEngineerClient {
       for (const accountId of input.accountIds) {
         formData.append('igAccountIds', accountId);
       }
-    } else if (input.provider === 'bluesky') {
-      formData.append('video', videoBlob, filename);
-      formData.append('caption', caption);
-      for (const accountId of input.accountIds) {
-        formData.append('did', accountId);
-      }
     } else {
+      const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds' }[input.provider];
       formData.append('video', videoBlob, filename);
       formData.append('caption', caption);
       for (const accountId of input.accountIds) {
-        formData.append('linkedinAccountIds', accountId);
+        formData.append(accountField, accountId);
       }
     }
 

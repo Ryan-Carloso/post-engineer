@@ -59,28 +59,9 @@ guessing.
 
 ## Copy-ready prompt
 
-Paste this into your agent (Cursor, Claude, Muse, OpenCode, or any agent):
-
-```text
-Turn this GitHub pull request into one persona video.
-
-PR to use (paste the PR title, description, and a short change summary, plus any linked issues):
-- Title: ...
-- Description: ...
-- What changed: ...
-- Linked issues: ...
-
-Rules:
-- Use the Post Engineer MCP server and the singular video tool, generate_persona_video.
-- First, call validate_script with your script and only proceed when it is valid — validate before any token is debited.
-- Script: spoken text only, no links, hashtags, markdown, emojis, or stage directions.
-- Structure: first segment is the hook, last segment is the CTA, exactly one of each.
-- Length: 60–200 words total, hook 20–30 words (8–12 seconds), body at least 30 words, CTA 5–20 words, at most 12 segments.
-- Language: en only.
-- Media: at most 6, only if they match the PR (screenshots, diagrams, or repo visuals); otherwise generate without media.
-- Then generate one video for this PR and publish it where the user asked, scheduled or asap.
-- Never invent PR details: if the title, description, or change summary is missing, ask for it instead of guessing.
-```
+Copy the current prompt from https://post-engineer.com/recipes/github-prs, or run
+`/github-prs` from the Post Engineer MCP server. Its text lives once in
+`shared/prompt-base/prompt-base.ts`, so this page does not repeat it.
 
 ## Example input (illustrative, not a real PR)
 

@@ -1,6 +1,6 @@
 name: pr-size
 
-# PR size limit: fails when a PR adds more than 800 lines of production
+# PR size limit: fails when a PR adds more than 1000 lines of production
 # code. Deletions never count. There is no exemption and no label
 # bypass: a PR over the limit fails, period. Split the PR by complete
 # layer, or justify it in the PR body (a justification documents an

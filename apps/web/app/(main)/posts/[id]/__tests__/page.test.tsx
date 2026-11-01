@@ -26,6 +26,7 @@ vi.mock('@/lib/api', () => ({
   useYouTubeAccountsQuery: vi.fn(),
   useInstagramAccountsQuery: vi.fn(),
   useLinkedinAccountsQuery: vi.fn(),
+  useThreadsAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
   useBlueskyAccountsQuery: vi.fn(),
   useUpdateSlotMutation: vi.fn(),
   useDeleteSlotMutation: vi.fn(),

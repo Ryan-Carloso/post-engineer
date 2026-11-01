@@ -1,4 +1,4 @@
-"""Publish metadata models for task requests (YouTube / Instagram)."""
+"""Publish metadata models for task requests (YouTube / Instagram / Bluesky / LinkedIn / Threads)."""
 
 from typing import Literal, Optional
 
@@ -36,14 +36,22 @@ class LinkedInPublish(BaseModel):
     account_ids: list[str] = Field(min_length=1)
 
 
-class PublishParams(BaseModel):
-    """Optional publish selection for a task (YouTube/Instagram/Bluesky/LinkedIn)."""
+class ThreadsPublish(BaseModel):
+    """Threads publish fields required by the internal upload API."""
 
-    providers: list[Literal["youtube", "instagram", "bluesky", "linkedin"]] = Field(min_length=1)
+    caption: str = Field(min_length=1, max_length=500)
+    account_ids: list[str] = Field(min_length=1)
+
+
+class PublishParams(BaseModel):
+    """Optional publish selection for a task (YouTube/Instagram/Bluesky/LinkedIn/Threads)."""
+
+    providers: list[Literal["youtube", "instagram", "bluesky", "linkedin", "threads"]] = Field(min_length=1)
     youtube: Optional[YouTubePublish] = None
     instagram: Optional[InstagramPublish] = None
     bluesky: Optional["BlueskyPublish"] = None
     linkedin: Optional[LinkedInPublish] = None
+    threads: Optional[ThreadsPublish] = None
 
     @model_validator(mode="after")
     def check_provider_metadata(self) -> "PublishParams":
@@ -55,4 +63,6 @@ class PublishParams(BaseModel):
             raise ValueError("bluesky provider requires bluesky metadata")
         if "linkedin" in self.providers and self.linkedin is None:
             raise ValueError("linkedin provider requires linkedin metadata")
+        if "threads" in self.providers and self.threads is None:
+            raise ValueError("threads provider requires threads metadata")
         return self

@@ -57,11 +57,12 @@ export interface GeneratePersonaVideoInput {
   personaId?: string;
   /** The slot label for the single video. */
   title: string;
-  providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky')[];
+  providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads')[];
   youtubeAccountIds?: string[];
   instagramAccountIds?: string[];
   linkedinAccountIds?: string[];
   blueskyAccountIds?: string[];
+  threadsAccountIds?: string[];
   /**
    * Publish mode. 'scheduled' (default) slots the video at startAt + times;
    * 'asap' publishes it the moment generation finishes, with no scheduled
@@ -114,10 +115,10 @@ export interface UpdatePersonaInput {
 
 /** Input for publishing a user-provided video directly, without generation. */
 export interface PublishVideoDirectInput {
-  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky';
+  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads';
   /** Local path to the video file (.mp4 or .mov, max 2GB). */
   videoPath: string;
-  /** Target accounts (channel IDs / IG user IDs / DIDs / LinkedIn member IDs or org URNs). */
+  /** Target accounts (channel IDs / IG user IDs / DIDs / LinkedIn member IDs or org URNs / Threads user IDs). */
   accountIds: string[];
   /** YouTube only: required. */
   title?: string;
@@ -127,7 +128,7 @@ export interface PublishVideoDirectInput {
   tags?: string[];
   /** YouTube only: required. */
   privacyStatus?: 'public' | 'private' | 'unlisted';
-  /** Instagram/Bluesky/LinkedIn: required. */
+  /** Instagram/Bluesky/LinkedIn/Threads: required. */
   caption?: string;
 }
 

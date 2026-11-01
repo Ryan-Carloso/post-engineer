@@ -37,13 +37,14 @@ export const GeneratePersonaVideoShape = {
     .optional()
     .describe('Spoken language code — English only for now, e.g. en-US.'),
   providers: z
-    .array(z.enum(['youtube', 'instagram', 'linkedin', 'bluesky']))
+    .array(z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads']))
     .min(1, 'Provide at least one provider')
     .describe('Where to publish the video.'),
   youtubeAccountIds: z.array(z.string().min(1)).optional().describe('YouTube channel IDs (the channelId field from list_social_accounts).'),
   instagramAccountIds: z.array(z.string().min(1)).optional().describe('Instagram account IDs (the igUserId field from list_social_accounts).'),
   linkedinAccountIds: z.array(z.string().min(1)).optional().describe('LinkedIn account IDs (the providerAccountId field from list_social_accounts).'),
   blueskyAccountIds: z.array(z.string().min(1)).optional().describe('Bluesky DIDs (the did field from list_social_accounts).'),
+  threadsAccountIds: z.array(z.string().min(1)).optional().describe('Threads account IDs (the providerAccountId field from list_social_accounts).'),
   mode: z
     .enum(['scheduled', 'asap'])
     .default('scheduled')

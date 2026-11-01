@@ -22,9 +22,9 @@ Who runs this prompt, and what do they already have (accounts, data, tools)?
 
 ## Full prompt text
 
-Paste the complete prompt exactly as it should be copied. Use bracketed
-placeholders like `[STORY_TITLE]` for values the user fills in — never include
-real account IDs or keys in the text.
+Paste the complete prompt exactly as it should be copied. Do not use
+bracketed placeholders: the agent looks up or asks the user for any value it
+needs. Never include real account IDs or keys in the text.
 
 ## Example input / output
 
