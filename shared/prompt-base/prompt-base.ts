@@ -4,15 +4,6 @@
 // delivered text is complete and standalone: the agent receives the
 // whole prompt in one paste, never a bare "see the base prompt"
 // reference.
-// DO NOT EDIT this copy directly in apps/web or apps/mcp: the files at
-// apps/web/lib/generation/prompt-base.ts and apps/mcp/src/prompt-base.ts
-// are generated copies of this file. Edit here, then run
-// `node scripts/sync-prompt-base.mjs` from the repo root. The per-app
-// prompt-base-shared tests fail loudly if a generated copy ever drifts,
-// so a stale copy can never pass CI silently. The sync script is
-// deliberately NOT wired into prebuild/pretest: both apps' package.json
-// files are guard-protected paths, and auto-regeneration is a
-// convenience, not a correctness requirement.
 // Rules that apply to every prompt go in SHARED_PROMPT_BASE. Topic-specific
 // steps go in the prompt that owns them, below, so the base stays short and
 // every prompt stays cheap. Web and MCP serve these exports unchanged.

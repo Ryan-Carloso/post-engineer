@@ -7,8 +7,8 @@
   },
   "type": "module",
   "description": "Post Engineer MCP Server for AI pair programming and agentic workflows",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/apps/mcp/src/index.js",
+  "types": "dist/apps/mcp/src/index.d.ts",
   "files": [
     "dist"
   ],
@@ -16,18 +16,16 @@
     "access": "public"
   },
   "bin": {
-    "post-engineer-mcp": "dist/index.js"
+    "post-engineer-mcp": "dist/apps/mcp/src/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepublishOnly": "pnpm build",
-    "start": "node dist/index.js",
+    "start": "node dist/apps/mcp/src/index.js",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "lint": "eslint src/",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.spec.json",
-    "prebuild": "node ../../scripts/sync-script-segments.mjs",
-    "pretest": "node ../../scripts/sync-script-segments.mjs"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.spec.json"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

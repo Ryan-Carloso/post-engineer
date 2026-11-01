@@ -1,8 +1,7 @@
 //---------------
 // MCP prompts hub: slash commands for the recipes prompts. Prompt texts
-// come from ./prompt-base.ts, a generated copy of
-// shared/prompt-base/prompt-base.ts, because the published tarball cannot
-// import outside src. Slugs, titles and descriptions mirror the web hub;
+// come from shared/prompt-base/prompt-base.ts through ./prompt-base.ts.
+// Slugs, titles and descriptions mirror the web hub;
 // prompts-sync.test.ts fails when they drift. Prompts are zero-arg: the
 // agent asks the user for values.
 //---------------

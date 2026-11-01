@@ -27,12 +27,8 @@ COPY tsconfig.base.json ./
 COPY VERSION ./
 COPY apps/web ./apps/web
 
-# `pnpm build` runs apps/web's prebuild, which syncs the generated
-# script-segments copy from the shared source. Both live outside apps/web, so
-# they must be copied explicitly; the script skips apps/mcp, which this image
-# does not build. Without these copies prebuild exits MODULE_NOT_FOUND.
+# apps/web imports shared/ directly, so the build needs it next to apps/web.
 COPY shared ./shared
-COPY scripts ./scripts
 
 # Build metadata: the VPS deploy injects VERSION/PR_NUMBER/BUILD/COMMIT as
 # build args from the commit being deployed (VERSION=MAJOR.MINOR.PR, e.g.

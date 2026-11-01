@@ -37,6 +37,8 @@ const nextConfig: NextConfig = {
   // Standalone output: the Docker image (apps/web/Dockerfile) copies only
   // the traced server + node_modules, keeping the image small.
   output: "standalone",
+  // shared/ sits outside apps/web; let Next compile its TypeScript.
+  experimental: { externalDir: true },
   env: {
     VERSION: readPlatformVersion(),
     PR_NUMBER: process.env.PR_NUMBER?.trim() ?? '',

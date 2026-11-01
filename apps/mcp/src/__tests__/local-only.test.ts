@@ -47,10 +47,13 @@ async function spawnServer(args: string[], extraEnv: NodeJS.ProcessEnv): Promise
     '..',
     '..',
     'dist',
+    'apps',
+    'mcp',
+    'src',
     'index.js',
   );
   if (!existsSync(entry)) {
-    throw new Error(`dist/index.js not found — run 'pnpm build' before 'pnpm test' (got ${entry})`);
+    throw new Error(`dist/apps/mcp/src/index.js not found — run 'pnpm build' before 'pnpm test' (got ${entry})`);
   }
   // Launch through a symlink, like the published npx .bin entry, to prove
   // isMainModule() resolves the real path instead of comparing raw strings.
@@ -128,10 +131,13 @@ describe('local-only transport', () => {
       '..',
       '..',
       'dist',
+      'apps',
+      'mcp',
+      'src',
       'index.js',
     );
     if (!existsSync(entry)) {
-      throw new Error(`dist/index.js not found — run 'pnpm build' before 'pnpm test' (got ${entry})`);
+      throw new Error(`dist/apps/mcp/src/index.js not found — run 'pnpm build' before 'pnpm test' (got ${entry})`);
     }
     const child = spawn(process.execPath, [entry], {
       env: { ...process.env, POST_ENGINEER_API_KEY: 'test-key', MCP_HTTP_RATE_LIMIT_PER_MINUTE: 'bogus' },

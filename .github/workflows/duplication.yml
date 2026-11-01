@@ -13,19 +13,9 @@ name: duplication
 # A failing threshold is a follow-up decision, once a baseline is known.
 #
 # Baseline measured on main (d6c2687a, 2026-10-28, jscpd 5.4.2):
-#   with the allowlist below: 0 clones, 0.00% duplicated lines
+#   0 clones, 0.00% duplicated lines
 #     (284 files, 63,649 lines analyzed)
-#   without the allowlist: 1 clone, 0.10% duplicated lines (62 lines) —
-#     exactly the known mirrored pair below. No other large block found.
-#
-# Allowlist (in .jscpd.json, with the reason here because JSON has no
-# comments): apps/web/lib/generation/script-segments.ts and
-# apps/mcp/src/script-segments.ts are mirrored BY DESIGN for parity — the
-# published MCP package cannot import from the web app, so the same
-# mechanical validation lives in both places. A separate shared-validation
-# PR is in progress to remove this duplication; this workflow must not
-# fail on it and must not try to fix it. When that PR merges, remove both
-# entries from .jscpd.json in the same change.
+# The former web/MCP script-segments mirror is gone: both import shared/.
 #
 # Excluded by design: test files, docs, generated files, lockfiles and
 # snapshots — only production code counts.
@@ -62,7 +52,5 @@ jobs:
             echo "Tool: jscpd 5.4.2, config \`.jscpd.json\`, min 50 lines / 100 tokens."
             echo "Scope: production TypeScript / TSX / JavaScript / Python under apps/web, apps/mcp, apps/engine."
             echo "Excluded: tests, docs, generated files, lockfiles, snapshots."
-            echo "Allowlisted by design: the mirrored script-segments pair (web vs MCP) — see the workflow header."
-            echo "Baseline on main (d6c2687a): 0 clones / 0.00% with the allowlist; 1 clone / 0.10% without it."
             echo "A failing threshold is a follow-up decision once this baseline is confirmed in CI."
           } >> "$GITHUB_STEP_SUMMARY"

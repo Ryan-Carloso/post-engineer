@@ -91,10 +91,10 @@ import { CheckMediaDescription, CheckMediaShape, UploadMediaDescription, UploadM
 import { withTracking } from './analytics.js';
 import { parseHttpTransportOptions, serveHttpTransport } from './http-transport.js';
 import { parseHttpAuthOptions } from './http-auth.js';
+import { readPackageVersion } from './package-version.js';
 
-// The server advertises the package version: import it so a version bump in
-// package.json flows through without touching this file.
-const { default: pkg } = await import('../package.json', { with: { type: 'json' } });
+// The server advertises the package version from package.json.
+const pkgVersion = readPackageVersion();
 
 export function requireApiKey(env: NodeJS.ProcessEnv = process.env): string {
   const apiKey = env.POST_ENGINEER_API_KEY;
@@ -108,7 +108,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
   const apiClient = client ?? new PostEngineerClient({ apiKey: requireApiKey() });
   const server = new McpServer({
     name: 'post-engineer-mcp',
-    version: pkg.version,
+    version: pkgVersion,
   });
   registerPrompts(server);
 
