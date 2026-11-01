@@ -145,8 +145,8 @@ describe('personaVoiceRejectionOptions', () => {
       voice: 'Bearer [redacted]',
     });
     expect(
-      personaVoiceRejectionOptions('sk-abcdefghij1234567890')?.metadata,
-    ).toEqual({ voice: '[redacted]' });
+      personaVoiceRejectionOptions('Bearer xyz987token')?.metadata,
+    ).toEqual({ voice: 'Bearer [redacted]' });
   });
 });
 

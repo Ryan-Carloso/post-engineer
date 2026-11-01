@@ -169,12 +169,12 @@ describe('resolvePersonaVoiceId', () => {
       voice: 'Bearer [redacted]',
     });
     await expect(
-      resolvePersonaVoiceId(client, 'sk-abcdefghij1234567890', 'create_persona'),
-    ).rejects.toThrow(UNKNOWN_VOICE('sk-abcdefghij1234567890'));
+      resolvePersonaVoiceId(client, 'Bearer xyz987token', 'create_persona'),
+    ).rejects.toThrow(UNKNOWN_VOICE('Bearer xyz987token'));
     expect(mockTrackEvent).toHaveBeenCalledWith('server_warning', {
       code: 'UNKNOWN_VOICE',
       tool: 'create_persona',
-      voice: '[redacted]',
+      voice: 'Bearer [redacted]',
     });
   });
 
