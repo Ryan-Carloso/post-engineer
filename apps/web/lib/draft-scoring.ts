@@ -79,6 +79,13 @@ export const SLOP_MARKERS = [
   'unlock',
   'elevate',
   'ever-evolving',
+  'seamless',
+  'next-level',
+  'have you ever wondered',
+  'did you know',
+  "let's dive in",
+  "here's the thing",
+  'a new era',
 ] as const;
 
 export interface DraftScoreReason {

@@ -112,6 +112,7 @@ describe('prompts hub data', () => {
     expect(baseText).toContain('make me want the next sentence');
     expect(baseText).toContain('another creator');
     expect(baseText).toContain('one specific action');
+    expect(baseText).toContain('score_draft with kind "script"');
     expect(baseText).toContain('no recurring schedule');
     expect(baseText).not.toContain('[');
     expect(baseText).toContain('3h-30d ahead');
