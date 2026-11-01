@@ -5,13 +5,16 @@
 // whole prompt in one paste, never a bare "see the base prompt"
 // reference.
 // DO NOT EDIT this copy directly in apps/web or apps/mcp: there is no
-// copy there anymore. The web hub imports this file directly
-// (apps/web/app/recipes/prompts.ts, with web tsconfig rootDir at the repo
-// root), and apps/mcp/src/prompt-base.ts is a symlink to this file —
-// tsc rootDir is ./src there, so a direct import fails with TS6059 and
-// widening rootDir would move dist/index.js. Edit here and both hubs
-// pick it up; there is no sync step and no generated copy to drift.
-// The per-app prompt-base-shared tests fail loudly if a copy ever
+// copy there anymore. Both hubs read this file through a symlink —
+// apps/web/lib/generation/prompt-base.ts and apps/mcp/src/prompt-base.ts.
+// A direct import is not an option: each app's tsc rootDir (apps/web,
+// apps/mcp/src) rejects it with TS6059, widening the MCP rootDir would
+// move dist/index.js, and Stryker's sandbox copies only the app root,
+// so a direct web import breaks mutation testing. The symlinks are
+// dereferenced by tsc, webpack, vitest, and Stryker, so every tool sees
+// the shared content as a local file. Edit here and both hubs pick it
+// up; there is no sync step and no generated copy to drift. The
+// per-app prompt-base-shared tests fail loudly if a copy ever
 // reappears, so a stale copy can never pass CI silently.
 // Rules that apply to every prompt go in SHARED_PROMPT_BASE. Topic-specific
 // steps go in the prompt that owns them, below, so the base stays short and

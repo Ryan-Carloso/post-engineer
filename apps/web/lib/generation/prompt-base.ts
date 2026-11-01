@@ -1,0 +1,1 @@
+../../../../shared/prompt-base/prompt-base.ts

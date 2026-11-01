@@ -2,34 +2,43 @@
  * @vitest-environment node
  */
 
-// prompt-base shared-source guard: the web hub must import
-// shared/prompt-base/prompt-base.ts directly — there must be no web
-// copy of it at apps/web/lib/generation/prompt-base.ts anymore.
-// This test fails loudly if a copy ever reappears, instead of letting
-// the hub silently serve stale text.
+// prompt-base shared-source guard: apps/web/lib/generation/prompt-base.ts
+// must be a symlink to shared/prompt-base/prompt-base.ts, never a
+// hand-maintained second copy and never a generated copy. A direct
+// import is not an option: tsc rootDir is apps/web (TS6059), and
+// Stryker's sandbox copies only the app root, so a direct import of
+// the shared file breaks mutation testing. The symlink is dereferenced
+// by tsc, webpack, vitest, and Stryker, so every tool sees the shared
+// content as a local file. This test fails loudly if the symlink is
+// replaced by a real file, even one with identical content, because a
+// real file can drift silently.
 import { describe, expect, it } from 'vitest';
-import { existsSync } from 'node:fs';
+import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
-import {
-  DAILY_NEWS_PROMPT,
-  FULL_SETUP_PROMPT,
-  GITHUB_PRS_PROMPT,
-} from '@/app/recipes/prompts';
-import * as sharedModule from '../../../../../shared/prompt-base/prompt-base';
+import * as linkedModule from '../prompt-base';
 
-const COPY_RELATIVE = join('apps', 'web', 'lib', 'generation', 'prompt-base.ts');
+const SHARED_RELATIVE = join('shared', 'prompt-base', 'prompt-base.ts');
+const LINKED_RELATIVE = join('apps', 'web', 'lib', 'generation', 'prompt-base.ts');
 
 describe('prompt-base shared source', () => {
-  it('has no web copy of the shared prompt base', () => {
+  it('is a symlink to the shared source of truth, not a copy', () => {
     const root = findRepoRoot(import.meta.url);
-    expect(existsSync(join(root, COPY_RELATIVE))).toBe(false);
+    expect(lstatSync(join(root, LINKED_RELATIVE)).isSymbolicLink()).toBe(true);
   });
 
-  it('serves the shared source at runtime, unchanged', () => {
-    expect(sharedModule.SHARED_PROMPT_BASE.length).toBeGreaterThan(0);
-    expect(DAILY_NEWS_PROMPT).toBe(sharedModule.DAILY_NEWS_PROMPT);
-    expect(FULL_SETUP_PROMPT).toBe(sharedModule.FULL_SETUP_PROMPT);
-    expect(GITHUB_PRS_PROMPT).toBe(sharedModule.GITHUB_PRS_PROMPT);
+  it('is byte-identical to the shared source of truth', () => {
+    const root = findRepoRoot(import.meta.url);
+    const shared = readFileSync(join(root, SHARED_RELATIVE), 'utf8');
+    const linked = readFileSync(join(root, LINKED_RELATIVE), 'utf8');
+    expect(shared).toContain('DO NOT EDIT this copy directly');
+    expect(linked).toBe(shared);
+  });
+
+  it('exports the same values as the shared source at runtime', async () => {
+    const root = findRepoRoot(import.meta.url);
+    const sharedModule: Record<string, unknown> = await import(/* @vite-ignore */ join(root, SHARED_RELATIVE));
+    expect({ ...sharedModule }).toEqual({ ...linkedModule });
+    expect(linkedModule.SHARED_PROMPT_BASE.length).toBeGreaterThan(0);
   });
 });

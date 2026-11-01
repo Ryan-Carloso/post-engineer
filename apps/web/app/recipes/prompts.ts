@@ -12,10 +12,12 @@
 // link are the only GitHub links.
 //
 // Prompt texts live once in shared/prompt-base/prompt-base.ts and are
-// imported directly from there — there is no web copy. The relative
-// path is deliberate: tsc rootDir is the repo root (see tsconfig.json),
-// so this import passes typecheck, and Next's webpack compiles the
-// shared file into the bundle.
+// imported here through a symlink at @/lib/generation/prompt-base —
+// there is no web copy. A direct import fails tsc with TS6059 (web
+// rootDir is apps/web) and, worse, breaks Stryker's sandbox, which
+// copies only the app root and would leave the shared file behind.
+// The symlink is dereferenced by tsc, webpack, vitest, and Stryker,
+// so every tool sees the shared content as a local file.
 //---------------
 
 import type { TranslationKey } from '@/lib/i18n';
@@ -23,7 +25,7 @@ import {
   DAILY_NEWS_PROMPT,
   FULL_SETUP_PROMPT,
   GITHUB_PRS_PROMPT,
-} from '../../../../shared/prompt-base/prompt-base';
+} from '@/lib/generation/prompt-base';
 
 export { DAILY_NEWS_PROMPT, FULL_SETUP_PROMPT, GITHUB_PRS_PROMPT };
 
