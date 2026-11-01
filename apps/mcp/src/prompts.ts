@@ -1,8 +1,11 @@
 //---------------
 // MCP prompts hub: slash commands for the recipes prompts. Prompt texts
-// come from ./prompt-base.ts, a generated copy of
-// shared/prompt-base/prompt-base.ts, because the published tarball cannot
-// import outside src. Slugs, titles and descriptions mirror the web hub;
+// come from ./prompt-base.ts, a symlink to
+// shared/prompt-base/prompt-base.ts: tsc rootDir is ./src, so a direct
+// import outside src fails with TS6059, and widening rootDir would move
+// dist/index.js. The symlink keeps the published tarball self-contained
+// (tsc emits a real dist/prompt-base.js) with no generated copy in git.
+// Slugs, titles and descriptions mirror the web hub;
 // prompts-sync.test.ts fails when they drift. Prompts are zero-arg: the
 // agent asks the user for values.
 //---------------

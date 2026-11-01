@@ -4,15 +4,18 @@
 // delivered text is complete and standalone: the agent receives the
 // whole prompt in one paste, never a bare "see the base prompt"
 // reference.
-// DO NOT EDIT this copy directly in apps/web or apps/mcp: the files at
-// apps/web/lib/generation/prompt-base.ts and apps/mcp/src/prompt-base.ts
-// are generated copies of this file. Edit here, then run
-// `node scripts/sync-prompt-base.mjs` from the repo root. The per-app
-// prompt-base-shared tests fail loudly if a generated copy ever drifts,
-// so a stale copy can never pass CI silently. The sync script is
-// deliberately NOT wired into prebuild/pretest: both apps' package.json
-// files are guard-protected paths, and auto-regeneration is a
-// convenience, not a correctness requirement.
+// DO NOT EDIT this copy directly in apps/web or apps/mcp: there is no
+// copy there anymore. Both hubs read this file through a symlink —
+// apps/web/lib/generation/prompt-base.ts and apps/mcp/src/prompt-base.ts.
+// A direct import is not an option: each app's tsc rootDir (apps/web,
+// apps/mcp/src) rejects it with TS6059, widening the MCP rootDir would
+// move dist/index.js, and Stryker's sandbox copies only the app root,
+// so a direct web import breaks mutation testing. The symlinks are
+// dereferenced by tsc, webpack, vitest, and Stryker, so every tool sees
+// the shared content as a local file. Edit here and both hubs pick it
+// up; there is no sync step and no generated copy to drift. The
+// per-app prompt-base-shared tests fail loudly if a copy ever
+// reappears, so a stale copy can never pass CI silently.
 // Rules that apply to every prompt go in SHARED_PROMPT_BASE. Topic-specific
 // steps go in the prompt that owns them, below, so the base stays short and
 // every prompt stays cheap. Web and MCP serve these exports unchanged.
@@ -36,6 +39,13 @@ export const SHARED_PROMPT_BASE: string[] = [
   'No em dashes. Do not sand off real voice: one short line or one "however" is fine; clusters of these habits are the problem.',
   'Test each line: could I picture it, could it be proven true or false, and could another creator say it about another topic? If yes to the last, rewrite it.',
   'Before validate_script, read it aloud and ask what still sounds like AI and which fact is not in the source. Fix both.',
+  '',
+  'Verify before you state it:',
+  'When a script needs a fact you are not sure about, search the web BEFORE stating it. If you have a doubt, search first, then speak.',
+  'Ask me once which search tool you already have: Tavily, Exa, or your own web or MCP search tool. Reuse that choice in this conversation; if only one tool is configured, use it without asking which. If it needs a key, the key lives in your own environment as YOUR_TAVILY_API_KEY or YOUR_EXA_API_KEY: never print it, never paste it anywhere else, never log it, and never ask me to paste it in chat. If it is missing, tell me to set it and stop that fact; do not invent it.',
+  'If the topic is entirely external (news, a place guide, an explainer about the world), search once first and keep at most 5 results: title, URL, and snippet for reasoning only; spoken segments never carry links. Write the script using ONLY facts from those results.',
+  'If search returns nothing or cannot confirm a fact, leave that fact out or ask me; never state an uncertain fact as a fact, and never invent a replacement fact to fill the gap.',
+  'If the source is already given (a GitHub PR I gave, a news story I gave, a personal opinion or story), use that source and do not force a search.',
   '',
   'Script contract, every video script follows it:',
   'Segments: first hook, last CTA, exactly one of each, at least one body, at most 12 segments.',

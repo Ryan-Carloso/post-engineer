@@ -4,10 +4,10 @@
 // apps/web/lib/i18n/recipes-i18n-en.ts for title + description).
 // This test fails loudly whenever the MCP copy drifts from the sources.
 // It never imports apps/web at runtime: the published MCP tarball must be
-// self-contained (see scripts/sync-prompt-base.mjs).
-// Prompt text itself is not copied: web and MCP both import it from their
-// generated prompt-base copy, and each web entry must name the same export
-// the MCP serves.
+// self-contained (see shared/README.md).
+// Prompt text itself is not copied: web imports it directly from
+// shared/prompt-base, MCP through a symlink to the same file, and each
+// web entry must name the same export the MCP serves.
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
