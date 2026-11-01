@@ -10,6 +10,7 @@ import { threadsStrings } from './threads-i18n';
 import { promptsStrings } from './nav-prompts-i18n';
 import { voiceFallbackStrings } from './voice-fallback-i18n';
 import { facelessMaterialStrings } from './faceless-material-i18n';
+import { pricingContactStrings } from './pricing-contact-i18n';
 import type { Locale } from './types';
 
 //---------------
@@ -33,6 +34,7 @@ export const ptDictionary = {
   accounts: { ...basePtDictionary.accounts, ...threadsStrings.pt.accounts },
   posts: { ...basePtDictionary.posts, ...facelessMaterialStrings.pt.posts },
   personas: { ...basePtDictionary.personas, ...facelessMaterialStrings.pt.personas },
+  landing: { ...basePtDictionary.landing, ...pricingContactStrings.pt.landing },
 };
 
 export const enDictionary = {
@@ -45,6 +47,7 @@ export const enDictionary = {
   accounts: { ...baseEnDictionary.accounts, ...threadsStrings.en.accounts },
   posts: { ...baseEnDictionary.posts, ...facelessMaterialStrings.en.posts },
   personas: { ...baseEnDictionary.personas, ...facelessMaterialStrings.en.personas },
+  landing: { ...baseEnDictionary.landing, ...pricingContactStrings.en.landing },
 };
 
 type PublishingAccountsKeys = typeof publishingAccountsStrings.en;
@@ -53,6 +56,7 @@ type ThreadsKeys = typeof threadsStrings.en;
 type PromptsKeys = typeof promptsStrings.en;
 type VoiceFallbackKeys = typeof voiceFallbackStrings.en;
 type FacelessMaterialKeys = typeof facelessMaterialStrings.en;
+type PricingContactKeys = typeof pricingContactStrings.en;
 export type Dictionary = BaseDictionary & {
   [Section in keyof ThreadsKeys]: {
     [Key in keyof ThreadsKeys[Section]]: string;
@@ -76,6 +80,10 @@ export type Dictionary = BaseDictionary & {
 } & {
   [Section in keyof FacelessMaterialKeys]: {
     [Key in keyof FacelessMaterialKeys[Section]]: string;
+  };
+} & {
+  [Section in keyof PricingContactKeys]: {
+    [Key in keyof PricingContactKeys[Section]]: string;
   };
 };
 
