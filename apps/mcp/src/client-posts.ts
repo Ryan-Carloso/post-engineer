@@ -41,3 +41,27 @@ export async function getPostMetrics(
     'get post metrics',
   );
 }
+
+export interface ScoreDraftInput {
+  draft: string;
+  network?: string;
+  personaId?: string;
+  kind?: string;
+}
+
+export async function scoreDraft(
+  client: PostEngineerClient,
+  input: ScoreDraftInput,
+): Promise<unknown> {
+  // Same parameter names as the route's body; omitted optionals are not
+  // sent (the route rejects empty parameters).
+  const body: Record<string, unknown> = { draft: input.draft };
+  if (input.network !== undefined) body.network = input.network;
+  if (input.personaId !== undefined) body.personaId = input.personaId;
+  if (input.kind !== undefined) body.kind = input.kind;
+  return client.request(
+    '/api/videos/score-draft',
+    { method: 'POST', headers: client.getHeaders(), body: JSON.stringify(body) },
+    'score draft',
+  );
+}
