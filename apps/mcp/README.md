@@ -170,8 +170,8 @@ hub by a sync test (`prompts-sync.test.ts`).
 - `/github-prs`: GitHub PRs become videos — turn a GitHub pull request into one persona video.
 - `/full-setup`: Full setup becomes videos — connect accounts, create a persona, validate the script, and publish your first video without skipping a step.
 
-Add a new prompt's text to `shared/prompt-base/prompt-base.ts` and run
-`node scripts/sync-prompt-base.mjs`. Then add its entry to the web hub
+Add a new prompt's text to `shared/prompt-base/prompt-base.ts`. Then add its
+entry to the web hub
 (`apps/web/app/recipes/prompts.ts` + its i18n title/description) and the same
 slug, title, description, and text export to `src/prompts.ts`; `pnpm test`
 fails if they drift.
