@@ -92,9 +92,8 @@ export interface DraftBaseline {
   topAngles: TopAngle[];
   medianEngagement: number | null;
   bestEngagement: number | null;
-  // True when the capped read hit the row limit, so the caller can tell
-  // a partial baseline (200-of-N) from a complete one — same signal as
-  // GET /api/metrics exposes on its own capped read.
+  // True when the capped read left rows out, so the numbers above describe
+  // only the most recent BASELINE_ROW_LIMIT snapshots.
   truncated: boolean;
 }
 
@@ -143,12 +142,19 @@ function countWords(text: string): number {
   return text.trim().length === 0 ? 0 : words.length;
 }
 
+// A # glued to a preceding word or path is a URL fragment or "C#", never a
+// hashtag ("example.com/guide#setup" must not count).
 function extractHashtags(text: string): string[] {
-  return text.match(/#[\p{L}\p{N}_]+/gu) ?? [];
+  return text.match(/(?<![\p{L}\p{N}_/])#[\p{L}\p{N}_]+/gu) ?? [];
 }
 
+// Any scheme casing, www., or a bare domain on a known TLD. The TLD list is
+// closed so "Node.js" or "e.g." never count, and the lookbehind skips email
+// addresses.
 function extractLinks(text: string): string[] {
-  return text.match(/https?:\/\/[^\s]+/g) ?? [];
+  return text.match(
+    /(?<![@\p{L}\p{N}.-])(?:https?:\/\/[^\s]+|www\.[^\s]+|(?:[a-z0-9-]+\.)+(?:com|org|net|io|co|ai|dev|app|br|pt)(?![\p{L}\p{N}-])(?:\/[^\s]*)?)/giu,
+  ) ?? [];
 }
 
 const STOPWORDS = new Set([
@@ -156,11 +162,17 @@ const STOPWORDS = new Set([
   'are', 'was', 'were', 'have', 'has', 'about', 'into', 'over', 'after',
   'before', 'when', 'what', 'which', 'their', 'them', 'they', 'then',
   'than', 'also', 'just', 'like', 'more', 'most', 'other', 'some',
+  // Portuguese (the product's default locale).
+  'para', 'como', 'mais', 'pela', 'pelo', 'pelas', 'pelos', 'esse', 'essa',
+  'isso', 'este', 'esta', 'isto', 'aqui', 'quando', 'sobre', 'entre',
+  'muito', 'muita', 'você', 'vocês', 'suas', 'seus', 'nosso', 'nossa',
+  'depois', 'antes', 'ainda', 'porque', 'também', 'foram', 'será', 'está',
 ]);
 
 function themeTokens(text: string): Set<string> {
   const tokens = new Set<string>();
-  for (const raw of text.toLowerCase().split(/[^a-z0-9]+/)) {
+  // Unicode-aware: an ASCII split would cut "manhãs" into "manh" and "s".
+  for (const raw of text.normalize('NFC').toLowerCase().split(/[^\p{L}\p{N}]+/u)) {
     if (raw.length >= 4 && !STOPWORDS.has(raw)) tokens.add(raw);
   }
   return tokens;
@@ -171,23 +183,54 @@ function findSlopHits(text: string): string[] {
   if (text.includes('—')) hits.push('em dash');
   // Padded word search instead of an interpolated RegExp (repo rule):
   // punctuation is flattened to spaces, so ' delve ' only matches the
-  // whole word, and multi-word markers match as whole phrases.
-  const flat = ` ${text.toLowerCase().replace(/[^a-z0-9' -]+/g, ' ').replace(/\s+/g, ' ')} `;
+  // whole word, and multi-word markers match as whole phrases. Typographic
+  // apostrophes fold to ASCII first, or "it’s" would never match "it's".
+  const flat = ` ${text.toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[^a-z0-9' -]+/g, ' ').replace(/\s+/g, ' ')} `;
   for (const marker of SLOP_MARKERS) {
     if (flat.includes(` ${marker} `)) hits.push(marker);
   }
   return hits;
 }
 
-const CTA_WORDS = [
-  'comment', 'share', 'follow', 'subscribe', 'download', 'read',
-  'try', 'join', 'save', 'check out', 'tell me', 'let me know',
+// Imperatives only count at the start of a sentence ("Read the guide"), so
+// a statement like "I read this on Sunday" is not a call to action.
+const CTA_IMPERATIVES = [
+  'comment', 'share', 'follow', 'subscribe', 'download', 'read', 'try',
+  'join', 'save',
+  'comente', 'compartilhe', 'siga', 'inscreva', 'baixe', 'leia',
+  'experimente', 'participe', 'salve',
 ];
+// Phrases are specific enough to count anywhere in the line.
+const CTA_PHRASES = [
+  'check out', 'tell me', 'let me know', 'leave a comment', 'drop a comment',
+  'me conta', 'me diga', 'deixe um comentário', 'deixe seu comentário',
+];
+
+function flattenWords(text: string): string {
+  return ` ${text.toLowerCase().replace(/[^\p{L}]+/gu, ' ').trim()} `;
+}
 
 function hasCallToAction(lastLine: string): boolean {
   if (lastLine.trim().endsWith('?')) return true;
-  const flat = ` ${lastLine.toLowerCase().replace(/[^a-z]+/g, ' ').replace(/\s+/g, ' ')} `;
-  return CTA_WORDS.some((word) => flat.includes(` ${word} `));
+  const flat = flattenWords(lastLine);
+  if (CTA_PHRASES.some((phrase) => flat.includes(` ${phrase} `))) return true;
+  return lastLine.split(/[.!?:;]+/).some((sentence) => {
+    const flatSentence = flattenWords(sentence);
+    return CTA_IMPERATIVES.some((word) => flatSentence.startsWith(` ${word} `));
+  });
+}
+
+// Trailing hashtags and links are not the closing line a reader answers:
+// "What is your ritual? #Porto" still ends with a question.
+function closingText(lines: string[]): string {
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    let line = lines[index];
+    for (const token of [...extractHashtags(line), ...extractLinks(line)]) {
+      line = line.replace(token, ' ');
+    }
+    if (line.trim().length > 0) return line;
+  }
+  return '';
 }
 
 //---------------
@@ -198,7 +241,7 @@ function hasCallToAction(lastLine: string): boolean {
 // grouped exactly as stored; rows without an angle cannot name a theme,
 // so they count toward postsMeasured but never toward topAngles.
 //---------------
-export function summarizeBaseline(rows: BaselineRow[], truncated = false): DraftBaseline {
+export function summarizeBaseline(rows: BaselineRow[], truncated: boolean): DraftBaseline {
   const engagements: number[] = [];
   const byAngle = new Map<string, { engagement: number; posts: number }>();
   for (const row of rows) {
@@ -302,9 +345,9 @@ export function checkPublish(draft: string, network: PublishNetwork): PublishChe
 // scoreDraft — 0-100 from mechanical signals, every point explained.
 //
 // Buckets: hook 20, length 15, hashtags 15, slop-free 20, links 10,
-// top-theme match 15, call to action 5. The reasons always sum to the
-// returned score: when the raw sum leaves 0-100, a floor/ceiling reason
-// carries the exact adjustment instead of silently clamping.
+// top-theme match 15, call to action 5. Each bucket emits exactly one
+// reason inside its own range, so the reasons always sum to the score and
+// the score cannot leave 0-100.
 //---------------
 export function scoreDraft(
   draft: string,
@@ -320,7 +363,7 @@ export function scoreDraft(
   const lines = draft.split('\n').filter((line) => line.trim().length > 0);
   const firstLine = lines[0] ?? '';
   const firstLineWords = countWords(firstLine);
-  const lastLine = lines[lines.length - 1] ?? '';
+  const lastLine = closingText(lines);
 
   if (firstLineWords >= 3 && firstLineWords <= 30) {
     reasons.push({ rule: 'hook', detail: `First line is ${firstLineWords} words.`, points: 20 });
@@ -355,10 +398,12 @@ export function scoreDraft(
   if (slopHits.length === 0) {
     reasons.push({ rule: 'slop_free', detail: 'No slop markers found.', points: 20 });
   } else {
-    reasons.push({ rule: 'slop_free', detail: `Slop bucket base of 20 reduced by ${slopHits.length} marker(s).`, points: 20 });
-  }
-  for (const hit of slopHits) {
-    reasons.push({ rule: 'slop', detail: `Slop marker found: "${hit}".`, points: -5 });
+    reasons.push({
+      rule: 'slop_free',
+      detail: `Slop markers found: ${slopHits.map((hit) => `"${hit}"`).join(', ')}.`,
+      // -5 per marker, floored at 0 so slop cannot eat other buckets' points.
+      points: Math.max(0, 20 - slopHits.length * 5),
+    });
   }
 
   if (links.length === 0) {
@@ -370,8 +415,10 @@ export function scoreDraft(
   }
 
   let topThemeMatch: string | null = null;
-  if (baseline.topAngles.length === 0) {
+  if (baseline.postsMeasured === 0) {
     reasons.push({ rule: 'top_theme', detail: 'No measured posts yet, so no top theme to match.', points: 0 });
+  } else if (baseline.topAngles.length === 0) {
+    reasons.push({ rule: 'top_theme', detail: 'Measured posts have no script angle yet, so no top theme to match.', points: 0 });
   } else {
     const draftTokens = themeTokens(draft);
     for (const top of baseline.topAngles) {
@@ -395,15 +442,7 @@ export function scoreDraft(
     reasons.push({ rule: 'call_to_action', detail: 'Draft does not end with a question or call to action.', points: 0 });
   }
 
-  const raw = reasons.reduce((sum, reason) => sum + reason.points, 0);
-  const score = Math.min(100, Math.max(0, raw));
-  if (score !== raw) {
-    reasons.push({
-      rule: score > raw ? 'score_ceiling' : 'score_floor',
-      detail: `Raw sum ${raw} clamped to ${score}.`,
-      points: score - raw,
-    });
-  }
+  const score = reasons.reduce((sum, reason) => sum + reason.points, 0);
 
   return {
     score,
