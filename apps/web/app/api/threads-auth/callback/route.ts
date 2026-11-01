@@ -11,10 +11,10 @@ import { withApiErrorReporting } from '@/lib/api-error-reporting';
 //---------------
 async function getSessionUserId(): Promise<string | null> {
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+  // Single-line destructuring: the API naming lint only exempts
+  // destructured names on one line, and `data` here is the Supabase
+  // SDK shape, not a contract field we chose.
+  const { data: { user }, error } = await supabase.auth.getUser();
 
   if (error || !user) return null;
   return user.id;

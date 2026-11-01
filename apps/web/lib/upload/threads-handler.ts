@@ -4,7 +4,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { publishThreadsVideo, THREADS_TEXT_MAX_CHARS, THREADS_VIDEO_MAX_BYTES } from '@/lib/threads';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
-import { uploadToStorage } from '@/lib/upload/handlers';
+import { cleanupOldUploads, uploadToStorage } from '@/lib/upload/handlers';
 
 //---------------
 // handleThreadsUpload — publishes the video to the user's Threads accounts.
@@ -97,6 +97,11 @@ export async function handleThreadsUpload(
       results.push({ accountId, success: false, error: message });
     }
   }
+
+  // Fire-and-forget: remove Threads media older than 24h from the bucket,
+  // mirroring the Instagram handler — otherwise every publish stores
+  // its video under `threads/` forever.
+  cleanupOldUploads('threads');
 
   return { success: results.some((result) => result.success), results };
 }

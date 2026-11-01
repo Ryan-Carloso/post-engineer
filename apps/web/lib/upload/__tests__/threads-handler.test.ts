@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/social-accounts', () => ({ getSocialAccountTokens: vi.fn(), touchSocialAccount: vi.fn() }));
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({ __mock: 'service-client' })) }));
-vi.mock('@/lib/upload/handlers', () => ({ uploadToStorage: vi.fn(async () => 'https://s.example/signed.mp4') }));
+vi.mock('@/lib/upload/handlers', () => ({ uploadToStorage: vi.fn(async () => 'https://s.example/signed.mp4'), cleanupOldUploads: vi.fn() }));
 vi.mock('@/lib/threads', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/threads')>()),
   publishThreadsVideo: vi.fn(),
@@ -11,7 +11,7 @@ vi.mock('@/lib/threads', async (importOriginal) => ({
 
 import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
-import { uploadToStorage } from '@/lib/upload/handlers';
+import { cleanupOldUploads, uploadToStorage } from '@/lib/upload/handlers';
 import { publishThreadsVideo } from '@/lib/threads';
 
 const MP4_BYTES = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
@@ -46,6 +46,7 @@ describe('handleThreadsUpload', () => {
       accessToken: 'tok', userId: '42', videoUrl: 'https://s.example/signed.mp4', text: 'my post',
     });
     expect(touchSocialAccount).toHaveBeenCalledWith(expect.anything(), 'user-1', 'threads', '42');
+    expect(cleanupOldUploads).toHaveBeenCalledWith('threads');
   });
 
   it.each([
