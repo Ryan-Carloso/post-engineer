@@ -30,16 +30,25 @@
 //   TEST_FLIGHT_EXA_API_KEY     reserve search key.
 // LLM configuration (the key is required; missing key means failure):
 //   TEST_FLIGHT_LLM_API_KEY   OpenAI-compatible API key. The workflow
-//                             passes OPENCODE_ZEN_API_KEY here (the repo
-//                             secret already used by the OpenCode review).
-//   TEST_FLIGHT_LLM_BASE_URL  default https://api.openai.com/v1; the
-//                             workflow passes https://opencode.ai/zen/v1
-//                             so the Zen key is used.
+//                             passes OPENROUTER_API_KEY here (repo secret).
+//                             Zen is NOT used: paid Zen was proven live
+//                             to fail with HTTP 402 (Insufficient account
+//                             funds, run 41323409879), and no OpenCode Go
+//                             key exists in repo secrets.
+//   TEST_FLIGHT_LLM_BASE_URL  default https://openrouter.ai/api/v1; the
+//                             workflow passes that same URL.
 //   TEST_FLIGHT_LLM_MODELS    comma-separated chain, default
-//                             glm-5.3-flash-free,deepseek-v4.1-flash-free
-//                             (free first, before any paid model set via
-//                             TEST_FLIGHT_LLM_MODEL, which is appended
-//                             last, never first).
+//                             nvidia/nemotron-3.5-lightning:free,
+//                             z-ai/glm-5.3-flash. The free step is a FIXED
+//                             model, not the openrouter/free router: the
+//                             router picks a free model at random, so a
+//                             run cannot say which model answered it, and
+//                             run 41325670131 got an empty completion from
+//                             an unknown router pick. z-ai/glm-5.3-flash
+//                             is paid GLM 5.3 Flash via OpenRouter only —
+//                             not the direct ZAI API and not Zen. A single
+//                             model set via TEST_FLIGHT_LLM_MODEL is
+//                             appended last, never first, never duplicated).
 //   TEST_FLIGHT_TOPIC         optional fixed topic; empty rotates topics.
 //   TEST_FLIGHT_RUN_ID        seed for the angle, so reruns differ.
 //   TEST_FLIGHT_SCRIPT_PATH   required output path for the script JSON.
@@ -49,6 +58,7 @@
 import { writeFile } from 'node:fs/promises';
 import { searchFacts } from './search.mjs';
 import { pathToFileURL } from 'node:url';
+import { accumulateLlmStream } from './llm-stream.mjs';
 
 export class ScriptError extends Error {}
 
@@ -64,15 +74,24 @@ export const MAX_HOOK_WORDS = 40;
 export const MIN_CTA_WORDS = 5;
 export const MAX_CTA_WORDS = 20;
 export const MAX_SEGMENTS = 12;
-export const LLM_TIMEOUT_MS = 60000;
-export const DEFAULT_LLM_BASE_URL = 'https://api.openai.com/v1';
-// Free-first model chain, same ids as the OpenCode review workflow
-// (opencode/glm-5.3-flash-free primary, opencode/deepseek-v4.1-flash-free
-// verify), minus the provider prefix, which is how OpenCode Zen names
-// them. Paid models come only after the free ones, and only when the
-// caller sets TEST_FLIGHT_LLM_MODEL explicitly — no paid model id is
-// hardcoded here, so no paid spend happens by default.
-export const DEFAULT_LLM_MODELS = ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free'];
+// Streaming timeouts: abort only on silence (a thinking model sends
+// nothing while it thinks, so a total-only timeout kills it mid-thought),
+// with a total cap per attempt so a job can never hang forever. The
+// fetch phase shares the same total cap via an AbortController below.
+export const LLM_SILENCE_TIMEOUT_MS = 60000;
+export const LLM_TOTAL_TIMEOUT_MS = 300000;
+export const DEFAULT_LLM_BASE_URL = 'https://openrouter.ai/api/v1';
+// OpenRouter-only model chain with a FIXED free model. The previous
+// openrouter/free router pick was random, so a failed run could not say
+// which model answered it; nvidia/nemotron-3.5-lightning:free is pinned
+// instead (verified 2026-11-01 in OpenRouter's live catalog: $0/$0,
+// reasoning mandatory:false, so it returns content directly rather than
+// reasoning-only). The script is still gated by the segment validation
+// below and the paid fallback catches a bad or failed free attempt.
+// Paid z-ai/glm-5.3-flash runs only after the fixed free model fails.
+// A single model set via TEST_FLIGHT_LLM_MODEL is still appended last,
+// never first, and never duplicated if it is already in this chain.
+export const DEFAULT_LLM_MODELS = ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash'];
 
 // Evergreen topics for the scheduled monitor (manual flights pass their own).
 export const MONITOR_TOPICS = [
@@ -306,32 +325,56 @@ function stripFences(text) {
     .trim();
 }
 
-async function callLlm({ topic, angle, llm, model, fetchFn, attemptError, facts = '' }) {
+async function callLlm({ topic, angle, llm, model, fetchFn, attemptError, facts = '', streamTimeouts = {} }) {
   const prompt = buildPrompt({ topic, angle, facts });
   const userContent = attemptError
     ? `${prompt}\n\nPrevious output failed validation: ${attemptError.rule} Fix: ${attemptError.fix} Return JSON only, with the fix applied.`
     : prompt;
-  const res = await fetchFn(`${llm.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${llm.apiKey}` },
-    body: JSON.stringify({
-      model,
-      temperature: 0.7,
-      messages: [
-        { role: 'system', content: 'You write short spoken video scripts. Respond with JSON only.' },
-        { role: 'user', content: userContent },
-      ],
-    }),
-    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
-  });
+  const startedAt = Date.now();
+  const silenceMs = streamTimeouts.silenceMs ?? LLM_SILENCE_TIMEOUT_MS;
+  const totalMs = streamTimeouts.totalMs ?? LLM_TOTAL_TIMEOUT_MS;
+  const controller = new AbortController();
+  const fetchTimer = setTimeout(() => controller.abort(), totalMs);
+  let res;
+  try {
+    res = await fetchFn(`${llm.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${llm.apiKey}` },
+      body: JSON.stringify({
+        model,
+        temperature: 0.7,
+        stream: true,
+        messages: [
+          { role: 'system', content: 'You write short spoken video scripts. Respond with JSON only.' },
+          { role: 'user', content: userContent },
+        ],
+      }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(fetchTimer);
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new ScriptError(`write-script: LLM endpoint returned HTTP ${res.status}${body ? `: ${body.slice(0, 200)}` : ''}`);
   }
-  const data = await res.json().catch(() => null);
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== 'string' || content.trim() === '') {
-    throw new ScriptError('write-script: LLM returned an empty completion');
+  // Streaming: thinking arrives as delta.reasoning chunks in real time,
+  // and the final script arrives as delta.content chunks. Count only
+  // lengths and presence here: reasoning text is internal thinking and
+  // is never logged, never parsed, and never used as the script. A
+  // non-SSE body or an unparseable chunk throws here, so the attempt
+  // fails and the next model in the chain catches it.
+  const remainingMs = totalMs - (Date.now() - startedAt);
+  if (remainingMs <= 0) {
+    throw new ScriptError(`write-script: LLM stream total timeout (${totalMs}ms)`);
+  }
+  const streamed = await accumulateLlmStream(res.body, { silenceMs, totalMs: remainingMs, startedAt });
+  const content = streamed.content;
+  const reasoningChars = streamed.reasoningChars;
+  const responseModel = streamed.model !== '' ? streamed.model : model;
+  console.log(`write-script: LLM response model=${responseModel} reasoning=${reasoningChars === 0 ? 'none' : `${reasoningChars} chars`} content=${content.length} chars timeout=streaming-silence-${silenceMs}ms-total-${totalMs}ms`);
+  if (content.trim() === '') {
+    throw new ScriptError(`write-script: LLM returned an empty completion (${reasoningChars > 0 ? `reasoning present, ${reasoningChars} chars` : 'no reasoning'})`);
   }
   let parsed;
   try {
@@ -350,7 +393,7 @@ export function resolveLlmModels(env) {
   return [...DEFAULT_LLM_MODELS];
 }
 
-export async function generateScript({ topic, angle, llm, fetchFn = fetch, facts = '' }) {
+export async function generateScript({ topic, angle, llm, fetchFn = fetch, facts = '', streamTimeouts = {} }) {
   if (!llm || !llm.apiKey) {
     throw new ScriptError('write-script: missing TEST_FLIGHT_LLM_API_KEY — refusing to publish a fallback script');
   }
@@ -364,7 +407,7 @@ export async function generateScript({ topic, angle, llm, fetchFn = fetch, facts
     let lastError = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const parsed = await callLlm({ topic, angle, llm, model, fetchFn, attemptError: lastError, facts });
+        const parsed = await callLlm({ topic, angle, llm, model, fetchFn, attemptError: lastError, facts, streamTimeouts });
         const checked = validateScript(parsed);
         if (!checked.ok) {
           lastError = checked.error;

@@ -108,10 +108,34 @@ test('buildPrompt is standalone: it carries topic, angle, contract, and banned p
   assert.equal(prompt.includes('see the base'), false);
 });
 
-function jsonFetch(content) {
-  return async () => ({
-    ok: true,
-    json: async () => ({ choices: [{ message: { content: JSON.stringify(content) } }] }),
+function sseResponse(chunks) {
+  const text = chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('') + 'data: [DONE]\n\n';
+  return new Response(text, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+}
+
+function streamFetch(content, extra = {}) {
+  return async () => sseResponse([{
+    model: extra.model ?? 'test-model',
+    choices: [{ delta: { content: JSON.stringify(content), ...(extra.reasoning ? { reasoning: extra.reasoning } : {}) } }],
+  }]);
+}
+
+function delayedStream(lines, delayMs, hangAfter = -1) {
+  let index = 0;
+  return new ReadableStream({
+    async pull(controller) {
+      if (hangAfter !== -1 && index > hangAfter) {
+        await new Promise(() => {});
+        return;
+      }
+      if (index < lines.length) {
+        if (delayMs > 0) await new Promise((resolve) => { setTimeout(resolve, delayMs); });
+        controller.enqueue(new TextEncoder().encode(lines[index]));
+        index += 1;
+      } else {
+        controller.close();
+      }
+    },
   });
 }
 
@@ -120,7 +144,7 @@ test('generateScript uses a valid LLM script and never returns the key in the ou
     topic: 'Porto in one day: what to visit first',
     angle: 'budget',
     llm: { apiKey: 'llm-key', baseUrl: 'https://llm.example.test/v1', model: 'test-model' },
-    fetchFn: jsonFetch(goodScript()),
+    fetchFn: streamFetch(goodScript()),
   });
   assert.equal(script.source, 'llm');
   assert.equal(script.title, goodScript().title);
@@ -133,7 +157,7 @@ test('generateScript retries once after a validation failure, then throws instea
     calls += 1;
     const bad = goodScript();
     bad.segments[0] = { kind: 'hook', text: 'Porto is nice.' };
-    return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(bad) } }] }) };
+    return sseResponse([{ choices: [{ delta: { content: JSON.stringify(bad) } }] }]);
   };
   await assert.rejects(() => generateScript({
     topic: 'Porto in one day: what to visit first',
@@ -144,28 +168,121 @@ test('generateScript retries once after a validation failure, then throws instea
   assert.equal(calls, 2);
 });
 
-test('resolveLlmModels defaults to the free chain and puts an explicit paid model last', () => {
-  assert.deepEqual(resolveLlmModels({}), ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free']);
-  assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODEL: 'paid-model' }), ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free', 'paid-model']);
+test('resolveLlmModels defaults to a fixed free model first with paid GLM last, and puts an explicit model last without duplicating it', () => {
+  assert.deepEqual(resolveLlmModels({}), ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash']);
+  assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODEL: 'paid-model' }), ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash', 'paid-model']);
+  assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODEL: 'z-ai/glm-5.3-flash' }), ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash']);
   assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODELS: 'a-model, b-model' }), ['a-model', 'b-model']);
 });
 
-test('generateScript tries the free chain in order and reports the model used', async () => {
+test('generateScript falls through a fixed free model failure to paid GLM and returns it as the model used', async () => {
   const calls = [];
   const fetchFn = async (url, options) => {
     const model = JSON.parse(options.body).model;
     calls.push(model);
-    if (model === 'glm-5.3-flash-free') return { ok: false, status: 500, text: async () => 'down' };
-    return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(goodScript()) } }] }) };
+    if (model === 'z-ai/glm-5.3-flash') {
+      return sseResponse([{ choices: [{ delta: { content: JSON.stringify(goodScript()) } }] }]);
+    }
+    return { ok: false, status: 429, text: async () => '{"error": {"message": "No free model available."}}' };
   };
   const script = await generateScript({
     topic: 'Porto in one day: what to visit first',
     angle: 'budget',
-    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free'] },
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: resolveLlmModels({}) },
     fetchFn,
   });
-  assert.deepEqual(calls, ['glm-5.3-flash-free', 'deepseek-v4.1-flash-free']);
-  assert.equal(script.model, 'deepseek-v4.1-flash-free');
+  assert.deepEqual(calls, ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash']);
+  assert.equal(script.source, 'llm');
+  assert.equal(script.model, 'z-ai/glm-5.3-flash');
+});
+
+test('generateScript throws when the fixed free model and paid GLM both fail, instead of publishing a repeat script', async () => {
+  const failing = async () => ({ ok: false, status: 429, text: async () => '{"error": {"type": "FreeUsageLimitError"}}' });
+  await assert.rejects(() => generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: resolveLlmModels({}) },
+    fetchFn: failing,
+  }), /failing the job instead of publishing a repeat script/);
+});
+
+test('generateScript tries the chain in order and reports the model used', async () => {
+  const calls = [];
+  const fetchFn = async (url, options) => {
+    const model = JSON.parse(options.body).model;
+    calls.push(model);
+    assert.equal(JSON.parse(options.body).stream, true);
+    if (model === 'nvidia/nemotron-3.5-lightning:free') return { ok: false, status: 500, text: async () => 'down' };
+    return sseResponse([{ choices: [{ delta: { content: JSON.stringify(goodScript()) } }] }]);
+  };
+  const script = await generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash'] },
+    fetchFn,
+  });
+  assert.deepEqual(calls, ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash']);
+  assert.equal(script.model, 'z-ai/glm-5.3-flash');
+});
+
+test('generateScript logs the actual response model and reasoning/content lengths, never reasoning text', async () => {
+  const logged = [];
+  const originalLog = console.log;
+  console.log = (...args) => { logged.push(args.join(' ')); };
+  try {
+    const fetchFn = async () => sseResponse([{
+      model: 'nvidia/nemotron-3.5-lightning:free',
+      choices: [{ delta: { content: JSON.stringify(goodScript()), reasoning: 'thinking that must never appear in logs' } }],
+    }]);
+    const script = await generateScript({
+      topic: 'Porto in one day: what to visit first',
+      angle: 'budget',
+      llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: ['nvidia/nemotron-3.5-lightning:free'] },
+      fetchFn,
+    });
+    assert.equal(script.model, 'nvidia/nemotron-3.5-lightning:free');
+    const responseLine = logged.find((line) => line.includes('LLM response model='));
+    assert.match(responseLine, /model=nvidia\/nemotron-3\.5-lightning:free reasoning=39 chars content=\d+ chars/);
+    assert.equal(logged.some((line) => line.includes('thinking that must never appear in logs')), false);
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test('generateScript distinguishes an empty completion with reasoning from one without', async () => {
+  const withReasoning = async () => sseResponse([{
+    choices: [{ delta: { content: '', reasoning_content: 'some internal thinking' } }],
+  }]);
+  await assert.rejects(() => generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: ['m'] },
+    fetchFn: withReasoning,
+  }), /LLM returned an empty completion \(reasoning present, 22 chars\)/);
+  const withoutReasoning = async () => sseResponse([{
+    choices: [{ delta: { content: '   ' } }],
+  }]);
+  await assert.rejects(() => generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: ['m'] },
+    fetchFn: withoutReasoning,
+  }), /LLM returned an empty completion \(no reasoning\)/);
+});
+
+test('generateScript never parses reasoning text as the script', async () => {
+  const reasoningScript = goodScript();
+  reasoningScript.title = 'Title hidden in reasoning only';
+  const fetchFn = async () => sseResponse([{
+    choices: [{ delta: { content: JSON.stringify(goodScript()), reasoning: JSON.stringify(reasoningScript), reasoning_details: [{ text: JSON.stringify(reasoningScript) }] } }],
+  }]);
+  const script = await generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: ['m'] },
+    fetchFn,
+  });
+  assert.equal(script.title, 'Porto in one day: what to visit first');
 });
 
 test('generateScript throws when the LLM endpoint fails or no key is configured', async () => {
@@ -177,4 +294,106 @@ test('generateScript throws when the LLM endpoint fails or no key is configured'
     fetchFn: failing,
   }), /failing the job instead of publishing a repeat script/);
   await assert.rejects(() => generateScript({ topic: 'Morning in Porto: the perfect riverside walk', angle: 'walking-route', llm: null }), /missing TEST_FLIGHT_LLM_API_KEY/);
+});
+
+test('generateScript accumulates streamed content across multiple chunks', async () => {
+  const json = JSON.stringify(goodScript());
+  const fetchFn = async () => sseResponse([
+    { choices: [{ delta: { content: json.slice(0, 40) } }] },
+    { choices: [{ delta: { content: json.slice(40, 120) } }] },
+    { choices: [{ delta: { content: json.slice(120) } }] },
+  ]);
+  const script = await generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', model: 'm' },
+    fetchFn,
+  });
+  assert.equal(script.title, goodScript().title);
+});
+
+test('generateScript accepts thinking chunks in real time, then the final content', async () => {
+  const fetchFn = async () => sseResponse([
+    { choices: [{ delta: { reasoning: 'first I think about the hook' } }] },
+    { choices: [{ delta: { reasoning_content: 'then I think about the body' } }] },
+    { choices: [{ delta: { content: JSON.stringify(goodScript()) } }] },
+  ]);
+  const script = await generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', model: 'm' },
+    fetchFn,
+  });
+  assert.equal(script.title, goodScript().title);
+});
+
+test('generateScript succeeds on a slow but alive stream, below the silence timeout', async () => {
+  const json = JSON.stringify(goodScript());
+  const fetchFn = async () => ({
+    ok: true,
+    body: delayedStream([`data: ${JSON.stringify({ choices: [{ delta: { content: json.slice(0, 50) } }] })}\n\n`, `data: ${JSON.stringify({ choices: [{ delta: { content: json.slice(50) } }] })}\n\n`, 'data: [DONE]\n\n'], 20),
+  });
+  const script = await generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', model: 'm' },
+    fetchFn,
+    streamTimeouts: { silenceMs: 200, totalMs: 5000 },
+  });
+  assert.equal(script.title, goodScript().title);
+});
+
+test('generateScript aborts on stream silence, not on total elapsed time alone', async () => {
+  const fetchFn = async () => ({
+    ok: true,
+    body: delayedStream([`data: ${JSON.stringify({ choices: [{ delta: { content: '{"partial' } }] })}\n\n`], 0, 0),
+  });
+  await assert.rejects(() => generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', model: 'm' },
+    fetchFn,
+    streamTimeouts: { silenceMs: 50, totalMs: 10000 },
+  }), /silence timeout/);
+});
+
+test('generateScript aborts on the total cap even when chunks keep arriving', async () => {
+  // A never-closing stream: chunks keep arriving, so only the total cap
+  // can stop it.
+  const neverClosing = async () => ({
+    ok: true,
+    body: new ReadableStream({
+      async pull(controller) {
+        await new Promise((resolve) => { setTimeout(resolve, 20); });
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta: { content: 'x' } }] })}\n\n`));
+      },
+    }),
+  });
+  await assert.rejects(() => generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', model: 'm' },
+    fetchFn: neverClosing,
+    streamTimeouts: { silenceMs: 10000, totalMs: 100 },
+  }), /total timeout/);
+});
+
+test('generateScript fails the attempt on a non-SSE response instead of guessing', async () => {
+  const fetchFn = async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(goodScript()) } }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  await assert.rejects(() => generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', model: 'm' },
+    fetchFn,
+  }), /ended without SSE data/);
+});
+
+test('generateScript fails the attempt on an unparseable stream chunk', async () => {
+  const fetchFn = async () => new Response('data: {not json\n\ndata: [DONE]\n\n', { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  await assert.rejects(() => generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', model: 'm' },
+    fetchFn,
+  }), /unparseable chunk/);
 });
