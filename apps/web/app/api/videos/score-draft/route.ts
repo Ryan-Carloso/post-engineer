@@ -99,7 +99,7 @@ async function loadBaseline(
   network: PublishNetwork | undefined,
   isScoped: boolean,
   scopedPersonaIds: string[],
-): Promise<BaselineRow[] | null> {
+): Promise<{ rows: BaselineRow[]; truncated: boolean } | null> {
   const supabase = createSupabaseServiceClient();
   // Prefer the 7d window (a full week of signal); fall back to 24h only
   // when the week has no measured rows at all, so a new account still
@@ -123,23 +123,27 @@ async function loadBaseline(
     if (network !== undefined) select = select.eq('provider', network);
     const { data, error } = await select
       .order('collected_at', { ascending: false })
-      .limit(BASELINE_ROW_LIMIT);
+      // +1 probe row: a full page means the baseline is partial, and the
+      // caller must see that (same pattern as GET /api/metrics).
+      .limit(BASELINE_ROW_LIMIT + 1);
     if (error) {
       logger.error('[score-draft] baseline query failed', error, { userId, window });
       return null;
     }
-    const rows = (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>;
-    if (rows.length > 0) {
-      return rows.map((row) => ({
+    const rawRows = (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>;
+    if (rawRows.length > 0) {
+      const truncated = rawRows.length > BASELINE_ROW_LIMIT;
+      const rows = rawRows.slice(0, BASELINE_ROW_LIMIT).map((row) => ({
         scriptAngle: typeof row.script_angle === 'string' ? row.script_angle : null,
         views: typeof row.views === 'number' ? row.views : null,
         likes: typeof row.likes === 'number' ? row.likes : null,
         comments: typeof row.comments === 'number' ? row.comments : null,
         saves: typeof row.saves === 'number' ? row.saves : null,
       }));
+      return { rows, truncated };
     }
   }
-  return [];
+  return { rows: [], truncated: false };
 }
 
 async function postHandler(request: Request): Promise<NextResponse> {
@@ -160,20 +164,20 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const parsed = parseBody(body);
   if (parsed instanceof NextResponse) return parsed;
 
-  const rows = await loadBaseline(
+  const loaded = await loadBaseline(
     auth.userId,
     parsed.personaId,
     parsed.network,
     isScopedApiKey(auth),
     auth.personaIds ?? [],
   );
-  if (rows === null) {
+  if (loaded === null) {
     return apiErrorResponse(500, 'Failed to load baseline metrics.', {
       route: ROUTE,
       cause: new Error('post_metrics query failed'),
     });
   }
-  const result = scoreDraft(parsed.draft, summarizeBaseline(rows), parsed.network);
+  const result = scoreDraft(parsed.draft, summarizeBaseline(loaded.rows, loaded.truncated), parsed.network);
   return NextResponse.json({ success: true, ...result });
 }
 

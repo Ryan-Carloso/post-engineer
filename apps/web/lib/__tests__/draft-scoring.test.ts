@@ -21,6 +21,7 @@ const EMPTY_BASELINE: DraftBaseline = {
   topAngles: [],
   medianEngagement: null,
   bestEngagement: null,
+  truncated: false,
 };
 
 function strongDraft(): string {
@@ -58,7 +59,17 @@ describe('summarizeBaseline', () => {
       topAngles: [],
       medianEngagement: null,
       bestEngagement: null,
+      truncated: false,
     });
+  });
+
+  it('surfaces a partial baseline through the truncated flag', () => {
+    const baseline = summarizeBaseline(
+      [{ scriptAngle: 'Porto mornings', views: 100, likes: 0, comments: 0, saves: 0 }],
+      true,
+    );
+    expect(baseline.truncated).toBe(true);
+    expect(baseline.postsMeasured).toBe(1);
   });
 });
 
@@ -69,6 +80,7 @@ describe('scoreDraft', () => {
       topAngles: [{ angle: 'Porto mornings', engagement: 165, posts: 2 }],
       medianEngagement: 115,
       bestEngagement: 200,
+      truncated: false,
     };
     const result = scoreDraft(strongDraft(), baseline);
     expect(result.score).toBe(100);
@@ -93,6 +105,15 @@ describe('scoreDraft', () => {
     expect(result.reasons.reduce((sum, reason) => sum + reason.points, 0)).toBe(38);
     expect(result.publishCheck.ok).toBe(true);
     expect(result.publishCheck.warnings.length).toBe(2);
+  });
+
+  it('never claims no slop markers when markers were found', () => {
+    const draft = "Let's delve — into the ever-evolving landscape of work.";
+    const result = scoreDraft(draft, EMPTY_BASELINE);
+    const details = result.reasons.map((reason) => reason.detail);
+    expect(details).not.toContain('No slop markers found.');
+    expect(details).toContain('Slop bucket base of 20 reduced by 3 marker(s).');
+    expect(result.reasons.reduce((sum, reason) => sum + reason.points, 0)).toBe(result.score);
   });
 
   it('scores an empty draft 30 and fails the publish check', () => {

@@ -143,6 +143,52 @@ describe('POST /api/videos/score-draft', () => {
     expect(((await persona.json()) as Record<string, unknown>).field).toBe('personaId');
   });
 
+  it('limits a persona-scoped API key to its personas plus persona-less rows', async () => {
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: 'user-1', accessToken: 't', isApiKey: true, personaIds: [PERSONA] },
+      error: null,
+    } as never);
+    const { calls } = mockQuery([{ data: [row()], error: null }]);
+    await post({ draft: strongDraft() });
+    expect(calls).toContainEqual(['or', `persona_id.in.(${PERSONA}),persona_id.is.null`]);
+  });
+
+  it('limits a persona-scoped API key with no personas to persona-less rows', async () => {
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: 'user-1', accessToken: 't', isApiKey: true, personaIds: [] },
+      error: null,
+    } as never);
+    const { calls } = mockQuery([{ data: [row()], error: null }]);
+    await post({ draft: strongDraft() });
+    expect(calls).toContainEqual(['is', 'persona_id', null]);
+  });
+
+  it('drops malformed stored persona ids before building the scope filter', async () => {
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: 'user-1', accessToken: 't', isApiKey: true, personaIds: ['bad,id)', PERSONA] },
+      error: null,
+    } as never);
+    const { calls } = mockQuery([{ data: [row()], error: null }]);
+    await post({ draft: strongDraft() });
+    expect(calls).toContainEqual(['or', `persona_id.in.(${PERSONA}),persona_id.is.null`]);
+  });
+
+  it('reports truncated false on a complete baseline and true past the row limit', async () => {
+    const { calls } = mockQuery([{ data: [row()], error: null }]);
+    const complete = await post({ draft: strongDraft() });
+    const completeBaseline = ((await complete.json()) as Record<string, unknown>).baseline as Record<string, unknown>;
+    expect(completeBaseline.truncated).toBe(false);
+    // The +1 probe row is what makes a full page detectable as partial.
+    expect(calls).toContainEqual(['limit', 201]);
+
+    const rows = Array.from({ length: 201 }, () => row());
+    mockQuery([{ data: rows, error: null }]);
+    const capped = await post({ draft: strongDraft() });
+    const cappedBaseline = ((await capped.json()) as Record<string, unknown>).baseline as Record<string, unknown>;
+    expect(cappedBaseline.truncated).toBe(true);
+    expect(cappedBaseline.postsMeasured).toBe(200);
+  });
+
   it('returns 500 when the baseline query fails', async () => {
     mockQuery([{ data: null, error: { message: 'boom' } }]);
     const response = await post({ draft: strongDraft() });

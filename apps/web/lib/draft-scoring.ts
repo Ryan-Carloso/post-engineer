@@ -92,6 +92,10 @@ export interface DraftBaseline {
   topAngles: TopAngle[];
   medianEngagement: number | null;
   bestEngagement: number | null;
+  // True when the capped read hit the row limit, so the caller can tell
+  // a partial baseline (200-of-N) from a complete one — same signal as
+  // GET /api/metrics exposes on its own capped read.
+  truncated: boolean;
 }
 
 export interface BaselineRow {
@@ -194,7 +198,7 @@ function hasCallToAction(lastLine: string): boolean {
 // grouped exactly as stored; rows without an angle cannot name a theme,
 // so they count toward postsMeasured but never toward topAngles.
 //---------------
-export function summarizeBaseline(rows: BaselineRow[]): DraftBaseline {
+export function summarizeBaseline(rows: BaselineRow[], truncated = false): DraftBaseline {
   const engagements: number[] = [];
   const byAngle = new Map<string, { engagement: number; posts: number }>();
   for (const row of rows) {
@@ -225,6 +229,7 @@ export function summarizeBaseline(rows: BaselineRow[]): DraftBaseline {
     topAngles,
     medianEngagement: median,
     bestEngagement: sorted.length === 0 ? null : sorted[sorted.length - 1],
+    truncated,
   };
 }
 
@@ -347,7 +352,11 @@ export function scoreDraft(
     reasons.push({ rule: 'hashtags', detail: `Draft has ${hashtags.length} hashtags; 1-5 reads best.`, points: 0 });
   }
 
-  reasons.push({ rule: 'slop_free', detail: 'No slop markers found.', points: 20 });
+  if (slopHits.length === 0) {
+    reasons.push({ rule: 'slop_free', detail: 'No slop markers found.', points: 20 });
+  } else {
+    reasons.push({ rule: 'slop_free', detail: `Slop bucket base of 20 reduced by ${slopHits.length} marker(s).`, points: 20 });
+  }
   for (const hit of slopHits) {
     reasons.push({ rule: 'slop', detail: `Slop marker found: "${hit}".`, points: -5 });
   }
