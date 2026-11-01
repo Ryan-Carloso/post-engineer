@@ -24,10 +24,8 @@ vi.mock('@/lib/ui', () => ({
   InstagramIcon: () => <span />,
 }));
 
-vi.mock('@/components/ui/token-pack-cards', () => ({
-  TokenPackCards: () => <div />,
-  EnterpriseCard: () => <div />,
-  packActionClassName: () => '',
+vi.mock('@/components/ui/pricing-contact', () => ({
+  PricingContactCard: () => <div data-testid="pricing-contact" />,
 }));
 
 vi.mock('@/components/site-footer', () => ({
@@ -40,5 +38,11 @@ describe('app/landing/page — Landing', () => {
     // the landing surface would otherwise pass CI.
     render(<Landing />);
     expect(screen.getAllByTestId('app-logo')).toHaveLength(2);
+  });
+
+  it('renders the beta pricing contact card instead of token pack prices', () => {
+    render(<Landing />);
+    expect(screen.getByTestId('pricing-contact')).toBeInTheDocument();
+    expect(screen.getByText('landing.pricingTitle')).toBeInTheDocument();
   });
 });

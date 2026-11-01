@@ -784,7 +784,14 @@ jobs:
               echo "$mutate"
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
-            if pnpm exec stryker run --mutate "$mutate"; then
+            # Stryker's --mutate takes ONE comma-separated argument: a
+            # space-separated list is treated as a single glob pattern
+            # matching nothing, which fails the scoped run and forces the
+            # whole-file fallback (same pitfall as mutation.yml — the
+            # comma-join there, with NO space after the comma, is the
+            # working form; a leading space makes later globs match
+            # nothing and the run passes vacuously with 0 mutants).
+            if pnpm exec stryker run --mutate "${mutate// /,}"; then
               exit 0
             fi
             echo "::warning::line-scoped run failed — falling back to whole changed files"

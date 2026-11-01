@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import { FacebookIcon, InstagramIcon } from '@/lib/ui';
 import AppLogo from '@/components/ui/app-logo';
 import { LOCALES } from '@/lib/i18n';
-import { TokenPackCards, EnterpriseCard, packActionClassName } from '@/components/ui/token-pack-cards';
+import { PricingContactCard } from '@/components/ui/pricing-contact';
 import {
   ArrowRight,
   Calendar,
@@ -507,7 +507,8 @@ const LandingFeatures = () => {
 };
 
 //---------------
-// LandingPricing — prepaid token packs with one-time Stripe checkout
+// LandingPricing — beta contact card, no prices yet (tokens via contact,
+// or self-host from GitHub)
 //---------------
 const LandingPricing = () => {
   const { t } = useI18n();
@@ -524,14 +525,7 @@ const LandingPricing = () => {
           <p className="mx-auto mt-3 max-w-xl text-[#657184]">{t('landing.pricingSubtitle')}</p>
         </div>
         <div className="mx-auto mt-12 max-w-6xl">
-          <TokenPackCards
-            renderAction={(pack) => (
-              <Link href="/login" className={packActionClassName(pack.id === 'pack_50')}>
-                {t('pricing.buyPack', { count: pack.tokens })}
-              </Link>
-            )}
-          />
-          <EnterpriseCard />
+          <PricingContactCard />
         </div>
       </div>
     </section>
