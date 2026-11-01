@@ -144,14 +144,14 @@ test('generateScript retries once after a validation failure, then throws instea
   assert.equal(calls, 2);
 });
 
-test('resolveLlmModels defaults to OpenRouter free router first with paid GLM last, and puts an explicit model last without duplicating it', () => {
-  assert.deepEqual(resolveLlmModels({}), ['openrouter/free', 'z-ai/glm-5.3-flash']);
-  assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODEL: 'paid-model' }), ['openrouter/free', 'z-ai/glm-5.3-flash', 'paid-model']);
-  assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODEL: 'z-ai/glm-5.3-flash' }), ['openrouter/free', 'z-ai/glm-5.3-flash']);
+test('resolveLlmModels defaults to a fixed free model first with paid GLM last, and puts an explicit model last without duplicating it', () => {
+  assert.deepEqual(resolveLlmModels({}), ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash']);
+  assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODEL: 'paid-model' }), ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash', 'paid-model']);
+  assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODEL: 'z-ai/glm-5.3-flash' }), ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash']);
   assert.deepEqual(resolveLlmModels({ TEST_FLIGHT_LLM_MODELS: 'a-model, b-model' }), ['a-model', 'b-model']);
 });
 
-test('generateScript falls through a free-router failure to paid GLM and returns it as the model used', async () => {
+test('generateScript falls through a fixed free model failure to paid GLM and returns it as the model used', async () => {
   const calls = [];
   const fetchFn = async (url, options) => {
     const model = JSON.parse(options.body).model;
@@ -167,12 +167,12 @@ test('generateScript falls through a free-router failure to paid GLM and returns
     llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: resolveLlmModels({}) },
     fetchFn,
   });
-  assert.deepEqual(calls, ['openrouter/free', 'z-ai/glm-5.3-flash']);
+  assert.deepEqual(calls, ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash']);
   assert.equal(script.source, 'llm');
   assert.equal(script.model, 'z-ai/glm-5.3-flash');
 });
 
-test('generateScript throws when free router and paid GLM both fail, instead of publishing a repeat script', async () => {
+test('generateScript throws when the fixed free model and paid GLM both fail, instead of publishing a repeat script', async () => {
   const failing = async () => ({ ok: false, status: 429, text: async () => '{"error": {"type": "FreeUsageLimitError"}}' });
   await assert.rejects(() => generateScript({
     topic: 'Porto in one day: what to visit first',
@@ -187,17 +187,85 @@ test('generateScript tries the chain in order and reports the model used', async
   const fetchFn = async (url, options) => {
     const model = JSON.parse(options.body).model;
     calls.push(model);
-    if (model === 'openrouter/free') return { ok: false, status: 500, text: async () => 'down' };
+    if (model === 'nvidia/nemotron-3.5-lightning:free') return { ok: false, status: 500, text: async () => 'down' };
     return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(goodScript()) } }] }) };
   };
   const script = await generateScript({
     topic: 'Porto in one day: what to visit first',
     angle: 'budget',
-    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: ['openrouter/free', 'z-ai/glm-5.3-flash'] },
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash'] },
     fetchFn,
   });
-  assert.deepEqual(calls, ['openrouter/free', 'z-ai/glm-5.3-flash']);
+  assert.deepEqual(calls, ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash']);
   assert.equal(script.model, 'z-ai/glm-5.3-flash');
+});
+
+test('generateScript logs the actual response model and reasoning/content lengths, never reasoning text', async () => {
+  const logged = [];
+  const originalLog = console.log;
+  console.log = (...args) => { logged.push(args.join(' ')); };
+  try {
+    const fetchFn = async () => ({
+      ok: true,
+      json: async () => ({
+        model: 'nvidia/nemotron-3.5-lightning:free',
+        choices: [{ message: { content: JSON.stringify(goodScript()), reasoning: 'thinking that must never appear in logs' } }],
+      }),
+    });
+    const script = await generateScript({
+      topic: 'Porto in one day: what to visit first',
+      angle: 'budget',
+      llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: ['nvidia/nemotron-3.5-lightning:free'] },
+      fetchFn,
+    });
+    assert.equal(script.model, 'nvidia/nemotron-3.5-lightning:free');
+    const responseLine = logged.find((line) => line.includes('LLM response model='));
+    assert.match(responseLine, /model=nvidia\/nemotron-3\.5-lightning:free reasoning=39 chars content=\d+ chars/);
+    assert.equal(logged.some((line) => line.includes('thinking that must never appear in logs')), false);
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test('generateScript distinguishes an empty completion with reasoning from one without', async () => {
+  const withReasoning = async () => ({
+    ok: true,
+    json: async () => ({ choices: [{ message: { content: '', reasoning_content: 'some internal thinking' } }] }),
+  });
+  await assert.rejects(() => generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: ['m'] },
+    fetchFn: withReasoning,
+  }), /LLM returned an empty completion \(reasoning present, 22 chars\)/);
+  const withoutReasoning = async () => ({
+    ok: true,
+    json: async () => ({ choices: [{ message: { content: '   ' } }] }),
+  });
+  await assert.rejects(() => generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: ['m'] },
+    fetchFn: withoutReasoning,
+  }), /LLM returned an empty completion \(no reasoning\)/);
+});
+
+test('generateScript never parses reasoning text as the script', async () => {
+  const reasoningScript = goodScript();
+  reasoningScript.title = 'Title hidden in reasoning only';
+  const fetchFn = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{ message: { content: JSON.stringify(goodScript()), reasoning: JSON.stringify(reasoningScript), reasoning_details: [{ text: JSON.stringify(reasoningScript) }] } }],
+    }),
+  });
+  const script = await generateScript({
+    topic: 'Porto in one day: what to visit first',
+    angle: 'budget',
+    llm: { apiKey: 'k', baseUrl: 'https://llm.example.test/v1', models: ['m'] },
+    fetchFn,
+  });
+  assert.equal(script.title, 'Porto in one day: what to visit first');
 });
 
 test('generateScript throws when the LLM endpoint fails or no key is configured', async () => {

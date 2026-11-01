@@ -56,8 +56,9 @@ name: test-flight
 #     OPENROUTER_API_KEY         (repo secret) used as the script
 #                                writer key, with base URL
 #                                https://openrouter.ai/api/v1 and the
-#                                chain openrouter/free first (Free Models
-#                                Router, picks a free model automatically),
+#                                chain fixed free model
+#                                nvidia/nemotron-3.5-lightning:free first
+#                                (not the random openrouter/free router),
 #                                then paid z-ai/glm-5.3-flash via OpenRouter
 #                                as last resort only. Zen is NOT used:
 #                                paid Zen failed live with HTTP 402
@@ -162,7 +163,7 @@ jobs:
           TEST_FLIGHT_LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           TEST_FLIGHT_LLM_BASE_URL: ${{ vars.TEST_FLIGHT_LLM_BASE_URL || 'https://openrouter.ai/api/v1' }}
           TEST_FLIGHT_LLM_MODEL: ${{ vars.TEST_FLIGHT_LLM_MODEL }}
-          TEST_FLIGHT_LLM_MODELS: ${{ vars.TEST_FLIGHT_LLM_MODELS || 'openrouter/free,z-ai/glm-5.3-flash' }}
+          TEST_FLIGHT_LLM_MODELS: ${{ vars.TEST_FLIGHT_LLM_MODELS || 'nvidia/nemotron-3.5-lightning:free,z-ai/glm-5.3-flash' }}
           TEST_FLIGHT_TAVILY_API_KEY: ${{ secrets.TEST_FLIGHT_TAVILY_API_KEY }}
           TEST_FLIGHT_EXA_API_KEY: ${{ secrets.TEST_FLIGHT_EXA_API_KEY }}
 

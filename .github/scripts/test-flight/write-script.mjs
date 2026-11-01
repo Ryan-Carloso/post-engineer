@@ -38,15 +38,17 @@
 //   TEST_FLIGHT_LLM_BASE_URL  default https://openrouter.ai/api/v1; the
 //                             workflow passes that same URL.
 //   TEST_FLIGHT_LLM_MODELS    comma-separated chain, default
-//                             openrouter/free,z-ai/glm-5.3-flash.
-//                             openrouter/free is OpenRouter's Free Models
-//                             Router: it picks a free model automatically
-//                             (openrouter/auto would be paid routing, not
-//                             free). z-ai/glm-5.3-flash is paid GLM 5.3
-//                             Flash via OpenRouter only — not the direct
-//                             ZAI API and not Zen. A single model set via
-//                             TEST_FLIGHT_LLM_MODEL is appended last, never
-//                             first, never duplicated).
+//                             nvidia/nemotron-3.5-lightning:free,
+//                             z-ai/glm-5.3-flash. The free step is a FIXED
+//                             model, not the openrouter/free router: the
+//                             router picks a free model at random, so a
+//                             run cannot say which model answered it, and
+//                             run 41325670131 got an empty completion from
+//                             an unknown router pick. z-ai/glm-5.3-flash
+//                             is paid GLM 5.3 Flash via OpenRouter only —
+//                             not the direct ZAI API and not Zen. A single
+//                             model set via TEST_FLIGHT_LLM_MODEL is
+//                             appended last, never first, never duplicated).
 //   TEST_FLIGHT_TOPIC         optional fixed topic; empty rotates topics.
 //   TEST_FLIGHT_RUN_ID        seed for the angle, so reruns differ.
 //   TEST_FLIGHT_SCRIPT_PATH   required output path for the script JSON.
@@ -73,14 +75,17 @@ export const MAX_CTA_WORDS = 20;
 export const MAX_SEGMENTS = 12;
 export const LLM_TIMEOUT_MS = 60000;
 export const DEFAULT_LLM_BASE_URL = 'https://openrouter.ai/api/v1';
-// OpenRouter-only model chain. openrouter/free is OpenRouter's Free
-// Models Router and picks a free model automatically; which free model
-// it picks varies, so the script is still gated by the segment
-// validation below and the paid fallback catches a bad or failed free
-// attempt. Paid z-ai/glm-5.3-flash runs only after the free router
-// fails. A single model set via TEST_FLIGHT_LLM_MODEL is still appended
-// last, never first, and never duplicated if it is already in this chain.
-export const DEFAULT_LLM_MODELS = ['openrouter/free', 'z-ai/glm-5.3-flash'];
+// OpenRouter-only model chain with a FIXED free model. The previous
+// openrouter/free router pick was random, so a failed run could not say
+// which model answered it; nvidia/nemotron-3.5-lightning:free is pinned
+// instead (verified 2026-11-01 in OpenRouter's live catalog: $0/$0,
+// reasoning mandatory:false, so it returns content directly rather than
+// reasoning-only). The script is still gated by the segment validation
+// below and the paid fallback catches a bad or failed free attempt.
+// Paid z-ai/glm-5.3-flash runs only after the fixed free model fails.
+// A single model set via TEST_FLIGHT_LLM_MODEL is still appended last,
+// never first, and never duplicated if it is already in this chain.
+export const DEFAULT_LLM_MODELS = ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash'];
 
 // Evergreen topics for the scheduled monitor (manual flights pass their own).
 export const MONITOR_TOPICS = [
@@ -337,9 +342,25 @@ async function callLlm({ topic, angle, llm, model, fetchFn, attemptError, facts 
     throw new ScriptError(`write-script: LLM endpoint returned HTTP ${res.status}${body ? `: ${body.slice(0, 200)}` : ''}`);
   }
   const data = await res.json().catch(() => null);
-  const content = data?.choices?.[0]?.message?.content;
+  const message = data?.choices?.[0]?.message;
+  const content = message?.content;
+  // Thinking diagnostic: a model's internal thinking, when the provider
+  // returns it, arrives in reasoning fields, never in message.content,
+  // and this code never requested or read them before — so a reasoning
+  // model could think and still look "empty" with no trace. Count only
+  // lengths and presence here: reasoning text is internal thinking and
+  // is never logged, never parsed, and never used as the script.
+  const reasoningChars = [
+    message?.reasoning,
+    message?.reasoning_content,
+    ...(Array.isArray(message?.reasoning_details)
+      ? message.reasoning_details.map((detail) => detail?.text)
+      : []),
+  ].reduce((total, value) => total + (typeof value === 'string' ? value.length : 0), 0);
+  const responseModel = typeof data?.model === 'string' && data.model !== '' ? data.model : model;
+  console.log(`write-script: LLM response model=${responseModel} reasoning=${reasoningChars === 0 ? 'none' : `${reasoningChars} chars`} content=${typeof content === 'string' ? `${content.length} chars` : 'none'}`);
   if (typeof content !== 'string' || content.trim() === '') {
-    throw new ScriptError('write-script: LLM returned an empty completion');
+    throw new ScriptError(`write-script: LLM returned an empty completion (${reasoningChars > 0 ? `reasoning present, ${reasoningChars} chars` : 'no reasoning'})`);
   }
   let parsed;
   try {
