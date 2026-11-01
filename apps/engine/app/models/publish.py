@@ -1,4 +1,4 @@
-"""Publish metadata models for task requests (YouTube / Instagram)."""
+"""Publish metadata models for task requests (YouTube / Instagram / Bluesky / LinkedIn / Threads)."""
 
 from typing import Literal, Optional
 
