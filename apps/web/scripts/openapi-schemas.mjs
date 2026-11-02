@@ -81,6 +81,7 @@ const generateBody = object(
     options: object({
       faceless: { type: 'boolean' },
       facelessMaterial: { type: 'string', enum: ['broll', 'svg'] },
+      fullLipsync: { type: 'boolean', description: 'Persona talks for the whole video, not only the hook. Not with faceless.' },
       audioUrl: str,
       imageId: str,
       segments: { type: 'array', items: { $ref: '#/components/schemas/Segment' } },
@@ -180,6 +181,11 @@ const ok = success({});
 
 export const operationSchemas = {
   'POST /api/videos/generate-and-schedule': {
+    extraResponses: {
+      402: 'INSUFFICIENT_TOKENS: the balance does not cover the video.',
+      409: 'PERSONA_ALREADY_SCHEDULED: this persona already has an active schedule.',
+      502: 'The engine did not accept any video (each one refunded); retry with backoff.',
+    },
     request: generateBody,
     response: success({
       schedule: object({ id: str, mode: str }),
@@ -216,7 +222,32 @@ export const operationSchemas = {
       },
       ['draft'],
     ),
-    response: success({}),
+    // apps/web/lib/draft-scoring.ts (DraftScore), spread next to success.
+    response: success({
+      score: { type: 'integer' },
+      reasons: { type: 'array', items: object({ rule: str, detail: str, points: { type: 'integer' } }) },
+      counts: object({
+        chars: { type: 'integer' },
+        words: { type: 'integer' },
+        hashtags: { type: 'integer' },
+        links: { type: 'integer' },
+        firstLineWords: { type: 'integer' },
+        slopHits: strArray,
+        topThemeMatch: { type: 'string', nullable: true },
+      }),
+      baseline: object({
+        postsMeasured: { type: 'integer' },
+        topAngles: { type: 'array', items: object({ angle: str, engagement: { type: 'number' }, posts: { type: 'integer' } }) },
+        medianEngagement: { type: 'number', nullable: true },
+        bestEngagement: { type: 'number', nullable: true },
+        truncated: { type: 'boolean' },
+      }),
+      publishCheck: {
+        ...object({ network: str, ok: { type: 'boolean' }, failures: strArray, warnings: strArray }),
+        nullable: true,
+        description: 'null for kind "script": caption limits do not apply to spoken text.',
+      },
+    }),
   },
   // apps/web/app/api/billing/tokens/route.ts
   'GET /api/billing/tokens': {
@@ -460,8 +491,17 @@ export const operationSchemas = {
     }),
   },
   // apps/web/app/api/persona/video-status|video-task: engine proxies
-  'GET /api/persona/video-status/[taskId]': { response: engineEnvelope },
-  'DELETE /api/persona/video-task/[taskId]': { response: engineEnvelope },
+  'GET /api/persona/video-status/[taskId]': {
+    response: engineEnvelope,
+    extraResponses: {
+      410: 'Terminal: the engine no longer has this task. Stop polling; GET /api/schedule/slots/{slotId} says whether the video was delivered or failed and refunded.',
+      502: 'Engine unavailable or state unverifiable; retry with backoff.',
+    },
+  },
+  'DELETE /api/persona/video-task/[taskId]': {
+    response: engineEnvelope,
+    extraResponses: { 502: 'Engine unavailable; retry with backoff.' },
+  },
   // apps/web/app/api/billing/transactions/route.ts
   'GET /api/billing/transactions': {
     query: [{ name: 'limit', required: false }, { name: 'offset', required: false }],

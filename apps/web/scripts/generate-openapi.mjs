@@ -69,7 +69,11 @@ export function buildSpec(mapping, version) {
         content: { [schemas.responseContent ?? 'application/json']: { schema: schemas.response } },
       };
     }
-    for (const status of [400, 401, 404, 429]) {
+    // Route-specific statuses (402, 409, 410, 502, ...) a client must handle.
+    for (const [status, description] of Object.entries(schemas?.extraResponses ?? {})) {
+      operation.responses[status] = { description };
+    }
+    for (const status of Object.keys(operation.responses).filter((s) => s !== '200')) {
       operation.responses[status].content = {
         'application/json': { schema: { $ref: '#/components/schemas/Error' } },
       };

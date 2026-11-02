@@ -2211,8 +2211,28 @@
               }
             }
           },
+          "410": {
+            "description": "Terminal: the engine no longer has this task. Stop polling; GET /api/schedule/slots/{slotId} says whether the video was delivered or failed and refunded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Engine unavailable or state unverifiable; retry with backoff.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4071,6 +4091,16 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "Engine unavailable; retry with backoff.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -4403,6 +4433,16 @@
               }
             }
           },
+          "402": {
+            "description": "INSUFFICIENT_TOKENS: the balance does not cover the video.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Resource not found.",
             "content": {
@@ -4413,8 +4453,28 @@
               }
             }
           },
+          "409": {
+            "description": "PERSONA_ALREADY_SCHEDULED: this persona already has an active schedule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The engine did not accept any video (each one refunded); retry with backoff.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4509,6 +4569,10 @@
                           "broll",
                           "svg"
                         ]
+                      },
+                      "fullLipsync": {
+                        "type": "boolean",
+                        "description": "Persona talks for the whole video, not only the hook. Not with faceless."
                       },
                       "audioUrl": {
                         "type": "string"
@@ -4742,6 +4806,117 @@
                       "enum": [
                         true
                       ]
+                    },
+                    "score": {
+                      "type": "integer"
+                    },
+                    "reasons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "rule": {
+                            "type": "string"
+                          },
+                          "detail": {
+                            "type": "string"
+                          },
+                          "points": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "counts": {
+                      "type": "object",
+                      "properties": {
+                        "chars": {
+                          "type": "integer"
+                        },
+                        "words": {
+                          "type": "integer"
+                        },
+                        "hashtags": {
+                          "type": "integer"
+                        },
+                        "links": {
+                          "type": "integer"
+                        },
+                        "firstLineWords": {
+                          "type": "integer"
+                        },
+                        "slopHits": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "topThemeMatch": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    },
+                    "baseline": {
+                      "type": "object",
+                      "properties": {
+                        "postsMeasured": {
+                          "type": "integer"
+                        },
+                        "topAngles": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "angle": {
+                                "type": "string"
+                              },
+                              "engagement": {
+                                "type": "number"
+                              },
+                              "posts": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        },
+                        "medianEngagement": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "bestEngagement": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "truncated": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "publishCheck": {
+                      "type": "object",
+                      "properties": {
+                        "network": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "failures": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "warnings": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "nullable": true,
+                      "description": "null for kind \"script\": caption limits do not apply to spoken text."
                     }
                   },
                   "required": [
