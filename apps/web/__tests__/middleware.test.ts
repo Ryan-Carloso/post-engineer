@@ -16,7 +16,7 @@ vi.mock('@supabase/ssr', () => ({
   }),
 }));
 
-import { middleware } from '@/middleware';
+import { config, middleware } from '@/middleware';
 
 // The coverage Cypress job fails when a client navigation to
 // /posts/<slotId> lands on /landing. Middleware is the only redirect
@@ -179,5 +179,35 @@ describe('middleware auth redirect', () => {
 
     expect(response.status).not.toBe(307);
     expect(response.headers.get('location')).toBeNull();
+  });
+
+  // API marketplaces and agents fetch the spec anonymously.
+  it('does not redirect unauthenticated requests for the public /openapi.json spec', async () => {
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: authError('AuthSessionMissingError', 400, 'Auth session missing!'),
+    });
+
+    const response = await middleware(requestFor('/openapi.json'));
+
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get('location')).toBeNull();
+    expect(getUser).not.toHaveBeenCalled();
+  });
+
+  it('still redirects unauthenticated requests for any other .json path', async () => {
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: authError('AuthSessionMissingError', 400, 'Auth session missing!'),
+    });
+
+    const response = await middleware(requestFor('/posts/openapi.json'));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('http://localhost:3434/landing');
+  });
+
+  it('excludes /openapi.json from the matcher so the middleware never runs on it', () => {
+    expect(config.matcher[0].includes('openapi\\.json$')).toBe(true);
   });
 });
