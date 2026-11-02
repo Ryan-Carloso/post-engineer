@@ -163,7 +163,7 @@ class VideoParams(BaseModel):
     # False (the default) keeps every existing video's behaviour exactly.
     full_lipsync: bool = False
     # Hook/modal pacing is product-fixed in app/services/task.py
-    # (PERSONA_HOOK_* / FACE_FILL_* constants) — intentionally NOT
+    # (PERSONA_HOOK_* constants) — intentionally NOT
     # config-driven: the values were validated against GPU intro cost and
     # lipsync quality windows, and tunable knobs reopen those failure modes.
     video_quality: LipSyncQuality = LipSyncQuality.ok

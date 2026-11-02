@@ -1369,9 +1369,6 @@ class TestArchiveFinalVideos(unittest.TestCase):
             patch.object(
                 tm, "prepare_persona_lipsync_video", return_value=None
             ), \
-            patch.object(
-                tm, "_apply_persona_face_fill", side_effect=lambda **k: k["video_file"]
-            ), \
             patch.object(tm.persona_hook, "track_event") as track, \
             patch.object(tm.video, "generate_video") as generate_video:
             final_paths, combined_paths, intro_report = tm.generate_final_videos(

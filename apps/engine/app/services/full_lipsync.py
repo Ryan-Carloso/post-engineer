@@ -1,7 +1,7 @@
 """Opt-in full lip-sync rendering: the whole video is the persona talking.
 
-Today a persona video only lip-syncs the hook intro (and an experimental
-outro); the rest is b-roll background video. Full mode renders the entire
+Today a persona video only lip-syncs the hook intro;
+the rest is b-roll background video. Full mode renders the entire
 narration as talking-head windows and concatenates them, so the output
 contains no b-roll stock footage at all.
 
@@ -31,8 +31,9 @@ from os import path
 from typing import Callable, Sequence
 
 from app.config import config
-from app.models.schema import VideoParams
+from app.models.schema import VideoLayout, VideoParams
 from app.services import longcat, persona_image
+from app.services.lipsync_active import persona_lipsync_active
 from app.utils import ssrf, utils
 
 logger = logging.getLogger(__name__)
@@ -335,3 +336,34 @@ def render_full_lipsync(
         logger.error("full lip-sync concat failed")
         raise FullLipSyncError("full lip-sync concat failed")
     return output_path, total_cost_usd(costs), job_ids
+
+
+# A lip-sync face fills the frame (full mode: the whole video; hook mode:
+# the intro), so the default center caption lands on the mouth. 70% from
+# the top sits under the chin and above the bottom strip the platform UI
+# (title, channel) covers.
+LIPSYNC_CAPTION_POSITION: float = 70.0
+
+
+def caption_params(params: VideoParams) -> VideoParams:
+    """Params for the final encode, with the caption moved off the face.
+
+    Applies to full lip-sync and to the hook intro; the react layout is
+    excluded because its center caption sits on the seam between the
+    persona (top half) and the b-roll (bottom half). Only the default
+    "center" placement moves: an explicit "top", "bottom" or "custom"
+    choice is the user's and is kept. Other jobs return `params` as is.
+    """
+    if params.subtitle_position != "center":
+        return params
+    on_face = params.full_lipsync or (
+        persona_lipsync_active(params) and params.video_layout != VideoLayout.react
+    )
+    if not on_face:
+        return params
+    return params.model_copy(
+        update={
+            "subtitle_position": "custom",
+            "custom_position": LIPSYNC_CAPTION_POSITION,
+        }
+    )

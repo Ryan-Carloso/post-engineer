@@ -62,7 +62,7 @@ class IntroCostReport(NamedTuple):
     older deployment). Only the overhead feeds the total; the full
     container spend rides along for diagnostics.
     handler_costs_usd: handler costs for this video's clips, when a caller
-    knows more than one (intro + outro + full-mode windows). Empty means
+    knows more than one (intro + full-mode windows). Empty means
     "only cost_usd is known", which is the intro-only behaviour today.
     """
 

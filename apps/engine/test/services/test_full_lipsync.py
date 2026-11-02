@@ -278,5 +278,43 @@ class RenderTests(unittest.TestCase):
             )
 
 
+class CaptionParamsTest(unittest.TestCase):
+    @staticmethod
+    def _params(**fields: object) -> VideoParams:
+        persona = PersonaParams(
+            name="p", photo_url="https://example.com/p.png", voice_id="calm"
+        )
+        return VideoParams(video_subject="x", persona=persona, **fields)
+
+    def test_full_lipsync_center_moves_caption_below_face(self) -> None:
+        params = self._params(full_lipsync=True, subtitle_position="center")
+        moved = full_lipsync.caption_params(params)
+        self.assertEqual(moved.subtitle_position, "custom")
+        self.assertEqual(moved.custom_position, full_lipsync.LIPSYNC_CAPTION_POSITION)
+        self.assertEqual(params.subtitle_position, "center")
+
+    def test_hook_lipsync_center_moves_caption_below_face(self) -> None:
+        moved = full_lipsync.caption_params(self._params(subtitle_position="center"))
+        self.assertEqual(moved.subtitle_position, "custom")
+
+    def test_react_layout_hook_keeps_center_on_the_seam(self) -> None:
+        params = self._params(subtitle_position="center", video_layout="react")
+        self.assertIs(full_lipsync.caption_params(params), params)
+
+    def test_explicit_user_position_is_kept(self) -> None:
+        for position in ("top", "bottom", "custom"):
+            params = self._params(full_lipsync=True, subtitle_position=position)
+            self.assertIs(full_lipsync.caption_params(params), params)
+
+    def test_lipsync_disabled_keeps_center(self) -> None:
+        params = self._params(lipsync_enabled=False, subtitle_position="center")
+        self.assertIs(full_lipsync.caption_params(params), params)
+
+    def test_no_persona_keeps_center(self) -> None:
+        params = VideoParams(video_subject="x", subtitle_position="center")
+        self.assertIs(full_lipsync.caption_params(params), params)
+
+
 if __name__ == "__main__":
     unittest.main()
+

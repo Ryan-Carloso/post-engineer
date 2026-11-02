@@ -729,105 +729,12 @@ def compose_lipsync_layout(
 
 
 def video_duration_seconds(video_path: str) -> float:
-    """Probe a video file's duration in seconds (face-fill tail alignment)."""
+    """Probe a video file's duration in seconds (the lip-sync intro splice)."""
     probe = VideoFileClip(video_path)
     try:
         return float(probe.duration)
     finally:
         close_clip(probe)
-
-
-def replace_video_outro_with_lipsync(
-    background_video: str,
-    lipsync_video: str,
-    output_file: str,
-    duration: float = 5,
-) -> str:
-    """Replace the end of a background video with a talking avatar.
-
-    Face-fill (experimental): the persona closes the video so weak stock
-    never has to fill the tail. Mirrors replace_video_intro_with_lipsync —
-    only the outro segment is re-encoded; the head is stream-copied.
-    """
-    source = _open_video_clip_quietly(background_video)
-    width, height = source.w, source.h
-    source.close()
-    # Probe the real duration: the head cut needs (total - outro), and
-    # assuming the audio-derived number here would drift from the encoded
-    # file by frame-boundary rounding.
-    probe = VideoFileClip(background_video)
-    try:
-        total_duration = float(probe.duration)
-    finally:
-        close_clip(probe)
-    head_duration = max(0.0, total_duration - duration)
-
-    outro_file = f"{os.path.splitext(output_file)[0]}-outro-encoded.mp4"
-    outro_command = [
-        utils.get_ffmpeg_binary(), "-y", "-i", lipsync_video,
-        "-t", str(duration),
-        "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-               f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1",
-        "-an", "-c:v", _get_effective_video_codec(),
-        # Force the pipeline fps: LongCat avatar-v1.5 renders at 25fps and a
-        # stream-copied 30fps tail would balloon the concat timeline by the
-        # timebase ratio (measured +5.4s on a 27s video).
-        "-r", str(fps),
-        "-preset", _get_configured_video_preset(),
-        "-pix_fmt", "yuv420p", outro_file,
-    ]
-    logger.info(
-        f"splicing {duration}s lip-sync outro onto {os.path.basename(background_video)}"
-    )
-    try:
-        _run_ffmpeg_bounded(
-            outro_command,
-            timeout=_LIPSYNC_CONCAT_TIMEOUT_SECONDS,
-            failure_message="lip-sync outro encode failed",
-        )
-
-        head_file = f"{os.path.splitext(output_file)[0]}-head.mp4"
-        try:
-            head_command = [
-                utils.get_ffmpeg_binary(), "-y",
-                "-i", background_video,
-                "-t", str(head_duration),
-                "-c:v", "copy", "-an", head_file,
-            ]
-            _run_ffmpeg_bounded(
-                head_command,
-                timeout=_LIPSYNC_CONCAT_TIMEOUT_SECONDS,
-                failure_message="lip-sync head extraction failed",
-            )
-            concat_list_file = f"{os.path.splitext(output_file)[0]}-concat.txt"
-            with open(concat_list_file, "w", encoding="utf-8") as fp:
-                for part in (head_file, outro_file):
-                    fp.write(f"file '{_format_ffmpeg_concat_path(part)}'\n")
-            try:
-                join_command = [
-                    utils.get_ffmpeg_binary(), "-y",
-                    "-f", "concat", "-safe", "0",
-                    "-i", concat_list_file,
-                    "-c:v", "copy",
-                    output_file,
-                ]
-                _run_ffmpeg_bounded(
-                    join_command,
-                    timeout=_LIPSYNC_CONCAT_TIMEOUT_SECONDS,
-                    failure_message="lip-sync concat failed",
-                )
-            finally:
-                delete_files(concat_list_file)
-        finally:
-            delete_files([head_file, outro_file])
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(
-            f"lip-sync concat timed out after {_LIPSYNC_CONCAT_TIMEOUT_SECONDS}s"
-        ) from exc
-    logger.info(
-        f"lip-sync outro concat completed: {os.path.basename(output_file)}"
-    )
-    return output_file
 
 
 def _sanitize_image_file(image_path: str) -> str:
@@ -1342,9 +1249,8 @@ def combine_videos(
 
         # Trim the LAST clip to the remaining budget: without this a long
         # clip (video_clip_duration >= 5) overshoots the voiceover by up to
-        # clip-1 seconds of silent footage, and the persona face-fill outro
-        # — which splices by subtitle timestamps on the AUDIO timeline —
-        # would land out of sync. With the historical 2s clips the drift
+        # clip-1 seconds of silent footage, and the muxed voiceover would
+        # end before the video. With the historical 2s clips the drift
         # was invisible; with 9s clips it broke the timeline.
         remaining = required_video_duration - video_duration
 

@@ -63,10 +63,9 @@ def test_photos_are_prepared_after_the_subtitle_for_every_video_type():
     prepare = source.index("place_photos.prepare_photos(")
     assert source.index("subtitle_path = generate_subtitle(") < prepare < source.index("get_video_materials(")
     before = source[prepare - 600:prepare]
-    # Persona videos keep their face intro and outro: photos fit between them.
+    # Persona videos keep their face intro: photos fit after it.
     assert "persona_lipsync_active(params)" in before
     assert "PERSONA_LIPSYNC_MAX_SECONDS" in before
-    assert "FACE_FILL_MAX_SECONDS" in before
     # Random concatenation scrambles the timeline: a photo's moment is lost.
     assert "match_materials_to_script" in before
     assert 'faceless_material != "svg"' not in source[prepare - 600:prepare + 400]
