@@ -6,9 +6,10 @@ file, or network is ever needed here.
 """
 
 import re
+import subprocess
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from app.models.schema import LipSyncQuality, PersonaParams, VideoParams
 from app.services import full_lipsync
@@ -170,6 +171,38 @@ class RenderTests(unittest.TestCase):
                 run_ffmpeg=lambda argv: MagicMock(returncode=0, stderr=""),
             )
         self.assertEqual(calls, [])
+
+    def test_production_concat_failure_raises_full_lipsync_error(self):
+        # The production runner (run_ffmpeg=None) must convert a failed
+        # ffmpeg run into FullLipSyncError with the stderr message — not
+        # leak subprocess.CalledProcessError. The fake mirrors real
+        # subprocess.run: it raises CalledProcessError when check=True
+        # (the old code) and returns a failed result when check=False
+        # (the fix), so this test fails on the old code and passes on
+        # the new one — a plain return-value mock would pass on both.
+        def fake_run(argv, **kwargs):
+            if kwargs.get("check"):
+                raise subprocess.CalledProcessError(
+                    1, argv, stderr="ffmpeg boom"
+                )
+            return MagicMock(returncode=1, stderr="ffmpeg boom")
+
+        calls: list[float] = []
+        with patch.object(full_lipsync.subprocess, "run", side_effect=fake_run):
+            with self.assertRaises(FullLipSyncError) as caught:
+                full_lipsync.render_full_lipsync(
+                    task_id="t1",
+                    params=_params(),
+                    image_path="/tmp/photo.png",
+                    audio_file="/tmp/audio.mp3",
+                    audio_seconds=10.0,
+                    subtitles=[],
+                    output_path="/tmp/full-fail.mp4",
+                    generate_intro=self._fake_generate(calls),
+                    trim_audio=lambda *args, **kwargs: None,
+                )
+        self.assertIn("ffmpeg boom", str(caught.exception))
+        self.assertEqual(calls, [10.0])
 
     def test_window_failure_propagates_never_degrades(self):
         def failing(*args, **kwargs):

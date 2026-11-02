@@ -18,6 +18,7 @@ describe('buildSlotRows', () => {
       userId: 'user-1',
       faceless: true,
       facelessMaterial: 'svg',
+      fullLipsync: true,
       segments: [
         { kind: 'hook', text: 'Porto wins you over slowly.' },
         { kind: 'body', text: 'Walk the Ribeira in the morning light.' },
@@ -33,6 +34,7 @@ describe('buildSlotRows', () => {
       title: 'Porto walks',
       faceless: true,
       faceless_material: 'svg',
+      full_lipsync: true,
       segments: [
         { kind: 'hook', text: 'Porto wins you over slowly.' },
         { kind: 'body', text: 'Walk the Ribeira in the morning light.' },
@@ -53,5 +55,7 @@ describe('buildSlotRows', () => {
     });
     expect(rows[0]?.segments).toBeNull();
     expect(rows[0]?.faceless_material).toBeUndefined();
+    expect(rows[0]?.full_lipsync).toBe(false);
   });
+
 });

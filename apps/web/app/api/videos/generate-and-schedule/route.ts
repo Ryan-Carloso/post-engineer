@@ -873,6 +873,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         userId,
         faceless: prep.faceless,
         facelessMaterial: validatedOptions.facelessMaterial,
+        fullLipsync: validatedOptions.fullLipsync,
         segments: options?.segments,
       }),
     )

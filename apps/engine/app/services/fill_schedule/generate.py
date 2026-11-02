@@ -26,6 +26,7 @@ from app.services.fill_schedule.support import (
     notify_safe,
     post_identity,
     slot_faceless,
+    slot_full_lipsync,
     slot_material,
     slot_user_id,
     token_cost,
@@ -124,6 +125,16 @@ class BatchGenerator:
                 # Per-post material (scheduled_posts, migration 029), forwarded
                 # exactly like the web's direct dispatch does.
                 faceless_material=slot_material(slot),
+                # Per-post full lip-sync (scheduled_posts, migration 035),
+                # forwarded exactly like the web's direct dispatch does.
+                # Without this, a tick-dispatched pending slot or a requeued
+                # slot (engine restart mid-generation) silently renders
+                # intro-only b-roll even though the user asked for the whole
+                # video as talking head — the silent degradation the full
+                # lip-sync module contract forbids. A row without the field
+                # (created before the migration) renders intro-only, the
+                # behaviour every earlier video had.
+                full_lipsync=slot_full_lipsync(slot),
                 # Segments (scheduled_posts, migration 030), forwarded exactly
                 # like the web's direct dispatch does. Without this, a
                 # requeued slot (engine restart mid-generation) or a

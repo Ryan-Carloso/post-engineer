@@ -313,8 +313,13 @@ def render_full_lipsync(
         output_path,
         codec=codec,
     )
+    # check=False on purpose: with check=True, subprocess.run raises
+    # CalledProcessError on a non-zero exit and the `status != 0` branch
+    # below — the FullLipSyncError with the ffmpeg stderr message — is
+    # unreachable in production. The injected run_ffmpeg seam keeps the
+    # same contract: it returns a result, it does not raise for failures.
     runner = run_ffmpeg or (
-        lambda argv: subprocess.run(argv, capture_output=True, text=True, check=True)
+        lambda argv: subprocess.run(argv, capture_output=True, text=True, check=False)
     )
     result = runner(command)
     status = getattr(result, "returncode", 0)
