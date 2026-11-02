@@ -47,8 +47,17 @@ class PlanWindowsTests(unittest.TestCase):
                 full_lipsync.plan_windows(bad, ())
 
     def test_rejects_audio_over_the_ceiling(self):
-        with self.assertRaises(FullLipSyncError):
-            full_lipsync.plan_windows(145.0, ())
+        for over in (60.01, 61.0, 144.0):
+            with self.assertRaises(FullLipSyncError):
+                full_lipsync.plan_windows(over, ())
+
+    def test_exactly_60s_is_five_windows(self):
+        self.assertEqual(
+            full_lipsync.plan_windows(60.0, ()),
+            [(0.0, 12.0), (12.0, 12.0), (24.0, 12.0), (36.0, 12.0), (48.0, 12.0)],
+        )
+        self.assertEqual(full_lipsync.MAX_FULL_LIPSYNC_SECONDS, 60.0)
+        self.assertEqual(full_lipsync.MAX_FULL_LIPSYNC_WINDOWS, 5)
 
     def test_short_tail_merges_backwards(self):
         # 25s with a cue at 24s would leave a 1s tail; it merges instead.
@@ -144,6 +153,23 @@ class RenderTests(unittest.TestCase):
         self.assertAlmostEqual(cost, 1.95)
         self.assertEqual(jobs, ["job-1", "job-2", "job-3"])
         self.assertEqual(len(ran), 1)
+
+    def test_over_60s_render_fails_before_any_window(self):
+        calls: list[float] = []
+        with self.assertRaises(FullLipSyncError):
+            full_lipsync.render_full_lipsync(
+                task_id="t1",
+                params=_params(),
+                image_path="/tmp/photo.png",
+                audio_file="/tmp/audio.mp3",
+                audio_seconds=61.0,
+                subtitles=[],
+                output_path="/tmp/full.mp4",
+                generate_intro=self._fake_generate(calls),
+                trim_audio=lambda *args, **kwargs: None,
+                run_ffmpeg=lambda argv: MagicMock(returncode=0, stderr=""),
+            )
+        self.assertEqual(calls, [])
 
     def test_window_failure_propagates_never_degrades(self):
         def failing(*args, **kwargs):

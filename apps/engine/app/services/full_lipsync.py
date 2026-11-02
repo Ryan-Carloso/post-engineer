@@ -41,10 +41,19 @@ FULL_LIPSYNC_MAX_WINDOW_SECONDS: float = 12.0
 # A window shorter than this would render a padded clip longer than its
 # audio, so short tails are merged backwards (see plan_windows).
 FULL_LIPSYNC_MIN_WINDOW_SECONDS: float = 3.72
-# Bound on total GPU work per video: 12 windows x 12s = 144s of narration,
-# well above the persona script budget (700 characters, roughly 60s max).
-# Beyond this the job fails fast instead of queueing an unbounded GPU bill.
-MAX_FULL_LIPSYNC_WINDOWS: int = 12
+# Bound on total GPU work per video: 5 windows x 12s = 60s of narration.
+# The token price is flat per video (ok -> 2, very_good -> 3), so it must
+# not cover unbounded GPU work: beyond 60s the job fails fast, before any
+# LongCat window is submitted (plan_windows runs first in
+# render_full_lipsync), instead of queueing an unbounded GPU bill. It never
+# truncates, never drops a window, and never degrades to b-roll.
+# Enforcement layer: the engine is authoritative, on the measured TTS
+# duration. The web side cannot measure TTS seconds before charge (TTS
+# happens engine-side, the same precedent as the custom-audio 60s limit
+# verified by the engine with ffprobe): a >60s full-mode request passes web
+# validation, is charged, then fails here before any GPU spend, and the
+# failed slot is refunded by the existing fill_schedule reconciler.
+MAX_FULL_LIPSYNC_WINDOWS: int = 5
 MAX_FULL_LIPSYNC_SECONDS: float = MAX_FULL_LIPSYNC_WINDOWS * FULL_LIPSYNC_MAX_WINDOW_SECONDS
 
 # Subtitle timing pattern, same shape as persona_hook's cue parser.
