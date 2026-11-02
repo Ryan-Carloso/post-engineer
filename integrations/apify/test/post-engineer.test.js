@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import {
   ActorInputError,
   DEFAULT_API_URL,
+  FACELESS_MATERIALS,
   POLL_INTERVAL_MS,
   PostEngineerApiError,
   PROVIDERS,
@@ -22,6 +23,7 @@ const baseInput = () => ({
   body: 'Short videos keep attention.',
   cta: 'Follow for more.',
   providers: ['youtube'],
+  voiceId: 'chatterbox:kokoro_af_heart',
 });
 
 const jsonResponse = (status, body) => new Response(JSON.stringify(body), { status });
@@ -71,7 +73,9 @@ describe('parseInput', () => {
     const input = parseInput(baseInput());
     assert.equal(input.apiUrl, DEFAULT_API_URL);
     assert.equal(input.mode, 'asap');
-    assert.equal(input.faceless, false);
+    // No persona: faceless by default (generate-and-schedule refuses otherwise).
+    assert.equal(input.faceless, true);
+    assert.equal(input.fullLipsync, false);
     assert.equal(input.waitForCompletion, true);
     assert.equal(input.timeoutMinutes, 30);
     assert.equal(input.schedule, undefined);
@@ -92,6 +96,11 @@ describe('parseInput', () => {
     ['an http apiUrl that is not loopback', { ...baseInput(), apiUrl: 'http://example.com' }, /must use https/],
     ['an apiUrl with credentials', { ...baseInput(), apiUrl: 'https://u:p@example.com' }, /must not contain credentials/],
     ['a string boolean', { ...baseInput(), faceless: 'true' }, /faceless must be true or false/],
+    ['no persona with faceless off', { ...baseInput(), faceless: false }, /without a persona must be faceless/],
+    ['no persona and no voice', { ...baseInput(), voiceId: undefined }, /without a persona needs a voice/],
+    ['full lip-sync without a persona', { ...baseInput(), fullLipsync: true }, /fullLipsync needs a persona/],
+    ['full lip-sync with faceless', { ...baseInput(), personaId: 'p1', faceless: true, fullLipsync: true }, /fullLipsync needs a persona/],
+    ['an unknown faceless material', { ...baseInput(), facelessMaterial: 'video' }, /facelessMaterial must be one of/],
     ['a timeout above the cap', { ...baseInput(), timeoutMinutes: 61 }, /timeoutMinutes must be an integer from 1 to 60/],
   ];
   for (const [name, raw, pattern] of rejects) {
@@ -119,9 +128,26 @@ describe('buildGenerateBody', () => {
     const body = buildGenerateBody(parseInput({ ...baseInput(), faceless: true }), 'apify-run-abc');
     assert.deepEqual(body.options.segments.map((s) => s.kind), ['hook', 'body', 'cta']);
     assert.equal(body.options.faceless, true);
+    assert.equal(body.options.voiceId, 'chatterbox:kokoro_af_heart');
+    assert.equal('fullLipsync' in body.options, false);
     assert.equal(body.idempotencyKey, 'apify-run-abc');
     assert.deepEqual(body.publishing, { mode: 'asap', providers: ['youtube'] });
     assert.equal('personaId' in body, false);
+  });
+});
+
+describe('buildGenerateBody look options', () => {
+  it('sends a persona video with full lip-sync and no faceless flag', () => {
+    const body = buildGenerateBody(parseInput({ ...baseInput(), voiceId: undefined, personaId: 'p1', fullLipsync: true }));
+    assert.equal(body.personaId, 'p1');
+    assert.equal(body.options.fullLipsync, true);
+    assert.equal('faceless' in body.options, false);
+    assert.equal('voiceId' in body.options, false);
+  });
+
+  it('sends the faceless material when chosen', () => {
+    const body = buildGenerateBody(parseInput({ ...baseInput(), facelessMaterial: 'svg' }));
+    assert.equal(body.options.facelessMaterial, 'svg');
   });
 });
 
@@ -358,6 +384,17 @@ describe('Actor definition files', () => {
     for (const key of schema.required) assert.ok(key in defaults, `${key} has no prefill`);
     assert.equal('apiKey' in defaults, false);
     assert.equal(parseInput(defaults).apiKey, null);
+  });
+
+  // The prefilled voice must be the web app's own default voice id, so the
+  // default input also works once a key is added.
+  it('prefills the voice with the web default voice id', () => {
+    const fallback = readFileSync(new URL('../../../apps/web/lib/voice-fallback.ts', import.meta.url), 'utf8');
+    assert.ok(fallback.includes(`DEFAULT_VOICE_FEMALE = '${schema.properties.voiceId.prefill}'`));
+  });
+
+  it('documents every faceless material the code accepts', () => {
+    assert.deepEqual(schema.properties.facelessMaterial.enum, FACELESS_MATERIALS);
   });
 
   it('documents every provider and mode the code accepts', () => {

@@ -6,6 +6,7 @@
 export const DEFAULT_API_URL = 'https://post-engineer.com';
 export const PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads'];
 export const MODES = ['asap', 'scheduled'];
+export const FACELESS_MATERIALS = ['broll', 'svg'];
 export const API_KEY_PREFIX = 'pe_live_';
 export const REQUEST_TIMEOUT_MS = 60_000;
 export const POLL_INTERVAL_MS = 15_000;
@@ -130,6 +131,29 @@ function parseTimeoutMinutes(raw) {
   return value;
 }
 
+// How the video looks, with the rules generate-and-schedule enforces before
+// any charge (route.ts): a post without a persona must be faceless and needs
+// a voice; full lip-sync needs a persona's face, so never with faceless.
+function parseLook(raw, personaId) {
+  const faceless = optionalBoolean(raw, 'faceless', personaId === undefined);
+  const voiceId = optionalString(raw, 'voiceId');
+  const fullLipsync = optionalBoolean(raw, 'fullLipsync', false);
+  const facelessMaterial = raw.facelessMaterial ?? undefined;
+  if (facelessMaterial !== undefined && !FACELESS_MATERIALS.includes(facelessMaterial)) {
+    throw new ActorInputError(`facelessMaterial must be one of: ${FACELESS_MATERIALS.join(', ')}.`);
+  }
+  if (personaId === undefined && !faceless) {
+    throw new ActorInputError('A video without a persona must be faceless: set faceless to true or give a personaId.');
+  }
+  if (personaId === undefined && voiceId === undefined) {
+    throw new ActorInputError('A video without a persona needs a voice: set voiceId (an id from GET /api/persona/voices).');
+  }
+  if (fullLipsync && (faceless || personaId === undefined)) {
+    throw new ActorInputError('fullLipsync needs a persona with a face, so it cannot be used with faceless videos.');
+  }
+  return { faceless, voiceId, fullLipsync, facelessMaterial };
+}
+
 /** Validates and normalizes the Actor input; throws ActorInputError. */
 export function parseInput(raw) {
   if (!isRecord(raw)) throw new ActorInputError('Actor input must be a JSON object.');
@@ -142,6 +166,8 @@ export function parseInput(raw) {
   const mode = raw.mode === undefined || raw.mode === null ? 'asap' : raw.mode;
   if (!MODES.includes(mode)) throw new ActorInputError(`mode must be one of: ${MODES.join(', ')}.`);
   const providers = parseProviders(raw);
+  const personaId = optionalString(raw, 'personaId');
+  const look = parseLook(raw, personaId);
   return {
     apiKey,
     apiUrl: parseApiUrl(raw),
@@ -149,8 +175,8 @@ export function parseInput(raw) {
     hook: requireString(raw, 'hook'),
     body: requireString(raw, 'body'),
     cta: requireString(raw, 'cta'),
-    personaId: optionalString(raw, 'personaId'),
-    faceless: optionalBoolean(raw, 'faceless', false),
+    personaId,
+    ...look,
     providers,
     accounts: parseAccounts(raw, providers),
     mode,
@@ -183,6 +209,9 @@ export function buildGenerateBody(input, idempotencyKey) {
     options: {
       segments: buildSegments(input),
       ...(input.faceless ? { faceless: true } : {}),
+      ...(input.voiceId !== undefined ? { voiceId: input.voiceId } : {}),
+      ...(input.facelessMaterial !== undefined ? { facelessMaterial: input.facelessMaterial } : {}),
+      ...(input.fullLipsync ? { fullLipsync: true } : {}),
     },
     ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
   };

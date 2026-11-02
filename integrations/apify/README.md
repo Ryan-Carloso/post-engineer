@@ -18,14 +18,17 @@ This Actor is a thin client for the [Post Engineer API](https://post-engineer.co
 | `title` | yes | Label of the scheduled post. |
 | `hook`, `body`, `cta` | yes | The script. 60 to 200 words in total. It is validated before any token is spent. |
 | `providers` | yes | Any of `youtube`, `instagram`, `linkedin`, `bluesky`, `threads`. |
-| `personaId` | no | AI persona to present the video. Leave empty and set `faceless` for a faceless video. |
-| `faceless` | no | `true` for a faceless video. |
+| `personaId` | no | AI persona that presents the video. Leave empty for a faceless video. |
+| `voiceId` | without a persona | Narration voice, an id from `GET /api/persona/voices` (prefilled with `chatterbox:kokoro_af_heart`). With a persona it overrides the persona's voice. |
+| `faceless` | no | No face on screen. Defaults to `true` when there is no persona; a video without a persona must be faceless. |
+| `facelessMaterial` | no | `broll` (stock footage) or `svg` (animated scenes). |
+| `fullLipsync` | no | The persona talks for the whole video instead of only the hook. Needs a persona; not with `faceless`. |
 | `accounts` | no | Account ids per provider, e.g. `{"youtube": ["<id>"]}`. Defaults to the persona's publishing accounts. |
 | `mode` | no | `asap` (default) publishes when the video is ready; `scheduled` uses `schedule`. |
 | `schedule` | for `scheduled` | `{"startAt": "2026-12-01T09:00:00Z", "times": ["18:00"], "timezone": "America/Sao_Paulo"}`. Slots must be 3 hours to 30 days ahead. |
 | `waitForCompletion` | no | Default `true`: keep the run open until the video is generated or fails. |
 | `timeoutMinutes` | no | How long to wait, 1 to 60 (default 30). |
-| `apiUrl` | no | Only for self-hosted Post Engineer. Must be https. |
+| `apiUrl` | no | Only for self-hosted Post Engineer. Must be https (http only for localhost). |
 
 ### Example
 
@@ -37,7 +40,7 @@ This Actor is a thin client for the [Post Engineer API](https://post-engineer.co
   "body": "Short videos fix that. ...",
   "cta": "Follow for one tip a day.",
   "providers": ["youtube"],
-  "faceless": true
+  "voiceId": "chatterbox:kokoro_af_heart"
 }
 ```
 

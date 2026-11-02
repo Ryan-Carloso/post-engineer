@@ -50,14 +50,39 @@
     "personaId": {
       "title": "Persona ID",
       "type": "string",
-      "description": "AI persona to present the video. Leave empty for a faceless video.",
+      "description": "AI persona that presents the video (lip-sync on the hook). Leave empty for a faceless video.",
       "editor": "textfield"
+    },
+    "voiceId": {
+      "title": "Voice ID",
+      "type": "string",
+      "description": "Narration voice: an id from GET /api/persona/voices. Required without a persona; with a persona it overrides the persona's voice.",
+      "editor": "textfield",
+      "prefill": "chatterbox:kokoro_af_heart"
     },
     "faceless": {
       "title": "Faceless video",
       "type": "boolean",
-      "description": "Generate without a persona (cheapest option).",
-      "default": false
+      "description": "No face on screen, only b-roll or animated svg (cheapest). Defaults to true when no persona is set."
+    },
+    "facelessMaterial": {
+      "title": "Faceless material",
+      "type": "string",
+      "description": "What fills a faceless video: stock b-roll or animated svg scenes.",
+      "editor": "select",
+      "enum": [
+        "broll",
+        "svg"
+      ],
+      "enumTitles": [
+        "Stock b-roll",
+        "Animated svg"
+      ]
+    },
+    "fullLipsync": {
+      "title": "Full lip-sync",
+      "type": "boolean",
+      "description": "The persona talks for the whole video instead of only the hook (most expensive). Needs a persona; not with faceless."
     },
     "accounts": {
       "title": "Account IDs per provider",
