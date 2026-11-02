@@ -79,6 +79,28 @@ jobs:
           fi
           echo "secrets hygiene OK: no secret-bearing files tracked"
 
+  # Apify Actor (integrations/apify): outside the pnpm workspace because
+  # Apify builds it with its own npm install. Its logic module has no
+  # dependencies, so node:test runs it without installing anything.
+  apify-actor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: integrations/apify
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      - name: Unit tests
+        run: npm test
+
   web:
     runs-on: ubuntu-latest
     timeout-minutes: 20
