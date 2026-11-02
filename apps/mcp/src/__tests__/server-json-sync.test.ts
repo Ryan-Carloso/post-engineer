@@ -69,6 +69,10 @@ describe('release workflows keep server.json in step', () => {
     expect(autoBump.includes('git add apps/mcp/package.json apps/mcp/server.json')).toBe(true);
   });
 
+  it('auto-release treats a package.json edit without a new version as a real change', () => {
+    expect(autoBump.includes('if [ "$OLD_VERSION" = "$NEW_PKG_VERSION" ]; then')).toBe(true);
+  });
+
   it('auto-release still releases a merge that changes server.json without package.json', () => {
     expect(
       autoBump.includes(
