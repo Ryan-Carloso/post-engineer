@@ -14,7 +14,7 @@ This Actor is a thin client for the [Post Engineer API](https://post-engineer.co
 
 | Field | Required | What it does |
 |---|---|---|
-| `apiKey` | yes | Your Post Engineer API key. Stored as a secret input. |
+| `apiKey` | to create a video | Your Post Engineer API key, stored as a secret input. Without it the run is a **dry run**: it validates the input and returns the request it would send, with nothing generated, published or charged. |
 | `title` | yes | Label of the scheduled post. |
 | `hook`, `body`, `cta` | yes | The script. 60 to 200 words in total. It is validated before any token is spent. |
 | `providers` | yes | Any of `youtube`, `instagram`, `linkedin`, `bluesky`, `threads`. |

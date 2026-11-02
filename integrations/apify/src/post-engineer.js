@@ -133,8 +133,10 @@ function parseTimeoutMinutes(raw) {
 /** Validates and normalizes the Actor input; throws ActorInputError. */
 export function parseInput(raw) {
   if (!isRecord(raw)) throw new ActorInputError('Actor input must be a JSON object.');
-  const apiKey = requireString(raw, 'apiKey');
-  if (!apiKey.startsWith(API_KEY_PREFIX)) {
+  // No key means a dry run (see runActor): the Store's daily auto-test runs
+  // the default input, which cannot carry anyone's key.
+  const apiKey = optionalString(raw, 'apiKey') ?? null;
+  if (apiKey !== null && !apiKey.startsWith(API_KEY_PREFIX)) {
     throw new ActorInputError(`apiKey must be a Post Engineer API key (starts with ${API_KEY_PREFIX}).`);
   }
   const mode = raw.mode === undefined || raw.mode === null ? 'asap' : raw.mode;
@@ -188,7 +190,7 @@ export function buildGenerateBody(input, idempotencyKey) {
 
 /** Removes the API key from any text that may reach logs or the run output. */
 export function redact(text, apiKey) {
-  return apiKey === '' ? text : text.split(apiKey).join('[redacted]');
+  return apiKey === null || apiKey === '' ? text : text.split(apiKey).join('[redacted]');
 }
 
 function errorMessageOf(json, status) {
@@ -282,10 +284,20 @@ async function waitForTask(ctx, slotId, taskId, deadline) {
 /**
  * Runs one Actor job: validate the script (no tokens), generate and
  * schedule one video, then optionally wait for it. Throws ActorInputError
- * or PostEngineerApiError with a redacted message on failure.
+ * or PostEngineerApiError with a redacted message on failure. Without an
+ * API key it is a dry run: the input is validated and the request that
+ * would be sent is returned, with no API call and no tokens spent.
  */
 export async function runActor({ input: rawInput, fetchImpl, sleep, now, idempotencyKey, log }) {
   const input = parseInput(rawInput);
+  if (input.apiKey === null) {
+    log('No apiKey: dry run, nothing is generated or published.');
+    return {
+      dryRun: true,
+      message: 'Dry run: no apiKey was given, so nothing was generated, published or charged. Add your Post Engineer API key (https://post-engineer.com/api-keys) to create the video.',
+      request: buildGenerateBody(input, idempotencyKey),
+    };
+  }
   const ctx = { input, fetchImpl, sleep, now, log };
 
   const validation = await callApi(ctx, 'POST', '/api/videos/validate-script', { segments: buildSegments(input) });

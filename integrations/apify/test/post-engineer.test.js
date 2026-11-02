@@ -79,7 +79,7 @@ describe('parseInput', () => {
 
   const rejects = [
     ['a non-object input', null, /must be a JSON object/],
-    ['a missing apiKey', { ...baseInput(), apiKey: undefined }, /apiKey is required/],
+    ['an empty apiKey', { ...baseInput(), apiKey: '  ' }, /apiKey must be a non-empty string/],
     ['a key without the pe_live_ prefix', { ...baseInput(), apiKey: 'sk-123' }, /starts with pe_live_/],
     ['an empty hook', { ...baseInput(), hook: '  ' }, /hook is required/],
     ['an unknown provider', { ...baseInput(), providers: ['tiktok'] }, /Unknown provider "tiktok"/],
@@ -156,6 +156,15 @@ describe('runActor', () => {
     assert.equal(result.scheduleId, 'sched-1');
     assert.equal(result.slots[0].videoStatus, 'complete');
     assert.deepEqual(result.slots[0].videos, ['https://v/1.mp4']);
+  });
+
+  it('runs dry without an apiKey: no request, the payload it would send', async () => {
+    const { promise, calls, logs } = runWith({}, { ...baseInput(), apiKey: undefined });
+    const result = await promise;
+    assert.equal(calls.length, 0);
+    assert.equal(result.dryRun, true);
+    assert.deepEqual(result.request.options.segments.map((s) => s.kind), ['hook', 'body', 'cta']);
+    assert.match(logs[0], /dry run/);
   });
 
   it('stops before spending tokens when the script is rejected', async () => {
@@ -336,7 +345,19 @@ describe('Actor definition files', () => {
   });
 
   it('requires exactly the fields parseInput requires', () => {
-    assert.deepEqual([...schema.required].sort(), ['apiKey', 'body', 'cta', 'hook', 'providers', 'title']);
+    assert.deepEqual([...schema.required].sort(), ['body', 'cta', 'hook', 'providers', 'title']);
+  });
+
+  // The Store auto-tests the Actor daily with its default (prefilled) input.
+  it('prefills every required field, so the default input is a valid dry run', () => {
+    const defaults = Object.fromEntries(
+      Object.entries(schema.properties)
+        .filter(([, p]) => p.prefill !== undefined)
+        .map(([k, p]) => [k, p.prefill]),
+    );
+    for (const key of schema.required) assert.ok(key in defaults, `${key} has no prefill`);
+    assert.equal('apiKey' in defaults, false);
+    assert.equal(parseInput(defaults).apiKey, null);
   });
 
   it('documents every provider and mode the code accepts', () => {
