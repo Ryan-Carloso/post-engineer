@@ -109,6 +109,18 @@ def test_opencode_model_follows_primary_when_different(mod):
     assert attempts[1] == "opencode/deepseek-v4.1-flash-free"
 
 
+def test_nemotron_35_lightning_not_blocked_by_super_vl_denylist(mod):
+    prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
+    model_id = "opencode/nemotron-3.5-lightning-free"
+    meta = mod.ModelMeta(
+        model_id=model_id,
+        context=1_000_000,
+        max_output=65_536,
+        tool_support=True,
+    )
+    assert mod.is_denied(model_id, meta, prefs) is None
+
+
 def test_missing_preferred_model_is_skipped(mod):
     prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
     # beam-free is preferred but not in the sample catalog.
