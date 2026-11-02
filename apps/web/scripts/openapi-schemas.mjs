@@ -9,6 +9,9 @@ const object = (properties, required = []) => ({
 });
 const str = { type: 'string' };
 const strArray = { type: 'array', items: str };
+const int = { type: 'integer' };
+// The same schema for each named field, e.g. fields(int, ['a', 'b']).
+const fields = (schema, names) => Object.fromEntries(names.map((name) => [name, schema]));
 
 export const componentSchemas = {
   Error: object(
@@ -117,37 +120,21 @@ const multipart = 'multipart/form-data';
 const personaIdQuery = [{ name: 'personaId', required: true }];
 
 const personaSummary = object({
-  id: str,
-  name: str,
+  ...fields(str, ['id', 'name']),
   createdAt: { type: 'string', format: 'date-time' },
-  avatarUrl: str,
-  photoUrl: str,
-  libraryUrl: str,
-  voiceId: str,
-  voiceAudioUrl: str,
-  language: str,
-  videoAspect: str,
-  videoLayout: str,
-  scriptPrompt: str,
-  ctaText: str,
-  paragraphNumber: { type: 'integer' },
-  niche: str,
-  faceQuality: str,
+  ...fields(str, ['avatarUrl', 'photoUrl', 'libraryUrl', 'voiceId', 'voiceAudioUrl', 'language']),
+  ...fields(str, ['videoAspect', 'videoLayout', 'scriptPrompt', 'ctaText']),
+  paragraphNumber: int,
+  ...fields(str, ['niche', 'faceQuality']),
 });
 
 const scheduleSummary = object({
   id: str,
   persona_id: { type: 'string', nullable: true },
   providers: strArray,
-  youtube_account_ids: strArray,
-  instagram_account_ids: strArray,
-  linkedin_account_ids: strArray,
-  bluesky_account_ids: strArray,
-  threads_account_ids: strArray,
-  days_of_week: { type: 'array', items: { type: 'integer' } },
-  start_hour: { type: 'integer' },
-  end_hour: { type: 'integer' },
-  posts_per_day: { type: 'integer' },
+  ...fields(strArray, ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads'].map((p) => `${p}_account_ids`)),
+  days_of_week: { type: 'array', items: int },
+  ...fields(int, ['start_hour', 'end_hour', 'posts_per_day']),
   timezone: str,
   active: { type: 'boolean' },
   created_at: { type: 'string', format: 'date-time' },
@@ -199,12 +186,7 @@ export const operationSchemas = {
     request: segmentsBody,
     response: success({
       valid: { type: 'boolean' },
-      segmentCount: { type: 'integer' },
-      totalWords: { type: 'integer' },
-      hookWords: { type: 'integer' },
-      bodyWords: { type: 'integer' },
-      ctaWords: { type: 'integer' },
-      mediaCount: { type: 'integer' },
+      ...fields(int, ['segmentCount', 'totalWords', 'hookWords', 'bodyWords', 'ctaWords', 'mediaCount']),
       hookWindowSeconds: object({ min: { type: 'number' }, max: { type: 'number' } }),
       measuredDurationSeconds: { type: 'number', nullable: true },
       measured: { type: 'string', enum: ['pending'] },
@@ -227,11 +209,7 @@ export const operationSchemas = {
       score: { type: 'integer' },
       reasons: { type: 'array', items: object({ rule: str, detail: str, points: { type: 'integer' } }) },
       counts: object({
-        chars: { type: 'integer' },
-        words: { type: 'integer' },
-        hashtags: { type: 'integer' },
-        links: { type: 'integer' },
-        firstLineWords: { type: 'integer' },
+        ...fields(int, ['chars', 'words', 'hashtags', 'links', 'firstLineWords']),
         slopHits: strArray,
         topThemeMatch: { type: 'string', nullable: true },
       }),
@@ -447,12 +425,7 @@ export const operationSchemas = {
     response: success({
       persona: object({ id: str, name: str }),
       counts: object({
-        schedules: { type: 'integer' },
-        upcomingSlots: { type: 'integer' },
-        publishedSlots: { type: 'integer' },
-        failedSlots: { type: 'integer' },
-        generatedVideos: { type: 'integer' },
-        personaImages: { type: 'integer' },
+        ...fields(int, ['schedules', 'upcomingSlots', 'publishedSlots', 'failedSlots', 'generatedVideos', 'personaImages']),
       }),
       videos: { type: 'array', items: anyObject },
       videosTruncated: { type: 'boolean' },
@@ -479,12 +452,7 @@ export const operationSchemas = {
   'GET /api/persona/video-generations/[generationId]': {
     response: success({
       generation: object({
-        id: str,
-        generationId: str,
-        engineTaskId: str,
-        personaName: str,
-        videoSubject: str,
-        status: str,
+        ...fields(str, ['id', 'generationId', 'engineTaskId', 'personaName', 'videoSubject', 'status']),
         errorCode: { type: 'string', nullable: true },
         tokensRefunded: { type: 'boolean' },
       }),
@@ -507,9 +475,7 @@ export const operationSchemas = {
     query: [{ name: 'limit', required: false }, { name: 'offset', required: false }],
     response: success({
       transactions: { type: 'array', items: anyObject },
-      total: { type: 'integer' },
-      limit: { type: 'integer' },
-      offset: { type: 'integer' },
+      ...fields(int, ['total', 'limit', 'offset']),
     }),
   },
   // apps/web/app/api/upload-content/route.ts
