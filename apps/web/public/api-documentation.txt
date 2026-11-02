@@ -8,9 +8,9 @@ MCP server:      npx -y post-engineer-mcp@latest (env POST_ENGINEER_API_KEY)
 
 The OpenAPI spec lists every endpoint below. It is generated from the MCP
 parity mapping (apps/mcp/src/__tests__/parity-endpoint-tools.json) by
-`node apps/web/scripts/generate-openapi.mjs`. Request and response schemas
-are not part of the spec yet; the MCP tool schemas in apps/mcp/src/tools.ts
-are the source of truth for request bodies.
+`node apps/web/scripts/generate-openapi.mjs`, with request and response
+schemas from apps/web/scripts/openapi-schemas.mjs. Some nested items (social
+accounts, metrics rows, generation lists) are typed as free-form objects.
 
 ================================================================================
 AUTHENTICATION

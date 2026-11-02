@@ -92,7 +92,7 @@
     "apiUrl": {
       "title": "API base URL",
       "type": "string",
-      "description": "Only for self-hosted Post Engineer. Must be https.",
+      "description": "Only for self-hosted Post Engineer. Must be https (http is allowed only for localhost).",
       "editor": "textfield",
       "sectionCaption": "Advanced"
     }
