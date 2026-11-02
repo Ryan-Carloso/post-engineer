@@ -204,7 +204,9 @@ class RenderTests(unittest.TestCase):
         # The raised message must carry NO stderr fragment and NO
         # absolute path: it reaches the task error and Discord via
         # safe_reason, which scrubs secrets but not local paths. The
-        # scrubbed detail goes to the log only.
+        # log carries no stderr either: CodeQL flags logging
+        # stderr-derived text even scrubbed, so only the generic
+        # failure is logged.
         def fake_run(argv, **kwargs):
             if kwargs.get("check"):
                 raise subprocess.CalledProcessError(
@@ -234,8 +236,10 @@ class RenderTests(unittest.TestCase):
         self.assertNotIn("/app/tasks", str(caught.exception))
         self.assertNotIn("ffmpeg boom", str(caught.exception))
         log_text = "\n".join(logs.output)
+        self.assertIn("full lip-sync concat failed", log_text)
         self.assertNotIn("/app/tasks", log_text)
-        self.assertIn("full-lipsync-clip-0.mp4", log_text)
+        self.assertNotIn("full-lipsync-clip-0.mp4", log_text)
+        self.assertNotIn("ffmpeg boom", log_text)
         self.assertEqual(calls, [10.0])
 
     def test_window_failure_propagates_never_degrades(self):

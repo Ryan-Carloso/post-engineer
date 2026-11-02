@@ -33,7 +33,6 @@ from typing import Callable, Sequence
 from app.config import config
 from app.models.schema import VideoParams
 from app.services import longcat, persona_image
-from app.services.analytics import scrub_error_text
 from app.utils import ssrf, utils
 
 logger = logging.getLogger(__name__)
@@ -328,10 +327,11 @@ def render_full_lipsync(
     result = runner(command)
     status = getattr(result, "returncode", 0)
     if status != 0:
-        stderr = getattr(result, "stderr", "") or ""
         # Raised message reaches task error/Discord via safe_reason
-        # (secrets only), so stderr goes to logs only, scrubbed.
-        # codeql[py/clear-text-logging-sensitive-data]: scrubbed, see scrub_error_text
-        logger.error("full lip-sync concat failed: %s", scrub_error_text(stderr))
+        # (secrets only), so stderr must not be embedded in it. It is
+        # not logged either: CodeQL flags logging stderr-derived text
+        # even scrubbed (verified: a codeql suppression on the scrubbed
+        # log line did not clear the alert on head e07b0654).
+        logger.error("full lip-sync concat failed")
         raise FullLipSyncError("full lip-sync concat failed")
     return output_path, total_cost_usd(costs), job_ids
