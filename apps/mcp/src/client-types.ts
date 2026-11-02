@@ -79,6 +79,8 @@ export interface GeneratePersonaVideoInput {
     faceless?: boolean;
     /** Stock footage only ('broll') or drawn illustrations only ('svg'), with or without a face. */
     facelessMaterial?: 'broll' | 'svg';
+    /** Render the whole video as the persona talking, with no b-roll: every narration window is lip-synced to the persona face. Requires a persona with a photo and lip-sync enabled; cannot be combined with faceless. */
+    fullLipsync?: boolean;
     audioUrl?: string;
     imageId?: string;
     voiceId?: string;

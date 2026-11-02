@@ -22,7 +22,6 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
-import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import {
   distributeSlots,
   SlotDistributionError,
@@ -32,11 +31,13 @@ import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber } from '@/lib/tokens';
 import { buildSlotRows } from './slot-rows';
+import { validateOptions } from './options-validation';
+import { validateProviders, type Provider } from './providers-validation';
+import { checkFullLipsyncNarration } from './full-lipsync-preflight';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
 import { validateSegmentsRequest } from './segments-validation';
 import { rejectScriptPromptKeys, rejectTopicsKey, resolveTitle } from './request-title';
 import {
-  MAX_TITLE_CHARS,
   persistVoiceSwap,
   preparePost,
   SlotDispatchError,
@@ -54,10 +55,9 @@ import {
   recordGenerationUpdate,
   startEngineVideoTask,
 } from '@/lib/generation/video-generation';
-import { checkCustomAudioUrl, isHttpUrl } from '@/lib/generation/custom-audio';
+import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
 import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { resolveIdempotency } from '@/lib/idempotency';
-import { VALID_SCHEDULE_PROVIDERS } from '@/app/api/schedule/route';
 import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
 import { VOICE_FALLBACK_WARNING_CODE } from '@/lib/voice-fallback';
@@ -65,10 +65,6 @@ import { ensureEngineImageUrl } from '@/lib/engine-image-url';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 const ROUTE = 'POST /api/videos/generate-and-schedule';
-// Mirrors the engine's PersonaParams caps (apps/engine/app/models/schema.py):
-// rejecting at the same boundary here is what turns an opaque engine
-// validation error into a 400 that names the field.
-const MAX_LANGUAGE_CHARS = 32;
 
 //---------------
 // Request shape. Semantic checks (codes, fields) run after the shape parse
@@ -98,6 +94,10 @@ const OptionsSchema = z
   .object({
     faceless: z.boolean().optional(),
     facelessMaterial: z.enum(['broll', 'svg']).optional(),
+    // Opt-in full lip-sync: the whole video is the persona talking, with
+    // no b-roll. False (the default) keeps the intro-only lip-sync over
+    // stock material. Rejected with faceless below: no face to render.
+    fullLipsync: z.boolean().optional(),
     audioUrl: z.string().optional(),
     imageId: z.string().optional(),
     // Segments contract (MCP first, Phase 1): one call = one video. The
@@ -144,7 +144,6 @@ const BodySchema = z.object({
 });
 
 type ParsedBody = z.infer<typeof BodySchema>;
-type Provider = (typeof VALID_SCHEDULE_PROVIDERS)[number];
 
 interface SlotResult {
   slotId: string;
@@ -163,125 +162,6 @@ interface SlotResult {
 //---------------
 // Validation helpers — all run BEFORE any token is charged.
 //---------------
-
-interface ValidatedInput {
-  /** Null for a post created without a persona (migration 012). */
-  personaId: string | null;
-  title: string;
-  providers: Provider[];
-  accountIds: Record<Provider, string[]>;
-  startAt: string;
-  times: string[];
-  timezone: string;
-  faceless: boolean;
-  /** Resolved in validateOptions: 'broll' when omitted. Applies to every
-   *  post, with or without a face (stock only, or illustrations only). */
-  facelessMaterial: 'broll' | 'svg';
-  audioUrl?: string;
-  imageId?: string;
-  webhookUrl?: string;
-  voiceId?: string;
-  videoAspect?: '9:16' | '16:9';
-  /** 'standard' = the avatar fills the frame; 'react' = the frame splits,
-   *  avatar on top and the video material below. Absent means standard. */
-  videoLayout?: 'standard' | 'react';
-  paragraphNumber?: number;
-  language?: string;
-  niche?: string;
-}
-
-function validateProviders(rawProviders: string[]): Provider[] | NextResponse {
-  const providers = [...new Set(rawProviders.map((p) => p.trim()).filter((p) => p.length > 0))];
-  if (providers.length === 0) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Select at least one provider.', 'publishing.providers');
-  }
-  for (const provider of providers) {
-    if (!(VALID_SCHEDULE_PROVIDERS as ReadonlyArray<string>).includes(provider)) {
-      return validationFailed(
-        ERROR_CODES.VALIDATION_FAILED,
-        `Invalid provider: "${provider}". Use one of ${VALID_SCHEDULE_PROVIDERS.join(', ')}.`,
-        'publishing.providers',
-      );
-    }
-  }
-  return providers as Provider[];
-}
-
-function validateOptions(
-  options: NonNullable<ParsedBody['options']>,
-): Omit<ValidatedInput, 'personaId' | 'title' | 'providers' | 'accountIds' | 'startAt' | 'times' | 'timezone'> | NextResponse {
-  const {
-    faceless = false,
-    facelessMaterial,
-    audioUrl,
-    imageId,
-    webhookUrl,
-    voiceId,
-    videoAspect,
-    paragraphNumber,
-    language,
-    niche,
-  } = options;
-  if (typeof faceless !== 'boolean') {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.faceless must be a boolean.', 'options.faceless');
-  }
-  if (audioUrl !== undefined && !isHttpUrl(audioUrl)) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.audioUrl must be a valid http(s) URL.', 'options.audioUrl');
-  }
-  if (imageId !== undefined && imageId.trim().length === 0) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.imageId must be a non-empty string.', 'options.imageId');
-  }
-  if (faceless && imageId !== undefined) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      'options.imageId cannot be used with faceless videos: there is no face to render.',
-      'options.imageId',
-    );
-  }
-  if (webhookUrl !== undefined && !isHttpUrl(webhookUrl)) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.webhookUrl must be a valid http(s) URL.', 'options.webhookUrl');
-  }
-  if (voiceId !== undefined && voiceId.trim().length === 0) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.voiceId must be a non-empty string.', 'options.voiceId');
-  }
-  // Caps mirroring the persona's own validation, so a persona-less post is
-  // rejected with the persona editor's message, not an opaque engine error.
-  if (language !== undefined && language.length > MAX_LANGUAGE_CHARS) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      `options.language must be at most ${MAX_LANGUAGE_CHARS} characters.`,
-      'options.language',
-    );
-  }
-  // English-only launch: a video in any other language is rejected here
-  // (and again on the effective language in preparePersona).
-  if (language !== undefined && language.trim().length > 0 && !isEnglishLanguage(language)) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      ONLY_ENGLISH_VIDEOS_MESSAGE,
-      'options.language',
-    );
-  }
-  if (niche !== undefined && niche.length > MAX_TITLE_CHARS) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      `options.niche must be at most ${MAX_TITLE_CHARS} characters.`,
-      'options.niche',
-    );
-  }
-  return {
-    faceless,
-    facelessMaterial: facelessMaterial ?? 'broll',
-    audioUrl,
-    imageId: imageId?.trim(),
-    webhookUrl,
-    voiceId: voiceId?.trim(),
-    videoAspect,
-    paragraphNumber,
-    language,
-    niche,
-  };
-}
 
 function validateSlots(
   startAt: string,
@@ -654,6 +534,20 @@ async function postHandler(request: Request): Promise<NextResponse> {
     }
   }
 
+  // Full lip-sync preflight: measure the real narration BEFORE any charge,
+  // so >60s is rejected here (400) instead of charged then refunded.
+  // Runs after all other pre-charge validation, before cost/spend below.
+  if (validatedOptions.fullLipsync === true) {
+    const preflight = await checkFullLipsyncNarration({
+      userId,
+      script: segmentsScript,
+      language: prep.language,
+      voiceId: prep.voiceIdValue,
+      voiceAudioUrl: prep.voiceAudioUrl,
+    });
+    if (preflight instanceof NextResponse) return preflight;
+  }
+
   // 6. Cost for the single video, computed BEFORE the charge.
   const perVideoCost = computeVideoTokens(prep.faceless, prep.faceQuality);
   const totalCost = perVideoCost;
@@ -979,6 +873,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         userId,
         faceless: prep.faceless,
         facelessMaterial: validatedOptions.facelessMaterial,
+        fullLipsync: validatedOptions.fullLipsync,
         segments: options?.segments,
       }),
     )
@@ -1086,6 +981,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
         lipsync: !prep.faceless,
         // The material choice rides the payload under its snake_case name on every post, face or not.
         faceless_material: validatedOptions.facelessMaterial,
+        // Opt-in full lip-sync rides the same way; omitted when unset so
+        // every existing post keeps the intro-only behaviour exactly.
+        full_lipsync: validatedOptions.fullLipsync,
         segments: options?.segments, // Segment media rides to the engine here, next to the joined script.
       });
       if (!hasNonEmptyString(payload.video_subject)) {

@@ -150,3 +150,20 @@ def test_body_is_squeezed_to_one_line(
     assert error == (
         "Chatterbox TTS failed after 3 attempts (status 400: bad request)"
     )
+
+
+def test_scrub_helper_is_linear_on_colon_heavy_input() -> None:
+    """ReDoS pin: the userinfo regex must not backtrack over ':' runs.
+
+    Before the fix the first capture class allowed ':', so a scheme
+    followed by a long ':' run (no '@') made the engine try every split
+    before the literal ':'. The fixed class excludes ':' from the user
+    part, so this returns immediately, capped at 200 chars like any
+    other long body.
+    """
+    from app.services.voice_providers import _scrubbed_response_body
+
+    body = _scrubbed_response_body("https://" + ":" * 20000)
+    assert len(body) <= 200
+    # No userinfo match (no '@'): the body passes through, capped.
+    assert body == "https://" + ":" * 192

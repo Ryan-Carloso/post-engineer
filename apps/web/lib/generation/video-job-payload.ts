@@ -57,6 +57,10 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<string> = [
   // it as the per-post material choice, face or not); without it a
   // post's svg choice would be dropped here and silently render broll.
   'faceless_material',
+  // full_lipsync is a first-class engine field (VideoParams carries it as
+  // the opt-in whole-video talking-head switch); without it a full-mode
+  // request would be dropped here and silently render intro-only b-roll.
+  'full_lipsync',
   // segments is a first-class engine field (TaskVideoRequest carries it):
   // without it a segments request would render stock for every segment
   // and drop every user photo with no warning.

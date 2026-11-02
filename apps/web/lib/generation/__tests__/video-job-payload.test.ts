@@ -72,6 +72,15 @@ describe('buildJobPayload — request allowlist', () => {
     expect(payload.generation_id).toBe('gen-1');
   });
 
+  it('forwards full_lipsync so a full-mode request is not dropped into intro-only b-roll', () => {
+    const payload = buildJobPayload(persona(), {
+      video_subject: 'myth busting',
+      lipsync: true,
+      full_lipsync: true,
+    });
+    expect(payload.full_lipsync).toBe(true);
+  });
+
   it('forwards faceless_material so an svg choice is not dropped into broll', () => {
     const payload = buildJobPayload(persona(), {
       video_subject: 'myth busting',

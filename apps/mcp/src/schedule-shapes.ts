@@ -96,6 +96,10 @@ export const GeneratePersonaVideoOptionsShape = {
     .enum(['broll', 'svg'])
     .optional()
     .describe('What fills the video, with or without a face: "broll" = real stock footage only, "svg" = drawn illustrations only. The two never mix. Defaults to "broll".'),
+  fullLipsync: z
+    .boolean()
+    .optional()
+    .describe('Render the whole video as the persona talking, with no b-roll stock footage: every narration window is lip-synced to the persona face. Requires a persona with a photo and lip-sync enabled, so it cannot be combined with faceless (there is no face to render). Narration over 60 seconds is rejected by the engine before any GPU spend.'),
   audioUrl: httpsUrlField('audioUrl').optional().describe('Public URL of custom audio for the videos (overrides the persona voice).'),
   imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to use for every video (overrides the deterministic per-video selection; see list_persona_images).'),
   voiceId: personaVoiceField().optional().describe('Voice ID override: id or label from list_voices. Never type a provider prefix.'),

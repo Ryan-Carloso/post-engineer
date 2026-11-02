@@ -216,8 +216,16 @@ def populate_legacy_submaker_with_full_text(
 # scrub_secret_values (analytics); the URL userinfo redactor mirrors the
 # one the engine's error paths apply to their own messages.
 #---------------
+# The user part before the first ':' cannot itself contain ':', so it
+# is excluded from the first class. Without that exclusion the engine
+# tries every split of a ':'-heavy string before the literal ':'
+# (polynomial backtracking, CodeQL py/polynomial-redos); with it the
+# first part is deterministic and a ':'-heavy string without '@' fails
+# in linear time. Matching behaviour for real userinfo is unchanged:
+# 'user:pass@' still matches with user='user', the ':' separator, and
+# pass='pass' (the password part may still contain ':').
 _URL_USERINFO_RE = re.compile(
-    r"((?:https?|wss?)://)([^/\s?#@]*:[^/\s?#@]*@)",
+    r"((?:https?|wss?)://)([^/\s?#@:]*:[^/\s?#@]*@)",
     re.IGNORECASE,
 )
 

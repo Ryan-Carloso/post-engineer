@@ -121,6 +121,16 @@ export async function handleGeneratePersonaVideo(
     if (!result.ok) {
       throw new Error(`${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`);
     }
+    // Full lip-sync mirrors the web route's validation, here, before any
+    // client call: a rejected combination never debits tokens. The web
+    // route re-validates server-side; this check is the MCP-side guard
+    // so an agent gets the failure without spending anything.
+    if (args.options?.fullLipsync === true && args.options?.faceless === true) {
+      throw new Error('options.fullLipsync cannot be used with faceless videos: there is no face to render.');
+    }
+    if (args.options?.fullLipsync === true && args.personaId === undefined) {
+      throw new Error('options.fullLipsync requires a persona with a photo and lip-sync enabled.');
+    }
     const script = joinSegments(args.segments);
     // Voice resolution is an explicit pre-step after mechanical validation
     // and before the generating call: an unknown voice fails without
