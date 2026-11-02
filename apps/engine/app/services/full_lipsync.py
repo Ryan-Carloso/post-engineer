@@ -331,6 +331,7 @@ def render_full_lipsync(
         stderr = getattr(result, "stderr", "") or ""
         # Raised message reaches task error/Discord via safe_reason
         # (secrets only), so stderr goes to logs only, scrubbed.
+        # codeql[py/clear-text-logging-sensitive-data]: scrubbed, see scrub_error_text
         logger.error("full lip-sync concat failed: %s", scrub_error_text(stderr))
         raise FullLipSyncError("full lip-sync concat failed")
     return output_path, total_cost_usd(costs), job_ids
