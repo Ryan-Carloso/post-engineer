@@ -68,10 +68,12 @@ const generateBody = object(
         mode: { type: 'string', enum: ['scheduled', 'asap'], default: 'scheduled' },
         providers: strArray,
         accounts: { type: 'object', additionalProperties: strArray },
-        schedule: object(
-          { startAt: str, times: strArray, timezone: str },
-          ['startAt', 'times', 'timezone'],
-        ),
+        // OpenAPI 3.0 cannot express "required unless mode is asap"; the
+        // route answers 400 when it is missing in scheduled mode.
+        schedule: {
+          ...object({ startAt: str, times: strArray, timezone: str }, ['startAt', 'times', 'timezone']),
+          description: "Required when mode is 'scheduled' (the default); forbidden when mode is 'asap'.",
+        },
         timezone: { type: 'string', description: 'asap mode only (IANA zone).' },
       },
       ['providers'],
@@ -89,10 +91,10 @@ const generateBody = object(
       paragraphNumber: { type: 'integer', minimum: 1, maximum: 10 },
       language: str,
       niche: str,
-    }),
+    }, ['segments']), // segments-validation.ts: 400 without them
     idempotencyKey: str,
   },
-  ['title', 'publishing'],
+  ['title', 'publishing', 'options'],
 );
 
 
@@ -159,11 +161,16 @@ const engineEnvelope = object({
   message: str,
   body: { ...anyObject, description: 'Task record. state: -1 failed, 1 complete, 3 queued, 4 processing.' },
 });
+// Responses return the DB row shape (snake_case), even though the POST
+// form field and the PATCH body take isPrimary.
 const imageSchema = object({
   id: str,
-  tag: { type: 'string', maxLength: 100 },
-  description: { type: 'string', maxLength: 500 },
-  isPrimary: { type: 'boolean' },
+  tag: { type: 'string', maxLength: 100, nullable: true },
+  description: { type: 'string', maxLength: 500, nullable: true },
+  is_primary: { type: 'boolean' },
+  created_at: { type: 'string', format: 'date-time' },
+  image_url: { type: 'string', nullable: true, description: 'Signed URL; null when signing failed (GET only).' },
+  image_url_error: { type: 'boolean', description: 'true when image_url could not be signed (GET only).' },
 });
 const imageWarnings = { type: 'array', items: str, description: 'Stable warning codes.' };
 const clonedVoice = { ...anyObject, description: 'Cloned voice record.' };
@@ -379,11 +386,11 @@ export const operationSchemas = {
     request: object(
       {
         file: { type: 'string', format: 'binary', description: 'Reference audio.' },
-        consent: { type: 'string', description: 'Voice cloning consent, required.' },
+        consent: { type: 'string', enum: ['true'], description: 'Voice cloning consent; must be "true".' },
         language: { type: 'string', description: 'English only.' },
         denoise: { type: 'string', enum: ['true', 'false'] },
       },
-      ['file', 'consent', 'language'],
+      ['file', 'consent', 'language', 'denoise'],
     ),
     response: success({ voice: clonedVoice }),
   },

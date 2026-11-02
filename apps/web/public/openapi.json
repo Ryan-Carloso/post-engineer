@@ -698,14 +698,29 @@
                           },
                           "tag": {
                             "type": "string",
-                            "maxLength": 100
+                            "maxLength": 100,
+                            "nullable": true
                           },
                           "description": {
                             "type": "string",
-                            "maxLength": 500
+                            "maxLength": 500,
+                            "nullable": true
                           },
-                          "isPrimary": {
+                          "is_primary": {
                             "type": "boolean"
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "image_url": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Signed URL; null when signing failed (GET only)."
+                          },
+                          "image_url_error": {
+                            "type": "boolean",
+                            "description": "true when image_url could not be signed (GET only)."
                           }
                         }
                       }
@@ -803,14 +818,29 @@
                         },
                         "tag": {
                           "type": "string",
-                          "maxLength": 100
+                          "maxLength": 100,
+                          "nullable": true
                         },
                         "description": {
                           "type": "string",
-                          "maxLength": 500
+                          "maxLength": 500,
+                          "nullable": true
                         },
-                        "isPrimary": {
+                        "is_primary": {
                           "type": "boolean"
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "image_url": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Signed URL; null when signing failed (GET only)."
+                        },
+                        "image_url_error": {
+                          "type": "boolean",
+                          "description": "true when image_url could not be signed (GET only)."
                         }
                       }
                     },
@@ -1027,14 +1057,29 @@
                         },
                         "tag": {
                           "type": "string",
-                          "maxLength": 100
+                          "maxLength": 100,
+                          "nullable": true
                         },
                         "description": {
                           "type": "string",
-                          "maxLength": 500
+                          "maxLength": 500,
+                          "nullable": true
                         },
-                        "isPrimary": {
+                        "is_primary": {
                           "type": "boolean"
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "image_url": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Signed URL; null when signing failed (GET only)."
+                        },
+                        "image_url_error": {
+                          "type": "boolean",
+                          "description": "true when image_url could not be signed (GET only)."
                         }
                       },
                       "nullable": true
@@ -2463,7 +2508,10 @@
                   },
                   "consent": {
                     "type": "string",
-                    "description": "Voice cloning consent, required."
+                    "enum": [
+                      "true"
+                    ],
+                    "description": "Voice cloning consent; must be \"true\"."
                   },
                   "language": {
                     "type": "string",
@@ -2480,7 +2528,8 @@
                 "required": [
                   "file",
                   "consent",
-                  "language"
+                  "language",
+                  "denoise"
                 ]
               }
             }
@@ -4436,7 +4485,8 @@
                           "startAt",
                           "times",
                           "timezone"
-                        ]
+                        ],
+                        "description": "Required when mode is 'scheduled' (the default); forbidden when mode is 'asap'."
                       },
                       "timezone": {
                         "type": "string",
@@ -4503,7 +4553,10 @@
                       "niche": {
                         "type": "string"
                       }
-                    }
+                    },
+                    "required": [
+                      "segments"
+                    ]
                   },
                   "idempotencyKey": {
                     "type": "string"
@@ -4511,7 +4564,8 @@
                 },
                 "required": [
                   "title",
-                  "publishing"
+                  "publishing",
+                  "options"
                 ]
               }
             }
