@@ -84,6 +84,7 @@ function visitPersona(path: string): void {
 // Fill a valid create form: name + character + voice.
 function fillValidForm(): void {
   cy.get('#persona-name').type('Maya E2E');
+  cy.contains('[role="tab"]', 'Escolha um personagem').click();
   cy.get('button[aria-label="Escolha um personagem 1"]').click();
   cy.pickHouseVoice('en us male 01');
 }
@@ -120,7 +121,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
 
     cy.contains('[role="tab"]', 'Envie sua foto').click();
     cy.contains('button', 'Enviar foto').should('be.visible');
-    cy.get('input[type="file"][accept="image/jpeg,image/png"]').selectFile(
+    cy.get('input[type="file"][multiple]').selectFile(
       { contents: Cypress.Buffer.from('fake image bytes'), fileName: 'foto.png', mimeType: 'image/png' },
       { force: true },
     );
@@ -171,7 +172,7 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
     // Photo upload satisfies the avatar gate without relying on the character
     // carousel (off-screen slides flake in CI viewports).
     cy.contains('[role="tab"]', 'Envie sua foto').click();
-    cy.get('input[type="file"][accept="image/jpeg,image/png"]').selectFile(
+    cy.get('input[type="file"][multiple]').selectFile(
       { contents: Cypress.Buffer.from('fake image bytes'), fileName: 'foto.png', mimeType: 'image/png' },
       { force: true },
     );

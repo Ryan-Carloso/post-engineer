@@ -1435,6 +1435,79 @@ describe('app/(main)/persona/page — seletor de foto', () => {
     expect(screen.getByRole('alert').textContent).toContain('persona.libraryFilesRejected');
   });
 
+  it('com exatamente 10 fotos não avisa limite e desabilita o botão de adicionar', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<PersonaPage />, { wrapper: createWrapper() });
+
+    const files = Array.from({ length: 10 }, (_, i) => new File(['x'], `f${i}.png`, { type: 'image/png' }));
+    await user.upload(fileInput(container), files);
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('button', { name: 'persona.photoUpload' })).toBeDisabled();
+  });
+
+  it('com 9 fotos, escolher mais 2 avisa limite e mantém só 10', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await user.upload(
+      fileInput(container),
+      Array.from({ length: 9 }, (_, i) => new File(['x'], `a${i}.png`, { type: 'image/png' })),
+    );
+    expect(screen.getByRole('button', { name: 'persona.photoUpload' })).toBeEnabled();
+    await user.upload(
+      fileInput(container),
+      Array.from({ length: 2 }, (_, i) => new File(['x'], `b${i}.png`, { type: 'image/png' })),
+    );
+
+    expect(1 + usePersonaStore.getState().extraPhotos.length).toBe(10);
+    expect(screen.getByRole('alert').textContent).toContain('persona.libraryLimitReached');
+  });
+
+  it('remover uma foto do meio mantém a principal', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await user.upload(fileInput(container), [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+      new File(['c'], 'c.png', { type: 'image/png' }),
+    ]);
+    await user.click(screen.getAllByRole('button', { name: 'persona.libraryRemove' })[1]);
+
+    expect(usePersonaStore.getState().photo?.name).toBe('a.png');
+    expect(usePersonaStore.getState().extraPhotos.map((file) => file.name)).toEqual(['c.png']);
+  });
+
+  it('em edição, mistura de válidas e inválidas envia só as válidas e avisa das puladas', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUploadPersonaImageMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    mockEditMode({ ...EDIT_PERSONA_FULL, avatarUrl: undefined, photoUrl: 'https://abc.supabase.co/p.png' });
+    const { container } = render(<PersonaPage />, { wrapper: createWrapper() });
+
+    fireEvent.change(fileInput(container), {
+      target: {
+        files: [new File(['x'], 'ok.png', { type: 'image/png' }), new File(['x'], 'bad.gif', { type: 'image/gif' })],
+      },
+    });
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(mutateAsync).toHaveBeenCalledWith({ file: expect.objectContaining({ name: 'ok.png' }) });
+    expect(screen.getByRole('alert').textContent).toContain('persona.libraryFilesRejected');
+  });
+
+  it('em edição, upload que lança erro mostra erro localizado', async () => {
+    const user = userEvent.setup();
+    const mutateAsync = vi.fn().mockRejectedValue(new Error('network'));
+    vi.mocked(useUploadPersonaImageMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    mockEditMode({ ...EDIT_PERSONA_FULL, avatarUrl: undefined, photoUrl: 'https://abc.supabase.co/p.png' });
+    const { container } = render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await user.upload(fileInput(container), new File(['a'], 'a.png', { type: 'image/png' }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe('persona.libraryUploadError');
+  });
+
   it('seleção cancelada mantém as fotos já escolhidas', async () => {
     const user = userEvent.setup();
     const { container } = render(<PersonaPage />, { wrapper: createWrapper() });

@@ -198,6 +198,7 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
 
     // Real UI: name, a character from the carousel, a house voice.
     cy.get('#persona-name').type(PERSONA.name);
+    cy.contains('[role="tab"]', 'Escolha um personagem').click();
     cy.get('button[aria-label="Escolha um personagem 1"]').click();
     cy.pickHouseVoice('en us male 01');
 

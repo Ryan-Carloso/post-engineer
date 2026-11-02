@@ -246,6 +246,21 @@ describe('usePersonaStore', () => {
       expect(usePersonaStore.getState().extraPhotos).toEqual([]);
     });
 
+    it('addPhotos at exactly the cap keeps all 10, removePhoto of a middle index keeps the primary', () => {
+      usePersonaStore.getState().addPhotos(Array.from({ length: 10 }, (_, i) => png(`${i}.png`)));
+      expect(1 + usePersonaStore.getState().extraPhotos.length).toBe(10);
+      usePersonaStore.getState().removePhoto(3);
+      const state = usePersonaStore.getState();
+      expect(state.photo?.name).toBe('0.png');
+      expect(state.extraPhotos.map((file) => file.name)).not.toContain('3.png');
+      expect(1 + state.extraPhotos.length).toBe(9);
+    });
+
+    it('buildPersonaFormData sends no images without a photo', () => {
+      usePersonaStore.getState().setAvatarUrl('/caracter-samples/x.png');
+      expect(usePersonaStore.getState().buildPersonaFormData().getAll('images')).toEqual([]);
+    });
+
     it('buildPersonaFormData sends photo plus images and resetForm clears them', () => {
       usePersonaStore.getState().addPhotos([png('a.png'), png('b.png'), png('c.png')]);
       const formData = usePersonaStore.getState().buildPersonaFormData();
