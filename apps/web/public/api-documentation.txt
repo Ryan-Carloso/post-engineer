@@ -25,8 +25,8 @@ Send the key on every request, either way:
   Authorization: Bearer pe_live_xxxxxxxx
   X-API-Key: pe_live_xxxxxxxx
 
-A key can be limited to specific personas. A missing or invalid key returns
-401 { "success": false, "error": "Invalid API key." }.
+A key can be limited to specific personas. A missing key returns 401
+"Authentication required."; an invalid key returns 401 "Invalid API key.".
 
 ================================================================================
 RESPONSES AND ERRORS
@@ -36,8 +36,10 @@ RESPONSES AND ERRORS
 - Engine-backed routes (video generation, task status) wrap the payload as
   { "status", "message", "body" }. The payload is `body`, never `data`.
 - 400 invalid, over-length or conflicting input (nothing is truncated or
-  coerced silently). 401 bad key. 404 unknown id. 429 rate limited: retry with
-  backoff. 5xx transient: retry with backoff.
+  coerced silently). 401 bad key. 402 not enough tokens. 404 unknown id.
+  409 conflict (e.g. the persona already has an active schedule). 410 gone:
+  terminal, stop polling. 429 rate limited: retry with backoff. 5xx
+  transient: retry with backoff. Each operation's statuses are in the spec.
 - Upload, destructive and fan-out routes are rate limited per caller.
 
 ================================================================================
@@ -55,6 +57,9 @@ Check the balance first: GET /api/billing/tokens.
 4. GET  /api/persona/video-status/{taskId}   task state
    state: -1 failed, 1 complete, 3 queued, 4 processing. Only -1 and 1 are
    terminal. HTTP 200 does not mean the job is alive: read `state`.
+   410 Gone is terminal too (the engine lost the task): stop polling and
+   read GET /api/schedule/slots/{slotId} to see if the video was delivered
+   or failed and refunded.
 5. DELETE /api/persona/video-task/{taskId}   cancel a task
 
 Jobs stuck for several days are refunded automatically.
@@ -109,8 +114,8 @@ GET    /api/billing/tokens                                    get token balance
 GET    /api/billing/transactions                              list token transactions
 
 Not in this list: session-only routes (OAuth callbacks, API key management,
-billing checkout/webhook, logout) and public system routes
-(GET /api/health, GET /api/version).
+billing checkout/webhook, logout, GET /api/health) and the public
+GET /api/version.
 
 ================================================================================
 SOCIAL ACCOUNTS
