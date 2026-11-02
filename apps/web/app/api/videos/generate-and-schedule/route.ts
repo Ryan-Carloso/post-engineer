@@ -32,6 +32,8 @@ import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber } from '@/lib/tokens';
 import { buildSlotRows } from './slot-rows';
 import { validateOptions } from './options-validation';
+import { validateProviders, type Provider } from './providers-validation';
+import { checkFullLipsyncNarration } from './full-lipsync-preflight';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
 import { validateSegmentsRequest } from './segments-validation';
 import { rejectScriptPromptKeys, rejectTopicsKey, resolveTitle } from './request-title';
@@ -56,7 +58,6 @@ import {
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
 import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { resolveIdempotency } from '@/lib/idempotency';
-import { VALID_SCHEDULE_PROVIDERS } from '@/app/api/schedule/route';
 import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
 import { VOICE_FALLBACK_WARNING_CODE } from '@/lib/voice-fallback';
@@ -143,7 +144,6 @@ const BodySchema = z.object({
 });
 
 type ParsedBody = z.infer<typeof BodySchema>;
-type Provider = (typeof VALID_SCHEDULE_PROVIDERS)[number];
 
 interface SlotResult {
   slotId: string;
@@ -162,23 +162,6 @@ interface SlotResult {
 //---------------
 // Validation helpers — all run BEFORE any token is charged.
 //---------------
-
-function validateProviders(rawProviders: string[]): Provider[] | NextResponse {
-  const providers = [...new Set(rawProviders.map((p) => p.trim()).filter((p) => p.length > 0))];
-  if (providers.length === 0) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Select at least one provider.', 'publishing.providers');
-  }
-  for (const provider of providers) {
-    if (!(VALID_SCHEDULE_PROVIDERS as ReadonlyArray<string>).includes(provider)) {
-      return validationFailed(
-        ERROR_CODES.VALIDATION_FAILED,
-        `Invalid provider: "${provider}". Use one of ${VALID_SCHEDULE_PROVIDERS.join(', ')}.`,
-        'publishing.providers',
-      );
-    }
-  }
-  return providers as Provider[];
-}
 
 function validateSlots(
   startAt: string,
@@ -549,6 +532,20 @@ async function postHandler(request: Request): Promise<NextResponse> {
     if (!imageCheck.ok) {
       return validationFailed(ERROR_CODES.VALIDATION_FAILED, imageCheck.error, 'options.imageId', imageCheck.status);
     }
+  }
+
+  // Full lip-sync preflight: measure the real narration BEFORE any charge,
+  // so >60s is rejected here (400) instead of charged then refunded.
+  // Runs after all other pre-charge validation, before cost/spend below.
+  if (validatedOptions.fullLipsync === true) {
+    const preflight = await checkFullLipsyncNarration({
+      userId,
+      script: segmentsScript,
+      language: prep.language,
+      voiceId: prep.voiceIdValue,
+      voiceAudioUrl: prep.voiceAudioUrl,
+    });
+    if (preflight instanceof NextResponse) return preflight;
   }
 
   // 6. Cost for the single video, computed BEFORE the charge.

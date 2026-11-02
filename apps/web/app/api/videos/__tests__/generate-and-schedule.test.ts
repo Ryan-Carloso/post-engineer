@@ -10,7 +10,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextResponse } from 'next/server';
 import { findRepoRoot } from '@/test/repo-root';
 
-vi.mock('@/lib/request-auth', () => ({ requireSupabaseSession: vi.fn() }));
+vi.mock('@/lib/request-auth', () => ({
+  requireSupabaseSession: vi.fn(),
+  // Mirrors the real helper (Bearer engine secret + user id) so the
+  // full lip-sync preflight's engine call is testable through the route.
+  engineAuthHeaders: (userId: string) => ({
+    Authorization: 'Bearer engine-secret',
+    'x-user-id': userId,
+  }),
+}));
 
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn() }));
 
@@ -789,11 +797,29 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('sends full_lipsync to the engine for an opt-in full-mode post', async () => {
-      const res = await post(baseBody({ options: { fullLipsync: true } }));
-      expect(res.status).toBe(200);
-      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      expect(payload.full_lipsync).toBe(true);
-      expect(payload.lipsync_enabled).toBe(true);
+      // The preflight runs before charging: stub a fitting narration so
+      // the request proceeds past it to dispatch.
+      vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+      vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () =>
+          new Response(JSON.stringify({ status: 200, body: { audio_duration_seconds: 51 } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+        ),
+      );
+      try {
+        const res = await post(baseBody({ options: { fullLipsync: true } }));
+        expect(res.status).toBe(200);
+        const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+        expect(payload.full_lipsync).toBe(true);
+        expect(payload.lipsync_enabled).toBe(true);
+      } finally {
+        vi.unstubAllGlobals();
+        vi.unstubAllEnvs();
+      }
     });
 
     it('rejects fullLipsync on faceless requests', async () => {
@@ -2814,5 +2840,61 @@ describe('segments-only contract (Phase 4)', () => {
     const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
     expect(payload.video_subject).toBe('Porto trip');
     expect(payload.video_script).toBe(`${hook}\n\n${bodyText}\n\n${cta}`);
+  });
+});
+
+describe('full lip-sync preflight — pre-charge rejection', () => {
+  function stubPreflight(duration: number): void {
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ status: 200, body: { audio_duration_seconds: duration } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    );
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it('rejects a 61s full-mode narration with 400 and charges nothing', async () => {
+    stubPreflight(61);
+    const res = await post(baseBody({ options: { fullLipsync: true } }));
+    const json = await res.json();
+    expect(res.status).toBe(400);
+    expect(String(json.field)).toContain('options.fullLipsync');
+    // The charge is the proof, not just the error: no spend, no schedule
+    // row, no engine dispatch happened for the rejected request.
+    expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    expect(rpcCalls.filter((c) => c.name.startsWith('refund'))).toHaveLength(0);
+    expect(inserts['schedules']).toBeUndefined();
+    expect(vi.mocked(startEngineVideoTask)).not.toHaveBeenCalled();
+  });
+
+  it('charges and dispatches a full-mode narration at exactly 60s', async () => {
+    stubPreflight(60);
+    const res = await post(baseBody({ options: { fullLipsync: true } }));
+    const json = await res.json();
+    expect(res.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
+    expect(vi.mocked(startEngineVideoTask)).toHaveBeenCalledTimes(1);
+    const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+    expect(payload.full_lipsync).toBe(true);
+  });
+
+  it('skips the preflight entirely for non-full videos', async () => {
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    const res = await post(baseBody());
+    expect(res.status).toBe(200);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
   });
 });
