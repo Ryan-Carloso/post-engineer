@@ -60,6 +60,27 @@ class PlanWindowsTests(unittest.TestCase):
         self.assertEqual(full_lipsync.MAX_FULL_LIPSYNC_SECONDS, 60.0)
         self.assertEqual(full_lipsync.MAX_FULL_LIPSYNC_WINDOWS, 5)
 
+    def test_cue_overflow_falls_back_to_even_split(self):
+        # Review example: 58s with cues every 5s greedily cuts six
+        # 10s windows, but five even windows fit the 60s ceiling, so
+        # preflight-approved narration must not fail here after charge.
+        cues = [float(s) for s in range(5, 56, 5)]
+        windows = full_lipsync.plan_windows(58.0, cues)
+        self.assertEqual(len(windows), 5)
+        self.assertAlmostEqual(sum(d for _s, d in windows), 58.0)
+        for _start, duration in windows:
+            self.assertLessEqual(duration, 12.0)
+            self.assertGreaterEqual(duration, 3.72)
+
+    def test_cue_split_preferred_when_it_fits(self):
+        # 50s with cues every 5s cuts exactly five 10s windows, so the
+        # cue-aligned split stays, no even-split fallback is needed.
+        cues = [float(s) for s in range(5, 50, 5)]
+        self.assertEqual(
+            full_lipsync.plan_windows(50.0, cues),
+            [(0.0, 10.0), (10.0, 10.0), (20.0, 10.0), (30.0, 10.0), (40.0, 10.0)],
+        )
+
     def test_short_tail_merges_backwards(self):
         # 25s with a cue at 24s would leave a 1s tail; it merges instead.
         windows = full_lipsync.plan_windows(25.0, [12.0, 24.0])
@@ -174,34 +195,47 @@ class RenderTests(unittest.TestCase):
 
     def test_production_concat_failure_raises_full_lipsync_error(self):
         # The production runner (run_ffmpeg=None) must convert a failed
-        # ffmpeg run into FullLipSyncError with the stderr message — not
-        # leak subprocess.CalledProcessError. The fake mirrors real
+        # ffmpeg run into FullLipSyncError — not leak
+        # subprocess.CalledProcessError. The fake mirrors real
         # subprocess.run: it raises CalledProcessError when check=True
         # (the old code) and returns a failed result when check=False
         # (the fix), so this test fails on the old code and passes on
         # the new one — a plain return-value mock would pass on both.
+        # The raised message must carry NO stderr fragment and NO
+        # absolute path: it reaches the task error and Discord via
+        # safe_reason, which scrubs secrets but not local paths. The
+        # scrubbed detail goes to the log only.
         def fake_run(argv, **kwargs):
             if kwargs.get("check"):
                 raise subprocess.CalledProcessError(
                     1, argv, stderr="ffmpeg boom"
                 )
-            return MagicMock(returncode=1, stderr="ffmpeg boom")
+            return MagicMock(
+                returncode=1,
+                stderr="/app/tasks/t1/full-lipsync-clip-0.mp4: ffmpeg boom",
+            )
 
         calls: list[float] = []
         with patch.object(full_lipsync.subprocess, "run", side_effect=fake_run):
-            with self.assertRaises(FullLipSyncError) as caught:
-                full_lipsync.render_full_lipsync(
-                    task_id="t1",
-                    params=_params(),
-                    image_path="/tmp/photo.png",
-                    audio_file="/tmp/audio.mp3",
-                    audio_seconds=10.0,
-                    subtitles=[],
-                    output_path="/tmp/full-fail.mp4",
-                    generate_intro=self._fake_generate(calls),
-                    trim_audio=lambda *args, **kwargs: None,
-                )
-        self.assertIn("ffmpeg boom", str(caught.exception))
+            with self.assertLogs(full_lipsync.__name__, level="ERROR") as logs:
+                with self.assertRaises(FullLipSyncError) as caught:
+                    full_lipsync.render_full_lipsync(
+                        task_id="t1",
+                        params=_params(),
+                        image_path="/tmp/photo.png",
+                        audio_file="/tmp/audio.mp3",
+                        audio_seconds=10.0,
+                        subtitles=[],
+                        output_path="/tmp/full-fail.mp4",
+                        generate_intro=self._fake_generate(calls),
+                        trim_audio=lambda *args, **kwargs: None,
+                    )
+        self.assertEqual(str(caught.exception), "full lip-sync concat failed")
+        self.assertNotIn("/app/tasks", str(caught.exception))
+        self.assertNotIn("ffmpeg boom", str(caught.exception))
+        log_text = "\n".join(logs.output)
+        self.assertNotIn("/app/tasks", log_text)
+        self.assertIn("full-lipsync-clip-0.mp4", log_text)
         self.assertEqual(calls, [10.0])
 
     def test_window_failure_propagates_never_degrades(self):

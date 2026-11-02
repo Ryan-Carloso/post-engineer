@@ -23,6 +23,7 @@ and ship the b-roll video instead.
 from __future__ import annotations
 
 import base64
+import logging
 import math
 import re
 import subprocess
@@ -32,8 +33,10 @@ from typing import Callable, Sequence
 from app.config import config
 from app.models.schema import VideoParams
 from app.services import longcat, persona_image
+from app.services.analytics import scrub_error_text
 from app.utils import ssrf, utils
 
+logger = logging.getLogger(__name__)
 # Per-window cap, in seconds. Must stay equal to task.py
 # PERSONA_LIPSYNC_MAX_SECONDS; a test pins the two literals together.
 FULL_LIPSYNC_MAX_WINDOW_SECONDS: float = 12.0
@@ -89,7 +92,11 @@ def plan_windows(
     Each window is at most FULL_LIPSYNC_MAX_WINDOW_SECONDS and ends on a
     subtitle cue start when one falls inside the window (at least 1s after
     the window start, so no window is a sliver). Without usable cues the
-    split is even 12s chunks. A trailing window shorter than the smallest
+    split is even 12s chunks. Cue alignment is a preference: when it
+    would need more than MAX_FULL_LIPSYNC_WINDOWS windows for audio
+    within the 60s ceiling, the split falls back to an even split, so
+    preflight-approved narration never fails here after charge. A
+    trailing window shorter than the smallest
     LongCat clip is merged backwards into the previous window when that
     keeps both windows inside the cap; a single short video keeps its one
     window and LongCat pads it, as the intro path already does.
@@ -118,10 +125,10 @@ def plan_windows(
         windows.append((current, end - current))
         current = end
     if len(windows) > MAX_FULL_LIPSYNC_WINDOWS:
-        raise FullLipSyncError(
-            f"full lip-sync needs {len(windows)} windows, over the "
-            f"{MAX_FULL_LIPSYNC_WINDOWS} window cap"
-        )
+        # Cue cuts can overshoot the cap within 60s (58s, 5s cues -> six
+        # 10s windows); an even split always fits (>= 6s over 12s).
+        count = math.ceil(audio_seconds / FULL_LIPSYNC_MAX_WINDOW_SECONDS)
+        windows = [(i * audio_seconds / count, audio_seconds / count) for i in range(count)]
     for start, duration in windows:
         if duration > FULL_LIPSYNC_MAX_WINDOW_SECONDS + 1e-9:
             raise FullLipSyncError(
@@ -322,5 +329,8 @@ def render_full_lipsync(
     status = getattr(result, "returncode", 0)
     if status != 0:
         stderr = getattr(result, "stderr", "") or ""
-        raise FullLipSyncError(f"full lip-sync concat failed: {stderr.strip()[-500:]}")
+        # Raised message reaches task error/Discord via safe_reason
+        # (secrets only), so stderr goes to logs only, scrubbed.
+        logger.error("full lip-sync concat failed: %s", scrub_error_text(stderr))
+        raise FullLipSyncError("full lip-sync concat failed")
     return output_path, total_cost_usd(costs), job_ids
