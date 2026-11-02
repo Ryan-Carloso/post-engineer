@@ -115,13 +115,18 @@ jobs:
           CHANGED="$(git diff --name-only HEAD~1 HEAD -- apps/mcp/ || true)"
           CODE_CHANGED=no
           PKG_CHANGED=no
-          # server.json only mirrors the version, so a bump that touches both
-          # files is still a bump-only merge.
-          if printf '%s\n' "$CHANGED" | grep -v -e '^apps/mcp/package.json$' -e '^apps/mcp/server.json$' | grep -q .; then
-            CODE_CHANGED=yes
-          fi
+          # A version bump rewrites package.json AND server.json, so a merge
+          # that changes package.json plus server.json is still bump-only.
+          # server.json also carries registry metadata (name, description,
+          # env vars): a merge that changes it WITHOUT package.json is a real
+          # change and must release.
           if printf '%s\n' "$CHANGED" | grep -qx 'apps/mcp/package.json'; then
             PKG_CHANGED=yes
+          fi
+          if printf '%s\n' "$CHANGED" | grep -v -e '^apps/mcp/package.json$' -e '^apps/mcp/server.json$' | grep -q .; then
+            CODE_CHANGED=yes
+          elif [ "$PKG_CHANGED" = "no" ] && printf '%s\n' "$CHANGED" | grep -qx 'apps/mcp/server.json'; then
+            CODE_CHANGED=yes
           fi
 
           if [ "$CODE_CHANGED" = "no" ] && [ "$PKG_CHANGED" = "no" ]; then

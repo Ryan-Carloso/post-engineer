@@ -69,6 +69,14 @@ describe('release workflows keep server.json in step', () => {
     expect(autoBump.includes('git add apps/mcp/package.json apps/mcp/server.json')).toBe(true);
   });
 
+  it('auto-release still releases a merge that changes server.json without package.json', () => {
+    expect(
+      autoBump.includes(
+        `elif [ "$PKG_CHANGED" = "no" ] && printf '%s\\n' "$CHANGED" | grep -qx 'apps/mcp/server.json'; then`,
+      ),
+    ).toBe(true);
+  });
+
   it('release publishes to the MCP Registry after npm, with OIDC login', () => {
     const npmPublish = release.indexOf('npm publish --provenance --access public');
     const registryPublish = release.indexOf('./mcp-publisher publish');
