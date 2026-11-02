@@ -33,6 +33,7 @@ import requests
 from app.config import config
 from app.models.schema import LipSyncQuality
 from app.services.analytics import scrub_error_text, track_ai_request
+from app.services.longcat_cost import ModalJobCost, parse_modal_job_cost
 
 
 class LongCatError(RuntimeError):
@@ -280,22 +281,20 @@ def trim_audio(
         raise LongCatError(detail[-500:])
 
 
-def generate_intro(
+def _generate_intro_tracked(
     image_path: str,
     audio_path: str,
     quality: LipSyncQuality,
     output_path: str,
-    request: Request = requests.request,
-    duration_seconds: float | None = None,
-) -> tuple[str, float | None, str]:
-    """Generate and download the persona intro using a fixed quality preset.
+    request: Request,
+    duration_seconds: float | None,
+) -> tuple[str, float | None, str, ModalJobCost | None]:
+    """Generate an intro and track one ai_request event, with full cost.
 
-    Returns (output_path, cost_usd, job_id): the Modal GPU cost in USD
-    reported on the completed job (None when the job reports no cost) and
-    the Modal job id. Tracked as one ai_request event (backend=modal): the
-    Modal job id, duration, cost when reported, and sanitized error when it
-    fails. The job id is captured even when the job fails after submit, so
-    post-submit failures stay correlatable in PostHog.
+    Returns (output_path, cost_usd, job_id, job_cost): job_cost is the
+    container snapshot from the done payload, or None when the impl did
+    not report one. The job id is captured even when the job fails after
+    submit, so post-submit failures stay correlatable in PostHog.
     """
     # Validate the quality up front so an unsupported preset fails before the
     # audio is trimmed, rather than after a paid submit. The resolution itself
@@ -307,7 +306,7 @@ def generate_intro(
     # failure during polling/download still reports the job_id.
     job_ids: list[str] = []
     try:
-        output_path, job_id, cost_usd = _generate_intro_impl(
+        output_path, job_id, cost_usd, job_cost = _generate_intro_impl(
             image_path,
             audio_path,
             quality,
@@ -347,7 +346,48 @@ def generate_intro(
         # the full pipeline finishing.
         success_props["cost_usd"] = cost_usd
     track_ai_request(success_props)
+    return output_path, cost_usd, job_id, job_cost
+
+
+def generate_intro(
+    image_path: str,
+    audio_path: str,
+    quality: LipSyncQuality,
+    output_path: str,
+    request: Request = requests.request,
+    duration_seconds: float | None = None,
+) -> tuple[str, float | None, str]:
+    """Generate and download the persona intro using a fixed quality preset.
+
+    Returns (output_path, cost_usd, job_id): the Modal GPU cost in USD
+    reported on the completed job (None when the job reports no cost) and
+    the Modal job id. Kept as the 3-tuple callers already unpack; use
+    generate_intro_with_container when the container snapshot is needed.
+    """
+    output_path, cost_usd, job_id, _ = _generate_intro_tracked(
+        image_path, audio_path, quality, output_path, request, duration_seconds
+    )
     return output_path, cost_usd, job_id
+
+
+def generate_intro_with_container(
+    image_path: str,
+    audio_path: str,
+    quality: LipSyncQuality,
+    output_path: str,
+    request: Request = requests.request,
+    duration_seconds: float | None = None,
+) -> tuple[str, float | None, str, ModalJobCost | None]:
+    """Generate an intro and return its full container cost snapshot.
+
+    Same call, tracking, and failure behaviour as generate_intro, plus
+    the container snapshot (container_cost_usd, container_id, scaledown,
+    jobs served) the engine needs to amortise shared container spend
+    across the videos one container served.
+    """
+    return _generate_intro_tracked(
+        image_path, audio_path, quality, output_path, request, duration_seconds
+    )
 
 
 def _generate_intro_impl(
@@ -358,13 +398,15 @@ def _generate_intro_impl(
     request: Request = requests.request,
     duration_seconds: float | None = None,
     job_id_holder: list[str] | None = None,
-) -> tuple[str, str, float | None]:
+) -> tuple[str, str, float | None, ModalJobCost | None]:
     """Submit/poll/download the intro video.
 
-    Returns (output_path, job_id, cost_usd): the Modal GPU cost in USD from
-    the completed job's status payload, or None when it reports none.
-    Appends the submitted job_id to job_id_holder as soon as the submit
-    succeeds, so callers can report it even when polling/download fails.
+    Returns (output_path, job_id, cost_usd, job_cost): the Modal GPU cost
+    in USD from the completed job's status payload, or None when it
+    reports none, plus the full container snapshot (or None when the
+    done payload carried none). Appends the submitted job_id to
+    job_id_holder as soon as the submit succeeds, so callers can report
+    it even when polling/download fails.
     """
     submit_url = _url("submit_url")
     status_url = _url("status_url")
@@ -423,6 +465,7 @@ def _generate_intro_impl(
 
     deadline = time.monotonic() + timeout_seconds
     cost_usd: float | None = None
+    job_cost: ModalJobCost | None = None
     while time.monotonic() < deadline:
         response = request(
             "POST", status_url, data={"job_id": job_id}, headers=headers, timeout=60
@@ -432,6 +475,7 @@ def _generate_intro_impl(
         state = status.get("status")
         if state == "done":
             cost_usd = _modal_cost_usd(status)
+            job_cost = parse_modal_job_cost(status)
             break
         if state == "failed":
             error = status.get("error", "unknown error")
@@ -451,4 +495,4 @@ def _generate_intro_impl(
     # between stage retries. Recreate it instead of crashing the task.
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     Path(output_path).write_bytes(response.content)
-    return output_path, job_id, cost_usd
+    return output_path, job_id, cost_usd, job_cost

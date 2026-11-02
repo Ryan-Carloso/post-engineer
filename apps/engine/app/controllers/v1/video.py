@@ -39,11 +39,11 @@ from app.services.language_gate import ensure_english_video_language
 from app.services.upload_filenames import sanitize_upload_filename as _sanitize_upload_filename
 from app.utils import file_security, upload_limits, utils
 
-# Operator-private task fields (cost_usd, cost_missing_reason): persisted
+# Operator-private task fields (cost_usd, cost_missing_reason, total cost): persisted
 # on the task row for server-side PostHog unit economics, but never
 # exposed through the API. The web forwards task bodies to browsers
 # wholesale — strip via _public_task_view on every serializing endpoint.
-PRIVATE_TASK_FIELDS = frozenset({"cost_usd", "cost_missing_reason"})
+PRIVATE_TASK_FIELDS = frozenset({"cost_usd", "cost_missing_reason", "total_cost_usd", "total_cost_label", "container_cost_usd", "container_uptime_s", "container_id", "jobs_served_in_container", "scaledown_cost_usd", "videos_per_container"})
 
 
 def _public_task_view(task: dict[str, object]) -> dict[str, object]:

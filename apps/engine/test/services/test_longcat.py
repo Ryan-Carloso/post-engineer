@@ -726,5 +726,58 @@ class TestAudioDuration(unittest.TestCase):
                     longcat.audio_duration_seconds(audio_path)
 
 
+class TestGenerateIntroWithContainer(unittest.TestCase):
+    """generate_intro_with_container returns the container snapshot too."""
+
+    def _run_with_status(self, status_body: bytes):
+        queue = [
+            SUBMIT_OK,
+            _response(200, status_body),
+            DOWNLOAD_OK,
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with _inputs(temp_dir) as (image, audio, output):
+                with _stubs():
+                    return longcat.generate_intro_with_container(
+                        image, audio, LipSyncQuality.ok, output,
+                        request=lambda *a, **k: queue.pop(0),
+                    )
+
+    def test_snapshot_fields_from_done_payload(self):
+        _, cost_usd, _, job_cost = self._run_with_status(
+            b'{"status":"done","cost_usd":0.63,"container_cost_usd":2.5,'
+            b'"container_uptime_s":1982.0,"container_id":"c-1",'
+            b'"jobs_served_in_container":3,"scaledown_cost_usd":0.0757}'
+        )
+        self.assertEqual(cost_usd, 0.63)
+        self.assertIsNotNone(job_cost)
+        assert job_cost is not None
+        self.assertEqual(job_cost.container_cost_usd, 2.5)
+        self.assertEqual(job_cost.container_id, "c-1")
+        self.assertEqual(job_cost.jobs_served_in_container, 3)
+        self.assertEqual(job_cost.scaledown_cost_usd, 0.0757)
+
+    def test_old_backend_without_snapshot_still_returns_tuple(self):
+        _, cost_usd, _, job_cost = self._run_with_status(
+            b'{"status":"done","cost_usd":0.63}'
+        )
+        self.assertEqual(cost_usd, 0.63)
+        self.assertIsNotNone(job_cost)
+        assert job_cost is not None
+        self.assertIsNone(job_cost.container_id)
+        self.assertIsNone(job_cost.container_cost_usd)
+
+    def test_generate_intro_keeps_exact_three_tuple(self):
+        queue = [SUBMIT_OK, STATUS_DONE, DOWNLOAD_OK]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with _inputs(temp_dir) as (image, audio, output):
+                with _stubs():
+                    result = longcat.generate_intro(
+                        image, audio, LipSyncQuality.ok, output,
+                        request=lambda *a, **k: queue.pop(0),
+                    )
+        self.assertEqual(len(result), 3)
+
+
 if __name__ == "__main__":
     unittest.main()

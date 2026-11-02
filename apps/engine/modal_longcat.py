@@ -71,6 +71,7 @@ from fastapi.responses import JSONResponse, Response
 # stays HERE so `modal deploy modal_longcat.py` and
 # `modal run modal_longcat.py::download_weights` keep resolving against this
 # module.
+from modal_longcat_cost import TRACKER, scaledown_cost_usd
 from modal_longcat_gpu import (
     AVATAR_WEIGHTS_DIR,
     BASE_WEIGHTS_DIR,
@@ -218,6 +219,7 @@ LONGCAT_API_IMAGE = (
     # modules must exist in every image that hosts this one -- including the
     # slim API image, whose endpoints never call the renderer.
     .add_local_file(_HERE / "modal_longcat_gpu.py", "/root/modal_longcat_gpu.py", copy=True)
+    .add_local_file(_HERE / "modal_longcat_cost.py", "/root/modal_longcat_cost.py", copy=True)
     # _MODAL_APP_NAME is read at module scope, which Modal evaluates when it
     # hydrates this module INSIDE the container -- a deploy-time shell variable
     # is not visible there, so every endpoint crash-looped with
@@ -299,7 +301,8 @@ class GenerateAvatar:
         container serves.
 
         The container-to-date spend is still reported, as ``container_uptime_s``
-        / ``container_cost_usd``: with ``max_containers=1`` the amortised view
+        / ``container_cost_usd`` plus ``container_id``, ``jobs_served`` and
+        ``scaledown_cost_usd``: with ``max_containers=1`` the amortised view
         (cold-start weight load, idle hold between jobs) is real money, it just
         is not the per-clip cost.
         """
@@ -347,6 +350,8 @@ class GenerateAvatar:
                     "gpu": active_gpu_name() or GPU_PREFERENCE[0],
                     "cost_usd": round(job_gpu_s * _rate(), 4),
                     "container_cost_usd": round(uptime_s * _rate(), 4),
+                    "container_id": TRACKER.container_id, "jobs_served_in_container": TRACKER.note_job(),
+                    "scaledown_cost_usd": scaledown_cost_usd(_rate()),
                     "progress": 100,
                     "phase": "complete",
                 },

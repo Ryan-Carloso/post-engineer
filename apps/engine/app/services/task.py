@@ -37,7 +37,7 @@ from app.services import task_webhook
 from app.services import user_media
 from app.services.lipsync_active import persona_lipsync_active  # noqa: F401 - re-exported for existing callers
 from app.services.pipeline_stage import PhaseTracker
-from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cost_event_props
+from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cost_event_props, report_from_job_cost
 from app.services.persona_hook import (
     PERSONA_HOOK_MAX_SECONDS,
     PERSONA_HOOK_MIN_SECONDS,
@@ -908,8 +908,8 @@ def generate_final_videos(
         )
         # None: no intro (already reported); the normal video ships.
         if intro is not None:
-            video_for_render, intro_cost_usd, intro_job_id = intro
-            intro_report = IntroCostReport(ran=True, cost_usd=intro_cost_usd, job_id=intro_job_id)
+            video_for_render, intro_cost_usd, intro_job_id, intro_job_cost = intro
+            intro_report = report_from_job_cost(intro_cost_usd, intro_job_id, intro_job_cost)
         # Experimental face-fill: close the video on the persona so weak
         # stock never has to fill the tail. Best-effort — ANY failure
         # (Modal down, unreadable file) degrades to the intro-only video;
@@ -1058,7 +1058,7 @@ def prepare_persona_lipsync_video(
             ) from exc
 
     lipsync_path = path.join(task_dir, f"lipsync-intro-{index}.mp4")
-    _, intro_cost_usd, intro_job_id = longcat.generate_intro(
+    _, intro_cost_usd, intro_job_id, intro_job_cost = longcat.generate_intro_with_container(
         image_path=image_path,
         audio_path=audio_file,
         quality=params.video_quality,
@@ -1074,8 +1074,7 @@ def prepare_persona_lipsync_video(
             duration=hook_duration,
             layout=params.video_layout.value,
         ),
-        intro_cost_usd,
-        intro_job_id,
+        intro_cost_usd, intro_job_id, intro_job_cost,
     )
 
 

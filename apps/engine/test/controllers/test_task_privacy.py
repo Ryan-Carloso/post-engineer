@@ -65,6 +65,34 @@ class TaskPrivacyTests(unittest.TestCase):
         self.assertNotIn("cost_usd", task)
         self.assertNotIn("cost_missing_reason", task)
 
+    def test_public_task_view_strips_total_cost_fields(self):
+        task = {
+            "task_id": "t",
+            "cost_usd": 0.1,
+            "total_cost_usd": 3.2,
+            "total_cost_label": "running",
+            "container_cost_usd": 2.5,
+            "container_uptime_s": 1982.0,
+            "container_id": "c-1",
+            "jobs_served_in_container": 3,
+            "scaledown_cost_usd": 0.0757,
+            "videos_per_container": 1,
+        }
+        view = video_controller._public_task_view(task)
+        for field in (
+            "total_cost_usd",
+            "total_cost_label",
+            "container_cost_usd",
+            "container_uptime_s",
+            "container_id",
+            "jobs_served_in_container",
+            "scaledown_cost_usd",
+            "videos_per_container",
+        ):
+            with self.subTest(field=field):
+                self.assertNotIn(field, view)
+                self.assertIn(field, task)
+
     def test_public_task_view_returns_a_copy(self):
         task = {"task_id": "t", "cost_usd": 0.1, "cost_missing_reason": "no_intro"}
         view = video_controller._public_task_view(task)
