@@ -239,17 +239,37 @@ describe('runActor', () => {
     assert.equal(result.slots[0].error, 'boom [redacted]');
   });
 
-  it('treats 410 Gone as a terminal failure', async () => {
-    const { promise } = runWith(
+  // The web proxy answers the same 410 for a delivered and a failed task;
+  // the slot status is what tells them apart.
+  const gone = () => jsonResponse(410, { success: false, terminal: true, error: 'The video task no longer exists.' });
+  const goneWithSlot = (slotResponse) =>
+    runWith(
       {
         'POST /api/videos/validate-script': validScript(),
         'POST /api/videos/generate-and-schedule': accepted(),
-        'GET /api/persona/video-status/task-1': jsonResponse(410, { success: false, terminal: true, error: 'The video task no longer exists.' }),
+        'GET /api/persona/video-status/task-1': gone(),
+        'GET /api/schedule/slots/slot-1': slotResponse,
       },
       baseInput(),
     );
+
+  it('reports 410 Gone as failed when the slot failed', async () => {
+    const { promise, calls } = goneWithSlot(jsonResponse(200, { success: true, slot: { status: 'failed' } }));
     const result = await promise;
     assert.equal(result.slots[0].videoStatus, 'failed');
+    assert.equal(calls.at(-1).key, 'GET /api/schedule/slots/slot-1');
+  });
+
+  for (const status of ['ready', 'publishing', 'published']) {
+    it(`reports 410 Gone as complete when the slot is ${status} (delivered before the engine lost it)`, async () => {
+      const result = await goneWithSlot(jsonResponse(200, { success: true, slot: { status } })).promise;
+      assert.equal(result.slots[0].videoStatus, 'complete');
+    });
+  }
+
+  it('reports 410 Gone as unknown, never failed, when the slot lookup fails', async () => {
+    const result = await goneWithSlot(jsonResponse(503, { success: false, error: 'busy' })).promise;
+    assert.equal(result.slots[0].videoStatus, 'unknown');
   });
 
   it('retries transient status errors and fails fast on auth errors', async () => {

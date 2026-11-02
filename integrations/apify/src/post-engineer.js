@@ -234,14 +234,30 @@ function taskStateOf(task) {
 
 const isTransient = (status) => status === 429 || status >= 500;
 
-async function waitForTask(ctx, taskId, deadline) {
+// Slot statuses (GET /api/schedule/slots/{id}) that mean the video exists.
+const DELIVERED_SLOT_STATUSES = ['ready', 'publishing', 'published'];
+
+// 410 Gone means the engine no longer has the task, but the web proxy sends
+// the same 410 whether the video was delivered first (completed, no refund)
+// or not (failed and refunded). The slot status carries that verdict.
+async function settleGoneTask(ctx, slotId, goneJson) {
+  const { ok, json } = await callApi(ctx, 'GET', `/api/schedule/slots/${encodeURIComponent(slotId)}`);
+  const slotStatus = ok && isRecord(json) && isRecord(json.slot) ? json.slot.status : null;
+  if (slotStatus === 'failed') {
+    return { videoStatus: 'failed', error: redact(errorMessageOf(goneJson, 410), ctx.input.apiKey) };
+  }
+  if (DELIVERED_SLOT_STATUSES.includes(slotStatus)) return { videoStatus: 'complete', videos: [] };
+  return {
+    videoStatus: 'unknown',
+    error: 'The engine no longer has this task and the slot status could not confirm the result; check the post in Post Engineer.',
+  };
+}
+
+async function waitForTask(ctx, slotId, taskId, deadline) {
   const path = `/api/persona/video-status/${encodeURIComponent(taskId)}`;
   while (ctx.now() < deadline) {
     const { status, ok, json } = await callApi(ctx, 'GET', path);
-    if (status === 410) {
-      // The engine lost the task; the web side already failed and refunded it.
-      return { videoStatus: 'failed', error: redact(errorMessageOf(json, status), ctx.input.apiKey) };
-    }
+    if (status === 410) return settleGoneTask(ctx, slotId, json);
     if (ok) {
       const task = taskPayload(json);
       const state = task === null ? null : taskStateOf(task);
@@ -302,7 +318,7 @@ export async function runActor({ input: rawInput, fetchImpl, sleep, now, idempot
   const deadline = now() + input.timeoutMinutes * 60_000;
   for (const slot of result.slots) {
     if (!isNonEmptyString(slot.taskId)) continue;
-    Object.assign(slot, await waitForTask(ctx, slot.taskId, deadline));
+    Object.assign(slot, await waitForTask(ctx, slot.slotId, slot.taskId, deadline));
   }
   return result;
 }
