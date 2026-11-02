@@ -350,5 +350,17 @@ describe('Actor definition files', () => {
     assert.equal(actor.input, './input_schema.json');
     assert.equal(actor.dockerfile, '../Dockerfile');
     assert.equal(actor.readme, '../README.md');
+    assert.equal(actor.output, './output_schema.json');
+  });
+
+  // The Store refuses to publish an Actor without an output schema.
+  it('declares an output schema that links the dataset items and the OUTPUT record', () => {
+    const output = read('../.actor/output_schema.json');
+    assert.equal(output.actorOutputSchemaVersion, 1);
+    const templates = Object.values(output.properties).map((p) => p.template);
+    assert.ok(templates.includes('{{links.apiDefaultDatasetUrl}}/items'));
+    // main.js saves the result under this key.
+    assert.ok(templates.includes('{{links.apiDefaultKeyValueStoreUrl}}/records/OUTPUT'));
+    assert.ok(readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').includes("Actor.setValue('OUTPUT'"));
   });
 });

@@ -1,0 +1,19 @@
+{
+  "actorOutputSchemaVersion": 1,
+  "title": "Post Engineer video output",
+  "description": "The scheduled video job: schedule id, its slot, and the video status when waitForCompletion is on.",
+  "properties": {
+    "results": {
+      "type": "string",
+      "title": "Video job",
+      "description": "One dataset item with scheduleId, mode, replayed, warnings and slots (slotId, taskId, status, videoStatus, videos).",
+      "template": "{{links.apiDefaultDatasetUrl}}/items"
+    },
+    "output": {
+      "type": "string",
+      "title": "OUTPUT record",
+      "description": "The same result saved in the default key-value store.",
+      "template": "{{links.apiDefaultKeyValueStoreUrl}}/records/OUTPUT"
+    }
+  }
+}
