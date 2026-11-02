@@ -70,7 +70,6 @@ _ALERT_LOCK_TIMEOUT_SECONDS = 0.5
 _discord_notified_failed_tasks: deque[str] = deque(maxlen=MAX_FAILED_ALERTS)
 _discord_notified_failed_tasks_lock = Lock()
 
-
 #---------------
 # Terminal-event emission dedup: the FIRST _fail_task notice for a task
 # always emits video_generation_failed; later notices stay deduped.
@@ -1639,6 +1638,7 @@ def _download_persona_voice(task_id: str, voice_audio_url: str) -> str:
         current_url = voice_audio_url
         for hop in range(_PERSONA_VOICE_MAX_REDIRECTS + 1):
             _assert_public_url(current_url)
+            # codeql[py/full-ssrf]: guarded, see _assert_public_url per hop
             response = http_client.get(
                 current_url, timeout=60, stream=True, allow_redirects=False
             )
