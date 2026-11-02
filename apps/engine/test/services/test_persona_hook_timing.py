@@ -136,7 +136,9 @@ class TestLipsyncIntroIsCappedNotSkipped:
                 )
             intro = stack.enter_context(
                 patch.object(
-                    task_service.longcat, "generate_intro", return_value=("intro.mp4", 0.5, "job-1")
+                    task_service.longcat,
+                    "generate_intro_with_container",
+                    return_value=("intro.mp4", 0.5, "job-1", None),
                 )
             )
             compose = stack.enter_context(
@@ -156,7 +158,7 @@ class TestLipsyncIntroIsCappedNotSkipped:
 
     def test_hook_past_the_ceiling_lipsyncs_the_first_12_seconds_once(self, tmp_path):
         result, intro, compose, track = self._prepare(tmp_path, hook_end=14.6)
-        assert result == ("combined.mp4", 0.5, "job-1")
+        assert result == ("combined.mp4", 0.5, "job-1", None)
         intro.assert_called_once()
         assert intro.call_args.kwargs["duration_seconds"] == 12.0
         assert compose.call_args.kwargs["duration"] == 12.0
@@ -187,7 +189,7 @@ class TestHookEstimatedWithoutSubtitles:
         prepare = TestLipsyncIntroIsCappedNotSkipped()
         result, intro, compose, track = prepare._prepare(tmp_path, cues=[], audio_seconds=30.0)
         expected = persona_hook.estimate_hook_end_seconds(_WHISPER_SCRIPT, 30.0)
-        assert result == ("combined.mp4", 0.5, "job-1")
+        assert result == ("combined.mp4", 0.5, "job-1", None)
         intro.assert_called_once()
         assert intro.call_args.kwargs["duration_seconds"] == pytest.approx(expected)
         assert compose.call_args.kwargs["duration"] == pytest.approx(expected)

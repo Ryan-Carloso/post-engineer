@@ -182,6 +182,14 @@ LONGCAT_IMAGE = (
         "/root/modal_longcat_resident.py",
         copy=True,
     )
+    # modal_longcat.py imports modal_longcat_cost at scope, so it must be
+    # present in the GPU image too, exactly like the GPU and resident
+    # modules above -- otherwise the renderer container fails on import.
+    .add_local_file(
+        Path(__file__).resolve().parent / "modal_longcat_cost.py",
+        "/root/modal_longcat_cost.py",
+        copy=True,
+    )
     .env(
         {
             "PYTHONPATH": "/LongCat-Video",
