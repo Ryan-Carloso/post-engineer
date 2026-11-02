@@ -115,7 +115,9 @@ jobs:
           CHANGED="$(git diff --name-only HEAD~1 HEAD -- apps/mcp/ || true)"
           CODE_CHANGED=no
           PKG_CHANGED=no
-          if printf '%s\n' "$CHANGED" | grep -v '^apps/mcp/package.json$' | grep -q .; then
+          # server.json only mirrors the version, so a bump that touches both
+          # files is still a bump-only merge.
+          if printf '%s\n' "$CHANGED" | grep -v -e '^apps/mcp/package.json$' -e '^apps/mcp/server.json$' | grep -q .; then
             CODE_CHANGED=yes
           fi
           if printf '%s\n' "$CHANGED" | grep -qx 'apps/mcp/package.json'; then
@@ -165,14 +167,22 @@ jobs:
 
           git fetch origin main
           git checkout -B "$BRANCH" origin/main
+          # server.json carries the same version twice (server + npm package);
+          # release-mcp.yml refuses to publish to the MCP Registry if it drifts.
           node -e "
             const fs = require('fs');
+            const version = process.argv[1];
             const p = 'apps/mcp/package.json';
             const d = JSON.parse(fs.readFileSync(p, 'utf8'));
-            d.version = process.argv[1];
+            d.version = version;
             fs.writeFileSync(p, JSON.stringify(d, null, 2) + '\n');
+            const s = 'apps/mcp/server.json';
+            const server = JSON.parse(fs.readFileSync(s, 'utf8'));
+            server.version = version;
+            server.packages[0].version = version;
+            fs.writeFileSync(s, JSON.stringify(server, null, 2) + '\n');
           " "$NEW_VERSION"
-          git add apps/mcp/package.json
+          git add apps/mcp/package.json apps/mcp/server.json
           git commit -m "chore(mcp): auto-bump to ${NEW_VERSION} for release"
           git push origin "$BRANCH"
           PR_URL="$(gh pr create \

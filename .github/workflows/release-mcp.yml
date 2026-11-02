@@ -87,3 +87,30 @@ jobs:
           # npm CLI bundled with Node 22 predates OIDC trusted publishing; upgrade first.
           npm install -g npm@latest
           npm publish --provenance --access public
+
+      # The official MCP Registry stores metadata only and verifies it
+      # against the npm package just published (mcpName in package.json
+      # must equal server.json name). GitHub OIDC login needs no secret:
+      # the id-token: write permission above covers it.
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.7/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+
+      - name: Verify server.json matches the package
+        run: |
+          set -euo pipefail
+          node -e "
+            const pkg = require('./package.json');
+            const server = require('./server.json');
+            const fail = (msg) => { console.error('::error::' + msg); process.exit(1); };
+            if (server.name !== pkg.mcpName) fail('server.json name ' + server.name + ' != package.json mcpName ' + pkg.mcpName);
+            if (server.version !== pkg.version) fail('server.json version ' + server.version + ' != package.json version ' + pkg.version);
+            if (server.packages[0].version !== pkg.version) fail('server.json packages[0].version != package.json version');
+          "
+
+      - name: Publish to the MCP Registry
+        run: |
+          set -euo pipefail
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
