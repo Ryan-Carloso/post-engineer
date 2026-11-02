@@ -8,6 +8,7 @@ import type {
   UploadContentResult,
 } from '@/lib/types';
 import { isEnglishLanguage } from '@/lib/language-gate';
+import { MAX_PERSONA_IMAGES } from '@/lib/persona-image-select';
 import { SOCIAL_PROVIDERS } from '@/lib/types';
 import type { FaceQuality } from '@/lib/tokens';
 
@@ -204,6 +205,9 @@ export function resolveScriptLanguage(locale: string): ScriptLanguage {
 interface PersonaFormState {
   name: string;
   photo: File | null;
+  /** Photos staged after the primary one; sent as the creation-time library
+      (`images`). Capped with `photo` at MAX_PERSONA_IMAGES. */
+  extraPhotos: File[];
   prompt: string;
   avatarUrl: string | null;
   /** Signed URL of the ALREADY uploaded photo (edit-mode display only).
@@ -229,6 +233,10 @@ interface PersonaFormState {
   faceQuality: FaceQuality;
   setName: (value: string) => void;
   setPhoto: (file: File | null) => void;
+  /** Appends picks after the staged ones; the first ever staged is the primary. */
+  addPhotos: (files: File[]) => void;
+  /** Removes by position in [photo, ...extraPhotos]. */
+  removePhoto: (index: number) => void;
   setPrompt: (value: string) => void;
   setAvatarUrl: (url: string | null) => void;
   setStoredPhotoUrl: (url: string | null) => void;
@@ -248,6 +256,7 @@ interface PersonaFormState {
 const initialPersonaState = {
   name: '',
   photo: null,
+  extraPhotos: [] as File[],
   prompt: '',
   avatarUrl: null,
   storedPhotoUrl: null,
@@ -267,6 +276,21 @@ export const usePersonaStore = create<PersonaFormState>()(
     ...initialPersonaState,
     setName: (name) => set({ name }),
     setPhoto: (photo) => set({ photo }),
+    addPhotos: (files) =>
+      set((s) => {
+        const [photo = null, ...extraPhotos] = [...(s.photo ? [s.photo] : []), ...s.extraPhotos, ...files].slice(
+          0,
+          MAX_PERSONA_IMAGES,
+        );
+        return { photo, extraPhotos };
+      }),
+    removePhoto: (index) =>
+      set((s) => {
+        const [photo = null, ...extraPhotos] = [...(s.photo ? [s.photo] : []), ...s.extraPhotos].filter(
+          (_, i) => i !== index,
+        );
+        return { photo, extraPhotos };
+      }),
     setPrompt: (prompt) => set({ prompt }),
     setAvatarUrl: (avatarUrl) => set({ avatarUrl }),
     setStoredPhotoUrl: (storedPhotoUrl) => set({ storedPhotoUrl }),
@@ -289,6 +313,7 @@ export const usePersonaStore = create<PersonaFormState>()(
       // are staged (the server enforces the same rule).
       if (s.photo) {
         formData.append('photo', s.photo);
+        for (const extra of s.extraPhotos) formData.append('images', extra);
       } else if (s.avatarUrl) {
         formData.append('avatarUrl', s.avatarUrl);
       }

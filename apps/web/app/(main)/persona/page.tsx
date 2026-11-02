@@ -23,6 +23,7 @@ import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-i
 import { PersonaPreferencesSection } from './persona-preferences-section';
 import { PersonaPublishingAccountsSection } from './persona-publishing-accounts-section';
 import { PersonaFormSync } from './persona-form-sync';
+import { PersonaPhotoPicker } from './persona-photo-picker';
 import { isPersonaVoiceHydrated, PersonaVoiceSection } from './persona-voice-section';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
@@ -34,7 +35,6 @@ import {
   ImageIcon,
   SpinnerIcon,
   UploadIcon,
-  formatFileSize,
   INPUT_CLASS,
 } from '@/lib/ui';
 
@@ -237,7 +237,21 @@ const PersonaHeader = ({ editing }: { editing: boolean }) => {
 // per-post choice (set on the post at creation, via MCP).
 //---------------
 const PersonaAvatarSection = () => {
-  const [source, setSource] = useState<'characters' | 'upload'>('characters');
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const personasQuery = usePersonaListQuery();
+  const editingPersonaId = resolveEditingPersonaId(pathname, searchParams.get('edit'));
+  const editingAvatarUrl = editingPersonaId
+    ? personasQuery.data?.find((persona) => persona.id === editingPersonaId)?.avatarUrl
+    : undefined;
+  // Upload leads; an edited persona that picked a house character opens on
+  // the character tab so its current choice stays visible.
+  const [source, setSource] = useState<'characters' | 'upload'>(editingAvatarUrl ? 'characters' : 'upload');
+  // The persona list may resolve after mount: follow it once it reports a
+  // house-character avatar.
+  useEffect(() => {
+    if (editingAvatarUrl) setSource('characters');
+  }, [editingAvatarUrl]);
   const result = usePersonaStore((s) => s.result);
   const { t } = useI18n();
 
@@ -262,7 +276,7 @@ const PersonaAvatarSection = () => {
         <PersonaCharacterPicker />
       </div>
       <div hidden={source !== 'upload'}>
-        <PersonaPhotoPicker />
+        <PersonaPhotoPicker personaId={editingPersonaId ?? undefined} />
       </div>
       {result && !result.success && result.error === t('persona.errAvatar') ? (
         <InlineFieldError message={result.error} />
@@ -371,103 +385,6 @@ const PersonaCharacterPicker = () => {
         <CarouselPrevious className="left-0" />
         <CarouselNext className="right-0" />
       </Carousel>
-    </div>
-  );
-};
-
-//---------------
-// PersonaPhotoPicker — upload de foto do dispositivo
-//---------------
-const PersonaPhotoPicker = () => {
-  const photo = usePersonaStore((s) => s.photo);
-  const storedPhotoUrl = usePersonaStore((s) => s.storedPhotoUrl);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const { t } = useI18n();
-
-  const handlePick = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null;
-    usePersonaStore.getState().setPhoto(file);
-    e.target.value = '';
-  };
-
-  // Edit mode with no new file: show the photo already stored, so the tab is
-  // not an empty uploader for a persona that clearly has a face.
-  if (!photo && storedPhotoUrl) {
-    return (
-      <div className="mt-4 flex items-center gap-3 rounded-lg border border-neutral-300 bg-white p-3">
-        <Image
-          src={storedPhotoUrl}
-          alt={t('persona.photoLabel')}
-          width={56}
-          height={96}
-          unoptimized
-          className="aspect-9/16 h-24 w-14 rounded-lg object-cover"
-        />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-neutral-900">{t('persona.photoCurrent')}</div>
-        </div>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="text-xs font-medium text-accent hover:underline"
-        >
-          {t('persona.photoUpload')}
-        </button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/jpeg,image/png"
-          onChange={handlePick}
-          className="hidden"
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-4">
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/jpeg,image/png"
-        onChange={handlePick}
-        className="hidden"
-      />
-      {photo ? (
-        <div className="flex items-center gap-3 rounded-lg border border-neutral-300 bg-white p-3">
-          <Image
-            src={URL.createObjectURL(photo)}
-            alt={t('persona.photoLabel')}
-            width={56}
-            height={96}
-            unoptimized
-            className="aspect-9/16 h-24 w-14 rounded-lg object-cover"
-          />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium text-neutral-900">{photo.name}</div>
-            <div className="mt-0.5 text-xs text-neutral-500">{formatFileSize(photo.size)}</div>
-          </div>
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            className="text-xs font-medium text-accent hover:underline"
-          >
-            {t('persona.photoUpload')}
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="group flex min-h-40 w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-neutral-300 bg-white px-6 py-8 text-sm font-medium text-neutral-700 transition-colors hover:border-accent/60 hover:bg-red-50/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          <span className="flex size-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 transition-colors group-hover:bg-red-100 group-hover:text-accent">
-            <ImageIcon />
-          </span>
-          <span>{t('persona.photoUpload')}</span>
-        </button>
-      )}
-      <p className="mt-3 text-sm leading-5 text-neutral-600">{t('persona.photoHint')}</p>
     </div>
   );
 };
