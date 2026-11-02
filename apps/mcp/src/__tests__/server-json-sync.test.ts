@@ -83,6 +83,10 @@ describe('release workflows keep server.json in step', () => {
     expect(npmPublish).toBeGreaterThan(-1);
     expect(registryPublish).toBeGreaterThan(npmPublish);
     expect(release.includes('./mcp-publisher login github-oidc')).toBe(true);
+    // The drift check must stop the release before npm ships anything.
+    const verify = release.indexOf('- name: Verify server.json matches the package');
+    expect(verify).toBeGreaterThan(-1);
+    expect(verify).toBeLessThan(npmPublish);
     expect(release.includes('id-token: write')).toBe(true);
   });
 });

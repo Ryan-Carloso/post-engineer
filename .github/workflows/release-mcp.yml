@@ -84,6 +84,20 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      # Before npm publish: a server.json drift must stop the release before
+      # anything ships, not leave npm ahead of a skipped registry publish.
+      - name: Verify server.json matches the package
+        run: |
+          set -euo pipefail
+          node -e "
+            const pkg = require('./package.json');
+            const server = require('./server.json');
+            const fail = (msg) => { console.error('::error::' + msg); process.exit(1); };
+            if (server.name !== pkg.mcpName) fail('server.json name ' + server.name + ' != package.json mcpName ' + pkg.mcpName);
+            if (server.version !== pkg.version) fail('server.json version ' + server.version + ' != package.json version ' + pkg.version);
+            if (server.packages[0].version !== pkg.version) fail('server.json packages[0].version != package.json version');
+          "
+
       - name: Publish to npm (trusted publishing)
         run: |
           set -euo pipefail
@@ -104,18 +118,6 @@ jobs:
           curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.7/mcp-publisher_linux_amd64.tar.gz" -o "$RUNNER_TEMP/mcp-publisher.tar.gz"
           echo "00b21004149a4ce66f0782508ae4a2bce67d1bea395a8da0bd8028159fb59579  $RUNNER_TEMP/mcp-publisher.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/mcp-publisher.tar.gz" mcp-publisher
-
-      - name: Verify server.json matches the package
-        run: |
-          set -euo pipefail
-          node -e "
-            const pkg = require('./package.json');
-            const server = require('./server.json');
-            const fail = (msg) => { console.error('::error::' + msg); process.exit(1); };
-            if (server.name !== pkg.mcpName) fail('server.json name ' + server.name + ' != package.json mcpName ' + pkg.mcpName);
-            if (server.version !== pkg.version) fail('server.json version ' + server.version + ' != package.json version ' + pkg.version);
-            if (server.packages[0].version !== pkg.version) fail('server.json packages[0].version != package.json version');
-          "
 
       - name: Publish to the MCP Registry
         run: |
