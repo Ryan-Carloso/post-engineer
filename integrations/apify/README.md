@@ -65,7 +65,14 @@ One dataset item (also saved as the `OUTPUT` record):
 }
 ```
 
-`videoStatus` is `complete`, `failed` (with `error`) or `timeout`, and is absent when `waitForCompletion` is `false`. A failed generation is refunded by Post Engineer.
+`videoStatus` is one of:
+
+- `complete`: the video was generated.
+- `failed` (with `error`): generation failed; Post Engineer refunds the tokens.
+- `unknown` (with `error`): the engine lost the task and the slot status could not confirm the outcome. Check the post in Post Engineer before re-running, so you do not pay for a second video.
+- `timeout`: the video was still processing when `timeoutMinutes` ran out.
+
+It is absent when `waitForCompletion` is `false`.
 
 ## Retries and failures
 

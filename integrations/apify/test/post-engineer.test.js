@@ -260,7 +260,7 @@ describe('runActor', () => {
     assert.equal(calls.at(-1).key, 'GET /api/schedule/slots/slot-1');
   });
 
-  for (const status of ['ready', 'publishing', 'published']) {
+  for (const status of ['ready', 'publishing', 'published', 'completed']) {
     it(`reports 410 Gone as complete when the slot is ${status} (delivered before the engine lost it)`, async () => {
       const result = await goneWithSlot(jsonResponse(200, { success: true, slot: { status } })).promise;
       assert.equal(result.slots[0].videoStatus, 'complete');

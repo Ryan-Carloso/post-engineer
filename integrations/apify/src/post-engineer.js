@@ -235,7 +235,9 @@ function taskStateOf(task) {
 const isTransient = (status) => status === 429 || status >= 500;
 
 // Slot statuses (GET /api/schedule/slots/{id}) that mean the video exists.
-const DELIVERED_SLOT_STATUSES = ['ready', 'publishing', 'published'];
+// 'completed' is the presentation of a slot whose lost task was settled as
+// delivered (apps/web/lib/schedule-slot-presentation.ts).
+const DELIVERED_SLOT_STATUSES = ['ready', 'publishing', 'published', 'completed'];
 
 // 410 Gone means the engine no longer has the task, but the web proxy sends
 // the same 410 whether the video was delivered first (completed, no refund)
