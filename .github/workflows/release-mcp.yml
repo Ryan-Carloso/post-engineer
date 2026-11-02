@@ -92,10 +92,15 @@ jobs:
       # against the npm package just published (mcpName in package.json
       # must equal server.json name). GitHub OIDC login needs no secret:
       # the id-token: write permission above covers it.
+      # Pinned by SHA-256 like the SHA-pinned actions: this job holds
+      # id-token: write, so a re-pointed release tag must not run here.
+      # Hash computed from the v1.8.7 tarball when it was pinned.
       - name: Install mcp-publisher
         run: |
           set -euo pipefail
-          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.7/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.7/mcp-publisher_linux_amd64.tar.gz" -o "$RUNNER_TEMP/mcp-publisher.tar.gz"
+          echo "00b21004149a4ce66f0782508ae4a2bce67d1bea395a8da0bd8028159fb59579  $RUNNER_TEMP/mcp-publisher.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/mcp-publisher.tar.gz" mcp-publisher
 
       - name: Verify server.json matches the package
         run: |
