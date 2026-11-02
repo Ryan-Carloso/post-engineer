@@ -146,12 +146,12 @@ jobs:
       - name: Install OpenCode (pinned release)
         if: steps.check.outputs.has_key == 'true'
         env:
-          OPENCODE_VERSION: "1.18.32"
+          OPENCODE_VERSION: "1.19.5"
           # sha256 of opencode-linux-x64.tar.gz for the release above, taken
           # from the official sst/opencode GitHub release. Bump both together;
           # never go back to a floating install script (an unpinned script's
           # download source has pointed at third-party forks).
-          OPENCODE_SHA256: "3046e0404fdc60fb80307e7a47824ba07477364178a4d09baa8548496dd6d43b"
+          OPENCODE_SHA256: "588310a336fa3b9df36b3f0225b26f679d453efaad0cf3d66c3651ef3ec1647a"
         run: |
           set -euo pipefail
           URL="https://github.com/sst/opencode/releases/download/v${OPENCODE_VERSION}/opencode-linux-x64.tar.gz"
