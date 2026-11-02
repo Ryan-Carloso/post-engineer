@@ -33,8 +33,10 @@ RESPONSES AND ERRORS
 ================================================================================
 
 - JSON bodies. Failures carry success:false and an error message.
-- Engine-backed routes (video generation, task status) wrap the payload as
-  { "status", "message", "body" }. The payload is `body`, never `data`.
+- Most routes return a flat { "success", ... } payload. Only the two engine
+  proxies, GET /api/persona/video-status/{taskId} and
+  DELETE /api/persona/video-task/{taskId}, return the engine envelope
+  { "status", "message", "body" }: the payload is `body`, never `data`.
 - 400 invalid, over-length or conflicting input (nothing is truncated or
   coerced silently). 401 bad key. 402 not enough tokens. 404 unknown id.
   409 conflict (e.g. the persona already has an active schedule). 410 gone:
