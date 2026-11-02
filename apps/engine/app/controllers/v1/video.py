@@ -43,7 +43,7 @@ from app.utils import file_security, upload_limits, utils
 # on the task row for server-side PostHog unit economics, but never
 # exposed through the API. The web forwards task bodies to browsers
 # wholesale — strip via _public_task_view on every serializing endpoint.
-PRIVATE_TASK_FIELDS = frozenset({"cost_usd", "cost_missing_reason", "total_cost_usd", "total_cost_label", "container_cost_usd", "container_uptime_s", "container_id", "jobs_served_in_container", "scaledown_cost_usd", "videos_per_container"})
+PRIVATE_TASK_FIELDS = frozenset({"cost_usd", "cost_missing_reason", "total_cost_usd", "total_cost_label", "container_cost_usd", "container_overhead_usd", "container_uptime_s", "container_id", "jobs_served_in_container", "scaledown_cost_usd", "videos_per_container"})
 
 
 def _public_task_view(task: dict[str, object]) -> dict[str, object]:

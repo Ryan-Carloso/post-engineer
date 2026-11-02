@@ -27,10 +27,13 @@ class ModalJobCost(NamedTuple):
 
     cost_usd is unchanged (marginal handler cost). container_cost_usd is
     the container-to-date spend (cold-start weight load included);
-    scaledown_cost_usd is one scaledown hold; container_id is stable for
-    one container lifetime; jobs_served_in_container counts clips, not
-    videos — the engine amortises by videos, never by this count. Every
-    field is None when the backend did not report it (older deployment).
+    container_overhead_usd is that spend minus the handler costs of every
+    job the container served — the shared spend the total amortises, so
+    this video's handler is not counted twice; scaledown_cost_usd is one
+    scaledown hold; container_id is stable for one container lifetime;
+    jobs_served_in_container counts clips, not videos — the engine
+    amortises by videos, never by this count. Every field is None when
+    the backend did not report it (older deployment).
     """
 
     cost_usd: float | None
@@ -39,6 +42,7 @@ class ModalJobCost(NamedTuple):
     container_id: str | None
     jobs_served_in_container: int | None
     scaledown_cost_usd: float | None
+    container_overhead_usd: float | None = None
 
 
 def _modal_number(status: dict[str, object], key: str) -> float | None:
@@ -73,6 +77,7 @@ def parse_modal_job_cost(status: dict[str, object]) -> ModalJobCost:
         container_id=container_id if isinstance(container_id, str) and container_id else None,
         jobs_served_in_container=jobs_value,
         scaledown_cost_usd=_modal_number(status, "scaledown_cost_usd"),
+        container_overhead_usd=_modal_number(status, "container_overhead_usd"),
     )
 
 

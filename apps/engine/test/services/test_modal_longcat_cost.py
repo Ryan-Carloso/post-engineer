@@ -44,6 +44,37 @@ class ContainerCostTrackerTests(unittest.TestCase):
         self.assertEqual(tracker.note_job(), 2)
         self.assertEqual(tracker.jobs_served, 2)
 
+    def test_note_job_accumulates_handler_costs_for_overhead(self):
+        module = _load_cost_module()
+        tracker = module.ContainerCostTracker()
+        tracker.note_job(0.44)
+        self.assertEqual(tracker.handler_costs_total_usd, 0.44)
+        tracker.note_job(0.21)
+        self.assertEqual(tracker.handler_costs_total_usd, 0.65)
+
+    def test_overhead_is_container_minus_handler_sum_across_jobs(self):
+        module = _load_cost_module()
+        tracker = module.ContainerCostTracker()
+        tracker.note_job(0.44)
+        self.assertEqual(tracker.container_overhead_usd(0.50), 0.06)
+        tracker.note_job(0.21)
+        self.assertEqual(tracker.container_overhead_usd(0.80), 0.15)
+
+    def test_overhead_never_goes_negative_from_rounding(self):
+        module = _load_cost_module()
+        tracker = module.ContainerCostTracker()
+        tracker.note_job(0.63)
+        self.assertEqual(tracker.container_overhead_usd(0.62), 0.0)
+
+    def test_invalid_handler_costs_are_not_accumulated(self):
+        module = _load_cost_module()
+        tracker = module.ContainerCostTracker()
+        tracker.note_job(True)
+        tracker.note_job(-0.5)
+        tracker.note_job(float("inf"))
+        self.assertEqual(tracker.handler_costs_total_usd, 0.0)
+        self.assertEqual(tracker.jobs_served, 3)
+
     def test_scaledown_cost_is_sixty_seconds_at_rate(self):
         module = _load_cost_module()
         self.assertEqual(module.SCALEDOWN_WINDOW_S, 60)
@@ -76,6 +107,7 @@ class BackendWiringTests(unittest.TestCase):
         for expected in (
             "cost_usd",
             "container_cost_usd",
+            "container_overhead_usd",
             "container_id",
             "jobs_served_in_container",
             "scaledown_cost_usd",

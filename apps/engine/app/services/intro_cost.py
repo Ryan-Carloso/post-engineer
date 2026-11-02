@@ -10,11 +10,19 @@ to exit. It is NEVER the total cost of a video. The total is computed
 here, in :func:`completion_cost_kwargs`, as:
 
     total_cost_usd = handler_total
-        + (container_cost_usd + scaledown_cost_usd) / videos_per_container
+        + (container_overhead_usd + scaledown_cost_usd) / videos_per_container
 
-where ``container_cost_usd`` is the container-to-date spend reported by
-the backend at the intro job's completion (cold-start weight load plus
-handler time to date), ``scaledown_cost_usd`` is one scaledown hold, and
+where ``container_overhead_usd`` is the container's shared spend
+reported by the backend at the intro job's completion: container-to-date
+spend (cold-start weight load plus handler time to date) MINUS the
+handler costs of every job the container served. The subtraction is
+the whole point — ``container_cost_usd`` itself already includes this
+video's handler, so adding the full container spend on top of the
+handler would count the handler twice (measured 2026-11-02: handler
+1.8366, container 2.8245, scaledown 0.0658 — the old formula gave
+4.7269, the real total is 2.8903). ``container_cost_usd`` is still
+reported for diagnostics, but it is never an input to the total.
+``scaledown_cost_usd`` is one scaledown hold, and
 ``videos_per_container`` counts DISTINCT videos (tasks), not clips: a
 video that renders several clips in one container counts once, because
 the shared container spend belongs to the video, not to each clip.
@@ -47,10 +55,12 @@ class IntroCostReport(NamedTuple):
     ran: True when the intro step executed. cost_usd: the Modal GPU cost in
     USD reported by the completed job (None when the job reported no cost).
     job_id: the Modal job id (None when the intro never ran).
-    container_cost_usd / container_uptime_s / container_id /
-    jobs_served_in_container / scaledown_cost_usd: the container snapshot
-    reported by the backend at the intro job's completion (all None when
-    the backend did not report them, e.g. an older deployment).
+    container_cost_usd / container_overhead_usd / container_uptime_s /
+    container_id / jobs_served_in_container / scaledown_cost_usd: the
+    container snapshot reported by the backend at the intro job's
+    completion (all None when the backend did not report them, e.g. an
+    older deployment). Only the overhead feeds the total; the full
+    container spend rides along for diagnostics.
     handler_costs_usd: handler costs for this video's clips, when a caller
     knows more than one (intro + outro + full-mode windows). Empty means
     "only cost_usd is known", which is the intro-only behaviour today.
@@ -65,6 +75,7 @@ class IntroCostReport(NamedTuple):
     jobs_served_in_container: int | None = None
     scaledown_cost_usd: float | None = None
     handler_costs_usd: tuple[float, ...] = ()
+    container_overhead_usd: float | None = None
 
 
 # Why a completed video's video_generated event carries no cost_usd.
@@ -97,27 +108,30 @@ def register_container_video(container_id: str, task_id: str) -> int:
 
 def amortize_video_cost(
     handler_total_usd: float | None,
-    container_cost_usd: float | None,
+    container_overhead_usd: float | None,
     scaledown_cost_usd: float | None,
     videos_per_container: int,
 ) -> float | None:
     """Amortised total cost for one video, or None when unknowable.
 
-    Shared spend (container-to-date + one scaledown hold) is divided by
+    Shared spend (container overhead + one scaledown hold) is divided by
     the number of distinct videos the container served, never by clips.
-    Returns None — never a handler-only figure dressed as a total — when
-    any input is missing, non-numeric, or bool, or the video count is
-    not positive (bool is an int subclass, so True must not read as 1).
+    The second argument is the OVERHEAD, not the container-to-date spend:
+    container spend already includes every served job's handler time, so
+    dividing it here would count this video's handler twice. Returns
+    None — never a handler-only figure dressed as a total — when any
+    input is missing, non-numeric, or bool, or the video count is not
+    positive (bool is an int subclass, so True must not read as 1).
     """
     handler = _valid_number(handler_total_usd)
-    container = _valid_number(container_cost_usd)
+    overhead = _valid_number(container_overhead_usd)
     scaledown = _valid_number(scaledown_cost_usd)
     videos = _valid_int(videos_per_container)
-    if handler is None or container is None or scaledown is None:
+    if handler is None or overhead is None or scaledown is None:
         return None
     if videos is None or videos <= 0:
         return None
-    shared = container + scaledown
+    shared = overhead + scaledown
     return round(handler + shared / videos, 4)
 
 
@@ -146,6 +160,7 @@ def report_from_job_cost(
         container_id=job_cost.container_id,
         jobs_served_in_container=job_cost.jobs_served_in_container,
         scaledown_cost_usd=job_cost.scaledown_cost_usd,
+        container_overhead_usd=job_cost.container_overhead_usd,
     )
 
 
@@ -183,7 +198,7 @@ def completion_cost_kwargs(
         videos = register_container_video(intro.container_id, task_id)
         total = amortize_video_cost(
             handler_total,
-            intro.container_cost_usd,
+            intro.container_overhead_usd,
             intro.scaledown_cost_usd,
             videos,
         )
@@ -193,6 +208,7 @@ def completion_cost_kwargs(
                     "total_cost_usd": total,
                     "total_cost_label": TOTAL_COST_LABEL_RUNNING,
                     "container_cost_usd": intro.container_cost_usd,
+                    "container_overhead_usd": intro.container_overhead_usd,
                     "container_uptime_s": intro.container_uptime_s,
                     "container_id": intro.container_id,
                     "jobs_served_in_container": intro.jobs_served_in_container,
@@ -239,7 +255,12 @@ def cost_event_props(source: Mapping[str, object]) -> dict[str, object]:
     label = source.get("total_cost_label")
     if label in TOTAL_COST_LABELS:
         props["total_cost_label"] = label
-    for key in ("container_cost_usd", "container_uptime_s", "scaledown_cost_usd"):
+    for key in (
+        "container_cost_usd",
+        "container_overhead_usd",
+        "container_uptime_s",
+        "scaledown_cost_usd",
+    ):
         value = _valid_number(source.get(key))
         if value is not None:
             props[key] = value

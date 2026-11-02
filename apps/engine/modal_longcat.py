@@ -301,7 +301,8 @@ class GenerateAvatar:
         container serves.
 
         The container-to-date spend is still reported, as ``container_uptime_s``
-        / ``container_cost_usd`` plus ``container_id``, ``jobs_served`` and
+        / ``container_cost_usd`` plus ``container_overhead_usd`` (container
+        spend minus handler costs to date), ``container_id``, ``jobs_served`` and
         ``scaledown_cost_usd``: with ``max_containers=1`` the amortised view
         (cold-start weight load, idle hold between jobs) is real money, it just
         is not the per-clip cost.
@@ -312,8 +313,7 @@ class GenerateAvatar:
             _write_job_status(
                 job_id,
                 "running",
-                {"progress": 10, "phase": "inference", "resolution": resolution,
-                 "num_segments": num_segments},
+                {"progress": 10, "phase": "inference", "resolution": resolution, "num_segments": num_segments},
             )
             video_bytes, phase_timings = run_longcat(
                 self.renderer,
@@ -348,9 +348,9 @@ class GenerateAvatar:
                     # fallback list that is not always the first preference,
                     # and Modal bills each card at its own rate.
                     "gpu": active_gpu_name() or GPU_PREFERENCE[0],
-                    "cost_usd": round(job_gpu_s * _rate(), 4),
-                    "container_cost_usd": round(uptime_s * _rate(), 4),
-                    "container_id": TRACKER.container_id, "jobs_served_in_container": TRACKER.note_job(),
+                    "cost_usd": round(job_gpu_s * _rate(), 4), "container_cost_usd": round(uptime_s * _rate(), 4),
+                    "container_id": TRACKER.container_id, "jobs_served_in_container": TRACKER.note_job(round(job_gpu_s * _rate(), 4)),
+                    "container_overhead_usd": TRACKER.container_overhead_usd(round(uptime_s * _rate(), 4)),
                     "scaledown_cost_usd": scaledown_cost_usd(_rate()),
                     "progress": 100,
                     "phase": "complete",

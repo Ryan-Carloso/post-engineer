@@ -77,6 +77,12 @@ class ParseModalJobCostTests(unittest.TestCase):
         parsed = parse_modal_job_cost({"jobs_served_in_container": 2.5})
         self.assertIsNone(parsed.jobs_served_in_container)
 
+    def test_overhead_parses_and_guards_like_other_costs(self):
+        parsed = parse_modal_job_cost({"container_overhead_usd": 0.9879})
+        self.assertEqual(parsed.container_overhead_usd, 0.9879)
+        parsed_bad = parse_modal_job_cost({"container_overhead_usd": True})
+        self.assertIsNone(parsed_bad.container_overhead_usd)
+
 
 if __name__ == "__main__":
     unittest.main()
