@@ -292,9 +292,10 @@ def _generate_intro_tracked(
     """Generate an intro and track one ai_request event, with full cost.
 
     Returns (output_path, cost_usd, job_id, job_cost): job_cost is the
-    container snapshot from the done payload, or None when the impl did
-    not report one. The job id is captured even when the job fails after
-    submit, so post-submit failures stay correlatable in PostHog.
+    container snapshot from the done payload, with None fields when the
+    backend reported no snapshot (an older deployment). The job id is
+    captured even when the job fails after submit, so post-submit
+    failures stay correlatable in PostHog.
     """
     # Validate the quality up front so an unsupported preset fails before the
     # audio is trimmed, rather than after a paid submit. The resolution itself

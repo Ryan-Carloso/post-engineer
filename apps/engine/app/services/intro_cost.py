@@ -128,10 +128,12 @@ def report_from_job_cost(
 ) -> IntroCostReport:
     """Build an IntroCostReport from one LongCat job's cost snapshot.
 
-    ``job_cost`` is None for an older backend (or a job that reported no
-    snapshot); a missing snapshot never breaks a video that already
-    rendered. Handler costs stay as cost_usd alone here — multi-clip
-    callers pass handler_costs through IntroCostReport directly.
+    ``job_cost`` is None only when the caller has no snapshot at all; for
+    an older backend (or a job that reported no snapshot) it is a snapshot
+    whose fields are None — that is the signal, never a None snapshot.
+    A missing snapshot never breaks a video that already rendered.
+    Handler costs stay as cost_usd alone here — multi-clip callers pass
+    handler_costs through IntroCostReport directly.
     """
     if job_cost is None:
         return IntroCostReport(ran=True, cost_usd=cost_usd, job_id=job_id)

@@ -38,6 +38,7 @@ from app.services import user_media
 from app.services.lipsync_active import persona_lipsync_active  # noqa: F401 - re-exported for existing callers
 from app.services.pipeline_stage import PhaseTracker
 from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cost_event_props, report_from_job_cost
+from app.services.longcat_cost import ModalJobCost
 from app.services.persona_hook import (
     PERSONA_HOOK_MAX_SECONDS,
     PERSONA_HOOK_MIN_SECONDS,
@@ -999,13 +1000,13 @@ def prepare_persona_lipsync_video(
     index: int,
     video_script: str,
     subtitle_path: str,
-) -> tuple[str, float | None, str | None] | None:
+) -> tuple[str, float | None, str | None, ModalJobCost | None] | None:
     """Generate the persona intro through a complete hook paragraph.
 
-    Returns (output_path, intro_cost_usd, intro_job_id): the Modal GPU cost
-    in USD (None when the job reports no cost) and the Modal job id. Returns
-    None, before any download or GPU work, when the hook end can be neither
-    measured nor estimated (persona_hook.resolve_lipsync_window).
+    Returns (output_path, intro_cost_usd, intro_job_id, intro_job_cost):
+    the Modal GPU cost, the job id, and the container snapshot (None
+    fields for an older backend). Returns None, before any GPU work, when
+    the hook end can be neither measured nor estimated (resolve_lipsync_window).
     """
     # Measured from the subtitles, else estimated from the audio length;
     # capped at the GPU ceiling so the Modal container never sees a render
