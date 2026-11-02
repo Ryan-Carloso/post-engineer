@@ -15,11 +15,14 @@ name: release-mcp
 #   with it would never start this workflow. If that secret is missing,
 #   the auto job fails loudly instead of pushing anything.
 #   MANUAL (fallback):
-#     1. Bump the version in apps/mcp/package.json (e.g. 1.2.0 -> 1.3.0) and push.
+#     1. Bump the version in apps/mcp/package.json (e.g. 1.2.0 -> 1.3.0) AND
+#        both version fields in apps/mcp/server.json (version and
+#        packages[0].version), then push.
 #     2. git tag -a mcp-v1.3.0 -m "post-engineer-mcp v1.3.0"
 #     3. git push origin mcp-v1.3.0
 #
-# The tag version MUST match apps/mcp/package.json or the job fails before
+# The tag version MUST match apps/mcp/package.json, and server.json must
+# match package.json (name and both versions), or the job fails before
 # publishing. One-time npm setup required: on npmjs.com, add this repo as a
 # trusted publisher for the post-engineer-mcp package
 # (org Ryan-Carloso, repo post-engineer, workflow release-mcp.yml).
@@ -81,9 +84,43 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      # Before npm publish: a server.json drift must stop the release before
+      # anything ships, not leave npm ahead of a skipped registry publish.
+      - name: Verify server.json matches the package
+        run: |
+          set -euo pipefail
+          node -e "
+            const pkg = require('./package.json');
+            const server = require('./server.json');
+            const fail = (msg) => { console.error('::error::' + msg); process.exit(1); };
+            if (server.name !== pkg.mcpName) fail('server.json name ' + server.name + ' != package.json mcpName ' + pkg.mcpName);
+            if (server.version !== pkg.version) fail('server.json version ' + server.version + ' != package.json version ' + pkg.version);
+            if (server.packages[0].version !== pkg.version) fail('server.json packages[0].version != package.json version');
+          "
+
       - name: Publish to npm (trusted publishing)
         run: |
           set -euo pipefail
           # npm CLI bundled with Node 22 predates OIDC trusted publishing; upgrade first.
           npm install -g npm@latest
           npm publish --provenance --access public
+
+      # The official MCP Registry stores metadata only and verifies it
+      # against the npm package just published (mcpName in package.json
+      # must equal server.json name). GitHub OIDC login needs no secret:
+      # the id-token: write permission above covers it.
+      # Pinned by SHA-256 like the SHA-pinned actions: this job holds
+      # id-token: write, so a re-pointed release tag must not run here.
+      # Hash computed from the v1.8.7 tarball when it was pinned.
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.7/mcp-publisher_linux_amd64.tar.gz" -o "$RUNNER_TEMP/mcp-publisher.tar.gz"
+          echo "00b21004149a4ce66f0782508ae4a2bce67d1bea395a8da0bd8028159fb59579  $RUNNER_TEMP/mcp-publisher.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/mcp-publisher.tar.gz" mcp-publisher
+
+      - name: Publish to the MCP Registry
+        run: |
+          set -euo pipefail
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish

@@ -1,0 +1,4 @@
+# apify run / npm install output; apify push also skips these.
+node_modules/
+storage/
+.claude/

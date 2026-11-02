@@ -1,0 +1,18 @@
+{
+  "name": "post-engineer-apify-actor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Apify Actor that generates and schedules a short video through the Post Engineer API.",
+  "engines": {
+    "node": ">=20.10"
+  },
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "apify": "^3.4.0"
+  },
+  "license": "Apache-2.0"
+}

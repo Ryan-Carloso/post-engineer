@@ -22,6 +22,13 @@
   for the MCP server, including daily news becomes a video and GitHub PRs
   become videos.
 
+## HTTP API
+
+- [OpenAPI spec](https://post-engineer.com/openapi.json): every endpoint callable
+  with an API key (`Authorization: Bearer pe_live_...`).
+- [API documentation](https://post-engineer.com/api-documentation.txt): auth,
+  errors, the video flow and token costs.
+
 ## MCP server
 
 - [npm package](https://www.npmjs.com/package/post-engineer-mcp): run locally

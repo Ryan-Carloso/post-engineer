@@ -1,0 +1,143 @@
+{
+  "title": "Post Engineer video",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "apiKey": {
+      "title": "Post Engineer API key",
+      "type": "string",
+      "description": "Create one at https://post-engineer.com/api-keys (starts with pe_live_). Without a key the run is a dry run: it validates the input and shows the request it would send, with nothing generated, published or charged. With a key, generating a video spends tokens from that account.",
+      "editor": "textfield",
+      "isSecret": true
+    },
+    "title": {
+      "title": "Video title",
+      "type": "string",
+      "description": "Label of the scheduled post.",
+      "editor": "textfield",
+      "prefill": "Why short videos win"
+    },
+    "hook": {
+      "title": "Hook",
+      "type": "string",
+      "description": "Opening line. Hook, body and CTA together must be 60 to 200 words; the script is validated before any token is spent.",
+      "editor": "textarea",
+      "prefill": "Most people scroll past your posts in under two seconds."
+    },
+    "body": {
+      "title": "Body",
+      "type": "string",
+      "description": "Main script.",
+      "editor": "textarea",
+      "prefill": "Short vertical videos stop the scroll because they show a face, a clear idea and movement in the first moments. You do not need a camera, a studio or an editor to make them every day. Write the idea once as a hook, a body and a call to action, and let an AI persona present it for you, with captions and b-roll that match what you say."
+    },
+    "cta": {
+      "title": "Call to action",
+      "type": "string",
+      "description": "Closing line.",
+      "editor": "textarea",
+      "prefill": "Follow for one practical tip like this every day."
+    },
+    "providers": {
+      "title": "Publish to",
+      "type": "array",
+      "description": "One or more of: youtube, instagram, linkedin, bluesky, threads. Connect the accounts first at https://post-engineer.com.",
+      "editor": "stringList",
+      "prefill": [
+        "youtube"
+      ]
+    },
+    "personaId": {
+      "title": "Persona ID",
+      "type": "string",
+      "description": "AI persona that presents the video (lip-sync on the hook). Leave empty for a faceless video.",
+      "editor": "textfield"
+    },
+    "voiceId": {
+      "title": "Voice ID",
+      "type": "string",
+      "description": "Narration voice: an id from GET /api/persona/voices. Required without a persona; with a persona it overrides the persona's voice.",
+      "editor": "textfield",
+      "prefill": "chatterbox:kokoro_af_heart"
+    },
+    "faceless": {
+      "title": "Faceless video",
+      "type": "boolean",
+      "description": "No face on screen, only b-roll or animated svg (cheapest). Defaults to true when no persona is set."
+    },
+    "facelessMaterial": {
+      "title": "Faceless material",
+      "type": "string",
+      "description": "What fills a faceless video: stock b-roll or animated svg scenes.",
+      "editor": "select",
+      "enum": [
+        "broll",
+        "svg"
+      ],
+      "enumTitles": [
+        "Stock b-roll",
+        "Animated svg"
+      ]
+    },
+    "fullLipsync": {
+      "title": "Full lip-sync",
+      "type": "boolean",
+      "description": "The persona talks for the whole video instead of only the hook (most expensive). Needs a persona; not with faceless."
+    },
+    "accounts": {
+      "title": "Account IDs per provider",
+      "type": "object",
+      "description": "Optional, e.g. {\"youtube\": [\"<account id>\"]}. Defaults to the persona's publishing accounts.",
+      "editor": "json"
+    },
+    "mode": {
+      "title": "When to publish",
+      "type": "string",
+      "description": "asap publishes as soon as the video is ready; scheduled uses the schedule below.",
+      "editor": "select",
+      "enum": [
+        "asap",
+        "scheduled"
+      ],
+      "enumTitles": [
+        "As soon as ready",
+        "At scheduled times"
+      ],
+      "default": "asap"
+    },
+    "schedule": {
+      "title": "Schedule",
+      "type": "object",
+      "description": "Only for mode scheduled: {\"startAt\": \"2026-12-01T09:00:00Z\", \"times\": [\"18:00\"], \"timezone\": \"America/Sao_Paulo\"}. startAt is an ISO datetime; slots must be 3 hours to 30 days ahead.",
+      "editor": "json"
+    },
+    "waitForCompletion": {
+      "title": "Wait for the video",
+      "type": "boolean",
+      "description": "Keep the run open until the video is generated (or fails) and return its status.",
+      "default": true
+    },
+    "timeoutMinutes": {
+      "title": "Wait timeout (minutes)",
+      "type": "integer",
+      "description": "How long to wait for the video before returning status timeout.",
+      "minimum": 1,
+      "maximum": 60,
+      "default": 30
+    },
+    "apiUrl": {
+      "title": "API base URL",
+      "type": "string",
+      "description": "Only for self-hosted Post Engineer. Must be https (http is allowed only for localhost).",
+      "editor": "textfield",
+      "sectionCaption": "Advanced"
+    }
+  },
+  "required": [
+    "title",
+    "hook",
+    "body",
+    "cta",
+    "providers"
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Ryan-Carloso/post-engineer",
+  "title": "Post Engineer",
+  "description": "Create AI personas, generate short videos and schedule posts to YouTube, Instagram and more.",
+  "websiteUrl": "https://post-engineer.com",
+  "repository": {
+    "url": "https://github.com/Ryan-Carloso/post-engineer",
+    "source": "github",
+    "subfolder": "apps/mcp"
+  },
+  "version": "1.38.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "post-engineer-mcp",
+      "version": "1.38.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "POST_ENGINEER_API_KEY",
+          "description": "API key from https://post-engineer.com/api-keys",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "POST_ENGINEER_API_URL",
+          "description": "Override the API base URL (staging or self-hosted). Defaults to production.",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}
