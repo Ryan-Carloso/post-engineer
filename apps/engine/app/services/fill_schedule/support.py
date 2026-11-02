@@ -154,16 +154,10 @@ def slot_material(slot: dict[str, Any]) -> str:
 
 
 def slot_full_lipsync(slot: dict[str, Any]) -> bool:
-    """True when this slot's post was created with full lip-sync.
-
-    ``scheduled_posts.full_lipsync`` (migration 035) is the per-post choice
-    written by the web at slot creation. Only the literal True selects the
-    whole video as talking head with no b-roll; a row without the field
-    (selected before the migration) or any other value renders the default
-    intro-only lip-sync over stock, the behaviour every earlier video had.
-    Anything looser would let a malformed row silently upgrade a video to
-    a much more expensive GPU render, and anything that drops the field
-    lets a requeued full-mode slot silently degrade to b-roll.
+    """True only for the literal True in ``scheduled_posts.full_lipsync``
+    (migration 035). Missing/other values render intro-only, the behaviour
+    every earlier video had; dropping the field would let a requeued
+    full-mode slot silently degrade to b-roll.
     """
     return slot.get("full_lipsync") is True
 
