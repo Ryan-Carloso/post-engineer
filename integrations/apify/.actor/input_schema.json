@@ -1,0 +1,101 @@
+{
+  "title": "Post Engineer video",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "apiKey": {
+      "title": "Post Engineer API key",
+      "type": "string",
+      "description": "Create one at https://post-engineer.com/api-keys. It starts with pe_live_. Generating a video spends tokens from that account.",
+      "editor": "textfield",
+      "isSecret": true
+    },
+    "title": {
+      "title": "Video title",
+      "type": "string",
+      "description": "Label of the scheduled post.",
+      "editor": "textfield",
+      "prefill": "Why short videos win"
+    },
+    "hook": {
+      "title": "Hook",
+      "type": "string",
+      "description": "Opening line. Hook, body and CTA together must be 60 to 200 words; the script is validated before any token is spent.",
+      "editor": "textarea"
+    },
+    "body": {
+      "title": "Body",
+      "type": "string",
+      "description": "Main script.",
+      "editor": "textarea"
+    },
+    "cta": {
+      "title": "Call to action",
+      "type": "string",
+      "description": "Closing line.",
+      "editor": "textarea"
+    },
+    "providers": {
+      "title": "Publish to",
+      "type": "array",
+      "description": "One or more of: youtube, instagram, linkedin, bluesky, threads. Connect the accounts first at https://post-engineer.com.",
+      "editor": "stringList",
+      "prefill": ["youtube"]
+    },
+    "personaId": {
+      "title": "Persona ID",
+      "type": "string",
+      "description": "AI persona to present the video. Leave empty for a faceless video.",
+      "editor": "textfield"
+    },
+    "faceless": {
+      "title": "Faceless video",
+      "type": "boolean",
+      "description": "Generate without a persona (cheapest option).",
+      "default": false
+    },
+    "accounts": {
+      "title": "Account IDs per provider",
+      "type": "object",
+      "description": "Optional, e.g. {\"youtube\": [\"<account id>\"]}. Defaults to the persona's publishing accounts.",
+      "editor": "json"
+    },
+    "mode": {
+      "title": "When to publish",
+      "type": "string",
+      "description": "asap publishes as soon as the video is ready; scheduled uses the schedule below.",
+      "editor": "select",
+      "enum": ["asap", "scheduled"],
+      "enumTitles": ["As soon as ready", "At scheduled times"],
+      "default": "asap"
+    },
+    "schedule": {
+      "title": "Schedule",
+      "type": "object",
+      "description": "Only for mode scheduled: {\"startAt\": \"2026-12-01T09:00:00Z\", \"times\": [\"18:00\"], \"timezone\": \"America/Sao_Paulo\"}. startAt is an ISO datetime; slots must be 3 hours to 30 days ahead.",
+      "editor": "json"
+    },
+    "waitForCompletion": {
+      "title": "Wait for the video",
+      "type": "boolean",
+      "description": "Keep the run open until the video is generated (or fails) and return its status.",
+      "default": true
+    },
+    "timeoutMinutes": {
+      "title": "Wait timeout (minutes)",
+      "type": "integer",
+      "description": "How long to wait for the video before returning status timeout.",
+      "minimum": 1,
+      "maximum": 60,
+      "default": 30
+    },
+    "apiUrl": {
+      "title": "API base URL",
+      "type": "string",
+      "description": "Only for self-hosted Post Engineer. Must be https.",
+      "editor": "textfield",
+      "sectionCaption": "Advanced"
+    }
+  },
+  "required": ["apiKey", "title", "hook", "body", "cta", "providers"]
+}
