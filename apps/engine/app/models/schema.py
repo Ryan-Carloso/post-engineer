@@ -156,6 +156,12 @@ class VideoParams(BaseModel):
 
     persona: Optional[PersonaParams] = None  # Inline persona (stateless, caller-resolved refs)
     lipsync_enabled: bool = config.app.get("persona_lipsync_enabled", True)  # False = persona voice only, no lip-sync intro
+    # Opt-in full lip-sync: the whole narration renders as talking head
+    # with no b-roll, instead of the default intro-only lip-sync over
+    # stock material. Per-request only (like video_layout, never
+    # config.toml): an editorial choice per post, not a site-wide default.
+    # False (the default) keeps every existing video's behaviour exactly.
+    full_lipsync: bool = False
     # Hook/modal pacing is product-fixed in app/services/task.py
     # (PERSONA_HOOK_* / FACE_FILL_* constants) — intentionally NOT
     # config-driven: the values were validated against GPU intro cost and

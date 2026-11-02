@@ -216,4 +216,58 @@ describe('usePersonaStore', () => {
       expect(state).not.toHaveProperty(key);
     }
   });
+
+  //---------------
+  // Multi-photo staging: first = avatar, the rest = creation-time library.
+  //---------------
+  describe('photo staging', () => {
+    const png = (name: string) => new File(['x'], name, { type: 'image/png' });
+
+    it('addPhotos appends and promotes the first to primary', () => {
+      usePersonaStore.getState().addPhotos([png('a.png'), png('b.png')]);
+      usePersonaStore.getState().addPhotos([png('c.png')]);
+      const state = usePersonaStore.getState();
+      expect(state.photo?.name).toBe('a.png');
+      expect(state.extraPhotos.map((file) => file.name)).toEqual(['b.png', 'c.png']);
+    });
+
+    it('addPhotos caps the total at 10', () => {
+      usePersonaStore.getState().addPhotos(Array.from({ length: 12 }, (_, i) => png(`${i}.png`)));
+      const state = usePersonaStore.getState();
+      expect(1 + state.extraPhotos.length).toBe(10);
+    });
+
+    it('removePhoto of the primary promotes the next; of the last empties the form', () => {
+      usePersonaStore.getState().addPhotos([png('a.png'), png('b.png')]);
+      usePersonaStore.getState().removePhoto(0);
+      expect(usePersonaStore.getState().photo?.name).toBe('b.png');
+      usePersonaStore.getState().removePhoto(0);
+      expect(usePersonaStore.getState().photo).toBeNull();
+      expect(usePersonaStore.getState().extraPhotos).toEqual([]);
+    });
+
+    it('addPhotos at exactly the cap keeps all 10, removePhoto of a middle index keeps the primary', () => {
+      usePersonaStore.getState().addPhotos(Array.from({ length: 10 }, (_, i) => png(`${i}.png`)));
+      expect(1 + usePersonaStore.getState().extraPhotos.length).toBe(10);
+      usePersonaStore.getState().removePhoto(3);
+      const state = usePersonaStore.getState();
+      expect(state.photo?.name).toBe('0.png');
+      expect(state.extraPhotos.map((file) => file.name)).not.toContain('3.png');
+      expect(1 + state.extraPhotos.length).toBe(9);
+    });
+
+    it('buildPersonaFormData sends no images without a photo', () => {
+      usePersonaStore.getState().setAvatarUrl('/caracter-samples/x.png');
+      expect(usePersonaStore.getState().buildPersonaFormData().getAll('images')).toEqual([]);
+    });
+
+    it('buildPersonaFormData sends photo plus images and resetForm clears them', () => {
+      usePersonaStore.getState().addPhotos([png('a.png'), png('b.png'), png('c.png')]);
+      const formData = usePersonaStore.getState().buildPersonaFormData();
+      expect((formData.get('photo') as File).name).toBe('a.png');
+      expect(formData.getAll('images').map((file) => (file as File).name)).toEqual(['b.png', 'c.png']);
+      usePersonaStore.getState().resetForm();
+      expect(usePersonaStore.getState().extraPhotos).toEqual([]);
+    });
+  });
 });

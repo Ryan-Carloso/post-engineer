@@ -40,6 +40,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 032 | `migrations/032_schedules-drop-post-script-prompt.sql` | BREAKING: drop `schedules.post_script_prompt` — scripts come from segments only since Phase 5 PR 4, so the snapshot column is write-dead with no reads (destructive; the former `db:destructive-approved` label gate was removed in BETA). No backfill: the value fed only the deleted LLM script path |
 | 033 | `migrations/033_mcp-refresh-tokens.sql` | MCP OAuth refresh-token allowlist (`mcp_oauth_refresh_tokens`, jti only, never the token value) + `register_mcp_refresh_token` / `rotate_mcp_refresh_token` RPCs (service-role only, single-use rotation, replay returns false) — the objects `apps/web/app/oauth/token/route.ts` already calls and fails closed without; the route comment cited 0026, which never contained them |
 | 034 | `migrations/034_threads-provider.sql` | Threads as a publishing provider: `schedules.threads_account_ids` (default empty) and `threads` in the `post_metrics.provider` check |
+| 035 | `migrations/035_scheduled-posts-full-lipsync.sql` | Per-post full lip-sync choice (`scheduled_posts.full_lipsync`, default false), forwarded by the engine batch pipeline so a tick-dispatched or requeued slot keeps full lip-sync instead of silently rendering intro-only b-roll |
 
 ## How to apply
 

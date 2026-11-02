@@ -1,4 +1,3 @@
-import base64
 import math
 import os.path
 import random
@@ -32,12 +31,13 @@ from app.services import (
     upload_post,
 )
 from app.services import state as sm
-from app.services import persona_image
 from app.services import task_webhook
 from app.services import user_media
 from app.services.lipsync_active import persona_lipsync_active  # noqa: F401 - re-exported for existing callers
+from app.services import full_lipsync
 from app.services.pipeline_stage import PhaseTracker
-from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cost_event_props
+from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cost_event_props, report_from_job_cost
+from app.services.longcat_cost import ModalJobCost
 from app.services.persona_hook import (
     PERSONA_HOOK_MAX_SECONDS,
     PERSONA_HOOK_MIN_SECONDS,
@@ -70,7 +70,6 @@ MAX_FAILED_ALERTS = 1000
 _ALERT_LOCK_TIMEOUT_SECONDS = 0.5
 _discord_notified_failed_tasks: deque[str] = deque(maxlen=MAX_FAILED_ALERTS)
 _discord_notified_failed_tasks_lock = Lock()
-
 
 #---------------
 # Terminal-event emission dedup: the FIRST _fail_task notice for a task
@@ -895,7 +894,37 @@ def generate_final_videos(
     )
 
     video_for_render = combined_video_path
-    if persona_lipsync_active(params):
+    if params.full_lipsync:
+        # Full mode replaces the b-roll video entirely: every narration
+        # window renders as talking head and the windows concatenate into
+        # the video the final encode muxes with narration. Any failure
+        # here propagates and fails the task; it NEVER falls through to
+        # the intro/b-roll path below, and face-fill is skipped (there is
+        # no stock tail left to fill).
+        if not persona_lipsync_active(params):
+            raise ValueError(
+                "full_lipsync requires a persona with a photo and lipsync enabled"
+            )
+        logger.info("generating full lip-sync video (no b-roll)")
+        full_image = full_lipsync.resolve_persona_image(
+            task_id, params, _PERSONA_IMAGE_MAX_BYTES
+        )
+        full_path, full_cost, full_job_ids = full_lipsync.render_full_lipsync(
+            task_id=task_id,
+            params=params,
+            image_path=full_image,
+            audio_file=audio_file,
+            audio_seconds=voice.get_audio_duration(audio_file),
+            subtitles=subtitle.file_to_subtitles(subtitle_path),
+            output_path=path.join(utils.task_dir(task_id), "full-lipsync-1.mp4"),
+        )
+        video_for_render = full_path
+        intro_report = IntroCostReport(
+            ran=True,
+            cost_usd=full_cost,
+            job_id=full_job_ids[0] if full_job_ids else None,
+        )
+    elif persona_lipsync_active(params):
         logger.info("generating persona lip-sync intro")
         intro = prepare_persona_lipsync_video(
             task_id=task_id,
@@ -908,8 +937,8 @@ def generate_final_videos(
         )
         # None: no intro (already reported); the normal video ships.
         if intro is not None:
-            video_for_render, intro_cost_usd, intro_job_id = intro
-            intro_report = IntroCostReport(ran=True, cost_usd=intro_cost_usd, job_id=intro_job_id)
+            video_for_render, intro_cost_usd, intro_job_id, intro_job_cost = intro
+            intro_report = report_from_job_cost(intro_cost_usd, intro_job_id, intro_job_cost)
         # Experimental face-fill: close the video on the persona so weak
         # stock never has to fill the tail. Best-effort — ANY failure
         # (Modal down, unreadable file) degrades to the intro-only video;
@@ -999,13 +1028,13 @@ def prepare_persona_lipsync_video(
     index: int,
     video_script: str,
     subtitle_path: str,
-) -> tuple[str, float | None, str | None] | None:
+) -> tuple[str, float | None, str | None, ModalJobCost | None] | None:
     """Generate the persona intro through a complete hook paragraph.
 
-    Returns (output_path, intro_cost_usd, intro_job_id): the Modal GPU cost
-    in USD (None when the job reports no cost) and the Modal job id. Returns
-    None, before any download or GPU work, when the hook end can be neither
-    measured nor estimated (persona_hook.resolve_lipsync_window).
+    Returns (output_path, intro_cost_usd, intro_job_id, intro_job_cost):
+    the Modal GPU cost, the job id, and the container snapshot (None
+    fields for an older backend). Returns None, before any GPU work, when
+    the hook end can be neither measured nor estimated (resolve_lipsync_window).
     """
     # Measured from the subtitles, else estimated from the audio length;
     # capped at the GPU ceiling so the Modal container never sees a render
@@ -1017,48 +1046,14 @@ def prepare_persona_lipsync_video(
     )
     if hook_duration is None:
         return None
-    persona = params.persona
-    if persona is None:
-        raise longcat.LongCatError("lip sync requires a persona")
-    image_url = persona.avatar_url or persona.photo_url
-    if not image_url:
-        raise longcat.LongCatError("lip sync requires a persona image")
-
+    # Shared with full lip-sync: one SSRF-safe download for both paths.
     task_dir = utils.task_dir(task_id)
-    image_path = path.join(task_dir, "persona-lipsync-image.png")
-    if image_url.startswith("data:image/"):
-        try:
-            encoded = image_url.split(",", 1)[1]
-            with open(image_path, "wb") as image_file:
-                image_file.write(base64.b64decode(encoded))
-        except (IndexError, ValueError) as exc:
-            raise longcat.LongCatError("invalid persona image data URI") from exc
-    else:
-        # SSRF-safe download: public-address check on every redirect hop,
-        # streamed body with a 20 MB cap, and image/* content-type required.
-        # Rejections raise LongCatError and fail the task: the post was
-        # priced with the face, so it never renders without the intro.
-        try:
-            ssrf.download_public_file(
-                persona_image.resolve_persona_image_url(image_url),
-                image_path,
-                what="persona image",
-                max_bytes=_PERSONA_IMAGE_MAX_BYTES,
-                allowed_content_types=("image/",),
-                timeout=60,
-                tls_verify=config.app.get("tls_verify", True),
-            )
-        except ssrf.UnsafeUrlError as exc:
-            raise longcat.LongCatError(
-                f"persona image download rejected: {exc}"
-            ) from exc
-        except OSError as exc:
-            raise longcat.LongCatError(
-                f"persona image download failed: {exc}"
-            ) from exc
+    image_path = full_lipsync.resolve_persona_image(
+        task_id, params, _PERSONA_IMAGE_MAX_BYTES
+    )
 
     lipsync_path = path.join(task_dir, f"lipsync-intro-{index}.mp4")
-    _, intro_cost_usd, intro_job_id = longcat.generate_intro(
+    _, intro_cost_usd, intro_job_id, intro_job_cost = longcat.generate_intro_with_container(
         image_path=image_path,
         audio_path=audio_file,
         quality=params.video_quality,
@@ -1074,8 +1069,7 @@ def prepare_persona_lipsync_video(
             duration=hook_duration,
             layout=params.video_layout.value,
         ),
-        intro_cost_usd,
-        intro_job_id,
+        intro_cost_usd, intro_job_id, intro_job_cost,
     )
 
 
@@ -1644,6 +1638,7 @@ def _download_persona_voice(task_id: str, voice_audio_url: str) -> str:
         current_url = voice_audio_url
         for hop in range(_PERSONA_VOICE_MAX_REDIRECTS + 1):
             _assert_public_url(current_url)
+            # codeql[py/full-ssrf]: guarded, see _assert_public_url per hop
             response = http_client.get(
                 current_url, timeout=60, stream=True, allow_redirects=False
             )

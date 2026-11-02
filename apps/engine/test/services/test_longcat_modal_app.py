@@ -112,6 +112,7 @@ class TestImageWiring(unittest.TestCase):
         "modal_longcat.py",
         "modal_longcat_gpu.py",
         "modal_longcat_resident.py",
+        "modal_longcat_cost.py",
     )
 
     def _modal_source(self) -> str:
@@ -125,6 +126,15 @@ class TestImageWiring(unittest.TestCase):
         # container; without the add_local_file the class crashes on boot.
         source = self._modal_source()
         self.assertIn('"/root/modal_longcat_resident.py"', source)
+
+    def test_gpu_image_ships_the_cost_module(self):
+        # modal_longcat.py imports modal_longcat_cost at scope, and the
+        # GPU image is what the renderer container boots from: the cost
+        # module must be mounted by LONGCAT_IMAGE itself, not merely by
+        # the slim API image (which never runs the renderer).
+        engine_dir = Path(__file__).resolve().parents[2]
+        gpu_source = (engine_dir / "modal_longcat_gpu.py").read_text()
+        self.assertIn('"/root/modal_longcat_cost.py"', gpu_source)
 
     def test_scaledown_window_matches_the_production_app(self):
         # 300s of idle H200 hold costs ~$0.38 per invocation against ~$0.08 at
