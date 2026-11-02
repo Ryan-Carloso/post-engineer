@@ -8,6 +8,63 @@
 
 export class StreamError extends Error {}
 
+// One OpenAI-compatible chat completions call over SSE, shared by the
+// script writer and the topic proposer so there is exactly one LLM
+// client. The caller supplies the messages; this function sends
+// stream:true, accumulates delta.content, counts reasoning length only,
+// and returns the parsed JSON. Reasoning text is never logged, never
+// parsed, and never returned. A non-2xx response, an empty completion,
+// or non-JSON content throws, so the caller can move to the next model
+// in the chain instead of publishing anything the LLM did not write.
+export async function streamLlmJson({
+  baseUrl,
+  apiKey,
+  model,
+  messages,
+  fetchFn = fetch,
+  streamTimeouts = {},
+}) {
+  const silenceMs = streamTimeouts.silenceMs ?? 60000;
+  const totalMs = streamTimeouts.totalMs ?? 300000;
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const fetchTimer = setTimeout(() => controller.abort(), totalMs);
+  let res;
+  try {
+    res = await fetchFn(`${String(baseUrl).replace(/\/+$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, temperature: 0.7, stream: true, messages }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(fetchTimer);
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new StreamError(`write-script: LLM endpoint returned HTTP ${res.status}${body ? `: ${body.slice(0, 200)}` : ''}`);
+  }
+  const remainingMs = totalMs - (Date.now() - startedAt);
+  if (remainingMs <= 0) {
+    throw new StreamError(`write-script: LLM stream total timeout (${totalMs}ms)`);
+  }
+  const streamed = await accumulateLlmStream(res.body, { silenceMs, totalMs: remainingMs, startedAt });
+  const content = streamed.content;
+  const reasoningChars = streamed.reasoningChars;
+  const responseModel = streamed.model !== '' ? streamed.model : model;
+  console.log(`write-script: LLM response model=${responseModel} reasoning=${reasoningChars === 0 ? 'none' : `${reasoningChars} chars`} content=${content.length} chars timeout=streaming-silence-${silenceMs}ms-total-${totalMs}ms`);
+  if (content.trim() === '') {
+    throw new StreamError(`write-script: LLM returned an empty completion (${reasoningChars > 0 ? `reasoning present, ${reasoningChars} chars` : 'no reasoning'})`);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim());
+  } catch {
+    throw new StreamError(`write-script: LLM returned non-JSON: ${content.slice(0, 120)}`);
+  }
+  return { parsed, model: responseModel, reasoningChars };
+}
+
 function reasoningLength(delta) {
   const values = [
     delta?.reasoning,

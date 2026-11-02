@@ -2,14 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   BANNED_PHRASES,
-  MONITOR_TOPICS,
   buildPrompt,
   generateScript,
   resolveLlmModels,
   pickAngle,
-  resolveTopic,
-  rotateTopic,
   validateScript,
+  writeScriptFile,
 } from './write-script.mjs';
 
 function goodScript(overrides = {}) {
@@ -72,16 +70,85 @@ test('validateScript rejects every banned phrase in the prompt base', () => {
   }
 });
 
-test('rotateTopic is deterministic for a date and cycles through the list', () => {
-  const a = rotateTopic(['a', 'b', 'c'], new Date('2026-03-01T12:00:00Z'));
-  const b = rotateTopic(['a', 'b', 'c'], new Date('2026-03-01T23:59:59Z'));
-  assert.equal(a, b);
-  assert.throws(() => rotateTopic([], new Date()));
+test('writeScriptFile with an explicit topic skips the history fetch and the LLM topic step', async () => {
+  const seenUrls = [];
+  const fetchFn = async (url, options) => {
+    seenUrls.push(url);
+    const body = JSON.parse(options.body);
+    assert.ok(body.messages[0].content.includes('short spoken video scripts'));
+    return sseResponse([{ choices: [{ delta: { content: JSON.stringify(goodScript()) } }] }]);
+  };
+  let written = '';
+  const out = await writeScriptFile({
+    TEST_FLIGHT_TOPIC: '  Francesinha restaurants in Porto ',
+    TEST_FLIGHT_RUN_ID: 'run-9',
+    TEST_FLIGHT_SCRIPT_PATH: 'out.json',
+    TEST_FLIGHT_LLM_API_KEY: 'llm-key',
+    TEST_FLIGHT_LLM_BASE_URL: 'https://llm.example.test/v1',
+    TEST_FLIGHT_LLM_MODEL: 'm',
+  }, {
+    fetchFn,
+    search: { provider: 'tavily', facts: '- Ribeira (https://example.test/r): Ribeira is the old riverside district.', sources: ['https://example.test/r'] },
+    writeFile: async (path, content) => { written = content; },
+  });
+  assert.equal(out.topic, 'Francesinha restaurants in Porto');
+  assert.equal(out.topicSource, 'explicit');
+  assert.equal(seenUrls.some((url) => url.includes('/api/schedule/status')), false);
+  assert.ok(written.includes('Francesinha restaurants in Porto'));
 });
 
-test('resolveTopic prefers the explicit topic and rotates when empty', () => {
-  assert.equal(resolveTopic({ TEST_FLIGHT_TOPIC: '  hello world ' }), 'hello world');
-  assert.ok(MONITOR_TOPICS.includes(resolveTopic({ TEST_FLIGHT_TOPIC: '' }, new Date('2026-01-15T00:00:00Z'))));
+test('writeScriptFile with no explicit topic fetches history, asks the LLM for a topic, then writes the script', async () => {
+  const seenUrls = [];
+  const fetchFn = async (url, options) => {
+    seenUrls.push(url);
+    if (url.includes('/api/schedule/status')) {
+      return new Response(JSON.stringify({
+        success: true,
+        upcoming: [],
+        recent: [{ title: 'Where locals eat in Porto', status: 'published', published_at: '2026-10-28T10:00:00Z', slot_at: '2026-10-28T10:00:00Z' }],
+      }), { status: 200 });
+    }
+    const body = JSON.parse(options.body);
+    if (body.messages[0].content.includes('propose video topics')) {
+      return sseResponse([{ choices: [{ delta: { content: JSON.stringify({ topic: 'Best beaches in the Algarve', whyDifferent: 'A different region.' }) } }] }]);
+    }
+    return sseResponse([{ choices: [{ delta: { content: JSON.stringify(goodScript()) } }] }]);
+  };
+  const out = await writeScriptFile({
+    TEST_FLIGHT_TOPIC: '',
+    TEST_FLIGHT_RUN_ID: 'run-10',
+    TEST_FLIGHT_SCRIPT_PATH: 'out.json',
+    TEST_FLIGHT_LLM_API_KEY: 'llm-key',
+    TEST_FLIGHT_LLM_BASE_URL: 'https://llm.example.test/v1',
+    TEST_FLIGHT_LLM_MODEL: 'm',
+    TEST_FLIGHT_POST_ENGINEER_API_KEY: 'pe-key',
+    TEST_FLIGHT_API_BASE_URL: 'https://post-engineer.com',
+  }, {
+    fetchFn,
+    search: { provider: 'tavily', facts: '- Algarve (https://example.test/a): The Algarve is the southern coast.', sources: ['https://example.test/a'] },
+    writeFile: async () => {},
+    now: new Date('2026-11-01T12:00:00Z'),
+  });
+  assert.equal(out.topic, 'Best beaches in the Algarve');
+  assert.equal(out.topicSource, 'llm');
+  assert.equal(seenUrls.some((url) => url.includes('/api/schedule/status')), true);
+});
+
+test('writeScriptFile fails before search or script when the history fetch fails', async () => {
+  const fetchFn = async (url) => {
+    if (url.includes('/api/schedule/status')) return { ok: false, status: 500, text: async () => 'down' };
+    throw new Error(`unexpected fetch to ${url}`);
+  };
+  await assert.rejects(() => writeScriptFile({
+    TEST_FLIGHT_TOPIC: '',
+    TEST_FLIGHT_RUN_ID: 'run-11',
+    TEST_FLIGHT_SCRIPT_PATH: 'out.json',
+    TEST_FLIGHT_LLM_API_KEY: 'llm-key',
+    TEST_FLIGHT_LLM_BASE_URL: 'https://llm.example.test/v1',
+    TEST_FLIGHT_LLM_MODEL: 'm',
+    TEST_FLIGHT_POST_ENGINEER_API_KEY: 'pe-key',
+    TEST_FLIGHT_API_BASE_URL: 'https://post-engineer.com',
+  }, { fetchFn }), /topic history/);
 });
 
 test('pickAngle is deterministic and varies with the run seed', () => {
