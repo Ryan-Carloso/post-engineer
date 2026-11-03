@@ -199,7 +199,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
 
   const { data: slotData, error: slotsError } = await supabase
     .from('scheduled_posts')
-    .select('id, status, faceless, task_id')
+    .select('id, status, faceless, full_lipsync, task_id')
     .eq('schedule_id', scheduleId)
     .eq('user_id', user.id);
   if (slotsError) {
@@ -246,7 +246,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
 
   const { data: remainingData, error: remainingError } = await supabase
     .from('scheduled_posts')
-    .select('id, status, faceless, task_id')
+    .select('id, status, faceless, full_lipsync, task_id')
     .eq('schedule_id', scheduleId)
     .eq('user_id', user.id);
   if (remainingError) {

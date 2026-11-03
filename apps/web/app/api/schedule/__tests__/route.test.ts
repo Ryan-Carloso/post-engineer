@@ -575,6 +575,11 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     expect(res.status).toBe(200);
     const refunds = refundCalls(db);
     expect(refunds.map((params) => params.p_amount)).toEqual([15]);
+    // The amount above is only real if the route actually selects the
+    // full_lipsync column: the mock returns full fixture rows regardless
+    // of the requested columns, so pin the column list itself, or a
+    // dropped column would pass this test while production under-refunds.
+    expect(db.slotSelectArgs.some((arg) => arg.includes('full_lipsync'))).toBe(true);
   });
 
   it('prices very_good at 3 and a faceless slot at 1', async () => {
