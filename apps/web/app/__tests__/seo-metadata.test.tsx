@@ -62,6 +62,13 @@ describe('root layout metadata — search and social', () => {
     expect(twitter.images).toContain('/og.png');
     const publicDir = join(findRepoRoot(import.meta.url), 'apps', 'web', 'public');
     expect(existsSync(join(publicDir, 'og.png'))).toBe(true);
+    // The metadata declares 1200x630 to crawlers, so check the file
+    // itself, not just its existence: PNG IHDR holds width/height
+    // big-endian at bytes 16 and 20. Otherwise the suite would pass
+    // with any size image behind the same declared numbers.
+    const png = readFileSync(join(publicDir, 'og.png'));
+    expect(png.readUInt32BE(16)).toBe(1200);
+    expect(png.readUInt32BE(20)).toBe(630);
   });
 });
 
