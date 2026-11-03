@@ -27,6 +27,15 @@ describe('app/sitemap — real sitemap, not the homepage', () => {
     expect(privacy?.priority).toBeLessThan(1);
   });
 
+  it('refreshes the landing weekly and the other pages monthly', () => {
+    const entries = sitemap();
+    const landing = entries.find((entry) => entry.url.endsWith('/landing'));
+    expect(landing?.changeFrequency).toBe('weekly');
+    for (const entry of entries.filter((e) => e.url !== landing?.url)) {
+      expect(entry.changeFrequency).toBe('monthly');
+    }
+  });
+
   it('stamps every entry with a lastModified date', () => {
     for (const entry of sitemap()) {
       expect(entry.lastModified).toBeInstanceOf(Date);

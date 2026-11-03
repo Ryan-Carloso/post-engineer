@@ -4,11 +4,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
-vi.mock('next/font/google', () => ({
-  Geist: () => ({ variable: '--font-geist-sans', className: '' }),
-  Geist_Mono: () => ({ variable: '--font-geist-mono', className: '' }),
-}));
-
 vi.mock('../providers', () => ({
   default: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="providers">{children}</div>
@@ -33,6 +28,23 @@ describe('root layout metadata — search and social', () => {
     expect(metadata.title).toContain('Instagram');
     expect(metadata.description).toContain('YouTube');
     expect(metadata.description).toContain('Instagram');
+  });
+
+  it('declares the Open Graph site identity and Twitter card', async () => {
+    const { metadata } = await import('../layout');
+    const openGraph = metadata.openGraph as {
+      siteName?: string;
+      locale?: string;
+      type?: string;
+      images?: Array<{ alt?: string }>;
+    };
+    expect(openGraph.siteName).toBe('Post Engineer');
+    expect(openGraph.locale).toBe('pt_BR');
+    expect(openGraph.type).toBe('website');
+    expect(openGraph.images?.[0]?.alt).toContain('YouTube');
+    const twitter = metadata.twitter as { card?: string; images?: string[] };
+    expect(twitter.card).toBe('summary_large_image');
+    expect(twitter.images).toEqual(['/og.png']);
   });
 
   it('declares Open Graph and Twitter cards with a real 1200x630 image', async () => {
@@ -68,6 +80,25 @@ describe('landing layout metadata — canonical and FAQ structured data', () => 
     };
     expect(openGraph.url).toBe('https://post-engineer.com/landing');
     expect(openGraph.images?.[0]?.url).toBe('/og.png');
+  });
+
+  it('declares the landing Open Graph identity and Twitter card', async () => {
+    const { metadata } = await import('../landing/layout');
+    const openGraph = metadata.openGraph as {
+      siteName?: string;
+      locale?: string;
+      type?: string;
+      images?: Array<{ alt?: string }>;
+    };
+    expect(openGraph.siteName).toBe('Post Engineer');
+    expect(openGraph.locale).toBe('pt_BR');
+    expect(openGraph.type).toBe('website');
+    expect(openGraph.images?.[0]?.alt).toBe(
+      'Post Engineer — vídeos com IA publicados automaticamente no YouTube e Instagram',
+    );
+    const twitter = metadata.twitter as { card?: string; images?: string[] };
+    expect(twitter.card).toBe('summary_large_image');
+    expect(twitter.images).toEqual(['/og.png']);
   });
 });
 
