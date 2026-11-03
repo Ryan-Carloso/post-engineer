@@ -1195,6 +1195,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         # Persona videos keep their lip-sync intro on screen: a photo fits
         # only after it. Random concatenation scrambles the timeline, so a
         # photo's moment would be lost.
+        # Short narration (audio_duration <= 12s) gives an inverted window:
+        # prepare_photos then matches no mention, which is correct — the
+        # face fills the whole video, so no photo fits after the intro.
         photo_window = (
             (PERSONA_LIPSYNC_MAX_SECONDS, audio_duration)
             if persona_lipsync_active(params)

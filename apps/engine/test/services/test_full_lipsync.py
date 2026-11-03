@@ -301,6 +301,16 @@ class CaptionParamsTest(unittest.TestCase):
         params = self._params(subtitle_position="center", video_layout="react")
         self.assertIs(full_lipsync.caption_params(params), params)
 
+    def test_full_lipsync_react_layout_still_moves_caption(self) -> None:
+        # Full mode has no persona/b-roll seam: the whole video is the
+        # face, so the react exclusion applies to the hook only.
+        params = self._params(
+            full_lipsync=True, subtitle_position="center", video_layout="react"
+        )
+        moved = full_lipsync.caption_params(params)
+        self.assertEqual(moved.subtitle_position, "custom")
+        self.assertEqual(moved.custom_position, full_lipsync.LIPSYNC_CAPTION_POSITION)
+
     def test_explicit_user_position_is_kept(self) -> None:
         for position in ("top", "bottom", "custom"):
             params = self._params(full_lipsync=True, subtitle_position=position)

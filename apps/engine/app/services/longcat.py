@@ -248,8 +248,8 @@ def trim_audio(
 ) -> None:
     """Create an accurately cut, standalone audio segment for LongCat.
 
-    ``start_seconds`` offsets the cut (used for face-fill tail segments);
-    0 keeps the historical intro-trim duration behavior. A single ``-t``
+    ``start_seconds`` offsets the cut (full lip-sync window trims pass a
+    nonzero offset); 0 keeps the historical intro-trim duration behavior. A single ``-t``
     flag sets the output length: ffmpeg silently applies the LAST
     duplicate flag, so passing two is dead code with a misleading value.
     """

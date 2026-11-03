@@ -296,7 +296,7 @@ def test_an_unexpected_error_never_escapes(tmp_path):
     assert photos == []
 
 
-# ---- the window (persona videos keep their face intro and outro)
+# ---- the window (persona videos keep their face intro on screen)
 
 
 def test_mentions_before_the_window_are_skipped_and_not_searched(tmp_path):
@@ -310,7 +310,7 @@ def test_mentions_before_the_window_are_skipped_and_not_searched(tmp_path):
 
 
 def test_mentions_after_the_window_are_skipped(tmp_path):
-    # A window closing at 7.0s (the face outro starts) leaves only Café Santiago.
+    # A window closing at 7.0s leaves only Café Santiago.
     photos, client, _ = _prepare(tmp_path, [_images(SANTIAGO)], window=(0.0, 7.0))
     assert [p.name for p in photos] == ["Café Santiago"]
     assert len(client.calls) == 1
@@ -319,6 +319,16 @@ def test_mentions_after_the_window_are_skipped(tmp_path):
 def test_the_window_edges_are_inclusive(tmp_path):
     photos, _, _ = _prepare(tmp_path, [_images(SANTIAGO)], window=(6.0, 6.0))
     assert [p.name for p in photos] == ["Café Santiago"]
+
+
+def test_an_inverted_window_matches_no_mention(tmp_path):
+    # Short persona narration gives task.py an inverted window
+    # (12.0, audio_duration < 12): the face fills the whole video, so no
+    # photo is searched for, even for a mention inside the narration.
+    photos, client, track = _prepare(tmp_path, [_images(SANTIAGO)], window=(12.0, 8.0))
+    assert photos == []
+    assert client.calls == []
+    track.assert_not_called()
 
 
 # ---- splicing into the final material list

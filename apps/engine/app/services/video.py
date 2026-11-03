@@ -729,7 +729,7 @@ def compose_lipsync_layout(
 
 
 def video_duration_seconds(video_path: str) -> float:
-    """Probe a video file's duration in seconds (the lip-sync intro splice)."""
+    """Probe a video file's duration in seconds."""
     probe = VideoFileClip(video_path)
     try:
         return float(probe.duration)

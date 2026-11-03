@@ -341,18 +341,23 @@ def render_full_lipsync(
 # A lip-sync face fills the frame (full mode: the whole video; hook mode:
 # the intro), so the default center caption lands on the mouth. 70% from
 # the top sits under the chin and above the bottom strip the platform UI
-# (title, channel) covers.
+# (title, channel) covers. 70% is the top of the caption box, not its
+# center: a multi-line caption extends downward from there, and the final
+# encode clamps it on-screen. The value is an estimate from a Shorts
+# screenshot, not yet verified on a rendered video.
 LIPSYNC_CAPTION_POSITION: float = 70.0
 
 
 def caption_params(params: VideoParams) -> VideoParams:
     """Params for the final encode, with the caption moved off the face.
 
-    Applies to full lip-sync and to the hook intro; the react layout is
-    excluded because its center caption sits on the seam between the
-    persona (top half) and the b-roll (bottom half). Only the default
-    "center" placement moves: an explicit "top", "bottom" or "custom"
-    choice is the user's and is kept. Other jobs return `params` as is.
+    Applies to full lip-sync and to the hook intro. The react exclusion
+    is hook-only: in hook mode its center caption sits on the seam between
+    the persona (top half) and the b-roll (bottom half), so it stays. In
+    full mode the whole video is the face and there is no seam, so a full
+    video in the react layout still moves. Only the default "center"
+    placement moves: an explicit "top", "bottom" or "custom" choice is
+    the user's and is kept. Other jobs return `params` as is.
     """
     if params.subtitle_position != "center":
         return params
