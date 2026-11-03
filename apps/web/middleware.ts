@@ -29,7 +29,10 @@ function authErrorLogFields(error: unknown): { name: string; status: number | nu
 
 // Public files under apps/web/public/ must bypass auth — next/image fetches
 // /logo.png server-side; a 307 to /landing yields HTML and breaks the optimizer.
-export const PUBLIC_STATIC_ASSET_PATH = /\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$/i;
+// xml is in the list for /sitemap.xml: it is a metadata route, not a
+// public/ file, but crawlers fetch it unauthenticated, and a 307 to
+// /landing would hand them HTML instead of a sitemap.
+export const PUBLIC_STATIC_ASSET_PATH = /\.(?:png|jpe?g|gif|webp|svg|ico|txt|xml|mp3|woff2?|ttf)$/i;
 // The OpenAPI spec is fetched anonymously by API marketplaces and agents.
 // Only this exact path: other .json paths stay behind auth.
 const PUBLIC_OPENAPI_SPEC_PATH = '/openapi.json';
@@ -153,11 +156,12 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - common public/ file extensions (logo.png, voice-samples, etc.)
+     * - sitemap.xml (public metadata route, via the xml extension)
      * - openapi.json (public API spec, exact path only)
      * - api/ (API routes)
      * - auth/ (auth callback)
      * - login, landing, privacy, terms, recipes (public pages)
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$|openapi\\.json$|api/|auth/|.well-known/|oauth/|login|landing|privacy|terms|recipes).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|webp|svg|ico|txt|xml|mp3|woff2?|ttf)$|openapi\\.json$|api/|auth/|.well-known/|oauth/|login|landing|privacy|terms|recipes).*)',
   ],
 }

@@ -210,4 +210,23 @@ describe('middleware auth redirect', () => {
   it('excludes /openapi.json from the matcher so the middleware never runs on it', () => {
     expect(config.matcher[0].includes('openapi\\.json$')).toBe(true);
   });
+
+  // Crawlers fetch the sitemap unauthenticated; a 307 to /landing would
+  // hand them HTML instead of XML.
+  it('does not redirect unauthenticated requests for /sitemap.xml', async () => {
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: authError('AuthSessionMissingError', 400, 'Auth session missing!'),
+    });
+
+    const response = await middleware(requestFor('/sitemap.xml'));
+
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get('location')).toBeNull();
+    expect(getUser).not.toHaveBeenCalled();
+  });
+
+  it('excludes sitemap.xml from the matcher so the middleware never runs on it', () => {
+    expect(config.matcher[0].includes('xml)$')).toBe(true);
+  });
 });
