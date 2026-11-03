@@ -5,15 +5,28 @@
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { GeneratePersonaVideoOptionsShape } from './schedule-shapes.js';
+import {
+  MAX_OVERLAY_BADGE_CHARS,
+  MAX_OVERLAY_SUBTITLE_CHARS,
+  MAX_OVERLAY_TITLE_CHARS,
+} from './script-segments.js';
+
+export const SegmentOverlayShape = z
+  .object({
+    title: z.string().min(1).max(MAX_OVERLAY_TITLE_CHARS).describe('The real place name, shown large on the card.'),
+    subtitle: z.string().min(1).max(MAX_OVERLAY_SUBTITLE_CHARS).optional().describe('Address or area, shown under the title.'),
+    badge: z.string().min(1).max(MAX_OVERLAY_BADGE_CHARS).optional().describe('Short highlight such as a price or a year, shown as a pill above the title.'),
+  })
+  .strict();
 
 export const ScriptSegmentShape = {
   kind: z.enum(['hook', 'body', 'cta']).describe('Segment role: hook first, body in the middle, CTA last. Exactly one hook and one CTA.'),
   text: z.string().min(1, 'Each segment text must be non-empty').describe('Spoken text only: no placeholders, links, markdown, emoji or stage directions.'),
   media: z
-    .object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional() })
+    .object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), overlay: SegmentOverlayShape.optional() })
     .strict()
     .optional()
-    .describe('Phase 2: media reference, exactly one of mediaId (from upload_media) or url (a public image URL).'),
+    .describe('Phase 2: media reference, exactly one of mediaId (from upload_media) or url (a public image URL). The photo is shown over the video while its segment is spoken: full frame on faceless videos and over b-roll, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional overlay: an info card (title, subtitle, badge) on the photo, e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
   terms: z.array(z.string().min(1)).max(10).optional().describe('Stock terms for this segment, chosen by the agent. At most 10.'),
 };
 

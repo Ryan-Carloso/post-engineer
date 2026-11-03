@@ -386,6 +386,69 @@ def test_valid_media_shape_passes():
     assert result["media_count"] == 2
 
 
+def _with_overlay(overlay):
+    return [
+        {"kind": "hook", "text": _hook()},
+        {"kind": "body", "text": _body(), "media": {"url": "https://example.com/x.jpg", "overlay": overlay}},
+        {"kind": "cta", "text": _cta()},
+    ]
+
+
+def test_media_overlay_with_every_field_passes_and_counts_as_one_media():
+    result = script_segments.validate_segments(
+        _with_overlay({"title": "Sushi Kinoshita", "subtitle": "Rua das Flores 12, Porto", "badge": "about 35 EUR"})
+    )
+    assert result["media_count"] == 1
+
+
+def test_media_overlay_with_only_a_title_passes():
+    assert script_segments.validate_segments(_with_overlay({"title": "Sushi Kinoshita"}))["media_count"] == 1
+
+
+@pytest.mark.parametrize(
+    "overlay",
+    [
+        "Sushi Kinoshita",
+        {"subtitle": "no title"},
+        {"title": "   "},
+        {"title": 5},
+        {"title": "Sushi", "subtitle": ""},
+        {"title": "Sushi", "subtitle": 3},
+        {"title": "Sushi", "badge": "  "},
+        {"title": "Sushi", "price": "10"},
+    ],
+)
+def test_media_overlay_with_a_bad_shape_is_400_on_the_overlay_field(overlay):
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(_with_overlay(overlay))
+    assert exc_info.value.field == "segments.1.media.overlay"
+
+
+@pytest.mark.parametrize(
+    ("key", "limit"),
+    [
+        ("title", script_segments.MAX_OVERLAY_TITLE_CHARS),
+        ("subtitle", script_segments.MAX_OVERLAY_SUBTITLE_CHARS),
+        ("badge", script_segments.MAX_OVERLAY_BADGE_CHARS),
+    ],
+)
+def test_media_overlay_text_at_the_limit_passes_and_one_over_is_400(key, limit):
+    at_limit = {"title": "Sushi", key: "x" * limit}
+    assert script_segments.validate_segments(_with_overlay(at_limit))["media_count"] == 1
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(_with_overlay({"title": "Sushi", key: "x" * (limit + 1)}))
+    assert exc_info.value.field == "segments.1.media.overlay"
+    assert str(limit) in exc_info.value.rule
+
+
+def test_media_overlay_needs_a_photo_to_sit_on():
+    segments = _with_overlay({"title": "Sushi"})
+    del segments[1]["media"]["url"]
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments)
+    assert exc_info.value.field == "segments.1.media"
+
+
 def test_hook_word_guard_below_15_is_400():
     segments = [
         {"kind": "hook", "text": "Short hook here today."},

@@ -22,15 +22,33 @@ export const MAX_CTA_WORDS = 20;
 export const MIN_HOOK_WORDS = 15;
 export const MAX_HOOK_WORDS = 40;
 export const MAX_TERMS_PER_SEGMENT = 10;
+// The info card painted inside a segment photo's panel (engine media_overlay). Same
+// numbers as MAX_OVERLAY_*_CHARS in apps/engine/app/services/script_segments.py;
+// a sync test in the engine pins them.
+export const MAX_OVERLAY_TITLE_CHARS = 60;
+export const MAX_OVERLAY_SUBTITLE_CHARS = 80;
+export const MAX_OVERLAY_BADGE_CHARS = 30;
+const OVERLAY_LIMITS: Record<string, number> = {
+  title: MAX_OVERLAY_TITLE_CHARS,
+  subtitle: MAX_OVERLAY_SUBTITLE_CHARS,
+  badge: MAX_OVERLAY_BADGE_CHARS,
+};
 // Hook window from the engine persona_hook constants (8-12 seconds).
 export const HOOK_MIN_SECONDS = 8;
 export const HOOK_MAX_SECONDS = 12;
 
 export type SegmentKind = 'hook' | 'body' | 'cta';
 
+export type SegmentOverlay = {
+  title: string;
+  subtitle?: string;
+  badge?: string;
+};
+
 export type SegmentMedia = {
   mediaId?: string;
   url?: string;
+  overlay?: SegmentOverlay;
 };
 
 export type ScriptSegment = {
@@ -64,6 +82,40 @@ export type SegmentsResult =
 
 function fail(field: string, rule: string, fix: string): SegmentsResult {
   return { ok: false, error: { field, rule, fix } };
+}
+
+// Mirrors _check_overlay in the engine: an object with a non-empty title and
+// optional non-empty subtitle/badge, nothing else, each within its limit.
+function checkOverlay(overlay: unknown, field: string): SegmentsResult | null {
+  if (typeof overlay !== 'object' || Array.isArray(overlay)) {
+    return fail(field, 'Overlay must be an object.', 'Send overlay as { title, subtitle?, badge? }.');
+  }
+  const record = overlay as Record<string, unknown>;
+  const unknown = Object.keys(record)
+    .filter((key) => !(key in OVERLAY_LIMITS))
+    .sort();
+  if (unknown.length > 0) {
+    return fail(field, `Overlay has unknown field ${unknown[0]}.`, 'Use only title, subtitle and badge in the overlay.');
+  }
+  const title = record.title;
+  if (typeof title !== 'string' || title.trim().length === 0) {
+    return fail(field, 'Overlay title must be a non-empty string.', 'Send the place name as the overlay title.');
+  }
+  for (const [key, limit] of Object.entries(OVERLAY_LIMITS)) {
+    const value = record[key];
+    if (value === undefined || value === null) continue;
+    if (typeof value !== 'string' || (key !== 'title' && value.trim().length === 0)) {
+      return fail(field, `Overlay ${key} must be a non-empty string.`, `Send a non-empty overlay ${key} or omit it.`);
+    }
+    if (value.trim().length > limit) {
+      return fail(
+        field,
+        `Overlay ${key} is longer than ${limit} characters.`,
+        `Shorten the overlay ${key} to at most ${limit} characters.`,
+      );
+    }
+  }
+  return null;
 }
 
 export function countWords(text: string): number {
@@ -272,7 +324,7 @@ export function validateSegments(input: unknown): SegmentsResult {
     // route's strict media shape rejects them, so this validator must
     // too, or validate-script accepts what generation rejects.
     const unknownMedia = Object.keys(media)
-      .filter((key) => key !== 'mediaId' && key !== 'url')
+      .filter((key) => key !== 'mediaId' && key !== 'url' && key !== 'overlay')
       .sort();
     if (unknownMedia.length > 0) {
       return fail(
@@ -302,6 +354,10 @@ export function validateSegments(input: unknown): SegmentsResult {
     }
     if (urlPresent && (typeof media.url !== 'string' || media.url.trim().length === 0)) {
       return fail(`segments.${i}.media`, 'url must be a non-empty string.', 'Send a non-empty image URL.');
+    }
+    if (media.overlay !== undefined && media.overlay !== null) {
+      const overlayError = checkOverlay(media.overlay, `segments.${i}.media.overlay`);
+      if (overlayError !== null) return overlayError;
     }
     mediaCount += 1;
   }

@@ -75,27 +75,27 @@ class MediaWarningsClearTests(unittest.TestCase):
                 patch.object(tm, "get_video_materials", return_value=["clip.mp4"])
             )
             stack.enter_context(
-                patch.object(tm.user_media, "apply_segment_media", return_value=apply_result)
+                patch.object(tm.user_media, "prepare_segment_panels", return_value=apply_result)
             )
             tm.start(task_id="task-warnings", params=params, stop_at="materials")
         return writes
 
     def test_clean_segments_retry_clears_the_previous_warnings(self):
         params = TaskVideoRequest(video_subject="Porto walks", segments=SEGMENTS)
-        writes = self._run_to_materials(params, (["clip.mp4"], []))
+        writes = self._run_to_materials(params, [])
         warning_writes = [w for w in writes if "media_warnings" in w]
         self.assertEqual(warning_writes, [{"media_warnings": []}])
 
     def test_skips_are_still_recorded_when_present(self):
         params = TaskVideoRequest(video_subject="Porto walks", segments=SEGMENTS)
         skipped = ["segment 1 media skipped: bad url"]
-        writes = self._run_to_materials(params, (["clip.mp4"], skipped))
+        writes = self._run_to_materials(params, skipped)
         warning_writes = [w for w in writes if "media_warnings" in w]
         self.assertEqual(warning_writes, [{"media_warnings": skipped}])
 
     def test_no_segments_run_writes_no_media_warnings(self):
         params = VideoParams(video_subject="Porto walks")
-        writes = self._run_to_materials(params, (["clip.mp4"], []))
+        writes = self._run_to_materials(params, [])
         self.assertEqual([w for w in writes if "media_warnings" in w], [])
 
 

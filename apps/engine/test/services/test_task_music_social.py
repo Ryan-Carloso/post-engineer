@@ -75,8 +75,8 @@ class StartMusicSocialTests(unittest.TestCase):
             stack.enter_context(
                 patch.object(
                     tm.user_media,
-                    "apply_segment_media",
-                    return_value=(["clip.mp4"], []),
+                    "prepare_segment_panels",
+                    return_value=[],
                 )
             )
             stack.enter_context(

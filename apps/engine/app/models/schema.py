@@ -8,6 +8,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.config import config
 from app.models import publish as publish_models
+from app.services.script_segments import (
+    MAX_OVERLAY_BADGE_CHARS,
+    MAX_OVERLAY_SUBTITLE_CHARS,
+    MAX_OVERLAY_TITLE_CHARS,
+)
 
 # Ignore specific Pydantic warnings
 warnings.filterwarnings(
@@ -267,6 +272,22 @@ def _validate_webhook_url(value: Optional[str]) -> Optional[str]:
     return value
 
 
+class SegmentOverlay(BaseModel):
+    """Info card painted inside a segment photo's panel: real name, address, price."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=MAX_OVERLAY_TITLE_CHARS)
+    subtitle: Optional[str] = Field(default=None, min_length=1, max_length=MAX_OVERLAY_SUBTITLE_CHARS)
+    badge: Optional[str] = Field(default=None, min_length=1, max_length=MAX_OVERLAY_BADGE_CHARS)
+
+    @field_validator("title", "subtitle", "badge", mode="before")
+    @classmethod
+    def _strip_text(cls, value: Optional[str]) -> Optional[str]:
+        """Measure the trimmed text, like validate_script and the TS validators."""
+        return value.strip() if isinstance(value, str) else value
+
+
 class SegmentMedia(BaseModel):
     """Media reference shape for a segment's photo (upload_media uploads it, check_media verifies it)."""
 
@@ -278,6 +299,7 @@ class SegmentMedia(BaseModel):
 
     mediaId: Optional[str] = None
     url: Optional[str] = None
+    overlay: Optional["SegmentOverlay"] = None
 
 
 class ScriptSegment(BaseModel):

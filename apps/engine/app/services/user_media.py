@@ -1,22 +1,28 @@
-"""Per-segment user media for faceless videos (MCP first, Phase 2).
+"""Per-segment user media (MCP first, Phase 2): photos shown as panels over the video.
 
 A segment carries either a mediaId (an upload_media temp asset, 1 hour
-TTL) or a direct image URL. The photo occupies the segment's spoken
-interval: the full joined script is voiced once, Whisper's word times
-are walked segment by segment, and each photo replaces the clip that
-overlaps its interval most. When the word walk cannot match exactly
-(numbers, contractions, punctuation split tokens differently), the
-intervals fall back to timing proportional to word counts, and the
-fallback is reported to the caller instead of silently placing a photo
-at the wrong time.
+TTL) or a direct image URL. The photo is shown as a framed panel over the
+video for the seconds its segment is spoken (segment_panels): the full
+joined script is voiced once, Whisper's word times are walked segment by
+segment, and each panel is on screen for its segment's interval. When the
+word walk cannot match exactly (numbers, contractions, punctuation split
+tokens differently), the intervals fall back to timing proportional to
+word counts, and the fallback is reported to the caller instead of
+silently placing a photo at the wrong time.
 
-A segment without media keeps whatever clip was already there (stock
-from the agent's terms, or the neutral background) — no theme is ever
-invented for it. A segment whose media fails is skipped with a warning
-recorded on the task; one bad URL never fails the video. Lip-sync
-videos do not render segment media yet (the intro/outro timeline would
-shift every interval): their media is skipped with a warning, not
-silently dropped.
+A panel is an overlay, so it works the same on every video: faceless over
+stock or the neutral background, and on a persona video over the persona's
+face (hook-only or full lip-sync). Where the face shows the panel sits at
+the bottom edge, so the captions above it never cover the photo.
+
+A segment's media may carry an overlay (title, subtitle, badge): an info
+card with the place's real name, address or price, painted inside the
+panel (media_overlay). A card that cannot be drawn costs only the card:
+the photo still ships and the reason is recorded as a task warning.
+
+A segment without media shows nothing extra. A segment whose media fails is
+skipped with a warning recorded on the task; one bad URL never fails the
+video.
 
 Nothing here logs image content, local paths, or full URLs: warnings
 carry only the segment index and a stable reason.
@@ -25,8 +31,6 @@ carry only the segment index and a stable reason.
 import contextlib
 import os
 import re
-import shutil
-from dataclasses import dataclass
 from typing import Any, Optional, Sequence
 
 import requests
@@ -34,7 +38,9 @@ from loguru import logger
 from PIL import Image
 
 from app.models.schema import VideoAspect
-from app.services import audio_trim, face_detect, image_material, place_photos, subtitle, svg_terms
+from app.services import face_detect, media_overlay, persona_hook, place_photos, segment_panels, subtitle, video
+from app.services.lipsync_active import persona_lipsync_active
+from app.services.segment_panels import Panel
 from app.utils import file_security, utils
 from app.utils.ssrf import UnsafeUrlError
 
@@ -60,16 +66,8 @@ _CODE_TO_REASON = {
     "timeout": "download timed out",
     "face_detected": "face detected",
 }
-
-
-@dataclass
-class SegmentMedia:
-    """A validated still ready to take its segment's clip."""
-
-    index: int
-    still_path: str
-    start: float
-    end: float
+REASON_NO_SPOKEN_TIME = "segment has no spoken time"
+REASON_PANEL_FAILED = "photo panel failed to render"
 
 
 def _temp_assets_dir() -> str:
@@ -148,29 +146,25 @@ def _segment_dict(segment: Any) -> dict[str, Any]:
     return {}
 
 
-def _prepare_still(source_path: str, dest_path: str, aspect: VideoAspect) -> tuple[str, Optional[str]]:
-    """Validate, compose and face-check one image file.
+def _validate_photo(source_path: str) -> Optional[str]:
+    """Mechanical check of one image file: None when usable, else a failure code.
 
-    Returns (still_path, None) on success, or ("", failure_code) where the
-    code is one of not_image / too_small / too_large / face_detected.
-    Size is checked on the decoded pixels before composing, so a
-    thumbnail is too_small rather than an opaque compose failure.
+    The code is one of not_image / too_small / too_large / face_detected.
+    Size is checked on the decoded pixels, so a thumbnail is too_small
+    rather than an opaque render failure.
     """
     try:
         with Image.open(source_path) as opened:
             width, height = opened.size
     except (OSError, ValueError, Image.DecompressionBombError):
-        return "", "not_image"
+        return "not_image"
     if width * height > MAX_PHOTO_PIXELS:
-        return "", "too_large"
+        return "too_large"
     if max(width, height) < MIN_PHOTO_LONG_EDGE or min(width, height) < MIN_PHOTO_SHORT_EDGE:
-        return "", "too_small"
-    still = place_photos.compose_portrait_still(source_path, dest_path, aspect)
-    if not still:
-        return "", "not_image"
-    if face_detect.image_contains_face(still):
-        return "", "face_detected"
-    return still, None
+        return "too_small"
+    if face_detect.image_contains_face(source_path):
+        return "face_detected"
+    return None
 
 
 def _download_failure_code(exc: Exception) -> str:
@@ -193,7 +187,7 @@ def _download_failure_code(exc: Exception) -> str:
     return "blocked_403"
 
 
-def check_media_code(url: str, work_dir: str, aspect: VideoAspect = VideoAspect.portrait) -> str:
+def check_media_code(url: str, work_dir: str) -> str:
     """Mechanical check of one image URL: one code, no judgement.
 
     No User-Agent or Referer tricks: a host that blocks the SSRF-safe
@@ -201,23 +195,20 @@ def check_media_code(url: str, work_dir: str, aspect: VideoAspect = VideoAspect.
     bytes it fetched on its own machine. Never logs the URL.
     """
     raw_path = os.path.join(work_dir, "check-media.raw")
-    still_path = os.path.join(work_dir, "check-media.jpg")
     try:
         place_photos.download_image(url, raw_path)
     except Exception as exc:  # noqa: BLE001 - every download failure maps to a code
         return _download_failure_code(exc)
     try:
-        _, failure = _prepare_still(raw_path, still_path, aspect)
+        failure = _validate_photo(raw_path)
         return failure if failure is not None else "ok"
     finally:
         with contextlib.suppress(OSError):
             os.remove(raw_path)
-        with contextlib.suppress(OSError):
-            os.remove(still_path)
 
 
-def _resolve_media_id(media_id: str, task_dir: str, aspect: VideoAspect) -> tuple[str, Optional[str]]:
-    """A temp asset by its UUID filename, or ("", reason)."""
+def _resolve_media_id(media_id: str) -> tuple[str, Optional[str]]:
+    """A temp asset by its UUID filename: (path, None), or ("", reason)."""
     if not _MEDIA_ID_PATTERN.match(media_id or ""):
         return "", "invalid media id"
     try:
@@ -230,24 +221,65 @@ def _resolve_media_id(media_id: str, task_dir: str, aspect: VideoAspect) -> tupl
         if str(exc) == "file does not exist":
             return "", "media expired or missing"
         return "", "invalid media id"
-    still = os.path.join(task_dir, f"segment-media-{os.path.splitext(media_id)[0]}.jpg")
-    return _prepare_still(source, still, aspect)
+    failure = _validate_photo(source)
+    return (source, None) if failure is None else ("", _CODE_TO_REASON.get(failure, "unusable media"))
 
 
-def _resolve_url(url: str, index: int, task_dir: str, aspect: VideoAspect, session=None) -> tuple[str, Optional[str]]:
+def _resolve_url(url: str, index: int, task_dir: str, session=None) -> tuple[str, Optional[str]]:
+    """Download one URL to the task directory: (path, None), or ("", reason).
+
+    The downloaded file is the caller's to remove once the panel is drawn.
+    """
     raw_path = os.path.join(task_dir, f"segment-media-{index}.raw")
     try:
         place_photos.download_image(url, raw_path, session=session)
     except Exception as exc:  # noqa: BLE001 - one bad URL costs only this segment
         return "", _CODE_TO_REASON.get(_download_failure_code(exc), "download failed")
-    try:
-        still, failure = _prepare_still(raw_path, os.path.join(task_dir, f"segment-media-{index}.jpg"), aspect)
-        if failure is not None:
-            return "", _CODE_TO_REASON.get(failure, "unusable media")
-        return still, None
-    finally:
+    failure = _validate_photo(raw_path)
+    if failure is not None:
         with contextlib.suppress(OSError):
             os.remove(raw_path)
+        return "", _CODE_TO_REASON.get(failure, "unusable media")
+    return raw_path, None
+
+
+def _overlay_font(params: Any, segments: Sequence[Any]) -> Optional[media_overlay.FontFor]:
+    """The subtitle font as a size loader, only when some segment wants a card."""
+    wants_card = any(
+        isinstance(_segment_dict(segment).get("media"), dict)
+        and isinstance(_segment_dict(segment)["media"].get("overlay"), dict)
+        for segment in segments
+    )
+    if not wants_card:
+        return None
+    try:
+        return media_overlay.font_loader(video._resolve_font_with_fallback(params))
+    except (ValueError, OSError, AttributeError) as exc:
+        logger.warning(f"segment media overlay font unavailable: {type(exc).__name__}")
+        return None
+
+
+def _face_mode(params: Any) -> str:
+    """How the persona's face appears: never, for the hook only, or all video."""
+    if getattr(params, "persona", None) is None or not persona_lipsync_active(params):
+        return segment_panels.FACE_NONE
+    if getattr(params, "full_lipsync", False) is True:
+        return segment_panels.FACE_FULL
+    return segment_panels.FACE_HOOK
+
+
+def _hook_end(video_script: str, subtitle_path: str, audio_duration: float) -> float:
+    """Where the face hands over: the intro's own window, never the segment
+    intervals (a proportional interval could draw a full-frame photo over the face)."""
+    if not video_script.strip():
+        return 0.0
+    hook_end, _estimated = persona_hook.measure_hook_end(
+        video_script,
+        subtitle.file_to_subtitles(subtitle_path),
+        audio_duration,
+        subtitle.file_to_words(subtitle_path),
+    )
+    return min(persona_hook.PERSONA_HOOK_MAX_SECONDS, hook_end)
 
 
 def prepare_segment_media(
@@ -258,161 +290,82 @@ def prepare_segment_media(
     task_dir: str,
     aspect: VideoAspect,
     *,
-    lipsync_active: bool = False,
+    face: str = segment_panels.FACE_NONE,
+    video_script: str = "",
     session=None,
-) -> tuple[list[SegmentMedia], list[str]]:
-    """Validated stills with spoken intervals, plus per-segment skip warnings.
+    font_for: Optional[media_overlay.FontFor] = None,
+) -> tuple[list[Panel], list[str]]:
+    """Drawn photos (panels or full frame) with spoken intervals, plus skip warnings.
 
-    Warnings carry only the segment index and a stable reason — never a
-    URL, a path, or a mediaId. The caller stores them on the task so the
-    status endpoint surfaces them; they are not just a log line.
+    A warning carries only the segment index and a stable reason, never a
+    URL, a path or a mediaId, and the caller stores it on the task.
     """
-    prepared: list[SegmentMedia] = []
+    panels: list[Panel] = []
     skipped: list[str] = []
     dicts = [_segment_dict(segment) for segment in segments]
     intervals, fallback = segment_intervals_from_subtitle(dicts, subtitle_path, audio_duration)
     if fallback and dicts:
         logger.warning(f"segment media for task {task_id}: proportional intervals (word walk mismatched)")
+    hook_end = _hook_end(video_script, subtitle_path, audio_duration)
     for index, segment in enumerate(dicts):
         media = segment.get("media")
         if not isinstance(media, dict):
             continue
-        if lipsync_active:
-            skipped.append(f"segment {index} media skipped: lip-sync videos do not render segment media yet")
-            continue
         start, end = intervals[index] if index < len(intervals) else (0.0, 0.0)
+        if end <= start:
+            skipped.append(f"segment {index} media skipped: {REASON_NO_SPOKEN_TIME}")
+            continue
         media_id = media.get("mediaId")
         url = media.get("url")
+        downloaded = ""
         if isinstance(media_id, str) and media_id:
-            still, reason = _resolve_media_id(media_id, task_dir, aspect)
+            photo, reason = _resolve_media_id(media_id)
         elif isinstance(url, str) and url:
-            still, reason = _resolve_url(url, index, task_dir, aspect, session=session)
+            photo, reason = _resolve_url(url, index, task_dir, session=session)
+            downloaded = photo
         else:
             continue
         if reason is not None:
             skipped.append(f"segment {index} media skipped: {reason}")
             continue
-        prepared.append(SegmentMedia(index=index, still_path=still, start=start, end=end))
-    return prepared, skipped
-
-
-def _clip_durations(clips: Sequence[str], clip_seconds: float) -> list[float]:
-    """What each clip contributes to the timeline (probed, capped)."""
-    durations: list[float] = []
-    for clip in clips:
+        overlay = media.get("overlay")
+        overlay = overlay if isinstance(overlay, dict) else None
+        out_path = os.path.join(task_dir, f"segment-panel-{index}.png")
+        on_face = face == segment_panels.FACE_FULL or (face == segment_panels.FACE_HOOK and start < hook_end)
         try:
-            durations.append(min(audio_trim.media_duration(clip), clip_seconds))
-        except Exception:  # noqa: BLE001 - an unprobable clip counts as a full clip
-            durations.append(clip_seconds)
-    return durations
-
-
-def splice_segment_media(
-    clips: list[str], prepared: Sequence[SegmentMedia], clip_seconds: float
-) -> tuple[list[str], list[str]]:
-    """`clips` with each segment's photo clip replacing its max-overlap clip.
-
-    Returns (clips, skipped warnings). A segment whose interval overlaps
-    no clip, or whose still fails to render, keeps the original clip
-    and is reported in the warnings — never just a log line.
-    A segment whose best clip is already used by an earlier segment's
-    photo is skipped with a warning instead of overwriting that photo
-    with no trace: two short adjacent segments can both overlap the
-    same clip most. The input list is untouched.
-    """
-    if not prepared or not clips or clip_seconds <= 0:
-        return list(clips), []
-    durations = _clip_durations(clips, clip_seconds)
-    starts: list[float] = []
-    cursor = 0.0
-    for duration in durations:
-        starts.append(cursor)
-        cursor += duration
-    result = list(clips)
-    used: set[int] = set()
-    rendered_stills: set[str] = set()
-    skipped: list[str] = []
-    for media in sorted(prepared, key=lambda item: item.start):
-        best_index: Optional[int] = None
-        best_overlap = 0.0
-        for index, duration in enumerate(durations):
-            overlap = min(media.end, starts[index] + duration) - max(media.start, starts[index])
-            if overlap > best_overlap:
-                best_overlap = overlap
-                best_index = index
-        if best_index is None:
-            logger.warning("segment media interval overlaps no clip; keeping the original clip")
-            skipped.append(f"segment {media.index} media skipped: interval overlaps no clip")
+            if on_face:
+                built = segment_panels.build_panel(photo, overlay, font_for, aspect, out_path)
+            else:
+                built = segment_panels.build_full(photo, overlay, font_for, aspect, out_path)
+        finally:
+            if downloaded:
+                with contextlib.suppress(OSError):
+                    os.remove(downloaded)
+        if built is None:
+            skipped.append(f"segment {index} media skipped: {REASON_PANEL_FAILED}")
             continue
-        if best_index in used:
-            logger.warning(
-                "segment media clip already used by an earlier segment; keeping the first photo"
-            )
-            skipped.append(
-                f"segment {media.index} media skipped: clip already used by an earlier segment"
-            )
-            continue
-        # Render at the replaced clip's modeled duration, not clip_seconds:
-        # a short original clip replaced by a full-length photo clip would
-        # lengthen the timeline past that point and shift every later
-        # segment's photo out of its spoken interval.
-        # Two segments may share one still (same mediaId), and the render
-        # output derives from the input path: rendering both from the
-        # same still would overwrite the first mp4 with the second's
-        # duration. A still already rendered in this call renders from
-        # a per-segment copy instead.
-        still_path = media.still_path
-        if still_path in rendered_stills:
-            still_path = f"{os.path.splitext(still_path)[0]}-seg{media.index}.jpg"
-            try:
-                shutil.copyfile(media.still_path, still_path)
-            except OSError:
-                logger.warning("segment media still copy failed; keeping the original clip")
-                skipped.append(f"segment {media.index} media skipped: photo clip failed to render")
-                continue
-        rendered = image_material.render_image_file_to_mp4(
-            still_path, clip_duration=max(1, round(durations[best_index]))
-        )
-        if rendered:
-            result[best_index] = rendered
-            used.add(best_index)
-            rendered_stills.add(media.still_path)
-        else:
-            logger.warning("segment media clip failed to render; keeping the original clip")
-            skipped.append(f"segment {media.index} media skipped: photo clip failed to render")
-    return result, skipped
+        if built.card_reason is not None:
+            skipped.append(f"segment {index} media overlay skipped: {built.card_reason}")
+        panels.append(Panel(index=index, path=built.path, x=built.x, y=built.y, start=start, end=end, caption_bottom=built.caption_bottom))
+    return panels, skipped
 
 
-def apply_segment_media(
-    task_id: str,
-    params: Any,
-    clips: list[str],
-    subtitle_path: str,
-    audio_duration: float,
-    *,
-    lipsync_active: bool,
-) -> tuple[list[str], list[str]]:
-    """Full wiring step for tm.start: prepare, splice, report warnings.
+def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_duration: float) -> list[str]:
+    """Materials-stage step for tm.start: draw the panels, persist them, report warnings.
 
-    Returns (clips, warnings). Without segments, or without media on any
-    segment, the clips and warnings pass through untouched.
+    They are overlaid when the final video is assembled (segment_panels.overlay_onto).
     """
     segments = getattr(params, "segments", None)
     if not segments:
-        return list(clips), []
+        return []
     try:
         aspect = VideoAspect(params.video_aspect)
     except (ValueError, TypeError, AttributeError):
         aspect = VideoAspect.portrait
-    task_dir = utils.task_dir(task_id)
-    prepared, skipped = prepare_segment_media(
-        task_id, segments, subtitle_path, audio_duration, task_dir, aspect,
-        lipsync_active=lipsync_active,
+    panels, warnings = prepare_segment_media(
+        task_id, segments, subtitle_path, audio_duration, utils.task_dir(task_id), aspect,
+        face=_face_mode(params), video_script=getattr(params, "video_script", "") or "",
+        font_for=_overlay_font(params, segments),
     )
-    if not prepared:
-        return list(clips), skipped
-    clip_seconds = svg_terms.clip_seconds(params, len(clips), audio_duration)
-    if not clip_seconds:
-        clip_seconds = params.video_clip_duration or 4
-    spliced, splice_skipped = splice_segment_media(clips, prepared, clip_seconds)
-    return spliced, [*skipped, *splice_skipped]
+    segment_panels.write_manifest(task_id, panels, warnings)
+    return warnings

@@ -131,6 +131,28 @@ def hook_end_from_words(
     return words[-1][2] if words else 0.0
 
 
+def measure_hook_end(
+    video_script: str,
+    subtitles: Sequence[tuple[int, str, str]],
+    audio_seconds: float,
+    words: Sequence[tuple[str, float, float]] = (),
+) -> tuple[float, bool]:
+    """The hook's spoken end and whether it is only an audio estimate.
+
+    One source of truth for where the face hands over: the lip-sync intro
+    renders this window, and the segment-photo overlay uses it to decide
+    whether a photo would land on the face. Exact from Whisper word times,
+    else from the timed subtitle cues, else proportional to the audio.
+    0.0 means unmeasurable.
+    """
+    hook_end = hook_end_from_words(video_script, words)
+    if hook_end <= 0:
+        hook_end = _find_hook_end_seconds(video_script, subtitles)
+    if hook_end <= 0:
+        return estimate_hook_end_seconds(video_script, audio_seconds), True
+    return hook_end, False
+
+
 def resolve_lipsync_window(
     task_id: str,
     video_script: str,
@@ -148,14 +170,11 @@ def resolve_lipsync_window(
     hands over to the material. None only when the audio length is also
     unknown. The result is capped at the GPU ceiling.
     """
-    hook_end = hook_end_from_words(video_script, words)
+    hook_end, estimated = measure_hook_end(video_script, subtitles, audio_seconds, words)
     if hook_end <= 0:
-        hook_end = _find_hook_end_seconds(video_script, subtitles)
-    if hook_end <= 0:
-        hook_end = estimate_hook_end_seconds(video_script, audio_seconds)
-        if hook_end <= 0:
-            report_lipsync_intro_skipped(task_id, hook_end)
-            return None
+        report_lipsync_intro_skipped(task_id, hook_end)
+        return None
+    if estimated:
         report_hook_estimated(task_id, hook_end)
     window = lipsync_window_seconds(hook_end, ceiling_seconds)
     if window < hook_end:
