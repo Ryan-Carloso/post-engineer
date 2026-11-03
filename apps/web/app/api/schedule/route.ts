@@ -121,6 +121,7 @@ interface ScheduleCancelSlot {
   id: string;
   status: string;
   faceless: boolean;
+  fullLipsync: boolean;
   taskId: string | null;
 }
 
@@ -148,6 +149,7 @@ function narrowCancelSlot(value: unknown): ScheduleCancelSlot | null {
     id: row.id,
     status: row.status,
     faceless: row.faceless === true,
+    fullLipsync: row.full_lipsync === true,
     taskId: typeof taskId === 'string' && taskId.length > 0 ? taskId : null,
   };
 }
@@ -284,7 +286,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
       p_user_id: user.id,
       p_batch_generation_id: batchGenerationId,
       p_refund_key: `${batchGenerationId}:slot:${slot.id}`,
-      p_amount: computeVideoTokens(slot.faceless, faceQuality),
+      p_amount: computeVideoTokens(slot.faceless, faceQuality, slot.fullLipsync),
       p_reason: 'Schedule cancelled before publish; video refunded',
       p_engine_task_id: slot.taskId,
     });

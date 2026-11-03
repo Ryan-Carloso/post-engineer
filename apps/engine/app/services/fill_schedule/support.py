@@ -12,21 +12,26 @@ from app.services.fill_schedule.store import ScheduleStore
 
 FACELESS_PRICE = 1
 FACE_QUALITY_PRICES = {"ok": 2, "very_good": 3}
+FULL_LIPSYNC_PRICES = {"ok": 8, "very_good": 15}
 
 
-def token_cost(faceless: bool, face_quality: str) -> int:
+def token_cost(faceless: bool, face_quality: str, full_lipsync: bool = False) -> int:
     """Per-video token cost.
 
     Mirrors the web's ``computeVideoTokens`` (apps/web/lib/tokens.ts) — the two
     MUST agree: the web pre-pays this amount and this function decides how
     much to refund, so a drift between them silently over- or under-refunds a
     failed slot. Personas are always faced (the face mix column is gone), so
-    the only inputs are the per-post "no face" choice and the persona's face
-    quality.
+    the inputs are the per-post "no face" choice, the persona's face quality,
+    and the per-post full lip-sync flag. A full lip-sync slot is never
+    faceless (the web route rejects the combination before charging), so
+    faceless still wins here and the full price never applies to a faceless
+    slot.
     """
     if faceless:
         return FACELESS_PRICE
-    return FACE_QUALITY_PRICES["very_good" if face_quality == "very_good" else "ok"]
+    prices = FULL_LIPSYNC_PRICES if full_lipsync else FACE_QUALITY_PRICES
+    return prices["very_good" if face_quality == "very_good" else "ok"]
 
 
 def persona_for(schedule: dict[str, Any]) -> dict[str, Any]:

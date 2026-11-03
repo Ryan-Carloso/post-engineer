@@ -5,8 +5,10 @@ import { describe, it, expect, beforeEach } from 'vitest';
 //  - Faceless (no face, per post)         = 1 token
 //  - Face ok (480p)                       = 2 tokens
 //  - Face very good (720p)                = 3 tokens
+//  - Full lip-sync, face ok               = 8 tokens
+//  - Full lip-sync, face very good        = 15 tokens
 // No face MIX anymore: personas are always faced, so the price is a lookup on
-// (faceless, face quality). The engine mirrors this formula in
+// (faceless, face quality, fullLipsync). The engine mirrors this formula in
 // apps/engine .../fill_schedule/support.py token_cost.
 //---------------
 
@@ -15,6 +17,7 @@ import {
   useTokenStore,
   FACELESS_PRICE,
   FACE_QUALITY_PRICES,
+  FULL_LIPSYNC_PRICES,
   DEFAULT_TOKEN_BALANCE,
 } from '@/lib/tokens';
 
@@ -26,6 +29,11 @@ describe('constant prices', () => {
   it('face ok custa 2 tokens e very_good custa 3', () => {
     expect(FACE_QUALITY_PRICES.ok).toBe(2);
     expect(FACE_QUALITY_PRICES.very_good).toBe(3);
+  });
+
+  it('full lip-sync custa 8 tokens ok e 15 tokens very_good', () => {
+    expect(FULL_LIPSYNC_PRICES.ok).toBe(8);
+    expect(FULL_LIPSYNC_PRICES.very_good).toBe(15);
   });
 
   it('default initial balance is 100 tokens', () => {
@@ -47,15 +55,27 @@ describe('computeVideoTokens', () => {
     expect(computeVideoTokens(false, 'very_good')).toBe(3);
   });
 
+  it('full lip-sync custa 8 tokens ok e 15 tokens very_good', () => {
+    expect(computeVideoTokens(false, 'ok', true)).toBe(8);
+    expect(computeVideoTokens(false, 'very_good', true)).toBe(15);
+  });
+
+  it('full lip-sync com faceless continua a custar 1 token (combinação rejeitada antes da cobrança)', () => {
+    expect(computeVideoTokens(true, 'ok', true)).toBe(1);
+    expect(computeVideoTokens(true, 'very_good', true)).toBe(1);
+  });
+
   it('o preço nunca é zero nem fracionário', () => {
     // The function returns a whole-token lookup; both branches are integers,
     // so the previous "round up so fractions are never charged" rule is
     // structural now, not arithmetic.
     for (const faceless of [true, false]) {
       for (const quality of ['ok', 'very_good'] as const) {
-        const cost = computeVideoTokens(faceless, quality);
-        expect(Number.isInteger(cost)).toBe(true);
-        expect(cost).toBeGreaterThanOrEqual(1);
+        for (const full of [false, true]) {
+          const cost = computeVideoTokens(faceless, quality, full);
+          expect(Number.isInteger(cost)).toBe(true);
+          expect(cost).toBeGreaterThanOrEqual(1);
+        }
       }
     }
   });

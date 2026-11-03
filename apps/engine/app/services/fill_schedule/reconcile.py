@@ -17,6 +17,7 @@ from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
     post_identity,
     slot_faceless,
+    slot_full_lipsync,
     slot_user_id,
     token_cost,
     track_refund_issued,
@@ -86,6 +87,7 @@ class BatchReconciler:
                         cost = token_cost(
                             slot_faceless(slot),
                             str(identity.get("face_quality") or "ok"),
+                            slot_full_lipsync(slot),
                         )
                         batch_generation_id = f"batch:{schedule['id']}"
                         engine_task_id = (

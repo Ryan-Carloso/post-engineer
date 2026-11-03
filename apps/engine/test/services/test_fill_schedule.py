@@ -1917,6 +1917,15 @@ class CoverageGapTests(unittest.TestCase):
         # expensive one.
         self.assertEqual(fs.token_cost(False, "bogus"), 2)
 
+    def test_token_cost_full_lipsync_prices(self):
+        self.assertEqual(fs.token_cost(False, "ok", True), 8)
+        self.assertEqual(fs.token_cost(False, "very_good", True), 15)
+        # A full lip-sync slot is never faceless; faceless still wins.
+        self.assertEqual(fs.token_cost(True, "ok", True), 1)
+        self.assertEqual(fs.token_cost(True, "very_good", True), 1)
+        # Unknown quality falls back to the "ok" full tier.
+        self.assertEqual(fs.token_cost(False, "bogus", True), 8)
+
     # -- publish_due without env configured -------------------------------------
     def test_publish_due_skips_without_base_url(self):
         scheduler = self._scheduler(_FakeStore())

@@ -11,6 +11,7 @@ import { promptsStrings } from './nav-prompts-i18n';
 import { voiceFallbackStrings } from './voice-fallback-i18n';
 import { facelessMaterialStrings } from './faceless-material-i18n';
 import { pricingContactStrings } from './pricing-contact-i18n';
+import { fullLipsyncPriceStrings } from './full-lipsync-price-i18n';
 import type { Locale } from './types';
 
 //---------------
@@ -26,6 +27,7 @@ import type { Locale } from './types';
 
 export const ptDictionary = {
   ...basePtDictionary,
+  tokens: { ...basePtDictionary.tokens, ...fullLipsyncPriceStrings.pt.tokens },
   apiKeys: { ...basePtDictionary.apiKeys, ...publishingAccountsStrings.pt.apiKeys },
   persona: { ...basePtDictionary.persona, ...publishingAccountsStrings.pt.persona, ...voiceFallbackStrings.pt.persona },
   newPost: { ...voiceFallbackStrings.pt.newPost, ...facelessMaterialStrings.pt.newPost },
@@ -39,6 +41,7 @@ export const ptDictionary = {
 
 export const enDictionary = {
   ...baseEnDictionary,
+  tokens: { ...baseEnDictionary.tokens, ...fullLipsyncPriceStrings.en.tokens },
   apiKeys: { ...baseEnDictionary.apiKeys, ...publishingAccountsStrings.en.apiKeys },
   persona: { ...baseEnDictionary.persona, ...publishingAccountsStrings.en.persona, ...voiceFallbackStrings.en.persona },
   newPost: { ...voiceFallbackStrings.en.newPost, ...facelessMaterialStrings.en.newPost },
@@ -57,6 +60,7 @@ type PromptsKeys = typeof promptsStrings.en;
 type VoiceFallbackKeys = typeof voiceFallbackStrings.en;
 type FacelessMaterialKeys = typeof facelessMaterialStrings.en;
 type PricingContactKeys = typeof pricingContactStrings.en;
+type FullLipsyncPriceKeys = typeof fullLipsyncPriceStrings.en;
 export type Dictionary = BaseDictionary & {
   [Section in keyof ThreadsKeys]: {
     [Key in keyof ThreadsKeys[Section]]: string;
@@ -84,6 +88,10 @@ export type Dictionary = BaseDictionary & {
 } & {
   [Section in keyof PricingContactKeys]: {
     [Key in keyof PricingContactKeys[Section]]: string;
+  };
+} & {
+  [Section in keyof FullLipsyncPriceKeys]: {
+    [Key in keyof FullLipsyncPriceKeys[Section]]: string;
   };
 };
 

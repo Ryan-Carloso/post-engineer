@@ -155,7 +155,7 @@ class BatchGenerator:
             if user_id is None:
                 raise RuntimeError("Scheduled slot has no user_id")
             face_quality = str(identity.get("face_quality") or "ok")
-            cost = token_cost(faceless, face_quality)
+            cost = token_cost(faceless, face_quality, slot_full_lipsync(slot))
             # Prepaid at request time under this id: no spend here, only a
             # refund if dispatch itself fails.
             generation_id = f"batch:{schedule['id']}"

@@ -16,8 +16,10 @@ export function PersonaTokensSection() {
   const { t } = useI18n();
 
   // The persona always has a face, so this is the with-face price (faceless is
-  // a per-post choice, priced on the post screen).
+  // a per-post choice, priced on the post screen). Full lip-sync is also a
+  // per-post choice, priced here so the dashboard shows both modes.
   const cost = computeVideoTokens(false, faceQuality);
+  const fullLipsyncCost = computeVideoTokens(false, faceQuality, true);
 
   return (
     <section>
@@ -51,6 +53,13 @@ export function PersonaTokensSection() {
           <span className="text-sm text-neutral-700">{t('tokens.costLabel')}</span>
           <span data-testid="token-cost-preview" className="shrink-0 text-sm font-semibold text-neutral-900">
             {t('tokens.costValue', { cost })}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3">
+          <span className="text-sm text-neutral-700">{t('tokens.fullLipsyncCostLabel')}</span>
+          <span data-testid="token-full-lipsync-cost-preview" className="shrink-0 text-sm font-semibold text-neutral-900">
+            {t('tokens.costValue', { cost: fullLipsyncCost })}
           </span>
         </div>
       </div>

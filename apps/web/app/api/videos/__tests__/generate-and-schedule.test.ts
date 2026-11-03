@@ -816,6 +816,11 @@ describe('POST /api/videos/generate-and-schedule', () => {
         const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
         expect(payload.full_lipsync).toBe(true);
         expect(payload.lipsync_enabled).toBe(true);
+        // Full lip-sync charges the full price (8 tokens, face ok),
+        // not the hook-only price (2 tokens).
+        const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
+        expect(spends).toHaveLength(1);
+        expect(spends[0].args.p_amount).toBe(8);
       } finally {
         vi.unstubAllGlobals();
         vi.unstubAllEnvs();

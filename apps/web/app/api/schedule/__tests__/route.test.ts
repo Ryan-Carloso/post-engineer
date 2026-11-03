@@ -563,6 +563,20 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     );
   });
 
+  it('refunds a full lip-sync slot at the full price, not the hook price', async () => {
+    const db = mockSupabase({
+      scheduleLookup: { data: { id: 's-1', post_face_quality: 'very_good' }, error: null },
+      scheduleSlots: [
+        { id: 'slot-full', status: 'pending', faceless: false, full_lipsync: true, task_id: null },
+      ],
+      remove: { error: null },
+    });
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    expect(res.status).toBe(200);
+    const refunds = refundCalls(db);
+    expect(refunds.map((params) => params.p_amount)).toEqual([15]);
+  });
+
   it('prices very_good at 3 and a faceless slot at 1', async () => {
     const faced = mockSupabase({
       scheduleLookup: { data: { id: 's-hq', post_face_quality: 'very_good' }, error: null },
