@@ -1,552 +1,150 @@
-Post Engineer API - COMPLETE API DOCUMENTATION FOR AI IMPLEMENTATION
+Post Engineer API
 ================================================================================
 
-API BASE URL: https://youtube-api.example.com
-DEVELOPMENT URL: http://localhost:3000
-VERSION: 3.0.0
-LAST UPDATED: August 2026
+Base URL:        https://post-engineer.com
+Development URL: http://localhost:3434
+OpenAPI spec:    https://post-engineer.com/openapi.json
+MCP server:      npx -y post-engineer-mcp@latest (env POST_ENGINEER_API_KEY)
+
+The OpenAPI spec lists every endpoint below. It is generated from the MCP
+parity mapping (apps/mcp/src/__tests__/parity-endpoint-tools.json) by
+`node apps/web/scripts/generate-openapi.mjs`, with request and response
+schemas from apps/web/scripts/openapi-schemas.mjs. Some nested items (social
+accounts, metrics rows, generation lists) are typed as free-form objects.
 
 ================================================================================
-ARCHITECTURE OVERVIEW (v3.0.0 — SUPABASE-BACKED)
+AUTHENTICATION
 ================================================================================
 
-Token storage: Supabase (table `social_accounts`, column `encrypted_tokens`)
-Encryption: AES-256-GCM (key from env TOKEN_ENCRYPTION_KEY, base64, 32 bytes)
-Local token file: REMOVED — token.json no longer exists and must NOT be recreated
+Create an API key in the dashboard (https://post-engineer.com/api-keys) or
+through POST /api/api-keys (web session only). Keys start with `pe_live_`
+and are shown once.
 
-Auth model:
-- Web UI users: Supabase session (GitHub OAuth login)
-- API clients: App API Key (post-engineer_...) sent per request
+Send the key on every request, either way:
 
-Required headers on protected routes (/api/upload, /api/instagram-post,
-/api/media/upload):
-  Authorization: Bearer post-engineer_xxxxxxxx
-  -- or --
-  X-API-Key: post-engineer_xxxxxxxx
+  Authorization: Bearer pe_live_xxxxxxxx
+  X-API-Key: pe_live_xxxxxxxx
 
-Generate keys in the web UI (App API Key tab) or via POST /api/app-api-keys.
+A key can be limited to specific personas. A missing key returns 401
+"Authentication required."; an invalid key returns 401 "Invalid API key.".
 
 ================================================================================
-API ENDPOINTS
+RESPONSES AND ERRORS
 ================================================================================
 
-AUTHENTICATION ENDPOINTS (web session users)
---------------------------------------------
-
-1. GET /api/google-oauth/start
-   Description: Generates OAuth authorization URL for Google/YouTube
-   Requires: Supabase session (cookie)
-   Response Format:
-   {
-     "success": true,
-     "message": "URL de autorização gerada",
-     "auth_url": "https://accounts.google.com/o/oauth2/v2/auth?...",
-     "instructions": {
-       "step1": "Abra a URL auth_url no navegador",
-       "step2": "Autorize o aplicativo",
-       "step3": "Você será redirecionado automaticamente de volta",
-       "step4": "Os tokens serão salvos criptografados no Supabase"
-     }
-   }
-
-2. GET /api/google-oauth/callback?code=AUTHORIZATION_CODE
-   Description: OAuth callback endpoint for Google authentication
-   Flow: exchanges code for tokens, fetches channel info, encrypts tokens
-   (AES-256-GCM) and persists them in Supabase `social_accounts`
-   Response: HTML popup that postMessages the opener window and closes
-   Tokens are NEVER returned to the client or written to disk
-
-3. GET /api/instagram-auth/start
-   Description: Generates OAuth authorization URL for Instagram
-   Requires: Supabase session (cookie)
-
-4. GET /api/instagram-auth/callback?code=AUTHORIZATION_CODE
-   Description: Instagram OAuth callback
-   Flow: exchanges code for long-lived token (~60 days), fetches pages and
-   Instagram business accounts, encrypts everything and persists in Supabase
-
-ACCOUNT ENDPOINTS
------------------
-
-5. GET /api/account
-   Description: Lists all social accounts of the logged-in user (NO tokens)
-   Requires: Supabase session (cookie)
-   Response Format:
-   {
-     "authenticated": true,
-     "accounts": [ { "channelId": "UC...", "channelName": "...", ... } ],
-     "message": "Contas obtidas do Supabase"
-   }
-
-UPLOAD ENDPOINT (requires App API Key)
---------------------------------------
-
-6. POST /api/upload
-   Description: Main endpoint for uploading videos to YouTube
-   Content-Type: multipart/form-data
-   Auth: Authorization: Bearer post-engineer_... (owner of the connected account)
-   STRICT VALIDATION: All fields are mandatory with NO fallbacks
-
-   Required Form Fields:
-   - video: File object (max 2GB, must be video/*)
-   - title: String (non-empty, trimmed)
-   - description: String (non-empty, trimmed, NO fallback)
-   - tags: String (comma-separated, minimum 1 tag required)
-   - privacyStatus: Enum (must be "public", "private", or "unlisted")
-   - accountId: String (channelId of a connected YouTube account)
-
-   Example curl Request:
-   curl -X POST http://localhost:3000/api/upload \
-     -H "Authorization: Bearer post-engineer_xxxxxxxxxxxx" \
-     -F "video=@meu-video.mp4" \
-     -F "title=Meu Vídeo Incrível" \
-     -F "description=Descrição do vídeo" \
-     -F "tags=teste,youtube,api" \
-     -F "privacyStatus=public" \
-     -F "accountId=UCxxxxxxxxxxxx"
-
-   Server flow:
-   1. Resolve API key -> owner user_id
-   2. Fetch encrypted tokens from Supabase for (owner, youtube, accountId)
-   3. Decrypt (AES-256-GCM) and auto-refresh if expired
-   4. Refreshed tokens are re-encrypted and persisted back to Supabase
-   5. Upload to YouTube with 30-minute timeout and progress tracking
-
-   Success Response (200 OK):
-   {
-     "success": true,
-     "videoId": "dQw4w9WgXcQ",
-     "videoUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-     "uploadDuration": "45.23s",
-     "logId": "2024-08-09_143030_jkl012",
-     "accountId": "UCxxxxxxxxxxxx"
-   }
-
-7. POST /api/instagram-post
-   Description: Publishes an image or video to a connected Instagram account
-   Content-Type: application/json
-   Auth: Authorization: Bearer post-engineer_... (owner of the connected account)
-
-   Required JSON Fields:
-   - igUserId: String (provider_account_id of a connected Instagram account)
-   - caption: String (non-empty, trimmed)
-   - imageUrl OR videoUrl: String (public URL of the uploaded media; exactly one)
-
-   Example curl Request:
-   curl -X POST http://localhost:3000/api/instagram-post \
-     -H "Authorization: Bearer post-engineer_xxxxxxxxxxxx" \
-     -H "Content-Type: application/json" \
-     -d '{"igUserId":"1784xxxxxxxxxxx","caption":"Hello IG","imageUrl":"https://cdn.example.com/foto.jpg"}'
-
-   Server flow:
-   1. Resolve API key -> owner user_id
-   2. Fetch encrypted token from Supabase for (owner, instagram, igUserId)
-   3. Decrypt (AES-256-GCM); 401 if expired
-   4. Create media container -> publish via /media_publish
-   5. Returns postId + permalink
-
-   Success Response (200 OK):
-   {
-     "success": true,
-     "postId": "179xxxxxxxxxxxx",
-     "mediaId": "1789xxxxxxxxxxx",
-     "permalink": "https://www.instagram.com/p/xxxx/",
-     "message": "Publicação criada com sucesso no Instagram."
-   }
-
-APP API KEY ENDPOINTS (web session users)
------------------------------------------
-
-8. GET /api/app-api-keys
-   - With ?key=post-engineer_...: validates the key -> { "success": true, "valid": true }
-   - Without query: lists the user's keys (without raw key material)
-
-9. POST /api/app-api-keys
-   Description: Generates a new API key
-   Response: { "success": true, "key": "post-engineer_...", ... }
-   NOTE: the raw key is shown only once, at generation time
-
-10. DELETE /api/app-api-keys
-   Body: { "key": "post-engineer_..." }
-   Description: Removes a key
-
-SYSTEM ENDPOINTS
-----------------
-
-11. GET /api/health
-    Description: Health check endpoint (Supabase-based) for system monitoring
-    Response Format:
-    {
-      "status": "ok",
-      "timestamp": "2026-08-18T07:52:30.857Z",
-      "uptime": "11s",
-      "version": "3.0.0",
-      "environment": "development",
-      "systems": {
-        "supabase": {
-          "status": "ok",
-          "message": "Supabase acessível e tabelas íntegras"
-        },
-        "socialAccounts": {
-          "status": "ok",
-          "total": 1,
-          "youtube": 1,
-          "instagram": 0,
-          "storage": "supabase (encrypted AES-256-GCM)"
-        },
-        "appApiKeys": { "status": "ok", "total": 2 },
-        "logs": { "status": "ok", "path": "/app/logs" },
-        "uploads": { "status": "ok", "path": "/app/uploads" }
-      },
-      "performance": { "memoryUsage": { ... }, "nodeVersion": "v22", ... }
-    }
-
-    status "ok" = Supabase reachable and tables intact. Works headless
-    (background mode): no web UI interaction required, no local token file.
+- JSON bodies. Failures carry success:false and an error message.
+- Most routes return a flat { "success", ... } payload. Only the two engine
+  proxies, GET /api/persona/video-status/{taskId} and
+  DELETE /api/persona/video-task/{taskId}, return the engine envelope
+  { "status", "message", "body" }: the payload is `body`, never `data`.
+- 400 invalid, over-length or conflicting input (nothing is truncated or
+  coerced silently). 401 bad key. 402 not enough tokens. 404 unknown id.
+  409 conflict (e.g. the persona already has an active schedule). 410 gone:
+  terminal, stop polling. 429 rate limited: retry with backoff. 5xx
+  transient: retry with backoff. Each operation's statuses are in the spec.
+- Upload, destructive and fan-out routes are rate limited per caller.
 
 ================================================================================
-ERROR RESPONSES - STANDARD FORMAT
+VIDEOS (cost prepaid tokens: faceless 1, ok 2, very_good 3)
 ================================================================================
 
-All error responses follow this format:
-{
-  "success": false,
-  "error": "Error description message",
-  "errorType": "ErrorType",
-  "logId": "YYYY-MM-DD_HHMMSS_randomString",
-  "suggestions": [
-    "Suggestion 1",
-    "Suggestion 2"
-  ]
-}
+Check the balance first: GET /api/billing/tokens.
 
-ERROR TYPES AND HTTP STATUS CODES:
-----------------------------------
+1. POST /api/videos/validate-script   mechanical validation, spends no tokens
+2. POST /api/videos/score-draft       mechanical score + publish check, no tokens
+3. POST /api/videos/generate-and-schedule
+   One call generates the video, schedules it and auto-publishes it. There
+   are no orphan videos. Script is segments: hook first, body, CTA last,
+   60-200 words total. Slot is 3h to 30d ahead, or mode "asap".
+4. GET  /api/persona/video-status/{taskId}   task state
+   state: -1 failed, 1 complete, 3 queued, 4 processing. Only -1 and 1 are
+   terminal. HTTP 200 does not mean the job is alive: read `state`.
+   410 Gone is terminal too (the engine lost the task): stop polling and
+   read GET /api/schedule/slots/{slotId} to see if the video was delivered
+   or failed and refunded.
+5. DELETE /api/persona/video-task/{taskId}   cancel a task
 
-ValidationError (400):
-- "Nenhum arquivo de vídeo enviado"
-- "Título do vídeo é obrigatório"
-- "Descrição do vídeo é obrigatória" (NO FALLBACKS)
-- "Tags do vídeo são obrigatórias"
-- "Pelo menos uma tag é obrigatória"
-- "Status de privacidade inválido. Use 'public', 'private' ou 'unlisted'"
-- "Arquivo muito grande. Máximo 2GB"
-- "Arquivo inválido. Deve ser um vídeo"
-- "ID da conta é obrigatório"
-
-AuthError (401):
-- "API key do app é obrigatória. Envie 'Authorization: Bearer <key>'..."
-- "API key inválida. Gere uma nova key na aba App API Key."
-- "Conta <accountId> não encontrada para o usuário dono da API key..."
-- "Token expirado e não há refresh token. Inicie OAuth novamente"
-- "Falha ao refresh token. Inicie OAuth novamente"
-
-TimeoutError (408):
-- "Upload timeout após 30 minutos"
-
-UploadError (500):
-- "Erro no processo de upload"
-
-YouTubeApiError (500):
-- "Erro na API do YouTube"
-
-NetworkError (500):
-- "Erro de conexão"
+Jobs stuck for several days are refunded automatically.
 
 ================================================================================
-VALIDATION RULES - STRICT MODE
+ENDPOINTS (all require an API key)
 ================================================================================
 
-NO FALLBACKS, NO DEFAULT VALUES, NO EXCEPTIONS
+METHOD PATH                                                   OPERATION
+--------------------------------------------------------------------------------
+POST   /api/videos/validate-script                            validate script
+POST   /api/videos/score-draft                                score draft
+POST   /api/videos/generate-and-schedule                      generate persona video
+GET    /api/persona/video-status/{taskId}                     get video status
+DELETE /api/persona/video-task/{taskId}                       cancel video task
+GET    /api/persona/video-generations                         list video generations
+GET    /api/persona/video-generations/{generationId}          get video generation
+POST   /api/upload-content                                    publish video direct
+POST   /api/media/upload                                      upload media
+POST   /api/media/check                                       check media
+GET    /api/persona/list                                      list personas
+POST   /api/persona                                           create persona
+PATCH  /api/persona                                           update persona
+DELETE /api/persona                                           delete persona
+GET    /api/persona/delete-preview                            get persona delete preview
+GET    /api/persona/faces                                     list faces
+GET    /api/persona/images                                    list persona images
+POST   /api/persona/images                                    add persona image
+PATCH  /api/persona/images                                    update persona image
+DELETE /api/persona/images                                    remove persona image
+GET    /api/persona/voices                                    list voices
+GET    /api/persona/cloned-voices                             list cloned voices
+POST   /api/persona/cloned-voices                             create cloned voice
+GET    /api/persona/cloned-voices/{cloneId}                   get cloned voice
+DELETE /api/persona/cloned-voices/{cloneId}                   delete cloned voice
+POST   /api/persona/cloned-voices/{cloneId}/preview           preview cloned voice
+GET    /api/persona/publishing-accounts                       get persona publishing accounts
+PUT    /api/persona/publishing-accounts                       set persona publishing accounts
+GET    /api/account                                           list social accounts
+DELETE /api/account                                           disconnect account
+POST   /api/account/connect-url                               connect account (OAuth URL)
+POST   /api/bluesky-connect                                   connect account (Bluesky)
+GET    /api/schedule                                          list schedules
+DELETE /api/schedule                                          cancel schedule
+GET    /api/schedule/status                                   list posts
+GET    /api/schedule/slots/{slotId}                           get slot
+PATCH  /api/schedule/slots/{slotId}                           update slot title
+DELETE /api/schedule/slots/{slotId}                           delete slot
+GET    /api/posts/{id}                                        get post
+GET    /api/metrics                                           get post metrics
+GET    /api/billing/tokens                                    get token balance
+GET    /api/billing/transactions                              list token transactions
 
-Required Fields with Validation:
----------------------------------
-
-1. VIDEO FILE
-   - Type: File object
-   - Max Size: 2GB (YouTube API limit)
-   - Content Type: Must start with "video/"
-   - Validation: File existence, size check, type check
-   - Error on failure: ValidationError
-
-2. TITLE
-   - Type: String
-   - Validation: Must not be empty or whitespace only
-   - Trim: Applied before validation
-   - Error on failure: ValidationError("Título do vídeo é obrigatório")
-
-3. DESCRIPTION
-   - Type: String
-   - Validation: Must not be empty or whitespace only
-   - Trim: Applied before validation
-   - NO FALLBACK TO EMPTY STRING
-   - Error on failure: ValidationError("Descrição do vídeo é obrigatória")
-
-4. TAGS
-   - Type: String (comma-separated)
-   - Validation: Split by commas, trim each tag, filter empty tags
-   - Minimum: At least 1 tag after processing
-   - NO FALLBACK TO EMPTY ARRAY
-   - Error on failure: ValidationError("Tags do vídeo são obrigatórias")
-
-5. PRIVACY STATUS
-   - Type: String (enum)
-   - Valid values: "public", "private", "unlisted"
-   - NO DEFAULT VALUE
-   - Error on failure: ValidationError("Status de privacidade inválido")
-
-6. ACCOUNT ID
-   - Type: String
-   - The channelId of a YouTube account connected by the API key owner
-   - Error on failure: AuthError("Conta não encontrada...")
-
-================================================================================
-TOKEN STORAGE - SUPABASE (CRITICAL IMPLEMENTATION DETAILS)
-================================================================================
-
-There is NO local token file. All OAuth tokens live in Supabase, encrypted.
-
-TABLE: social_accounts
-  id uuid primary key
-  user_id uuid references auth.users(id)
-  api_key_id uuid references app_api_keys(id)
-  provider text ('youtube' | 'instagram')
-  provider_account_id text (channelId / fb user id)
-  account_name text
-  account_metadata jsonb (thumbnail, pages, statistics...)
-  encrypted_tokens text (v1.<iv>.<tag>.<ciphertext> — AES-256-GCM)
-  token_expires_at timestamptz
-  created_at / updated_at / last_used_at timestamptz
-  unique (user_id, provider, provider_account_id)
-
-ENCRYPTION FORMAT:
-  v1.<iv_b64url>.<auth_tag_b64url>.<ciphertext_b64url>
-  - Key: env TOKEN_ENCRYPTION_KEY (base64, must decode to exactly 32 bytes)
-  - No fallback: missing/invalid env throws at encryption time
-
-TABLE: app_api_keys
-  id uuid primary key
-  user_id uuid references auth.users(id)
-  name text
-  key_hash text unique (sha256 hex of the raw key)
-  created_at / last_used_at timestamptz
-
-AUTO-REFRESH LOGIC (server-side, in /api/upload and the CLI script):
-  1. Resolve API key -> owner user_id
-  2. Select encrypted_tokens from social_accounts
-     where user_id = owner, provider = 'youtube',
-           provider_account_id = accountId
-  3. decryptTokens(encrypted_tokens)
-  4. If expiry_date < now: oauth2Client.refreshAccessToken()
-  5. Re-encrypt refreshed tokens and UPDATE social_accounts
-  6. Tokens never touch the filesystem and never reach the client
+Not in this list: session-only routes (OAuth callbacks, API key management,
+billing checkout/webhook, logout, GET /api/health) and the public
+GET /api/version.
 
 ================================================================================
-UPLOAD IMPLEMENTATION - COMPLETE FLOW
+SOCIAL ACCOUNTS
 ================================================================================
 
-1. Resolve API key from Authorization header (sha256 lookup)
-2. Parse FormData from request
-3. Validate all required fields (strict validation, no fallbacks)
-4. Fetch + decrypt tokens from Supabase (auto-refresh if expired)
-5. Convert File to Buffer
-6. Create video metadata
-7. Upload to YouTube API with 30-minute timeout
-8. Track progress via logging
-9. Register post in history
-10. Clean up temporary files
-11. Return success response with video ID and URL
-
-UPLOAD METADATA FORMAT:
-----------------------
-
-{
-  snippet: {
-    title: "Video Title",
-    description: "Video Description",
-    tags: ["tag1", "tag2", "tag3"],
-    categoryId: "22"  // People & Blogs
-  },
-  status: {
-    privacyStatus: "public",
-    selfDeclaredMadeForKids: false
-  }
-}
-
-TIMEOUT CONFIGURATION:
----------------------
-
-- Upload timeout: 30 minutes (1,800,000 ms)
-- OAuth timeout: 5 minutes (300,000 ms)
-- Progress callback: Real-time upload progress tracking
+Supported: YouTube, Instagram, LinkedIn, Threads, Bluesky.
+Connect via POST /api/account/connect-url (returns an https auth_url to open in
+a browser) or POST /api/bluesky-connect (app password). Then map accounts to a
+persona with PUT /api/persona/publishing-accounts.
 
 ================================================================================
-LOGGING SYSTEM
+MARKETPLACES (RapidAPI, Apify, MCP Registry)
 ================================================================================
 
-LOG ID FORMAT:
--------------
+The same API key works everywhere; tokens are always billed by Post Engineer.
 
-Format: YYYY-MM-DD_HHMMSS_randomString
-Example: 2024-08-09_143022_abc123
-
-LOG FILES:
-----------
-
-logs/error.log - Error logging
-logs/uploads.log - Upload operation logging
-logs/oauth.log - OAuth operation logging
-logs/combined.log - All logs combined
-
-LOG STRUCTURE:
---------------
-
-{
-  "logId": "2024-08-09_143022_abc123",
-  "timestamp": "2024-08-09T14:30:22.000Z",
-  "level": "info",
-  "message": "Log message",
-  "metadata": {
-    "additional": "information"
-  }
-}
+- RapidAPI: send your Post Engineer key in Authorization: Bearer pe_live_...
+  next to the X-RapidAPI-Key header. RapidAPI forwards it; without it the API
+  returns 401.
+- Apify: the "Post Engineer video" Actor takes the key as a secret input and
+  calls POST /api/videos/generate-and-schedule for you (source:
+  integrations/apify in the repository).
+- MCP Registry: io.github.Ryan-Carloso/post-engineer (npm post-engineer-mcp),
+  configured with POST_ENGINEER_API_KEY.
 
 ================================================================================
-ENVIRONMENT VARIABLES
+SELF-HOSTING
 ================================================================================
 
-REQUIRED VARIABLES:
-------------------
-
-Google OAuth:
-- GOOGLE_CLIENT_ID - OAuth Client ID from Google Cloud Console
-- GOOGLE_CLIENT_SECRET - OAuth Client Secret from Google Cloud Console
-- GOOGLE_REDIRECT_URI - OAuth callback (https://post-engineer.com/api/google-oauth/callback)
-
-Instagram OAuth:
-- INSTAGRAM_CLIENT_ID - Instagram app ID from Meta for Developers
-- INSTAGRAM_CLIENT_SECRET - Instagram app secret from Meta for Developers
-- INSTAGRAM_REDIRECT_URI - OAuth callback (.../api/instagram-auth/callback)
-
-Supabase:
-- NEXT_PUBLIC_SUPABASE_URL - Project URL
-- NEXT_PUBLIC_SUPABASE_ANON_KEY - Anon key
-- SUPABASE_SERVICE_ROLE_KEY - Service role key (server-only)
-
-Encryption:
-- TOKEN_ENCRYPTION_KEY - base64, decodes to exactly 32 bytes (AES-256)
-
-NEVER provide fallback values for these variables — fail explicitly if missing.
-
-OPTIONAL VARIABLES:
---------------------
-
-NODE_ENV - Node environment (development/production)
-PORT - Server port (default: 3000)
-APP_API_KEY - Default API key for the CLI upload script
-
-================================================================================
-SECURITY REQUIREMENTS
-================================================================================
-
-NEVER COMMIT:
--------------
-
-- .env file (contains sensitive credentials)
-- logs/ directory (may contain sensitive information)
-- uploads/ directory (temporary files)
-- API keys (post-engineer_...)
-
-FILE PERMISSIONS:
------------------
-
-.env: 600 (read/write for owner only)
-logs/: 700 (read/write/execute for owner only)
-
-TOKEN SECURITY:
----------------
-
-- Tokens are encrypted at rest (AES-256-GCM) in Supabase
-- Tokens are never returned by any API endpoint
-- Tokens are never written to the filesystem
-- RLS policies restrict rows to their owner (user_id)
-- The service role key is server-only; never expose it to the client
-
-================================================================================
-SCRIPT USAGE - UPLOAD VIA COMMAND LINE
-================================================================================
-
-UPLOAD SCRIPT USAGE (Supabase-backed, requires API key):
--------------------------------------------------------
-
-ts-node upload.ts <caminho-do-video> --api-key <post-engineer_...> [--account-id <channelId>]
-
-The API key can also come from the APP_API_KEY environment variable.
-Without --account-id, the script uses the owner's most recent YouTube account.
-
-WITH ENVIRONMENT VARIABLES:
----------------------------
-
-VIDEO_TITLE="My Video" \
-VIDEO_DESCRIPTION="Video description" \
-VIDEO_TAGS="tag1,tag2,tag3" \
-VIDEO_PRIVACY="public" \
-APP_API_KEY=post-engineer_xxx \
-ts-node upload.ts ./videos/meu-video.mp4 --account-id UCxxxx
-
-SCRIPT FLOW:
-1. Resolve API key in Supabase (owner lookup)
-2. Decrypt tokens from social_accounts
-3. Auto-refresh expired tokens and persist re-encrypted
-4. Strict validation (same rules as the API endpoint)
-5. Upload with progress bar and timeout
-
-================================================================================
-AI IMPLEMENTATION GUIDE
-================================================================================
-
-FOR AI AGENTS IMPLEMENTING THIS API:
------------------------------------
-
-1. Always authenticate API calls with "Authorization: Bearer post-engineer_..."
-2. Implement strict validation with NO fallbacks
-3. Handle all error types appropriately
-4. Use logId for debugging and tracking
-5. Implement retry logic for network failures
-6. Never store tokens locally — the server handles refresh in Supabase
-7. Pass accountId on every upload request
-8. Test all error scenarios before production
-
-IMPLEMENTATION CHECKLIST:
--------------------------
-
-☑️ API key authentication on protected routes
-☑️ All required fields validated with no fallbacks
-☑️ accountId passed on upload requests
-☑️ Error handling with specific error types
-☑️ Timeout management (30 min for uploads)
-☑️ logId used for debugging
-☑️ No local token storage
-☑️ Security measures for sensitive data
-
-COMMON PITFALLS TO AVOID:
--------------------------
-
-❌ Calling /api/upload without a Bearer API key
-❌ Omitting the accountId form field
-❌ Writing tokens to token.json (removed architecture)
-❌ Adding fallback values for required fields
-❌ Ignoring validation errors
-❌ Not handling timeouts properly
-❌ Committing sensitive files to version control
-
-================================================================================
-END OF API DOCUMENTATION
-================================================================================
-
-This documentation is provided for AI agents implementing the Post Engineer API.
-Always reference this document when implementing new features or troubleshooting issues.
-
-Last Updated: August 2026
-Version: 3.0.0
-API Base: https://youtube-api.example.com
+See docs/SELF_HOSTING.md in https://github.com/Ryan-Carloso/post-engineer.
