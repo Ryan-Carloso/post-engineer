@@ -30,6 +30,11 @@ function authErrorLogFields(error: unknown): { name: string; status: number | nu
 // Public files under apps/web/public/ must bypass auth — next/image fetches
 // /logo.png server-side; a 307 to /landing yields HTML and breaks the optimizer.
 export const PUBLIC_STATIC_ASSET_PATH = /\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$/i;
+// The sitemap is a metadata route, not a public/ file, but crawlers fetch
+// it unauthenticated, and a 307 to /landing would hand them HTML instead
+// of a sitemap. Exact path only, like the OpenAPI spec: a blanket .xml
+// extension would silently exempt any future .xml path from auth.
+const PUBLIC_SITEMAP_PATH = '/sitemap.xml';
 // The OpenAPI spec is fetched anonymously by API marketplaces and agents.
 // Only this exact path: other .json paths stay behind auth.
 const PUBLIC_OPENAPI_SPEC_PATH = '/openapi.json';
@@ -54,7 +59,7 @@ function getSupabaseEnv() {
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-  if (PUBLIC_STATIC_ASSET_PATH.test(pathname) || pathname === PUBLIC_OPENAPI_SPEC_PATH) {
+  if (pathname === PUBLIC_SITEMAP_PATH || PUBLIC_STATIC_ASSET_PATH.test(pathname) || pathname === PUBLIC_OPENAPI_SPEC_PATH) {
     return NextResponse.next({
       request: {
         headers: request.headers,
@@ -153,11 +158,12 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - common public/ file extensions (logo.png, voice-samples, etc.)
+     * - sitemap.xml (public metadata route, exact path only)
      * - openapi.json (public API spec, exact path only)
      * - api/ (API routes)
      * - auth/ (auth callback)
      * - login, landing, privacy, terms, recipes (public pages)
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$|openapi\\.json$|api/|auth/|.well-known/|oauth/|login|landing|privacy|terms|recipes).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$|sitemap\\.xml$|openapi\\.json$|api/|auth/|.well-known/|oauth/|login|landing|privacy|terms|recipes).*)',
   ],
 }
