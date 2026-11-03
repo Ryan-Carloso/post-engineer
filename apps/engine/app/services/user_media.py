@@ -12,8 +12,8 @@ silently placing a photo at the wrong time.
 
 A panel is an overlay, so it works the same on every video: faceless over
 stock or the neutral background, and on a persona video over the persona's
-face (hook-only or full lip-sync). In the react layout the persona fills
-the top half, so the panel anchors to the bottom edge instead.
+face (hook-only or full lip-sync). Where the face shows the panel sits at
+the bottom edge, so the captions above it never cover the photo.
 
 A segment's media may carry an overlay (title, subtitle, badge): an info
 card with the place's real name, address or price, painted inside the
@@ -40,7 +40,6 @@ from PIL import Image
 from app.models.schema import VideoAspect
 from app.services import face_detect, media_overlay, persona_hook, place_photos, segment_panels, subtitle, video
 from app.services.lipsync_active import persona_lipsync_active
-from app.services.lipsync_layout import LAYOUT_REACT
 from app.services.segment_panels import Panel
 from app.utils import file_security, utils
 from app.utils.ssrf import UnsafeUrlError
@@ -260,20 +259,6 @@ def _overlay_font(params: Any, segments: Sequence[Any]) -> Optional[media_overla
         return None
 
 
-def _anchor(params: Any) -> str:
-    """Bottom for the react layout (persona on top), top for every other video."""
-    layout = getattr(params, "video_layout", None)
-    layout = getattr(layout, "value", layout)
-    persona = getattr(params, "persona", None)
-    face_on_top = (
-        layout == LAYOUT_REACT
-        and persona is not None
-        and persona_lipsync_active(params)
-        and getattr(params, "full_lipsync", False) is not True
-    )
-    return segment_panels.ANCHOR_BOTTOM if face_on_top else segment_panels.ANCHOR_TOP
-
-
 def _face_mode(params: Any) -> str:
     """How the persona's face appears: never, for the hook only, or all video."""
     if getattr(params, "persona", None) is None or not persona_lipsync_active(params):
@@ -305,7 +290,6 @@ def prepare_segment_media(
     aspect: VideoAspect,
     *,
     face: str = segment_panels.FACE_NONE,
-    anchor: str = segment_panels.ANCHOR_TOP,
     session=None,
     font_for: Optional[media_overlay.FontFor] = None,
 ) -> tuple[list[Panel], list[str]]:
@@ -349,7 +333,7 @@ def prepare_segment_media(
         on_face = face == segment_panels.FACE_FULL or (face == segment_panels.FACE_HOOK and start < hook_end)
         try:
             if on_face:
-                built = segment_panels.build_panel(photo, overlay, font_for, aspect, anchor, out_path)
+                built = segment_panels.build_panel(photo, overlay, font_for, aspect, out_path)
             else:
                 built = segment_panels.build_full(photo, overlay, font_for, aspect, out_path)
         finally:
@@ -361,7 +345,7 @@ def prepare_segment_media(
             continue
         if built.card_reason is not None:
             skipped.append(f"segment {index} media overlay skipped: {built.card_reason}")
-        panels.append(Panel(index=index, path=built.path, x=built.x, y=built.y, start=start, end=end))
+        panels.append(Panel(index=index, path=built.path, x=built.x, y=built.y, start=start, end=end, caption_bottom=built.caption_bottom))
     return panels, skipped
 
 
@@ -382,7 +366,7 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
         aspect = VideoAspect.portrait
     panels, warnings = prepare_segment_media(
         task_id, segments, subtitle_path, audio_duration, utils.task_dir(task_id), aspect,
-        face=_face_mode(params), anchor=_anchor(params), font_for=_overlay_font(params, segments),
+        face=_face_mode(params), font_for=_overlay_font(params, segments),
     )
     segment_panels.write_manifest(task_id, panels, warnings)
     return warnings

@@ -1,15 +1,12 @@
-"""user_media on persona videos: the panel goes over the face, and below it in the react layout.
+"""user_media on persona videos: the panel goes at the bottom, so captions stay above it.
 
 A panel is an overlay on the finished video, so it works the same over a
-hook-only lip-sync intro, over a full lip-sync render and over stock. The
-only thing the persona changes is where the panel sits: the react layout
-fills the top half with the persona, so the panel anchors to the bottom.
+hook-only lip-sync intro, over a full lip-sync render and over stock. Where
+the persona's face shows, the photo is a panel anchored to the bottom edge,
+so the captions above it never cover the photo.
 """
 
 import inspect
-from types import SimpleNamespace
-
-import pytest
 
 from app.models.schema import PersonaParams, TaskVideoRequest, VideoLayout
 from app.services import segment_panels, user_media
@@ -32,40 +29,18 @@ def _request(**overrides):
     return TaskVideoRequest(**values)
 
 
-def test_faceless_video_anchors_the_panel_at_the_top():
-    assert user_media._anchor(_request()) == segment_panels.ANCHOR_TOP
+def test_persona_panel_sits_at_the_bottom_in_every_layout():
+    # The photo is inset where the face shows: bottom-anchored, so the
+    # captions above it never cover the photo.
+    for layout in (VideoLayout.standard, VideoLayout.react, "react"):
+        for full in (False, True):
+            params = _request(persona=_persona(), video_layout=layout, full_lipsync=full)
+            assert user_media._face_mode(params) != segment_panels.FACE_NONE
+            assert segment_panels.panel_rect(1080, 1920)[1] == 1160
 
 
-def test_hook_only_persona_in_the_standard_layout_anchors_at_the_top():
-    assert user_media._anchor(_request(persona=_persona(), video_layout=VideoLayout.standard)) == segment_panels.ANCHOR_TOP
-
-
-def test_hook_only_persona_in_the_react_layout_anchors_at_the_bottom_below_the_persona():
-    params = _request(persona=_persona(), video_layout=VideoLayout.react)
-    assert user_media._anchor(params) == segment_panels.ANCHOR_BOTTOM
-
-
-def test_full_lipsync_ignores_the_react_layout_because_the_face_fills_the_frame():
-    params = _request(persona=_persona(), video_layout=VideoLayout.react, full_lipsync=True)
-    assert user_media._anchor(params) == segment_panels.ANCHOR_TOP
-
-
-def test_react_layout_without_a_lipsync_face_keeps_the_top():
-    assert user_media._anchor(_request(video_layout=VideoLayout.react)) == segment_panels.ANCHOR_TOP
-    params = _request(persona=_persona(), video_layout=VideoLayout.react, lipsync_enabled=False)
-    assert user_media._anchor(params) == segment_panels.ANCHOR_TOP
-
-
-@pytest.mark.parametrize("layout", [None, "standard", "react", VideoLayout.react])
-def test_anchor_accepts_the_layout_as_a_string_an_enum_or_nothing(layout):
-    params = SimpleNamespace(video_layout=layout, persona=None, full_lipsync=False)
-    assert user_media._anchor(params) == segment_panels.ANCHOR_TOP
-
-
-def test_react_layout_anchor_survives_a_plain_string_layout():
-    params = _request(persona=_persona())
-    params.video_layout = "react"
-    assert user_media._anchor(params) == segment_panels.ANCHOR_BOTTOM
+def test_faceless_video_shows_the_photo_full_frame():
+    assert user_media._face_mode(_request()) == segment_panels.FACE_NONE
 
 
 def test_start_draws_the_panels_at_the_materials_stage_and_overlays_them_when_assembling():
@@ -79,3 +54,8 @@ def test_start_draws_the_panels_at_the_materials_stage_and_overlays_them_when_as
     assert final.index("full_lipsync.render_full_lipsync(") < overlay < final.index("video.generate_video(")
     assert final.index("prepare_persona_lipsync_video(") < overlay
     assert "_update_task)" in final[overlay : overlay + 140], "the render failure is recorded on the task"
+
+
+def test_final_encode_keeps_the_captions_above_each_panel():
+    final = inspect.getsource(tm.generate_final_videos)
+    assert "caption_bands=segment_panels.caption_bands(task_id)" in final

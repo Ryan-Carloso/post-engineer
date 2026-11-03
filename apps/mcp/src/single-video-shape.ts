@@ -26,7 +26,7 @@ export const ScriptSegmentShape = {
     .object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), overlay: SegmentOverlayShape.optional() })
     .strict()
     .optional()
-    .describe('Phase 2: media reference, exactly one of mediaId (from upload_media) or url (a public image URL). The photo is shown over the video while its segment is spoken: full frame on faceless videos and over b-roll, or a framed panel (about 38% of the frame) where the persona face is on screen, so the face still shows. Optional overlay: an info card (title, subtitle, badge) on the photo, e.g. a place name, address and price; the subtitles stay on top of everything.'),
+    .describe('Phase 2: media reference, exactly one of mediaId (from upload_media) or url (a public image URL). The photo is shown over the video while its segment is spoken: full frame on faceless videos and over b-roll, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional overlay: an info card (title, subtitle, badge) on the photo, e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
   terms: z.array(z.string().min(1)).max(10).optional().describe('Stock terms for this segment, chosen by the agent. At most 10.'),
 };
 

@@ -50,13 +50,13 @@ def _font_for(size):
     return ImageFont.load_default(size)
 
 
-def _prepare(tmp_path, segments, font_for=_font_for, anchor=segment_panels.ANCHOR_TOP, has_face=False, face=segment_panels.FACE_FULL):
+def _prepare(tmp_path, segments, font_for=_font_for, has_face=False, face=segment_panels.FACE_FULL):
     with patch.object(place_photos, "download_image", side_effect=_download), patch(
         "app.services.user_media.face_detect.image_contains_face", return_value=has_face
     ):
         return user_media.prepare_segment_media(
             "task-1", segments, _subtitle(tmp_path), 6.0, str(tmp_path), VideoAspect.portrait,
-            face=face, anchor=anchor, font_for=font_for,
+            face=face, font_for=font_for,
         )
 
 
@@ -72,19 +72,15 @@ def _panel_pixel(panel, offset_y):
         return image.convert("RGBA").getpixel((40 + 500, 40 + offset_y))
 
 
-def test_panel_carries_the_segment_interval_and_the_top_position_where_the_face_is_on_screen(tmp_path):
+def test_panel_carries_the_segment_interval_and_the_bottom_position(tmp_path):
     panels, skipped = _prepare(tmp_path, _segments(None))
     assert skipped == []
     assert len(panels) == 1
     panel = panels[0]
     assert (panel.index, panel.start, panel.end) == (0, 0.0, 1.2)
     assert panel.path.endswith("segment-panel-0.png") and os.path.exists(panel.path)
-    assert (panel.x, panel.y) == (0, -10), "panel at 40px/30px, minus the 40px shadow pad"
-
-
-def test_bottom_anchor_puts_the_panel_at_the_bottom(tmp_path):
-    panels, _ = _prepare(tmp_path, _segments(None), anchor=segment_panels.ANCHOR_BOTTOM)
-    assert panels[0].y == 1920 - 30 - 730 - 40
+    assert (panel.x, panel.y) == (0, 1920 - 30 - 730 - 40), "panel at 40px/30px from the bottom, minus the 40px shadow pad"
+    assert panel.caption_bottom == 1920 - 30 - 730 - segment_panels.CAPTION_GAP
 
 
 def test_card_is_painted_inside_the_panel(tmp_path):

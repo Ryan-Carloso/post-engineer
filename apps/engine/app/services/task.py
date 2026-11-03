@@ -953,7 +953,7 @@ def generate_final_videos(
         output_file=final_video_path,
         params=full_lipsync.caption_params(params),
         music_mood=music_mood,
-        recent_bgm_files=recent_bgm_files,
+        recent_bgm_files=recent_bgm_files, caption_bands=segment_panels.caption_bands(task_id),
     )
     if len(recent_bgm_files) > bgm_history_count:
         history_repository.record(user_id, recent_bgm_files[-1])

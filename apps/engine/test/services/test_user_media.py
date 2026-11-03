@@ -11,7 +11,6 @@ recorded as a task warning the status endpoint surfaces.
 
 import io
 import json
-import subprocess
 from unittest.mock import patch
 
 import pytest

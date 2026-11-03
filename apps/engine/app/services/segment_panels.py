@@ -1,15 +1,14 @@
 """A segment photo shown over the video, as a framed panel or full frame.
 
 Where the persona's face is on screen the photo is a rounded panel with a
-white border and a soft shadow, 30px from the top edge (or from the bottom
-edge when the react layout keeps the persona in the top half) and about 38%
-of the frame tall, so the face still shows behind it. Everywhere else
-(faceless videos, the b-roll after a hook-only lip-sync intro) the photo is
-full frame: contained over a blurred copy of itself, so a photo that does not
-fill the frame never leaves black bars. The optional info card
-(media_overlay) is painted inside either. Both are overlaid on the finished
-video for the seconds their segment is spoken, before the subtitles are
-burned in, so the subtitles stay on top of everything.
+white border and a soft shadow, 30px from the bottom edge and about 38% of
+the frame tall, so the face still shows behind it and the captions sit above
+it. Everywhere else (faceless videos, the b-roll after a hook-only lip-sync
+intro) the photo is full frame: contained over a blurred copy of itself, so a
+photo that does not fill the frame never leaves black bars. The optional info
+card (media_overlay) is painted inside either. Both are overlaid on the
+finished video for the seconds their segment is spoken, before the subtitles
+are burned in, so the subtitles stay on top of everything.
 
 The panels are prepared at the materials stage (download, checks, drawing)
 and written to a manifest in the task directory; the overlay runs when the
@@ -31,9 +30,6 @@ from PIL import Image, ImageDraw, ImageFilter, ImageOps
 from app.models.schema import VideoAspect
 from app.services import media_overlay, place_photos, video
 from app.utils import utils
-
-ANCHOR_TOP = "top"
-ANCHOR_BOTTOM = "bottom"
 
 # How the persona's face appears in a video, which decides where a photo may
 # be full frame: never (face the whole time), after the hook (hook-only
@@ -60,6 +56,8 @@ SHADOW_OFFSET = 8
 SHADOW_BLUR = 14
 BACKDROP_BLUR = 30
 SHADOW_ALPHA = 120
+# Space kept between the panel's top edge and the caption block above it.
+CAPTION_GAP = 24
 
 MANIFEST_NAME = "segment-panels.json"
 OVERLAY_TIMEOUT_SECONDS = 600
@@ -74,6 +72,7 @@ class BuiltPanel:
     x: int
     y: int
     card_reason: Optional[str]
+    caption_bottom: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -86,20 +85,20 @@ class Panel:
     y: int
     start: float
     end: float
+    caption_bottom: Optional[int] = None
 
 
 def _scale(width: int, height: int) -> float:
     return min(width, height) / 1080
 
 
-def panel_rect(width: int, height: int, anchor: str) -> tuple[int, int, int, int]:
+def panel_rect(width: int, height: int) -> tuple[int, int, int, int]:
     """(x, y, width, height) of the panel on a frame of this size."""
     scale = _scale(width, height)
     panel_width = min(width - 2 * round(40 * scale), round(PANEL_WIDTH * scale))
     panel_height = round(height * HEIGHT_FRACTION)
     edge = round(EDGE_MARGIN * scale)
-    y = edge if anchor == ANCHOR_TOP else height - edge - panel_height
-    return (width - panel_width) // 2, y, panel_width, panel_height
+    return (width - panel_width) // 2, height - edge - panel_height, panel_width, panel_height
 
 
 def full_card_rect(width: int, height: int) -> tuple[int, int, int, int]:
@@ -152,7 +151,6 @@ def build_panel(
     overlay: Optional[dict],
     font_for: Optional[media_overlay.FontFor],
     aspect: VideoAspect,
-    anchor: str,
     out_path: str,
 ) -> Optional[BuiltPanel]:
     """Draw one panel as a transparent PNG; None when the photo cannot be read.
@@ -163,7 +161,7 @@ def build_panel(
     """
     width, height = aspect.to_resolution()
     scale = _scale(width, height)
-    x, y, panel_width, panel_height = panel_rect(width, height, anchor)
+    x, y, panel_width, panel_height = panel_rect(width, height)
     try:
         with Image.open(photo_path) as opened:
             photo = ImageOps.exif_transpose(opened).convert("RGB")
@@ -202,7 +200,7 @@ def build_panel(
     except (OSError, ValueError, Image.DecompressionBombError) as exc:
         logger.warning(f"segment panel unusable: {type(exc).__name__}")
         return None
-    return BuiltPanel(path=out_path, x=x - pad, y=y - pad, card_reason=card_reason)
+    return BuiltPanel(path=out_path, x=x - pad, y=y - pad, card_reason=card_reason, caption_bottom=y - round(CAPTION_GAP * scale))
 
 
 def _manifest_path(task_id: str) -> str:
@@ -222,6 +220,21 @@ def _read_manifest(task_id: str) -> tuple[list[Panel], list[str]]:
     with open(path, encoding="utf-8") as handle:
         data = json.load(handle)
     return [Panel(**item) for item in data["panels"]], list(data["warnings"])
+
+
+def caption_bands(task_id: str) -> list[tuple[float, float, int]]:
+    """(start, end, lowest caption pixel) for every panel on screen.
+
+    A panel is a photo inset in the frame, so the subtitles stay above it
+    while it shows (caption_layout). A full-frame photo covers the frame and
+    imposes no band.
+    """
+    panels, _warnings = _read_manifest(task_id)
+    return [
+        (panel.start, panel.end, panel.caption_bottom)
+        for panel in panels
+        if panel.caption_bottom is not None
+    ]
 
 
 def overlay_command(

@@ -28,7 +28,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from app.config import config
 from app.models import const
-from app.services import image_material, video_loop
+from app.services import caption_layout, image_material, video_loop
 from app.services.material import MAX_LETTERBOX_BARS
 from app.models.schema import (
     MaterialInfo,
@@ -1533,6 +1533,7 @@ def generate_video(
     params: VideoParams,
     music_mood: str,
     recent_bgm_files: list[str] | None = None,
+    caption_bands: Sequence[caption_layout.CaptionBand] = (),
 ):
     aspect = VideoAspect(params.video_aspect)
     video_width, video_height = aspect.to_resolution()
@@ -1700,22 +1701,20 @@ def generate_video(
         _clip = _clip.with_start(subtitle_item[0][0])
         _clip = _clip.with_end(subtitle_item[0][1])
         _clip = _clip.with_duration(duration)
-        if params.subtitle_position == "bottom":
-            _clip = _clip.with_position(("center", video_height * 0.95 - _clip.h))
-        elif params.subtitle_position == "top":
-            _clip = _clip.with_position(("center", video_height * 0.05))
-        elif params.subtitle_position == "custom":
-            # Ensure the subtitle is fully within the screen bounds
-            margin = 10  # Additional margin, in pixels
-            max_y = video_height - _clip.h - margin
-            min_y = margin
-            custom_y = (video_height - _clip.h) * (params.custom_position / 100)
-            custom_y = max(
-                min_y, min(custom_y, max_y)
-            )  # Constrain the y value within the valid range
-            _clip = _clip.with_position(("center", custom_y))
-        else:  # center
-            _clip = _clip.with_position(("center", "center"))
+        # A caption spoken while a segment panel is on screen stays above it.
+        max_bottom = caption_layout.cue_bottom(caption_bands, subtitle_item[0][0])
+        _clip = _clip.with_position(
+            (
+                "center",
+                caption_layout.caption_y(
+                    params.subtitle_position,
+                    params.custom_position,
+                    video_height,
+                    _clip.h,
+                    max_bottom,
+                ),
+            )
+        )
         return _clip
 
     video_clip = _open_video_clip_quietly(video_path)

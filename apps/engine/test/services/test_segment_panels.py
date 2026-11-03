@@ -31,28 +31,28 @@ def _near(pixel, color, tolerance=40):
 # ---- geometry
 
 
-def test_top_panel_sits_30px_from_the_top_and_is_38_percent_of_the_frame():
-    x, y, width, height = segment_panels.panel_rect(1080, 1920, segment_panels.ANCHOR_TOP)
-    assert (x, y, width, height) == (40, 30, 1000, 730)
-    assert height / 1920 == pytest.approx(0.38, abs=0.001)
-
-
-def test_bottom_panel_mirrors_it_30px_from_the_bottom_edge():
-    x, y, width, height = segment_panels.panel_rect(1080, 1920, segment_panels.ANCHOR_BOTTOM)
+def test_panel_sits_30px_from_the_bottom_and_is_38_percent_of_the_frame():
+    x, y, width, height = segment_panels.panel_rect(1080, 1920)
     assert (x, width, height) == (40, 1000, 730)
+    assert height / 1920 == pytest.approx(0.38, abs=0.001)
     assert y + height == 1920 - 30
+
+
+def test_panel_leaves_room_above_it_for_the_captions():
+    _, y, _, _ = segment_panels.panel_rect(1080, 1920)
+    assert y == 1160, "the caption block above the panel keeps the photo clear"
 
 
 def test_panel_never_covers_the_frame_and_leaves_the_side_margins():
     for aspect in (VideoAspect.portrait, VideoAspect.square, VideoAspect.landscape):
         width, height = aspect.to_resolution()
-        x, y, panel_width, panel_height = segment_panels.panel_rect(width, height, segment_panels.ANCHOR_TOP)
+        x, y, panel_width, panel_height = segment_panels.panel_rect(width, height)
         assert x > 0 and x + panel_width < width
         assert panel_height < height * 0.4
 
 
 def test_landscape_panel_is_capped_instead_of_spanning_the_whole_width():
-    _, _, width, _ = segment_panels.panel_rect(1920, 1080, segment_panels.ANCHOR_TOP)
+    _, _, width, _ = segment_panels.panel_rect(1920, 1080)
     assert width == 1000
 
 
@@ -62,21 +62,22 @@ def test_landscape_panel_is_capped_instead_of_spanning_the_whole_width():
 def test_built_panel_is_a_transparent_png_larger_than_the_panel_by_its_shadow(tmp_path):
     out = str(tmp_path / "panel.png")
     built = segment_panels.build_panel(
-        _photo(tmp_path), None, None, VideoAspect.portrait, segment_panels.ANCHOR_TOP, out
+        _photo(tmp_path), None, None, VideoAspect.portrait, out
     )
     assert built is not None and built.card_reason is None
+    assert built.caption_bottom == 1160 - segment_panels.CAPTION_GAP, "captions stop above the panel"
     with Image.open(out) as image:
         assert image.mode == "RGBA"
         assert image.size == (1000 + 80, 730 + 80)
         assert image.getpixel((0, 0))[3] == 0, "outside the shadow the layer is transparent"
         assert image.getpixel((540, 40 + 365))[3] == 255, "the photo itself is opaque"
         assert _near(image.getpixel((540, 40 + 365)), RED)
-    assert (built.x, built.y) == (0, -10)
+    assert (built.x, built.y) == (0, 1120)
 
 
 def test_panel_has_a_white_border_and_rounded_corners(tmp_path):
     out = str(tmp_path / "panel.png")
-    segment_panels.build_panel(_photo(tmp_path), None, None, VideoAspect.portrait, segment_panels.ANCHOR_TOP, out)
+    segment_panels.build_panel(_photo(tmp_path), None, None, VideoAspect.portrait, out)
     with Image.open(out) as image:
         assert _near(image.getpixel((540, 41)), (255, 255, 255), 10), "the top edge is the white border"
         corner = image.getpixel((41, 41))
@@ -92,7 +93,7 @@ def test_whole_photo_is_shown_over_a_blurred_backdrop_nothing_cropped(tmp_path):
             photo.putpixel((x, y), BLUE)
     photo.save(path, "JPEG", quality=95)
     out = str(tmp_path / "panel.png")
-    segment_panels.build_panel(path, None, None, VideoAspect.portrait, segment_panels.ANCHOR_TOP, out)
+    segment_panels.build_panel(path, None, None, VideoAspect.portrait, out)
     with Image.open(out) as image:
         centre_x = 40 + 500
         assert _near(image.getpixel((centre_x, 40 + 12)), BLUE, 60)
@@ -102,7 +103,7 @@ def test_whole_photo_is_shown_over_a_blurred_backdrop_nothing_cropped(tmp_path):
 def test_card_is_painted_inside_the_panel(tmp_path):
     out = str(tmp_path / "panel.png")
     built = segment_panels.build_panel(
-        _photo(tmp_path), {"title": "Sushi Kinoshita"}, _font_for, VideoAspect.portrait, segment_panels.ANCHOR_TOP, out
+        _photo(tmp_path), {"title": "Sushi Kinoshita"}, _font_for, VideoAspect.portrait, out
     )
     assert built is not None and built.card_reason is None
     with Image.open(out) as image:
@@ -114,7 +115,7 @@ def test_card_is_painted_inside_the_panel(tmp_path):
 def test_card_that_does_not_fit_keeps_the_plain_photo_and_says_why(tmp_path):
     out = str(tmp_path / "panel.png")
     built = segment_panels.build_panel(
-        _photo(tmp_path), {"title": "W" * 120}, _font_for, VideoAspect.portrait, segment_panels.ANCHOR_TOP, out
+        _photo(tmp_path), {"title": "W" * 120}, _font_for, VideoAspect.portrait, out
     )
     assert built is not None
     assert built.card_reason == media_overlay.REASON_NO_FIT
@@ -123,7 +124,7 @@ def test_card_that_does_not_fit_keeps_the_plain_photo_and_says_why(tmp_path):
 def test_card_without_a_font_keeps_the_plain_photo_and_says_why(tmp_path):
     out = str(tmp_path / "panel.png")
     built = segment_panels.build_panel(
-        _photo(tmp_path), {"title": "Sushi"}, None, VideoAspect.portrait, segment_panels.ANCHOR_TOP, out
+        _photo(tmp_path), {"title": "Sushi"}, None, VideoAspect.portrait, out
     )
     assert built is not None
     assert built.card_reason == media_overlay.REASON_NO_FONT
@@ -134,7 +135,7 @@ def test_unreadable_photo_gives_no_panel(tmp_path):
     bad.write_bytes(b"nope")
     assert (
         segment_panels.build_panel(
-            str(bad), None, None, VideoAspect.portrait, segment_panels.ANCHOR_TOP, str(tmp_path / "p.png")
+            str(bad), None, None, VideoAspect.portrait, str(tmp_path / "p.png")
         )
         is None
     )
@@ -206,18 +207,18 @@ def test_manifest_without_panels_passes_through_even_with_warnings(task_dir):
 def test_real_overlay_shows_the_photo_only_in_its_seconds_and_never_full_frame(task_dir):
     base = _video(task_dir, seconds=4)
     built = segment_panels.build_panel(
-        _photo(task_dir), None, None, VideoAspect.portrait, segment_panels.ANCHOR_TOP, str(task_dir / "panel.png")
+        _photo(task_dir), None, None, VideoAspect.portrait, str(task_dir / "panel.png")
     )
     segment_panels.write_manifest("t", [Panel(0, built.path, built.x, built.y, 1.0, 3.0)], [])
     recorded = []
     out = segment_panels.overlay_onto("t", base, lambda *a, **k: recorded.append(k))
     assert out != base and recorded == []
     inside = _frame(out, 2, task_dir)
-    assert _near(inside.getpixel((540, 400)), RED), "the photo shows inside the panel while its segment is spoken"
-    assert _near(inside.getpixel((540, 1500)), BLUE), "the background shows below the panel: never full frame"
-    assert _near(inside.getpixel((15, 400)), BLUE), "and beside it"
-    assert _near(_frame(out, 0.4, task_dir).getpixel((540, 400)), BLUE), "no panel before its segment"
-    assert _near(_frame(out, 3.6, task_dir).getpixel((540, 400)), BLUE), "no panel after its segment"
+    assert _near(inside.getpixel((540, 1500)), RED), "the photo shows inside the panel while its segment is spoken"
+    assert _near(inside.getpixel((540, 400)), BLUE), "the background shows above the panel: never full frame"
+    assert _near(inside.getpixel((15, 1500)), BLUE), "and beside it"
+    assert _near(_frame(out, 0.4, task_dir).getpixel((540, 1500)), BLUE), "no panel before its segment"
+    assert _near(_frame(out, 3.6, task_dir).getpixel((540, 1500)), BLUE), "no panel after its segment"
     probe = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_name", "-of", "csv=p=0", out],
         capture_output=True, text=True, check=True,
@@ -225,16 +226,20 @@ def test_real_overlay_shows_the_photo_only_in_its_seconds_and_never_full_frame(t
     assert probe.stdout.strip() == "aac", "the audio track is kept"
 
 
-def test_bottom_anchored_panel_shows_at_the_bottom(task_dir):
-    base = _video(task_dir, seconds=3)
-    built = segment_panels.build_panel(
-        _photo(task_dir), None, None, VideoAspect.portrait, segment_panels.ANCHOR_BOTTOM, str(task_dir / "panel.png")
+def test_panel_bands_record_each_panel_and_leave_full_frame_photos_alone(task_dir):
+    panel = segment_panels.build_panel(
+        _photo(task_dir), None, None, VideoAspect.portrait, str(task_dir / "panel.png")
     )
-    segment_panels.write_manifest("t", [Panel(0, built.path, built.x, built.y, 0.5, 2.5)], [])
-    out = segment_panels.overlay_onto("t", base, lambda *a, **k: None)
-    frame = _frame(out, 1.5, task_dir)
-    assert _near(frame.getpixel((540, 1500)), RED)
-    assert _near(frame.getpixel((540, 300)), BLUE)
+    full = segment_panels.build_full(_photo(task_dir, name="f.jpg"), None, None, VideoAspect.portrait, str(task_dir / "full.png"))
+    segment_panels.write_manifest(
+        "t",
+        [
+            Panel(0, panel.path, panel.x, panel.y, 0.5, 2.5, caption_bottom=panel.caption_bottom),
+            Panel(1, full.path, full.x, full.y, 3.0, 5.0, caption_bottom=full.caption_bottom),
+        ],
+        [],
+    )
+    assert segment_panels.caption_bands("t") == [(0.5, 2.5, 1160 - segment_panels.CAPTION_GAP)]
 
 
 def test_failed_overlay_keeps_the_video_and_records_the_stored_warnings_plus_the_failure(task_dir):
@@ -347,7 +352,7 @@ def test_real_overlay_of_a_full_frame_photo_covers_the_whole_frame_only_in_its_s
 def test_a_full_frame_photo_and_a_panel_can_follow_each_other_in_one_video(task_dir):
     base = _video(task_dir, seconds=6)
     panel = segment_panels.build_panel(
-        _photo(task_dir, color=RED), None, None, VideoAspect.portrait, segment_panels.ANCHOR_TOP, str(task_dir / "panel.png")
+        _photo(task_dir, color=RED), None, None, VideoAspect.portrait, str(task_dir / "panel.png")
     )
     full = segment_panels.build_full(_photo(task_dir, color=(30, 200, 30), name="g.jpg"), None, None, VideoAspect.portrait, str(task_dir / "full.png"))
     segment_panels.write_manifest(
@@ -355,6 +360,6 @@ def test_a_full_frame_photo_and_a_panel_can_follow_each_other_in_one_video(task_
     )
     out = segment_panels.overlay_onto("t", base, lambda *a, **k: None)
     first = _frame(out, 1.5, task_dir)
-    assert _near(first.getpixel((540, 400)), RED) and _near(first.getpixel((540, 1500)), BLUE)
+    assert _near(first.getpixel((540, 1500)), RED) and _near(first.getpixel((540, 400)), BLUE)
     second = _frame(out, 4, task_dir)
     assert _near(second.getpixel((540, 400)), (30, 200, 30)) and _near(second.getpixel((540, 1500)), (30, 200, 30))
