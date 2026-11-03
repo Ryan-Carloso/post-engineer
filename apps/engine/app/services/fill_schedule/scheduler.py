@@ -149,9 +149,9 @@ class FillScheduleScheduler:
         return int((now - self._outage_since).total_seconds())
 
     @staticmethod
-    def _token_cost(faceless: bool, face_quality: str) -> int:
+    def _token_cost(faceless: bool, face_quality: str, full_lipsync: bool = False) -> int:
         """Per-video token cost (also used by the batch billing flow)."""
-        return token_cost(faceless, face_quality)
+        return token_cost(faceless, face_quality, full_lipsync)
 
 
 def start_fill_schedule_thread(scheduler: FillScheduleScheduler) -> threading.Thread:

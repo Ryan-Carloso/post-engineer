@@ -5,10 +5,15 @@ import { create } from 'zustand';
 //  - Faceless (no face, 100% stock)   = 1 token
 //  - With the persona's face "ok" (480p)    = 2 tokens
 //  - With the persona's face "very_good" (720p) = 3 tokens
+//  - Full lip-sync, face "ok"               = 8 tokens
+//  - Full lip-sync, face "very_good"        = 15 tokens
 //
-// There is no face MIX anymore (migration 007 dropped the persona column):
-// a persona always has a face, and "no face" is a boolean the user picks per
-// post — so the price is a straight lookup, not a weighted average.
+// Full lip-sync renders every narration window as talking head, so its GPU
+// cost is a multiple of the hook-only intro; the flat hook prices above do
+// not cover it. There is no face MIX anymore (migration 007 dropped the
+// persona column): a persona always has a face, and "no face" is a boolean
+// the user picks per post — so the price is a straight lookup, not a
+// weighted average.
 //---------------
 
 export const FACELESS_PRICE = 1;
@@ -16,6 +21,11 @@ export const FACELESS_PRICE = 1;
 export const FACE_QUALITY_PRICES = {
   ok: 2,
   very_good: 3,
+} as const;
+
+export const FULL_LIPSYNC_PRICES = {
+  ok: 8,
+  very_good: 15,
 } as const;
 
 export type FaceQuality = keyof typeof FACE_QUALITY_PRICES;
@@ -44,12 +54,22 @@ export function computeTokenPercentage(balance: unknown, maxTokens: unknown): nu
 
 //---------------
 // computeVideoTokens — cost of ONE video: the faceless price when the post
-// asked for no face, otherwise the persona's face quality. The server calls
+// asked for no face, otherwise the persona's face quality, or the full
+// lip-sync price when the post asked for full lip-sync. The server calls
 // the same formula (apps/engine .../fill_schedule/support.py token_cost), so
 // an estimate that disagrees with the charge is a bug in one of the two.
+// A full lip-sync request is never faceless (the route rejects the
+// combination before charging), so faceless still wins here and the full
+// price never applies to a faceless post.
 //---------------
-export function computeVideoTokens(faceless: boolean, faceQuality: FaceQuality): number {
-  return faceless ? FACELESS_PRICE : FACE_QUALITY_PRICES[faceQuality];
+export function computeVideoTokens(
+  faceless: boolean,
+  faceQuality: FaceQuality,
+  fullLipsync = false,
+): number {
+  if (faceless) return FACELESS_PRICE;
+  if (fullLipsync) return FULL_LIPSYNC_PRICES[faceQuality];
+  return FACE_QUALITY_PRICES[faceQuality];
 }
 
 //---------------

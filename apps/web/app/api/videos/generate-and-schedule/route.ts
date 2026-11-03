@@ -549,7 +549,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
 
   // 6. Cost for the single video, computed BEFORE the charge.
-  const perVideoCost = computeVideoTokens(prep.faceless, prep.faceQuality);
+  const perVideoCost = computeVideoTokens(prep.faceless, prep.faceQuality, validatedOptions.fullLipsync === true);
   const totalCost = perVideoCost;
   trackApiEvent('video_creation_validated', {
     userId,

@@ -17,6 +17,7 @@ vi.mock('@/lib/i18n/provider', () => {
     'tokens.qualityOk': 'OK (480p)',
     'tokens.qualityVeryGood': 'Muito boa (720p)',
     'tokens.costLabel': 'Custo estimado por vídeo',
+    'tokens.fullLipsyncCostLabel': 'Custo por vídeo em full lip-sync',
     'tokens.costValue': '≈ {cost} tokens',
   };
   const t = (key: string, vars?: Record<string, string | number>) => {
@@ -72,5 +73,12 @@ describe('PersonaTokensSection', () => {
     fireEvent.click(screen.getByTestId('face-quality-very_good'));
     expect(screen.getByTestId('token-cost-preview')).toHaveTextContent('≈ 3 tokens');
     expect(screen.getByTestId('face-quality-very_good')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('mostra o custo full lip-sync (8 tokens ok, 15 tokens very_good)', () => {
+    render(<PersonaTokensSection />);
+    expect(screen.getByTestId('token-full-lipsync-cost-preview')).toHaveTextContent('≈ 8 tokens');
+    fireEvent.click(screen.getByTestId('face-quality-very_good'));
+    expect(screen.getByTestId('token-full-lipsync-cost-preview')).toHaveTextContent('≈ 15 tokens');
   });
 });

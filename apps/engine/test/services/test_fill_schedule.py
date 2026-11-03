@@ -393,6 +393,34 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertEqual(amount, 2)  # face_mix 50% @ ok = ceil(0.5*2 + 0.5*1) = 2
         self.assertEqual(store.updates[0][1]["status"], "failed")
 
+    def test_generate_batch_dispatch_failure_refunds_full_lipsync_at_full_price(self):
+        slot = self._batch_slot()
+        slot["full_lipsync"] = True
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        store.refund_batch_calls = []
+        store.refund_batch_tokens = (
+            lambda *args, **kwargs: store.refund_batch_calls.append(
+                args + (kwargs.get("engine_task_id"),)
+            )
+            or True
+        )
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(
+            scheduler.generator, "_dispatch_generation", side_effect=RuntimeError("dispatch down")
+        ):
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(enqueued, 0)
+        self.assertEqual(len(store.refund_batch_calls), 1)
+        user_id, batch_gen_id, refund_key, amount, _reason, _task_id = store.refund_batch_calls[0]
+        # Full lip-sync @ ok, not the hook-only 2: dropping the
+        # slot_full_lipsync argument at the call site must fail this test.
+        self.assertEqual(amount, 8)
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+
     def test_non_english_slot_fails_and_refunds_without_dispatch(self):
         # English-only launch: a slot scheduled earlier in Portuguese must not
         # generate, and its prepaid video cost is refunded.
@@ -1916,6 +1944,15 @@ class CoverageGapTests(unittest.TestCase):
         # Unknown quality falls back to the cheaper "ok" tier, not the
         # expensive one.
         self.assertEqual(fs.token_cost(False, "bogus"), 2)
+
+    def test_token_cost_full_lipsync_prices(self):
+        self.assertEqual(fs.token_cost(False, "ok", True), 8)
+        self.assertEqual(fs.token_cost(False, "very_good", True), 15)
+        # A full lip-sync slot is never faceless; faceless still wins.
+        self.assertEqual(fs.token_cost(True, "ok", True), 1)
+        self.assertEqual(fs.token_cost(True, "very_good", True), 1)
+        # Unknown quality falls back to the "ok" full tier.
+        self.assertEqual(fs.token_cost(False, "bogus", True), 8)
 
     # -- publish_due without env configured -------------------------------------
     def test_publish_due_skips_without_base_url(self):
