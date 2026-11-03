@@ -811,9 +811,8 @@ class TestVideoService(unittest.TestCase):
     def test_combine_videos_trims_the_last_clip_to_the_required_duration(self):
         """
         A long clip (video_clip_duration >= 5) must not overshoot the
-        voiceover: the timeline is cut to audio + margin so the face-fill
-        outro — spliced by subtitle timestamps on the audio timeline —
-        stays in sync and no silent footage enters the end of the video.
+        voiceover: the timeline is cut to audio + margin so no silent
+        footage enters the end of the video.
         """
 
         class _FakeAudioClip:

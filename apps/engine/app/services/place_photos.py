@@ -199,8 +199,8 @@ def prepare_photos(
     """Photos for the places the script names; [] when off or when nothing works.
 
     `window` is the (earliest, latest) mention time, in seconds, that may get
-    a photo: a persona video keeps its lip-sync intro and face outro on screen,
-    so only mentions between them qualify (the edges are inclusive).
+    a photo: a persona video keeps its lip-sync intro on screen, so only
+    mentions after it qualify (the edges are inclusive).
 
     Never raises. Logs and tracks counts only: names and URLs derive from
     third-party pages and user topics.

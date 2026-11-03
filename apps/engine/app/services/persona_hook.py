@@ -18,8 +18,7 @@ from app.services.analytics import track_event
 # Product-fixed hook pacing ("always this way"): deliberately NOT
 # config-driven — these values were validated against GPU intro cost and
 # lipsync quality windows, and tunable knobs reopen those failure modes
-# (hooks over the GPU ceiling). Face-fill pacing stays in
-# app/services/task.py.
+# (hooks over the GPU ceiling).
 PERSONA_HOOK_MIN_SECONDS = 8.0
 PERSONA_HOOK_MAX_SECONDS = 12.0
 PERSONA_HOOK_TARGET_WORDS_MIN = 20

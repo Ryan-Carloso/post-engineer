@@ -637,6 +637,48 @@ class TestGenerateFinalVideosSingleOutput(unittest.TestCase):
         )
 
 
+class TestGenerateFinalVideosCaptionWiring(unittest.TestCase):
+    """The moved caption must actually reach the final encode.
+
+    A unit test on caption_params alone passes even if the call site in
+    generate_final_videos is dropped, so pin the wiring here: a center
+    caption on a persona video arrives at generate_video as custom/70.
+    """
+
+    def test_center_caption_arrives_at_generate_video_as_custom_70(self):
+        params = VideoParams(
+            video_subject="x",
+            subtitle_position="center",
+            persona=PersonaParams(
+                name="Ana",
+                photo_url="https://example.com/photo.png",
+                voice_id="calm",
+            ),
+        )
+        with (
+            patch.object(tm.sm.state, "get_task", return_value={"user_id": "u1"}),
+            patch.object(tm.sm.state, "update_task"),
+            patch.object(tm.history_repository, "recent", return_value=[]),
+            patch.object(tm.video, "combine_videos"),
+            patch.object(tm, "prepare_persona_lipsync_video", return_value=None),
+            patch.object(tm.video, "generate_video") as generate,
+        ):
+            tm.generate_final_videos(
+                task_id="caption-wiring",
+                params=params,
+                downloaded_videos=["c1.mp4"],
+                audio_file="a.mp3",
+                subtitle_path="s.srt",
+                video_script="script",
+                music_mood="calm",
+            )
+        moved = generate.call_args.kwargs["params"]
+        self.assertEqual(moved.subtitle_position, "custom")
+        self.assertEqual(moved.custom_position, 70.0)
+        # The caller's params are untouched: caption_params copies.
+        self.assertEqual(params.subtitle_position, "center")
+
+
 class _FakeStreamResponse:
     """Fake requests.get(stream=True) response for download_persona_voice."""
 
@@ -1368,9 +1410,6 @@ class TestArchiveFinalVideos(unittest.TestCase):
             patch.object(tm.video, "combine_videos"), \
             patch.object(
                 tm, "prepare_persona_lipsync_video", return_value=None
-            ), \
-            patch.object(
-                tm, "_apply_persona_face_fill", side_effect=lambda **k: k["video_file"]
             ), \
             patch.object(tm.persona_hook, "track_event") as track, \
             patch.object(tm.video, "generate_video") as generate_video:

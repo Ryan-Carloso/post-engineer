@@ -48,7 +48,7 @@ from app.services.persona_hook import (
 )
 from app.services.bgm_history import history_repository
 from app.services.stock_terms import PERSONA_SELECTIVE_STOCK_MIN_SCORE  # noqa: F401 - pinned by tests
-from app.services.analytics import nonempty_error_reason, scrub_secret_values, track_event
+from app.services.analytics import nonempty_error_reason, track_event
 from app.services.notify import safe_reason, send_discord, task_failed_msg
 from app.utils import file_security, ssrf, utils
 
@@ -430,16 +430,14 @@ def _fail_task(
         _release_failure_alert(task_id)
 
 
-# Product-fixed persona pacing ("always this way"): the face-fill outro
-# closes the video. Deliberately NOT config-driven — validated against GPU
+# Product-fixed persona pacing ("always this way"): the lip-sync hook
+# opens the video. Deliberately NOT config-driven — validated against GPU
 # intro cost and lipsync quality windows; tunable knobs reopen those
 # failure modes. Hook pacing (PERSONA_HOOK_*) lives in persona_hook.py.
 # GPU ceiling, not product ceiling: LongCat MAX_SEGMENTS=5 renders 16.52s,
 # but a 5-segment render SIGKILLed inside the Modal container on the first
 # real run; 12s is the highest segment count observed to survive there.
 PERSONA_LIPSYNC_MAX_SECONDS = 12.0
-FACE_FILL_MIN_SECONDS = 5.0
-FACE_FILL_MAX_SECONDS = 8.0
 
 
 def _ensure_persona_hook_fits(
@@ -899,8 +897,8 @@ def generate_final_videos(
         # window renders as talking head and the windows concatenate into
         # the video the final encode muxes with narration. Any failure
         # here propagates and fails the task; it NEVER falls through to
-        # the intro/b-roll path below, and face-fill is skipped (there is
-        # no stock tail left to fill).
+        # the intro/b-roll path below (there is no stock left
+        # to fill).
         if not persona_lipsync_active(params):
             raise ValueError(
                 "full_lipsync requires a persona with a photo and lipsync enabled"
@@ -939,19 +937,6 @@ def generate_final_videos(
         if intro is not None:
             video_for_render, intro_cost_usd, intro_job_id, intro_job_cost = intro
             intro_report = report_from_job_cost(intro_cost_usd, intro_job_id, intro_job_cost)
-        # Experimental face-fill: close the video on the persona so weak
-        # stock never has to fill the tail. Best-effort — ANY failure
-        # (Modal down, unreadable file) degrades to the intro-only video;
-        # the residual cost is that a slow Modal backend can hold the task
-        # for up to the LongCat timeout before the fallback fires.
-        video_for_render = _apply_persona_face_fill(
-            task_id=task_id,
-            params=params,
-            video_file=video_for_render,
-            audio_file=audio_file,
-            subtitle_path=subtitle_path,
-            index=1,
-        )
 
     _update_task(task_id, progress=75, music_mood=music_mood)
 
@@ -962,7 +947,7 @@ def generate_final_videos(
         audio_path=audio_file,
         subtitle_path=subtitle_path,
         output_file=final_video_path,
-        params=params,
+        params=full_lipsync.caption_params(params),
         music_mood=music_mood,
         recent_bgm_files=recent_bgm_files,
     )
@@ -1070,141 +1055,6 @@ def prepare_persona_lipsync_video(
             layout=params.video_layout.value,
         ),
         intro_cost_usd, intro_job_id, intro_job_cost,
-    )
-
-
-def _face_fill_tail_seconds(
-    subtitles: Sequence[tuple[int, str, str]],
-    video_duration: float,
-) -> tuple[float, float] | None:
-    """Tail (start, duration) for the face-fill outro, snapped to subtitles.
-
-    The slot is chosen on the VIDEO timeline: the muxed narration starts at
-    video second 0, so a boundary B on the video is also B on the audio —
-    slicing the tail audio at B and rendering lipsync for [B, V] keeps the
-    mouth in sync with the muxed voiceover. Boundaries only come from
-    subtitle event starts (never mid-word). Among the valid windows
-    (FACE_FILL_MIN_SECONDS..FACE_FILL_MAX_SECONDS, after the hook) the one
-    closest to the window midpoint wins. Returns None when no valid
-    boundary exists.
-    """
-    min_seconds = FACE_FILL_MIN_SECONDS
-    max_seconds = FACE_FILL_MAX_SECONDS
-    events: list[tuple[float, float]] = []
-    for _, timing, _text in subtitles:
-        match = re.search(
-            r"(\d+):(\d+):(\d+)[,\.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,\.](\d+)",
-            timing,
-        )
-        if match is None:
-            continue
-        g = [int(x) for x in match.groups()]
-        start = g[0] * 3600 + g[1] * 60 + g[2] + g[3] / 1000
-        end = g[4] * 3600 + g[5] * 60 + g[6] + g[7] / 1000
-        if end > start:
-            events.append((start, end))
-    if not events:
-        return None
-    # The hook boundary is the end of the first subtitle event; a
-    # single-event video has no separate body to protect.
-    hook_end = events[0][1] if len(events) >= 2 else 0.0
-    target = (min_seconds + max_seconds) / 2
-    best: tuple[float, float] | None = None
-    for start, _end in events:
-        tail = video_duration - start
-        if not min_seconds <= tail <= max_seconds:
-            continue
-        # The tail must not eat the hook: keep >=1s of body between them.
-        if start <= hook_end + 1.0:
-            continue
-        if best is None or abs(tail - target) < abs(best[1] - target):
-            best = (start, tail)
-    return best
-
-
-def _apply_persona_face_fill(
-    task_id: str,
-    params: VideoParams,
-    video_file: str,
-    audio_file: str,
-    subtitle_path: str,
-    index: int,
-) -> str:
-    """Close the video with a lipsync outro instead of trailing stock.
-
-    Experimental face-fill: after the intro splice, the last subtitle-
-    bounded segment of the VIDEO timeline is re-rendered as a second
-    LongCat segment and spliced over the background tail. The slot is
-    cut on the video timeline (not the audio's) so the muxed voiceover —
-    which starts at video second 0 — stays lip-synced. When the tail window
-    can't be derived the video is returned untouched. EVERY failure is
-    swallowed with a logged warning: a complete intro-only video already
-    exists, so a face-fill problem (Modal down, unreadable file, ffmpeg
-    error) must degrade to the intro-only video, never fail the task.
-    The accepted trade-off: a slow Modal backend can still hold the task
-    for up to the configured LongCat timeout before the fallback
-    kicks in — no separate timeout knob is added (product-fixed pacing).
-    """
-    try:
-        filled = _build_persona_face_fill(
-            task_id=task_id,
-            params=params,
-            video_file=video_file,
-            audio_file=audio_file,
-            subtitle_path=subtitle_path,
-            index=index,
-        )
-    except Exception as exc:  # noqa: BLE001 — best-effort by contract
-        logger.error(
-            f"face-fill skipped after error (keeping intro-only video): "
-            f"{scrub_secret_values(str(exc))[:500]}"
-        )
-        return video_file
-    return video_file if filled is None else filled
-
-
-def _build_persona_face_fill(
-    task_id: str,
-    params: VideoParams,
-    video_file: str,
-    audio_file: str,
-    subtitle_path: str,
-    index: int,
-) -> str | None:
-    """Build the face-fill outro; return None when no slot/image exists."""
-    subtitles = subtitle.file_to_subtitles(subtitle_path)
-    video_duration = video.video_duration_seconds(video_file)
-    tail = _face_fill_tail_seconds(subtitles, video_duration)
-    if tail is None:
-        return None
-    tail_start, tail_seconds = tail
-    task_dir = utils.task_dir(task_id)
-    image_path = path.join(task_dir, "persona-lipsync-image.png")
-    if not os.path.isfile(image_path):
-        logger.warning("face-fill skipped: persona image not found on disk")
-        return None
-    tail_audio = path.join(task_dir, f"tail-audio-{index}.mp3")
-    longcat.trim_audio(
-        audio_file,
-        tail_audio,
-        duration_seconds=tail_seconds,
-        padding_seconds=0.2,
-        start_seconds=tail_start,
-    )
-    lipsync_path = path.join(task_dir, f"lipsync-outro-{index}.mp4")
-    longcat.generate_intro(
-        image_path=image_path,
-        audio_path=tail_audio,
-        quality=params.video_quality,
-        output_path=lipsync_path,
-        duration_seconds=tail_seconds,
-    )
-    output_path = path.join(task_dir, f"combined-lipsync-outro-{index}.mp4")
-    return video.replace_video_outro_with_lipsync(
-        video_file,
-        lipsync_path,
-        output_path,
-        duration=tail_seconds,
     )
 
 
@@ -1342,11 +1192,14 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
         # 5. Get video materials
         phases.begin("materials")
-        # Persona videos keep their lip-sync intro and face outro on screen: a
-        # photo fits only between them. Random concatenation scrambles the
-        # timeline, so a photo's moment would be lost.
+        # Persona videos keep their lip-sync intro on screen: a photo fits
+        # only after it. Random concatenation scrambles the timeline, so a
+        # photo's moment would be lost.
+        # Short narration (audio_duration <= 12s) gives an inverted window:
+        # prepare_photos then matches no mention, which is correct — the
+        # face fills the whole video, so no photo fits after the intro.
         photo_window = (
-            (PERSONA_LIPSYNC_MAX_SECONDS, audio_duration - FACE_FILL_MAX_SECONDS)
+            (PERSONA_LIPSYNC_MAX_SECONDS, audio_duration)
             if persona_lipsync_active(params)
             else None
         )

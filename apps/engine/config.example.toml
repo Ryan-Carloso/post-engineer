@@ -41,9 +41,8 @@ bgm_history_db = "storage/bgm_history.sqlite3"
 # Callers can also override per request with the `lipsync_enabled` field.
 persona_lipsync_enabled = true
 
-# Persona hook pacing and the face-fill outro are product-fixed in code
-# (PERSONA_HOOK_* in app/services/persona_hook.py, FACE_FILL_* in
-# app/services/task.py) — the values were validated against GPU intro cost and lipsync quality windows and are
+# Persona hook pacing is product-fixed in code
+# (PERSONA_HOOK_* in app/services/persona_hook.py) — the values were validated against GPU intro cost and lipsync quality windows and are
 # intentionally not tunable.
 
 # 是否隐藏配置面板
@@ -446,7 +445,7 @@ models = []
 poll_interval_seconds = 5
 timeout_seconds = 1800
 # Fallback only: both production callers pass an explicit duration (the persona
-# hook window, and the face-fill tail), so this is never used on a real task.
+# hook window), so this is never used on a real task.
 intro_duration_seconds = 5
 
 [bgm]
@@ -464,7 +463,7 @@ enabled = false
 providers = ["tavily", "exa"]
 timeout_seconds = 8.0
 # Photos of named places, for every video type: drawings, stock footage and persona videos
-# (a persona video keeps its face intro and outro on screen). When the script names a
+# (a persona video keeps its face intro on screen). When the script names a
 # place the subject does not cover, one extra Tavily image search looks for its
 # photo; only an image whose title or description names the place is used, at most
 # 2 per video, in place of the clip nearest to the spoken name. The photos are
