@@ -1,9 +1,7 @@
-"""Where a subtitle cue sits on the frame.
-
-A segment photo shown as a panel (segment_panels) is an inset, so a cue
-spoken while one is on screen is bottom-anchored just above its top edge:
-the subtitles never cover the photo. An explicit "top" placement is already
-above every panel and is kept; full-frame photos impose no band.
+"""Where a subtitle cue sits on the frame: a panel photo (segment_panels) is
+an inset, so any cue on screen while one is on screen is bottom-anchored above
+its top edge. Cue and panel intervals come from different sources, so any
+overlap counts and the tightest band wins.
 """
 
 from typing import Optional, Sequence
@@ -15,12 +13,10 @@ MIN_MARGIN = 10
 CaptionBand = tuple[float, float, int]
 
 
-def cue_bottom(bands: Sequence[CaptionBand], seconds: float) -> Optional[int]:
-    """The lowest pixel a caption starting at `seconds` may reach, if any."""
-    for start, end, bottom in bands:
-        if start <= seconds <= end:
-            return bottom
-    return None
+def cue_bottom(bands: Sequence[CaptionBand], times: tuple[float, float]) -> Optional[int]:
+    """The lowest pixel a caption shown for `times` (start, end) may reach, if any."""
+    start, end = times
+    return min((band[2] for band in bands if band[0] < end and band[1] > start), default=None)
 
 
 def caption_y(

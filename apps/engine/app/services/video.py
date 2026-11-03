@@ -1702,7 +1702,7 @@ def generate_video(
         _clip = _clip.with_end(subtitle_item[0][1])
         _clip = _clip.with_duration(duration)
         # A caption spoken while a segment panel is on screen stays above it.
-        max_bottom = caption_layout.cue_bottom(caption_bands, subtitle_item[0][0])
+        max_bottom = caption_layout.cue_bottom(caption_bands, subtitle_item[0])
         _clip = _clip.with_position(
             (
                 "center",

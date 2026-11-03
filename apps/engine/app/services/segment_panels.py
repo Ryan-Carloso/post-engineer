@@ -262,7 +262,8 @@ def overlay_onto(task_id: str, video_path: str, record: Callable[..., None]) -> 
     A failed render keeps the video without photos and calls
     `record(task_id, media_warnings=...)` with the stored warnings plus the
     render failure, so the status endpoint still tells the caller the photos
-    are missing.
+    are missing. No panel landed, so the manifest then carries none and the
+    final encode imposes no caption band for a photo that is not there.
     """
     panels, warnings = _read_manifest(task_id)
     if not panels:
@@ -281,5 +282,6 @@ def overlay_onto(task_id: str, video_path: str, record: Callable[..., None]) -> 
     except (RuntimeError, subprocess.TimeoutExpired, OSError) as exc:
         logger.error(f"segment panel overlay failed: {type(exc).__name__}")
         record(task_id, media_warnings=[*warnings, REASON_RENDER_FAILED])
+        write_manifest(task_id, [], warnings)
         return video_path
     return output_path

@@ -11,9 +11,24 @@ def _panel_bottom():
 
 def test_a_cue_inside_a_panel_band_is_capped_at_the_panel_top():
     bands = [(1.0, 3.0, _panel_bottom())]
-    assert caption_layout.cue_bottom(bands, 2.0) == _panel_bottom()
-    assert caption_layout.cue_bottom(bands, 0.9) is None
-    assert caption_layout.cue_bottom(bands, 3.1) is None
+    assert caption_layout.cue_bottom(bands, (2.0, 2.4)) == _panel_bottom()
+    assert caption_layout.cue_bottom(bands, (0.6, 0.9)) is None
+    assert caption_layout.cue_bottom(bands, (3.1, 3.4)) is None
+
+
+def test_a_cue_straddling_the_panel_start_is_lifted_so_it_never_covers_the_photo():
+    # The panel interval (spoken time) and the cue interval (subtitle provider)
+    # do not have to start together: the cue is already on screen when the
+    # photo appears, so it must clear it too.
+    bands = [(1.0, 3.0, _panel_bottom())]
+    assert caption_layout.cue_bottom(bands, (0.6, 1.4)) == _panel_bottom()
+    assert caption_layout.cue_bottom(bands, (2.9, 3.4)) == _panel_bottom()
+    assert caption_layout.cue_bottom(bands, (0.6, 1.0)) is None, "no overlap, no lift"
+
+
+def test_when_two_bands_overlap_the_tightest_wins():
+    bands = [(1.0, 3.0, 900), (2.4, 4.0, 1100)]
+    assert caption_layout.cue_bottom(bands, (2.5, 3.5)) == 900
 
 
 def test_the_caption_block_ends_above_the_panel_whatever_its_height():

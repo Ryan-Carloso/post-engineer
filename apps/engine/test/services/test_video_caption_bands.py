@@ -109,3 +109,15 @@ def test_a_panel_band_lifts_the_caption_above_the_photo(tmp_path, monkeypatch):
     top, bottom = _text_rows(output, tmp_path)
     assert bottom <= panel_top - segment_panels.CAPTION_GAP, "the captions stay above the panel"
     assert top > 0 and bottom < 1920, "the whole caption is on the frame"
+
+
+def test_a_cue_that_starts_before_the_panel_is_still_lifted(tmp_path, monkeypatch):
+    # The cue (0.2-1.8s) begins before the panel's interval (1.0-2.0s) but is on
+    # screen when the photo appears: matching on the cue start alone would let
+    # it cover the photo.
+    _stub_bundled_font(tmp_path, monkeypatch)
+    panel_top = segment_panels.panel_rect(1080, 1920)[1]
+    bands = [(1.0, 2.0, panel_top - segment_panels.CAPTION_GAP)]
+    output = _render(tmp_path, bands, "band-late.mp4")
+    _top, bottom = _text_rows(output, tmp_path)
+    assert bottom <= panel_top - segment_panels.CAPTION_GAP, "the captions stay above the panel"

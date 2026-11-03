@@ -264,6 +264,17 @@ def test_timed_out_overlay_is_a_failure_not_a_crash(task_dir):
     assert recorded and recorded[0]["media_warnings"][-1] == segment_panels.REASON_RENDER_FAILED
 
 
+def test_a_failed_overlay_imposes_no_caption_band_on_the_panel_less_video(task_dir):
+    # Captions must keep the user's placement: lifting them above a panel that
+    # never reached the video leaves them floating over the footage.
+    panel = Panel(0, "/t/a.png", 0, 0, 1.0, 2.0, caption_bottom=1100)
+    segment_panels.write_manifest("t", [panel], [])
+    assert segment_panels.caption_bands("t") == [(1.0, 2.0, 1100)]
+    with patch.object(segment_panels.video, "_run_ffmpeg_bounded", side_effect=RuntimeError("boom")):
+        segment_panels.overlay_onto("t", "/t/in.mp4", lambda task_id, **k: None)
+    assert segment_panels.caption_bands("t") == []
+
+
 # ---- full frame: faceless videos and the b-roll after a hook-only intro
 
 
