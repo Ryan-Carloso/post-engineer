@@ -2,13 +2,10 @@
 
 Where the persona's face is on screen the photo is a rounded panel with a
 white border and a soft shadow, 30px from the bottom edge and about 38% of
-the frame tall, so the face still shows behind it and the captions sit above
-it. Everywhere else (faceless videos, the b-roll after a hook-only lip-sync
+the frame tall, so the face shows behind it and the captions sit above it.
+Everywhere else (faceless videos, the b-roll after a hook-only lip-sync
 intro) the photo is full frame: contained over a blurred copy of itself, so a
-photo that does not fill the frame never leaves black bars. The optional info
-card (media_overlay) is painted inside either. Both are overlaid on the
-finished video for the seconds their segment is spoken, before the subtitles
-are burned in, so the subtitles stay on top of everything.
+photo that does not fill the frame never leaves black bars.
 
 The panels are prepared at the materials stage (download, checks, drawing)
 and written to a manifest in the task directory; the overlay runs when the
@@ -31,16 +28,12 @@ from app.models.schema import VideoAspect
 from app.services import media_overlay, place_photos, video
 from app.utils import utils
 
-# How the persona's face appears in a video, which decides where a photo may
-# be full frame: never (face the whole time), after the hook (hook-only
-# lip-sync over b-roll), or always (faceless).
+# Where the photo may be full frame: never (face on screen), after the hook, or always.
 FACE_NONE = "none"
 FACE_HOOK = "hook"
 FACE_FULL = "full"
 
-# Where the card sits on a full-frame photo, as a rectangle for the card
-# geometry: 1080px-wide frames put the card 60px from the sides and ~163px
-# from the top (below the status bar), at most ~30% of the frame tall.
+# The card's rectangle on a full-frame photo, below the status bar.
 FULL_CARD_SIDE = 36
 FULL_CARD_TOP_FRACTION = 0.0724
 FULL_CARD_HEIGHT_FRACTION = 0.545
@@ -155,9 +148,8 @@ def build_panel(
 ) -> Optional[BuiltPanel]:
     """Draw one panel as a transparent PNG; None when the photo cannot be read.
 
-    The whole photo is shown (contained over a blurred copy of itself),
-    nothing is cropped away. A card that cannot be drawn leaves the plain
-    photo and is reported in `card_reason`.
+    The whole photo is shown (contained over a blurred copy of itself), and a
+    card that cannot be drawn leaves the plain photo, reported in `card_reason`.
     """
     width, height = aspect.to_resolution()
     scale = _scale(width, height)
@@ -225,9 +217,7 @@ def _read_manifest(task_id: str) -> tuple[list[Panel], list[str]]:
 def caption_bands(task_id: str) -> list[tuple[float, float, int]]:
     """(start, end, lowest caption pixel) for every panel on screen.
 
-    A panel is a photo inset in the frame, so the subtitles stay above it
-    while it shows (caption_layout). A full-frame photo covers the frame and
-    imposes no band.
+    A full-frame photo covers the frame and imposes no band (caption_layout).
     """
     panels, _warnings = _read_manifest(task_id)
     return [

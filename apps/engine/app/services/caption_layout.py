@@ -1,12 +1,9 @@
 """Where a subtitle cue sits on the frame.
 
-A segment photo shown as a panel (segment_panels) is an inset: the subtitles
-must stay above it, never on the photo, or they cover the very thing the
-photo is there to show. A cue spoken while a panel is on screen is therefore
-bottom-anchored just above the panel's top edge, whatever placement the
-video would use. An explicit "top" placement is already above every panel
-and is kept. Full-frame photos cover the frame, so they are not bands and
-the user's placement applies.
+A segment photo shown as a panel (segment_panels) is an inset, so a cue
+spoken while one is on screen is bottom-anchored just above its top edge:
+the subtitles never cover the photo. An explicit "top" placement is already
+above every panel and is kept; full-frame photos impose no band.
 """
 
 from typing import Optional, Sequence
@@ -35,8 +32,7 @@ def caption_y(
 ) -> float | str:
     """Top y of the caption block, or "center" for the centered placement.
 
-    `max_bottom` is the ceiling a segment panel imposes: the block is
-    bottom-anchored there so the photo stays clear.
+    `max_bottom` is the ceiling a segment panel imposes, so the photo stays clear.
     """
     if position == "top":
         return video_height * 0.05

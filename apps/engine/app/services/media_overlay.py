@@ -1,17 +1,12 @@
 """The info card painted on a segment photo (a panel or a full-frame photo).
 
 A place photo is more useful with the real name, the address and the price
-on screen. The card sits at the top of the photo, inset from its edges so
-the photo still shows around it, and never grows past about half of the
-rectangle it is laid out in. It has no border of its own. The photo is an
-overlay on the video and the subtitles are burned in after it, so the
-subtitles always land on top of the card.
+on screen. The card sits at the top of the photo, inset from its edges, and
+never grows past about half of the rectangle it is laid out in.
 
-Text is never truncated or shrunk below a readable size. A title that does
-not fit in two lines, or a card that would outgrow its box, is refused with
-a stable reason and the photo ships without a card (the caller records the
-reason as a task warning). Nothing here logs the text: it comes from the
-caller's research, not from this service.
+Text is never truncated or shrunk below a readable size: a card that cannot
+fit is refused with a stable reason and the photo ships without one (the
+caller records that as a task warning). Nothing here logs the text.
 """
 
 import re
@@ -149,11 +144,7 @@ def measure_card(overlay: dict, font_for: FontFor, scale: float, rect: tuple[int
 def paint_card(
     layer: Image.Image, overlay: dict, font_for: FontFor, scale: float, rect: tuple[int, int, int, int]
 ) -> Optional[str]:
-    """Paint the card onto an RGBA layer, inside the panel `rect`.
-
-    Returns None on success, or a stable reason string; on any refusal the
-    layer is left untouched.
-    """
+    """Paint the card onto an RGBA layer inside `rect`: None, or a stable refusal."""
     if not _clean(overlay.get("title")):
         return REASON_NO_TITLE
     left, top, width, max_height = card_geometry(rect, scale)

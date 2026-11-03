@@ -36,3 +36,13 @@ def test_segment_media_carries_an_overlay_through_a_request_dump():
 def test_overlay_rejects_what_the_validator_rejects(overlay):
     with pytest.raises(ValidationError):
         SegmentMedia(url="https://example.com/x.jpg", overlay=overlay)
+
+
+def test_overlay_text_is_measured_after_trimming_like_the_validators():
+    # validate_script and the TS validators measure the trimmed string, so a
+    # title that only exceeds the limit by its padding must be accepted here.
+    overlay = SegmentOverlay(title="x" * script_segments.MAX_OVERLAY_TITLE_CHARS + "  ", badge=" EUR 35 ")
+    assert overlay.title == "x" * script_segments.MAX_OVERLAY_TITLE_CHARS
+    assert overlay.badge == "EUR 35"
+    with pytest.raises(ValidationError):
+        SegmentOverlay(title=" " * 3)

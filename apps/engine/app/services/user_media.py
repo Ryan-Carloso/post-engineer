@@ -268,17 +268,18 @@ def _face_mode(params: Any) -> str:
     return segment_panels.FACE_HOOK
 
 
-def _hook_end(segments: Sequence[dict[str, Any]], intervals: Sequence[tuple[float, float]]) -> float:
-    """Second at which a hook-only lip-sync intro ends: the hook's spoken end.
-
-    The intro is the hook, capped at the hook ceiling (the lip-sync GPU
-    window), so a hook that runs past the ceiling still hands over to b-roll
-    at the ceiling.
-    """
-    ceiling = persona_hook.PERSONA_HOOK_MAX_SECONDS
-    if not segments or not intervals or segments[0].get("kind") != "hook":
-        return ceiling
-    return min(ceiling, intervals[0][1])
+def _hook_end(video_script: str, subtitle_path: str, audio_duration: float) -> float:
+    """Where the face hands over: the intro's own window, never the segment
+    intervals (a proportional interval could draw a full-frame photo over the face)."""
+    if not video_script.strip():
+        return 0.0
+    hook_end, _estimated = persona_hook.measure_hook_end(
+        video_script,
+        subtitle.file_to_subtitles(subtitle_path),
+        audio_duration,
+        subtitle.file_to_words(subtitle_path),
+    )
+    return min(persona_hook.PERSONA_HOOK_MAX_SECONDS, hook_end)
 
 
 def prepare_segment_media(
@@ -290,14 +291,14 @@ def prepare_segment_media(
     aspect: VideoAspect,
     *,
     face: str = segment_panels.FACE_NONE,
+    video_script: str = "",
     session=None,
     font_for: Optional[media_overlay.FontFor] = None,
 ) -> tuple[list[Panel], list[str]]:
     """Drawn photos (panels or full frame) with spoken intervals, plus skip warnings.
 
-    Warnings carry only the segment index and a stable reason, never a
-    URL, a path, or a mediaId. The caller stores them on the task so the
-    status endpoint surfaces them; they are not just a log line.
+    A warning carries only the segment index and a stable reason, never a
+    URL, a path or a mediaId, and the caller stores it on the task.
     """
     panels: list[Panel] = []
     skipped: list[str] = []
@@ -305,7 +306,7 @@ def prepare_segment_media(
     intervals, fallback = segment_intervals_from_subtitle(dicts, subtitle_path, audio_duration)
     if fallback and dicts:
         logger.warning(f"segment media for task {task_id}: proportional intervals (word walk mismatched)")
-    hook_end = _hook_end(dicts, intervals)
+    hook_end = _hook_end(video_script, subtitle_path, audio_duration)
     for index, segment in enumerate(dicts):
         media = segment.get("media")
         if not isinstance(media, dict):
@@ -352,10 +353,7 @@ def prepare_segment_media(
 def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_duration: float) -> list[str]:
     """Materials-stage step for tm.start: draw the panels, persist them, report warnings.
 
-    The panels are overlaid when the final video is assembled
-    (segment_panels.overlay_onto), so a persona's intro or a full lip-sync
-    render underneath never changes where a photo lands. Without segments
-    nothing is written. Returns the task warnings.
+    They are overlaid when the final video is assembled (segment_panels.overlay_onto).
     """
     segments = getattr(params, "segments", None)
     if not segments:
@@ -366,7 +364,8 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
         aspect = VideoAspect.portrait
     panels, warnings = prepare_segment_media(
         task_id, segments, subtitle_path, audio_duration, utils.task_dir(task_id), aspect,
-        face=_face_mode(params), font_for=_overlay_font(params, segments),
+        face=_face_mode(params), video_script=getattr(params, "video_script", "") or "",
+        font_for=_overlay_font(params, segments),
     )
     segment_panels.write_manifest(task_id, panels, warnings)
     return warnings

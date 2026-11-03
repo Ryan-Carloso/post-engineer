@@ -281,6 +281,12 @@ class SegmentOverlay(BaseModel):
     subtitle: Optional[str] = Field(default=None, min_length=1, max_length=MAX_OVERLAY_SUBTITLE_CHARS)
     badge: Optional[str] = Field(default=None, min_length=1, max_length=MAX_OVERLAY_BADGE_CHARS)
 
+    @field_validator("title", "subtitle", "badge", mode="before")
+    @classmethod
+    def _strip_text(cls, value: Optional[str]) -> Optional[str]:
+        """Measure the trimmed text, like validate_script and the TS validators."""
+        return value.strip() if isinstance(value, str) else value
+
 
 class SegmentMedia(BaseModel):
     """Media reference shape for a segment's photo (upload_media uploads it, check_media verifies it)."""

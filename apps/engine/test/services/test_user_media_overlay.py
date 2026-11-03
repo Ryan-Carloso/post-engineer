@@ -15,7 +15,7 @@ import pytest
 from PIL import Image, ImageFont
 
 from app.models.schema import VideoAspect
-from app.services import place_photos, segment_panels, user_media
+from app.services import persona_hook, place_photos, segment_panels, subtitle, user_media
 
 WORDS = [("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2), ("Visit", 5.0, 5.4), ("Porto", 5.4, 5.9)]
 SEGMENTS_TEXT = [
@@ -56,7 +56,8 @@ def _prepare(tmp_path, segments, font_for=_font_for, has_face=False, face=segmen
     ):
         return user_media.prepare_segment_media(
             "task-1", segments, _subtitle(tmp_path), 6.0, str(tmp_path), VideoAspect.portrait,
-            face=face, font_for=font_for,
+            face=face, video_script="\n\n".join(segment["text"] for segment in segments),
+            font_for=font_for,
         )
 
 
@@ -237,19 +238,43 @@ def test_hook_only_lipsync_puts_the_hook_photo_over_the_face_and_the_b_roll_phot
     assert _is_full_frame(panels[1]) is True, "after the hook it is b-roll, so the photo is full frame"
 
 
-def test_a_hook_spoken_past_the_ceiling_hands_over_to_b_roll_at_the_ceiling():
-    # The lip-sync intro is the hook capped at the 12s GPU window.
-    assert user_media._hook_end(SEGMENTS_TEXT, [(0.0, 14.0), (13.0, 14.0)]) == 12.0
+def _timed_subtitle(tmp_path, words, name="timed.srt"):
+    path = str(tmp_path / name)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("1\n00:00:00,000 --> 00:00:40,000\nHook\n\n")
+    with open(f"{path}.words.json", "w", encoding="utf-8") as handle:
+        json.dump([[text, start, end] for text, start, end in words], handle)
+    return path
 
 
-def test_hook_end_is_the_hooks_spoken_end_when_before_the_ceiling():
-    assert user_media._hook_end(SEGMENTS_TEXT, [(0.0, 9.0), (9.0, 14.0)]) == 9.0
+def _script():
+    return "\n\n".join(segment["text"] for segment in SEGMENTS_TEXT)
 
 
-def test_hook_end_falls_back_to_the_ceiling_without_a_hook_or_intervals():
-    assert user_media._hook_end([{"kind": "body", "text": "x"}], [(0.0, 5.0)]) == 12.0
-    assert user_media._hook_end([], []) == 12.0
-    assert user_media._hook_end(SEGMENTS_TEXT, []) == 12.0
+def test_the_handover_is_the_window_the_intro_actually_renders(tmp_path):
+    # The MAJOR this pins: the panel/full-frame boundary must come from the
+    # same measurement the intro renders, not from the segment intervals.
+    subtitle_path = _subtitle(tmp_path)
+    intro_window = persona_hook.resolve_lipsync_window(
+        "t", _script(), subtitle.file_to_subtitles(subtitle_path), 6.0,
+        persona_hook.PERSONA_HOOK_MAX_SECONDS, words=subtitle.file_to_words(subtitle_path),
+    )
+    assert user_media._hook_end(_script(), subtitle_path, 6.0) == intro_window
+
+
+def test_a_hook_spoken_past_the_ceiling_hands_over_to_b_roll_at_the_ceiling(tmp_path):
+    subtitle_path = _timed_subtitle(tmp_path, [("Welcome", 0.0, 20.0), ("to", 20.0, 20.5)])
+    assert user_media._hook_end(_script(), subtitle_path, 20.5) == persona_hook.PERSONA_HOOK_MAX_SECONDS
+
+
+def test_no_measurable_hook_means_no_face_on_screen(tmp_path):
+    path = str(tmp_path / "empty.srt")
+    open(path, "w", encoding="utf-8").close()
+    assert user_media._hook_end(_script(), path, 0.0) == 0.0
+
+
+def test_a_missing_script_has_no_face_window(tmp_path):
+    assert user_media._hook_end("", _subtitle(tmp_path), 6.0) == 0.0
 
 
 def test_a_segment_that_starts_exactly_when_the_face_leaves_is_full_frame(tmp_path):
@@ -293,7 +318,7 @@ def test_prepare_segment_panels_uses_the_video_type_to_pick_panel_or_full_frame(
     params = SimpleNamespace(
         video_aspect="9:16", font_name="x.ttf", segments=_two_media_segments(), full_lipsync=False,
         persona=PersonaParams(name="Ana", avatar_url="https://e.com/a.png", voice_id="calm"),
-        lipsync_enabled=True, video_layout="standard",
+        lipsync_enabled=True, video_layout="standard", video_script=_script(),
     )
     with patch.object(user_media.video, "_resolve_font_with_fallback", return_value="/f.ttf"), patch.object(
         user_media.media_overlay, "font_loader", return_value=_font_for
