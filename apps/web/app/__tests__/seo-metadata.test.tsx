@@ -75,7 +75,10 @@ describe('public/robots.txt — real sitemap, no placeholder', () => {
   it('points crawlers at the real sitemap and keeps the placeholder out', () => {
     const publicDir = join(findRepoRoot(import.meta.url), 'apps', 'web', 'public');
     const robots = readFileSync(join(publicDir, 'robots.txt'), 'utf8');
-    expect(robots).toContain('Sitemap: https://post-engineer.com/sitemap.xml');
+    // Line-exact: a commented-out '# Sitemap:' line is ignored by
+    // crawlers, so a plain toContain would pass on a dead directive.
+    const lines = robots.split('\n').map((line) => line.trim());
+    expect(lines).toContain('Sitemap: https://post-engineer.com/sitemap.xml');
     expect(robots).not.toContain('your-domain.example');
   });
 });

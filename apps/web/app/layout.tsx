@@ -16,13 +16,12 @@ import "./globals.css";
 // font stack as fallback when CYPRESS_COVERAGE=1.
 //---------------
 
-const geistSans = process.env.CYPRESS_COVERAGE === '1'
-  ? { variable: '--font-geist-sans' }
-  : (() => { try { const { Geist } = require('next/font/google'); return Geist({ variable: '--font-geist-sans', subsets: ['latin'] }); } catch { return { variable: '--font-geist-sans' }; } })();
+// Single-line ternaries on purpose: under CYPRESS_COVERAGE=1 the
+// fallback branch always runs, so a multi-line form would leave the
+// next/font branch as a permanently uncovered line in the Cypress gate.
+const geistSans = process.env.CYPRESS_COVERAGE === '1' ? { variable: '--font-geist-sans' } : (() => { try { const { Geist } = require('next/font/google'); return Geist({ variable: '--font-geist-sans', subsets: ['latin'] }); } catch { return { variable: '--font-geist-sans' }; } })();
 
-const geistMono = process.env.CYPRESS_COVERAGE === '1'
-  ? { variable: '--font-geist-mono' }
-  : (() => { try { const { Geist_Mono } = require('next/font/google'); return Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] }); } catch { return { variable: '--font-geist-mono' }; } })();
+const geistMono = process.env.CYPRESS_COVERAGE === '1' ? { variable: '--font-geist-mono' } : (() => { try { const { Geist_Mono } = require('next/font/google'); return Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] }); } catch { return { variable: '--font-geist-mono' }; } })();
 
 export const metadata: Metadata = {
   title: LANDING_TITLE,

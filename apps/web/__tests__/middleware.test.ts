@@ -226,7 +226,19 @@ describe('middleware auth redirect', () => {
     expect(getUser).not.toHaveBeenCalled();
   });
 
+  it('still redirects unauthenticated requests for any other .xml path', async () => {
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: authError('AuthSessionMissingError', 400, 'Auth session missing!'),
+    });
+
+    const response = await middleware(requestFor('/export.xml'));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('http://localhost:3434/landing');
+  });
+
   it('excludes sitemap.xml from the matcher so the middleware never runs on it', () => {
-    expect(config.matcher[0].includes('xml)$')).toBe(true);
+    expect(config.matcher[0].includes('sitemap\\.xml$')).toBe(true);
   });
 });
