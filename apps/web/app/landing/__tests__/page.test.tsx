@@ -45,4 +45,13 @@ describe('app/landing/page — Landing', () => {
     expect(screen.getByTestId('pricing-contact')).toBeInTheDocument();
     expect(screen.getByText('landing.pricingTitle')).toBeInTheDocument();
   });
+
+  it('does not render the removed +500 creators claim anywhere', () => {
+    // Owner decision: no unverified creator count on the landing, in
+    // either locale. The mock t() returns the key itself, so the
+    // removed line would surface as 'landing.socialProof' if it came back.
+    render(<Landing />);
+    expect(screen.queryByText('landing.socialProof')).toBeNull();
+    expect(screen.queryByText(/500/)).toBeNull();
+  });
 });

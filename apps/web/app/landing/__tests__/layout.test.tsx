@@ -30,13 +30,11 @@ describe('app/landing/layout — FAQ structured data', () => {
     expect(jsonLd.mainEntity.map((item) => item.name)).toEqual([
       ptDictionary.landing.faq1Q,
       ptDictionary.landing.faq2Q,
-      ptDictionary.landing.faq3Q,
       ptDictionary.landing.faq4Q,
     ]);
     expect(jsonLd.mainEntity.map((item) => item.acceptedAnswer.text)).toEqual([
       ptDictionary.landing.faq1A,
       ptDictionary.landing.faq2A,
-      ptDictionary.landing.faq3A,
       ptDictionary.landing.faq4A,
     ]);
   });

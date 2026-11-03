@@ -252,7 +252,6 @@ const LandingHero = () => {
                   </svg>
                 ))}
               </div>
-              <p className="mt-1 text-xs text-[#657184]">{t('landing.socialProof')}</p>
             </div>
           </div>
         </div>
@@ -537,10 +536,11 @@ const LandingPricing = () => {
 //---------------
 const LandingFaq = () => {
   const { t } = useI18n();
-  const faqs: Array<{ q: 'faq1Q' | 'faq2Q' | 'faq3Q' | 'faq4Q'; a: 'faq1A' | 'faq2A' | 'faq3A' | 'faq4A' }> = [
+  // faq3 (cancel) is gone: cancelling only makes sense with a paid plan,
+  // and the product is still beta with tokens set up by contact.
+  const faqs: Array<{ q: 'faq1Q' | 'faq2Q' | 'faq4Q'; a: 'faq1A' | 'faq2A' | 'faq4A' }> = [
     { q: 'faq1Q', a: 'faq1A' },
     { q: 'faq2Q', a: 'faq2A' },
-    { q: 'faq3Q', a: 'faq3A' },
     { q: 'faq4Q', a: 'faq4A' },
   ];
   return (

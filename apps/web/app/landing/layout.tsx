@@ -45,10 +45,11 @@ export const metadata: Metadata = {
   },
 };
 
+// faq3 (cancel) was removed with the Starter plan: the product is still
+// beta, so the structured data lists exactly the visible FAQ items.
 const LANDING_FAQ = [
   { question: ptDictionary.landing.faq1Q, answer: ptDictionary.landing.faq1A },
   { question: ptDictionary.landing.faq2Q, answer: ptDictionary.landing.faq2A },
-  { question: ptDictionary.landing.faq3Q, answer: ptDictionary.landing.faq3A },
   { question: ptDictionary.landing.faq4Q, answer: ptDictionary.landing.faq4A },
 ];
 
