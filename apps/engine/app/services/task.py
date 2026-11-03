@@ -20,6 +20,7 @@ from app.services import (
     material,
     persona_hook,
     place_photos,
+    segment_panels,
     stock_terms,
     subtitle,
     svg_terms,
@@ -938,6 +939,9 @@ def generate_final_videos(
             video_for_render, intro_cost_usd, intro_job_id, intro_job_cost = intro
             intro_report = report_from_job_cost(intro_cost_usd, intro_job_id, intro_job_cost)
 
+    # Segment photos: panels over the video, before the subtitles are burned in.
+    video_for_render = segment_panels.overlay_onto(task_id, video_for_render, _update_task)
+
     _update_task(task_id, progress=75, music_mood=music_mood)
 
     final_video_path = path.join(utils.task_dir(task_id), "final-1.mp4")
@@ -1217,14 +1221,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
 
-        # Segment media (Phase 2, faceless first): each segment's photo
-        # replaces the clip overlapping its spoken interval. Skips are
-        # stored on the task so the status endpoint surfaces them — a bad
-        # URL costs only that photo, never the video.
-        downloaded_videos, media_warnings = user_media.apply_segment_media(
-            task_id, params, downloaded_videos, subtitle_path, audio_duration,
-            lipsync_active=persona_lipsync_active(params),
-        )
+        # Segment photos become panels over the final video; skips are task warnings.
+        media_warnings = user_media.prepare_segment_panels(task_id, params, subtitle_path, audio_duration)
         if media_warnings or getattr(params, "segments", None):
             _update_task(task_id, media_warnings=media_warnings)
 

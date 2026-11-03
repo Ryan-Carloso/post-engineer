@@ -35,6 +35,17 @@ MAX_CTA_WORDS = 20
 MIN_HOOK_WORDS = 15
 MAX_HOOK_WORDS = 40
 MAX_TERMS_PER_SEGMENT = 10
+# The info card painted inside a segment photo's panel (media_overlay). The limits are
+# what the card can show at a readable size; the TS validators and the
+# MCP schema pin the same numbers (see shared/script-segments).
+MAX_OVERLAY_TITLE_CHARS = 60
+MAX_OVERLAY_SUBTITLE_CHARS = 80
+MAX_OVERLAY_BADGE_CHARS = 30
+_OVERLAY_LIMITS = {
+    "title": MAX_OVERLAY_TITLE_CHARS,
+    "subtitle": MAX_OVERLAY_SUBTITLE_CHARS,
+    "badge": MAX_OVERLAY_BADGE_CHARS,
+}
 
 _TERMINAL_PUNCTUATION = (".", "!", "?", "。", "！", "？")
 # Emoji code points, checked by ordinal, not by a regex character class.
@@ -130,7 +141,7 @@ def _check_media(media: Any, field: str) -> int:
     # SegmentMedia extra="forbid" shape on the request path and the TS
     # validators: otherwise validate_segments accepts what the request
     # parsers reject.
-    unknown = sorted(set(media) - {"mediaId", "url"})
+    unknown = sorted(set(media) - {"mediaId", "url", "overlay"})
     if unknown:
         raise SegmentValidationError(
             field,
@@ -159,7 +170,42 @@ def _check_media(media: Any, field: str) -> int:
         raise SegmentValidationError(
             field, "url must be a non-empty string.", "Send a non-empty image URL."
         )
+    if "overlay" in media and media["overlay"] is not None:
+        _check_overlay(media["overlay"], f"{field}.overlay")
     return 1
+
+
+def _check_overlay(overlay: Any, field: str) -> None:
+    if not isinstance(overlay, dict):
+        raise SegmentValidationError(
+            field, "Overlay must be an object.", "Send overlay as { title, subtitle?, badge? }."
+        )
+    unknown = sorted(set(overlay) - set(_OVERLAY_LIMITS))
+    if unknown:
+        raise SegmentValidationError(
+            field,
+            f"Overlay has unknown field {unknown[0]}.",
+            "Use only title, subtitle and badge in the overlay.",
+        )
+    title = overlay.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise SegmentValidationError(
+            field, "Overlay title must be a non-empty string.", "Send the place name as the overlay title."
+        )
+    for key, limit in _OVERLAY_LIMITS.items():
+        value = overlay.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, str) or (key != "title" and not value.strip()):
+            raise SegmentValidationError(
+                field, f"Overlay {key} must be a non-empty string.", f"Send a non-empty overlay {key} or omit it."
+            )
+        if len(value.strip()) > limit:
+            raise SegmentValidationError(
+                field,
+                f"Overlay {key} is longer than {limit} characters.",
+                f"Shorten the overlay {key} to at most {limit} characters.",
+            )
 
 
 def validate_segments(segments: Any) -> dict[str, Any]:

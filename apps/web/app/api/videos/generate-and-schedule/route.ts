@@ -36,6 +36,7 @@ import { validateProviders, type Provider } from './providers-validation';
 import { checkFullLipsyncNarration } from './full-lipsync-preflight';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
 import { validateSegmentsRequest } from './segments-validation';
+import { segmentsRequestSchema } from './segments-schema';
 import { rejectScriptPromptKeys, rejectTopicsKey, resolveTitle } from './request-title';
 import {
   persistVoiceSwap,
@@ -104,21 +105,7 @@ const OptionsSchema = z
     // joined script becomes the video script; no LLM expands it. The
     // engine's existing persona script budget and duration trim still
     // apply to persona videos downstream.
-    segments: z
-      .array(
-        z
-          .object({
-            kind: z.enum(['hook', 'body', 'cta']),
-            text: z.string(),
-            media: z
-              .object({ mediaId: z.string().optional(), url: z.string().optional() })
-              .strict()
-              .optional(),
-            terms: z.array(z.string()).optional(),
-          })
-          .strict(),
-      )
-      .optional(),
+    segments: segmentsRequestSchema.optional(),
     webhookUrl: z.string().optional(),
     voiceId: z.string().optional(),
     // The rest of a persona's editorial definition, for a post created
