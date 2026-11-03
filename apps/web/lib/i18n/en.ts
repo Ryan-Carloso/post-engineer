@@ -626,7 +626,7 @@ export const enDictionary: Dictionary = {
     faq4Q: 'Which platforms are supported?',
     faq4A: 'Today we publish to YouTube and Instagram. TikTok, Facebook, X and LinkedIn are coming soon.',
     ctaFinalTitle: 'Your next video could be online tomorrow.',
-    ctaFinalSubtitle: 'Join hundreds of creators already automating their content with Post Engineer.',
+    ctaFinalSubtitle: 'Join creators already automating their content with Post Engineer.',
     ctaFinalNote: 'No credit card required · Cancel anytime',
   },
 

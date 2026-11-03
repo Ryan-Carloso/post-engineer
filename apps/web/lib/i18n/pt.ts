@@ -630,7 +630,7 @@ export const ptDictionary = {
     faq4Q: 'Quais plataformas são suportadas?',
     faq4A: 'Hoje publicamos no YouTube e Instagram. TikTok, Facebook, X e LinkedIn estão chegando em breve.',
     ctaFinalTitle: 'Seu próximo vídeo pode estar online amanhã.',
-    ctaFinalSubtitle: 'Junte-se a centenas de criadores que já automatizam o seu conteúdo com o Post Engineer.',
+    ctaFinalSubtitle: 'Junte-se a criadores que já automatizam o seu conteúdo com o Post Engineer.',
     ctaFinalNote: 'Sem cartão de crédito · Cancele quando quiser',
   },
 
