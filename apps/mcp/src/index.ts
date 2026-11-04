@@ -91,6 +91,7 @@ import { CheckMediaDescription, CheckMediaShape, UploadMediaDescription, UploadM
 import { withTracking } from './analytics.js';
 import { parseHttpTransportOptions, serveHttpTransport } from './http-transport.js';
 import { parseHttpAuthOptions } from './http-auth.js';
+import { SERVER_INSTRUCTIONS, registerPromptTools } from './tools-prompts.js';
 
 // The server advertises the package version: import it so a version bump in
 // package.json flows through without touching this file.
@@ -106,11 +107,15 @@ export function requireApiKey(env: NodeJS.ProcessEnv = process.env): string {
 
 export function createPostEngineerMcpServer(client?: PostEngineerClient): McpServer {
   const apiClient = client ?? new PostEngineerClient({ apiKey: requireApiKey() });
-  const server = new McpServer({
-    name: 'post-engineer-mcp',
-    version: pkg.version,
-  });
+  const server = new McpServer(
+    {
+      name: 'post-engineer-mcp',
+      version: pkg.version,
+    },
+    { instructions: SERVER_INSTRUCTIONS },
+  );
   registerPrompts(server);
+  registerPromptTools(server);
 
   server.tool(
     'create_persona',
@@ -384,7 +389,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
 
   server.tool(
     'generate_persona_video',
-    'Generate and schedule ONE persona video from a complete script. Product rule: generation is always tied to publishing — one call generates the video AND schedules its automatic publish; there is no orphan generation. Send the full script as segments (first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation) — no LLM expands it. title is the slot label for this video. Pass providers plus per-provider account IDs (see list_social_accounts), startAt (ISO datetime, wall-clock in timezone when naive), times (HH:MM, 24h), and timezone. Set mode to \'asap\' to publish the video the moment its generation finishes instead of scheduling it — startAt and times must NOT be set then. The slot must be 3h-30d ahead. idempotencyKey is generated automatically; reuse it to retry without generating twice (replayed: true). Poll the slot\'s taskId with get_video_task_progress.',
+    'Generate and schedule ONE persona video from a complete script. Product rule: generation is always tied to publishing — one call generates the video AND schedules its automatic publish; there is no orphan generation. Send the full script as segments (first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation) — no LLM expands it. title is the slot label for this video. Pass providers plus per-provider account IDs (see list_social_accounts), startAt (ISO datetime, wall-clock in timezone when naive), times (HH:MM, 24h), and timezone. Set mode to \'asap\' to publish the video the moment its generation finishes instead of scheduling it — startAt and times must NOT be set then. The slot must be 3h-30d ahead. idempotencyKey is generated automatically; reuse it to retry without generating twice (replayed: true). If the request is a topic rather than a ready script, call list_prompts first and follow the matching recipe with get_prompt instead of improvising the script — recipes pre-validate the script, media, and price facts before any token is spent. Poll the slot\'s taskId with get_video_task_progress.',
     GeneratePersonaVideoShape,
     withTracking('generate_persona_video', async (args) => handleGeneratePersonaVideo(apiClient, args)),
   );

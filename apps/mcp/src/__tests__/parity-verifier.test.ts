@@ -24,6 +24,12 @@ const MCP_SOURCES = [
     `,
   },
   {
+    // A module other than index.ts that registers a tool: discovery must
+    // see it, or the reverse parity check silently skips the tool.
+    file: 'tools-prompts.ts',
+    text: `server.tool('local_tool', 'd', {}, async () => ({ ok: true }));`,
+  },
+  {
     file: MCP_INDEX,
     text: `
       server.tool('list_personas', 'd', {}, async () => client.listPersonas());
@@ -31,7 +37,14 @@ const MCP_SOURCES = [
     `,
   },
 ];
-const graph = buildMcpCallGraph(MCP_SOURCES, MCP_INDEX);
+const graph = buildMcpCallGraph(MCP_SOURCES);
+
+describe('parity discovery: tool registrations across sources', () => {
+  it('discovers a server.tool registration outside index.ts', () => {
+    expect(graph.tools).toContain('local_tool');
+    expect(graph.tools).toContain('list_personas');
+  });
+});
 
 function route(key: string, text: string): { route: RouteFile; handler: HandlerFacts } {
   const parsed = readRouteFile(`${key}.ts`, text);

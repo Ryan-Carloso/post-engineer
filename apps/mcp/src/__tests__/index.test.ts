@@ -46,6 +46,7 @@ import { GeneratePersonaVideoShape, ValidateScriptShape, ScoreDraftShape } from 
 import { CheckMediaShape, UploadMediaShape } from '../tools-user-media.js';
 import { GetPostShape, GetPostMetricsShape } from '../tools-posts.js';
 import { CancelVideoTaskShape } from '../video-task-tools.js';
+import { ListPromptsShape, GetPromptShape } from '../tools-prompts.js';
 import type { PostEngineerClient } from '../client.js';
 
 const mockTrackEvent = vi.fn();
@@ -101,6 +102,8 @@ const EXPECTED_TOOLS = [
   'update_persona_image',
   'remove_persona_image',
   'publish_video_direct',
+  'list_prompts',
+  'get_prompt',
 ];
 
 async function listServerToolNames(server: ReturnType<typeof createPostEngineerMcpServer>) {
@@ -294,6 +297,8 @@ describe('registered tool schemas (single source of truth)', () => {
       update_persona_image: UpdatePersonaImageShape,
       remove_persona_image: RemovePersonaImageShape,
       publish_video_direct: PublishVideoDirectShape,
+      list_prompts: ListPromptsShape,
+      get_prompt: GetPromptShape,
     };
     expect(schemas.size).toBe(Object.keys(expected).length);
     for (const [name, shape] of Object.entries(expected)) {
@@ -519,5 +524,45 @@ describe('new tool registrations run their handlers', () => {
       vi.mocked(mockClient.disconnectAccount),
       { success: true }
     );
+  });
+
+  it('calls through list_prompts (needs no client method at all)', async () => {
+    const server = createPostEngineerMcpServer(mockClient);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const result = await client.callTool({ name: 'list_prompts', arguments: {} });
+      expect(result.isError).toBeFalsy();
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        'mcp_tool_called',
+        expect.objectContaining({ toolName: 'list_prompts' })
+      );
+      const text = (result.content as Array<{ type: string; text: string }>)?.[0]?.text ?? '';
+      expect(text).toContain('daily-news');
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('calls through get_prompt and tracks the call', async () => {
+    const server = createPostEngineerMcpServer(mockClient);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const result = await client.callTool({ name: 'get_prompt', arguments: { slug: 'full-setup' } });
+      expect(result.isError).toBeFalsy();
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        'mcp_tool_called',
+        expect.objectContaining({ toolName: 'get_prompt' })
+      );
+      const text = (result.content as Array<{ type: string; text: string }>)?.[0]?.text ?? '';
+      // The full-setup prompt never names its own slug; pin the first step instead.
+      expect(text).toContain('list_personas');
+      expect(text).toContain('get_token_balance');
+    } finally {
+      await client.close();
+    }
   });
 });
