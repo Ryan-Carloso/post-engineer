@@ -244,6 +244,13 @@ command by the MCP server, and linked from the MCP README Links section. The
 page is an initial version, intentionally minimal, and the user will improve
 it later.
 
+## Related
+
+- Sibling recipe: [subject-spotlight](./subject-spotlight.md) — the same flow
+  for a subject that is not a place (a car, a product): the identity to pin is
+  the model/trim/year and the card carries the real price instead of opening
+  facts.
+
 ## What this recipe is not
 
 - Not the daily-news recipe (recipe 1) and not its photo rules alone: the

@@ -22,9 +22,11 @@ describe('Prompts hub', () => {
     cy.contains('h1', 'Get your prompts').should('be.visible');
     cy.contains('Daily news becomes a video').should('be.visible');
     cy.contains('Place spotlight becomes a video').should('be.visible');
+    cy.contains('Subject spotlight becomes a video').should('be.visible');
     cy.contains('GitHub PRs become videos').should('be.visible');
     cy.get('a[href="/recipes/daily-news"]').should('be.visible');
     cy.get('a[href="/recipes/place-spotlight"]').should('be.visible');
+    cy.get('a[href="/recipes/subject-spotlight"]').should('be.visible');
     cy.get('a[href="/recipes/github-prs"]').should('be.visible');
     cy.get('a[href="/recipes/full-setup"]').should('be.visible');
   });
@@ -43,6 +45,14 @@ describe('Prompts hub', () => {
     cy.contains('h2', 'What this prompt does').should('be.visible');
     cy.contains('button', 'Copy this prompt').should('be.visible');
     cy.get('a[href*="docs/recipes/place-spotlight.md"]').should('be.visible');
+  });
+
+  it('shows the subject-spotlight detail: steps, copy button, GitHub last', () => {
+    visitEnglish('/recipes/subject-spotlight');
+    cy.contains('h1', 'Subject spotlight becomes a video').should('be.visible');
+    cy.contains('h2', 'What this prompt does').should('be.visible');
+    cy.contains('button', 'Copy this prompt').should('be.visible');
+    cy.get('a[href*="docs/recipes/subject-spotlight.md"]').should('be.visible');
   });
 
   it('shows the GitHub PRs detail: steps and copy button', () => {

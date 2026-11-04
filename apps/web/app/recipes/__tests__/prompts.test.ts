@@ -7,6 +7,7 @@ describe('prompts hub data', () => {
     expect(PROMPTS.map((prompt) => prompt.slug)).toEqual([
       'daily-news',
       'place-spotlight',
+      'subject-spotlight',
       'github-prs',
       'full-setup',
     ]);
@@ -91,10 +92,71 @@ describe('prompts hub data', () => {
     expect(text).toContain('lives one hour');
   });
 
+  it('adds subject-spotlight, ordered after place-spotlight with the globe icon and recipe kind', () => {
+    const subjectSpotlight = getPrompt('subject-spotlight');
+    if (subjectSpotlight === undefined) {
+      throw new Error('subject-spotlight prompt entry is missing');
+    }
+    expect(subjectSpotlight.icon).toBe('globe');
+    expect(subjectSpotlight.kindKey).toBe('recipes.kindRecipe');
+    expect(subjectSpotlight.objectiveKey).toBe('recipes.subjectSpotlightObjective');
+    expect(subjectSpotlight.stepKeys).toEqual([
+      'recipes.subjectSpotlightStep1',
+      'recipes.subjectSpotlightStep2',
+      'recipes.subjectSpotlightStep3',
+      'recipes.subjectSpotlightStep4',
+      'recipes.subjectSpotlightStep5',
+    ]);
+    expect(subjectSpotlight.deliverKeys).toEqual([
+      'recipes.subjectSpotlightDeliver1',
+      'recipes.subjectSpotlightDeliver2',
+      'recipes.subjectSpotlightDeliver3',
+    ]);
+    expect(subjectSpotlight.exampleInputKey).toBe('recipes.subjectSpotlightExampleInput');
+    expect(subjectSpotlight.exampleOutputKey).toBe('recipes.subjectSpotlightExampleOutput');
+    expect(subjectSpotlight.docHref).toEqual(
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/subject-spotlight.md',
+    );
+  });
+
+  it('orders the subject-spotlight flow: subject, identity and price, exact photos, validate, generate', () => {
+    const fullText = getPrompt('subject-spotlight')?.prompt ?? '';
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(fullText.startsWith(baseText)).toBe(true);
+    const text = fullText.slice(baseText.length + 2);
+    const positions = [
+      'Ask me what the subject is',
+      'Pin the identity first',
+      'image search',
+      'check_media',
+      'upload_media',
+      'media overlay',
+      'validate_script',
+      'score_draft',
+      'get_video_task_progress',
+      'get_video_status',
+    ].map((needle) => text.indexOf(needle));
+    expect(positions.every((i) => i >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    expect(text).toContain('generate_persona_video call');
+    expect(text).toContain('model, trim, and year');
+    expect(text).toContain('currency, market, and date');
+    expect(text).toContain('a price without a source is a dropped badge');
+    expect(text).toContain('never a different generation, a render, or a rebadged');
+    expect(text).toContain('only on ok');
+    expect(text).toContain('at most 6 photos');
+    expect(text).toContain('60 characters');
+    expect(text).toContain('drop the badge: a');
+    expect(text).toContain('Never send a fake User-Agent or');
+    expect(text).toContain('never attach a photo of a different');
+    expect(text).toContain('lives one hour');
+  });
+
   it('adds full-setup as the last recipe entry with the compose icon', () => {
     expect(PROMPTS.map((prompt) => prompt.slug)).toEqual([
       'daily-news',
       'place-spotlight',
+      'subject-spotlight',
       'github-prs',
       'full-setup',
     ]);
