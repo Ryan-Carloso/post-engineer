@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -6,13 +6,28 @@ import { describe, expect, it } from 'vitest';
 // Every user-facing surface that lists MCP tools as documentation must stay
 // in sync with the registered tools, so agents reading any of them see the
 // full surface (batch generation, task progress, image library, account
-// connect) instead of a stale subset.
+// connect) instead of a stale subset. Tool registrations live in every
+// apps/mcp/src file that calls server.tool(...), not only index.ts, so the
+// discovery scans all of src and skips the test fixtures.
 const here = dirname(fileURLToPath(import.meta.url));
-const indexTs = readFileSync(join(here, '..', 'index.ts'), 'utf8');
+const srcDir = join(here, '..');
 
-const toolNames = [...indexTs.matchAll(/server\.tool\(\s*'([a-z_]+)'/g)].map(
-  (m) => m[1],
-);
+function collectFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name !== '__tests__') out.push(...collectFiles(full));
+    } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+      out.push(full);
+    }
+  }
+  return out.sort();
+}
+
+const toolNames = collectFiles(srcDir)
+  .map((file) => [...readFileSync(file, 'utf8').matchAll(/server\.tool\(\s*'([a-z_]+)'/g)].map((m) => m[1]))
+  .flat();
 
 // Doc surfaces that enumerate the tool list, relative to apps/mcp/.
 const docFiles: Array<{ path: string; label: string }> = [
@@ -32,6 +47,14 @@ describe('MCP tool docs sync', () => {
   it('registers at least one tool', () => {
     expect(toolNames.length).toBeGreaterThan(0);
   });
+
+  // Coverage across files, not just one: a registration added to a module
+  // other than index.ts (tools-prompts.ts today) must still surface here.
+  const srcFiles = collectFiles(srcDir);
+  it('discoveries run over more than one source file', () => {
+    expect(srcFiles.length).toBeGreaterThan(1);
+  });
+
 
   it('has at least one doc surface', () => {
     expect(docs.length).toBeGreaterThan(0);

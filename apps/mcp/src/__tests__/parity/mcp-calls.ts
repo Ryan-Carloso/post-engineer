@@ -124,7 +124,7 @@ function unitOf(node: ts.Node): Unit {
   return unit;
 }
 
-export function buildMcpCallGraph(files: ReadonlyArray<{ file: string; text: string }>, indexFile: string): McpCallGraph {
+export function buildMcpCallGraph(files: ReadonlyArray<{ file: string; text: string }>): McpCallGraph {
   const functions = new Map<string, Unit[]>();
   const methods = new Map<string, Unit[]>();
   const add = (map: Map<string, Unit[]>, name: string, node: ts.Node): void => {
@@ -148,7 +148,6 @@ export function buildMcpCallGraph(files: ReadonlyArray<{ file: string; text: str
         add(methods, node.name.text, node.body);
       }
       if (
-        file === indexFile &&
         ts.isCallExpression(node) &&
         ts.isPropertyAccessExpression(node.expression) &&
         node.expression.name.text === 'tool' &&

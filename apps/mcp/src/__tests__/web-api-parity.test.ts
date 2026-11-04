@@ -31,8 +31,6 @@ const mcpSrcDir = join(here, '..');
 const webDir = join(here, '..', '..', '..', 'web');
 const webAppDir = join(webDir, 'app');
 const apiDir = join(webAppDir, 'api');
-const indexFile = join(mcpSrcDir, 'index.ts');
-
 const PARITY: z.infer<typeof ParityDataSchema> = ParityDataSchema.parse(
   JSON.parse(readFileSync(join(here, 'parity-exclusions.json'), 'utf8')),
 );
@@ -42,10 +40,16 @@ const ENDPOINT_TOOLS: Record<string, string[]> = z
   .record(z.string(), z.array(z.string().min(1)))
   .parse(JSON.parse(readFileSync(join(here, 'parity-endpoint-tools.json'), 'utf8')));
 
-// Tools with no backing web endpoint. Empty today: every tool calls the
-// web API through the MCP client. Kept so a future local-only tool has a
-// declared home instead of breaking the reverse check.
-const WEBLESS_TOOLS: Record<string, string> = {};
+// Tools with no backing web endpoint. list_prompts and get_prompt read
+// HUB_PROMPTS from the local prompt hub (the same source the MCP slash
+// commands register from); every other tool calls the web API through the
+// MCP client. A tool registered anywhere in apps/mcp/src must appear here
+// or in parity-endpoint-tools.json — parity discovers registrations in
+// every source file, not only index.ts.
+const WEBLESS_TOOLS: Record<string, string> = {
+  list_prompts: 'reads HUB_PROMPTS locally; no web endpoint',
+  get_prompt: 'reads HUB_PROMPTS locally; no web endpoint',
+};
 
 function collectFiles(dir: string, accept: (name: string) => boolean): string[] {
   const out: string[] = [];
@@ -100,7 +104,6 @@ const graph = buildMcpCallGraph(
     file,
     text: readFileSync(file, 'utf8'),
   })),
-  indexFile,
 );
 const toolNames = graph.tools;
 const mappedTools = new Set(Object.values(ENDPOINT_TOOLS).flat());
