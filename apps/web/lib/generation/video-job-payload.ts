@@ -1,3 +1,4 @@
+import type { EngineVideoRequestField } from '@/lib/engine/types';
 import { logger } from '@/lib/logger';
 //---------------
 // buildJobPayload — SINGLE assembly of the engine (money-print) payload.
@@ -11,7 +12,7 @@ import { logger } from '@/lib/logger';
 //---------------
 const PERSONA_PREFERENCE_FIELDS: ReadonlyArray<{
   personaKey: string;
-  jobKey: string;
+  jobKey: EngineVideoRequestField;
 }> = [
   { personaKey: 'language', jobKey: 'video_language' },
   { personaKey: 'video_aspect', jobKey: 'video_aspect' },
@@ -29,8 +30,10 @@ const PERSONA_PREFERENCE_FIELDS: ReadonlyArray<{
 // engine under their own names. The persona face MIX is gone entirely
 // (migration 007): `lipsync` is the one and only face-shaped switch, and the
 // route sets it from the per-post `faceless` choice.
+// Typed against the generated engine contract (lib/engine/types.ts): a key
+// the engine's TaskVideoRequest does not accept fails the typecheck.
 //---------------
-const REQUEST_FORWARD_FIELDS: ReadonlyArray<string> = [
+const REQUEST_FORWARD_FIELDS: ReadonlyArray<EngineVideoRequestField> = [
   'video_subject',
   'video_language',
   'video_aspect',
@@ -66,6 +69,8 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<string> = [
   // and drop every user photo with no warning.
   'segments',
 ];
+// String-keyed view for membership checks on untyped request keys.
+const REQUEST_FORWARD_FIELD_SET: ReadonlySet<string> = new Set(REQUEST_FORWARD_FIELDS);
 
 export interface JobPersona {
   name: string;
@@ -103,7 +108,7 @@ export function buildJobPayload(
   const forwardedRequest: Record<string, unknown> = {};
   const droppedKeys: string[] = [];
   for (const [key, value] of Object.entries(jobRequest)) {
-    if (REQUEST_FORWARD_FIELDS.includes(key)) {
+    if (REQUEST_FORWARD_FIELD_SET.has(key)) {
       forwardedRequest[key] = value;
     } else {
       droppedKeys.push(key);
