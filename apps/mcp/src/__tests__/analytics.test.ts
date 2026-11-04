@@ -1,209 +1,84 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import pkg from '../../package.json' with { type: 'json' };
+import {
+  MCP_CALL_ID_HEADER,
+  MCP_TOOL_HEADER,
+  MCP_VERSION_HEADER,
+  mcpTelemetryHeaders,
+  withTracking,
+} from '../analytics.js';
+import { PostEngineerClient } from '../client.js';
 
 //---------------
-// MCP analytics: track tool invocations as PostHog events.
-//
-// - trackEvent() never throws; telemetry must never break the MCP server.
-// - No-op when POSTHOG_API_KEY is missing (warns once).
-// - Secret-bearing property keys are redacted before capture.
-// - Never logs PII, credentials, or raw request bodies.
+// MCP tool telemetry travels to the web API as request headers: the web
+// records mcp_tool_called against the authenticated user. These tests pin
+// the header contract and the per-invocation context isolation.
 //---------------
 
-const mockCapture = vi.fn();
-const mockPostHogCtor = vi.fn();
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-vi.mock('posthog-node', () => ({
-  PostHog: class {
-    capture = mockCapture;
-    constructor(...args: unknown[]) {
-      mockPostHogCtor(...args);
-    }
-  },
-}));
-
-import { trackEvent, withTracking, resetAnalyticsForTesting, DEFAULT_POSTHOG_HOST } from '../analytics.js';
-
-describe('trackEvent', () => {
-  beforeEach(() => {
-    mockCapture.mockClear();
-    mockPostHogCtor.mockClear();
-    resetAnalyticsForTesting();
+describe('mcpTelemetryHeaders', () => {
+  it('outside a tool call sends only the server version', () => {
+    expect(mcpTelemetryHeaders()).toEqual({ [MCP_VERSION_HEADER]: pkg.version });
   });
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    resetAnalyticsForTesting();
+  it('inside a tool call adds the tool name and a UUID call id', async () => {
+    const wrapped = withTracking('list_personas', async () => mcpTelemetryHeaders());
+    const headers = await wrapped({});
+    expect(headers[MCP_TOOL_HEADER]).toBe('list_personas');
+    expect(headers[MCP_CALL_ID_HEADER]).toMatch(UUID);
+    expect(headers[MCP_VERSION_HEADER]).toBe(pkg.version);
   });
 
-  it('captures mcp_tool_called with the tool name', async () => {
-    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
-    trackEvent('mcp_tool_called', { toolName: 'generate_video' });
-    // trackEvent is fire-and-forget (async lazy SDK load); wait a tick.
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(mockCapture).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event: 'mcp_tool_called',
-        properties: expect.objectContaining({ toolName: 'generate_video' }),
-      }),
-    );
-  });
-
-  it('is a no-op when POSTHOG_API_KEY is missing', () => {
-    vi.stubEnv('POSTHOG_API_KEY', '');
-    expect(() => trackEvent('mcp_tool_called', { toolName: 'x' })).not.toThrow();
-    expect(mockPostHogCtor).not.toHaveBeenCalled();
-    expect(mockCapture).not.toHaveBeenCalled();
-  });
-
-  it('redacts secret-bearing property keys', async () => {
-    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
-    trackEvent('mcp_tool_called', {
-      toolName: 'x',
-      password: 'secret123',
-      apiKey: 'sk-secret',
+  it('keeps the same call id across awaits within one call and a fresh one per call', async () => {
+    const wrapped = withTracking('generate_persona_video', async () => {
+      const first = mcpTelemetryHeaders()[MCP_CALL_ID_HEADER];
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      return [first, mcpTelemetryHeaders()[MCP_CALL_ID_HEADER]];
     });
-    await new Promise((resolve) => setImmediate(resolve));
-    const call = mockCapture.mock.calls[0][0] as {
-      properties: Record<string, unknown>;
-    };
-    const text = JSON.stringify(call.properties);
-    expect(text).not.toContain('secret123');
-    expect(text).not.toContain('sk-secret');
-    expect(call.properties['password']).toBe('[redacted]');
+    const [a1, a2] = await wrapped({});
+    const [b1] = await wrapped({});
+    expect(a1).toBe(a2);
+    expect(b1).not.toBe(a1);
   });
 
-  it('never throws when PostHog capture fails', () => {
-    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
-    mockCapture.mockImplementation(() => {
-      throw new Error('posthog down');
+  it('never mixes concurrent tool calls', async () => {
+    const slow = withTracking('slow_tool', async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return mcpTelemetryHeaders()[MCP_TOOL_HEADER];
     });
-    expect(() => trackEvent('mcp_tool_called', { toolName: 'x' })).not.toThrow();
+    const fast = withTracking('fast_tool', async () => mcpTelemetryHeaders()[MCP_TOOL_HEADER]);
+    await expect(Promise.all([slow({}), fast({})])).resolves.toEqual(['slow_tool', 'fast_tool']);
+    expect(mcpTelemetryHeaders()[MCP_TOOL_HEADER]).toBeUndefined();
   });
 
-  it('never throws when PostHog constructor fails', () => {
-    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
-    mockPostHogCtor.mockImplementationOnce(() => {
-      throw new Error('init failed');
+  it('returns the handler result and propagates handler errors', async () => {
+    const ok = withTracking('upload_media', async (args: { path: string }) => `done:${args.path}`);
+    await expect(ok({ path: 'photo.jpg' })).resolves.toBe('done:photo.jpg');
+    const failing = withTracking('upload_media', async () => {
+      throw new Error('boom');
     });
-    expect(() => trackEvent('mcp_tool_called', { toolName: 'x' })).not.toThrow();
-    expect(mockCapture).not.toHaveBeenCalled();
-  });
-
-  it('falls back to DEFAULT_POSTHOG_HOST when POSTHOG_HOST is not set', async () => {
-    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
-    // undefined deletes the var and vi.unstubAllEnvs() restores the original
-    // afterwards — a manual `delete` would leak into other test files.
-    vi.stubEnv('POSTHOG_HOST', undefined);
-    trackEvent('mcp_tool_called', { toolName: 'x' });
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(mockPostHogCtor).toHaveBeenCalledWith(
-      'phc_test_key',
-      expect.objectContaining({ host: DEFAULT_POSTHOG_HOST }),
-    );
-  });
-
-  it('prefers POSTHOG_HOST over the default', async () => {
-    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
-    vi.stubEnv('POSTHOG_HOST', 'https://eu.i.posthog.com');
-    trackEvent('mcp_tool_called', { toolName: 'x' });
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(mockPostHogCtor).toHaveBeenCalledWith(
-      'phc_test_key',
-      expect.objectContaining({ host: 'https://eu.i.posthog.com' }),
-    );
-  });
-
-  it('shares one lazy client promise across concurrent trackEvent calls', async () => {
-    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
-    // Both calls happen before the dynamic import resolves: they must wait
-    // for the same in-flight promise instead of initializing twice.
-    trackEvent('mcp_tool_called', { toolName: 'a' });
-    trackEvent('mcp_tool_called', { toolName: 'b' });
-    await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(mockPostHogCtor).toHaveBeenCalledTimes(1);
-    expect(mockCapture).toHaveBeenCalledTimes(2);
-  });
-
-
-  it('tags every capture with source mcp and environment', async () => {
-    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
-    trackEvent('mcp_tool_called', { toolName: 'generate_video' });
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(mockCapture).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event: 'mcp_tool_called',
-        properties: expect.objectContaining({
-          toolName: 'generate_video',
-          source: 'mcp',
-          environment: 'development',
-        }),
-      }),
-    );
-  });
-
-  it('tags environment production when NODE_ENV=production', async () => {
-    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
-    vi.stubEnv('NODE_ENV', 'production');
-    trackEvent('mcp_tool_called', { toolName: 'x' });
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(mockCapture).toHaveBeenCalledWith(
-      expect.objectContaining({
-        properties: expect.objectContaining({ source: 'mcp', environment: 'production' }),
-      }),
-    );
-  });
-
-  it('caller properties cannot strip or override the origin tags', async () => {
-    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
-    trackEvent('mcp_tool_called', { source: 'spoofed', environment: 'production' });
-    await new Promise((resolve) => setImmediate(resolve));
-    const args = mockCapture.mock.calls[0][0] as { properties: Record<string, unknown> };
-    expect(args.properties['source']).toBe('mcp');
-    expect(args.properties['environment']).toBe('development');
-  });
-
-  it('warns only once when POSTHOG_API_KEY is missing', async () => {
-    vi.stubEnv('POSTHOG_API_KEY', '');
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      trackEvent('mcp_tool_called', { toolName: 'a' });
-      trackEvent('mcp_tool_called', { toolName: 'b' });
-      await new Promise((resolve) => setImmediate(resolve));
-      const disabledWarnings = warn.mock.calls.filter((args) =>
-        String(args[0]).includes('POSTHOG_API_KEY not set'),
-      );
-      expect(disabledWarnings).toHaveLength(1);
-      expect(mockPostHogCtor).not.toHaveBeenCalled();
-    } finally {
-      warn.mockRestore();
-    }
+    await expect(failing({})).rejects.toThrow('boom');
   });
 });
 
-describe('withTracking', () => {
-  beforeEach(() => {
-    mockCapture.mockClear();
-    mockPostHogCtor.mockClear();
-    resetAnalyticsForTesting();
-  });
-
+describe('PostEngineerClient telemetry headers', () => {
   afterEach(() => {
-    vi.unstubAllEnvs();
-    resetAnalyticsForTesting();
+    vi.unstubAllGlobals();
   });
 
-  it('tracks the tool name and returns the handler result', async () => {
-    vi.stubEnv('POSTHOG_API_KEY', 'phc_test_key');
-    const wrapped = withTracking('upload_media', async (args: { path: string }) => `done:${args.path}`);
-    await expect(wrapped({ path: 'photo.jpg' })).resolves.toBe('done:photo.jpg');
-    // trackEvent is fire-and-forget (async lazy SDK load); wait a tick.
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(mockCapture).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event: 'mcp_tool_called',
-        properties: expect.objectContaining({ toolName: 'upload_media' }),
-      }),
+  it('sends the tool headers on a real API request made inside a tool call', async () => {
+    const fetchMock = vi.fn(
+      async (_url: string, _init: RequestInit) => new Response(JSON.stringify({ personas: [] }), { status: 200 }),
     );
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new PostEngineerClient({ apiKey: 'pe_test', baseUrl: 'https://api.example.test' });
+    await withTracking('list_personas', async () => client.listPersonas())({});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const headers = fetchMock.mock.calls[0]?.[1].headers as Record<string, string>;
+    expect(headers[MCP_TOOL_HEADER]).toBe('list_personas');
+    expect(headers[MCP_CALL_ID_HEADER]).toMatch(UUID);
+    expect(headers[MCP_VERSION_HEADER]).toBe(pkg.version);
+    expect(headers.Authorization).toBe('Bearer pe_test');
   });
 });

@@ -28,13 +28,12 @@ credits is billed by Modal.
 - Node.js 20.10+
 - API key generated at https://post-engineer.com/api-keys
 
-### Telemetry (optional)
+### Telemetry
 
-Set `POSTHOG_API_KEY` (and optionally `POSTHOG_HOST`, defaults to
-`DEFAULT_POSTHOG_HOST` in `src/analytics.ts` — change the constant to
-self-host) to send `mcp_tool_called` analytics events to
-PostHog. Without it, the server runs normally with telemetry disabled.
-The key is read from the environment only — never hardcoded.
+Each request to the post-engineer API includes the calling tool's name and
+the server version, recorded against your account for product analytics.
+No script content, media or credentials are sent. The server itself never
+contacts any analytics service.
 
 ## Use
 

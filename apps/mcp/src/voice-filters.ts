@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { trackEvent } from './analytics.js';
 import type { PostEngineerClient } from './client.js';
 
 //---------------
@@ -202,45 +201,16 @@ export const NO_VOICE_SENTINELS = ['no-voice', 'none'] as const;
 const UNKNOWN_VOICE_COPY = (attempt: string) =>
   `Unknown voice "${attempt}". Not a house voice and not one of your clones. Call list_voices and pass the id or label from that list.`;
 
-// Telemetry and copy share one truncation so both always agree.
+// Cap on the echoed voice attempt in the rejection copy.
 const MAX_VOICE_ATTEMPT = 80;
 
 function truncateVoice(attempt: string): string {
   return attempt.slice(0, MAX_VOICE_ATTEMPT);
 }
 
-// redactCredentialFragments — the value-level scrubber for the PostHog
-// property below, mirroring the web's scrub.ts patterns. trackEvent only
-// redacts by property KEY name, so a `voice` value carrying a pasted
-// credential would otherwise reach PostHog verbatim. The thrown message
-// keeps the raw attempt: it goes back to the agent that typed it, never
-// to telemetry.
-function redactCredentialFragments(text: string): string {
-  return text
-    .replace(/\bBearer\s+[^\s]+/gi, 'Bearer [redacted]')
-    .replace(/(https?:\/\/)[^\s/@]+@/gi, '$1[redacted]@')
-    .replace(/([?&](?:api[_-]?key|access[_-]?token|token)=)[^\s&]+/gi, '$1[redacted]')
-    .replace(/\bsk-[A-Za-z0-9_-]{20,}/g, '[redacted]');
-}
-
-/** throwUnknownVoice — first the PostHog `server_warning` under the EXISTING
- *  event name and the shared UNKNOWN_VOICE code (issue #301: no new event
- *  names), then the loud, exact rejection. The rejection is what the agent
- *  must see even if telemetry is down, so the capture is swallowed on
- *  failure — trackEvent itself never breaks the resolution path. */
-function throwUnknownVoice(tool: string, attempt: string): never {
-  const voice = truncateVoice(attempt);
-  try {
-    trackEvent('server_warning', {
-      code: 'UNKNOWN_VOICE',
-      tool,
-      voice: redactCredentialFragments(voice),
-    });
-  } catch {
-    // Telemetry must never break the rejection: the agent still gets the
-    // exact Unknown-voice message below.
-  }
-  throw new Error(UNKNOWN_VOICE_COPY(voice));
+/** throwUnknownVoice — the loud, exact rejection the agent must see. */
+function throwUnknownVoice(attempt: string): never {
+  throw new Error(UNKNOWN_VOICE_COPY(truncateVoice(attempt)));
 }
 
 function houseMatch(voiceId: string): string | null {
@@ -288,13 +258,11 @@ function voiceEntries(payload: unknown): Array<{ id?: unknown; label?: unknown; 
  *  4. anything else → consult client.listVoices() (a GET) and match
  *     `cloned` entries by full id, key without prefix, the old
  *     `chatterbox:<key>` spelling, or label. Unknown / ambiguous → the
- *     Unknown-voice error plus a `server_warning` PostHog event. A
- *     listVoices failure propagates with its real message (never the
- *     Unknown-voice error, no server_warning). */
+ *     Unknown-voice error. A listVoices failure propagates with its real
+ *     message (never the Unknown-voice error). */
 export async function resolvePersonaVoiceId(
   client: PostEngineerClient,
   voiceId: string | undefined,
-  tool: string,
 ): Promise<string | undefined> {
   const trimmed = (voiceId ?? '').trim();
   if (trimmed.length === 0) return undefined;
@@ -310,7 +278,7 @@ export async function resolvePersonaVoiceId(
   const resolved = new Set(
     matches.map((entry) => (typeof entry.id === 'string' ? entry.id : '')).filter((id) => id !== ''),
   );
-  if (resolved.size !== 1) throwUnknownVoice(tool, trimmed);
+  if (resolved.size !== 1) throwUnknownVoice(trimmed);
   return resolved.values().next().value;
 }
 
@@ -320,9 +288,8 @@ export async function resolvePersonaVoiceId(
 export async function withResolvedPersonaVoice<T extends { voiceId?: string }>(
   client: PostEngineerClient,
   input: T,
-  tool: string,
 ): Promise<T> {
-  const voiceId = await resolvePersonaVoiceId(client, input.voiceId, tool);
+  const voiceId = await resolvePersonaVoiceId(client, input.voiceId);
   if (voiceId === undefined || voiceId === input.voiceId) return input;
   return { ...input, voiceId };
 }
@@ -353,7 +320,7 @@ function storedPersonaVoice(payload: unknown, personaId: string): string | undef
  *  through. */
 export async function withResolvedPersonaVoiceForUpdate<
   T extends { personaId: string; voiceId?: string },
->(client: PostEngineerClient, input: T, tool: string): Promise<T> {
+>(client: PostEngineerClient, input: T): Promise<T> {
   const voiceId = input.voiceId;
   if (voiceId !== undefined) {
     try {
@@ -363,7 +330,7 @@ export async function withResolvedPersonaVoiceForUpdate<
       // Fall through to normal resolution below.
     }
   }
-  return withResolvedPersonaVoice(client, input, tool);
+  return withResolvedPersonaVoice(client, input);
 }
 
 /** PersonaVoiceIdSchema — the voiceId field family: the 65 house names plus

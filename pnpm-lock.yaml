@@ -29,9 +29,6 @@ importers:
       jose:
         specifier: ^6.2.12
         version: 6.2.12
-      posthog-node:
-        specifier: ^5.54.1
-        version: 5.54.1(rxjs@7.8.2)
       zod:
         specifier: ^3.24.2
         version: 3.25.76

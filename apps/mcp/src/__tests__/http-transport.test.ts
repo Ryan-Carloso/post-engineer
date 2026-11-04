@@ -13,7 +13,7 @@ import {
 
 const mockTrackEvent = vi.fn();
 vi.mock('../analytics.js', () => ({
-  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+  mcpTelemetryHeaders: () => ({}),
   // Same shape as the real withTracking: track, then run the handler.
   withTracking: (toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     mockTrackEvent('mcp_tool_called', { toolName });

@@ -43,7 +43,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { requireTitle } from './require-title.js';
 import { basename, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
-
+import { mcpTelemetryHeaders } from './analytics.js';
 
 const PRODUCTION_API_URL = 'https://post-engineer.com';
 // Hung requests must not block the stdio tool call (and the agent session) forever.
@@ -229,7 +229,6 @@ function resolveBaseUrl(override: string | undefined): string {
   return url.origin + url.pathname.replace(/\/+$/, '');
 }
 
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -280,9 +279,9 @@ export class PostEngineerClient {
   }
 
   getHeaders(includeContentType = true): Record<string, string> {
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-    };
+    // Telemetry headers name the calling MCP tool; the web API records
+    // mcp_tool_called from them (see analytics.ts).
+    const headers: Record<string, string> = { ...mcpTelemetryHeaders(), Accept: 'application/json' };
     if (includeContentType) headers['Content-Type'] = 'application/json';
     if (this.apiKey) {
       headers.Authorization = `Bearer ${this.apiKey}`;
