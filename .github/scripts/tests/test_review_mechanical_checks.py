@@ -102,6 +102,40 @@ def test_secret_values_are_never_printed(checks, tmp_path, monkeypatch, capsys):
     assert secret not in out
 
 
+def test_synthetic_sequential_key_does_not_fail(checks, tmp_path, monkeypatch, capsys):
+    # The telemetry scrubber test uses an alphabet-sequence fixture:
+    # provably not a random key, so the mechanical scan must not fail on it.
+    # Built at runtime, like the real-key test below, to keep the literal
+    # out of this file's own diff.
+    secret = "sk-" + "".join(chr(ord("a") + i) for i in range(26))
+    diff = (
+        "diff --git a/apps/web/lib/__tests__/x.test.ts b/apps/web/lib/__tests__/x.test.ts\n"
+        "+++ b/apps/web/lib/__tests__/x.test.ts\n"
+        "@@ -1 +1 @@\n"
+        f'+const url = "https://post-engineer.test/api/prompts/{secret}";\n'
+    )
+    rc, out = run_main(
+        checks, monkeypatch, capsys, tmp_path, diff=diff, files="apps/web/lib/__tests__/x.test.ts\n"
+    )
+    assert rc == 0
+    assert "no obvious secrets" in out
+
+
+def test_repeated_char_key_does_not_fail(checks, tmp_path, monkeypatch, capsys):
+    secret = "sk-" + "a" * 26
+    diff = (
+        "diff --git a/apps/web/lib/__tests__/x.test.ts b/apps/web/lib/__tests__/x.test.ts\n"
+        "+++ b/apps/web/lib/__tests__/x.test.ts\n"
+        "@@ -1 +1 @@\n"
+        f'+const url = "https://post-engineer.test/api/prompts/{secret}";\n'
+    )
+    rc, out = run_main(
+        checks, monkeypatch, capsys, tmp_path, diff=diff, files="apps/web/lib/__tests__/x.test.ts\n"
+    )
+    assert rc == 0
+    assert "no obvious secrets" in out
+
+
 def test_prod_changes_without_tests_warn_but_pass(checks, tmp_path, monkeypatch, capsys):
     rc, out = run_main(
         checks, monkeypatch, capsys, tmp_path, files="apps/web/lib/x.ts\n"
