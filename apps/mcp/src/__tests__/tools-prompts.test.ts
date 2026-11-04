@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { InitializeResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { InitializeResultSchema, type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
   SERVER_INSTRUCTIONS,
   ListPromptsShape,
@@ -20,8 +20,9 @@ import type { PostEngineerClient } from '../client.js';
 // ids: an explicit error naming the valid values.
 //---------------
 
-function textOf(result: { content: Array<{ type: string; text: string }> }): string {
-  return result.content[0]?.text ?? '';
+function textOf(result: CallToolResult): string {
+  const first = result.content[0];
+  return first !== undefined && first.type === 'text' ? first.text : '';
 }
 
 describe('handleListPrompts', () => {
@@ -98,7 +99,8 @@ describe('registerPromptTools', () => {
   // registration wrapper (tracking included) actually runs.
   const mockClient = {} as unknown as PostEngineerClient;
 
-  async function withClient(run: (client: Client) => Promise<void>): Promise<void> {    const server = createPostEngineerMcpServer(mockClient);
+  async function withClient(run: (client: Client) => Promise<void>): Promise<void> {
+    const server = createPostEngineerMcpServer(mockClient);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'test-client', version: '0.0.0' });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -126,7 +128,7 @@ describe('registerPromptTools', () => {
     await withClient(async (client) => {
       const result = await client.callTool({ name: 'list_prompts', arguments: {} });
       expect(result.isError).toBeFalsy();
-      const listed = JSON.parse(textOf(result as { content: Array<{ type: string; text: string }> })) as Array<{ slug: string }>;
+      const listed = JSON.parse(textOf(result)) as Array<{ slug: string }>;
       expect(listed.map((entry) => entry.slug)).toEqual(HUB_PROMPTS.map((prompt) => prompt.slug));
     });
   });
@@ -135,7 +137,7 @@ describe('registerPromptTools', () => {
     await withClient(async (client) => {
       const result = await client.callTool({ name: 'get_prompt', arguments: { slug: 'daily-news' } });
       expect(result.isError).toBeFalsy();
-      expect(textOf(result as { content: Array<{ type: string; text: string }> })).toBe(
+      expect(textOf(result)).toBe(
         HUB_PROMPTS.find((prompt) => prompt.slug === 'daily-news')?.prompt,
       );
     });
@@ -145,7 +147,7 @@ describe('registerPromptTools', () => {
     await withClient(async (client) => {
       const result = await client.callTool({ name: 'get_prompt', arguments: { slug: 'nope' } });
       expect(result.isError).toBe(true);
-      expect(textOf(result as { content: Array<{ type: string; text: string }> })).toContain('nope');
+      expect(textOf(result)).toContain('nope');
     });
   });
 
