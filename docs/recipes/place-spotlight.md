@@ -1,6 +1,6 @@
 # Recipe: place spotlight becomes a video
 
-> Version: 1. MCP: `post-engineer-mcp` 1.40.0 (use `npx -y post-engineer-mcp@latest`;
+> MCP: `post-engineer-mcp` (use `npx -y post-engineer-mcp@latest`;
 > `@latest` fetches the newest version instead of a stale cached copy).
 > Status: prompt shipped in the hub. Proven mechanically (see "Verification"
 > below); a real published video from this recipe is a separate, user-approved

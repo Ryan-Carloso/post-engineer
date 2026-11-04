@@ -1,6 +1,6 @@
 # Recipe: daily news becomes a video
 
-> Version: 1. MCP: `post-engineer-mcp` 1.31.0 (use `npx -y post-engineer-mcp@latest`;
+> MCP: `post-engineer-mcp` (use `npx -y post-engineer-mcp@latest`;
 > `@latest` fetches the newest version instead of a stale cached copy).
 > Status: first recipe. Proven mechanically (see "Verification" below); a real
 > published video from this recipe is a separate, user-approved step, not part
