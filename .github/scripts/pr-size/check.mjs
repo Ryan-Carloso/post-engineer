@@ -40,6 +40,9 @@ export function isExcludedFile(p) {
   if (base === 'package-lock.json' || base === 'pnpm-lock.yaml' || base === 'yarn.lock' || base.endsWith('.lock')) return true;
   // Generated/snapshot files.
   if (segments.includes('__snapshots__') || p.endsWith('.snap')) return true;
+  // Generated code is named *.gen.<ext> (e.g. apps/web/lib/engine/schema.gen.ts)
+  // and is pinned by a drift test against its generator instead.
+  if (/\.gen\.[^.]+$/.test(base)) return true;
   // Test files: test dirs, *.test.*, *.spec.*, test_*.py, *_test.py.
   if (segments.some((s) => s === '__tests__' || s === 'test' || s === 'tests')) return true;
   if (base.includes('.test.') || base.includes('.spec.')) return true;

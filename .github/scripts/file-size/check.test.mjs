@@ -106,6 +106,16 @@ describe('file-size ratchet (exemptions)', () => {
     assert.equal(exitCode, 0);
   });
 
+  it('ignores generated *.gen.<ext> files even when huge', () => {
+    const { exitCode } = runCheck([A('apps/web/lib/engine/schema.gen.ts', 2004)]);
+    assert.equal(exitCode, 0);
+  });
+
+  it('still checks a file whose name merely contains "gen"', () => {
+    const { exitCode } = runCheck([A('apps/web/lib/general.ts', 501)]);
+    assert.equal(exitCode, 1);
+  });
+
   it('ignores supabase migrations', () => {
     const { exitCode } = runCheck([A('supabase/migrations/20261011_big_seed.ts', 900)]);
     assert.equal(exitCode, 0);
