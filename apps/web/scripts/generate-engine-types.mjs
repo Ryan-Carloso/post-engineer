@@ -36,30 +36,43 @@ export async function generateEngineTypes(spec) {
   return HEADER + astToString(ast);
 }
 
-async function main() {
-  const spec = JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf8'));
+/**
+ * Run the generator CLI against explicit paths and I/O hooks. The
+ * production entry point (main) passes the real paths and console/process
+ * hooks; tests pass temp paths and mocks so every branch — write,
+ * --check up-to-date, --check stale, --check missing output — runs
+ * without touching the committed files.
+ */
+export async function runCli({ snapshotPath, outputPath, args, exit, log, error }) {
+  const spec = JSON.parse(readFileSync(snapshotPath, 'utf8'));
   const text = await generateEngineTypes(spec);
-  if (process.argv.includes('--check')) {
+  if (args.includes('--check')) {
     let current;
     try {
-      current = readFileSync(OUTPUT_PATH, 'utf8');
+      current = readFileSync(outputPath, 'utf8');
     } catch {
       current = undefined;
     }
     if (current !== text) {
-      console.error(`stale ${OUTPUT_PATH} — run node apps/web/scripts/generate-engine-types.mjs`);
-      process.exit(1);
+      error(`stale ${outputPath} — run node apps/web/scripts/generate-engine-types.mjs`);
+      exit(1);
+      return;
     }
-    console.log(`up to date ${OUTPUT_PATH}`);
+    log(`up to date ${outputPath}`);
     return;
   }
-  writeFileSync(OUTPUT_PATH, text);
-  console.log(`wrote ${OUTPUT_PATH}`);
+  writeFileSync(outputPath, text);
+  log(`wrote ${outputPath}`);
+}
+
+async function main() { await runCli({ snapshotPath: SNAPSHOT_PATH, outputPath: OUTPUT_PATH, args: process.argv, exit: process.exit, log: console.log.bind(console), error: console.error.bind(console) }); }
+
+/** Log a CLI failure and exit non-zero (exported so the entry path is testable). */
+export function reportCliFailure(error) {
+  console.error(error);
+  process.exit(1);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  main().catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+  main().catch(reportCliFailure);
 }
