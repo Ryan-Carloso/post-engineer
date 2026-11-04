@@ -90,7 +90,7 @@ import { CheckMediaDescription, CheckMediaShape, UploadMediaDescription, UploadM
 import { withTracking } from './analytics.js';
 import { parseHttpTransportOptions, serveHttpTransport } from './http-transport.js';
 import { parseHttpAuthOptions } from './http-auth.js';
-import { GetPromptDescription, GetPromptShape, ListPromptsDescription, ListPromptsShape, SERVER_INSTRUCTIONS, handleGetPrompt, handleListPrompts } from './tools-prompts.js';
+import { SERVER_INSTRUCTIONS, registerPromptTools, withRecipeNudge, withScriptOutcome, type McpTransportKind } from './tools-prompts.js';
 import { registerRemotePrompts } from './prompts.js';
 
 // The server advertises the package version: import it so a version bump in
@@ -105,7 +105,7 @@ export function requireApiKey(env: NodeJS.ProcessEnv = process.env): string {
   return apiKey;
 }
 
-export function createPostEngineerMcpServer(client?: PostEngineerClient): McpServer {
+export function createPostEngineerMcpServer(client?: PostEngineerClient, transport: McpTransportKind = 'stdio'): McpServer {
   const apiClient = client ?? new PostEngineerClient({ apiKey: requireApiKey() });
   const server = new McpServer(
     {
@@ -115,25 +115,24 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     { instructions: SERVER_INSTRUCTIONS },
   );
   registerRemotePrompts(server, apiClient);
-  server.tool('list_prompts', ListPromptsDescription, ListPromptsShape, withTracking('list_prompts', async () => handleListPrompts(apiClient)));
-  server.tool('get_prompt', GetPromptDescription, GetPromptShape, withTracking('get_prompt', async (args) => handleGetPrompt(apiClient, args)));
+  const recipeSession = registerPromptTools(server, apiClient, transport);
 
   server.tool(
     'create_persona',
     'Create a new AI persona with avatar, voice, language, and niche prompt. avatarUrl is REQUIRED: every persona has a face. A video without a face is a per-video choice — set options.faceless on generate_persona_video.',
     CreatePersonaShape,
-    withTracking('create_persona', async (args) => {
+    withTracking('create_persona', withRecipeNudge(recipeSession, 'create_persona', async (args) => {
       return handleCreatePersona(apiClient, args);
-    })
+    }))
   );
 
   server.tool(
     'list_personas',
     'List all existing personas for the authenticated user.',
     ListPersonasShape,
-    withTracking('list_personas', async () => {
+    withTracking('list_personas', withRecipeNudge(recipeSession, 'list_personas', async () => {
       return handleListPersonas(apiClient);
-    })
+    }))
   );
 
   server.tool(
@@ -212,9 +211,9 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     'list_social_accounts',
     'List connected social accounts (YouTube, Instagram, LinkedIn, Threads, Bluesky) with the account IDs needed for posting.',
     ListSocialAccountsShape,
-    withTracking('list_social_accounts', async () => {
+    withTracking('list_social_accounts', withRecipeNudge(recipeSession, 'list_social_accounts', async () => {
       return handleListSocialAccounts(apiClient);
-    })
+    }))
   );
 
   server.tool(
@@ -383,18 +382,18 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     'get_token_balance',
     'Get the prepaid token wallet balance. Check before triggering video generation, which costs tokens.',
     GetTokenBalanceShape,
-    withTracking('get_token_balance', async () => {
+    withTracking('get_token_balance', withRecipeNudge(recipeSession, 'get_token_balance', async () => {
       return handleGetTokenBalance(apiClient);
-    })
+    }))
   );
 
   server.tool(
     'generate_persona_video',
-    'Generate and schedule ONE persona video from a complete script. Product rule: generation is always tied to publishing — one call generates the video AND schedules its automatic publish; there is no orphan generation. Send the full script as segments (first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation) — no LLM expands it. title is the slot label for this video. Pass providers plus per-provider account IDs (see list_social_accounts), startAt (ISO datetime, wall-clock in timezone when naive), times (HH:MM, 24h), and timezone. Set mode to \'asap\' to publish the video the moment its generation finishes instead of scheduling it — startAt and times must NOT be set then. The slot must be 3h-30d ahead. idempotencyKey is generated automatically; reuse it to retry without generating twice (replayed: true). If the request is a topic rather than a ready script, call list_prompts first and follow the matching recipe with get_prompt instead of improvising the script — recipes pre-validate the script, media, and price facts before any token is spent. Poll the slot\'s taskId with get_video_task_progress.',
+    'Generate and schedule ONE persona video from a complete script. Product rule: generation is always tied to publishing — one call generates the video AND schedules its automatic publish; there is no orphan generation. Send the full script as segments (first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation) — no LLM expands it. title is the slot label for this video. Pass providers plus per-provider account IDs (see list_social_accounts), startAt (ISO datetime, wall-clock in timezone when naive), times (HH:MM, 24h), and timezone. Set mode to \'asap\' to publish the video the moment its generation finishes instead of scheduling it — startAt and times must NOT be set then. The slot must be 3h-30d ahead. idempotencyKey is generated automatically; reuse it to retry without generating twice (replayed: true). If the request is a topic rather than a ready script, call list_prompts first and follow the matching recipe with get_prompt instead of improvising the script — recipes pre-validate the script, media, and price facts before any token is spent; then pass its slug as recipe. Poll the slot\'s taskId with get_video_task_progress.',
     GeneratePersonaVideoShape,
-    withTracking('generate_persona_video', async (args) => handleGeneratePersonaVideo(apiClient, args)),
+    withTracking('generate_persona_video', withScriptOutcome(recipeSession, 'generate_persona_video', async (args) => handleGeneratePersonaVideo(apiClient, args))),
   );
-  server.tool('validate_script', ValidateScriptDescription, ValidateScriptShape, withTracking('validate_script', async (args) => handleValidateScript(apiClient, args)));
+  server.tool('validate_script', ValidateScriptDescription, ValidateScriptShape, withTracking('validate_script', withScriptOutcome(recipeSession, 'validate_script', async (args) => handleValidateScript(apiClient, args))));
   server.tool('score_draft', ScoreDraftDescription, ScoreDraftShape, withTracking('score_draft', async (args) => handleScoreDraft(apiClient, args)));
   server.tool('upload_media', UploadMediaDescription, UploadMediaShape, withTracking('upload_media', async (args) => handleUploadMedia(apiClient, args)));
   server.tool('check_media', CheckMediaDescription, CheckMediaShape, withTracking('check_media', async (args) => handleCheckMedia(apiClient, args)));
@@ -481,7 +480,7 @@ async function main() {
     // Fresh server per request; the bearer is forwarded as this request's web API credential.
     const apiKey = authOptions !== null ? process.env.POST_ENGINEER_API_KEY : requireApiKey();
     await serveHttpTransport(
-      (auth) => createPostEngineerMcpServer(new PostEngineerClient({ apiKey: auth?.bearer ?? apiKey })),
+      (auth) => createPostEngineerMcpServer(new PostEngineerClient({ apiKey: auth?.bearer ?? apiKey }), 'http'),
       httpOptions,
       authOptions,
     );

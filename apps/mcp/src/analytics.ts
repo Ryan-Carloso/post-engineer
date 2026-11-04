@@ -31,11 +31,25 @@ interface ToolCallContext {
 const toolCallContext = new AsyncLocalStorage<ToolCallContext>();
 
 //---------------
+// Extra telemetry headers for the current call, set by recipe-session.ts
+// (recipe-adoption attribution). A function, not a snapshot, so a request
+// sent late in the call reports the session state at send time. A
+// separate store from toolCallContext: the extras wrap the handler inside
+// withTracking and never replace the tool name or call id.
+//---------------
+const extraHeadersContext = new AsyncLocalStorage<() => Record<string, string>>();
+
+export function withTelemetryHeaders<TResult>(headers: () => Record<string, string>, run: () => Promise<TResult>): Promise<TResult> {
+  return extraHeadersContext.run(headers, run);
+}
+
+//---------------
 // Headers for the current API request: the server version always, plus the
 // tool name and call id when the request runs inside a tracked tool call.
 //---------------
 export function mcpTelemetryHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { [MCP_VERSION_HEADER]: pkg.version };
+  const extras = extraHeadersContext.getStore();
+  const headers: Record<string, string> = { ...(extras === undefined ? {} : extras()), [MCP_VERSION_HEADER]: pkg.version };
   const context = toolCallContext.getStore();
   if (context !== undefined) {
     headers[MCP_TOOL_HEADER] = context.toolName;
