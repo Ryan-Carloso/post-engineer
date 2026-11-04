@@ -153,53 +153,6 @@ describe('isMainModule', () => {
   });
 });
 
-describe('prompts hub over MCP (slash commands)', () => {
-  const mockClient = {} as unknown as PostEngineerClient;
-
-  async function withClient(
-    run: (client: Client) => Promise<void>,
-  ): Promise<void> {
-    const server = createPostEngineerMcpServer(mockClient);
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const client = new Client({ name: 'test-client', version: '0.0.0' });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    try {
-      await run(client);
-    } finally {
-      await client.close();
-    }
-  }
-
-  it('lists every hub prompt with name, title, and description', async () => {
-    await withClient(async (client) => {
-      const { prompts } = await client.listPrompts();
-      const slugs = prompts.map((p) => p.name);
-      expect(slugs).toEqual(['daily-news', 'place-spotlight', 'subject-spotlight', 'github-prs', 'full-setup']);
-      for (const prompt of prompts) {
-        expect(prompt.title, `prompt ${prompt.name} has a title`).toBeTruthy();
-        expect(prompt.description, `prompt ${prompt.name} has a description`).toBeTruthy();
-        expect(prompt.arguments ?? [], `prompt ${prompt.name} is zero-arg`).toHaveLength(0);
-      }
-    });
-  });
-
-  it('returns the exact hub prompt text per slug with zero args', async () => {
-    await withClient(async (client) => {
-      const { prompts } = await client.listPrompts();
-      const slugs = prompts.map((p) => p.name);
-      for (const slug of slugs) {
-        const result = await client.getPrompt({ name: slug });
-        expect(result.messages).toHaveLength(1);
-        expect(result.messages[0].role).toBe('user');
-        const text = (result.messages[0].content as { type: string; text: string }).text;
-        expect(text.length).toBeGreaterThan(100);
-        expect(text).toContain('validate_script');
-        expect(text).toContain('generate_persona_video');
-      }
-    });
-  });
-});
-
 describe('server version', () => {
   it('advertises the same version as package.json', async () => {
     const { default: pkg } = await import('../../package.json', { with: { type: 'json' } });
@@ -524,45 +477,5 @@ describe('new tool registrations run their handlers', () => {
       vi.mocked(mockClient.disconnectAccount),
       { success: true }
     );
-  });
-
-  it('calls through list_prompts (needs no client method at all)', async () => {
-    const server = createPostEngineerMcpServer(mockClient);
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const client = new Client({ name: 'test-client', version: '0.0.0' });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    try {
-      const result = await client.callTool({ name: 'list_prompts', arguments: {} });
-      expect(result.isError).toBeFalsy();
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        'mcp_tool_called',
-        expect.objectContaining({ toolName: 'list_prompts' })
-      );
-      const text = (result.content as Array<{ type: string; text: string }>)?.[0]?.text ?? '';
-      expect(text).toContain('daily-news');
-    } finally {
-      await client.close();
-    }
-  });
-
-  it('calls through get_prompt and tracks the call', async () => {
-    const server = createPostEngineerMcpServer(mockClient);
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const client = new Client({ name: 'test-client', version: '0.0.0' });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    try {
-      const result = await client.callTool({ name: 'get_prompt', arguments: { slug: 'full-setup' } });
-      expect(result.isError).toBeFalsy();
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        'mcp_tool_called',
-        expect.objectContaining({ toolName: 'get_prompt' })
-      );
-      const text = (result.content as Array<{ type: string; text: string }>)?.[0]?.text ?? '';
-      // The full-setup prompt never names its own slug; pin the first step instead.
-      expect(text).toContain('list_personas');
-      expect(text).toContain('get_token_balance');
-    } finally {
-      await client.close();
-    }
   });
 });

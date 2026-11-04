@@ -411,6 +411,9 @@ export const operationSchemas = {
     responseContent: 'audio/mpeg',
     response: { type: 'string', format: 'binary' },
   },
+  // apps/web/app/api/prompts/route.ts and prompts/[slug]/route.ts
+  'GET /api/prompts': { response: success({ prompts: { type: 'array', items: object(fields(str, ['slug', 'title', 'description'])) } }) },
+  'GET /api/prompts/[slug]': { response: success({ prompt: object(fields(str, ['slug', 'title', 'description', 'prompt'])) }) },
   // apps/web/app/api/schedule/status/route.ts
   'GET /api/schedule/status': {
     query: [{ name: 'limit', required: false }],

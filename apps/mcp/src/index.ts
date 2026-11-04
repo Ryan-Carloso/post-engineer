@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { PostEngineerClient, MAX_LIBRARY_IMAGES, MAX_LIBRARY_IMAGE_MB, MAX_UPLOAD_VIDEO_GB } from './client.js';
-import { registerPrompts } from './prompts.js';
 import {
   CreatePersonaShape,
   ListPersonasShape,
@@ -91,7 +90,8 @@ import { CheckMediaDescription, CheckMediaShape, UploadMediaDescription, UploadM
 import { withTracking } from './analytics.js';
 import { parseHttpTransportOptions, serveHttpTransport } from './http-transport.js';
 import { parseHttpAuthOptions } from './http-auth.js';
-import { SERVER_INSTRUCTIONS, registerPromptTools } from './tools-prompts.js';
+import { GetPromptDescription, GetPromptShape, ListPromptsDescription, ListPromptsShape, SERVER_INSTRUCTIONS, handleGetPrompt, handleListPrompts } from './tools-prompts.js';
+import { registerRemotePrompts } from './prompts.js';
 
 // The server advertises the package version: import it so a version bump in
 // package.json flows through without touching this file.
@@ -114,8 +114,9 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient): McpSer
     },
     { instructions: SERVER_INSTRUCTIONS },
   );
-  registerPrompts(server);
-  registerPromptTools(server);
+  registerRemotePrompts(server, apiClient);
+  server.tool('list_prompts', ListPromptsDescription, ListPromptsShape, withTracking('list_prompts', async () => handleListPrompts(apiClient)));
+  server.tool('get_prompt', GetPromptDescription, GetPromptShape, withTracking('get_prompt', async (args) => handleGetPrompt(apiClient, args)));
 
   server.tool(
     'create_persona',

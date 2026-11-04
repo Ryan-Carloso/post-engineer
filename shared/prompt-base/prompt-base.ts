@@ -1,26 +1,19 @@
-// Shared prompt base: single source of truth for the web prompts hub and
-// the MCP prompts hub. Every served prompt is composed as
+// Shared prompt base: single source of truth for the prompts hub. Every
+// served prompt is composed as
 // [...SHARED_PROMPT_BASE, '', ...specificLines].join('\n'), so the
 // delivered text is complete and standalone: the agent receives the
 // whole prompt in one paste, never a bare "see the base prompt"
 // reference.
-// DO NOT EDIT this copy directly in apps/web or apps/mcp: there is no
-// copy there anymore. Both hubs read this file through a symlink —
-// apps/web/lib/generation/prompt-base.ts and apps/mcp/src/prompt-base.ts.
-// A direct import is not an option: each app's tsc rootDir (apps/web,
-// apps/mcp/src) rejects it with TS6059, widening the MCP rootDir would
-// move dist/index.js, and Stryker's sandbox copies only the app root,
-// so a direct web import breaks mutation testing. The symlinks are
-// dereferenced by tsc, webpack, vitest, and Stryker, so every tool sees
-// the shared content as a local file. Edit here and both hubs pick it
-// up; there is no sync step and no generated copy to drift. The
-// per-app prompt-base-shared tests fail loudly if a copy ever
-// reappears, so a stale copy can never pass CI silently.
+// The web reads this file through a symlink
+// (apps/web/lib/generation/prompt-base.ts); DO NOT EDIT this copy directly
+// there, edit this file. A direct import fails tsc
+// with TS6059 (web rootDir) and breaks Stryker's sandbox, which copies
+// only the app root. The MCP has no copy: it fetches the recipes from the
+// web API (GET /api/prompts, GET /api/prompts/[slug]). The web
+// prompt-base-shared test fails loudly if a copy ever reappears.
 // Rules that apply to every prompt go in SHARED_PROMPT_BASE. Topic-specific
 // steps go in the prompt that owns them, below, so the base stays short and
-// every prompt stays cheap. Web and MCP serve these exports unchanged.
-// This file has no imports, so the same bytes compile under the web
-// bundler resolution and the MCP NodeNext resolution.
+// every prompt stays cheap. The web serves these exports unchanged.
 
 export const SHARED_PROMPT_BASE: string[] = [
   'Ask me, do not make me fill anything in:',
