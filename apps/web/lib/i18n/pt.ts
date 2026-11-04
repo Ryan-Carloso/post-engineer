@@ -3,6 +3,7 @@
 import { personaVoiceClonePt, voiceCloneApiToolDescPt } from './voice-clone-i18n-pt';
 import { postToolDescPt } from './post-tools-i18n-pt';
 import { segmentMediaToolDescPt } from './segment-media-i18n-pt';
+import { promptHubToolDescPt } from './prompt-hub-i18n-pt';
 import { accountI18nPt } from './account-i18n-pt';
 import { recipesI18nPt } from './recipes-i18n-pt';
 import { legalI18nPt } from './legal-i18n-pt';
@@ -298,7 +299,7 @@ export const ptDictionary = {
     toolDescCreatePersona: 'Crie uma nova persona',
     toolDescUpdatePersona: 'Atualize uma persona existente',
     toolDescGetTokenBalance: 'Consulte o saldo de tokens',
-    ...segmentMediaToolDescPt,
+    ...segmentMediaToolDescPt, ...promptHubToolDescPt,
     toolDescGetVideoStatus: 'Confira o status do vídeo',
     toolDescGetVideoTaskProgress: 'Acompanhe o progresso por vídeo (%, etapa)',
     toolDescListPersonaImages: 'Liste a biblioteca de imagens da persona',

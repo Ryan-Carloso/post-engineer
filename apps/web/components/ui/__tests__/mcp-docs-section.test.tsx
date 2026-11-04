@@ -108,7 +108,7 @@ describe('McpDocsSection', () => {
     expect(screen.queryByTestId('mcp-docs-help-cta')).toBeNull();
   });
 
-  it('renders the tools grid with all 42 tools', () => {
+  it('renders the tools grid with all 44 tools', () => {
     render(<McpDocsSection />);
 
     const grid = screen.getByTestId('mcp-tools-grid');
@@ -140,6 +140,8 @@ describe('McpDocsSection', () => {
       'score_draft',
       'upload_media',
       'check_media',
+      'list_prompts',
+      'get_prompt',
       'get_video_status',
       'get_video_task_progress',
       'list_social_accounts',
@@ -198,6 +200,8 @@ describe('McpDocsSection', () => {
       'apiKeys.toolDescGetPersonaDeletePreview',
       'apiKeys.toolDescDeletePersona',
       'apiKeys.toolDescDisconnectAccount',
+      'apiKeys.toolDescListPrompts',
+      'apiKeys.toolDescGetPrompt',
     ]) {
       expect(within(grid).getByText(descKey)).toBeInTheDocument();
     }
@@ -222,6 +226,10 @@ describe('McpDocsSection', () => {
     expect(prompt).toContain('list_social_accounts');
     expect(prompt).toContain('get_token_balance');
     expect(prompt).toContain('cancel_schedule');
+    // Recipe self-serve must be discoverable in the copied prompt: the
+    // agent learns list_prompts before any improvised script.
+    expect(prompt).toContain('list_prompts');
+    expect(prompt).toContain('get_prompt');
     // Single-video generation, per-video progress, image library, and account
     // connect must be visible to the agent in the copied prompt.
     expect(prompt).toContain('generate_persona_video');
@@ -398,6 +406,8 @@ const EXPECTED_EN_PROMPT: string[] = [
   "- remove_persona_image: remove an image from a persona's library.",
   "- publish_video_direct: publish a ready-made video file directly (no generation, no schedule): local .mp4/.mov path (max 2GB) + account IDs from list_social_accounts; YouTube needs title, description, tags, privacyStatus; Instagram/Bluesky/LinkedIn need caption.",
   "- get_token_balance: get my prepaid token wallet balance.",
+  "- list_prompts: list the recipe prompts this server can run (slug, title, description per recipe — news, place spotlight, subject spotlight, GitHub PRs, full setup). Call this first when I ask for a video about a topic instead of a ready script.",
+  "- get_prompt: get one recipe prompt by its slug (from list_prompts) as ready-to-run validated instructions; unknown slugs return an error naming the valid slugs.",
   "- generate_persona_video: generate AND schedule ONE persona video from a complete script (segments: first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation — no LLM expands it; title is the slot label; personaId optional — omit it for a faceless post with no persona, then set options.faceless and options.voiceId; providers plus per-provider account IDs from list_social_accounts; mode 'scheduled' (default) slots the video across startAt ISO datetime + times [\"HH:MM\"] in timezone, mode 'asap' publishes it the moment its generation finishes with no startAt/times; slot must be 3h-30d ahead). The video is generated then auto-published at its slot; there is no separate schedule step. Poll the slot's taskId with get_video_task_progress. Costs tokens.",
   "- validate_script: validate a segments script mechanically, without spending tokens (segments: first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation). Returns the word counts and the hook window (8-12 seconds spoken). Measured hook duration is pending a hook-only TTS endpoint and is reported as pending, never invented.",
   "- score_draft: score a draft mechanically against your own measured posts, without spending tokens. Returns a 0-100 score where every point is explained, the baseline it was scored against, and the publish check for the requested network (linkedin, youtube, instagram, bluesky). A failing publish check means: fix the draft before scheduling it for that network. Pass kind 'script' for a video script: hashtags are not scored and publishCheck is null.",
@@ -467,6 +477,8 @@ const EXPECTED_PT_PROMPT: string[] = [
   "- remove_persona_image: remover uma imagem da biblioteca de uma persona.",
   "- publish_video_direct: publicar um vídeo pronto diretamente (sem geração, sem agendamento): arquivo local .mp4/.mov (máx 2GB) + account IDs do list_social_accounts; YouTube exige title, description, tags e privacyStatus; Instagram/Bluesky/LinkedIn exigem caption.",
   "- get_token_balance: ver o saldo da minha carteira de tokens.",
+  "- list_prompts: listar as receitas de prompt que este servidor executa (slug, título e descrição por receita — notícia, destaque de lugar, destaque de assunto, GitHub PRs, setup completo). Chame primeiro se eu pedir um vídeo sobre um assunto em vez de um roteiro pronto.",
+  "- get_prompt: buscar uma receita de prompt pelo slug (do list_prompts) como instruções validadas prontas para executar; slug desconhecido devolve um erro listando os slugs válidos.",
   "- generate_persona_video: gerar E agendar UM vídeo de persona a partir de um roteiro completo (segments: primeiro hook, depois body, por último CTA; 60-200 palavras no total, body no mínimo 30, CTA 5-20, hook 15-40 palavras terminando com pontuação final — nenhum LLM expande o roteiro; title é o rótulo do slot; personaId opcional — omita para um post faceless sem persona e informe options.faceless e options.voiceId; providers mais account IDs por provider do list_social_accounts; mode 'scheduled' (padrão) agenda o vídeo com startAt datetime ISO + times [\"HH:MM\"] em timezone, mode 'asap' publica no momento em que a geração termina sem startAt/times; slot deve estar de 3h a 30 dias à frente). O vídeo é gerado e publicado automaticamente no seu slot; não há etapa separada de agendamento. Acompanhe o taskId do slot com get_video_task_progress. Custa tokens.",
   "- validate_script: validar um roteiro em segments mecanicamente, sem gastar tokens (segments: primeiro hook, depois body, por último CTA; 60-200 palavras no total, body no mínimo 30, CTA 5-20, hook 15-40 palavras terminando com pontuação final). Retorna as contagens de palavras e a janela do hook (8-12 segundos falados). A duração medida do hook está pendente de um endpoint TTS só do hook e é informada como pendente, nunca inventada.",
   "- score_draft: pontuar um rascunho mecanicamente contra seus próprios posts medidos, sem gastar tokens. Retorna uma nota 0-100 com cada ponto explicado, a base usada e o check de publicação da rede pedida (linkedin, youtube, instagram, bluesky). Um check com falha significa: corrija o rascunho antes de agendar para essa rede. Use kind 'script' para um roteiro de vídeo: hashtags não contam e publishCheck vem null.",
