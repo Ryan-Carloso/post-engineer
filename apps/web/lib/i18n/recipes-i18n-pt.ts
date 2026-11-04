@@ -58,7 +58,7 @@ export const recipesI18nPt = {
   placeSpotlightExampleInput:
       'O café do centro que abriu em 1913 e serve bolo de azeite.',
   placeSpotlightExampleOutput:
-      'Gancho sobre o preço na porta, dois corpos com as fotos do lugar, CTA — 3 fotos, um cartão em cada.',
+      'Gancho sobre o café servindo desde 1913, dois corpos com as fotos do lugar, CTA — 3 fotos, um cartão em cada.',
   subjectSpotlightTitle: 'Assunto em destaque vira vídeo',
   subjectSpotlightObjective:
       'Transformar um assunto concreto (um carro, um produto, um gadget) em um vídeo de persona com as fotos dele e o preço real na tela, validado antes de gastar qualquer token.',
@@ -78,7 +78,7 @@ export const recipesI18nPt = {
   subjectSpotlightExampleInput:
       'O hatch elétrico 2026 com 400 km de autonomia e preço de lançamento.',
   subjectSpotlightExampleOutput:
-      'Gancho sobre o preço real, dois corpos com as fotos do carro, CTA — 2 fotos, um cartão em cada.',
+      'Gancho sobre o preço real, um corpo com as fotos do carro, CTA — 2 fotos, um cartão em cada.',
   stepsTitle: 'O que este prompt faz',
   deliversTitle: 'O que você recebe',
   examplesTitle: 'Exemplo',

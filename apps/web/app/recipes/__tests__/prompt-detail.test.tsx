@@ -66,7 +66,7 @@ vi.mock('@/lib/i18n/provider', () => {
     'recipes.placeSpotlightExampleInput':
       'The downtown café that opened in 1913 and serves olive oil cake.',
     'recipes.placeSpotlightExampleOutput':
-      'Hook about the door price, two bodies with the place photos, CTA — 3 photos, one card each.',
+      'Hook on the café serving since 1913, two bodies with the place photos, CTA — 3 photos, one card each.',
     'recipes.subjectSpotlightTitle': 'Subject spotlight becomes a video',
     'recipes.subjectSpotlightObjective':
       'Turn one concrete subject (a car, a product, a gadget) into one persona video with its own photos and its real price on screen, validated before any token is spent.',
@@ -87,7 +87,7 @@ vi.mock('@/lib/i18n/provider', () => {
     'recipes.subjectSpotlightExampleInput':
       'The 2026 electric hatch with a 400 km range and a launch price.',
     'recipes.subjectSpotlightExampleOutput':
-      'Hook about the real price, two bodies with the car photos, CTA — 2 photos, one card each.',
+      'Hook about the real price, one body with the car photos, CTA — 2 photos, one card each.',
   };
   return {
     useI18n: () => ({

@@ -138,7 +138,7 @@ Skip a field the facts do not support: an empty card is not worth inventing.
 ### 5. Validate the script, photos included (free)
 
 Call `validate_script` with exactly the segments from steps 3-4, media
-included. It returns word counts, the hook window, and the media count, or
+included. It returns word counts and the hook window, or
 an error naming a field and a fix. Fix and re-validate until it passes. Do
 not proceed on a failed validation, and do not slim the script to pass:
 pull the photos that fail instead (each skipped photo is only a card lost).
@@ -201,7 +201,9 @@ Segments (hook 21 words, body 53 words, CTA 17 words, total 91 words,
 
 `validate_script` on exactly these segments reports `Script valid:
 4 segment(s), 91 words total, hook 21 words, body 53 words, CTA 17
-words.` with `mediaCount: 3`; every `media` carries the `overlay` card,
+words.` (The web validation endpoint also returns `mediaCount: 3`; the
+`validate_script` tool does not surface it.) Every `media` carries the
+`overlay` card,
 and every URL passed `check_media` with `ok` in this illustration. The
 `generate_persona_video` call then uses these segments unchanged, plus
 `title`, `language: "en"`, `providers`, account IDs, and `mode` as in
