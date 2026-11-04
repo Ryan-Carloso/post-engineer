@@ -4,7 +4,6 @@ import type { Dictionary } from './pt';
 import { personaVoiceCloneEn, voiceCloneApiToolDescEn } from './voice-clone-i18n-en';
 import { postToolDescEn } from './post-tools-i18n-en';
 import { segmentMediaToolDescEn } from './segment-media-i18n-en';
-import { promptHubToolDescEn } from './prompt-hub-i18n-en';
 import { accountI18nEn } from './account-i18n-en';
 import { recipesI18nEn } from './recipes-i18n-en';
 import { legalI18nEn } from './legal-i18n-en';
@@ -299,7 +298,7 @@ export const enDictionary: Dictionary = {
     toolDescCreatePersona: 'Create a new persona',
     toolDescUpdatePersona: 'Update an existing persona',
     toolDescGetTokenBalance: 'Check token balance',
-    ...segmentMediaToolDescEn, ...promptHubToolDescEn,
+    ...segmentMediaToolDescEn,
     toolDescGetVideoStatus: 'Check video status',
     toolDescGetVideoTaskProgress: 'Poll per-video progress (%, stage)',
     toolDescListPersonaImages: "List a persona's image library",

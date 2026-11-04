@@ -8,7 +8,6 @@ import {
   GetPromptShape,
   handleListPrompts,
   handleGetPrompt,
-  registerPromptTools,
 } from '../tools-prompts.js';
 import { HUB_PROMPTS } from '../prompts.js';
 import { createPostEngineerMcpServer } from '../index.js';
