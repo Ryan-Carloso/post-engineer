@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { cancelVideoTask } from '../client-video-task.js';
@@ -10,12 +10,12 @@ import { createPostEngineerMcpServer } from '../index.js';
 import type { PostEngineerClient } from '../client.js';
 import type { McpToolResponse } from '../tools-call.js';
 
-const mockTrackEvent = vi.fn();
 vi.mock('../analytics.js', () => ({
-  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
-  // Same shape as the real withTracking: track, then run the handler.
-  withTracking: (toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
-    mockTrackEvent('mcp_tool_called', { toolName });
+  mcpTelemetryHeaders: () => ({}),
+  // Passthrough stand-in for the real withTracking, which only opens the
+  // per-call context: mcp_tool_called is recorded by the web API from the
+  // request headers, not by the MCP (see analytics.test.ts).
+  withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
 }));
@@ -73,10 +73,6 @@ describe('handleCancelVideoTask', () => {
 });
 
 describe('registered cancel_video_task tool', () => {
-  beforeEach(() => {
-    mockTrackEvent.mockClear();
-  });
-
   async function callTool(name: string, args: Record<string, unknown>, request: ReturnType<typeof vi.fn>) {
     const server = createPostEngineerMcpServer(fakeClient(request));
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -89,7 +85,7 @@ describe('registered cancel_video_task tool', () => {
     }
   }
 
-  it('calls DELETE /api/persona/video-task/[taskId] and tracks the call', async () => {
+  it('calls DELETE /api/persona/video-task/[taskId] through the server', async () => {
     const request = vi.fn().mockResolvedValue({ status: 'deleted' });
     const result = await callTool('cancel_video_task', { taskId: 'task-1' }, request);
     expect(result.isError).toBeFalsy();
@@ -98,6 +94,5 @@ describe('registered cancel_video_task tool', () => {
       { method: 'DELETE', headers: HEADERS },
       'cancel video task',
     );
-    expect(mockTrackEvent).toHaveBeenCalledWith('mcp_tool_called', { toolName: 'cancel_video_task' });
   });
 });

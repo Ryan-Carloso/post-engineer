@@ -45,28 +45,23 @@ hub: `SHARED_PROMPT_BASE` (rules for all prompts) plus each composed prompt
 gets every shared rule by spreading the base. Web, MCP, and docs never repeat
 this text: docs link to the hub.
 
-There is exactly one prompt-base file in git: this one. Both consumers
-read it through a symlink, not a copy:
+There is exactly one prompt-base file in git: this one. The web reads it
+through a symlink, not a copy:
 
 - `apps/web/lib/generation/prompt-base.ts` ->
   `../../../../shared/prompt-base/prompt-base.ts`
-- `apps/mcp/src/prompt-base.ts` ->
-  `../../../shared/prompt-base/prompt-base.ts`
 
-A direct import is not an option for either app: each app's `rootDir`
-(apps/web, apps/mcp/src) makes `tsc` reject it with TS6059, widening
-the MCP `rootDir` would move `dist/index.js` out of the published
-package layout, and Stryker's sandbox copies only the app root, so a
-direct web import breaks mutation testing (verified: Stryker fails
-with "No tests were executed" on a directly imported shared file).
-The symlinks are dereferenced by `tsc`, webpack, vitest, and Stryker,
-so every tool sees the shared content as a local file. `tsc` emits a
-real `dist/prompt-base.js`, so the published MCP tarball stays
-self-contained.
+A direct import is not an option: the web `rootDir` makes `tsc` reject
+it with TS6059, and Stryker's sandbox copies only the app root, so a
+direct import breaks mutation testing (verified: Stryker fails with
+"No tests were executed" on a directly imported shared file). The
+symlink is dereferenced by `tsc`, webpack, vitest, and Stryker.
 
-The shared file has no imports, so it compiles under both the web's
-bundler resolution and the MCP's NodeNext resolution. To change the
-base, edit only this file — no sync step, no generated copy to drift.
-Each app has a `prompt-base-shared.test.ts` suite that fails loudly
-if a copy ever reappears, and `prompts-sync.test.ts` fails if any web
-or MCP prompt bypasses the base.
+The MCP has no copy: `list_prompts`, `get_prompt` and the slash commands
+fetch the recipes from the web API (`GET /api/prompts`,
+`GET /api/prompts/[slug]`), so a recipe edit reaches every MCP install
+without a package release.
+
+To change the base, edit only this file. The web
+`prompt-base-shared.test.ts` suite fails loudly if a copy ever
+reappears.

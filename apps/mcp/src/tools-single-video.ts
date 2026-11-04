@@ -139,7 +139,7 @@ export async function handleGeneratePersonaVideo(
     // resolve — the persona's stored voice is used.
     let voiceId = args.options?.voiceId;
     if (voiceId !== undefined) {
-      voiceId = await resolvePersonaVoiceId(client, voiceId, 'generate_persona_video');
+      voiceId = await resolvePersonaVoiceId(client, voiceId);
     }
     // The shape advertises a top-level language, but the web route only
     // reads options.language: forward it there unless options already

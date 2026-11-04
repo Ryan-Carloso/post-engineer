@@ -28,13 +28,12 @@ credits is billed by Modal.
 - Node.js 20.10+
 - API key generated at https://post-engineer.com/api-keys
 
-### Telemetry (optional)
+### Telemetry
 
-Set `POSTHOG_API_KEY` (and optionally `POSTHOG_HOST`, defaults to
-`DEFAULT_POSTHOG_HOST` in `src/analytics.ts` — change the constant to
-self-host) to send `mcp_tool_called` analytics events to
-PostHog. Without it, the server runs normally with telemetry disabled.
-The key is read from the environment only — never hardcoded.
+Each request to the post-engineer API includes the calling tool's name and
+the server version, recorded against your account for product analytics.
+No script content, media or credentials are sent. The server itself never
+contacts any analytics service.
 
 ## Use
 
@@ -166,8 +165,9 @@ The server serves the prompts hub from the Post Engineer web platform over
 the MCP [prompts capability](https://modelcontextprotocol.io/docs/concepts/prompts),
 so MCP clients (Cursor, Claude) list them as slash commands. Each prompt is
 zero-arg: the agent asks you for the persona, accounts, and timing when you
-run it. The copy is kept in sync with the web
-hub by a sync test (`prompts-sync.test.ts`).
+run it. The list and the text are fetched from the web API on demand
+(`GET /api/prompts`, `GET /api/prompts/{slug}`), so a recipe edit on the
+web reaches every install without a package update.
 
 - `/daily-news`: Daily news becomes a video — turn one top GNews story of the day into one persona video, validated before any token is spent.
 - `/place-spotlight`: Place spotlight becomes a video — turn one real place into one persona video with the place's own photos checked and attached as segment media, validated before any token is spent.
@@ -181,12 +181,9 @@ the same hub through MCP **tools**: `list_prompts` lists the recipes
 `slug`. The server's initialize instructions point agents there for
 topic-shaped requests.
 
-Add a new prompt's text to `shared/prompt-base/prompt-base.ts` (the MCP
-hub reads it through a symlink to that file, so no sync step is needed).
-Then add its entry to the web hub
-(`apps/web/app/recipes/prompts.ts` + its i18n title/description) and the same
-slug, title, description, and text export to `src/prompts.ts`; `pnpm test`
-fails if they drift.
+To add a prompt, add its text to `shared/prompt-base/prompt-base.ts` and its
+entry to the web hub (`apps/web/app/recipes/prompts.ts` + its i18n title and
+objective). The MCP needs no change: it serves whatever the web hub lists.
 
 ## Links
 

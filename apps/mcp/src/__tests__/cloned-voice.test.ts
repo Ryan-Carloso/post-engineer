@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
@@ -21,12 +21,12 @@ import {
 import { createPostEngineerMcpServer } from '../index.js';
 import type { PostEngineerClient } from '../client.js';
 
-const mockTrackEvent = vi.fn();
 vi.mock('../analytics.js', () => ({
-  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
-  // Same shape as the real withTracking: track, then run the handler.
-  withTracking: (toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
-    mockTrackEvent('mcp_tool_called', { toolName });
+  mcpTelemetryHeaders: () => ({}),
+  // Passthrough stand-in for the real withTracking, which only opens the
+  // per-call context: mcp_tool_called is recorded by the web API from the
+  // request headers, not by the MCP (see analytics.test.ts).
+  withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
 }));
@@ -430,10 +430,6 @@ describe('cloned voice tool handlers', () => {
 });
 
 describe('cloned voice tools run through the MCP server', () => {
-  beforeEach(() => {
-    mockTrackEvent.mockClear();
-  });
-
   afterEach(() => {
     global.fetch = realFetch;
   });
@@ -451,10 +447,6 @@ describe('cloned voice tools run through the MCP server', () => {
     try {
       const result = await client.callTool({ name: toolName, arguments: args });
       expect(result.isError).toBeFalsy();
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        'mcp_tool_called',
-        expect.objectContaining({ toolName })
-      );
       return result;
     } finally {
       await client.close();

@@ -12,12 +12,16 @@ vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
 
+const trackMcpToolCall = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/mcp-tool-telemetry', () => ({ trackMcpToolCall }));
+
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 
 describe('requireSupabaseSession', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    trackMcpToolCall.mockClear();
   });
 
   it('authenticates via valid Bearer API key in request header', async () => {
@@ -40,6 +44,8 @@ describe('requireSupabaseSession', () => {
     expect(result.auth?.userId).toBe('user-api-key-123');
     expect(result.auth?.isApiKey).toBe(true);
     expect(result.auth?.personaIds).toBeNull();
+    // MCP tool telemetry is recorded against the key's user.
+    expect(trackMcpToolCall).toHaveBeenCalledWith(request, 'user-api-key-123', 'api_key');
   });
 
   it('propagates the persona scope of restricted keys', async () => {
@@ -77,6 +83,7 @@ describe('requireSupabaseSession', () => {
     const result = await requireSupabaseSession(request);
     expect(result.auth).toBeNull();
     expect(result.error?.status).toBe(401);
+    expect(trackMcpToolCall).not.toHaveBeenCalled();
   });
 
   it('authenticates via cookie session when no API key header is present', async () => {
@@ -98,6 +105,26 @@ describe('requireSupabaseSession', () => {
     expect(result.error).toBeNull();
     expect(result.auth?.userId).toBe('user-cookie-456');
     expect(result.auth?.accessToken).toBe('cookie-session-token');
+  });
+
+  it('never records MCP tool telemetry for a cookie session, even with the MCP headers', async () => {
+    const mockServerClient = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'user-cookie-456' } }, error: null }),
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { access_token: 'cookie-session-token' } },
+          error: null,
+        }),
+      },
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(mockServerClient as unknown as SupabaseClient);
+
+    const request = new Request('http://localhost:3434/api/persona/list', {
+      headers: { 'x-mcp-tool': 'list_personas' },
+    });
+    const result = await requireSupabaseSession(request);
+    expect(result.auth?.userId).toBe('user-cookie-456');
+    expect(trackMcpToolCall).not.toHaveBeenCalled();
   });
 
   it('carries the display name from user_metadata on cookie sessions', async () => {
@@ -206,6 +233,7 @@ describe('requireSupabaseSession with OAuth access tokens', () => {
     // The flag is what routes use to pick the service client for OAuth
     // callers (no cookie session); pin the producer-side contract.
     expect(result.auth?.isOAuth).toBe(true);
+    expect(trackMcpToolCall).toHaveBeenCalledWith(request, 'user-oauth-789', 'oauth');
   });
 
   it('falls through to session auth when the OAuth token is invalid', async () => {

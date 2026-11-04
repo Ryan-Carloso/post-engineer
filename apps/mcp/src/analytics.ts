@@ -1,154 +1,54 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { randomUUID } from 'node:crypto';
+
 //---------------
-// MCP analytics: track tool invocations as PostHog product-analytics events.
+// MCP tool telemetry, reported through the web API.
 //
-// The MCP server is a local stdio process used heavily by AI agents; these
-// events show which tools are actually used (1M/month free).
+// The MCP server never talks to PostHog. Every request the server sends to
+// the post-engineer API carries headers naming the MCP tool that triggered
+// it; the web API validates them and records `mcp_tool_called` against the
+// authenticated user (apps/web/lib/mcp-tool-telemetry.ts). Nothing to
+// configure on the user side, and no analytics key ships in the package.
 //
-// posthog-node is lazy-loaded (dynamic import) so a missing/incompatible
-// SDK never breaks module load — the MCP server must start even on older
-// Node versions. Telemetry degrades to disabled.
-//
-// Safety rules:
-// - Never throws: telemetry must never break the MCP server.
-// - No-op when POSTHOG_API_KEY is missing (warns once to stderr).
-// - Secret-bearing property keys are redacted before capture.
-// - Never log PII, credentials, or raw request bodies in properties.
-// - Reads configuration from environment variables only — never hardcode.
+// withTracking() opens a per-invocation context (AsyncLocalStorage, so
+// concurrent tool calls in the HTTP transport never mix their names) and
+// mcpTelemetryHeaders() reads it when the API client builds its headers.
+// One tool call can send several API requests; they share one call id so
+// PostHog counts calls with count(distinct call_id).
 //---------------
 
-// Property keys matching this pattern are redacted before capture.
-// Matched case-insensitively; the key is kept so the field's presence
-// stays visible for debugging, but the value is replaced.
-const SECRET_KEY_PATTERN =
-  /password|passwd|secret|token|authorization|auth\b|api[-_]?key|bearer|credential|private[-_]?key|session/i;
+const { default: pkg } = await import('../package.json', { with: { type: 'json' } });
 
-const REDACTED = '[redacted]';
+export const MCP_TOOL_HEADER = 'X-MCP-Tool';
+export const MCP_CALL_ID_HEADER = 'X-MCP-Call-Id';
+export const MCP_VERSION_HEADER = 'X-MCP-Version';
 
-function scrubSecrets(properties: Record<string, unknown>): Record<string, unknown> {
-  const scrubbed: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(properties)) {
-    scrubbed[key] = SECRET_KEY_PATTERN.test(key) ? REDACTED : value;
+interface ToolCallContext {
+  toolName: string;
+  callId: string;
+}
+
+const toolCallContext = new AsyncLocalStorage<ToolCallContext>();
+
+//---------------
+// Headers for the current API request: the server version always, plus the
+// tool name and call id when the request runs inside a tracked tool call.
+//---------------
+export function mcpTelemetryHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { [MCP_VERSION_HEADER]: pkg.version };
+  const context = toolCallContext.getStore();
+  if (context !== undefined) {
+    headers[MCP_TOOL_HEADER] = context.toolName;
+    headers[MCP_CALL_ID_HEADER] = context.callId;
   }
-  return scrubbed;
+  return headers;
 }
 
 //---------------
-// Default PostHog ingest host. Change this constant if you self-host
-// PostHog — every telemetry path in the MCP server reads it as the
-// fallback when POSTHOG_HOST is not set. Keep in sync with the web
-// (apps/web/lib/posthog-config.ts) and engine
-// (apps/engine/app/services/analytics.py) constants —
-// apps/web/lib/__tests__/posthog-config.test.ts enforces it.
+// Wrap a tool (or prompt) handler so every API request it sends is tagged
+// with its name and a fresh call id.
 //---------------
-export const DEFAULT_POSTHOG_HOST = 'https://eu.i.posthog.com';
-
-interface PostHogClient {
-  capture(args: {
-    distinctId: string;
-    event: string;
-    properties?: Record<string, unknown>;
-  }): void;
-}
-
-let client: PostHogClient | null = null;
-let warned = false;
-let clientPromise: Promise<PostHogClient | null> | null = null;
-
-async function getClient(): Promise<PostHogClient | null> {
-  if (client !== null) return client;
-  // Cache the in-flight promise: concurrent trackEvent calls during the
-  // lazy import wait for the same load instead of dropping events.
-  if (clientPromise !== null) return clientPromise;
-  clientPromise = (async (): Promise<PostHogClient | null> => {
-    const apiKey = process.env['POSTHOG_API_KEY'];
-    if (typeof apiKey !== 'string' || apiKey.length === 0) {
-      if (!warned) {
-        warned = true;
-        console.warn('[mcp-analytics] POSTHOG_API_KEY not set — analytics disabled');
-      }
-      return null;
-    }
-
-    try {
-      // Dynamic import: a missing or incompatible posthog-node never breaks
-      // module load. The MCP server declares node >=20.10; posthog-node 5.x
-      // wants >=20.20 — on older Node this catch degrades to disabled.
-      const { PostHog } = await import('posthog-node');
-      const host = process.env['POSTHOG_HOST'] ?? DEFAULT_POSTHOG_HOST;
-      client = new PostHog(apiKey, { host }) as unknown as PostHogClient;
-      return client;
-    } catch (error) {
-      if (!warned) {
-        warned = true;
-        console.warn('[mcp-analytics] PostHog init failed — analytics disabled:', error);
-      }
-      return null;
-    }
-  })();
-  return clientPromise;
-}
-
-//---------------
-// Track a product-analytics event (e.g. 'mcp_tool_called').
-// eventName should be snake_case. properties carries safe context only:
-// tool names, counts, validated enums — never credentials or raw bodies.
-//---------------
-
-export function trackEvent(eventName: string, properties?: Record<string, unknown>): void {
-  try {
-    const props = scrubSecrets({ ...(properties ?? {}) });
-    // Fire-and-forget: the lazy SDK load happens async. Telemetry must
-    // never block or break the MCP server.
-    void getClient().then((posthog) => {
-      if (posthog === null) return;
-      try {
-        posthog.capture({
-          distinctId: 'post-engineer-mcp',
-          event: eventName,
-          // Origin tags: ours win over caller-supplied values — the origin
-          // of an event is a pipeline fact, not caller input, so it can
-          // never be spoofed away.
-          properties: { ...props, source: 'mcp', environment: getEnvironment() },
-        });
-      } catch {
-        // Telemetry must never break the MCP server.
-      }
-    });
-  } catch {
-    // Telemetry must never break the MCP server.
-  }
-}
-
-//---------------
-// Deployment tag for PostHog: 'production' only when NODE_ENV says so.
-// The MCP is a local stdio tool; NODE_ENV is unset in normal use, so
-// MCP events report 'development' — which is what they are.
-//---------------
-
-function getEnvironment(): 'production' | 'development' {
-  return process.env['NODE_ENV'] === 'production' ? 'production' : 'development';
-}
-
-//---------------
-// Test seam: reset the cached client between tests.
-// Not used in production code.
-//---------------
-
-export function resetAnalyticsForTesting(): void {
-  client = null;
-  warned = false;
-  clientPromise = null;
-}
-
-//---------------
-// Wrap a tool handler so every invocation is tracked (never throws,
-// never blocks): the PostHog event carries only the tool name.
-// Moved here from index.ts so that file stays under the 500-line cap.
-//---------------
-
 export function withTracking<TArgs extends Record<string, unknown>, TResult>(toolName: string, handler: (args: TArgs) => Promise<TResult>): (args: TArgs) => Promise<TResult> {
-  return async (args: TArgs): Promise<TResult> => {
-    trackEvent('mcp_tool_called', { toolName });
-    return handler(args);
-  };
+  return async (args: TArgs): Promise<TResult> =>
+    toolCallContext.run({ toolName, callId: randomUUID() }, () => handler(args));
 }

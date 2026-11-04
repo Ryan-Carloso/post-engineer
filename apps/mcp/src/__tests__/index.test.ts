@@ -49,12 +49,12 @@ import { CancelVideoTaskShape } from '../video-task-tools.js';
 import { ListPromptsShape, GetPromptShape } from '../tools-prompts.js';
 import type { PostEngineerClient } from '../client.js';
 
-const mockTrackEvent = vi.fn();
 vi.mock('../analytics.js', () => ({
-  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
-  // Same shape as the real withTracking: track, then run the handler.
-  withTracking: (toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
-    mockTrackEvent('mcp_tool_called', { toolName });
+  mcpTelemetryHeaders: () => ({}),
+  // Passthrough stand-in for the real withTracking, which only opens the
+  // per-call context: mcp_tool_called is recorded by the web API from the
+  // request headers, not by the MCP (see analytics.test.ts).
+  withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
 }));
@@ -150,53 +150,6 @@ describe('createPostEngineerMcpServer', () => {
 describe('isMainModule', () => {
   it('returns a boolean', () => {
     expect(typeof isMainModule()).toBe('boolean');
-  });
-});
-
-describe('prompts hub over MCP (slash commands)', () => {
-  const mockClient = {} as unknown as PostEngineerClient;
-
-  async function withClient(
-    run: (client: Client) => Promise<void>,
-  ): Promise<void> {
-    const server = createPostEngineerMcpServer(mockClient);
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const client = new Client({ name: 'test-client', version: '0.0.0' });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    try {
-      await run(client);
-    } finally {
-      await client.close();
-    }
-  }
-
-  it('lists every hub prompt with name, title, and description', async () => {
-    await withClient(async (client) => {
-      const { prompts } = await client.listPrompts();
-      const slugs = prompts.map((p) => p.name);
-      expect(slugs).toEqual(['daily-news', 'place-spotlight', 'subject-spotlight', 'github-prs', 'full-setup']);
-      for (const prompt of prompts) {
-        expect(prompt.title, `prompt ${prompt.name} has a title`).toBeTruthy();
-        expect(prompt.description, `prompt ${prompt.name} has a description`).toBeTruthy();
-        expect(prompt.arguments ?? [], `prompt ${prompt.name} is zero-arg`).toHaveLength(0);
-      }
-    });
-  });
-
-  it('returns the exact hub prompt text per slug with zero args', async () => {
-    await withClient(async (client) => {
-      const { prompts } = await client.listPrompts();
-      const slugs = prompts.map((p) => p.name);
-      for (const slug of slugs) {
-        const result = await client.getPrompt({ name: slug });
-        expect(result.messages).toHaveLength(1);
-        expect(result.messages[0].role).toBe('user');
-        const text = (result.messages[0].content as { type: string; text: string }).text;
-        expect(text.length).toBeGreaterThan(100);
-        expect(text).toContain('validate_script');
-        expect(text).toContain('generate_persona_video');
-      }
-    });
   });
 });
 
@@ -354,19 +307,18 @@ describe('registered tool schemas (single source of truth)', () => {
 });
 
 describe('withTracking wrapper', () => {
-  // Every tool call must emit mcp_tool_called with the tool name AND still
-  // run the real handler. Pin both: dropping the trackEvent call or
-  // swallowing the handler result are the Stryker survivors here.
+  // withTracking opens the per-call AsyncLocalStorage context and still runs
+  // the real handler; mcp_tool_called is recorded by the web API from the
+  // X-MCP-Tool headers (pinned in analytics.test.ts / tools-prompts.test.ts).
   const mockClient = {
     listVoices: vi.fn(),
   } as unknown as PostEngineerClient;
 
   beforeEach(() => {
-    mockTrackEvent.mockClear();
     vi.mocked(mockClient.listVoices).mockReset();
   });
 
-  it('tracks the tool call and returns the handler result', async () => {
+  it('runs the handler and returns its result', async () => {
     vi.mocked(mockClient.listVoices).mockResolvedValue({ voices: [{ id: 'alloy', kind: 'standard' }] });
     const server = createPostEngineerMcpServer(mockClient);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -374,10 +326,6 @@ describe('withTracking wrapper', () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
       const result = await client.callTool({ name: 'list_voices', arguments: {} });
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        'mcp_tool_called',
-        expect.objectContaining({ toolName: 'list_voices' })
-      );
       expect(mockClient.listVoices).toHaveBeenCalled();
       expect(result.isError).toBeFalsy();
       const text = (result.content as Array<{ type: string; text: string }>)?.[0]?.text ?? '';
@@ -387,7 +335,7 @@ describe('withTracking wrapper', () => {
     }
   });
 
-  it('still tracks when the handler throws', async () => {
+  it('propagates the handler error', async () => {
     vi.mocked(mockClient.listVoices).mockRejectedValue(new Error('down'));
     const server = createPostEngineerMcpServer(mockClient);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -395,10 +343,6 @@ describe('withTracking wrapper', () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
       const result = await client.callTool({ name: 'list_voices', arguments: {} });
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        'mcp_tool_called',
-        expect.objectContaining({ toolName: 'list_voices' })
-      );
       expect(result.isError).toBe(true);
     } finally {
       await client.close();
@@ -423,7 +367,6 @@ describe('new tool registrations run their handlers', () => {
   } as unknown as PostEngineerClient;
 
   beforeEach(() => {
-    mockTrackEvent.mockClear();
     vi.clearAllMocks();
   });
 
@@ -442,10 +385,6 @@ describe('new tool registrations run their handlers', () => {
       const result = await client.callTool({ name: toolName, arguments: args });
       expect(result.isError).toBeFalsy();
       expect(clientMethod).toHaveBeenCalled();
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        'mcp_tool_called',
-        expect.objectContaining({ toolName })
-      );
     } finally {
       await client.close();
     }
@@ -524,45 +463,5 @@ describe('new tool registrations run their handlers', () => {
       vi.mocked(mockClient.disconnectAccount),
       { success: true }
     );
-  });
-
-  it('calls through list_prompts (needs no client method at all)', async () => {
-    const server = createPostEngineerMcpServer(mockClient);
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const client = new Client({ name: 'test-client', version: '0.0.0' });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    try {
-      const result = await client.callTool({ name: 'list_prompts', arguments: {} });
-      expect(result.isError).toBeFalsy();
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        'mcp_tool_called',
-        expect.objectContaining({ toolName: 'list_prompts' })
-      );
-      const text = (result.content as Array<{ type: string; text: string }>)?.[0]?.text ?? '';
-      expect(text).toContain('daily-news');
-    } finally {
-      await client.close();
-    }
-  });
-
-  it('calls through get_prompt and tracks the call', async () => {
-    const server = createPostEngineerMcpServer(mockClient);
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const client = new Client({ name: 'test-client', version: '0.0.0' });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    try {
-      const result = await client.callTool({ name: 'get_prompt', arguments: { slug: 'full-setup' } });
-      expect(result.isError).toBeFalsy();
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        'mcp_tool_called',
-        expect.objectContaining({ toolName: 'get_prompt' })
-      );
-      const text = (result.content as Array<{ type: string; text: string }>)?.[0]?.text ?? '';
-      // The full-setup prompt never names its own slug; pin the first step instead.
-      expect(text).toContain('list_personas');
-      expect(text).toContain('get_token_balance');
-    } finally {
-      await client.close();
-    }
   });
 });

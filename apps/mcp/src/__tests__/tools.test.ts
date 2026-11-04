@@ -1,11 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 
-const mockTrackEvent = vi.hoisted(() => vi.fn());
 vi.mock('../analytics.js', () => ({
-  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
-  withTracking: (toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
-    mockTrackEvent('mcp_tool_called', { toolName });
+  mcpTelemetryHeaders: () => ({}),
+  withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
 }));
@@ -108,11 +106,6 @@ describe('MCP Tool Handlers', () => {
       'Unknown voice "energetic". Not a house voice and not one of your clones. Call list_voices and pass the id or label from that list.',
     );
     expect(mockClient.createPersona).not.toHaveBeenCalled();
-    expect(mockTrackEvent).toHaveBeenCalledWith('server_warning', {
-      code: 'UNKNOWN_VOICE',
-      tool: 'create_persona',
-      voice: 'energetic',
-    });
   });
 
   it('handleListVoices returns the voice catalog', async () => {

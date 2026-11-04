@@ -125,5 +125,11 @@
   ],
   "POST /api/videos/score-draft": [
     "score_draft"
+  ],
+  "GET /api/prompts": [
+    "list_prompts"
+  ],
+  "GET /api/prompts/[slug]": [
+    "get_prompt"
   ]
 }

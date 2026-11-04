@@ -7,6 +7,7 @@ import { resolveApiKey, validateApiKeyFormat } from '@/lib/api-keys';
 import { getOAuthKeys } from '@/lib/oauth/keys';
 import { verifyAccessToken } from '@/lib/oauth/tokens';
 import { getMcpResource } from '@/lib/oauth/config';
+import { trackMcpToolCall } from '@/lib/mcp-tool-telemetry';
 
 interface SupabaseSessionAuth {
   userId: string;
@@ -66,6 +67,7 @@ export async function requireSupabaseSession(request?: Request): Promise<Supabas
           ),
         };
       }
+      trackMcpToolCall(request, resolved.userId, 'api_key');
       return {
         auth: {
           userId: resolved.userId,
@@ -81,6 +83,7 @@ export async function requireSupabaseSession(request?: Request): Promise<Supabas
     if (candidateKey && looksLikeJwt(candidateKey)) {
       const oauth = await resolveOAuthAccessToken(candidateKey);
       if (oauth) {
+        trackMcpToolCall(request, oauth.userId, 'oauth');
         return { auth: oauth, error: null };
       }
     }

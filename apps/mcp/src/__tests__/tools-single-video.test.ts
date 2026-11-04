@@ -1,10 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 
-const mockTrackEvent = vi.hoisted(() => vi.fn());
 vi.mock('../analytics.js', () => ({
-  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
-  withTracking: (toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
-    mockTrackEvent('mcp_tool_called', { toolName });
+  mcpTelemetryHeaders: () => ({}),
+  withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
 }));
@@ -175,11 +173,6 @@ describe('generate_persona_video tool', () => {
       'Unknown voice "energetic". Not a house voice and not one of your clones.',
     );
     expect(client.generatePersonaVideo).not.toHaveBeenCalled();
-    expect(mockTrackEvent).toHaveBeenCalledWith('server_warning', {
-      code: 'UNKNOWN_VOICE',
-      tool: 'generate_persona_video',
-      voice: 'energetic',
-    });
   });
 });
 

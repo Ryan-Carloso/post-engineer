@@ -12,7 +12,9 @@ Reads the PR diff and the list of changed files and reports:
    (sk-, ghp_, xox[baprs]-, AKIA, AIza, private key blocks, ...).
    Complements secrets-hygiene (which scans tracked files) with a scan of
    the PR diff itself. Secret VALUES are never printed — only the file and
-   the matched pattern name.
+   the matched pattern name. Synthetic fixtures are ignored: a token body
+   that is fully sequential or a single repeated character is provably
+   not a random key.
 
 Output is a markdown section for the review comment. Exits 1 on any FAIL,
 0 otherwise (WARN-only passes).
@@ -59,6 +61,32 @@ SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 MAX_LISTED_FILES = 20
 
 
+def _is_synthetic_token(body: str) -> bool:
+    """True for a token body that is provably not a random secret.
+
+    A fully sequential body (a-z, 0-9, or the reverse) or a single repeated
+    character has near-zero entropy: no randomly generated key looks like
+    that. Test fixtures use exactly this shape (e.g. an alphabet-sequence
+    scrubber fixture), and flagging them fails the review job while the
+    reviewer itself refutes the flag. A random key never satisfies either
+    check, so this does not open a bypass for real secrets.
+    """
+    if len(body) < 2:
+        return False
+    if len(set(body)) == 1:
+        return True
+    steps = [ord(body[i + 1]) - ord(body[i]) for i in range(len(body) - 1)]
+    return all(step == 1 for step in steps) or all(step == -1 for step in steps)
+
+
+def _token_body(match_text: str) -> str:
+    """Body after the secret prefix, e.g. the part after 'sk-' or 'ghp_'."""
+    for sep in ("-", "_"):
+        if sep in match_text:
+            return match_text.split(sep, 1)[1]
+    return match_text
+
+
 def check_migration_numbers(migrations_dir: Path) -> list[tuple[str, str, str]]:
     """Return [(number, first_file, second_file), ...] for duplicated prefixes."""
     seen: dict[str, str] = {}
@@ -100,7 +128,10 @@ def check_secrets_in_diff(diff_text: str) -> list[tuple[str, str, int]]:
         elif line.startswith("+") and not line.startswith("+++"):
             added = line[1:]
             for pattern, name in SECRET_PATTERNS:
-                if pattern.search(added):
+                match = pattern.search(added)
+                if match and _is_synthetic_token(_token_body(match.group(0))):
+                    continue  # synthetic fixture, not a secret; check other patterns
+                if match:
                     key = (current_file, name)
                     hits[key] = hits.get(key, 0) + 1
                     break  # one pattern per line is enough
