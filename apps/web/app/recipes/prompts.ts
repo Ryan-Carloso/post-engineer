@@ -25,9 +25,17 @@ import {
   DAILY_NEWS_PROMPT,
   FULL_SETUP_PROMPT,
   GITHUB_PRS_PROMPT,
+  PLACE_SPOTLIGHT_PROMPT,
+  SUBJECT_SPOTLIGHT_PROMPT,
 } from '@/lib/generation/prompt-base';
 
-export { DAILY_NEWS_PROMPT, FULL_SETUP_PROMPT, GITHUB_PRS_PROMPT };
+export {
+  DAILY_NEWS_PROMPT,
+  FULL_SETUP_PROMPT,
+  GITHUB_PRS_PROMPT,
+  PLACE_SPOTLIGHT_PROMPT,
+  SUBJECT_SPOTLIGHT_PROMPT,
+};
 
 export type PromptIcon = 'globe' | 'compose';
 
@@ -69,6 +77,54 @@ export const PROMPTS: PromptEntry[] = [
     docHref:
       'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/daily-news.md',
     prompt: DAILY_NEWS_PROMPT,
+  },
+  {
+    slug: 'place-spotlight',
+    icon: 'globe',
+    titleKey: 'recipes.placeSpotlightTitle',
+    objectiveKey: 'recipes.placeSpotlightObjective',
+    kindKey: 'recipes.kindRecipe',
+    stepKeys: [
+      'recipes.placeSpotlightStep1',
+      'recipes.placeSpotlightStep2',
+      'recipes.placeSpotlightStep3',
+      'recipes.placeSpotlightStep4',
+      'recipes.placeSpotlightStep5',
+    ],
+    deliverKeys: [
+      'recipes.placeSpotlightDeliver1',
+      'recipes.placeSpotlightDeliver2',
+      'recipes.placeSpotlightDeliver3',
+    ],
+    exampleInputKey: 'recipes.placeSpotlightExampleInput',
+    exampleOutputKey: 'recipes.placeSpotlightExampleOutput',
+    docHref:
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/place-spotlight.md',
+    prompt: PLACE_SPOTLIGHT_PROMPT,
+  },
+  {
+    slug: 'subject-spotlight',
+    icon: 'globe',
+    titleKey: 'recipes.subjectSpotlightTitle',
+    objectiveKey: 'recipes.subjectSpotlightObjective',
+    kindKey: 'recipes.kindRecipe',
+    stepKeys: [
+      'recipes.subjectSpotlightStep1',
+      'recipes.subjectSpotlightStep2',
+      'recipes.subjectSpotlightStep3',
+      'recipes.subjectSpotlightStep4',
+      'recipes.subjectSpotlightStep5',
+    ],
+    deliverKeys: [
+      'recipes.subjectSpotlightDeliver1',
+      'recipes.subjectSpotlightDeliver2',
+      'recipes.subjectSpotlightDeliver3',
+    ],
+    exampleInputKey: 'recipes.subjectSpotlightExampleInput',
+    exampleOutputKey: 'recipes.subjectSpotlightExampleOutput',
+    docHref:
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/subject-spotlight.md',
+    prompt: SUBJECT_SPOTLIGHT_PROMPT,
   },
   {
     slug: 'github-prs',

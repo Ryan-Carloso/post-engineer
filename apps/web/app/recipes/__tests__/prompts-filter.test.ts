@@ -6,6 +6,10 @@ import { filterPrompts, promptKinds } from '../prompts-filter';
 const translations: Record<string, string> = {
   'recipes.dailyNewsTitle': 'Notícia diária vira vídeo',
   'recipes.dailyNewsObjective': 'Transforme uma notícia do dia em vídeo.',
+  'recipes.placeSpotlightTitle': 'Destaque de lugar vira vídeo',
+  'recipes.placeSpotlightObjective': 'Transforme um lugar real em vídeo.',
+  'recipes.subjectSpotlightTitle': 'Assunto em destaque vira vídeo',
+  'recipes.subjectSpotlightObjective': 'Transforme um assunto concreto em vídeo.',
   'recipes.githubPrsTitle': 'GitHub PRs become videos',
   'recipes.githubPrsObjective': 'Turn your pull requests into videos.',
 };
@@ -14,7 +18,13 @@ const slugs = (list: typeof PROMPTS): string[] => list.map((prompt) => prompt.sl
 
 describe('filterPrompts', () => {
   it('returns every prompt with no kind and an empty query', () => {
-    expect(slugs(filterPrompts(PROMPTS, 'all', '  ', t))).toEqual(['daily-news', 'github-prs', 'full-setup']);
+    expect(slugs(filterPrompts(PROMPTS, 'all', '  ', t))).toEqual([
+      'daily-news',
+      'place-spotlight',
+      'subject-spotlight',
+      'github-prs',
+      'full-setup',
+    ]);
   });
 
   it('keeps only the chosen kind', () => {
@@ -22,6 +32,8 @@ describe('filterPrompts', () => {
   });
 
   it('matches the localized title ignoring case and accents', () => {
+    expect(slugs(filterPrompts(PROMPTS, 'all', 'LUGAR', t))).toEqual(['place-spotlight']);
+    expect(slugs(filterPrompts(PROMPTS, 'all', 'CONCRETO', t))).toEqual(['subject-spotlight']);
     expect(slugs(filterPrompts(PROMPTS, 'all', 'NOTICIA', t))).toEqual(['daily-news']);
   });
 

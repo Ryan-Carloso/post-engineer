@@ -39,6 +39,46 @@ export const recipesI18nPt = {
       'Adicionar retry com backoff aos uploads de vídeo.',
   githubPrsExampleOutput:
       'Gancho sobre a correção, corpo sobre o que mudou, CTA para seguir o repositório — um vídeo.',
+  placeSpotlightTitle: 'Destaque de lugar vira vídeo',
+  placeSpotlightObjective:
+      'Transformar um lugar real em um vídeo de persona com as fotos do próprio lugar na tela, validado antes de gastar qualquer token.',
+  placeSpotlightStep1: 'Para criadores que mostram lugares: bares, hotéis, bairros, lojas, cafés.',
+  placeSpotlightStep2:
+      'Busca os fatos e as fotos do próprio lugar com a sua ferramenta de busca: Tavily, Exa ou outra.',
+  placeSpotlightStep3:
+      'Cada foto passa por checagem mecânica antes de entrar no roteiro; recusada, cai fora sem estragar o vídeo.',
+  placeSpotlightStep4:
+      'Escreva o gancho primeiro, o CTA por último, e valide antes de gastar qualquer token.',
+  placeSpotlightStep5: 'Gere um vídeo: as fotos entram como cartões com nome, endereço e preço.',
+  placeSpotlightDeliver1: 'Um vídeo de persona com até 6 fotos reais do lugar.',
+  placeSpotlightDeliver2:
+      'Um roteiro validado: 60–200 palavras, gancho primeiro, CTA por último.',
+  placeSpotlightDeliver3:
+      'Cartões na tela com o nome, o endereço e um detalhe como preço ou época.',
+  placeSpotlightExampleInput:
+      'O café do centro que abriu em 1913 e serve bolo de azeite.',
+  placeSpotlightExampleOutput:
+      'Gancho sobre o café servindo desde 1913, dois corpos com as fotos do lugar, CTA — 3 fotos, um cartão em cada.',
+  subjectSpotlightTitle: 'Assunto em destaque vira vídeo',
+  subjectSpotlightObjective:
+      'Transformar um assunto concreto (um carro, um produto, um gadget) em um vídeo de persona com as fotos dele e o preço real na tela, validado antes de gastar qualquer token.',
+  subjectSpotlightStep1: 'Para criadores que falam de coisas: carros, gadgets, produtos, ferramentas.',
+  subjectSpotlightStep2:
+      'Fixa a identidade exata do assunto (modelo, versão, ano) e o preço real com mercado e data.',
+  subjectSpotlightStep3:
+      'Só entra foto do assunto exato; recusada, cai fora sem estragar o vídeo.',
+  subjectSpotlightStep4:
+      'Escreva o gancho primeiro, o CTA por último, e valide antes de gastar qualquer token.',
+  subjectSpotlightStep5: 'Gere um vídeo: as fotos entram como cartões com nome, versão e preço real.',
+  subjectSpotlightDeliver1: 'Um vídeo de persona com até 6 fotos reais do assunto.',
+  subjectSpotlightDeliver2:
+      'Um roteiro validado: 60–200 palavras, gancho primeiro, CTA por último.',
+  subjectSpotlightDeliver3:
+      'Cartões na tela com o nome, a versão e o preço real pinado em data e mercado.',
+  subjectSpotlightExampleInput:
+      'O hatch elétrico 2026 com 400 km de autonomia e preço de lançamento.',
+  subjectSpotlightExampleOutput:
+      'Gancho sobre o preço real, um corpo com as fotos do carro, CTA — 2 fotos, um cartão em cada.',
   stepsTitle: 'O que este prompt faz',
   deliversTitle: 'O que você recebe',
   examplesTitle: 'Exemplo',

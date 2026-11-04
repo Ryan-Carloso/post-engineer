@@ -45,6 +45,49 @@ vi.mock('@/lib/i18n/provider', () => {
       'It walks accounts, persona, a validated script, and real publishing in one flow.',
     'recipes.fullSetupDeliver1': 'Every account connected and a persona created.',
     'recipes.fullSetupExampleInput': 'Starting with zero accounts and no persona.',
+    'recipes.placeSpotlightTitle': 'Place spotlight becomes a video',
+    'recipes.placeSpotlightObjective':
+      'Turn one real place into one persona video with photos of the place itself on screen, validated before any token is spent.',
+    'recipes.placeSpotlightStep1':
+      'For creators who spotlight places: bars, hotels, neighbourhoods, shops, cafés.',
+    'recipes.placeSpotlightStep2':
+      'It finds the facts and the real photos of the place with your own search tool: Tavily, Exa, or another.',
+    'recipes.placeSpotlightStep3':
+      'Every photo passes a mechanical check before it enters the script; a refused photo drops out without hurting the video.',
+    'recipes.placeSpotlightStep4':
+      'Write hook first, CTA last, then validate before any token is spent.',
+    'recipes.placeSpotlightStep5':
+      'Generate one video: the photos come in as cards with name, address, and price.',
+    'recipes.placeSpotlightDeliver1': 'One persona video with up to 6 real photos of the place.',
+    'recipes.placeSpotlightDeliver2':
+      'A validated script: 60–200 words, hook first, CTA last.',
+    'recipes.placeSpotlightDeliver3':
+      'On-screen cards with the place name, the address, and one detail like a price.',
+    'recipes.placeSpotlightExampleInput':
+      'The downtown café that opened in 1913 and serves olive oil cake.',
+    'recipes.placeSpotlightExampleOutput':
+      'Hook on the café serving since 1913, two bodies with the place photos, CTA — 3 photos, one card each.',
+    'recipes.subjectSpotlightTitle': 'Subject spotlight becomes a video',
+    'recipes.subjectSpotlightObjective':
+      'Turn one concrete subject (a car, a product, a gadget) into one persona video with its own photos and its real price on screen, validated before any token is spent.',
+    'recipes.subjectSpotlightStep1': 'For creators who talk about things: cars, gadgets, products, tools.',
+    'recipes.subjectSpotlightStep2':
+      'It pins the exact identity (model, trim, year) and the real price with its market and date.',
+    'recipes.subjectSpotlightStep3':
+      'Only photos of the exact subject enter the script; a refused photo drops out without hurting the video.',
+    'recipes.subjectSpotlightStep4':
+      'Write hook first, CTA last, then validate before any token is spent.',
+    'recipes.subjectSpotlightStep5':
+      'Generate one video: the photos come in as cards with the name, the trim, and the real price.',
+    'recipes.subjectSpotlightDeliver1': 'One persona video with up to 6 real photos of the subject.',
+    'recipes.subjectSpotlightDeliver2':
+      'A validated script: 60–200 words, hook first, CTA last.',
+    'recipes.subjectSpotlightDeliver3':
+      'On-screen cards with the name, the trim, and the real price pinned to a date and market.',
+    'recipes.subjectSpotlightExampleInput':
+      'The 2026 electric hatch with a 400 km range and a launch price.',
+    'recipes.subjectSpotlightExampleOutput':
+      'Hook about the real price, one body with the car photos, CTA — 2 photos, one card each.',
   };
   return {
     useI18n: () => ({
@@ -177,6 +220,94 @@ describe('prompt detail page', () => {
     const { container } = render(<PromptDetail prompt={prompt} />);
     const ids = [...container.querySelectorAll('[data-agent]')].map((el) => el.getAttribute('data-agent'));
     expect(ids).toEqual(['cursor', 'claude', 'opencode']);
+  });
+});
+
+describe('place-spotlight detail page', () => {
+  const prompt = getPrompt('place-spotlight');
+  if (prompt === undefined) {
+    throw new Error('place-spotlight prompt entry is missing');
+  }
+
+  it('renders the place-spotlight title and objective', () => {
+    render(<PromptDetail prompt={prompt} />);
+    expect(
+      screen.getByRole('heading', { name: 'Place spotlight becomes a video' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Turn one real place into one persona video with photos of the place itself on screen, validated before any token is spent.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('points the doc link at docs/recipes/place-spotlight.md', () => {
+    render(<PromptDetail prompt={prompt} />);
+    expect(
+      screen.getByRole('link', { name: 'View this prompt on GitHub' }),
+    ).toHaveAttribute(
+      'href',
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/place-spotlight.md',
+    );
+  });
+
+  it('shows the full prompt with the ordered place flow', () => {
+    render(<PromptDetail prompt={prompt} />);
+    for (const marker of [
+      'Ask me which place',
+      'Search the place once',
+      'image search',
+      'check_media',
+      'media overlay',
+      'validate_script',
+      'generate_persona_video',
+    ]) {
+      expect(screen.getByText(new RegExp(marker.replace(/[.[\\(\\)|*+?^$]/g, '\\$&')))).toBeInTheDocument();
+    }
+  });
+});
+
+describe('subject-spotlight detail page', () => {
+  const prompt = getPrompt('subject-spotlight');
+  if (prompt === undefined) {
+    throw new Error('subject-spotlight prompt entry is missing');
+  }
+
+  it('renders the subject-spotlight title and objective', () => {
+    render(<PromptDetail prompt={prompt} />);
+    expect(
+      screen.getByRole('heading', { name: 'Subject spotlight becomes a video' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Turn one concrete subject (a car, a product, a gadget) into one persona video with its own photos and its real price on screen, validated before any token is spent.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('points the doc link at docs/recipes/subject-spotlight.md', () => {
+    render(<PromptDetail prompt={prompt} />);
+    expect(
+      screen.getByRole('link', { name: 'View this prompt on GitHub' }),
+    ).toHaveAttribute(
+      'href',
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/subject-spotlight.md',
+    );
+  });
+
+  it('shows the full prompt with the ordered subject flow', () => {
+    render(<PromptDetail prompt={prompt} />);
+    for (const marker of [
+      'Ask me what the subject is',
+      'Pin the identity first',
+      'image search',
+      'check_media',
+      'media overlay',
+      'validate_script',
+      'generate_persona_video',
+    ]) {
+      expect(screen.getByText(new RegExp(marker.replace(/[.[\\(\\)|*+?^$]/g, '\\$&')))).toBeInTheDocument();
+    }
   });
 });
 

@@ -9,6 +9,10 @@ vi.mock('@/lib/i18n/provider', () => {
       'Copy-ready prompts for the Post Engineer MCP server. Copy one, paste it into your agent, done.',
     'recipes.dailyNewsTitle': 'Daily news becomes a video',
     'recipes.dailyNewsObjective': 'Turn one news story of the day into one persona video.',
+    'recipes.placeSpotlightTitle': 'Place spotlight becomes a video',
+    'recipes.placeSpotlightObjective': 'Turn one real place into one persona video.',
+    'recipes.subjectSpotlightTitle': 'Subject spotlight becomes a video',
+    'recipes.subjectSpotlightObjective': 'Turn one concrete subject into one persona video.',
     'recipes.githubPrsTitle': 'GitHub PRs become videos',
     'recipes.githubPrsObjective': 'Turn your GitHub pull requests into persona videos.',
     'recipes.fullSetupTitle': 'Full setup becomes videos',
@@ -50,6 +54,14 @@ describe('/recipes prompts hub list', () => {
       'href',
       '/recipes/daily-news',
     );
+    expect(screen.getByRole('link', { name: /Place spotlight becomes a video/ })).toHaveAttribute(
+      'href',
+      '/recipes/place-spotlight',
+    );
+    expect(screen.getByRole('link', { name: /Subject spotlight becomes a video/ })).toHaveAttribute(
+      'href',
+      '/recipes/subject-spotlight',
+    );
     expect(screen.getByRole('link', { name: /GitHub PRs become videos/ })).toHaveAttribute(
       'href',
       '/recipes/github-prs',
@@ -63,14 +75,14 @@ describe('/recipes prompts hub list', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('shows three prompts in the hero count', () => {
+  it('shows five prompts in the hero count', () => {
     render(<RecipesPage />);
-    expect(screen.getByText('recipes.promptCount:{"count":3}')).toBeInTheDocument();
+    expect(screen.getByText('recipes.promptCount:{"count":5}')).toBeInTheDocument();
   });
 
   it('labels entries by kind, not by sequence number', () => {
     render(<RecipesPage />);
-    expect(screen.getAllByText('Recipe')).toHaveLength(3);
+    expect(screen.getAllByText('Recipe')).toHaveLength(5);
     expect(screen.getAllByText('Prompt')).toHaveLength(2);
     expect(screen.queryByText('01')).not.toBeInTheDocument();
     expect(screen.queryByText('02')).not.toBeInTheDocument();
@@ -97,7 +109,7 @@ describe('/recipes prompts hub list', () => {
 
   it('shows the step count on each card', () => {
     render(<RecipesPage />);
-    expect(screen.getAllByText('recipes.stepCount:{"count":5}')).toHaveLength(3);
+    expect(screen.getAllByText('recipes.stepCount:{"count":5}')).toHaveLength(5);
   });
 
   it('offers a secondary "Add your prompt" link to the prompt_request template after the grid', () => {
