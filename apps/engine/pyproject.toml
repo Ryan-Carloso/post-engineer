@@ -186,6 +186,9 @@ also_copy = [
     "local_tts/backends.py",
     "scripts/changed_functions.py",
     "scripts/audit_secrets.py",
+    "scripts/export_openapi.py",
+    # Committed OpenAPI snapshot read by test_export_openapi's drift test.
+    "openapi.json",
 ]
 # Test exclusions for mutmut runs (these still run in the main engine CI job):
 # - test_mypy_config.py pins the CI workflow file layout (.github/workflows/),

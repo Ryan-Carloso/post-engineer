@@ -9,7 +9,8 @@
  *     files already above the cap are grandfathered and may only shrink —
  *     any growth past the cap fails, there is no warning-only loophole).
  *
- * Exempt: test files, supabase/migrations, lockfiles, markdown. Only
+ * Exempt: test files, supabase/migrations, lockfiles, markdown, generated
+ * *.gen.<ext> files (pinned by a drift test against their generator). Only
  * *.py / *.ts / *.tsx are checked; everything else is ignored.
  *
  * Usage:
@@ -49,7 +50,7 @@ export function isSourceFile(p) {
   return /\.(py|tsx?)$/.test(p);
 }
 
-/** True for paths excluded from the lint (tests, migrations, lockfiles, docs). */
+/** True for paths excluded from the lint (tests, migrations, lockfiles, docs, generated). */
 export function isExempt(p) {
   const segments = p.split('/');
   const base = segments[segments.length - 1];
@@ -62,6 +63,9 @@ export function isExempt(p) {
   if (base === 'pnpm-lock.yaml' || base === 'uv.lock' || base.endsWith('.lock')) return true;
   // Markdown docs.
   if (base.endsWith('.md')) return true;
+  // Generated code (*.gen.<ext>, e.g. apps/web/lib/engine/schema.gen.ts) is
+  // pinned by a drift test against its generator, never edited by hand.
+  if (/\.gen\.[^.]+$/.test(base)) return true;
   return false;
 }
 

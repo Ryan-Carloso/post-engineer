@@ -49,6 +49,15 @@ describe('isExcludedFile', () => {
       assert.equal(isExcludedFile(p), true, p);
     }
   });
+
+  it('excludes generated *.gen.<ext> files but not names that merely contain "gen"', () => {
+    for (const p of ['apps/web/lib/engine/schema.gen.ts', 'apps/engine/app/x.gen.py']) {
+      assert.equal(isExcludedFile(p), true, p);
+    }
+    for (const p of ['apps/web/lib/general.ts', 'apps/web/lib/gen.ts', 'apps/web/lib/a.gen.test-helper/b.ts', 'apps/web/lib/schema.gen.ts.bak/c.ts']) {
+      assert.equal(isExcludedFile(p), false, p);
+    }
+  });
 });
 
 describe('countAddedLines', () => {
