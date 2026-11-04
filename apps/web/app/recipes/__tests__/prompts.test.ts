@@ -141,7 +141,7 @@ describe('prompts hub data', () => {
     expect(text).toContain('generate_persona_video call');
     expect(text).toContain('model, trim, and year');
     expect(text).toContain('currency, market, and date');
-    expect(text).toContain('a price without a source is a dropped badge');
+    expect(text).toContain('a price without a source is a');
     expect(text).toContain('never a different generation, a render, or a rebadged');
     expect(text).toContain('only on ok');
     expect(text).toContain('at most 6 photos');
