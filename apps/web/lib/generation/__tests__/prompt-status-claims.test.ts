@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 import * as promptBase from '../prompt-base';
 
-const STALE_STATUS_PHRASES = ['currently being fixed', 'being fixed', 'issue #'];
+const STALE_STATUS_PHRASES = ['currently being fixed', 'being fixed', 'issue #', 'is broken'];
 
 // snake_case values in prompt text that are not tool calls: check_media
 // returns face_detected as a photo-check code, it is never called as a
@@ -97,6 +97,11 @@ describe('prompt status claims', () => {
       }
     },
   );
+
+  it('blocks "is broken" as a stale provider status (PR #395 review)', () => {
+    expect(STALE_STATUS_PHRASES).toContain('is broken');
+    expect(STALE_STATUS_PHRASES.some((phrase) => 'Bluesky is broken'.includes(phrase))).toBe(true);
+  });
 
   it('keeps Bluesky as an ordinary optional provider in full-setup', () => {
     expect(promptBase.FULL_SETUP_PROMPT).toContain('Bluesky is optional');
