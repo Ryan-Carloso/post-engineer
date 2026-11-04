@@ -130,3 +130,19 @@ describe('prompt tool names match registered MCP tools', () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe('every hub prompt comes from shared, never a hand copy', () => {
+  it('serves each shared prompt in the hub, byte-identical', async () => {
+    const { PROMPTS } = await import('@/app/recipes/prompts');
+    const sharedTexts = new Set(
+      Object.values(promptBase).filter((value): value is string => typeof value === 'string'),
+    );
+    expect(PROMPTS.length).toBeGreaterThan(0);
+    for (const entry of PROMPTS) {
+      expect(sharedTexts.has(entry.prompt)).toBe(true);
+    }
+    for (const text of sharedTexts) {
+      expect(PROMPTS.some((entry) => entry.prompt === text)).toBe(true);
+    }
+  });
+});
