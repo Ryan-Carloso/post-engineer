@@ -49,12 +49,12 @@ import { CancelVideoTaskShape } from '../video-task-tools.js';
 import { ListPromptsShape, GetPromptShape } from '../tools-prompts.js';
 import type { PostEngineerClient } from '../client.js';
 
-const mockTrackEvent = vi.fn();
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
-  // Same shape as the real withTracking: track, then run the handler.
-  withTracking: (toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
-    mockTrackEvent('mcp_tool_called', { toolName });
+  // Passthrough stand-in for the real withTracking, which only opens the
+  // per-call context: mcp_tool_called is recorded by the web API from the
+  // request headers, not by the MCP (see analytics.test.ts).
+  withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
 }));
@@ -307,19 +307,18 @@ describe('registered tool schemas (single source of truth)', () => {
 });
 
 describe('withTracking wrapper', () => {
-  // Every tool call must emit mcp_tool_called with the tool name AND still
-  // run the real handler. Pin both: dropping the trackEvent call or
-  // swallowing the handler result are the Stryker survivors here.
+  // withTracking opens the per-call AsyncLocalStorage context and still runs
+  // the real handler; mcp_tool_called is recorded by the web API from the
+  // X-MCP-Tool headers (pinned in analytics.test.ts / tools-prompts.test.ts).
   const mockClient = {
     listVoices: vi.fn(),
   } as unknown as PostEngineerClient;
 
   beforeEach(() => {
-    mockTrackEvent.mockClear();
     vi.mocked(mockClient.listVoices).mockReset();
   });
 
-  it('tracks the tool call and returns the handler result', async () => {
+  it('runs the handler and returns its result', async () => {
     vi.mocked(mockClient.listVoices).mockResolvedValue({ voices: [{ id: 'alloy', kind: 'standard' }] });
     const server = createPostEngineerMcpServer(mockClient);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -327,10 +326,6 @@ describe('withTracking wrapper', () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
       const result = await client.callTool({ name: 'list_voices', arguments: {} });
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        'mcp_tool_called',
-        expect.objectContaining({ toolName: 'list_voices' })
-      );
       expect(mockClient.listVoices).toHaveBeenCalled();
       expect(result.isError).toBeFalsy();
       const text = (result.content as Array<{ type: string; text: string }>)?.[0]?.text ?? '';
@@ -340,7 +335,7 @@ describe('withTracking wrapper', () => {
     }
   });
 
-  it('still tracks when the handler throws', async () => {
+  it('propagates the handler error', async () => {
     vi.mocked(mockClient.listVoices).mockRejectedValue(new Error('down'));
     const server = createPostEngineerMcpServer(mockClient);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -348,10 +343,6 @@ describe('withTracking wrapper', () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
       const result = await client.callTool({ name: 'list_voices', arguments: {} });
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        'mcp_tool_called',
-        expect.objectContaining({ toolName: 'list_voices' })
-      );
       expect(result.isError).toBe(true);
     } finally {
       await client.close();
@@ -376,7 +367,6 @@ describe('new tool registrations run their handlers', () => {
   } as unknown as PostEngineerClient;
 
   beforeEach(() => {
-    mockTrackEvent.mockClear();
     vi.clearAllMocks();
   });
 
@@ -395,10 +385,6 @@ describe('new tool registrations run their handlers', () => {
       const result = await client.callTool({ name: toolName, arguments: args });
       expect(result.isError).toBeFalsy();
       expect(clientMethod).toHaveBeenCalled();
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        'mcp_tool_called',
-        expect.objectContaining({ toolName })
-      );
     } finally {
       await client.close();
     }

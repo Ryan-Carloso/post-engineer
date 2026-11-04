@@ -15,11 +15,12 @@ import {
   type HttpTransportHandle,
 } from '../http-transport.js';
 
-const mockTrackEvent = vi.fn();
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
-  withTracking: (toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
-    mockTrackEvent('mcp_tool_called', { toolName });
+  // Passthrough stand-in for the real withTracking, which only opens the
+  // per-call context: mcp_tool_called is recorded by the web API from the
+  // request headers, not by the MCP (see analytics.test.ts).
+  withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
 }));

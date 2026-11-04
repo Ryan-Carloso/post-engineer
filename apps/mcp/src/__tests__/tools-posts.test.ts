@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { getPost, getPostMetrics } from '../client-posts.js';
@@ -11,12 +11,12 @@ import { createPostEngineerMcpServer } from '../index.js';
 import type { PostEngineerClient } from '../client.js';
 import type { McpToolResponse } from '../tools-call.js';
 
-const mockTrackEvent = vi.fn();
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
-  // Same shape as the real withTracking: track, then run the handler.
-  withTracking: (toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
-    mockTrackEvent('mcp_tool_called', { toolName });
+  // Passthrough stand-in for the real withTracking, which only opens the
+  // per-call context: mcp_tool_called is recorded by the web API from the
+  // request headers, not by the MCP (see analytics.test.ts).
+  withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
 }));
@@ -139,10 +139,6 @@ describe('get_post / get_post_metrics handlers', () => {
 });
 
 describe('registered get_post / get_post_metrics tools', () => {
-  beforeEach(() => {
-    mockTrackEvent.mockClear();
-  });
-
   async function callTool(name: string, args: Record<string, unknown>, request: ReturnType<typeof vi.fn>) {
     const server = createPostEngineerMcpServer(fakeClient(request));
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -155,15 +151,14 @@ describe('registered get_post / get_post_metrics tools', () => {
     }
   }
 
-  it('get_post calls GET /api/posts/[id] and tracks the call', async () => {
+  it('get_post calls GET /api/posts/[id] through the server', async () => {
     const request = vi.fn().mockResolvedValue({ success: true, kind: 'slot' });
     const result = await callTool('get_post', { id: 'slot-1' }, request);
     expect(result.isError).toBeFalsy();
     expect(request).toHaveBeenCalledWith('/api/posts/slot-1', { method: 'GET', headers: HEADERS }, 'get post');
-    expect(mockTrackEvent).toHaveBeenCalledWith('mcp_tool_called', { toolName: 'get_post' });
   });
 
-  it('get_post_metrics calls GET /api/metrics and tracks the call', async () => {
+  it('get_post_metrics calls GET /api/metrics through the server', async () => {
     const request = vi.fn().mockResolvedValue({ success: true, rows: [], truncated: false });
     const result = await callTool('get_post_metrics', { window: '7d', provider: 'linkedin' }, request);
     expect(result.isError).toBeFalsy();
@@ -172,7 +167,6 @@ describe('registered get_post / get_post_metrics tools', () => {
       { method: 'GET', headers: HEADERS },
       'get post metrics',
     );
-    expect(mockTrackEvent).toHaveBeenCalledWith('mcp_tool_called', { toolName: 'get_post_metrics' });
   });
 
   it('get_post_metrics rejects a bad persona before any request', async () => {

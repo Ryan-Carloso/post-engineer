@@ -19,8 +19,8 @@ export interface PromptDetail extends PromptSummary {
   prompt: string;
 }
 
-// Thrown by getPrompt on a 404: carries the valid slugs from the API body
-// so the agent can recover without another call.
+// Thrown by getPrompt on a 404: fetches the valid slugs with a follow-up
+// listPrompts request so the agent can recover.
 export class UnknownPromptSlugError extends Error {
   constructor(readonly slug: string, readonly validSlugs: string[]) {
     super(`unknown prompt slug ${JSON.stringify(slug)}. Valid slugs: ${validSlugs.join(', ')}.`);
