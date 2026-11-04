@@ -33,7 +33,9 @@ export type McpAuthMethod = 'api_key' | 'oauth';
 
 const trackedRequests = new WeakSet<Request>();
 
-// A static route word: lowercase letters, digits and hyphens.
+// A static route word: lowercase letters, digits and hyphens — but never a
+// uuid-shaped id, which is a dynamic segment even when it starts with a
+// letter (a-f-initial uuids otherwise match STATIC_SEGMENT verbatim).
 const STATIC_SEGMENT = /^[a-z][a-z0-9-]{0,40}$/;
 
 function telemetryPath(url: string): string {
@@ -44,7 +46,7 @@ function telemetryPath(url: string): string {
     } catch {
       return ':param';
     }
-    return decoded === '' || STATIC_SEGMENT.test(decoded) ? decoded : ':param';
+    return decoded === '' || (STATIC_SEGMENT.test(decoded) && !CALL_ID.test(decoded)) ? decoded : ':param';
   });
   return redactCredentialFragments(segments.join('/'));
 }

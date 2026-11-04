@@ -42,6 +42,7 @@ describe('trackMcpToolCall', () => {
     ['a percent-encoded Bearer token', '/api/prompts/Bearer%20abc123secret'],
     ['an API key', '/api/prompts/pe_live_1234567890abcdef'],
     ['a uuid', '/api/persona/video-status/0b9f6a52-2f43-4c8e-9a51-6f0d1c2e3a4b'],
+    ['a letter-initial uuid', '/api/persona/video-status/a1b2c3d4-2f43-4c8e-9a51-6f0d1c2e3a4b'],
     ['a malformed percent-encoding', '/api/prompts/%E0%A4%A'],
   ])('replaces a dynamic path segment carrying %s with :param', (_label, path) => {
     trackMcpToolCall(mcpRequest({ 'x-mcp-tool': 'get_prompt' }, `https://post-engineer.test${path}`), 'user-1', 'api_key');
