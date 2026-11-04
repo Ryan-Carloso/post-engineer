@@ -217,7 +217,8 @@ describe('prompts hub data', () => {
     expect(positions.every((i) => i >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(text).toContain('never the main password');
-    expect(text).toContain('issue #327');
+    expect(text).toContain('Bluesky is optional');
+    expect(text).not.toContain('issue #');
   });
 
   it('bakes the segments contract into every prompt text', () => {

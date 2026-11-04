@@ -117,6 +117,12 @@
 - Update `supabase/README.md` with each migration — it is the single migration list; `docs/SELF_HOSTING.md` only links to it, never duplicate the list there. Moving a migration file: grep the tests that read it.
 - CI checks numbering and applies the chain to an ephemeral Postgres (stubs only `auth`/`storage` — extend stubs if needed). BETA: there is no destructive-DDL label gate — destructive migrations are approved by the owner's merge tap, no separate label step; reintroduce the `db:destructive-approved` label gate explicitly when the first paying user arrives (the BETA flip rule). CD runs `supabase db push --linked --include-all` on merge (or via workflow_dispatch, always from `main`), before redeploying the VPS: `--include-all` also applies an older-numbered migration whose PR merged after a newer one, which plain `db push` refuses — without it an out-of-order merge leaves that migration unapplied forever.
 
+## Prompts — every prompt comes from shared, never a hand copy
+
+- `shared/prompt-base/prompt-base.ts` is the single source for every prompt served anywhere: the web hub reads it through the symlink `apps/web/lib/generation/prompt-base.ts` (never a real file, never a direct import — tsc rootDir and the Stryker sandbox both break on those), the MCP fetches prompts from the web API (`GET /api/prompts`, `GET /api/prompts/[slug]`), and recipe docs link to the hub page, never retype prompt steps.
+- Never add a prompt, a prompt step, a tool name, or a provider-status claim in a second place — not in the hub data, not in the MCP, not in a doc. A second copy drifts the moment the first one is fixed (the stale "Bluesky is broken" warning, cited from issue #327 long after PR #332 fixed publishing, is the case that made this rule).
+- Enforced by tests, not by convention alone: `prompt-base-shared` (the web file is a symlink, byte-identical to shared), `prompt-status-claims` (no `issue #` references or stale provider-status phrases in served prompts, every tool name mentioned is a registered MCP tool, and every hub entry's prompt text is exactly a shared export).
+
 ## Testing gotchas
 
 - Tests must not pass vacuously: assert the path under test was actually taken; mutation-verify new pins (revert the fix, the test must fail). Test names match their assertions.

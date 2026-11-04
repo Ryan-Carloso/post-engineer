@@ -1,6 +1,6 @@
 # Prompt: GitHub PRs become videos
 
-> Version: 1. MCP: `post-engineer-mcp` 1.31.0 (use `npx -y post-engineer-mcp@latest`;
+> MCP: `post-engineer-mcp` (use `npx -y post-engineer-mcp@latest`;
 > `@latest` fetches the newest version instead of a stale cached copy).
 > Status: first prompt entry for this use. Proven mechanically (the script
 > contract below is the same one `validate_script` enforces); a real
