@@ -39,6 +39,26 @@ export const recipesI18nEn = {
       'Add retry with backoff to video uploads.',
   githubPrsExampleOutput:
       'Hook on the fix, body on what changed, CTA to follow the repo — one video.',
+  placeSpotlightTitle: 'Place spotlight becomes a video',
+  placeSpotlightObjective:
+      'Turn one real place into one persona video with photos of the place itself on screen, validated before any token is spent.',
+  placeSpotlightStep1: 'For creators who spotlight places: bars, hotels, neighbourhoods, shops, cafés.',
+  placeSpotlightStep2:
+      'It finds the facts and the real photos of the place with your own search tool: Tavily, Exa, or another.',
+  placeSpotlightStep3:
+      'Every photo passes a mechanical check before it enters the script; a refused photo drops out without hurting the video.',
+  placeSpotlightStep4:
+      'Write hook first, CTA last, then validate before any token is spent.',
+  placeSpotlightStep5: 'Generate one video: the photos come in as cards with name, address, and price.',
+  placeSpotlightDeliver1: 'One persona video with up to 6 real photos of the place.',
+  placeSpotlightDeliver2:
+      'A validated script: 60–200 words, hook first, CTA last.',
+  placeSpotlightDeliver3:
+      'On-screen cards with the place name, the address, and one detail like a price.',
+  placeSpotlightExampleInput:
+      'The downtown café that opened in 1913 and serves olive oil cake.',
+  placeSpotlightExampleOutput:
+      'Hook about the door price, two bodies with the place photos, CTA — 4 photos, one card each.',
   stepsTitle: 'What this prompt does',
   deliversTitle: 'What you get',
   examplesTitle: 'Example',

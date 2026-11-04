@@ -168,6 +168,7 @@ run it. The copy is kept in sync with the web
 hub by a sync test (`prompts-sync.test.ts`).
 
 - `/daily-news`: Daily news becomes a video — turn one top GNews story of the day into one persona video, validated before any token is spent.
+- `/place-spotlight`: Place spotlight becomes a video — turn one real place into one persona video with the place's own photos checked and attached as segment media, validated before any token is spent.
 - `/github-prs`: GitHub PRs become videos — turn a GitHub pull request into one persona video.
 - `/full-setup`: Full setup becomes videos — connect accounts, create a persona, validate the script, and publish your first video without skipping a step.
 
@@ -182,4 +183,4 @@ fails if they drift.
 
 - Platform: https://post-engineer.com/
 - API keys: https://post-engineer.com/api-keys
-- Recipes: [docs/recipes/daily-news.md](../../docs/recipes/daily-news.md) (daily news becomes a video)
+- Recipes: [docs/recipes/daily-news.md](../../docs/recipes/daily-news.md) (daily news becomes a video) and [docs/recipes/place-spotlight.md](../../docs/recipes/place-spotlight.md) (place spotlight becomes a video)

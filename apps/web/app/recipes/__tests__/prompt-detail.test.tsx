@@ -45,6 +45,28 @@ vi.mock('@/lib/i18n/provider', () => {
       'It walks accounts, persona, a validated script, and real publishing in one flow.',
     'recipes.fullSetupDeliver1': 'Every account connected and a persona created.',
     'recipes.fullSetupExampleInput': 'Starting with zero accounts and no persona.',
+    'recipes.placeSpotlightTitle': 'Place spotlight becomes a video',
+    'recipes.placeSpotlightObjective':
+      'Turn one real place into one persona video with photos of the place itself on screen, validated before any token is spent.',
+    'recipes.placeSpotlightStep1':
+      'For creators who spotlight places: bars, hotels, neighbourhoods, shops, cafés.',
+    'recipes.placeSpotlightStep2':
+      'It finds the facts and the real photos of the place with your own search tool: Tavily, Exa, or another.',
+    'recipes.placeSpotlightStep3':
+      'Every photo passes a mechanical check before it enters the script; a refused photo drops out without hurting the video.',
+    'recipes.placeSpotlightStep4':
+      'Write hook first, CTA last, then validate before any token is spent.',
+    'recipes.placeSpotlightStep5':
+      'Generate one video: the photos come in as cards with name, address, and price.',
+    'recipes.placeSpotlightDeliver1': 'One persona video with up to 6 real photos of the place.',
+    'recipes.placeSpotlightDeliver2':
+      'A validated script: 60–200 words, hook first, CTA last.',
+    'recipes.placeSpotlightDeliver3':
+      'On-screen cards with the place name, the address, and one detail like a price.',
+    'recipes.placeSpotlightExampleInput':
+      'The downtown café that opened in 1913 and serves olive oil cake.',
+    'recipes.placeSpotlightExampleOutput':
+      'Hook about the door price, two bodies with the place photos, CTA — 4 photos, one card each.',
   };
   return {
     useI18n: () => ({
@@ -177,6 +199,50 @@ describe('prompt detail page', () => {
     const { container } = render(<PromptDetail prompt={prompt} />);
     const ids = [...container.querySelectorAll('[data-agent]')].map((el) => el.getAttribute('data-agent'));
     expect(ids).toEqual(['cursor', 'claude', 'opencode']);
+  });
+});
+
+describe('place-spotlight detail page', () => {
+  const prompt = getPrompt('place-spotlight');
+  if (prompt === undefined) {
+    throw new Error('place-spotlight prompt entry is missing');
+  }
+
+  it('renders the place-spotlight title and objective', () => {
+    render(<PromptDetail prompt={prompt} />);
+    expect(
+      screen.getByRole('heading', { name: 'Place spotlight becomes a video' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Turn one real place into one persona video with photos of the place itself on screen, validated before any token is spent.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('points the doc link at docs/recipes/place-spotlight.md', () => {
+    render(<PromptDetail prompt={prompt} />);
+    expect(
+      screen.getByRole('link', { name: 'View this prompt on GitHub' }),
+    ).toHaveAttribute(
+      'href',
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/place-spotlight.md',
+    );
+  });
+
+  it('shows the full prompt with the ordered place flow', () => {
+    render(<PromptDetail prompt={prompt} />);
+    for (const marker of [
+      'Ask me which place',
+      'Search the place once',
+      'image search',
+      'check_media',
+      'media overlay',
+      'validate_script',
+      'generate_persona_video',
+    ]) {
+      expect(screen.getByText(new RegExp(marker.replace(/[.[\\(\\)|*+?^$]/g, '\\$&')))).toBeInTheDocument();
+    }
   });
 });
 

@@ -11,7 +11,12 @@
 //---------------
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { DAILY_NEWS_PROMPT, FULL_SETUP_PROMPT, GITHUB_PRS_PROMPT } from './prompt-base.js';
+import {
+  DAILY_NEWS_PROMPT,
+  FULL_SETUP_PROMPT,
+  GITHUB_PRS_PROMPT,
+  PLACE_SPOTLIGHT_PROMPT,
+} from './prompt-base.js';
 
 export interface HubPrompt {
   slug: string;
@@ -28,6 +33,14 @@ export const HUB_PROMPTS: HubPrompt[] = [
       "Turn one news story of the day into one persona video, validated before any token is spent.",
     ].join("\n"),
     prompt: DAILY_NEWS_PROMPT,
+  },
+  {
+    slug: "place-spotlight",
+    title: "Place spotlight becomes a video",
+    description: [
+      "Turn one real place into one persona video with photos of the place itself on screen, validated before any token is spent.",
+    ].join("\n"),
+    prompt: PLACE_SPOTLIGHT_PROMPT,
   },
   {
     slug: "github-prs",

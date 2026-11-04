@@ -6,6 +6,7 @@ describe('prompts hub data', () => {
   it('has one data entry per prompt, and adding a prompt is adding one entry', () => {
     expect(PROMPTS.map((prompt) => prompt.slug)).toEqual([
       'daily-news',
+      'place-spotlight',
       'github-prs',
       'full-setup',
     ]);
@@ -29,9 +30,71 @@ describe('prompts hub data', () => {
     expect(getPrompt('no-such-prompt')).toBeUndefined();
   });
 
-  it('adds full-setup as the third recipe entry with the compose icon', () => {
+  it('adds place-spotlight, ordered after daily-news with the globe icon and recipe kind', () => {
+    const placeSpotlight = getPrompt('place-spotlight');
+    if (placeSpotlight === undefined) {
+      throw new Error('place-spotlight prompt entry is missing');
+    }
+    expect(placeSpotlight.icon).toBe('globe');
+    expect(placeSpotlight.kindKey).toBe('recipes.kindRecipe');
+    expect(placeSpotlight.objectiveKey).toBe('recipes.placeSpotlightObjective');
+    expect(placeSpotlight.stepKeys).toEqual([
+      'recipes.placeSpotlightStep1',
+      'recipes.placeSpotlightStep2',
+      'recipes.placeSpotlightStep3',
+      'recipes.placeSpotlightStep4',
+      'recipes.placeSpotlightStep5',
+    ]);
+    expect(placeSpotlight.deliverKeys).toEqual([
+      'recipes.placeSpotlightDeliver1',
+      'recipes.placeSpotlightDeliver2',
+      'recipes.placeSpotlightDeliver3',
+    ]);
+    expect(placeSpotlight.exampleInputKey).toBe('recipes.placeSpotlightExampleInput');
+    expect(placeSpotlight.exampleOutputKey).toBe('recipes.placeSpotlightExampleOutput');
+    expect(placeSpotlight.docHref).toEqual(
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/place-spotlight.md',
+    );
+  });
+
+  it('orders the place-spotlight flow: place, facts search, photos with checks and cards, validate, generate', () => {
+    // The composed prompt starts with the shared base, which already
+    // mentions validate_script and the 3h-30d window; the flow order
+    // below is checked on the specific part only, after stripping that
+    // base prefix.
+    const fullText = getPrompt('place-spotlight')?.prompt ?? '';
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(fullText.startsWith(baseText)).toBe(true);
+    const text = fullText.slice(baseText.length + 2);
+    const positions = [
+      'Ask me which place',
+      'Search the place once',
+      'image search',
+      'check_media',
+      'upload_media',
+      'media overlay',
+      'validate_script',
+      'score_draft',
+      'get_video_task_progress',
+      'get_video_status',
+    ].map((needle) => text.indexOf(needle));
+    expect(positions.every((i) => i >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    expect(text).toContain('one generate_persona_video call');
+    expect(text).toContain('only on ok');
+    expect(text).toContain('at most 6 photos');
+    expect(text).toContain('60 characters');
+    expect(text).toContain('80');
+    expect(text).toContain('30');
+    expect(text).toContain('Never send a fake User-Agent or');
+    expect(text).toContain('never attach a photo of a different');
+    expect(text).toContain('lives one hour');
+  });
+
+  it('adds full-setup as the last recipe entry with the compose icon', () => {
     expect(PROMPTS.map((prompt) => prompt.slug)).toEqual([
       'daily-news',
+      'place-spotlight',
       'github-prs',
       'full-setup',
     ]);
