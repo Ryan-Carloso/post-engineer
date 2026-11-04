@@ -5,6 +5,7 @@ const getPostHogServer = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/posthog-server', () => ({ getPostHogServer }));
 
 import { trackMcpToolCall } from '../mcp-tool-telemetry';
+import { PROMPTS } from '@/app/recipes/prompts';
 
 const CALL_ID = '0b9f6a52-2f43-4c8e-9a51-6f0d1c2e3a4b';
 
@@ -121,5 +122,77 @@ describe('trackMcpToolCall', () => {
     });
     expect(() => trackMcpToolCall(mcpRequest({ 'x-mcp-tool': 'list_personas' }), 'user-1', 'api_key')).not.toThrow();
     expect(captureAs).toHaveBeenCalledTimes(1);
+  });
+
+  describe('recipe-adoption headers', () => {
+    const SESSION_ID = '7c1e2d3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f';
+    const hubSlug = PROMPTS[0]?.slug ?? '';
+
+    function recordedProperties(headers: Record<string, string>): Record<string, unknown> {
+      trackMcpToolCall(mcpRequest({ 'x-mcp-tool': 'generate_persona_video', ...headers }), 'user-1', 'api_key');
+      return captureAs.mock.calls[0]?.[2] as Record<string, unknown>;
+    }
+
+    it('records the session, attribution and recipe headers as typed properties', () => {
+      expect(hubSlug.length).toBeGreaterThan(0);
+      const properties = recordedProperties({
+        'x-mcp-session-id': SESSION_ID,
+        'x-mcp-transport': 'stdio',
+        'x-mcp-nudged-by': 'list_personas',
+        'x-mcp-recipes-known': 'true',
+        'x-mcp-recipe-fetched': hubSlug,
+        'x-mcp-script-rejections': '2',
+        'x-mcp-recipe': hubSlug,
+      });
+      expect(properties).toMatchObject({
+        session_id: SESSION_ID,
+        transport: 'stdio',
+        nudged_by: 'list_personas',
+        recipes_known: true,
+        recipe_fetched: hubSlug,
+        script_rejections: 2,
+        recipe: hubSlug,
+      });
+    });
+
+    it('records a recipe that is not a hub slug as unknown, never the caller text', () => {
+      const properties = recordedProperties({
+        'x-mcp-recipe': 'pe-live-secret-slug',
+        'x-mcp-recipe-fetched': 'another-made-up-slug',
+      });
+      expect(properties.recipe).toBe('unknown');
+      expect(properties.recipe_fetched).toBe('unknown');
+      expect(JSON.stringify(properties)).not.toContain('secret-slug');
+      expect(JSON.stringify(properties)).not.toContain('made-up-slug');
+    });
+
+    it('accepts none for the fetched recipe but not for the declared one', () => {
+      const properties = recordedProperties({ 'x-mcp-recipe-fetched': 'none', 'x-mcp-recipe': 'none' });
+      expect(properties.recipe_fetched).toBe('none');
+      expect(properties.recipe).toBe('unknown');
+    });
+
+    it('drops malformed session, transport, surface, boolean and counter values', () => {
+      const properties = recordedProperties({
+        'x-mcp-session-id': 'not-a-uuid',
+        'x-mcp-transport': 'carrier-pigeon',
+        'x-mcp-nudged-by': 'some_other_tool',
+        'x-mcp-recipes-known': 'yes',
+        'x-mcp-script-rejections': '10000',
+      });
+      for (const key of ['session_id', 'transport', 'nudged_by', 'recipes_known', 'script_rejections']) {
+        expect(properties).not.toHaveProperty(key);
+      }
+      expect(properties.tool).toBe('generate_persona_video');
+    });
+
+    it('records recipes_known false as a boolean', () => {
+      expect(recordedProperties({ 'x-mcp-recipes-known': 'false' }).recipes_known).toBe(false);
+    });
+
+    it('lets no recipe header override the tool, path or auth method', () => {
+      const properties = recordedProperties({ 'x-mcp-recipe': hubSlug });
+      expect(properties).toMatchObject({ tool: 'generate_persona_video', auth_method: 'api_key', path: '/api/persona/list' });
+    });
   });
 });

@@ -11,6 +11,7 @@ import { withTracking } from './analytics.js';
 import type { PostEngineerClient } from './client.js';
 import { UnknownPromptSlugError, getPrompt, listPrompts } from './client-prompts.js';
 import { getErrorMessage } from './errors.js';
+import { recipeRunText } from './recipe-session.js';
 
 //---------------
 // MCP prompts hub: slash commands for the recipe prompts, served from the
@@ -47,7 +48,7 @@ export async function getSlashPrompt(client: PostEngineerClient, slug: string): 
     const prompt = await trackedGet({ client, slug });
     return {
       description: prompt.description,
-      messages: [{ role: 'user', content: { type: 'text', text: prompt.prompt } }],
+      messages: [{ role: 'user', content: { type: 'text', text: recipeRunText(prompt.slug, prompt.prompt) } }],
     };
   } catch (error) {
     if (error instanceof UnknownPromptSlugError) {

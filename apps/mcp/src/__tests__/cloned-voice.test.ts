@@ -26,6 +26,7 @@ vi.mock('../analytics.js', () => ({
   // Passthrough stand-in for the real withTracking, which only opens the
   // per-call context: mcp_tool_called is recorded by the web API from the
   // request headers, not by the MCP (see analytics.test.ts).
+  withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },

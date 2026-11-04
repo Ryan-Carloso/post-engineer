@@ -12,6 +12,7 @@ import {
 import { createPostEngineerMcpServer } from '../index.js';
 import { PostEngineerClient } from '../client.js';
 import { MCP_TOOL_HEADER } from '../analytics.js';
+import { recipeRunText } from '../recipe-session.js';
 
 //---------------
 // Recipe prompts come from the web hub over the API: list_prompts and
@@ -122,10 +123,12 @@ describe('handleListPrompts', () => {
 });
 
 describe('handleGetPrompt', () => {
-  it('returns the exact prompt text from the API', async () => {
+  it('returns the prompt text from the API plus the declare-the-recipe footer', async () => {
     const result = await handleGetPrompt(client(), { slug: 'daily-news' });
     expect(result.isError).toBeFalsy();
-    expect(textOf(result)).toBe(PROMPT_TEXT['daily-news']);
+    expect(textOf(result)).toBe(recipeRunText('daily-news', PROMPT_TEXT['daily-news'] ?? ''));
+    expect(textOf(result).startsWith(PROMPT_TEXT['daily-news'] ?? '-')).toBe(true);
+    expect(textOf(result)).toContain('pass recipe: "daily-news"');
     expect(requestedPaths()).toEqual(['/api/prompts/daily-news']);
   });
 
@@ -191,7 +194,7 @@ describe('prompt tools over MCP', () => {
       const listed = await mcp.callTool({ name: 'list_prompts', arguments: {} });
       expect(JSON.parse(textOf(listed))).toEqual(CATALOG);
       const fetched = await mcp.callTool({ name: 'get_prompt', arguments: { slug: 'full-setup' } });
-      expect(textOf(fetched)).toBe(PROMPT_TEXT['full-setup']);
+      expect(textOf(fetched)).toBe(recipeRunText('full-setup', PROMPT_TEXT['full-setup'] ?? ''));
       expect(toolHeaders()).toEqual(['list_prompts', 'get_prompt']);
     });
   });
@@ -237,11 +240,11 @@ describe('slash commands over MCP', () => {
     });
   });
 
-  it('returns the prompt text as one user message', async () => {
+  it('returns the prompt text plus the declare-the-recipe footer as one user message', async () => {
     await withMcpClient(async (mcp) => {
       const result = await mcp.getPrompt({ name: 'daily-news' });
       expect(result.messages).toEqual([
-        { role: 'user', content: { type: 'text', text: PROMPT_TEXT['daily-news'] } },
+        { role: 'user', content: { type: 'text', text: recipeRunText('daily-news', PROMPT_TEXT['daily-news'] ?? '') } },
       ]);
       expect(toolHeaders()).toEqual(['slash_get_prompt']);
     });

@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { GeneratePersonaVideoOptionsShape } from './schedule-shapes.js';
+import { RECIPE_SLUG_PATTERN } from './recipe-session.js';
 import {
   MAX_OVERLAY_BADGE_CHARS,
   MAX_OVERLAY_SUBTITLE_CHARS,
@@ -77,6 +78,14 @@ export const GeneratePersonaVideoShape = {
   timezone: z.string().min(1).default('UTC').describe('IANA timezone for a naive startAt and the HH:MM times, e.g. "Europe/Lisbon". Defaults to UTC.'),
   options: z.object(GeneratePersonaVideoOptionsShape).optional().describe('Generation options applied to this video.'),
   idempotencyKey: z.string().min(1).optional().describe('Idempotency key: retrying the call with the same key returns the original schedule (replayed: true) instead of generating again.'),
+  // Telemetry-only: the recipe the script came from. Never forwarded in the
+  // request body (handleGeneratePersonaVideo builds it field by field);
+  // recipe-session.ts sends it as the X-MCP-Recipe header.
+  recipe: z
+    .string()
+    .regex(RECIPE_SLUG_PATTERN, 'recipe must be a recipe slug from list_prompts (lowercase letters, digits and hyphens)')
+    .optional()
+    .describe('The recipe slug (from list_prompts / get_prompt) this script was written with. Omit when the script was not written from a recipe.'),
 };
 
 export const GeneratePersonaVideoSchema = z.object(GeneratePersonaVideoShape);

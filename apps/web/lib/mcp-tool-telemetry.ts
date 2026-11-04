@@ -1,5 +1,6 @@
 import { getPostHogServer } from './posthog-server';
 import { redactCredentialFragments } from './scrub';
+import { PROMPTS } from '@/app/recipes/prompts';
 
 //---------------
 // MCP tool telemetry, recorded server-side.
@@ -22,6 +23,13 @@ import { redactCredentialFragments } from './scrub';
 //   slug an agent typed) are replaced by `:param` unless they look like a
 //   static route word, and the result still passes the credential-fragment
 //   scrubber. Low cardinality, and a pasted token never reaches PostHog.
+// - Recipe adoption (apps/mcp/src/recipe-session.ts): the MCP adds
+//   X-MCP-Session-Id / -Transport / -Nudged-By / -Recipes-Known /
+//   -Recipe-Fetched / -Script-Rejections / -Recipe to the requests of its
+//   recipe-aware tools. Each is validated against a fixed set; a recipe
+//   slug that is not a hub slug is recorded as 'unknown', so agent text
+//   never reaches PostHog. The names are pinned against the MCP module by
+//   mcp-recipe-headers-sync.test.ts.
 // - Never throws: telemetry must never break the request path.
 //---------------
 
@@ -32,6 +40,52 @@ const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,6}(?:-[0-9A-Za-z.-]{1,20})?$/;
 export type McpAuthMethod = 'api_key' | 'oauth';
 
 const trackedRequests = new WeakSet<Request>();
+
+export const RECIPE_NUDGE_SURFACES: ReadonlySet<string> = new Set([
+  'none',
+  'create_persona',
+  'list_personas',
+  'list_social_accounts',
+  'get_token_balance',
+  'validate_script',
+  'generate_persona_video',
+]);
+const TRANSPORTS: ReadonlySet<string> = new Set(['stdio', 'http']);
+const HUB_SLUGS: ReadonlySet<string> = new Set(PROMPTS.map((entry) => entry.slug));
+const SCRIPT_REJECTIONS = /^\d{1,3}$/;
+
+function headerInSet(request: Request, name: string, allowed: ReadonlySet<string>): string | undefined {
+  const value = request.headers.get(name);
+  return value !== null && allowed.has(value) ? value : undefined;
+}
+
+// A present recipe header is always recorded, but only as a hub slug,
+// 'none' (where the MCP sends it), or 'unknown'.
+function recipeHeader(request: Request, name: string, allowNone: boolean): string | undefined {
+  const value = request.headers.get(name);
+  if (value === null) return undefined;
+  if (HUB_SLUGS.has(value) || (allowNone && value === 'none')) return value;
+  return 'unknown';
+}
+
+function recipeAdoptionProperties(request: Request): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  const sessionId = headerMatching(request, 'x-mcp-session-id', CALL_ID);
+  if (sessionId !== undefined) properties.session_id = sessionId;
+  const transport = headerInSet(request, 'x-mcp-transport', TRANSPORTS);
+  if (transport !== undefined) properties.transport = transport;
+  const nudgedBy = headerInSet(request, 'x-mcp-nudged-by', RECIPE_NUDGE_SURFACES);
+  if (nudgedBy !== undefined) properties.nudged_by = nudgedBy;
+  const recipesKnown = request.headers.get('x-mcp-recipes-known');
+  if (recipesKnown === 'true' || recipesKnown === 'false') properties.recipes_known = recipesKnown === 'true';
+  const recipeFetched = recipeHeader(request, 'x-mcp-recipe-fetched', true);
+  if (recipeFetched !== undefined) properties.recipe_fetched = recipeFetched;
+  const rejections = headerMatching(request, 'x-mcp-script-rejections', SCRIPT_REJECTIONS);
+  if (rejections !== undefined) properties.script_rejections = Number(rejections);
+  const recipe = recipeHeader(request, 'x-mcp-recipe', false);
+  if (recipe !== undefined) properties.recipe = recipe;
+  return properties;
+}
 
 // A static route word: lowercase letters, digits and hyphens — but never a
 // uuid-shaped id, which is a dynamic segment even when it starts with a
@@ -65,6 +119,7 @@ export function trackMcpToolCall(request: Request, userId: string, authMethod: M
     const client = getPostHogServer();
     if (client === null) return;
     const properties: Record<string, unknown> = {
+      ...recipeAdoptionProperties(request),
       tool,
       auth_method: authMethod,
       method: request.method,

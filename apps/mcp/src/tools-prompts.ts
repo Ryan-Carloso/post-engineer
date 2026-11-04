@@ -3,6 +3,12 @@ import type { PostEngineerClient } from './client.js';
 import { UnknownPromptSlugError, getPrompt, listPrompts } from './client-prompts.js';
 import { getErrorMessage } from './errors.js';
 import type { McpToolResponse } from './tools-call.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { withTracking } from './analytics.js';
+import { RecipeSession, recipeRunText, type McpTransportKind } from './recipe-session.js';
+
+// Re-exported so index.ts pays one import line (it sits at the file-size cap).
+export { withRecipeNudge, withScriptOutcome, type McpTransportKind } from './recipe-session.js';
 
 //---------------
 // Recipe self-serve tools: list_prompts and get_prompt.
@@ -43,7 +49,7 @@ export async function handleListPrompts(client: PostEngineerClient): Promise<Mcp
 }
 
 export const GetPromptDescription =
-  'Return the full recipe prompt for one slug from list_prompts. Load only the recipe the agent will follow. Each recipe carries the complete validated workflow: script structure and word limits, media verification via check_media for photo URLs, pricing rules for the overlay badge, and the generation and publish steps. Unknown slugs fail with the list of valid slugs — call list_prompts first when unsure.';
+  'Return the full recipe prompt for one slug from list_prompts. Load only the recipe the agent will follow, and pass its slug as recipe on generate_persona_video. Each recipe carries the complete validated workflow: script structure and word limits, media verification via check_media for photo URLs, pricing rules for the overlay badge, and the generation and publish steps. Unknown slugs fail with the list of valid slugs — call list_prompts first when unsure.';
 
 export const GetPromptShape = {
   slug: z.string().min(1, 'slug is required').describe('Prompt slug from list_prompts.'),
@@ -58,7 +64,7 @@ export async function handleGetPrompt(client: PostEngineerClient, args: unknown)
   }
   try {
     const prompt = await getPrompt(client, parsed.data.slug);
-    return { content: [{ type: 'text', text: prompt.prompt }] };
+    return { content: [{ type: 'text', text: recipeRunText(prompt.slug, prompt.prompt) }] };
   } catch (error) {
     if (error instanceof UnknownPromptSlugError) return errorResponse('getting prompt', error.message);
     return errorResponse('getting prompt', getErrorMessage(error));
@@ -67,4 +73,38 @@ export async function handleGetPrompt(client: PostEngineerClient, args: unknown)
 
 function errorResponse(action: string, message: string): McpToolResponse {
   return { content: [{ type: 'text', text: `Error ${action}: ${message}` }], isError: true };
+}
+
+//---------------
+// Registration lives here (not in index.ts, which sits at the file-size
+// cap). Both tools run inside the server's RecipeSession: their requests
+// carry the recipe-adoption headers, list_prompts marks the recipes as
+// known, and get_prompt records the slug once the API returned it.
+// Returns the session so index.ts wraps the entry and script tools with
+// the same one.
+//---------------
+export function registerPromptTools(server: McpServer, client: PostEngineerClient, transport: McpTransportKind): RecipeSession {
+  const session = new RecipeSession(transport);
+  server.tool(
+    'list_prompts',
+    ListPromptsDescription,
+    ListPromptsShape,
+    withTracking('list_prompts', async () => {
+      const response = await session.run(undefined, () => handleListPrompts(client));
+      if (response.isError !== true) session.recordRecipesListed();
+      return response;
+    }),
+  );
+  server.tool(
+    'get_prompt',
+    GetPromptDescription,
+    GetPromptShape,
+    withTracking('get_prompt', async (args) => {
+      const slug = GetPromptSchema.safeParse(args).data?.slug;
+      const response = await session.run(slug, () => handleGetPrompt(client, args));
+      if (response.isError !== true && slug !== undefined) session.recordRecipeFetched(slug);
+      return response;
+    }),
+  );
+  return session;
 }
