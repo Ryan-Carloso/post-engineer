@@ -20,9 +20,12 @@ import type { PostEngineerClient } from '../client.js';
 // ids: an explicit error naming the valid values.
 //---------------
 
-function textOf(result: CallToolResult): string {
+function textOf(result: CallToolResult | { toolResult?: unknown }): string {
+  // client.callTool may answer an unstructured { toolResult } instead of a
+  // content block; only the content shape carries text.
+  if (!('content' in result)) return '';
   const first = result.content[0];
-  return first !== undefined && first.type === 'text' ? first.text : '';
+  return first !== undefined && 'text' in first ? String(first.text) : '';
 }
 
 describe('handleListPrompts', () => {
