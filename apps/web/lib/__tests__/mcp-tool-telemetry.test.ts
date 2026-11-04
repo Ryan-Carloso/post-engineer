@@ -38,6 +38,37 @@ describe('trackMcpToolCall', () => {
     });
   });
 
+  it.each([
+    ['a percent-encoded Bearer token', '/api/prompts/Bearer%20abc123secret'],
+    ['an API key', '/api/prompts/pe_live_1234567890abcdef'],
+    ['a uuid', '/api/persona/video-status/0b9f6a52-2f43-4c8e-9a51-6f0d1c2e3a4b'],
+    ['a malformed percent-encoding', '/api/prompts/%E0%A4%A'],
+  ])('replaces a dynamic path segment carrying %s with :param', (_label, path) => {
+    trackMcpToolCall(mcpRequest({ 'x-mcp-tool': 'get_prompt' }, `https://post-engineer.test${path}`), 'user-1', 'api_key');
+    const properties = captureAs.mock.calls[0]?.[2] as Record<string, unknown>;
+    const expected = path.slice(0, path.lastIndexOf('/') + 1) + ':param';
+    expect(properties.path).toBe(expected);
+    expect(JSON.stringify(properties)).not.toContain(path.slice(path.lastIndexOf('/') + 1));
+  });
+
+  it('redacts a credential that looks like a static segment (scrubber layer)', () => {
+    trackMcpToolCall(
+      mcpRequest({ 'x-mcp-tool': 'get_prompt' }, 'https://post-engineer.test/api/prompts/sk-abcdefghijklmnopqrstuvwxyz'),
+      'user-1',
+      'api_key',
+    );
+    expect(captureAs.mock.calls[0]?.[2]).toMatchObject({ path: '/api/prompts/[redacted]' });
+  });
+
+  it('keeps a static slug segment readable', () => {
+    trackMcpToolCall(
+      mcpRequest({ 'x-mcp-tool': 'get_prompt' }, 'https://post-engineer.test/api/prompts/daily-news'),
+      'user-1',
+      'api_key',
+    );
+    expect(captureAs.mock.calls[0]?.[2]).toMatchObject({ path: '/api/prompts/daily-news' });
+  });
+
   it('records nothing without the tool header', () => {
     trackMcpToolCall(mcpRequest({ 'x-mcp-version': '1.42.0' }), 'user-1', 'oauth');
     expect(captureAs).not.toHaveBeenCalled();

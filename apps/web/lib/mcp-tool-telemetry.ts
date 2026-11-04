@@ -1,4 +1,5 @@
 import { getPostHogServer } from './posthog-server';
+import { redactCredentialFragments } from './scrub';
 
 //---------------
 // MCP tool telemetry, recorded server-side.
@@ -17,6 +18,10 @@ import { getPostHogServer } from './posthog-server';
 // - requireSupabaseSession can run more than once for the same request
 //   (the route, then resolveReportingUserId in withApiErrorReporting);
 //   a WeakSet keeps it to one event per request.
+// - `path` never carries caller text: dynamic segments (ids, the prompt
+//   slug an agent typed) are replaced by `:param` unless they look like a
+//   static route word, and the result still passes the credential-fragment
+//   scrubber. Low cardinality, and a pasted token never reaches PostHog.
 // - Never throws: telemetry must never break the request path.
 //---------------
 
@@ -27,6 +32,22 @@ const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,6}(?:-[0-9A-Za-z.-]{1,20})?$/;
 export type McpAuthMethod = 'api_key' | 'oauth';
 
 const trackedRequests = new WeakSet<Request>();
+
+// A static route word: lowercase letters, digits and hyphens.
+const STATIC_SEGMENT = /^[a-z][a-z0-9-]{0,40}$/;
+
+function telemetryPath(url: string): string {
+  const segments = new URL(url).pathname.split('/').map((segment) => {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      return ':param';
+    }
+    return decoded === '' || STATIC_SEGMENT.test(decoded) ? decoded : ':param';
+  });
+  return redactCredentialFragments(segments.join('/'));
+}
 
 function headerMatching(request: Request, name: string, pattern: RegExp): string | undefined {
   const value = request.headers.get(name);
@@ -45,7 +66,7 @@ export function trackMcpToolCall(request: Request, userId: string, authMethod: M
       tool,
       auth_method: authMethod,
       method: request.method,
-      path: new URL(request.url).pathname,
+      path: telemetryPath(request.url),
     };
     const callId = headerMatching(request, 'x-mcp-call-id', CALL_ID);
     if (callId !== undefined) properties.call_id = callId;
