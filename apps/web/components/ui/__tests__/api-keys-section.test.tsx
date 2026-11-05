@@ -142,6 +142,20 @@ describe('ApiKeysSection', () => {
     expect(screen.queryByTestId('api-key-scope-specific')).not.toBeInTheDocument();
   });
 
+  it('closes the create form on cancel', () => {
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+    } as never);
+    renderSection();
+
+    fireEvent.click(screen.getByTestId('generate-api-key-btn'));
+    expect(screen.getByTestId('create-api-key-form')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Cancel'));
+    expect(screen.queryByTestId('create-api-key-form')).not.toBeInTheDocument();
+  });
+
   it('creates a key and shows the secret once with copy support', async () => {
     vi.mocked(useApiKeysQuery).mockReturnValue({
       data: [],
@@ -204,6 +218,39 @@ describe('ApiKeysSection', () => {
 
     expect(screen.getByTestId('api-key-row-key-1')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('revoke-key-btn-key-1'));
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith('key-1');
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('revokes from the compact mobile card after confirmation', async () => {
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: [
+        {
+          id: 'key-1',
+          name: 'Prod',
+          keyPrefix: 'pe_live_prod1234...',
+          createdAt: '2026-09-18T10:00:00.000Z',
+          lastUsedAt: null,
+          revokedAt: null,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    } as never);
+    const mutateAsync = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(useRevokeApiKeyMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    window.confirm = vi.fn(() => true);
+    renderSection();
+
+    // jsdom renders the table twin and the compact hidden mobile twin; the
+    // card's button comes after the table in the DOM.
+    const revokeButtons = screen.getAllByRole('button', { name: 'Revoke' });
+    expect(revokeButtons).toHaveLength(2);
+    fireEvent.click(revokeButtons[revokeButtons.length - 1]);
 
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalledWith('key-1');
