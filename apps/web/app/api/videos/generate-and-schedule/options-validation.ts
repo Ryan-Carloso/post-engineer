@@ -1,15 +1,12 @@
 //---------------
-// Options validation — extracted from route.ts so the route file, already
-// over the 500-line cap, does not grow. Pure move: every check runs BEFORE
-// any token is charged, exactly as before.
+// Options validation. Every check runs BEFORE any token is charged, and
+// every failing check is reported (not just the first one).
 //---------------
 
-import type { NextResponse } from 'next/server';
-
-import { ERROR_CODES } from '@/lib/error-codes';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import { isHttpUrl } from '@/lib/generation/custom-audio';
-import { MAX_TITLE_CHARS, validationFailed } from './prepare-persona';
+import { MAX_TITLE_CHARS } from './prepare-persona';
+import { invalid, type Checked, type ValidationIssue } from './validation-issues';
 
 // Mirrors the engine's PersonaParams caps (apps/engine/app/models/schema.py):
 // rejecting at the same boundary here is what turns an opaque engine
@@ -54,7 +51,7 @@ export interface ValidatedOptions {
   niche?: string;
 }
 
-export function validateOptions(options: OptionsInput): ValidatedOptions | NextResponse {
+export function validateOptions(options: OptionsInput): Checked<ValidatedOptions> {
   const {
     faceless = false,
     facelessMaterial,
@@ -68,71 +65,60 @@ export function validateOptions(options: OptionsInput): ValidatedOptions | NextR
     language,
     niche,
   } = options;
+  const issues: ValidationIssue[] = [];
   if (typeof faceless !== 'boolean') {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.faceless must be a boolean.', 'options.faceless');
+    issues.push(invalid('options.faceless must be a boolean.', 'options.faceless'));
   }
   if (fullLipsync === true && faceless) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      'options.fullLipsync cannot be used with faceless videos: there is no face to render.',
-      'options.fullLipsync',
+    issues.push(
+      invalid('options.fullLipsync cannot be used with faceless videos: there is no face to render.', 'options.fullLipsync'),
     );
   }
   if (audioUrl !== undefined && !isHttpUrl(audioUrl)) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.audioUrl must be a valid http(s) URL.', 'options.audioUrl');
+    issues.push(invalid('options.audioUrl must be a valid http(s) URL.', 'options.audioUrl'));
   }
   if (imageId !== undefined && imageId.trim().length === 0) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.imageId must be a non-empty string.', 'options.imageId');
+    issues.push(invalid('options.imageId must be a non-empty string.', 'options.imageId'));
   }
   if (faceless && imageId !== undefined) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      'options.imageId cannot be used with faceless videos: there is no face to render.',
-      'options.imageId',
+    issues.push(
+      invalid('options.imageId cannot be used with faceless videos: there is no face to render.', 'options.imageId'),
     );
   }
   if (webhookUrl !== undefined && !isHttpUrl(webhookUrl)) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.webhookUrl must be a valid http(s) URL.', 'options.webhookUrl');
+    issues.push(invalid('options.webhookUrl must be a valid http(s) URL.', 'options.webhookUrl'));
   }
   if (voiceId !== undefined && voiceId.trim().length === 0) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'options.voiceId must be a non-empty string.', 'options.voiceId');
+    issues.push(invalid('options.voiceId must be a non-empty string.', 'options.voiceId'));
   }
   // Caps mirroring the persona's own validation, so a persona-less post is
   // rejected with the persona editor's message, not an opaque engine error.
   if (language !== undefined && language.length > MAX_LANGUAGE_CHARS) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      `options.language must be at most ${MAX_LANGUAGE_CHARS} characters.`,
-      'options.language',
-    );
+    issues.push(invalid(`options.language must be at most ${MAX_LANGUAGE_CHARS} characters.`, 'options.language'));
   }
   // English-only launch: a video in any other language is rejected here
   // (and again on the effective language in preparePersona).
   if (language !== undefined && language.trim().length > 0 && !isEnglishLanguage(language)) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      ONLY_ENGLISH_VIDEOS_MESSAGE,
-      'options.language',
-    );
+    issues.push(invalid(ONLY_ENGLISH_VIDEOS_MESSAGE, 'options.language'));
   }
   if (niche !== undefined && niche.length > MAX_TITLE_CHARS) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      `options.niche must be at most ${MAX_TITLE_CHARS} characters.`,
-      'options.niche',
-    );
+    issues.push(invalid(`options.niche must be at most ${MAX_TITLE_CHARS} characters.`, 'options.niche'));
   }
+  if (issues.length > 0) return { ok: false, issues };
   return {
-    faceless,
-    facelessMaterial: facelessMaterial ?? 'broll',
-    fullLipsync,
-    audioUrl,
-    imageId: imageId?.trim(),
-    webhookUrl,
-    voiceId: voiceId?.trim(),
-    videoAspect,
-    paragraphNumber,
-    language,
-    niche,
+    ok: true,
+    value: {
+      faceless,
+      facelessMaterial: facelessMaterial ?? 'broll',
+      fullLipsync,
+      audioUrl,
+      imageId: imageId?.trim(),
+      webhookUrl,
+      voiceId: voiceId?.trim(),
+      videoAspect,
+      paragraphNumber,
+      language,
+      niche,
+    },
   };
 }

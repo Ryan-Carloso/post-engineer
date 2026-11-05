@@ -53,6 +53,15 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const UPLOAD_TIMEOUT_MS = 120_000;
 // Bound how much of an upstream error body can flow into agent-visible output.
 const MAX_ERROR_BODY_CHARS = 200;
+
+/** Messages from a structured API `errors` list (non-message entries skipped). */
+function listedErrorMessages(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item: unknown): string[] => {
+    if (typeof item !== 'object' || item === null || !('message' in item)) return [];
+    return typeof item.message === 'string' ? [item.message] : [];
+  });
+}
 // Shared with tools.ts so the client-side guards, the Zod schema limits,
 // and the field description strings can't drift apart.
 export const MAX_LIBRARY_IMAGES = 10;
@@ -321,6 +330,10 @@ export class PostEngineerClient {
           if (typeof record.error === 'string' && record.error.length > 0) {
             detail = record.error.slice(0, MAX_ERROR_BODY_CHARS);
           }
+          // A validation 400 lists every problem in `errors` (issue #351):
+          // show them all so the agent can fix the request in one retry.
+          const listed = listedErrorMessages(record.errors);
+          if (listed.length > 1) detail = listed.join(' ').slice(0, MAX_ERROR_BODY_CHARS);
           if (typeof record.code === 'string') code = record.code;
           if (typeof record.field === 'string') field = record.field;
         }

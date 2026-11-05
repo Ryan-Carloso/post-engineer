@@ -31,13 +31,12 @@ import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber } from '@/lib/tokens';
 import { buildSlotRows } from './slot-rows';
-import { validateOptions } from './options-validation';
-import { validateProviders, type Provider } from './providers-validation';
+import type { Provider } from './providers-validation';
 import { checkFullLipsyncNarration } from './full-lipsync-preflight';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
-import { validateSegmentsRequest } from './segments-validation';
 import { segmentsRequestSchema } from './segments-schema';
-import { rejectScriptPromptKeys, rejectTopicsKey, resolveTitle } from './request-title';
+import { rawKeyIssues } from './request-title';
+import { checkSemantics, rejectInvalidRequest, shapeIssues } from './request-validation';
 import {
   persistVoiceSwap,
   preparePost,
@@ -379,52 +378,28 @@ async function postHandler(request: Request): Promise<NextResponse> {
   } catch {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Invalid JSON payload.');
   }
-  const topicsError = rejectTopicsKey(body);
-  if (topicsError) return topicsError;
-  const scriptPromptError = rejectScriptPromptKeys(body);
-  if (scriptPromptError) return scriptPromptError;
+  // Shape, title, segments, providers, options and persona-less rules: all
+  // collected, then one 400 with every problem (see request-validation.ts).
+  const rawIssues = rawKeyIssues(body);
   const parsed = BodySchema.safeParse(body);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const field = issue.path.length > 0 ? issue.path.join('.') : undefined;
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, `Invalid request: ${issue.message}`, field);
-  }
+  if (!parsed.success) return rejectInvalidRequest([...rawIssues, ...shapeIssues(parsed.error)]);
   const { publishing, options, idempotencyKey } = parsed.data;
 
   // A blank/absent personaId means "post without a persona" (migration 012).
   // Null is the only accepted spelling so a caller cannot half-intend a
   // persona by sending an empty string.
   const personaId = parsed.data.personaId?.trim() || null;
-  const title = resolveTitle(parsed.data.title);
-  if (title instanceof NextResponse) return title;
-  // Segments validation runs here, before auth and before any charge.
-  // Segments are required: without a script there is nothing to generate.
-  const segmentsScript = validateSegmentsRequest(options?.segments);
-  if (segmentsScript instanceof NextResponse) return segmentsScript;
-  const providers = validateProviders(publishing.providers);
-  if (providers instanceof NextResponse) return providers;
-  const validatedOptions = validateOptions(options ?? {});
-  if (validatedOptions instanceof NextResponse) return validatedOptions;
-
-  // A post without a persona has no face to render and no voice to speak
-  // with: the engine's PersonaParams requires exactly one voice. Both are
-  // refused here, before auth and before any charge.
-  if (personaId === null) {
-    if (!validatedOptions.faceless) {
-      return validationFailed(
-        ERROR_CODES.VALIDATION_FAILED,
-        'A post without a persona must be faceless: set options.faceless to true.',
-        'options.faceless',
-      );
-    }
-    if (validatedOptions.voiceId === undefined && validatedOptions.audioUrl === undefined) {
-      return validationFailed(
-        ERROR_CODES.VALIDATION_FAILED,
-        'A post without a persona needs a voice: set options.voiceId (or options.audioUrl).',
-        'options.voiceId',
-      );
-    }
+  const checked = checkSemantics({
+    title: parsed.data.title,
+    segments: options?.segments,
+    providers: publishing.providers,
+    options: options ?? {},
+    personaId,
+  });
+  if (rawIssues.length > 0 || !checked.ok) {
+    return rejectInvalidRequest([...rawIssues, ...(checked.ok ? [] : checked.issues)]);
   }
+  const { title, script: segmentsScript, providers, options: validatedOptions } = checked.value;
 
   // Publish mode: scheduled (default) distributes slots across the plan's
   // times; asap skips the schedule entirely and lands every slot at the

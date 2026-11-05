@@ -1,29 +1,29 @@
-// Segments request validation for POST /api/videos/generate-and-schedule,
-// extracted from route.ts so the route stays under the file-size ratchet.
-// Runs before auth and before any token is charged. Returns the joined
-// script, or a 400 response. Segments are required: one call is one video
-// with a complete script — a request without segments has nothing to
-// generate, so it fails here instead of dispatching an empty job.
-import type { NextResponse } from 'next/server';
-import { ERROR_CODES } from '@/lib/error-codes';
-import { validationFailed } from './prepare-persona';
+// Segments request validation for POST /api/videos/generate-and-schedule.
+// Runs before auth and before any token is charged. Segments are required:
+// one call is one video with a complete script, so a request without
+// segments fails here instead of dispatching an empty job. The shared
+// validator reports the first content rule that fails in the script.
 import { joinSegments, validateSegments } from '@/lib/generation/script-segments';
+import { invalid, type Checked } from './validation-issues';
 
-export function validateSegmentsRequest(rawSegments: unknown): string | NextResponse {
+export function validateSegmentsRequest(rawSegments: unknown): Checked<string> {
   if (rawSegments === undefined) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      'options.segments is required: send the full script as segments (first hook, then body, last CTA).',
-      'options.segments',
-    );
+    return {
+      ok: false,
+      issues: [
+        invalid(
+          'options.segments is required: send the full script as segments (first hook, then body, last CTA).',
+          'options.segments',
+        ),
+      ],
+    };
   }
   const result = validateSegments(rawSegments);
   if (!result.ok) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      `${result.error.rule} Fix: ${result.error.fix}`,
-      `options.${result.error.field}`,
-    );
+    return {
+      ok: false,
+      issues: [invalid(`${result.error.rule} Fix: ${result.error.fix}`, `options.${result.error.field}`)],
+    };
   }
-  return joinSegments(rawSegments);
+  return { ok: true, value: joinSegments(rawSegments) };
 }

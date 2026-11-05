@@ -38,7 +38,9 @@ RESPONSES AND ERRORS
   DELETE /api/persona/video-task/{taskId}, return the engine envelope
   { "status", "message", "body" }: the payload is `body`, never `data`.
 - 400 invalid, over-length or conflicting input (nothing is truncated or
-  coerced silently). 401 bad key. 402 not enough tokens. 404 unknown id.
+  coerced silently). POST /api/videos/generate-and-schedule lists every
+  problem in one response: `code`, `message` and `field` describe the first
+  one, and `errors` (an array of { code, message, field }) holds all of them. 401 bad key. 402 not enough tokens. 404 unknown id.
   409 conflict (e.g. the persona already has an active schedule). 410 gone:
   terminal, stop polling. 429 rate limited: retry with backoff. 5xx
   transient: retry with backoff. Each operation's statuses are in the spec.
