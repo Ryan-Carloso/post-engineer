@@ -119,6 +119,22 @@ describe('BillingPage', () => {
     expect(routerPush).not.toHaveBeenCalled();
   });
 
+  it('notifies on a checkout 401 whose body is not JSON (proxy error page)', async () => {
+    const notify = vi.mocked(notifyIfSessionExpired);
+    notify.mockClear();
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, balance: 0 }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, transactions: [], total: 0, limit: 20, offset: 0 }) })
+      .mockResolvedValueOnce({ ok: false, status: 401, json: async () => { throw new SyntaxError('Unexpected token <'); } });
+    render(<BillingPage />, { wrapper: Wrapper });
+
+    await waitFor(() => expect(screen.getByText('10 tokens')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Buy tokens' })[1]);
+
+    await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
   it('opens the cancel feedback dialog with WhatsApp CTA on ?checkout=canceled', async () => {
     checkoutParam.value = 'canceled';
     vi.stubEnv('NEXT_PUBLIC_WHATSAPP_NUMBER', '15551234567');

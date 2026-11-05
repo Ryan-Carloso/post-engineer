@@ -151,9 +151,10 @@ const BillingPacks = () => {
     setLoading(packId); setError(null);
     try {
       const response = await fetch('/api/billing/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ packId }) });
-      const data: unknown = await response.json();
-      const result = typeof data === 'object' && data !== null ? data as { url?: unknown; error?: unknown } : {};
+      // Notify before parsing: a non-JSON 401 body must still redirect.
       if (!response.ok) notifyIfSessionExpired(response);
+      const data: unknown = await response.json().catch(() => null);
+      const result = typeof data === 'object' && data !== null ? data as { url?: unknown; error?: unknown } : {};
       if (!response.ok || typeof result.url !== 'string') { setError(typeof result.error === 'string' ? result.error : t('pricing.checkoutError')); return; }
       router.push(result.url);
     } catch { setError(t('pricing.checkoutError')); } finally { setLoading(null); }

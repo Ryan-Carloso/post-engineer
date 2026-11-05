@@ -127,6 +127,25 @@ describe('dashboard queries with the default retry policy', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
+  // A proxy/CDN error page is not JSON: the status must still reach the
+  // retry policy and the session-expiry handler.
+  it.each<[string, () => UseQueryResult<unknown, Error>]>([
+    ['useVoicesQuery', () => useVoicesQuery()],
+    ['useSchedulesQuery', () => useSchedulesQuery()],
+    ['useScheduleStatusQuery', () => useScheduleStatusQuery()],
+    ['useVideoGenerationsQuery', () => useVideoGenerationsQuery()],
+  ])('%s keeps the 401 status when the error body is not JSON', async (_name, useHook) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 401, json: async () => { throw new SyntaxError('Unexpected token <'); } })),
+    );
+    const { result } = renderHook(useHook, { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toBeInstanceOf(HttpStatusError);
+    expect((result.current.error as HttpStatusError).status).toBe(401);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('retries a network error once', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
     const { result } = renderHook(() => useScheduleStatusQuery(), { wrapper: wrapper() });

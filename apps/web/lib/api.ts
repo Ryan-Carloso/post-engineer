@@ -133,7 +133,8 @@ async function generatePersonaAvatar(prompt: string): Promise<GeneratePersonaAva
 
 async function fetchVoices(): Promise<VoiceOption[]> {
   const response = await fetch('/api/persona/voices');
-  const data: unknown = await response.json();
+  // Guarded: a non-JSON error page must still surface the status.
+  const data: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
     const message =
@@ -744,8 +745,8 @@ interface SlotRow {
 
 async function fetchSchedules(): Promise<ScheduleConfig[]> {
   const response = await fetch('/api/schedule');
-  const data: { success: boolean; schedules?: ScheduleRow[] } = await response.json();
-  if (!response.ok || !data.success) throw new HttpStatusError('Failed to fetch schedules', response.status);
+  const data: { success: boolean; schedules?: ScheduleRow[] } | null = await response.json().catch(() => null);
+  if (!response.ok || !data?.success) throw new HttpStatusError('Failed to fetch schedules', response.status);
   return (data.schedules ?? []).map(mapSchedule);
 }
 
@@ -776,8 +777,8 @@ function mapSlot(row: SlotRow): ScheduledSlot {
 async function fetchScheduleStatus(limit?: number): Promise<{ upcoming: ScheduledSlot[]; recent: ScheduledSlot[] }> {
   const url = typeof limit === 'number' ? `/api/schedule/status?limit=${limit}` : '/api/schedule/status';
   const response = await fetch(url);
-  const data: ScheduleStatusPayload = await response.json();
-  if (!response.ok || !data.success) throw new HttpStatusError('Failed to fetch schedule status', response.status);
+  const data: ScheduleStatusPayload | null = await response.json().catch(() => null);
+  if (!response.ok || !data?.success) throw new HttpStatusError('Failed to fetch schedule status', response.status);
   return {
     upcoming: (data.upcoming ?? []).map(mapSlot),
     recent: (data.recent ?? []).map(mapSlot),
@@ -833,8 +834,8 @@ async function fetchVideoGenerations(limit?: number): Promise<VideoGeneration[]>
       ? `/api/persona/video-generations?limit=${limit}`
       : '/api/persona/video-generations';
   const response = await fetch(url);
-  const data: { success?: boolean; generations?: VideoGeneration[] } = await response.json();
-  if (!response.ok || !data.success) throw new HttpStatusError('Failed to fetch video generations', response.status);
+  const data: { success?: boolean; generations?: VideoGeneration[] } | null = await response.json().catch(() => null);
+  if (!response.ok || !data?.success) throw new HttpStatusError('Failed to fetch video generations', response.status);
   return data.generations ?? [];
 }
 
