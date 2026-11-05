@@ -25,6 +25,7 @@ vi.mock('@/lib/voice-catalog-fetch', () => ({
 }));
 
 import { POST } from '../route';
+import { logger } from '@/lib/logger';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -217,6 +218,25 @@ describe('POST /api/persona with image library', () => {
     const body = (await res.json()) as { error?: string };
     // The second file (index 1) is the bad one; the error names it.
     expect(body.error).toContain('(image 2: doc.pdf)');
+  });
+
+  it('tags a bad library file VALIDATION_FAILED and keeps its file name out of the PostHog message', async () => {
+    mockClient();
+    const warn = vi.spyOn(logger, 'warn');
+    const bad = new File(['x'], 'secret-plan.pdf', { type: 'application/pdf' });
+    const res = await POST(createRequest(BASE_FIELDS, [png('a.png'), bad]));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string; code?: string; field?: string };
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('images');
+    // The client still gets the file name; the logged template does not.
+    expect(body.error).toContain('secret-plan.pdf');
+    const messages = warn.mock.calls.map((call) => String(call[0]));
+    const routeWarning = messages.find((m) => m.startsWith('[POST /api/persona] 400'));
+    expect(routeWarning).toBeDefined();
+    expect(routeWarning?.includes('secret-plan.pdf')).toBe(false);
+    expect(routeWarning?.includes('(image 2')).toBe(false);
+    warn.mockRestore();
   });
 
   it('reads each library file once at creation (validated bytes are reused)', async () => {

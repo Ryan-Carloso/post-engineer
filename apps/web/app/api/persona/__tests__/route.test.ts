@@ -412,9 +412,10 @@ describe('POST /api/persona', () => {
     const res = await POST(formRequest({ voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
 
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string };
+    const body = (await res.json()) as { success: boolean; error: string; code?: string };
     expect(body.success).toBe(false);
     expect(body.error).toBeTruthy();
+    expect(body.code).toBe('VALIDATION_FAILED');
   });
 
   it('retorna 400 sem identidade visual (nem foto nem avatarUrl)', async () => {
@@ -987,6 +988,9 @@ describe('PATCH /api/persona', () => {
     const res = await PATCH(request);
 
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { code?: string; field?: string };
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('personaId');
   });
 
   it('returns 404 when the persona does not exist or is not the user\'s', async () => {
@@ -1003,6 +1007,7 @@ describe('PATCH /api/persona', () => {
     const res = await PATCH(patchRequest('persona-uuid-1'));
 
     expect(res.status).toBe(400);
+    expect(((await res.json()) as { code?: string }).code).toBe('VALIDATION_FAILED');
   });
 
   it('atualiza apenas o nome', async () => {

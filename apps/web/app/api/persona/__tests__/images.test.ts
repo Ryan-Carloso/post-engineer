@@ -238,6 +238,9 @@ describe('GET /api/persona/images', () => {
     mockClient();
     const res = await GET(new Request('http://localhost/api/persona/images'));
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { code?: string; field?: string };
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('personaId');
   });
 
   it('rejects a scoped API key without access to the persona', async () => {
@@ -362,6 +365,9 @@ describe('POST /api/persona/images', () => {
       postForm({ personaId: PERSONA_ID, image: imageFile('doc.pdf', 'application/pdf') }),
     );
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { code?: string; field?: string };
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('file');
   });
 
   it('rejects unsupported extensions', async () => {
@@ -528,6 +534,7 @@ describe('PATCH /api/persona/images', () => {
     mockClient({ imageRow: IMAGE_ROW });
     const res = await PATCH(patchRequest({ id: IMAGE_ROW.id }));
     expect(res.status).toBe(400);
+    expect(((await res.json()) as { code?: string }).code).toBe('VALIDATION_FAILED');
   });
 
   it('updates tag and description', async () => {
