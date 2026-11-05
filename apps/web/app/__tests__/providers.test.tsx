@@ -1,11 +1,12 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import Providers from '../providers';
 import { shouldRetryQuery } from '@/lib/query-retry';
 import { HttpStatusError } from '@/lib/errors';
-import { useScheduleStatusQuery } from '@/lib/api';
+import { useScheduleStatusQuery, useUpdateSlotMutation } from '@/lib/api';
 
 // Only the redirect handler is doubled: the assertions check that Providers
 // wires every query error into lib/session-expiry, not the redirect itself.
@@ -77,6 +78,35 @@ describe('app/providers — Providers', () => {
     render(
       <Providers>
         <Dashboard />
+      </Providers>,
+    );
+
+    await waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+    const error = handler.mock.calls[0]?.[0];
+    expect(error).toBeInstanceOf(HttpStatusError);
+    expect((error as HttpStatusError).status).toBe(401);
+  });
+
+  it('routes a thrown 401 mutation error through handleSessionExpiredError (MutationCache wiring)', async () => {
+    const handler = vi.mocked(handleSessionExpiredError);
+    handler.mockClear();
+    vi.stubGlobal('fetch', vi.fn(async () => response(401)));
+
+    function Posts(): null {
+      const updateSlot = useUpdateSlotMutation();
+      // The mutation object is part of the deps per exhaustive-deps; the ref
+      // guard keeps the test asserting an exactly-once dispatch.
+      const started = useRef(false);
+      useEffect(() => {
+        if (started.current) return;
+        started.current = true;
+        updateSlot.mutate({ slotId: 'slot-1', title: 'new title' });
+      }, [updateSlot]);
+      return null;
+    }
+    render(
+      <Providers>
+        <Posts />
       </Providers>,
     );
 

@@ -89,3 +89,54 @@ describe('handleSessionExpiredError', () => {
     expect(assign).not.toHaveBeenCalled();
   });
 });
+
+//---------------
+// Mutation fetchers swallow failures into { success: false } (see lib/api.ts),
+// so the 401 detection runs on the swallowed HTTP response instead. Each case
+// uses a fresh module graph (fresh latch) and stubs fetch.
+//---------------
+describe('notifyIfSessionExpired — swallowed mutation failures', () => {
+  function response(status: number): Response {
+    return { ok: status >= 200 && status < 300, status, json: async () => ({ success: false, error: 'nope' }) } as unknown as Response;
+  }
+
+  it('redirects once when a swallowed mutation response is a 401', async () => {
+    const assign = vi.fn();
+    stubWindowLocation('/persona', '', assign);
+    vi.resetModules();
+    const { notifyIfSessionExpired } = await import('../session-expiry');
+
+    notifyIfSessionExpired(response(401));
+    // A second concurrent swallow must not fire a second navigation.
+    notifyIfSessionExpired(response(401));
+
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledWith('/login?next=%2Fpersona');
+  });
+
+  it('does not navigate for non-401 swallowed responses', async () => {
+    const assign = vi.fn();
+    stubWindowLocation('/persona', '', assign);
+    vi.resetModules();
+    const { notifyIfSessionExpired } = await import('../session-expiry');
+
+    notifyIfSessionExpired(response(403));
+    notifyIfSessionExpired(response(500));
+
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('updatePersonaImage on a 401 still returns its failure object and triggers the redirect', async () => {
+    const assign = vi.fn();
+    stubWindowLocation('/persona', '', assign);
+    vi.resetModules();
+    const { updatePersonaImage } = await import('../api');
+
+    vi.stubGlobal('fetch', vi.fn(async () => response(401)));
+    const result = await updatePersonaImage({ id: 'img-1' });
+
+    expect(result.success).toBe(false);
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledWith('/login?next=%2Fpersona');
+  });
+});

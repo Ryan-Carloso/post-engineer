@@ -74,7 +74,7 @@ export async function createClonedVoice(
       typeof data === 'object' && data !== null && 'error' in data && typeof data.error === 'string'
         ? data.error
         : 'Could not create voice clone.';
-    throw new Error(message);
+    throw new HttpStatusError(message, response.status);
   }
   const row =
     typeof data === 'object' && data !== null && 'voice' in data
@@ -96,7 +96,7 @@ export async function deleteClonedVoice(cloneId: string): Promise<void> {
       typeof data === 'object' && data !== null && 'error' in data && typeof data.error === 'string'
         ? data.error
         : 'Could not delete cloned voice.';
-    throw new Error(message);
+    throw new HttpStatusError(message, response.status);
   }
 }
 
