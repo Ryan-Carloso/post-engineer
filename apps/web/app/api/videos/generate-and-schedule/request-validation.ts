@@ -25,7 +25,9 @@ import { MAX_REPORTED_ISSUES, type Checked, type ValidationIssue } from './valid
 export { MAX_REPORTED_ISSUES };
 
 export function shapeIssues(error: z.ZodError): ValidationIssue[] {
-  return error.issues.slice(0, MAX_REPORTED_ISSUES).map((issue) => ({
+  // Do not slice here. rejectInvalidRequest caps what is echoed and uses
+  // the array length as errorCount, which the docstring says is the real total.
+  return error.issues.map((issue) => ({
     code: 'VALIDATION_FAILED' as const,
     message: `Invalid request: ${issue.message}`,
     field: issue.path.length > 0 ? issue.path.join('.') : undefined,

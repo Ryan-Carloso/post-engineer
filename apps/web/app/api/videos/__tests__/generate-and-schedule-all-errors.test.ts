@@ -229,6 +229,26 @@ describe('generate-and-schedule reports every validation problem in one 400 (#35
     expect(json.errors[0].message).toBe(message.slice(0, 500));
   });
 
+  it('counts every shape problem when the response stops at 20', async () => {
+    const accounts = Object.fromEntries(Array.from({ length: 25 }, (_, i) => [`slot-${i}`, 'nope']));
+    const res = await post(
+      body({
+        publishing: {
+          providers: ['youtube'],
+          accounts,
+          schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
+        },
+      }),
+    );
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { errors: unknown[] };
+    expect(json.errors).toHaveLength(MAX_REPORTED_ISSUES);
+    const calls = vi.mocked(trackApiEvent).mock.calls.filter(
+      ([name]) => name === 'video_creation_validation_failed',
+    );
+    expect(calls.at(-1)?.[1]).toMatchObject({ errorCount: 25 });
+  });
+
   it('rejects an oversized provider list before naming each one', () => {
     const outcome = validateProviders(Array.from({ length: 21 }, () => 'youtube'));
     expect(outcome.ok).toBe(false);
