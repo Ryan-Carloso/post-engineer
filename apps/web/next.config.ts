@@ -69,11 +69,18 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     // Security headers applied to every route. `unsafe-eval` is only needed in
-    // dev (React refresh / Next dev overlay); production stays strict.
+    // dev (React refresh / Next dev overlay) and in the coverage-instrumented
+    // production build the Cypress job runs: the .babelrc istanbul plugin
+    // seeds `__coverage__` through `Function("return this")()` in every
+    // module, and a strict script-src throws EvalError on it, breaking
+    // hydration of every page (React #418). Production deployments never set
+    // CYPRESS_COVERAGE, so the header stays strict there.
     const dev = process.env.NODE_ENV !== 'production';
+    const instrumented = process.env.CYPRESS_COVERAGE === '1';
+    const evalException = dev || instrumented ? " 'unsafe-eval'" : '';
     const csp = [
       "default-src 'self'",
-      `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ''}`,
+      `script-src 'self' 'unsafe-inline'${evalException}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "media-src 'self' data: blob: https:",
