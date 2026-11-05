@@ -667,8 +667,8 @@ describe('PostDetailPage — post identity', () => {
     expect(screen.getByText('posts.postIdLabel')).toBeInTheDocument();
     expect(screen.getByText('u1')).toBeInTheDocument();
 
-    // fireEvent, not user.click: this matches the clipboard-copy tests in
-    // api-keys-section/mcp-docs-section — user-event's pointer sequence
+    // fireEvent, not user.click: this matches the other clipboard-copy
+    // tests (every useCopyText caller) — user-event's pointer sequence
     // does not reach the handler under jsdom here.
     fireEvent.click(screen.getByRole('button', { name: 'posts.copyPostId' }));
     expect(writeText).toHaveBeenCalledWith('u1');
@@ -767,20 +767,26 @@ describe('PostDetailPage — post identity', () => {
     expect(screen.getByText('Europa Na Estrada')).toBeInTheDocument();
   });
 
-  it('restarts the copied-indicator window on rapid clicks instead of extending it', () => {
+  it('restarts the copied-indicator window on rapid clicks instead of extending it', async () => {
     vi.useFakeTimers();
     try {
       render(<DetailPage />);
 
+      // The indicator turns on once the clipboard write resolves, so each
+      // click is flushed inside an async act.
       const button = screen.getByRole('button', { name: 'posts.copyPostId' });
-      fireEvent.click(button);
+      await act(async () => {
+        fireEvent.click(button);
+      });
       expect(screen.getByText('posts.copied')).toBeInTheDocument();
 
       // 2s into the 2.5s window, click again: the window restarts.
       act(() => {
         vi.advanceTimersByTime(2000);
       });
-      fireEvent.click(button);
+      await act(async () => {
+        fireEvent.click(button);
+      });
 
       // 2s after the second click the indicator is still up (2s into the
       // restarted window); without the reset it would have cleared 0.5s

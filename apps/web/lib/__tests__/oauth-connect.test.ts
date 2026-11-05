@@ -197,6 +197,31 @@ describe('oauth-connect', () => {
     const result = await buildOAuthConnectUrl('instagram', REDIRECT);
     expect(result.ok).toBe(false);
   });
+
+  it('buildOAuthConnectUrl for Threads uses the Instagram app id', async () => {
+    vi.stubEnv('INSTAGRAM_CLIENT_ID', 'ig-app-id');
+    vi.stubEnv('INSTAGRAM_CLIENT_SECRET', 'ig-app-secret');
+    vi.stubEnv('THREADS_CLIENT_ID', 'legacy-threads-id');
+    const { buildOAuthConnectUrl } = await import('@/lib/oauth-connect');
+    const result = await buildOAuthConnectUrl('threads', 'https://app.example/threads/callback');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(new URL(result.authUrl).searchParams.get('client_id')).toBe('ig-app-id');
+    }
+    vi.unstubAllEnvs();
+  });
+
+  it('buildOAuthConnectUrl for Threads fails without Instagram credentials even if Threads vars are set', async () => {
+    vi.stubEnv('INSTAGRAM_CLIENT_ID', undefined);
+    vi.stubEnv('INSTAGRAM_CLIENT_SECRET', undefined);
+    vi.stubEnv('THREADS_CLIENT_ID', 'legacy-threads-id');
+    vi.stubEnv('THREADS_CLIENT_SECRET', 'legacy-threads-secret');
+    const { buildOAuthConnectUrl } = await import('@/lib/oauth-connect');
+    const result = await buildOAuthConnectUrl('threads', 'https://app.example/threads/callback');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('INSTAGRAM_CLIENT_ID');
+    vi.unstubAllEnvs();
+  });
 });
 
 describe('resolveOAuthCallbackAuth', () => {

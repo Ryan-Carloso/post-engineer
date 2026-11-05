@@ -7,7 +7,7 @@ This Actor is a thin client for the [Post Engineer API](https://post-engineer.co
 ## Before you run it
 
 1. Create an account at [post-engineer.com](https://post-engineer.com) and connect the social accounts you want to post to.
-2. Create an API key at [post-engineer.com/api-keys](https://post-engineer.com/api-keys). It starts with `pe_live_`.
+2. Create an API key at [post-engineer.com/recipes](https://post-engineer.com/recipes). It starts with `pe_live_`.
 3. Make sure the account has tokens. A faceless video costs 1 token, a persona video 2 or 3, depending on face quality.
 
 ## Input

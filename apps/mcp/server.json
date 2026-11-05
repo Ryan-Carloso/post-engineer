@@ -21,7 +21,7 @@
       "environmentVariables": [
         {
           "name": "POST_ENGINEER_API_KEY",
-          "description": "API key from https://post-engineer.com/api-keys",
+          "description": "API key from https://post-engineer.com/recipes",
           "isRequired": true,
           "isSecret": true,
           "format": "string"

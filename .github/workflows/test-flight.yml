@@ -41,7 +41,7 @@ name: test-flight
 #   Environment `test-flight` secrets:
 #     TEST_FLIGHT_POST_ENGINEER_API_KEY  Post Engineer API key of the funded
 #                                        test account (create at
-#                                        post-engineer.com/api-keys, scoped
+#                                        post-engineer.com/recipes, scoped
 #                                        to the test persona). Delete the
 #                                        repository-level copy after copying
 #                                        it here.

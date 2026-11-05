@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import {
   usePostDetailQuery,
@@ -27,6 +27,7 @@ import { ExternalLinkIcon } from '@/lib/ui';
 import type { PublishLink } from '@/lib/publish-links';
 import { PROVIDER_LABELS, scheduleAccountIds } from '@/lib/account-options';
 import { useI18n } from '@/lib/i18n/provider';
+import { useCopyText } from '@/lib/use-copy-text';
 import type { TranslationKey } from '@/lib/i18n';
 
 //---------------
@@ -304,24 +305,7 @@ const DetailHeader = ({
 //---------------
 export const PostIdSection = ({ postId }: { postId: string }) => {
   const { t } = useI18n();
-  const [copied, setCopied] = useState(false);
-  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    // Never flip state after unmount when a reset timer is still pending.
-    return () => {
-      if (resetTimer.current !== null) clearTimeout(resetTimer.current);
-    };
-  }, []);
-
-  const handleCopy = (): void => {
-    void navigator.clipboard.writeText(postId);
-    setCopied(true);
-    // A rapid second click restarts the "Copied" window instead of
-    // stacking another timer that would extend it.
-    if (resetTimer.current !== null) clearTimeout(resetTimer.current);
-    resetTimer.current = setTimeout(() => setCopied(false), 2500);
-  };
+  const { copied, copy } = useCopyText();
 
   return (
     <section aria-label={t('posts.postIdLabel')} className="mt-6">
@@ -332,7 +316,7 @@ export const PostIdSection = ({ postId }: { postId: string }) => {
         </code>
         <button
           type="button"
-          onClick={handleCopy}
+          onClick={() => copy(postId)}
           aria-label={t('posts.copyPostId')}
           className="shrink-0 rounded-xl border border-input bg-white px-3 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
         >

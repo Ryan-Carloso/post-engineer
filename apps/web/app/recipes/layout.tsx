@@ -1,12 +1,15 @@
 import { AppShell } from '@/components/ui/app-shell';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import PublicPromptsFrame from './components/public-prompts-frame';
+import { ViewerProvider } from './viewer-context';
 
 //---------------
 // Prompts hub layout — /recipes is public (middleware), but it is
 // also a sidebar tab of the dashboard. A signed-in visitor gets the
 // same AppShell as every (main) page so the tabs never disappear;
 // a signed-out visitor gets the public frame (back link + footer).
+// Both branches pass the signed-in answer to the page through
+// ViewerProvider, so the hub never fetches the session twice.
 //---------------
 
 export default async function RecipesLayout({ children }: { children: React.ReactNode }) {
@@ -17,6 +20,16 @@ export default async function RecipesLayout({ children }: { children: React.Reac
       message: error.message,
     });
   }
-  if (data.user !== null) return <AppShell>{children}</AppShell>;
-  return <PublicPromptsFrame>{children}</PublicPromptsFrame>;
+  if (data.user !== null) {
+    return (
+      <AppShell>
+        <ViewerProvider signedIn>{children}</ViewerProvider>
+      </AppShell>
+    );
+  }
+  return (
+    <PublicPromptsFrame>
+      <ViewerProvider signedIn={false}>{children}</ViewerProvider>
+    </PublicPromptsFrame>
+  );
 }

@@ -1,7 +1,7 @@
 export const recipesI18nEn = {
   title: 'Get your prompts',
   subtitle:
-      'Copy-ready prompts for the Post Engineer MCP server. Copy one, paste it into your agent, done.',
+      'Your key, your agent setup, and ready-made prompts — all in one place.',
   dailyNewsTitle: 'Daily news becomes a video',
   dailyNewsObjective:
       'Turn one news story of the day into one persona video, validated before any token is spent.',
@@ -98,15 +98,8 @@ export const recipesI18nEn = {
   kindRecipe: 'Recipe',
   kindPrompt: 'Prompt',
   copyPrompt: 'Copy prompt',
-  viewRecipe: 'View recipe',
-  filterAll: 'All',
-  searchLabel: 'Search prompts',
-  searchPlaceholder: 'Search by title or goal…',
-  emptyState: 'No prompt matches your search.',
   addYourPrompt: 'Add your prompt',
   addYourPromptHint: 'Got a prompt that works? Send it in.',
-  stepCount: '{count} steps',
-  promptCount: '{count} prompts',
   fullSetupTitle: 'Full setup becomes videos',
   fullSetupObjective:
       'Connect accounts, create a persona, validate the script, and publish your first video without skipping a step.',
@@ -125,4 +118,14 @@ export const recipesI18nEn = {
   fullSetupExampleInput: 'Starting with zero accounts and no persona.',
   fullSetupExampleOutput:
       'Accounts connected, persona created, script validated, one video published.',
+  stepKeyTitle: 'Create your API key',
+  stepKeyHint:
+      'It connects your agent to your account. You can create several, one per agent.',
+  stepSetupTitle: 'Send the setup prompt to your agent',
+  stepSetupHint:
+      'Paste it into Claude, Cursor, OpenCode, or any agent: it installs the Post Engineer MCP server. If you just created a key, it is already filled in.',
+  stepRecipesTitle: 'Pick a recipe',
+  stepRecipesHint: 'Once set up, copy a prompt and paste it into your agent.',
+  signInCta: 'Sign in or create an account',
+  signInHint: 'Sign in to create your API key. The setup prompt and the recipes below use it.',
 } as const;

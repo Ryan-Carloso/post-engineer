@@ -17,6 +17,11 @@ vi.mock('@/components/site-footer', () => ({
 }));
 
 import RecipesLayout from '../layout';
+import { useSignedIn } from '../viewer-context';
+
+function Probe(): React.ReactElement {
+  return <p>{useSignedIn() ? 'signed-in' : 'signed-out'}</p>;
+}
 
 describe('/recipes layout', () => {
   beforeEach(() => {
@@ -28,6 +33,21 @@ describe('/recipes layout', () => {
     render(await RecipesLayout({ children: <p>content</p> }));
     expect(screen.getByTestId('app-shell')).toContainElement(screen.getByText('content'));
     expect(screen.queryByTestId('site-footer')).not.toBeInTheDocument();
+  });
+
+  it('tells the page a signed-in visitor is signed in', async () => {
+    getUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    render(await RecipesLayout({ children: <Probe /> }));
+    expect(screen.getByTestId('app-shell')).toContainElement(screen.getByText('signed-in'));
+  });
+
+  it('tells the page a signed-out visitor is signed out', async () => {
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: { name: 'AuthSessionMissingError', message: 'Auth session missing!' },
+    });
+    render(await RecipesLayout({ children: <Probe /> }));
+    expect(screen.getByText('signed-out')).toBeInTheDocument();
   });
 
   it('renders the public frame with footer for signed-out visitors', async () => {

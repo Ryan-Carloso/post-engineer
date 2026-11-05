@@ -1,4 +1,4 @@
-describe('API Keys — UI & E2E', () => {
+describe('API Keys in the prompts hub — UI & E2E', () => {
   beforeEach(() => {
     cy.loginE2EUser();
 
@@ -13,38 +13,43 @@ describe('API Keys — UI & E2E', () => {
     }).as('getApiKeys');
   });
 
-  it('renders the dedicated /api-keys page with keys section and MCP docs', () => {
-    cy.visit('/api-keys');
+  it('renders the key manager and the setup prompt as steps 1 and 2 of /recipes', () => {
+    cy.visit('/recipes');
     // React Query may serve a warm cache — assert UI, not cy.wait on GET.
-    cy.location('pathname').should('eq', '/api-keys');
+    cy.location('pathname').should('eq', '/recipes');
 
-    cy.contains('h1', 'API Keys').should('be.visible');
+    cy.contains('h2', 'Crie sua API key').should('be.visible');
     cy.get('[data-testid="api-keys-empty-state"]')
       .scrollIntoView()
       .should('be.visible')
       .and('contain', 'Nenhuma API key ainda');
     cy.get('[data-testid="generate-api-key-btn"]').scrollIntoView().should('be.visible');
 
-    // MCP docs section with copy install prompt
-    cy.contains('h2', 'Conecte ao seu agente de IA (MCP)')
+    cy.contains('h2', 'Mande o prompt de setup ao seu agente')
       .scrollIntoView()
       .should('be.visible');
     cy.get('[data-testid="copy-mcp-prompt-btn"]').scrollIntoView().should('be.visible');
+    cy.get('[data-testid="mcp-install-prompt"]').should('contain', '<MINHA_API_KEY>');
   });
 
-  it('navigates to /api-keys from the profile area', () => {
+  it('redirects the old /api-keys page to /recipes', () => {
+    cy.visit('/api-keys');
+    cy.location('pathname').should('eq', '/recipes');
+    cy.get('[data-testid="generate-api-key-btn"]', { timeout: 15_000 }).should('be.visible');
+  });
+
+  it('navigates to the key manager from the profile area', () => {
     cy.visit('/account');
     // The desktop sidebar footer renders the same AccountPanel, so scope
     // to the page container (same duplicate-DOM reason as account-profile.cy.ts).
     cy.get('[data-testid=account-page] [data-testid=profile-api-keys-link]')
       .scrollIntoView()
       .click();
-    cy.url().should('include', '/api-keys');
+    cy.location('pathname').should('eq', '/recipes');
     cy.get('[data-testid="generate-api-key-btn"]', { timeout: 15_000 }).should('be.visible');
-    cy.contains('h1', 'API Keys').should('be.visible');
   });
 
-  it('generates a new API key and displays the secret once', () => {
+  it('generates a new API key, displays it once, and fills it into the setup prompt', () => {
     cy.intercept('POST', '/api/api-keys', {
       statusCode: 201,
       body: {
@@ -57,7 +62,7 @@ describe('API Keys — UI & E2E', () => {
       },
     }).as('createApiKey');
 
-    cy.visit('/api-keys');
+    cy.visit('/recipes');
     cy.get('[data-testid="generate-api-key-btn"]', { timeout: 15_000 }).scrollIntoView().click();
     cy.get('[data-testid="create-api-key-form"]').scrollIntoView().should('be.visible');
 
@@ -69,6 +74,9 @@ describe('API Keys — UI & E2E', () => {
     cy.get('[data-testid="api-key-created-banner"]').scrollIntoView().should('be.visible');
     cy.get('[data-testid="raw-api-key-value"]').should('have.value', 'pe_live_1234567890abcdef1234567890abcdef');
     cy.get('[data-testid="copy-api-key-btn"]').should('be.visible');
+    cy.get('[data-testid="mcp-install-prompt"]')
+      .should('contain', 'pe_live_1234567890abcdef1234567890abcdef')
+      .and('not.contain', '<MINHA_API_KEY>');
   });
 
   it('allows revoking an active API key', () => {
@@ -94,11 +102,11 @@ describe('API Keys — UI & E2E', () => {
       body: { success: true },
     }).as('revokeApiKey');
 
-    cy.visit('/api-keys');
-    // A missing session is a 307 to /landing. The keys request never
-    // fires there, and cy.wait then times out with "No request ever
-    // occurred" — assert the page itself so that redirect is the error.
-    cy.location('pathname').should('eq', '/api-keys');
+    cy.visit('/recipes');
+    // /recipes is public: a missing session renders the sign-in call to
+    // action instead of the key manager, so the keys request never fires
+    // and the row lookup below fails — on the missing row, not a timeout.
+    cy.location('pathname').should('eq', '/recipes');
     cy.get('[data-testid="api-key-row-key-1"]', { timeout: 15_000 }).scrollIntoView().within(() => {
       cy.contains('Production Server').should('be.visible');
       cy.contains('pe_live_prod1234...').should('be.visible');
@@ -111,7 +119,7 @@ describe('API Keys — UI & E2E', () => {
   });
 
   it('copies the MCP install prompt and shows the confirmation label', () => {
-    cy.visit('/api-keys', {
+    cy.visit('/recipes', {
       onBeforeLoad(win) {
         // The real clipboard API is permission-gated in the runner; the
         // copy handler only needs writeText to resolve.

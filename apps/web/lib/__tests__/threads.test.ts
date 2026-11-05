@@ -25,23 +25,26 @@ const input = { accessToken: 'tok-secret', userId: '42', videoUrl: 'https://s.ex
 beforeEach(() => {
   mockFetch.mockReset();
   noSleep.mockClear();
-  vi.stubEnv('THREADS_CLIENT_ID', 'cid');
-  vi.stubEnv('THREADS_CLIENT_SECRET', 'csecret');
+  vi.stubEnv('INSTAGRAM_CLIENT_ID', 'cid');
+  vi.stubEnv('INSTAGRAM_CLIENT_SECRET', 'csecret');
+  vi.stubEnv('THREADS_CLIENT_ID', 'legacy-threads-id');
+  vi.stubEnv('THREADS_CLIENT_SECRET', 'legacy-threads-secret');
   vi.stubEnv('THREADS_REDIRECT_URI', 'https://app.example/cb');
 });
 
 describe('buildThreadsAuthorizationUrl', () => {
-  it('requests the publish and insights scopes with the given state', () => {
+  it('requests the publish and insights scopes with the Instagram app id', () => {
     const url = new URL(buildThreadsAuthorizationUrl('st-1'));
     expect(url.origin).toBe('https://threads.com');
+    expect(url.searchParams.get('client_id')).toBe('cid');
     expect(url.searchParams.get('state')).toBe('st-1');
     expect(url.searchParams.get('redirect_uri')).toBe('https://app.example/cb');
     expect(url.searchParams.get('scope')).toBe('threads_basic,threads_content_publish,threads_manage_insights');
   });
 
-  it('fails explicitly when the client id is missing', () => {
-    vi.stubEnv('THREADS_CLIENT_ID', undefined);
-    expect(() => buildThreadsAuthorizationUrl('st-1')).toThrow('THREADS_ENV_MISSING');
+  it('fails when the Instagram client id is missing and ignores a leftover Threads client id', () => {
+    vi.stubEnv('INSTAGRAM_CLIENT_ID', undefined);
+    expect(() => buildThreadsAuthorizationUrl('st-1')).toThrow('INSTAGRAM_CLIENT_ID');
   });
 });
 
@@ -52,9 +55,13 @@ describe('exchangeThreadsCodeForToken', () => {
       .mockResolvedValueOnce(jsonResponse({ access_token: 'long', expires_in: 100 }));
     await expect(exchangeThreadsCodeForToken('code-1')).resolves.toEqual({ access_token: 'long', expires_in: 100 });
     expect(String(mockFetch.mock.calls[0][0])).toBe('https://graph.threads.com/oauth/access_token');
+    const tokenBody = new URLSearchParams(String((mockFetch.mock.calls[0][1] as RequestInit).body));
+    expect(tokenBody.get('client_id')).toBe('cid');
+    expect(tokenBody.get('client_secret')).toBe('csecret');
     const exchangeUrl = new URL(String(mockFetch.mock.calls[1][0]));
     expect(exchangeUrl.origin + exchangeUrl.pathname).toBe('https://graph.threads.com/access_token');
     expect(exchangeUrl.searchParams.get('grant_type')).toBe('th_exchange_token');
+    expect(exchangeUrl.searchParams.get('client_secret')).toBe('csecret');
     expect(exchangeUrl.searchParams.get('access_token')).toBe('short');
   });
 

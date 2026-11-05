@@ -16,11 +16,12 @@ async function getHandler(request: NextRequest) {
   const logId = logger.generateLogId();
 
   try {
-    if (!process.env.THREADS_CLIENT_ID || !process.env.THREADS_CLIENT_SECRET) {
+    if (!process.env.INSTAGRAM_CLIENT_ID || !process.env.INSTAGRAM_CLIENT_SECRET) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Threads credentials are not configured (THREADS_CLIENT_ID / THREADS_CLIENT_SECRET).',
+          error:
+            'Threads uses the Instagram app credentials, which are not configured (INSTAGRAM_CLIENT_ID / INSTAGRAM_CLIENT_SECRET).',
         },
         { status: 500 }
       );

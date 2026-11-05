@@ -9,7 +9,6 @@ vi.mock('@/lib/api', () => ({
   useApiKeysQuery: vi.fn(),
   useCreateApiKeyMutation: vi.fn(),
   useRevokeApiKeyMutation: vi.fn(),
-  usePersonasQuery: vi.fn(),
 }));
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -36,12 +35,8 @@ vi.mock('@/lib/i18n/provider', () => {
     'apiKeys.create': 'Create key',
     'apiKeys.cancel': 'Cancel',
     'apiKeys.loadError': 'Could not load API keys.',
-    'apiKeys.scopeLabel': 'Personas this key can access',
-    'apiKeys.scopeAll': 'All personas (including future ones)',
-    'apiKeys.scopeSpecific': 'Only selected personas',
-    'apiKeys.scopeAllBadge': 'All personas',
-    'apiKeys.scopeCount': '{count} personas',
-    'apiKeys.scopePersonasError': 'Could not load personas.',
+    'apiKeys.showAll': 'Show all {count} keys',
+    'apiKeys.showFewer': 'Show fewer keys',
   };
   return {
     useI18n: () => ({
@@ -56,20 +51,34 @@ import {
   useApiKeysQuery,
   useCreateApiKeyMutation,
   useRevokeApiKeyMutation,
-  usePersonasQuery,
 } from '@/lib/api';
 
-const PERSONAS = [
-  { id: 'persona-1', name: 'Ana', createdAt: '2026-09-18T10:00:00.000Z' },
-  { id: 'persona-2', name: 'Beto', createdAt: '2026-09-18T10:00:00.000Z' },
-];
+function makeKey(index: number): {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  personaIds: string[] | null;
+  createdAt: string;
+  lastUsedAt: null;
+  revokedAt: null;
+} {
+  return {
+    id: `key-${index}`,
+    name: `Agent ${index}`,
+    keyPrefix: `pe_live_test${index}...`,
+    personaIds: null,
+    createdAt: '2026-09-18T10:00:00.000Z',
+    lastUsedAt: null,
+    revokedAt: null,
+  };
+}
 
-function renderSection(): void {
+function renderSection(onKeyCreated?: (key: string) => void): void {
   const queryClient = new QueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
-  render(<ApiKeysSection />, { wrapper });
+  render(<ApiKeysSection onKeyCreated={onKeyCreated} />, { wrapper });
 }
 
 describe('ApiKeysSection', () => {
@@ -82,11 +91,6 @@ describe('ApiKeysSection', () => {
     vi.mocked(useCreateApiKeyMutation).mockReturnValue({
       mutateAsync: vi.fn(),
       isPending: false,
-    } as never);
-    vi.mocked(usePersonasQuery).mockReturnValue({
-      data: PERSONAS,
-      isLoading: false,
-      isError: false,
     } as never);
     Object.defineProperty(window.navigator, 'clipboard', {
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -123,13 +127,8 @@ describe('ApiKeysSection', () => {
     expect(screen.getByTestId('create-api-key-form')).toBeInTheDocument();
   });
 
-  it('shows an empty state in the scope selector when there are no personas', () => {
+  it('create form offers only a name, without persona scope controls', () => {
     vi.mocked(useApiKeysQuery).mockReturnValue({
-      data: [],
-      isLoading: false,
-      isError: false,
-    } as never);
-    vi.mocked(usePersonasQuery).mockReturnValue({
       data: [],
       isLoading: false,
       isError: false,
@@ -137,10 +136,24 @@ describe('ApiKeysSection', () => {
     renderSection();
 
     fireEvent.click(screen.getByTestId('generate-api-key-btn'));
-    fireEvent.click(screen.getByTestId('api-key-scope-specific'));
+    expect(screen.getByTestId('api-key-name-input')).toBeInTheDocument();
+    // Persona scoping was removed from the UI; the API still accepts it.
+    expect(screen.queryByTestId('api-key-scope-all')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('api-key-scope-specific')).not.toBeInTheDocument();
+  });
 
-    expect(screen.getByTestId('api-key-scope-empty')).toBeInTheDocument();
-    expect(screen.getByTestId('submit-create-key-btn')).toBeDisabled();
+  it('closes the create form on cancel', () => {
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+    } as never);
+    renderSection();
+
+    fireEvent.click(screen.getByTestId('generate-api-key-btn'));
+    expect(screen.getByTestId('create-api-key-form')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Cancel'));
+    expect(screen.queryByTestId('create-api-key-form')).not.toBeInTheDocument();
   });
 
   it('creates a key and shows the secret once with copy support', async () => {
@@ -157,8 +170,10 @@ describe('ApiKeysSection', () => {
       createdAt: '2026-09-18T10:00:00.000Z',
     });
     vi.mocked(useCreateApiKeyMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
-    renderSection();
+    const onKeyCreated = vi.fn();
+    renderSection(onKeyCreated);
 
+    expect(onKeyCreated).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('generate-api-key-btn'));
     fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'CI Agent' } });
     fireEvent.click(screen.getByTestId('submit-create-key-btn'));
@@ -167,6 +182,8 @@ describe('ApiKeysSection', () => {
       expect(mutateAsync).toHaveBeenCalledWith({ name: 'CI Agent', personaIds: null });
     });
     expect(await screen.findByTestId('api-key-created-banner')).toBeInTheDocument();
+    // The hub receives the raw key once, to fill it into the install prompt.
+    expect(onKeyCreated).toHaveBeenCalledExactlyOnceWith('pe_live_abcdef1234567890abcdef1234567890');
     expect(screen.getByTestId('raw-api-key-value')).toHaveValue(
       'pe_live_abcdef1234567890abcdef1234567890',
     );
@@ -175,6 +192,7 @@ describe('ApiKeysSection', () => {
     expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(
       'pe_live_abcdef1234567890abcdef1234567890',
     );
+    expect(await screen.findByText('Copied!')).toBeInTheDocument();
   });
 
   it('lists keys and revokes after confirmation', async () => {
@@ -207,6 +225,39 @@ describe('ApiKeysSection', () => {
     vi.unstubAllGlobals();
   });
 
+  it('revokes from the compact mobile card after confirmation', async () => {
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: [
+        {
+          id: 'key-1',
+          name: 'Prod',
+          keyPrefix: 'pe_live_prod1234...',
+          createdAt: '2026-09-18T10:00:00.000Z',
+          lastUsedAt: null,
+          revokedAt: null,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    } as never);
+    const mutateAsync = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(useRevokeApiKeyMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    window.confirm = vi.fn(() => true);
+    renderSection();
+
+    // jsdom renders the table twin and the compact hidden mobile twin; the
+    // card's button comes after the table in the DOM.
+    const revokeButtons = screen.getAllByRole('button', { name: 'Revoke' });
+    expect(revokeButtons).toHaveLength(2);
+    fireEvent.click(revokeButtons[revokeButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith('key-1');
+    });
+    vi.unstubAllGlobals();
+  });
+
   it('renders the loading and error states', () => {    vi.mocked(useApiKeysQuery).mockReturnValue({
     data: undefined,
     isLoading: true,
@@ -228,7 +279,7 @@ describe('ApiKeysSection', () => {
   expect(screen.getByText('Could not load API keys.')).toBeInTheDocument();
   });
 
-  it('creates a scoped key limited to the selected personas', async () => {
+  it('creates a key with full persona access when the form submits', async () => {
     vi.mocked(useApiKeysQuery).mockReturnValue({
       data: [],
       isLoading: false,
@@ -239,45 +290,80 @@ describe('ApiKeysSection', () => {
       name: 'Scoped Agent',
       key: 'pe_live_abcdef1234567890abcdef1234567890',
       keyPrefix: 'pe_live_abcdef12...',
-      personaIds: ['persona-1'],
+      personaIds: null,
       createdAt: '2026-09-18T10:00:00.000Z',
     });
     vi.mocked(useCreateApiKeyMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
     renderSection();
 
     fireEvent.click(screen.getByTestId('generate-api-key-btn'));
-    expect(screen.getByTestId('api-key-scope-all')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByTestId('api-key-scope-specific'));
-    fireEvent.click(screen.getByTestId('api-key-persona-persona-1'));
     fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'Scoped Agent' } });
     fireEvent.click(screen.getByTestId('submit-create-key-btn'));
 
     await waitFor(() => {
-      expect(mutateAsync).toHaveBeenCalledWith({ name: 'Scoped Agent', personaIds: ['persona-1'] });
+      expect(mutateAsync).toHaveBeenCalledWith({ name: 'Scoped Agent', personaIds: null });
     });
     expect(await screen.findByTestId('api-key-created-banner')).toBeInTheDocument();
   });
 
-  it('requires at least one persona when scope is specific', async () => {
+  it('shows the last-used date for a used key and "Never used" otherwise', () => {
+    const usedAt = '2026-11-04T18:30:00.000Z';
     vi.mocked(useApiKeysQuery).mockReturnValue({
-      data: [],
+      data: [
+        {
+          id: 'key-used',
+          name: 'Used key',
+          keyPrefix: 'pe_live_used1234...',
+          personaIds: null,
+          createdAt: '2026-09-18T10:00:00.000Z',
+          lastUsedAt: usedAt,
+          revokedAt: null,
+        },
+        {
+          id: 'key-fresh',
+          name: 'Fresh key',
+          keyPrefix: 'pe_live_fresh123...',
+          personaIds: null,
+          createdAt: '2026-09-18T10:00:00.000Z',
+          lastUsedAt: null,
+          revokedAt: null,
+        },
+      ],
       isLoading: false,
       isError: false,
     } as never);
-    const mutateAsync = vi.fn();
-    vi.mocked(useCreateApiKeyMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
     renderSection();
 
-    fireEvent.click(screen.getByTestId('generate-api-key-btn'));
-    fireEvent.click(screen.getByTestId('api-key-scope-specific'));
-    fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'Scoped Agent' } });
-
-    expect(screen.getByTestId('submit-create-key-btn')).toBeDisabled();
-    expect(mutateAsync).not.toHaveBeenCalled();
+    const usedDate = new Date(usedAt).toLocaleDateString();
+    // Table and mobile card both render the date, so each key shows it at least once.
+    expect(screen.getAllByText(usedDate).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(`Last used: ${usedDate}`).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Never used').length).toBeGreaterThan(0);
   });
 
-  it('displays the persona scope badge on each key row', () => {
+  it('marks a revoked key in the list without a revoke action', () => {
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: [
+        {
+          id: 'key-1',
+          name: 'Old CI',
+          keyPrefix: 'pe_live_oldci123...',
+          personaIds: null,
+          createdAt: '2026-09-18T10:00:00.000Z',
+          lastUsedAt: null,
+          revokedAt: '2026-10-01T10:00:00.000Z',
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    } as never);
+    renderSection();
+
+    expect(screen.getAllByText('Revoked').length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('revoke-key-btn-key-1')).not.toBeInTheDocument();
+  });
+
+  it('never renders a persona scope badge, even on legacy scoped keys', () => {
     vi.mocked(useApiKeysQuery).mockReturnValue({
       data: [
         {
@@ -289,6 +375,9 @@ describe('ApiKeysSection', () => {
           lastUsedAt: null,
           revokedAt: null,
         },
+        // Scoped keys can only exist from before scoping was removed from
+        // the UI; the server still enforces their restriction, but the hub
+        // no longer surfaces it.
         {
           id: 'key-2',
           name: 'Scoped',
@@ -304,7 +393,75 @@ describe('ApiKeysSection', () => {
     } as never);
     renderSection();
 
-    expect(screen.getByTestId('api-key-scope-badge-key-1')).toHaveTextContent('All personas');
-    expect(screen.getByTestId('api-key-scope-badge-key-2')).toHaveTextContent('2 personas');
+    expect(screen.queryByTestId('api-key-scope-badge-key-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('api-key-scope-badge-key-2')).not.toBeInTheDocument();
+  });
+
+  it('collapses long key lists behind a show-all toggle', () => {
+    const manyKeys = Array.from({ length: 6 }, (_, index) => makeKey(index + 1));
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: manyKeys,
+      isLoading: false,
+      isError: false,
+    } as never);
+    renderSection();
+
+    // Only the first four keys are visible before expanding.
+    expect(screen.getByTestId('api-key-row-key-4')).toBeInTheDocument();
+    expect(screen.queryByTestId('api-key-row-key-5')).not.toBeInTheDocument();
+    expect(screen.getByTestId('api-keys-show-all-toggle')).toHaveTextContent('Show all 6 keys');
+
+    fireEvent.click(screen.getByTestId('api-keys-show-all-toggle'));
+    expect(screen.getByTestId('api-key-row-key-5')).toBeInTheDocument();
+    expect(screen.getByTestId('api-key-row-key-6')).toBeInTheDocument();
+    expect(screen.getByTestId('api-keys-show-all-toggle')).toHaveTextContent('Show fewer keys');
+
+    fireEvent.click(screen.getByTestId('api-keys-show-all-toggle'));
+    expect(screen.queryByTestId('api-key-row-key-5')).not.toBeInTheDocument();
+  });
+
+  it('does not render the show-all toggle when every key fits', () => {
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: Array.from({ length: 4 }, (_, index) => makeKey(index + 1)),
+      isLoading: false,
+      isError: false,
+    } as never);
+    renderSection();
+
+    expect(screen.queryByTestId('api-keys-show-all-toggle')).not.toBeInTheDocument();
+    expect(screen.getByTestId('api-key-row-key-4')).toBeInTheDocument();
+  });
+
+  it('keeps the show-all toggle consistent while the created-key banner is open', async () => {
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: Array.from({ length: 6 }, (_, index) => makeKey(index + 1)),
+      isLoading: false,
+      isError: false,
+    } as never);
+    const mutateAsync = vi.fn().mockResolvedValue({
+      id: 'key-new',
+      name: 'New Agent',
+      key: 'pe_live_newkey12345678901234567890ab',
+      keyPrefix: 'pe_live_newkey...',
+      personaIds: null,
+      createdAt: '2026-11-05T10:00:00.000Z',
+    });
+    vi.mocked(useCreateApiKeyMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    renderSection();
+
+    fireEvent.click(screen.getByTestId('api-keys-show-all-toggle'));
+    expect(screen.getByTestId('api-key-row-key-5')).toBeInTheDocument();
+
+    // Creating a key shows the one-time banner; the list is ordered newest
+    // first, so the banner being open must not desync the toggle.
+    fireEvent.click(screen.getByTestId('generate-api-key-btn'));
+    fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'New Agent' } });
+    fireEvent.click(screen.getByTestId('submit-create-key-btn'));
+    expect(await screen.findByTestId('api-key-created-banner')).toBeInTheDocument();
+    expect(screen.getByTestId('api-key-row-key-5')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('api-keys-show-all-toggle'));
+    expect(screen.getByTestId('api-keys-show-all-toggle')).toHaveTextContent('Show all 6 keys');
+    expect(screen.queryByTestId('api-key-row-key-5')).not.toBeInTheDocument();
   });
 });
