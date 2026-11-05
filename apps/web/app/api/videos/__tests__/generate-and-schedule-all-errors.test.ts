@@ -210,6 +210,25 @@ describe('generate-and-schedule reports every validation problem in one 400 (#35
     });
   });
 
+  it('does not echo a huge provider name', () => {
+    const name = `nope-${'x'.repeat(400)}`;
+    const outcome = validateProviders([name]);
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.issues[0].message).toContain('Use one of');
+    expect(outcome.issues[0].message).not.toContain(name);
+    expect(outcome.issues[0].message.length).toBeLessThan(300);
+  });
+
+  it('caps an echoed validation message', async () => {
+    const message = `problem ${'m'.repeat(800)}`;
+    const res = rejectInvalidRequest([{ code: 'VALIDATION_FAILED', message, field: 'title' }]);
+    const json = (await res.json()) as { error: string; errors: Array<{ message: string }> };
+    expect(json.error).toHaveLength(500);
+    expect(json.error).toBe(message.slice(0, 500));
+    expect(json.errors[0].message).toBe(message.slice(0, 500));
+  });
+
   it('rejects an oversized provider list before naming each one', () => {
     const outcome = validateProviders(Array.from({ length: 21 }, () => 'youtube'));
     expect(outcome.ok).toBe(false);

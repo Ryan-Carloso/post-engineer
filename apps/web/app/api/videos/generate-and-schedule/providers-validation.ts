@@ -9,6 +9,14 @@ import { invalid, MAX_REPORTED_ISSUES, type Checked } from './validation-issues'
 
 export type Provider = (typeof VALID_SCHEDULE_PROVIDERS)[number];
 
+// A provider value is caller-controlled and is echoed in the 400 message.
+// Keep the "use one of" hint by shortening the name, not the whole sentence.
+const MAX_PROVIDER_CHARS = 100;
+
+function shownProvider(provider: string): string {
+  return provider.length > MAX_PROVIDER_CHARS ? `${provider.slice(0, MAX_PROVIDER_CHARS)}…` : provider;
+}
+
 export function validateProviders(rawProviders: string[]): Checked<Provider[]> {
   // Stop before building one issue per entry. The route also rejects this
   // length at the schema, so a normal request never reaches the map below
@@ -28,7 +36,7 @@ export function validateProviders(rawProviders: string[]): Checked<Provider[]> {
     .filter((provider) => !known.includes(provider))
     .map((provider) =>
       invalid(
-        `Invalid provider: "${provider}". Use one of ${VALID_SCHEDULE_PROVIDERS.join(', ')}.`,
+        `Invalid provider: "${shownProvider(provider)}". Use one of ${VALID_SCHEDULE_PROVIDERS.join(', ')}.`,
         'publishing.providers',
       ),
     );

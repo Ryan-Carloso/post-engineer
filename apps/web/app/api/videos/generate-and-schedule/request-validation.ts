@@ -94,8 +94,16 @@ export function checkSemantics(input: SemanticInput): Checked<CheckedRequest> {
 // trackApiEvent applies to top-level strings, kept shorter for a field path.
 const MAX_FIELD_PATH_CHARS = 200;
 
+// Any issue message can quote caller input (a provider name, a zod value).
+// Same bound trackApiEvent uses for a top-level string.
+const MAX_ECHOED_MESSAGE_CHARS = 500;
+
 function capField(field: string | undefined): string | undefined {
   return field === undefined ? undefined : field.slice(0, MAX_FIELD_PATH_CHARS);
+}
+
+function capMessage(message: string): string {
+  return message.slice(0, MAX_ECHOED_MESSAGE_CHARS);
 }
 
 /** Track once per rejected request and return the 400 with every problem, capped. */
@@ -103,16 +111,17 @@ export function rejectInvalidRequest(issues: ValidationIssue[]): NextResponse {
   const reported = issues.slice(0, MAX_REPORTED_ISSUES);
   const [first] = reported;
   const field = capField(first.field);
+  const message = capMessage(first.message);
   trackApiEvent('video_creation_validation_failed', {
     errorCode: first.code,
     field: field ?? null,
     errorCount: issues.length,
     fields: reported.map((issue) => capField(issue.field) ?? null),
   });
-  return coded(400, first.code, first.message, field, {
+  return coded(400, first.code, message, field, {
     errors: reported.map((issue) => ({
       code: issue.code,
-      message: issue.message,
+      message: capMessage(issue.message),
       field: capField(issue.field),
     })),
   });
