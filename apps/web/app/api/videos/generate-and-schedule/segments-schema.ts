@@ -1,8 +1,10 @@
 // Request shape of `segments` for generate-and-schedule (MCP first,
 // Phase 1): one call = one video. Strict at every level so an unknown key
-// is a 400, never silently dropped. Content rules (word counts, limits)
-// live in the shared validator; this only pins the shape. Kept next to the
-// route because the route file may not grow (file-size ratchet).
+// is a 400, never silently dropped. Content rules (word counts) live in
+// the shared validator; this pins the shape plus the segment-count cap
+// (MAX_SEGMENTS, the same constant) so an oversized array is a 400 before
+// those checks run. Kept next to the route because the route file may not
+// grow (file-size ratchet).
 import { z } from 'zod';
 
 import { MAX_SEGMENTS } from '@/lib/generation/script-segments';
