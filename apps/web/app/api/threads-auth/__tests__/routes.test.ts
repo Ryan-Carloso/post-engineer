@@ -39,8 +39,10 @@ function session(user: { id: string } | null): void {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubEnv('THREADS_CLIENT_ID', 'cid');
-  vi.stubEnv('THREADS_CLIENT_SECRET', 'secret');
+  vi.stubEnv('INSTAGRAM_CLIENT_ID', 'cid');
+  vi.stubEnv('INSTAGRAM_CLIENT_SECRET', 'secret');
+  vi.stubEnv('THREADS_CLIENT_ID', undefined);
+  vi.stubEnv('THREADS_CLIENT_SECRET', undefined);
   session({ id: 'user-1' });
 });
 
@@ -56,9 +58,11 @@ describe('GET /api/threads-auth/start', () => {
     expect((await startGET(new NextRequest(START))).status).toBe(401);
   });
 
-  it('500s when credentials are missing', async () => {
-    vi.stubEnv('THREADS_CLIENT_SECRET', undefined);
-    expect((await startGET(new NextRequest(START))).status).toBe(500);
+  it('500s when the Instagram app credentials are missing', async () => {
+    vi.stubEnv('INSTAGRAM_CLIENT_SECRET', undefined);
+    const response = await startGET(new NextRequest(START));
+    expect(response.status).toBe(500);
+    expect((await response.json()).error).toContain('INSTAGRAM_CLIENT_SECRET');
   });
 });
 
