@@ -199,7 +199,7 @@ usá-lo com a plataforma hospedada:
 ```
 
 Gere `<MY_API_KEY>` em
-[post-engineer.com/api-keys](https://post-engineer.com/api-keys). A tag
+[post-engineer.com/recipes](https://post-engineer.com/recipes). A tag
 `@latest` é importante: o `npx` reutiliza a cópia em cache sem verificar
 atualizações. Para apontar
 o servidor para sua própria instância self-hosted, defina

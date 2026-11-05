@@ -6,7 +6,7 @@
     "apiKey": {
       "title": "Post Engineer API key",
       "type": "string",
-      "description": "Create one at https://post-engineer.com/api-keys (starts with pe_live_). Without a key the run is a dry run: it validates the input and shows the request it would send, with nothing generated, published or charged. With a key, generating a video spends tokens from that account.",
+      "description": "Create one at https://post-engineer.com/recipes (starts with pe_live_). Without a key the run is a dry run: it validates the input and shows the request it would send, with nothing generated, published or charged. With a key, generating a video spends tokens from that account.",
       "editor": "textfield",
       "isSecret": true
     },

@@ -206,7 +206,7 @@ hosted platform:
 ```
 
 Generate `<MY_API_KEY>` at
-[post-engineer.com/api-keys](https://post-engineer.com/api-keys). The
+[post-engineer.com/recipes](https://post-engineer.com/recipes). The
 `@latest` tag matters: `npx` reuses its cached copy without checking for
 updates. To point the
 server at your own self-hosted instance instead, set

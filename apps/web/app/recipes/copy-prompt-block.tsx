@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
+import { useCopyText } from '@/lib/use-copy-text';
 import { Button } from '@/components/ui/button';
 import AgentLogos from '@/components/ui/agent-logos';
 
@@ -12,31 +12,13 @@ import AgentLogos from '@/components/ui/agent-logos';
 // where the prompt goes — the user's own agent — and what happens
 // next). GitHub is not part of this flow and is not mentioned
 // here; it appears only as a small link at the bottom of the
-// detail page. Presentational: props + callback only, no fetch.
+// detail page. Presentational: props + callback only, no fetch; the
+// copy itself goes through useCopyText.
 //---------------
 
 export default function CopyPromptBlock({ prompt }: { prompt: string }) {
   const { t } = useI18n();
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    // Outside a secure context navigator.clipboard has no writeText;
-    // in that case keep the "Copy this prompt" label instead of
-    // claiming a copy that never happened.
-    if (typeof navigator.clipboard?.writeText !== 'function') {
-      return;
-    }
-    navigator.clipboard
-      .writeText(prompt)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2500);
-      })
-      .catch(() => {
-        // Keep the "Copy this prompt" label — the copy did not happen,
-        // so the user must not paste an empty clipboard into their agent.
-      });
-  };
+  const { copied, copy } = useCopyText();
 
   return (
     <section className="mt-12">
@@ -51,7 +33,7 @@ export default function CopyPromptBlock({ prompt }: { prompt: string }) {
           </span>
           <Button
             type="button"
-            onClick={handleCopy}
+            onClick={() => copy(prompt)}
             className="rounded-lg bg-[#ff544c] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#ff544c]/90"
           >
             {copied ? t('recipes.copiedPrompt') : t('recipes.copyFullPrompt')}

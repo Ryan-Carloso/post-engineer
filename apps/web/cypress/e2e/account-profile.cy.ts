@@ -173,16 +173,16 @@ describe('Account area — /account page', () => {
     cy.get('@page')
       .find('[data-testid=profile-api-keys-link]')
       .should('be.visible')
-      .and('have.attr', 'href', '/api-keys');
+      .and('have.attr', 'href', '/recipes');
   });
 
-  it('navigates to /api-keys from the profile API Keys row', () => {
+  it('navigates to the prompts hub from the profile API Keys row', () => {
     cy.visit('/account');
 
     cy.get('[data-testid=account-page]')
       .find('[data-testid=profile-api-keys-link]')
       .click();
-    cy.url().should('include', '/api-keys');
+    cy.location('pathname').should('eq', '/recipes');
   });
 
   it('signs out and lands on /login', () => {

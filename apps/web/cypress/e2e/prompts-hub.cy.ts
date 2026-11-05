@@ -31,6 +31,38 @@ describe('Prompts hub', () => {
     cy.get('a[href="/recipes/full-setup"]').should('be.visible');
   });
 
+  it('shows a signed-out visitor the sign-in step and the setup prompt', () => {
+    visitEnglish('/recipes');
+    cy.get('[data-testid="recipes-sign-in-cta"]')
+      .should('be.visible')
+      .and('have.attr', 'href', '/login?next=/recipes');
+    cy.get('[data-testid="generate-api-key-btn"]').should('not.exist');
+    cy.get('[data-testid="mcp-install-prompt"]')
+      .scrollIntoView()
+      .should('contain', '<MY_API_KEY>');
+  });
+
+  it('copies a recipe prompt straight from its card', () => {
+    cy.visit('/recipes', {
+      onBeforeLoad(win) {
+        win.localStorage.setItem('social-hub-locale', 'en');
+        // The real clipboard API is permission-gated in the runner; the
+        // label flips to Copied! only after this write resolves.
+        cy.stub(win.navigator.clipboard, 'writeText').resolves();
+      },
+    });
+    cy.get('[data-testid="copy-prompt-daily-news"]')
+      .scrollIntoView()
+      .should('contain', 'Copy prompt')
+      .click()
+      .should('contain', 'Copied!');
+  });
+
+  it('redirects the old /api-keys page to the hub', () => {
+    visitEnglish('/api-keys');
+    cy.location('pathname').should('eq', '/recipes');
+  });
+
   it('shows the daily-news detail: steps, copy button, GitHub last', () => {
     visitEnglish('/recipes/daily-news');
     cy.contains('h1', 'Daily news becomes a video').should('be.visible');

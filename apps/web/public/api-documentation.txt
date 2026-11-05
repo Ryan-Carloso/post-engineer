@@ -16,7 +16,7 @@ accounts, metrics rows, generation lists) are typed as free-form objects.
 AUTHENTICATION
 ================================================================================
 
-Create an API key in the dashboard (https://post-engineer.com/api-keys) or
+Create an API key in the dashboard (https://post-engineer.com/recipes) or
 through POST /api/api-keys (web session only). Keys start with `pe_live_`
 and are shown once.
 

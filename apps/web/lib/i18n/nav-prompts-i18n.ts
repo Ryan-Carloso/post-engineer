@@ -6,13 +6,13 @@ export const promptsStrings = {
   pt: {
     nav: {
       prompts: 'Pegue seus prompts',
-      promptsHint: 'Prompts prontos para o seu agente',
+      promptsHint: 'API key, setup e prompts para o seu agente',
     },
   },
   en: {
     nav: {
       prompts: 'Get your prompts',
-      promptsHint: 'Ready-made prompts for your agent',
+      promptsHint: 'API key, setup, and prompts for your agent',
     },
   },
 } as const;

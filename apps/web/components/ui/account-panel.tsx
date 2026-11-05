@@ -370,15 +370,15 @@ export function AccountPanel({ showVersionBadge = false }: { showVersionBadge?: 
 }
 
 //---------------
-// ApiKeysRow — link to /api-keys inside the profile area. The API Keys
-// tab was removed from the navs to curb tab sprawl; the route itself
-// is unchanged.
+// ApiKeysRow — link to the API key manager inside the profile area. The
+// key manager lives in step 1 of the prompts hub (/recipes), next to the
+// setup prompt that uses the key.
 //---------------
 export function ApiKeysRow() {
   const { t } = useI18n();
   return (
     <Link
-      href="/api-keys"
+      href="/recipes"
       data-testid="profile-api-keys-link"
       className="flex w-full items-center gap-3.5 rounded-[18px] bg-[#f8fafc] px-4 py-3 text-left text-[15px] text-[#718096] transition-colors hover:bg-[#f1f4f7] hover:text-[#101728] lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
     >
