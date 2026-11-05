@@ -42,6 +42,8 @@ vi.mock('@/lib/i18n/provider', () => {
     'apiKeys.scopeAllBadge': 'All personas',
     'apiKeys.scopeCount': '{count} personas',
     'apiKeys.scopePersonasError': 'Could not load personas.',
+    'apiKeys.showAll': 'Show all {count} keys',
+    'apiKeys.showFewer': 'Show fewer keys',
   };
   return {
     useI18n: () => ({
@@ -63,6 +65,26 @@ const PERSONAS = [
   { id: 'persona-1', name: 'Ana', createdAt: '2026-09-18T10:00:00.000Z' },
   { id: 'persona-2', name: 'Beto', createdAt: '2026-09-18T10:00:00.000Z' },
 ];
+
+function makeKey(index: number): {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  personaIds: string[] | null;
+  createdAt: string;
+  lastUsedAt: null;
+  revokedAt: null;
+} {
+  return {
+    id: `key-${index}`,
+    name: `Agent ${index}`,
+    keyPrefix: `pe_live_test${index}...`,
+    personaIds: null,
+    createdAt: '2026-09-18T10:00:00.000Z',
+    lastUsedAt: null,
+    revokedAt: null,
+  };
+}
 
 function renderSection(onKeyCreated?: (key: string) => void): void {
   const queryClient = new QueryClient();
@@ -311,5 +333,67 @@ describe('ApiKeysSection', () => {
 
     expect(screen.getByTestId('api-key-scope-badge-key-1')).toHaveTextContent('All personas');
     expect(screen.getByTestId('api-key-scope-badge-key-2')).toHaveTextContent('2 personas');
+  });
+
+  it('collapses long key lists behind a show-all toggle', () => {
+    const manyKeys = Array.from({ length: 6 }, (_, index) => makeKey(index + 1));
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: manyKeys,
+      isLoading: false,
+      isError: false,
+    } as never);
+    renderSection();
+
+    // Only the first four keys are visible before expanding.
+    expect(screen.getByTestId('api-key-row-key-4')).toBeInTheDocument();
+    expect(screen.queryByTestId('api-key-row-key-5')).not.toBeInTheDocument();
+    expect(screen.getByTestId('api-keys-show-all-toggle')).toHaveTextContent('Show all 6 keys');
+
+    fireEvent.click(screen.getByTestId('api-keys-show-all-toggle'));
+    expect(screen.getByTestId('api-key-row-key-5')).toBeInTheDocument();
+    expect(screen.getByTestId('api-key-row-key-6')).toBeInTheDocument();
+    expect(screen.getByTestId('api-keys-show-all-toggle')).toHaveTextContent('Show fewer keys');
+
+    fireEvent.click(screen.getByTestId('api-keys-show-all-toggle'));
+    expect(screen.queryByTestId('api-key-row-key-5')).not.toBeInTheDocument();
+  });
+
+  it('does not render the show-all toggle when every key fits', () => {
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: Array.from({ length: 4 }, (_, index) => makeKey(index + 1)),
+      isLoading: false,
+      isError: false,
+    } as never);
+    renderSection();
+
+    expect(screen.queryByTestId('api-keys-show-all-toggle')).not.toBeInTheDocument();
+    expect(screen.getByTestId('api-key-row-key-4')).toBeInTheDocument();
+  });
+
+  it('expands the list when a new key is created so it stays visible', async () => {
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: Array.from({ length: 6 }, (_, index) => makeKey(index + 1)),
+      isLoading: false,
+      isError: false,
+    } as never);
+    const mutateAsync = vi.fn().mockResolvedValue({
+      id: 'key-new',
+      name: 'New Agent',
+      key: 'pe_live_newkey12345678901234567890ab',
+      keyPrefix: 'pe_live_newkey...',
+      personaIds: null,
+      createdAt: '2026-11-05T10:00:00.000Z',
+    });
+    vi.mocked(useCreateApiKeyMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    renderSection();
+
+    expect(screen.queryByTestId('api-key-row-key-5')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('generate-api-key-btn'));
+    fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'New Agent' } });
+    fireEvent.click(screen.getByTestId('submit-create-key-btn'));
+
+    expect(await screen.findByTestId('api-key-created-banner')).toBeInTheDocument();
+    // Even outside the collapsed slice, keys beyond the limit are revealed on create.
+    expect(screen.getByTestId('api-key-row-key-5')).toBeInTheDocument();
   });
 });

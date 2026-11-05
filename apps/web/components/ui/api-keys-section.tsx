@@ -8,6 +8,9 @@ import { useCopyText } from '@/lib/use-copy-text';
 import { Button } from '@/components/ui/button';
 import { KeyIcon, SpinnerIcon } from '@/lib/ui';
 
+// Show at most this many keys at once; a toggle reveals the rest.
+const MAX_VISIBLE_KEYS = 4;
+
 //---------------
 // ApiKeysSection — step 1 of the prompts hub: list, create, and revoke
 // API keys. A freshly created key is shown once; onKeyCreated hands it
@@ -29,9 +32,14 @@ export default function ApiKeysSection({
   const [scopeMode, setScopeMode] = useState<'all' | 'specific'>('all');
   const [selectedPersonaIds, setSelectedPersonaIds] = useState<string[]>([]);
   const [newKeyData, setNewKeyData] = useState<{ name: string; key: string } | null>(null);
+  const [showAllKeys, setShowAllKeys] = useState(false);
   const { copied, copy } = useCopyText();
 
   const keys = query.data ?? [];
+  // A freshly created key must stay visible even when it falls outside the
+  // collapsed slice, so creation itself forces the list open.
+  const visibleKeys = showAllKeys || newKeyData ? keys : keys.slice(0, MAX_VISIBLE_KEYS);
+  const hasHiddenKeys = keys.length > MAX_VISIBLE_KEYS;
   const personasQuery = usePersonasQuery();
   const personas = personasQuery.data ?? [];
   const personaNames = new Map(personas.map((persona) => [persona.id, persona.name]));
@@ -297,7 +305,6 @@ export default function ApiKeysSection({
               <thead>
                 <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500">
                   <th className="px-4 py-3 font-semibold">{t('apiKeys.colName')}</th>
-                  <th className="px-4 py-3 font-semibold">{t('apiKeys.colKeyPreview')}</th>
                   <th className="px-4 py-3 font-semibold">{t('apiKeys.colCreated')}</th>
                   <th className="px-4 py-3 font-semibold">{t('apiKeys.colPermissions')}</th>
                   <th className="px-4 py-3 font-semibold">{t('apiKeys.colLastUsed')}</th>
@@ -306,7 +313,7 @@ export default function ApiKeysSection({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {keys.map((key) => {
+                {visibleKeys.map((key) => {
                   const isRevoked = Boolean(key.revokedAt);
                   const created = new Date(key.createdAt);
                   return (
@@ -314,9 +321,6 @@ export default function ApiKeysSection({
                       <td className="px-4 py-3.5">
                         <span className="block font-semibold text-slate-900">{key.name}</span>
                         <span className="mt-0.5 block font-mono text-xs text-slate-400">{key.keyPrefix}</span>
-                      </td>
-                      <td className="px-4 py-3.5 font-mono text-xs text-slate-500">
-                        <span className="rounded-md bg-slate-100 px-2 py-1">{key.keyPrefix}</span>
                       </td>
                       <td className="px-4 py-3.5 text-slate-600">
                         <span className="block">{created.toLocaleDateString()}</span>
@@ -355,7 +359,7 @@ export default function ApiKeysSection({
                             data-testid={`revoke-key-btn-${key.id}`}
                             onClick={() => handleRevoke(key.id)}
                             disabled={revokeMutation.isPending}
-                            className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                            className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
                           >
                             {t('apiKeys.revoke')}
                           </Button>
@@ -367,16 +371,16 @@ export default function ApiKeysSection({
               </tbody>
             </table>
             <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 sm:hidden">
-              {keys.map((key) => {
+              {visibleKeys.map((key) => {
                 const isRevoked = Boolean(key.revokedAt);
                 return (
                   <div
                     key={key.id}
-                    className="flex flex-col justify-between gap-2 p-4"
+                    className="flex items-start justify-between gap-3 p-3"
                   >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-900">{key.name}</span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="truncate font-semibold text-slate-900">{key.name}</span>
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase ${
                             isRevoked ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
@@ -385,17 +389,19 @@ export default function ApiKeysSection({
                           {isRevoked ? t('apiKeys.revoked') : t('apiKeys.active')}
                         </span>
                       </div>
-                      <div className="mt-1 flex items-center gap-3 font-mono text-xs text-slate-500">
-                        <span>{key.keyPrefix}</span>
-                        <span>•</span>
-                        <span title={scopeBadgeTitle(key.personaIds ?? null)}>
-                          {scopeBadgeText(key.personaIds ?? null)}
-                        </span>
-                        <span>•</span>
-                        <span>
-                          {key.lastUsedAt
-                            ? t('apiKeys.lastUsed').replace('{date}', new Date(key.lastUsedAt).toLocaleDateString())
-                            : t('apiKeys.neverUsed')}
+                      <div className="mt-1 flex flex-col gap-0.5 text-xs text-slate-500">
+                        <span className="font-mono">{key.keyPrefix}</span>
+                        <span
+                          title={scopeBadgeTitle(key.personaIds ?? null)}
+                          className="flex flex-wrap items-center gap-x-1.5"
+                        >
+                          <span>{scopeBadgeText(key.personaIds ?? null)}</span>
+                          <span aria-hidden="true" className="text-slate-300">•</span>
+                          <span>
+                            {key.lastUsedAt
+                              ? t('apiKeys.lastUsed').replace('{date}', new Date(key.lastUsedAt).toLocaleDateString())
+                              : t('apiKeys.neverUsed')}
+                          </span>
                         </span>
                       </div>
                     </div>
@@ -405,7 +411,7 @@ export default function ApiKeysSection({
                         type="button"
                         onClick={() => handleRevoke(key.id)}
                         disabled={revokeMutation.isPending}
-                        className="self-start rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                        className="shrink-0 rounded-lg border border-red-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50"
                       >
                         {t('apiKeys.revoke')}
                       </Button>
@@ -414,6 +420,17 @@ export default function ApiKeysSection({
                 );
               })}
             </div>
+            {hasHiddenKeys ? (
+              <Button
+                type="button"
+                data-testid="api-keys-show-all-toggle"
+                onClick={() => setShowAllKeys((previous) => !previous)}
+                variant="ghost"
+                className="mt-3 rounded-lg px-2 py-1 text-sm font-semibold text-slate-500 hover:text-slate-800"
+              >
+                {showAllKeys ? t('apiKeys.showFewer') : t('apiKeys.showAll').replace('{count}', String(keys.length))}
+              </Button>
+            ) : null}
           </>
         )}
       </div>
