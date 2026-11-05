@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n/provider';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import {
   OAuthError,
   openOAuthPopup,
@@ -42,6 +43,9 @@ export function useOAuthFlow({ startUrl, popupTitle, successType, errorType, que
 
       // Step 1: authorization URL (validates the session)
       const authUrlResponse = await fetch(startUrl);
+      // A 401 here is the hub session (the start routes check it), never a
+      // provider credential: join the host-wide session-expiry redirect.
+      if (!authUrlResponse.ok) notifyIfSessionExpired(authUrlResponse);
       const authUrlData: {
         success?: boolean;
         auth_url?: string;
