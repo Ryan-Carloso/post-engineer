@@ -18,6 +18,7 @@ import type {
 } from '@/lib/types';
 import { isVoiceOption } from './voice-catalog';
 import { logger } from '@/lib/logger';
+import { HttpStatusError } from '@/lib/errors';
 import type { PublishLink } from '@/lib/publish-links';
 import { narrowGeneration, narrowProgressHistory, narrowPublishLinks, type GenerationFacts, type ProgressHistoryEntry } from './slot-detail';
 import { narrowScriptAngle } from './script-angle';
@@ -26,7 +27,6 @@ import type { PersonaRecord } from './persona-record';
 // Re-exported so existing import sites (`@/lib/api`) keep working.
 export type { ProgressHistoryEntry };
 export type { PersonaRecord };
-
 
 //---------------
 // API — typed fetch clients
@@ -63,7 +63,7 @@ async function fetchServerAccounts(): Promise<ServerAccountPayload> {
   try {
     const response = await fetch('/api/account');
     if (!response.ok) {
-      throw new Error(`Account request failed with status ${response.status}`);
+      throw new HttpStatusError(`Account request failed with status ${response.status}`, response.status);
     }
     const data: ServerAccountPayload = await response.json();
     return data;
@@ -140,7 +140,7 @@ async function fetchVoices(): Promise<VoiceOption[]> {
       typeof data.error === 'string'
         ? data.error
         : 'Failed to fetch voices.';
-    throw new Error(message);
+    throw new HttpStatusError(message, response.status);
   }
 
   if (
@@ -159,7 +159,7 @@ async function fetchVoices(): Promise<VoiceOption[]> {
 async function fetchPersonaList(): Promise<PersonaRecord[]> {
   const response = await fetch('/api/persona/list');
   if (!response.ok) {
-    throw new Error(`Persona list request failed with status ${response.status}`);
+    throw new HttpStatusError(`Persona list request failed with status ${response.status}`, response.status);
   }
   const data: { authenticated: boolean; personas: PersonaRecord[] } =
     await response.json();
@@ -339,7 +339,7 @@ async function fetchPersonaImages(personaId: string): Promise<PersonaImageRecord
   // paths do — a generic status message is less actionable.
   const serverError = data && typeof data.error === 'string' ? data.error : null;
   if (!response.ok) {
-    throw new Error(serverError ?? `Persona images request failed with status ${response.status}`);
+    throw new HttpStatusError(serverError ?? `Persona images request failed with status ${response.status}`, response.status);
   }
   if (!data || data.success !== true || !Array.isArray(data.images)) {
     throw new Error(serverError ?? 'Persona images request returned an unexpected payload.');
@@ -737,7 +737,7 @@ interface SlotRow {
 async function fetchSchedules(): Promise<ScheduleConfig[]> {
   const response = await fetch('/api/schedule');
   const data: { success: boolean; schedules?: ScheduleRow[] } = await response.json();
-  if (!response.ok || !data.success) throw new Error('Failed to fetch schedules');
+  if (!response.ok || !data.success) throw new HttpStatusError('Failed to fetch schedules', response.status);
   return (data.schedules ?? []).map(mapSchedule);
 }
 
@@ -769,7 +769,7 @@ async function fetchScheduleStatus(limit?: number): Promise<{ upcoming: Schedule
   const url = typeof limit === 'number' ? `/api/schedule/status?limit=${limit}` : '/api/schedule/status';
   const response = await fetch(url);
   const data: ScheduleStatusPayload = await response.json();
-  if (!response.ok || !data.success) throw new Error('Failed to fetch schedule status');
+  if (!response.ok || !data.success) throw new HttpStatusError('Failed to fetch schedule status', response.status);
   return {
     upcoming: (data.upcoming ?? []).map(mapSlot),
     recent: (data.recent ?? []).map(mapSlot),
@@ -796,7 +796,7 @@ export interface ApiKeyItem {
 
 export async function fetchApiKeys(): Promise<ApiKeyItem[]> {
   const response = await fetch('/api/api-keys');
-  if (!response.ok) throw new Error('Failed to fetch API keys');
+  if (!response.ok) throw new HttpStatusError('Failed to fetch API keys', response.status);
   const data = await response.json();
   return data.keys ?? [];
 }
@@ -889,7 +889,7 @@ async function fetchVideoGenerations(limit?: number): Promise<VideoGeneration[]>
       : '/api/persona/video-generations';
   const response = await fetch(url);
   const data: { success?: boolean; generations?: VideoGeneration[] } = await response.json();
-  if (!response.ok || !data.success) throw new Error('Failed to fetch video generations');
+  if (!response.ok || !data.success) throw new HttpStatusError('Failed to fetch video generations', response.status);
   return data.generations ?? [];
 }
 
@@ -920,7 +920,7 @@ async function parseJsonBody<T>(response: Response): Promise<T | null> {
 async function throwForBadResponse(response: Response, fallback: string): Promise<never> {
   const data = await parseJsonBody<{ error?: string }>(response);
   const message = typeof data?.error === 'string' && data.error.length > 0 ? data.error : fallback;
-  throw new Error(message);
+  throw new HttpStatusError(message, response.status);
 }
 
 //---------------

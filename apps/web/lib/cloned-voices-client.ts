@@ -1,5 +1,6 @@
 import type { ClonedVoicePublicRow } from '@/lib/cloned-voices-types';
 import { narrowClonedVoiceRow } from '@/lib/cloned-voices-types';
+import { HttpStatusError } from '@/lib/errors';
 
 async function parseJson(response: Response): Promise<unknown> {
   try {
@@ -17,7 +18,7 @@ export async function fetchClonedVoices(): Promise<ClonedVoicePublicRow[]> {
       typeof data === 'object' && data !== null && 'error' in data && typeof data.error === 'string'
         ? data.error
         : 'Failed to load cloned voices.';
-    throw new Error(message);
+    throw new HttpStatusError(message, response.status);
   }
   if (
     typeof data !== 'object' ||
@@ -40,7 +41,7 @@ export async function fetchClonedVoice(cloneId: string): Promise<ClonedVoicePubl
       typeof data === 'object' && data !== null && 'error' in data && typeof data.error === 'string'
         ? data.error
         : 'Failed to load cloned voice.';
-    throw new Error(message);
+    throw new HttpStatusError(message, response.status);
   }
   const row =
     typeof data === 'object' && data !== null && 'voice' in data
