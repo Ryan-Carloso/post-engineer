@@ -26,8 +26,11 @@ describe('Billing — storefront, checkout and after-payment notices', () => {
     cy.wait('@tokens');
 
     cy.contains('h1', 'Suas ideias merecem virar vídeos.').should('be.visible');
+    // The storefront sits inside the AppShell's overflow-hidden scroll
+    // container; below-the-fold content needs scrollIntoView to be counted
+    // visible (same as metrics.cy.ts).
     cy.contains('42 tokens').scrollIntoView().should('be.visible');
-    cy.contains('Escolha seu pacote').should('be.visible');
+    cy.contains('Escolha seu pacote').scrollIntoView().should('be.visible');
     // A clean URL shows no after-payment notice.
     cy.get('[role="status"]').should('not.exist');
   });
@@ -67,14 +70,19 @@ describe('Billing — storefront, checkout and after-payment notices', () => {
   it('shows the after-payment notice and settles back to /billing', (): void => {
     cy.visit('/billing?checkout=success');
     cy.wait('@tokens');
-    cy.contains('[role="status"]', 'Seu pagamento está sendo confirmado.').should('be.visible');
+    // The notice renders below the fold inside the scroll container.
+    cy.contains('[role="status"]', 'Seu pagamento está sendo confirmado.')
+      .scrollIntoView()
+      .should('be.visible');
   });
 
   it('shows the canceled notice plus the feedback dialog and closes both', (): void => {
     cy.visit('/billing?checkout=canceled');
     cy.wait('@tokens');
 
-    cy.contains('[role="status"]', 'Nenhum cobrado.').should('be.visible');
+    cy.contains('[role="status"]', 'Nenhum cobrado.')
+      .scrollIntoView()
+      .should('be.visible');
     // The cancel feedback dialog asks WHY and closes via router.replace.
     cy.contains('Por que você desistiu?').should('be.visible');
     cy.contains('button', 'Fechar').click();
