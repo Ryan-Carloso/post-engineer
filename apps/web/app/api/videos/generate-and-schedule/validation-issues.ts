@@ -8,7 +8,7 @@ import { ERROR_CODES, type ErrorCode } from '@/lib/error-codes';
 
 export interface ValidationIssue {
   code: ErrorCode;
-  /** Human-readable problem; the first issue's message is the top-level `message`. */
+  /** Human-readable problem; the first issue's message is the top-level `error`. */
   message: string;
   /** Dotted request path of the failing field, when one is known. */
   field?: string;

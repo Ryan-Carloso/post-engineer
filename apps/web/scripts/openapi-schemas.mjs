@@ -20,6 +20,19 @@ export const componentSchemas = {
       error: str,
       code: { type: 'string', description: 'Stable error code.' },
       field: { type: 'string', description: 'Offending request field, when known.' },
+      errors: {
+        type: 'array',
+        description:
+          'Every validation problem (generate-and-schedule 400 only). The first entry matches the top-level code, error and field.',
+        items: object(
+          {
+            code: str,
+            message: str,
+            field: { type: 'string', description: 'Offending request field, when known.' },
+          },
+          ['code', 'message'],
+        ),
+      },
     },
     ['success', 'error'],
   ),

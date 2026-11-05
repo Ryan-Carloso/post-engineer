@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Post Engineer API",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Generate and schedule short videos for social accounts. Authenticate with an API key created in the dashboard: Authorization: Bearer <key>."
   },
   "servers": [
@@ -37,6 +37,29 @@
           "field": {
             "type": "string",
             "description": "Offending request field, when known."
+          },
+          "errors": {
+            "type": "array",
+            "description": "Every validation problem (generate-and-schedule 400 only). The first entry matches the top-level code, error and field.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "field": {
+                  "type": "string",
+                  "description": "Offending request field, when known."
+                }
+              },
+              "required": [
+                "code",
+                "message"
+              ]
+            }
           }
         },
         "required": [
