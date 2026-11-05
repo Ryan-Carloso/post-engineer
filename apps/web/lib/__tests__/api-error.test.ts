@@ -191,9 +191,12 @@ describe('apiErrorResponse', () => {
 
     const body = await res.json();
     const listed = body.errors as Array<{ message: string }>;
-    expect(listed[0].message).toBe('Invalid provider: "Bearer [redacted]');
+    const redacted = 'Invalid provider: "Bearer [redacted]';
+    expect(body.error).toBe(redacted);
+    expect(listed[0].message).toBe(redacted);
+    expect(body.error).toBe(listed[0].message);
     expect(listed[1].message).toBe('Title is required.');
-    expect(JSON.stringify(listed)).not.toContain(token);
+    expect(JSON.stringify(body)).not.toContain(token);
 
     const warnCall = vi.mocked(logger.warn).mock.calls[0];
     expect(JSON.stringify(warnCall[1])).not.toContain(token);
