@@ -8,8 +8,11 @@ import { HttpStatusError } from './errors';
 // returns to the same screen afterwards via ?next=<current relative path>.
 //---------------
 
-/** Public paths reachable while logged out — never redirect from these. */
-const PUBLIC_PATH_PREFIXES = ['/login', '/auth/', '/landing', '/privacy', '/terms'];
+/** Public paths reachable while logged out — never redirect from these.
+ * Keep in sync with the middleware's publicPaths list (and its matcher's
+ * auth/, oauth/ exemptions) — pinned by the sync test in
+ * lib/__tests__/session-expiry.test.tsx. */
+const PUBLIC_PATH_PREFIXES = ['/login', '/auth/', '/landing', '/privacy', '/terms', '/recipes', '/oauth/'];
 
 export function isSessionExpiredError(error: unknown): boolean {
   return error instanceof HttpStatusError && error.status === 401;

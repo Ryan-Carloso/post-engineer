@@ -1,11 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
+import { currentRelativePath, isSessionExpiredError, loginRedirectTarget } from '../session-expiry';
+import { findRepoRoot } from '../../test/repo-root';
 import { HttpStatusError } from '../errors';
-import {
-  currentRelativePath,
-  isSessionExpiredError,
-  loginRedirectTarget,
-} from '../session-expiry';
 
 describe('isSessionExpiredError', () => {
   it('is true for an HttpStatusError with status 401', () => {
@@ -45,8 +44,45 @@ describe('loginRedirectTarget', () => {
     ['the landing page', '/landing', ''],
     ['the privacy page', '/privacy', ''],
     ['the terms page', '/terms', ''],
+    ['a public recipe page', '/recipes', ''],
+    ['/oauth/ pages', '/oauth/authorize', '?state=x'],
   ])('returns null on %s', (_name, pathname, search) => {
     stubWindowLocation(pathname, search, undefined);
+    expect(loginRedirectTarget()).toBeNull();
+  });
+});
+
+//---------------
+// Sync pin: the public paths accepted here must cover every path the
+// middleware treats as public (apps/web/middleware.ts), read from the real
+// middleware source so the two lists cannot drift.
+//---------------
+describe('PUBLIC_PATH_PREFIXES — middleware parity', () => {
+  const middlewareSource = readFileSync(
+    join(findRepoRoot(import.meta.url), 'apps/web', 'middleware.ts'),
+    'utf8',
+  );
+  const start = middlewareSource.indexOf('const publicPaths = ');
+  const listBlock = middlewareSource.slice(start + 'const publicPaths = '.length, middlewareSource.indexOf('];', start));
+  const middlewarePublicPaths = listBlock
+    .split(',')
+    .map((entry) => entry.replace(/[[\] ']/g, ''))
+    .filter(Boolean);
+
+  it('extracts the middleware list (guard for this very pin)', () => {
+    expect(middlewarePublicPaths).toEqual(['/landing', '/login', '/privacy', '/terms', '/recipes']);
+  });
+
+  it.each(middlewarePublicPaths)('never redirects from the middleware-public %s', (prefix) => {
+    stubWindowLocation(prefix, '', undefined);
+    expect(loginRedirectTarget()).toBeNull();
+  });
+
+  it.each([
+    ['/auth/', '/auth/callback'],
+    ['/oauth/', '/oauth/authorize'],
+  ])('never redirects from the matcher exemption %s', (prefix, pathname) => {
+    stubWindowLocation(pathname, '?state=1', undefined);
     expect(loginRedirectTarget()).toBeNull();
   });
 });

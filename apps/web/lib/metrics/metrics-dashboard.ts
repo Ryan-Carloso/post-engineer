@@ -6,6 +6,7 @@ import {
   type MetricsResponse,
   type MetricsRowView,
 } from './metrics-query';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 
 //---------------
 // metrics-dashboard — client-side data for the metrics page: the React
@@ -57,7 +58,12 @@ function isMetricsResponse(value: unknown): value is MetricsResponse {
 export async function fetchMetrics(query: MetricsQuery): Promise<MetricsFetchResult> {
   try {
     const response = await fetch(`/api/metrics?${metricsSearchParams(query).toString()}`);
-    if (!response.ok) return { success: false, error: `status ${response.status}` };
+    if (!response.ok) {
+      // Fail-safe contract kept ({ success: false, error }), but a dead
+      // session must still trigger the host-wide redirect.
+      notifyIfSessionExpired(response);
+      return { success: false, error: `status ${response.status}` };
+    }
     const body: unknown = await response.json().catch(() => null);
     if (!isMetricsResponse(body)) return { success: false, error: 'unexpected response' };
     return { success: true, rows: body.rows, truncated: body.truncated };
