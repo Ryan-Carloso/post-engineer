@@ -14,6 +14,16 @@
  */
 export const CLONE_PREVIEW_TEXT_MAX_CHARS = 300;
 
+/**
+ * Max voice clone reference audio size in bytes (20MB), for both the
+ * audioUrl download and the local audioPath read. Same bound as the web
+ * cloned-voices route.
+ */
+export const MAX_CLONE_AUDIO_BYTES = 20 * 1024 * 1024;
+
+/** Same limit in whole MB, derived from the byte limit. */
+export const MAX_CLONE_AUDIO_MB = MAX_CLONE_AUDIO_BYTES / (1024 * 1024);
+
 /** Max library image size in bytes (10MB). */
 export const MAX_LIBRARY_IMAGE_BYTES = 10 * 1024 * 1024;
 

@@ -1,13 +1,19 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import * as fsPromises from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
+  createClonedVoiceFromFile,
   createClonedVoiceFromUrl,
   deleteClonedVoice,
   fetchCloneReferenceAudio,
   getClonedVoice,
   listClonedVoices,
   previewClonedVoice,
+  readCloneReferenceFile,
   type ClonedVoiceClientHost,
 } from '../cloned-voice-client.js';
 import {
@@ -20,6 +26,12 @@ import {
 } from '../cloned-voice-tools.js';
 import { createPostEngineerMcpServer } from '../index.js';
 import type { PostEngineerClient } from '../client.js';
+
+// Spy-able readFile: the over-size test proves the file is never read.
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, readFile: vi.fn(actual.readFile) };
+});
 
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
@@ -356,6 +368,109 @@ describe('createClonedVoiceFromUrl', () => {
   });
 });
 
+describe('readCloneReferenceFile / createClonedVoiceFromFile (audioPath)', () => {
+  let dir: string;
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'clone-ref-'));
+  });
+
+  afterAll(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  afterEach(() => {
+    vi.mocked(fsPromises.readFile).mockClear();
+  });
+
+  it('reads a local recording into a typed Blob named by its basename', async () => {
+    const path = join(dir, 'My Voice.MP3');
+    await writeFile(path, Buffer.from([1, 2, 3]));
+    const { blob, filename } = await readCloneReferenceFile(path);
+    expect(filename).toBe('My Voice.MP3');
+    expect(blob.type).toBe('audio/mpeg');
+    expect(blob.size).toBe(3);
+  });
+
+  it.each([
+    ['ref.wav', 'audio/wav'],
+    ['ref.m4a', 'audio/mp4'],
+    ['ref.webm', 'audio/webm'],
+  ])('maps %s to %s', async (name, mime) => {
+    const path = join(dir, name);
+    await writeFile(path, Buffer.from([9]));
+    expect((await readCloneReferenceFile(path)).blob.type).toBe(mime);
+  });
+
+  it('rejects an over-size file before reading it', async () => {
+    const path = join(dir, 'huge.wav');
+    await writeFile(path, Buffer.alloc(20 * 1024 * 1024 + 1));
+    await expect(readCloneReferenceFile(path)).rejects.toThrow('Audio "huge.wav" exceeds 20 MB.');
+    expect(fsPromises.readFile).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unsupported extension before touching the file', async () => {
+    const path = join(dir, 'notes.txt');
+    await writeFile(path, 'hello');
+    await expect(readCloneReferenceFile(path)).rejects.toThrow(
+      'Audio "notes.txt" must be an MP3, WAV, M4A, or WebM file.',
+    );
+    expect(fsPromises.readFile).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty file', async () => {
+    const path = join(dir, 'empty.wav');
+    await writeFile(path, Buffer.alloc(0));
+    await expect(readCloneReferenceFile(path)).rejects.toThrow('Audio "empty.wav" is empty.');
+  });
+
+  it('names only the basename when the file is missing, never the full path', async () => {
+    const path = join(dir, 'private-folder', 'missing.wav');
+    const error = await readCloneReferenceFile(path).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toBe('Failed to read audio "missing.wav".');
+    expect(message.includes(dir)).toBe(false);
+    expect(message.includes('private-folder')).toBe(false);
+  });
+
+  it('rejects a directory', async () => {
+    const path = join(dir, 'folder.wav');
+    await fsPromises.mkdir(path);
+    await expect(readCloneReferenceFile(path)).rejects.toThrow('Audio "folder.wav" is not a file.');
+  });
+
+  it('requires consent before reading anything', async () => {
+    const request = vi.fn();
+    await expect(
+      createClonedVoiceFromFile(fakeHost(request), join(dir, 'My Voice.MP3'), 'en', false, true),
+    ).rejects.toThrow('consent must be true to create a voice clone');
+    expect(fsPromises.readFile).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('uploads the local file as the multipart file field', async () => {
+    const path = join(dir, 'take1.wav');
+    await writeFile(path, Buffer.from([4, 4, 4, 4]));
+    const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-2' } });
+    const result = await createClonedVoiceFromFile(fakeHost(request), path, 'en', true, true);
+    expect(result).toEqual({ success: true, body: { id: 'clone-2' } });
+    const [route, init, label, timeout] = request.mock.calls[0] as [string, RequestInit, string, number];
+    expect(route).toBe('/api/persona/cloned-voices');
+    expect(init.method).toBe('POST');
+    expect(label).toBe('create cloned voice');
+    expect(timeout).toBe(120_000);
+    const form = init.body as FormData;
+    expect(form.get('consent')).toBe('true');
+    expect(form.get('denoise')).toBe('true');
+    expect(form.get('language')).toBe('en');
+    const file = form.get('file') as File;
+    expect(file.name).toBe('take1.wav');
+    expect(file.type).toBe('audio/wav');
+    expect(file.size).toBe(4);
+  });
+});
+
 describe('cloned voice tool handlers', () => {
   afterEach(() => {
     global.fetch = realFetch;
@@ -521,6 +636,61 @@ describe('cloned voice tools run through the MCP server', () => {
       expect(request).not.toHaveBeenCalled();
     } finally {
       await client.close();
+    }
+  });
+
+  async function callToolRaw(args: Record<string, unknown>, request: ReturnType<typeof vi.fn>) {
+    const apiClient = fakeHost(request) as unknown as PostEngineerClient;
+    const server = createPostEngineerMcpServer(apiClient);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      return await client.callTool({ name: 'create_cloned_voice', arguments: args });
+    } finally {
+      await client.close();
+    }
+  }
+
+  it('create_cloned_voice rejects both audioUrl and audioPath', async () => {
+    const request = vi.fn();
+    global.fetch = vi.fn();
+    const result = await callToolRaw(
+      { audioUrl: 'https://cdn.example.com/ref.wav', audioPath: '/tmp/ref.wav', language: 'en', consent: true, denoise: true },
+      request,
+    );
+    expect(result.isError).toBe(true);
+    expect(firstText(result as { content?: unknown })).toContain('Send exactly one of audioUrl or audioPath.');
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('create_cloned_voice rejects neither audioUrl nor audioPath', async () => {
+    const request = vi.fn();
+    const result = await callToolRaw({ language: 'en', consent: true, denoise: true }, request);
+    expect(result.isError).toBe(true);
+    expect(firstText(result as { content?: unknown })).toContain('Send exactly one of audioUrl or audioPath.');
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('create_cloned_voice uploads a local audioPath without downloading anything', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'clone-tool-'));
+    try {
+      const path = join(dir, 'voice.m4a');
+      await writeFile(path, Buffer.from([7, 7]));
+      const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-3' } });
+      global.fetch = vi.fn();
+      const result = await callTool(
+        'create_cloned_voice',
+        { audioPath: path, language: 'en', consent: true, denoise: false },
+        request,
+      );
+      expect(firstText(result as { content?: unknown })).toContain('Voice clone registration started');
+      expect(global.fetch).not.toHaveBeenCalled();
+      const form = (request.mock.calls[0] as [string, RequestInit])[1].body as FormData;
+      expect((form.get('file') as File).name).toBe('voice.m4a');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   });
 

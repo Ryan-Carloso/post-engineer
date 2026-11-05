@@ -119,7 +119,7 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `list_personas`: list existing personas.
 - `list_voices`: list available persona voices (live catalog: 65 English house voices with `gender`/`accent`/`kind`, plus your ready clones). Each voice has a `description` of how it sounds. Optional filters: `gender` (`female`|`male`), `origin` (`us`|`gb`|`character`), `search` (words matched in name/description, e.g. `"deep calm"`). The response never contains `openrouter:` or `elevenlabs:` ids — the picker is house voices + your clones only.
 - `list_cloned_voices`: list your per-user Chatterbox voice clones (status and `voice_id` when ready).
-- `create_cloned_voice`: register a voice clone from a short HTTPS audio URL (requires `consent: true` and `denoise`: `true` cleans background noise first, `false` keeps the original).
+- `create_cloned_voice`: register a voice clone from a short reference recording — exactly one of `audioUrl` (HTTPS URL) or `audioPath` (local `.mp3`/`.wav`/`.m4a`/`.webm` file, max 20MB, checked before it is read; errors name only the file, never the full path) (requires `consent: true` and `denoise`: `true` cleans background noise first, `false` keeps the original).
 - `get_cloned_voice`: get one voice clone by id — poll its `status` after `create_cloned_voice` until `ready` (then `voice_id` is set) or `failed`.
 - `delete_cloned_voice`: delete a voice clone by id.
 - `preview_cloned_voice`: synthesize a short MP3 preview for a ready clone (returns base64 audio). Optional `text` (1-300 chars, English) makes the clone speak your words instead of the fixed sample; previews are free and limited to 10 per user per day.

@@ -1,4 +1,8 @@
+import { readFile, stat } from 'node:fs/promises';
+import { basename, extname } from 'node:path';
+
 import { readApiFailure } from './errors.js';
+import { MAX_CLONE_AUDIO_BYTES, MAX_CLONE_AUDIO_MB } from './limits.js';
 
 const UPLOAD_TIMEOUT_MS = 120_000;
 
@@ -74,8 +78,7 @@ export async function fetchCloneReferenceAudio(audioUrl: string): Promise<Blob> 
     if (!response.ok) {
       throw new Error(`Failed to download audio: HTTP ${response.status}`);
     }
-    const maxBytes = 20 * 1024 * 1024;
-    const buffer = await readBodyWithCap(response, maxBytes);
+    const buffer = await readBodyWithCap(response, MAX_CLONE_AUDIO_BYTES);
     if (buffer.length === 0) {
       throw new Error('Downloaded audio is empty');
     }
@@ -84,6 +87,58 @@ export async function fetchCloneReferenceAudio(audioUrl: string): Promise<Blob> 
   } finally {
     clearTimeout(timeout);
   }
+}
+
+// Accepted local reference extensions and the MIME type each is sent with.
+// The web route re-validates the real content; this only fails fast.
+const CLONE_AUDIO_MIME_TYPES: ReadonlyMap<string, string> = new Map([
+  ['.mp3', 'audio/mpeg'],
+  ['.wav', 'audio/wav'],
+  ['.m4a', 'audio/mp4'],
+  ['.webm', 'audio/webm'],
+]);
+
+function assertCloneAudioSize(bytes: number, name: string): void {
+  if (bytes > MAX_CLONE_AUDIO_BYTES) {
+    throw new Error(`Audio "${name}" exceeds ${MAX_CLONE_AUDIO_MB} MB.`);
+  }
+}
+
+/**
+ * Read a local reference recording for a voice clone. Extension and stat()
+ * size are checked before the file is read (bounded memory), the size is
+ * re-checked after the read, and errors carry only the file's basename,
+ * never the full local path.
+ */
+export async function readCloneReferenceFile(
+  path: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const name = basename(path);
+  const mimeType = CLONE_AUDIO_MIME_TYPES.get(extname(name).toLowerCase());
+  if (mimeType === undefined) {
+    throw new Error(`Audio "${name}" must be an MP3, WAV, M4A, or WebM file.`);
+  }
+  let fileStat;
+  try {
+    fileStat = await stat(path);
+  } catch {
+    throw new Error(`Failed to read audio "${name}".`);
+  }
+  if (!fileStat.isFile()) {
+    throw new Error(`Audio "${name}" is not a file.`);
+  }
+  assertCloneAudioSize(fileStat.size, name);
+  let buffer: Buffer;
+  try {
+    buffer = await readFile(path);
+  } catch {
+    throw new Error(`Failed to read audio "${name}".`);
+  }
+  if (buffer.length === 0) {
+    throw new Error(`Audio "${name}" is empty.`);
+  }
+  assertCloneAudioSize(buffer.length, name);
+  return { blob: new Blob([buffer], { type: mimeType }), filename: name };
 }
 
 export async function listClonedVoices(client: ClonedVoiceClientHost): Promise<unknown> {
@@ -105,11 +160,35 @@ export async function createClonedVoiceFromUrl(
     throw new Error('consent must be true to create a voice clone');
   }
   const blob = await fetchCloneReferenceAudio(audioUrl);
+  return postCloneReference(client, blob, 'reference.bin', language, denoise);
+}
+
+export async function createClonedVoiceFromFile(
+  client: ClonedVoiceClientHost,
+  audioPath: string,
+  language: string,
+  consent: boolean,
+  denoise: boolean,
+): Promise<unknown> {
+  if (!consent) {
+    throw new Error('consent must be true to create a voice clone');
+  }
+  const { blob, filename } = await readCloneReferenceFile(audioPath);
+  return postCloneReference(client, blob, filename, language, denoise);
+}
+
+async function postCloneReference(
+  client: ClonedVoiceClientHost,
+  blob: Blob,
+  filename: string,
+  language: string,
+  denoise: boolean,
+): Promise<unknown> {
   const formData = new FormData();
   formData.set('consent', 'true');
   formData.set('denoise', denoise ? 'true' : 'false');
   formData.set('language', language);
-  formData.set('file', blob, 'reference.bin');
+  formData.set('file', blob, filename);
   return client.request(
     '/api/persona/cloned-voices',
     { method: 'POST', headers: client.getHeaders(false), body: formData },
@@ -168,7 +247,7 @@ export async function previewClonedVoice(
     const failure = readApiFailure(errorText);
     throw new Error(`Failed to preview cloned voice: ${response.status} ${failure.detail}`);
   }
-  const bytes = await readBodyWithCap(response, 20 * 1024 * 1024, 'Preview audio');
+  const bytes = await readBodyWithCap(response, MAX_CLONE_AUDIO_BYTES, 'Preview audio');
   if (bytes.length === 0) {
     throw new Error(
       `Failed to preview cloned voice: preview audio was empty (status ${response.status}).`,
