@@ -12,6 +12,7 @@ import { HttpStatusError } from '../errors';
 import {
   fetchApiKeys,
   fetchPostDetail,
+  deletePersonaImage,
   usePersonaImagesQuery,
   usePersonaListQuery,
   usePostDetailQuery,
@@ -23,6 +24,7 @@ import {
   useVoicesQuery,
 } from '../api';
 import { fetchClonedVoice, fetchClonedVoices } from '../cloned-voices-client';
+import * as sessionExpiry from '../session-expiry';
 
 function response(status: number, body: unknown = { success: false, error: 'nope' }): Response {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as unknown as Response;
@@ -137,5 +139,46 @@ describe('dashboard queries with the default retry policy', () => {
     const { result } = renderHook(() => useVoicesQuery(), { wrapper: wrapper() });
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+//---------------
+// Branches next to the status plumbing: fallback messages, the 2xx paths,
+// and a failed-but-OK mutation that must not trip the session redirect.
+//---------------
+describe('fetcher branches around the HTTP status', () => {
+  function wrapper(): (props: { children: ReactNode }) => ReactNode {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return ({ children }) => QueryClientProvider({ client, children }) as ReactNode;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('persona images: a non-OK answer without an error body falls back to the status message', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 503, json: async () => { throw new SyntaxError('html'); } })),
+    );
+    const { result } = renderHook(() => usePersonaImagesQuery('p-1'), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('Persona images request failed with status 503');
+    expect((result.current.error as HttpStatusError).status).toBe(503);
+  });
+
+  it('image mutation: a 200 with success:false fails without the session-expiry notify', async () => {
+    const notify = vi.spyOn(sessionExpiry, 'notifyIfSessionExpired');
+    vi.stubGlobal('fetch', vi.fn(async () => response(200, { success: false, error: 'Image not found.' })));
+    await expect(deletePersonaImage('img-1')).resolves.toEqual({ success: false, error: 'Image not found.' });
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('video generations: a successful read returns the generations', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(200, { success: true, generations: [{ id: 'g-1' }] })));
+    const { result } = renderHook(() => useVideoGenerationsQuery(), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual([{ id: 'g-1' }]);
   });
 });
