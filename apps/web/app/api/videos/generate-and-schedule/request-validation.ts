@@ -88,17 +88,32 @@ export function checkSemantics(input: SemanticInput): Checked<CheckedRequest> {
   };
 }
 
+// A zod path can contain a caller-controlled key (publishing.accounts.<key>).
+// The issue count is already capped; each path is capped too, or one long
+// key still reaches PostHog and the response. Matches the 500-char cap
+// trackApiEvent applies to top-level strings, kept shorter for a field path.
+const MAX_FIELD_PATH_CHARS = 200;
+
+function capField(field: string | undefined): string | undefined {
+  return field === undefined ? undefined : field.slice(0, MAX_FIELD_PATH_CHARS);
+}
+
 /** Track once per rejected request and return the 400 with every problem, capped. */
 export function rejectInvalidRequest(issues: ValidationIssue[]): NextResponse {
   const reported = issues.slice(0, MAX_REPORTED_ISSUES);
   const [first] = reported;
+  const field = capField(first.field);
   trackApiEvent('video_creation_validation_failed', {
     errorCode: first.code,
-    field: first.field ?? null,
+    field: field ?? null,
     errorCount: issues.length,
-    fields: reported.map((issue) => issue.field ?? null),
+    fields: reported.map((issue) => capField(issue.field) ?? null),
   });
-  return coded(400, first.code, first.message, first.field, {
-    errors: reported.map((issue) => ({ code: issue.code, message: issue.message, field: issue.field })),
+  return coded(400, first.code, first.message, field, {
+    errors: reported.map((issue) => ({
+      code: issue.code,
+      message: issue.message,
+      field: capField(issue.field),
+    })),
   });
 }

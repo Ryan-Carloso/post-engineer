@@ -192,6 +192,24 @@ describe('generate-and-schedule reports every validation problem in one 400 (#35
     });
   });
 
+  it('caps each echoed field path, not only the number of problems', async () => {
+    const longField = `publishing.accounts.${'k'.repeat(500)}`;
+    const res = rejectInvalidRequest([
+      { code: 'VALIDATION_FAILED', message: 'accounts must be arrays', field: longField },
+    ]);
+    const json = (await res.json()) as { field: string; errors: Array<{ field: string }> };
+    expect(json.field).toHaveLength(200);
+    expect(json.field).toBe(longField.slice(0, 200));
+    expect(json.errors[0].field).toBe(longField.slice(0, 200));
+    const calls = vi.mocked(trackApiEvent).mock.calls.filter(
+      ([name]) => name === 'video_creation_validation_failed',
+    );
+    expect(calls.at(-1)?.[1]).toMatchObject({
+      field: longField.slice(0, 200),
+      fields: [longField.slice(0, 200)],
+    });
+  });
+
   it('rejects an oversized provider list before naming each one', () => {
     const outcome = validateProviders(Array.from({ length: 21 }, () => 'youtube'));
     expect(outcome.ok).toBe(false);
