@@ -1,0 +1,33 @@
+{
+  "uiFiles": [
+    "apps/web/app/(main)/accounts/page.tsx",
+    "apps/web/app/(main)/billing/page.tsx",
+    "apps/web/app/(main)/billing/token-history.tsx",
+    "apps/web/app/(main)/persona/persona-publishing-accounts-section.tsx",
+    "apps/web/app/providers.tsx"
+  ],
+  "vitest": {
+    "status": "na",
+    "reason": "no coverable lines in changed UI files"
+  },
+  "cypress": {
+    "covered": 94,
+    "total": 157,
+    "status": "fail",
+    "inScope": [
+      "apps/web/app/(main)/accounts/page.tsx",
+      "apps/web/app/(main)/billing/page.tsx",
+      "apps/web/app/providers.tsx"
+    ],
+    "exempt": [
+      "apps/web/app/(main)/billing/token-history.tsx",
+      "apps/web/app/(main)/persona/persona-publishing-accounts-section.tsx"
+    ],
+    "missing": []
+  },
+  "mutation": {
+    "status": "missing",
+    "reason": "Stryker mutation.json is not valid JSON"
+  },
+  "pass": false
+}
