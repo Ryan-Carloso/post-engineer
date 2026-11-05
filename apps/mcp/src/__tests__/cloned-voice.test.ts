@@ -271,6 +271,22 @@ describe('cloned voice client calls', () => {
     );
   });
 
+  it('joins every listed validation message on a non-ok preview', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () =>
+        JSON.stringify({
+          error: 'title is required',
+          errors: [{ message: 'title is required' }, { message: 'voice is required' }],
+        }),
+    });
+    const host = fakeHost(vi.fn());
+    await expect(previewClonedVoice(host, 'clone-1')).rejects.toThrow(
+      'Failed to preview cloned voice: 400 title is required voice is required'
+    );
+  });
+
   it('rejects an empty preview audio body', async () => {
     global.fetch = vi.fn().mockResolvedValue(audioResponse([], 'audio/mpeg'));
     const host = fakeHost(vi.fn());

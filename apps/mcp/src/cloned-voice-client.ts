@@ -1,3 +1,5 @@
+import { readApiFailure } from './errors.js';
+
 const UPLOAD_TIMEOUT_MS = 120_000;
 
 export interface ClonedVoiceClientHost {
@@ -161,21 +163,10 @@ export async function previewClonedVoice(
   });
   if (!response.ok) {
     const errorText = await response.text();
-    // Mirror the client's error contract: prefer the structured `error`
-    // message, capped like MAX_ERROR_BODY_CHARS in client.ts.
-    let detail = errorText.slice(0, 200);
-    try {
-      const parsed: unknown = JSON.parse(errorText);
-      if (typeof parsed === 'object' && parsed !== null) {
-        const record = parsed as Record<string, unknown>;
-        if (typeof record.error === 'string' && record.error.length > 0) {
-          detail = record.error.slice(0, 200);
-        }
-      }
-    } catch {
-      // Non-JSON body: detail stays the capped raw text.
-    }
-    throw new Error(`Failed to preview cloned voice: ${response.status} ${detail}`);
+    // Same contract as client.request: structured `error`, and every
+    // message in an `errors` list, capped inside readApiFailure.
+    const failure = readApiFailure(errorText);
+    throw new Error(`Failed to preview cloned voice: ${response.status} ${failure.detail}`);
   }
   const bytes = await readBodyWithCap(response, 20 * 1024 * 1024, 'Preview audio');
   if (bytes.length === 0) {
