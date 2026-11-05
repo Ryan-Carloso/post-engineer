@@ -176,6 +176,35 @@ describe('apiErrorResponse', () => {
     expect(warnCall[1]).toMatchObject({ code: 'INSUFFICIENT', have: 10, need: 50 });
   });
 
+  it('fragment-redacts tokens nested in an errors list before logging or responding', async () => {
+    const token = 'sk-' + 'b'.repeat(24);
+    const leaked = `Invalid provider: "Bearer ${token}".`;
+    const res = apiErrorResponse(400, leaked, {
+      route: 'POST /api/videos/generate-and-schedule',
+      extra: {
+        errors: [
+          { code: 'VALIDATION_FAILED', message: leaked, field: 'publishing.providers' },
+          { code: 'VALIDATION_FAILED', message: 'Title is required.', field: 'title' },
+        ],
+      },
+    });
+
+    const body = await res.json();
+    const listed = body.errors as Array<{ message: string }>;
+    expect(listed[0].message).toBe('Invalid provider: "Bearer [redacted]');
+    expect(listed[1].message).toBe('Title is required.');
+    expect(JSON.stringify(listed)).not.toContain(token);
+
+    const warnCall = vi.mocked(logger.warn).mock.calls[0];
+    expect(JSON.stringify(warnCall[1])).not.toContain(token);
+    expect(warnCall[1]).toMatchObject({
+      errors: [
+        { message: 'Invalid provider: "Bearer [redacted]', field: 'publishing.providers' },
+        { message: 'Title is required.', field: 'title' },
+      ],
+    });
+  });
+
   it('logs a stable logMessage instead of the user-facing error when provided', async () => {
     // User input embedded in the public message would create a distinct
     // PostHog issue per malformed value; the stable template keeps

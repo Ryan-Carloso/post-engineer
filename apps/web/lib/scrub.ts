@@ -31,9 +31,16 @@ export function scrubSecrets(metadata: Record<string, unknown>, depth = 0): Reco
     } else if (depth < MAX_SCRUB_DEPTH && isPlainRecord(value)) {
       scrubbed[key] = scrubSecrets(value, depth + 1);
     } else if (depth < MAX_SCRUB_DEPTH && Array.isArray(value)) {
-      scrubbed[key] = value.map((item) =>
-        isPlainRecord(item) ? scrubSecrets(item, depth + 1) : item,
-      );
+      scrubbed[key] = value.map((item) => {
+        if (isPlainRecord(item)) return scrubSecrets(item, depth + 1);
+        // Free-text entries (a validation `errors` list) are caller-controlled.
+        if (typeof item === 'string') return redactCredentialFragments(item);
+        return item;
+      });
+    } else if (typeof value === 'string') {
+      // Key-name scrubbing misses a Bearer/sk- token pasted into a message.
+      // Nested strings (errors[].message) take this path via the recursive call.
+      scrubbed[key] = redactCredentialFragments(value);
     } else if (value instanceof Error) {
       // Errors have no enumerable own properties — Object.entries would
       // yield {}. Preserve the message instead of silently emptying.

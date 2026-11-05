@@ -76,3 +76,47 @@ export class VideoTooLargeError extends Error {
     this.sizeBytes = sizeBytes;
   }
 }
+
+// Bound how much of an upstream error body can flow into agent-visible output.
+const MAX_ERROR_BODY_CHARS = 200;
+
+/** Messages from a structured API `errors` list (non-message entries skipped). */
+function listedErrorMessages(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item: unknown): string[] => {
+    if (typeof item !== 'object' || item === null || !('message' in item)) return [];
+    return typeof item.message === 'string' ? [item.message] : [];
+  });
+}
+
+/**
+ * Turn a non-2xx body into the detail, code and field `ApiError` carries.
+ * A validation 400 lists every problem in `errors` (issue #351): when more
+ * than one is present, the agent sees all of them, capped, so it can fix
+ * the request in one retry. A non-JSON body stays the capped raw text.
+ */
+export function readApiFailure(errorText: string): {
+  detail: string;
+  code: string | null;
+  field: string | null;
+} {
+  let code: string | null = null;
+  let field: string | null = null;
+  let detail = errorText.slice(0, MAX_ERROR_BODY_CHARS);
+  try {
+    const parsed: unknown = JSON.parse(errorText);
+    if (typeof parsed === 'object' && parsed !== null) {
+      const record = parsed as Record<string, unknown>;
+      if (typeof record.error === 'string' && record.error.length > 0) {
+        detail = record.error.slice(0, MAX_ERROR_BODY_CHARS);
+      }
+      const listed = listedErrorMessages(record.errors);
+      if (listed.length > 1) detail = listed.join(' ').slice(0, MAX_ERROR_BODY_CHARS);
+      if (typeof record.code === 'string') code = record.code;
+      if (typeof record.field === 'string') field = record.field;
+    }
+  } catch {
+    // Non-JSON body: detail stays the capped raw text.
+  }
+  return { detail, code, field };
+}
