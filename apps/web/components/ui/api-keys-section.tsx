@@ -37,9 +37,9 @@ export default function ApiKeysSection({
   const { copied, copy } = useCopyText();
 
   const keys = query.data ?? [];
-  // A freshly created key must stay visible even when it falls outside the
-  // collapsed slice, so creation itself forces the list open.
-  const visibleKeys = showAllKeys || newKeyData ? keys : keys.slice(0, MAX_VISIBLE_KEYS);
+  // The API orders keys newest first, so a freshly created key always sits
+  // inside the visible slice; the list collapses purely by user choice.
+  const visibleKeys = showAllKeys ? keys : keys.slice(0, MAX_VISIBLE_KEYS);
   const hasHiddenKeys = keys.length > MAX_VISIBLE_KEYS;
 
   const canSubmit = keyName.trim().length > 0 && !createMutation.isPending;

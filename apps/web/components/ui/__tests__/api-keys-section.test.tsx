@@ -375,7 +375,7 @@ describe('ApiKeysSection', () => {
     expect(screen.getByTestId('api-key-row-key-4')).toBeInTheDocument();
   });
 
-  it('expands the list when a new key is created so it stays visible', async () => {
+  it('keeps the show-all toggle consistent while the created-key banner is open', async () => {
     vi.mocked(useApiKeysQuery).mockReturnValue({
       data: Array.from({ length: 6 }, (_, index) => makeKey(index + 1)),
       isLoading: false,
@@ -392,13 +392,19 @@ describe('ApiKeysSection', () => {
     vi.mocked(useCreateApiKeyMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
     renderSection();
 
-    expect(screen.queryByTestId('api-key-row-key-5')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('api-keys-show-all-toggle'));
+    expect(screen.getByTestId('api-key-row-key-5')).toBeInTheDocument();
+
+    // Creating a key shows the one-time banner; the list is ordered newest
+    // first, so the banner being open must not desync the toggle.
     fireEvent.click(screen.getByTestId('generate-api-key-btn'));
     fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'New Agent' } });
     fireEvent.click(screen.getByTestId('submit-create-key-btn'));
-
     expect(await screen.findByTestId('api-key-created-banner')).toBeInTheDocument();
-    // Even outside the collapsed slice, keys beyond the limit are revealed on create.
     expect(screen.getByTestId('api-key-row-key-5')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('api-keys-show-all-toggle'));
+    expect(screen.getByTestId('api-keys-show-all-toggle')).toHaveTextContent('Show all 6 keys');
+    expect(screen.queryByTestId('api-key-row-key-5')).not.toBeInTheDocument();
   });
 });
