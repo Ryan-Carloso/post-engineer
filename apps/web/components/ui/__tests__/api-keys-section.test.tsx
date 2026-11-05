@@ -306,6 +306,28 @@ describe('ApiKeysSection', () => {
     expect(await screen.findByTestId('api-key-created-banner')).toBeInTheDocument();
   });
 
+  it('marks a revoked key in the list without a revoke action', () => {
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: [
+        {
+          id: 'key-1',
+          name: 'Old CI',
+          keyPrefix: 'pe_live_oldci123...',
+          personaIds: null,
+          createdAt: '2026-09-18T10:00:00.000Z',
+          lastUsedAt: null,
+          revokedAt: '2026-10-01T10:00:00.000Z',
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    } as never);
+    renderSection();
+
+    expect(screen.getAllByText('Revoked').length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('revoke-key-btn-key-1')).not.toBeInTheDocument();
+  });
+
   it('never renders a persona scope badge, even on legacy scoped keys', () => {
     vi.mocked(useApiKeysQuery).mockReturnValue({
       data: [
