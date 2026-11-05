@@ -15,7 +15,6 @@ import {
   type DisconnectAccountResult,
 } from '@/lib/api';
 import { useUploadStore } from '@/lib/store';
-import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { useYouTubeOAuth } from '@/lib/oauth/google-handler';
 import { useInstagramOAuth } from '@/lib/oauth/instagram-handler';
 import { useLinkedInOAuth } from '@/lib/oauth/linkedin-handler';
@@ -160,7 +159,10 @@ function BlueskyAccountsSection(): ReactNode {
       formData.append('appPassword', appPassword);
       const response = await fetch('/api/bluesky-connect', { method: 'POST', body: formData });
       if (!response.ok) {
-        notifyIfSessionExpired(response);
+        // NOTE: /api/bluesky-connect returns 401 both for a dead hub session
+        // and for a rejected Bluesky credential, so a 401 here must not
+        // trigger the host-wide session-expiry redirect — the dialog shows
+        // the credential error locally instead (tracked in issue #403).
         setError(t('accounts.blueskyConnectError'));
         setAppPassword('');
         return;

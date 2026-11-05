@@ -438,17 +438,22 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('instagram');
   });
 
-  it('bluesky connect dialog notifies the session-expiry handler on a 401', async () => {
+  it('bluesky connect dialog does NOT log the user out when the credential 401s', async () => {
     const notify = vi.mocked(notifyIfSessionExpired);
     notify.mockClear();
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401, json: async () => ({ success: false }) })));
+    // /api/bluesky-connect overloads 401: a rejected app password is reported
+    // with the same status as a dead hub session, so this dialog must show
+    // the credential error locally instead of redirecting (cypress spec
+    // bluesky-connect.cy.ts: mostra erro quando a credencial é inválida).
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401, json: async () => ({ success: false, error: 'Invalid Bluesky handle or app password.' }) })));
     render(<AccountsPage />, { wrapper: createWrapper() });
     // Section order: youtube, instagram, bluesky, linkedin, threads.
     fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[2]);
     fireEvent.change(await screen.findByTestId('bluesky-handle-input'), { target: { value: 'voce.bsky.social' } });
     fireEvent.change(screen.getByTestId('bluesky-password-input'), { target: { value: 'app-password' } });
     fireEvent.click(screen.getByTestId('bluesky-connect-button'));
-    await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId('bluesky-connect-error')).toBeInTheDocument();
+    expect(notify).not.toHaveBeenCalled();
   });
 
   it('disconnects a Bluesky account using its did', async () => {
