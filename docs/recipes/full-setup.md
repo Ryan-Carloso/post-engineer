@@ -30,9 +30,10 @@ never a blocker.
 
 - A Post Engineer account and an API key from
   https://post-engineer.com/recipes, in the agent's local MCP configuration as
-  `POST_ENGINEER_API_KEY`. Never paste the key in chat, in a prompt, or in this
-  repo. Use `npx -y post-engineer-mcp@latest` so the MCP is the newest
-  version instead of a stale cached copy.
+  `POST_ENGINEER_API_KEY`. The prompts hub can fill a freshly created key into
+  its own setup prompt for you; never paste the key anywhere else — no other
+  chat, prompt, or this repo. Use `npx -y post-engineer-mcp@latest` so the MCP
+  is the newest version instead of a stale cached copy.
 - For youtube, instagram, and linkedin: OAuth. The user finishes the
   provider's OAuth link in their own browser; only the accounts they choose
   get connected.
