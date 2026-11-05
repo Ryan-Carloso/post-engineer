@@ -597,6 +597,72 @@ describe('GET slot progress (0–100)', () => {
   });
 
   //---------------
+  // Engine reachability (#376): one unreachable answer stops the remaining
+  // lookups for the whole request, logged once; failures tied to one task
+  // keep the per-slot behaviour.
+  //---------------
+  function generatingSlots(count: number): Record<string, unknown>[] {
+    return Array.from({ length: count }, (_, i) => ({
+      id: `gen-${i}`, slot_at: '2026-09-24T10:00:00Z', status: 'generating',
+      title: `Live ${i}`, schedule_id: 's1', task_id: `task-${i}`,
+    }));
+  }
+
+  it('engine unreachable: one engine call and one warning for the whole request', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('fetch failed'); }));
+    const body = await getStatus(generatingSlots(4), [
+      { id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'failed', title: 'Old', schedule_id: 's1', task_id: 'task-9', error: 'boom' },
+    ]);
+
+    expect(vi.mocked(fetch).mock.calls.length).toBe(1);
+    expect(body.upcoming.every((s) => s.progress === 0 && s.stage === null)).toBe(true);
+    expect(body.recent[0].progress).toBe(0);
+    const warnings = vi.mocked(logger.warn).mock.calls.map((call) => call[0]);
+    expect(warnings.filter((m) => m.includes('engine unreachable'))).toHaveLength(1);
+    expect(warnings.filter((m) => m.includes('engine task progress unavailable'))).toHaveLength(0);
+  });
+
+  it('engine 503 trips the probe like a network failure', async () => {
+    mockEngine({}, false);
+    vi.mocked(fetch).mockImplementation(async () => ({ ok: false, status: 503, json: async () => ({}) }) as never);
+    await getStatus(generatingSlots(3));
+
+    expect(vi.mocked(fetch).mock.calls.length).toBe(1);
+  });
+
+  it('a 500 tied to one task does not stop the other lookups', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('/task-0')
+          ? { ok: false, status: 500, json: async () => ({}) }
+          : { ok: true, status: 200, json: async () => ({ body: { progress: 40 } }) },
+      ),
+    );
+    const body = await getStatus(generatingSlots(3));
+
+    expect(vi.mocked(fetch).mock.calls.length).toBe(3);
+    expect(body.upcoming.map((s) => s.progress)).toEqual([0, 40, 40]);
+    const warnings = vi.mocked(logger.warn).mock.calls.map((call) => call[0]);
+    expect(warnings.filter((m) => m.includes('engine task progress unavailable'))).toHaveLength(1);
+  });
+
+  it('engine answering a 404 for the first task keeps looking up the others', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('/task-0')
+          ? { ok: false, status: 404, json: async () => ({}) }
+          : { ok: true, status: 200, json: async () => ({ body: { progress: 70 } }) },
+      ),
+    );
+    const body = await getStatus(generatingSlots(3));
+
+    expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(body.upcoming.slice(1).map((s) => s.progress)).toEqual([70, 70]);
+  });
+
+  //---------------
   // Engine lookup cap — only slots that actually need a live lookup
   // (generating/failed WITH a task id) consume the ENGINE_LOOKUP_CAP
   // budget. Anything else reaching past the cap degrades to progress 0

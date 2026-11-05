@@ -88,6 +88,21 @@ function taskStage(value: unknown): string | null {
 }
 
 //---------------
+// EngineTaskLookupError — a non-ok, non-404 engine answer to a task lookup.
+// Carries the status so callers can tell an unreachable engine (502/503/504)
+// from a failure tied to one task.
+//---------------
+export class EngineTaskLookupError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super(`Engine task lookup failed with status ${status}`);
+    this.name = 'EngineTaskLookupError';
+    this.status = status;
+  }
+}
+
+//---------------
 // fetchEngineTaskProgress — GET {MONEYPRINT_API_URL}/api/v1/tasks/{taskId}
 // with the engine auth headers. Strictly a read: no refunds, no history
 // writes, no video URL rewriting.
@@ -125,7 +140,7 @@ export async function fetchEngineTaskProgress(
       return { progress: 0, stage: null, state: TASK_STATE_FAILED, gone: true, scriptAngle: null };
     }
     if (!response.ok) {
-      throw new Error(`Engine task lookup failed with status ${response.status}`);
+      throw new EngineTaskLookupError(response.status);
     }
     const body: unknown = await response.json().catch(() => null);
     const task = taskPayload(body);
@@ -218,7 +233,7 @@ async function fetchEngineTaskRecord(
       },
     );
     if (!response.ok) {
-      throw new Error(`Engine task lookup failed with status ${response.status}`);
+      throw new EngineTaskLookupError(response.status);
     }
     const body: unknown = await response.json().catch(() => null);
     return taskPayload(body);

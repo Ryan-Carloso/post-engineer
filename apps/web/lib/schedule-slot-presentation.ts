@@ -1,4 +1,5 @@
 import { fetchEngineTaskProgress, type EngineTaskProgress } from './engine-tasks';
+import { isEngineUnreachableError, type EngineProbe } from './engine-reachability';
 import { isRetryableGenerationError } from './generation/generation-errors';
 import { resolveGoneGenerationId } from './generation/gone-generation-reconcile';
 import { settleGoneGeneration, type GoneSettleOutcome } from './generation/gone-settle';
@@ -142,7 +143,7 @@ export async function enrichSlot(
   slot: { status?: unknown; task_id?: unknown; error?: unknown; schedule_id?: unknown; id?: unknown },
   userId: string,
   queuePositions: QueuePositions = new Map(),
-  options: { allowEngineLookup?: boolean; task?: EngineTaskProgress } = {},
+  options: { allowEngineLookup?: boolean; task?: EngineTaskProgress; engineProbe?: EngineProbe } = {},
 ): Promise<SlotEnrichment> {
   const dbStatus = typeof slot.status === 'string' ? slot.status : 'pending';
   const enrichment: SlotEnrichment = {
@@ -193,7 +194,10 @@ export async function enrichSlot(
       // allowEngineLookup false degrades past the fan-out cap (progress 0).
       // A prefetched task (options.task) is used as-is: the caller already
       // paid for the read and needs other fields from the same record.
-      if (taskId && options.allowEngineLookup !== false) {
+      // A probe that saw the engine fail earlier in this request skips the
+      // lookup: same degradation as a failed lookup, without the call.
+      const engineDown = options.engineProbe?.unreachable === true && options.task === undefined;
+      if (taskId && options.allowEngineLookup !== false && !engineDown) {
         try {
           const task = options.task ?? (await fetchEngineTaskProgress(taskId, userId));
           if (task.gone) {
@@ -221,11 +225,16 @@ export async function enrichSlot(
           }
         } catch (error) {
           // Transient (5xx, abort, network): degrade, keep the slot as-is so
-          // the next poll retries. Only a 404 is terminal.
-          logger.warn('[api/schedule] engine task progress unavailable', {
-            taskId,
-            error: error instanceof Error ? error.message : String(error),
-          });
+          // the next poll retries. Only a 404 is terminal. An unreachable
+          // engine is logged once per request (probe), not once per slot.
+          if (options.engineProbe !== undefined && isEngineUnreachableError(error)) {
+            options.engineProbe.markUnreachable(taskId, error);
+          } else {
+            logger.warn('[api/schedule] engine task progress unavailable', {
+              taskId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
       }
       if (dbStatus === 'failed' && enrichment.retryable === null) {

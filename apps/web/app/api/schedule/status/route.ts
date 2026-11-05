@@ -35,6 +35,7 @@ import {
   type QueuePositions,
   type SlotEnrichment,
 } from '@/lib/schedule-slot-presentation';
+import { createEngineProbe, type EngineProbe } from '@/lib/engine-reachability';
 import { recordProgressHistory, type ProgressSample } from '@/lib/schedule-progress-history';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
@@ -74,7 +75,9 @@ function buildQueuePositions(rows: unknown): QueuePositions {
 // means at most one generating slot per schedule, but a caller may list
 // many schedules. The fan-out is capped (PR #41 rule): past the cap,
 // generating/failed slots degrade to progress 0 instead of firing
-// unbounded concurrent engine calls.
+// unbounded concurrent engine calls. The first lookup runs alone so an
+// unreachable engine costs one failed call and one warning per request
+// (lib/engine-reachability), not one per slot.
 //---------------
 const ENGINE_LOOKUP_CAP = 25;
 
@@ -82,16 +85,29 @@ async function withSlotPresentation<T extends { status?: unknown; task_id?: unkn
   slots: T[],
   userId: string,
   queuePositions: QueuePositions,
+  engineProbe: EngineProbe,
 ): Promise<(T & SlotEnrichment)[]> {
   let remaining = ENGINE_LOOKUP_CAP;
+  const plans = slots.map((slot) => {
+    const needsEngine =
+      (slot.status === 'generating' || slot.status === 'failed') &&
+      typeof slot.task_id === 'string';
+    return { slot, needsEngine, allowEngineLookup: !needsEngine || remaining-- > 0 };
+  });
+  const enrich = (plan: (typeof plans)[number]): Promise<SlotEnrichment> =>
+    enrichSlot(plan.slot, userId, queuePositions, {
+      allowEngineLookup: plan.allowEngineLookup,
+      engineProbe,
+    });
+  // The first engine lookup runs alone: if the engine is unreachable, the
+  // probe skips every other lookup (one failed call, one warning) instead
+  // of firing up to the cap concurrently against a dead engine.
+  const firstIndex = plans.findIndex((plan) => plan.needsEngine && plan.allowEngineLookup);
+  const first = firstIndex === -1 ? null : await enrich(plans[firstIndex]);
   const enrichments = await Promise.all(
-    slots.map((slot) => {
-      const needsEngine =
-        (slot.status === 'generating' || slot.status === 'failed') &&
-        typeof slot.task_id === 'string';
-      const allowEngineLookup = !needsEngine || remaining-- > 0;
-      return enrichSlot(slot, userId, queuePositions, { allowEngineLookup });
-    }),
+    plans.map((plan, index) =>
+      index === firstIndex && first !== null ? first : enrich(plan),
+    ),
   );
   return slots.map((slot, index) => ({ ...slot, ...enrichments[index] }));
 }
@@ -201,8 +217,11 @@ async function getHandler(request?: Request): Promise<NextResponse> {
   }
   const queuePositions = buildQueuePositions(queueResult.error ? [] : (queueResult.data ?? []));
 
-  const upcomingEnriched = await withSlotPresentation(upcoming.data ?? [], userId, queuePositions);
-  const recentEnriched = await withSlotPresentation(recent.data ?? [], userId, queuePositions);
+  // One probe for the whole request: an engine found unreachable while
+  // presenting upcoming slots is not re-probed for the recent ones.
+  const engineProbe = createEngineProbe();
+  const upcomingEnriched = await withSlotPresentation(upcoming.data ?? [], userId, queuePositions, engineProbe);
+  const recentEnriched = await withSlotPresentation(recent.data ?? [], userId, queuePositions, engineProbe);
 
   // Best-effort progress history: every observation of a live (generating)
   // or dead (failed) slot records a (progress, stage) row when it changed
