@@ -1,16 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import Image from 'next/image';
+import { reportAccountCardDisplay } from '@/lib/account-card-telemetry';
+import type { AccountLabelOrigin } from '@/lib/account-display-diagnostics';
 import { useI18n } from '@/lib/i18n/provider';
 import { cn } from '@/lib/utils';
 
 //---------------
-// AccountCard — card compartilhado de conta social.
-// Suporta YouTube, Instagram, Bluesky, LinkedIn, Threads.
-// Usado na página de contas (com seleção/desconexão), na criação de API key
-// (com seleção via checkbox) e no schedule de persona (modo compacto:
-// apenas o avatar no tamanho da imagem, com fallback para a primeira letra).
+// AccountCard — shared social-account card.
+// Supports YouTube, Instagram, Bluesky, LinkedIn and Threads.
+// Used on the accounts page (select / disconnect), API-key creation
+// (checkbox selection) and the persona schedule (compact mode: avatar
+// only, falling back to the first letters of the name).
 //---------------
 
 export interface AccountCardProps {
@@ -20,6 +22,12 @@ export interface AccountCardProps {
   thumbnail?: string;
   customUrl?: string;
   handle?: string;
+  // Display name stored for the account but not painted on this card
+  // (Instagram `name`). Reported to PostHog; it does not change the label.
+  storedDisplayName?: string;
+  // 'provider_id' when the visible label is the opaque provider id because
+  // accountName was empty (LinkedIn, Threads).
+  labelOrigin?: AccountLabelOrigin;
   onSelect?: () => void;
   selected?: boolean;
   compact?: boolean;
@@ -28,8 +36,8 @@ export interface AccountCardProps {
 }
 
 //---------------
-// nameInitials — fallback do avatar: 2 primeiras letras do nome
-// (ignora "@" de handles), ou "?" quando não há nada utilizável.
+// nameInitials — avatar fallback: first two letters of the name
+// ("@" on handles is ignored), or "?" when nothing usable remains.
 //---------------
 function nameInitials(name: string): string {
   const cleaned = name.trim().replace(/^@+/, '');
@@ -43,6 +51,8 @@ export default function AccountCard({
   thumbnail,
   customUrl,
   handle,
+  storedDisplayName,
+  labelOrigin,
   onSelect,
   selected = false,
   compact = false,
@@ -50,8 +60,38 @@ export default function AccountCard({
   onDisconnect,
 }: AccountCardProps) {
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  const cardRef = useRef<HTMLElement>(null);
+  const labelRef = useRef<HTMLHeadingElement>(null);
+  const secondaryRef = useRef<HTMLParagraphElement>(null);
 
   const { t } = useI18n();
+  const shownLabel = handle || name;
+  const secondaryLabel = email || customUrl || null;
+
+  useLayoutEffect(() => {
+    if (compact) return;
+    const publish = (): void => {
+      reportAccountCardDisplay({
+        provider: type,
+        shownLabel,
+        secondaryLabel,
+        storedDisplayName,
+        thumbnailUrl: thumbnail,
+        thumbnailFailed,
+        labelOrigin,
+        compact: false,
+        labelEl: labelRef.current,
+        secondaryEl: secondaryRef.current,
+        cardEl: cardRef.current,
+      });
+    };
+    publish();
+    const node = cardRef.current;
+    if (node === null || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => publish());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [compact, type, shownLabel, secondaryLabel, storedDisplayName, thumbnail, thumbnailFailed, labelOrigin]);
 
   if (compact) {
     return (
@@ -94,10 +134,10 @@ export default function AccountCard({
       <div className="min-w-0 flex-1 leading-tight">
         <div className="flex items-center gap-2">
           <span role="img" className="size-2 shrink-0 rounded-full bg-emerald-500" aria-label={t('accounts.connectedAccount')} />
-          <h3 className="truncate text-sm font-semibold text-[#101728]">{handle || name}</h3>
+          <h3 ref={labelRef} className="truncate text-sm font-semibold text-[#101728]">{shownLabel}</h3>
         </div>
-        {email || customUrl ? (
-          <p className="mt-1 truncate text-xs text-[#718096]">{email || customUrl}</p>
+        {secondaryLabel ? (
+          <p ref={secondaryRef} className="mt-1 truncate text-xs text-[#718096]">{secondaryLabel}</p>
         ) : null}
       </div>
 
@@ -127,6 +167,7 @@ export default function AccountCard({
   if (onSelect) {
     return (
       <label
+        ref={(node) => { cardRef.current = node; }}
         data-testid="account-card"
         className={cn(
           'block cursor-pointer rounded-xl border bg-white p-4 transition-colors focus-within:ring-2 focus-within:ring-[#101728]/15',
@@ -138,13 +179,13 @@ export default function AccountCard({
     );
   }
 
-  return <div className="rounded-xl border border-[#dfe5ec] bg-white p-4">{body}</div>;
+  return <div ref={(node) => { cardRef.current = node; }} data-testid="account-card" className="rounded-xl border border-[#dfe5ec] bg-white p-4">{body}</div>;
 }
 
 //---------------
-// AccountAvatar — avatar do tamanho exato da imagem (48px) usado no modo
-// compacto. Sem imagem, ou se a imagem falhar ao carregar, mostra as
-// primeiras letras do nome da conta como fallback.
+// AccountAvatar — image-sized avatar (the compact card is 64px and the
+// image is scaled). With no image, or when the image fails to load, shows
+// the first letters of the account name.
 //---------------
 const AccountAvatar = ({
   name,

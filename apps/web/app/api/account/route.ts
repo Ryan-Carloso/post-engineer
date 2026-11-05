@@ -8,29 +8,13 @@ import { InstagramService } from '@/lib/instagram';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-
-//---------------
-// instagramPictureUrlExpired — Instagram CDN media URLs are signed
-// and expire (param `oe` = Unix timestamp in hex). Without this check,
-// the profile photo saved in the database stops loading after a few days.
-//---------------
-function instagramPictureUrlExpired(url: string): boolean {
-  try {
-    const oe = new URL(url).searchParams.get('oe');
-    if (!oe) return false;
-    const expiresAtMs = Number.parseInt(oe, 16) * 1000;
-    return Number.isFinite(expiresAtMs) && expiresAtMs < Date.now();
-  } catch {
-    return false;
-  }
-}
+import { instagramPictureUrlExpired } from '@/lib/account-display-diagnostics';
 
 //---------------
 // refreshInstagramAccountPicture — when the saved profile photo expired,
 // fetch the profile from the Graph API with the account token and update
-// the metadata.
-// Best-effort: quem chama trata falha (ex.: token revogado) e segue com o
-// registro original.
+// the metadata. Best-effort: the caller handles failure (for example a
+// revoked token) and keeps the original record.
 //---------------
 async function refreshInstagramAccountPicture(
   supabase: SupabaseClient,

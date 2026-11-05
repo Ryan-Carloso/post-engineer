@@ -16,6 +16,11 @@ vi.mock('next/image', () => ({
   default: (props: React.ComponentProps<'img'>) => <img {...props} />,
 }));
 
+vi.mock('@/lib/account-card-telemetry', () => ({
+  reportAccountDisconnectFailed: vi.fn(),
+  useAccountListErrorTelemetry: vi.fn(),
+}));
+
 vi.mock('@/lib/api', () => ({
   useYouTubeAccountsQuery: vi.fn(),
   useInstagramAccountsQuery: vi.fn(),
@@ -113,6 +118,7 @@ vi.mock('@/components/account-card', () => ({
 }));
 
 import AccountsPage from '../page';
+import { reportAccountDisconnectFailed, useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
 import { useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery, useThreadsAccountsQuery, useDisconnectAccountMutation } from '@/lib/api';
 import { useYouTubeOAuth } from '@/lib/oauth/google-handler';
 import { useInstagramOAuth } from '@/lib/oauth/instagram-handler';
@@ -371,6 +377,7 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     fireEvent.click(screen.getByTestId('youtube-disconnect-button'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'ch1' }));
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('youtube');
+    expect(reportAccountDisconnectFailed).not.toHaveBeenCalled();
   });
 
   it('does not disconnect when the confirmation is cancelled', async () => {
@@ -385,6 +392,7 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     fireEvent.click(screen.getByTestId('youtube-disconnect-button'));
     await waitFor(() => expect(window.confirm).toHaveBeenCalled());
     expect(mutateAsync).not.toHaveBeenCalled();
+    expect(reportAccountDisconnectFailed).not.toHaveBeenCalled();
   });
 
   it('shows an error message when disconnect throws', async () => {
@@ -399,6 +407,17 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     fireEvent.click(screen.getByTestId('youtube-disconnect-button'));
     await waitFor(() => expect(screen.getByTestId('disconnect-error')).toBeInTheDocument());
     expect(screen.getByTestId('disconnect-error')).toHaveTextContent('accounts.disconnectError');
+    expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('youtube', 'threw');
+  });
+
+  it('reports a YouTube list failure', () => {
+    vi.mocked(useYouTubeAccountsQuery, { partial: true }).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error('list failed'),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(useAccountListErrorTelemetry).toHaveBeenCalledWith('youtube', 'list failed');
   });
 
   it('shows an error message when the server reports failure', async () => {
@@ -412,6 +431,7 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('youtube-disconnect-button'));
     await waitFor(() => expect(screen.getByTestId('disconnect-error')).toBeInTheDocument());
+    expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('youtube', 'rejected');
   });
 
   it('disconnects an Instagram account using its igUserId', async () => {

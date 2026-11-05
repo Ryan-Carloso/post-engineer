@@ -196,6 +196,7 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
           key={`instagram:${account.igUserId}`}
           type="instagram"
           name={`@${account.username}`}
+          storedDisplayName={account.name}
           thumbnail={account.profilePictureUrl}
           selected={selection.instagram.includes(account.igUserId)}
           onSelect={() => toggle('instagram', account.igUserId)}
@@ -222,6 +223,8 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
           key={`linkedin:${account.providerAccountId}`}
           type="linkedin"
           name={account.accountName ?? account.providerAccountId}
+          storedDisplayName={account.accountMetadata?.name ?? undefined}
+          labelOrigin={account.accountName ? 'stored' : 'provider_id'}
           selected={selection.linkedin.includes(account.providerAccountId)}
           onSelect={() => toggle('linkedin', account.providerAccountId)}
         />
@@ -234,6 +237,7 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
           key={`threads:${account.providerAccountId}`}
           type="threads"
           name={account.accountName ?? account.providerAccountId}
+          labelOrigin={account.accountName ? 'stored' : 'provider_id'}
           thumbnail={account.profilePictureUrl}
           selected={selection.threads.includes(account.providerAccountId)}
           onSelect={() => toggle('threads', account.providerAccountId)}
