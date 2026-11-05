@@ -70,6 +70,11 @@ describe('api-keys-client — fetchers', () => {
     expect(fetch).toHaveBeenCalledWith('/api/api-keys');
   });
 
+  it('fetchApiKeys returns an empty list when the body has no keys', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(200, {})));
+    await expect(fetchApiKeys()).resolves.toEqual([]);
+  });
+
   it('fetchApiKeys throws an HttpStatusError carrying the status on failure', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => response(403)));
     const error = await fetchApiKeys().catch((caught: unknown) => caught);

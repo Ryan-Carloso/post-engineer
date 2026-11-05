@@ -103,6 +103,21 @@ describe('dashboard queries with the default retry policy', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  // A 200 whose body says success:false is a failed read, not data: it
+  // throws with the 2xx status, which the policy treats as transient.
+  it.each<[string, () => UseQueryResult<unknown, Error>]>([
+    ['useSchedulesQuery', () => useSchedulesQuery()],
+    ['useScheduleStatusQuery', () => useScheduleStatusQuery()],
+    ['useVideoGenerationsQuery', () => useVideoGenerationsQuery()],
+  ])('%s fails on a 200 with success:false and retries it once', async (_name, useHook) => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(200, { success: false })));
+    const { result } = renderHook(useHook, { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toBeInstanceOf(HttpStatusError);
+    expect((result.current.error as HttpStatusError).status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it.each(hooks)('%s still retries a 500 once', async (_name, useHook) => {
     vi.stubGlobal('fetch', vi.fn(async () => response(500)));
     const { result } = renderHook(useHook, { wrapper: wrapper() });
