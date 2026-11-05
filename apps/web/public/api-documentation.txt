@@ -40,7 +40,7 @@ RESPONSES AND ERRORS
 - 400 invalid, over-length or conflicting input (nothing is truncated or
   coerced silently). POST /api/videos/generate-and-schedule lists every
   problem in one response: `code`, `error` and `field` describe the first
-  one, and `errors` (an array of { code, message, field }) holds all of them. 401 bad key. 402 not enough tokens. 404 unknown id.
+  one, and `errors` (an array of { code, message, field }) holds at most 20 of them. 401 bad key. 402 not enough tokens. 404 unknown id.
   409 conflict (e.g. the persona already has an active schedule). 410 gone:
   terminal, stop polling. 429 rate limited: retry with backoff. 5xx
   transient: retry with backoff. Each operation's statuses are in the spec.

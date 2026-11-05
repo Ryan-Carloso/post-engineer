@@ -5,6 +5,8 @@
 // route because the route file may not grow (file-size ratchet).
 import { z } from 'zod';
 
+import { MAX_SEGMENTS } from '@/lib/generation/script-segments';
+
 export const segmentOverlaySchema = z
   .object({
     title: z.string(),
@@ -29,4 +31,4 @@ export const segmentsRequestSchema = z.array(
       terms: z.array(z.string()).optional(),
     })
     .strict(),
-);
+).max(MAX_SEGMENTS);

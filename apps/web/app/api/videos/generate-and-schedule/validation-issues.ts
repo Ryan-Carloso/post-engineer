@@ -6,6 +6,14 @@
 
 import { ERROR_CODES, type ErrorCode } from '@/lib/error-codes';
 
+/**
+ * How many problems a pre-auth 400 will echo. The route runs before session
+ * and rate-limit checks, and a caller can send a huge array, so the response
+ * and the telemetry payload stay bounded. The event's errorCount is the real
+ * total.
+ */
+export const MAX_REPORTED_ISSUES = 20;
+
 export interface ValidationIssue {
   code: ErrorCode;
   /** Human-readable problem; the first issue's message is the top-level `error`. */

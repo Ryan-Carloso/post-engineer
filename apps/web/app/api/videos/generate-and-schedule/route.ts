@@ -36,7 +36,7 @@ import { checkFullLipsyncNarration } from './full-lipsync-preflight';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
 import { segmentsRequestSchema } from './segments-schema';
 import { rawKeyIssues } from './request-title';
-import { checkSemantics, rejectInvalidRequest, shapeIssues } from './request-validation';
+import { checkSemantics, MAX_REPORTED_ISSUES, rejectInvalidRequest, shapeIssues } from './request-validation';
 import {
   persistVoiceSwap,
   preparePost,
@@ -80,7 +80,7 @@ const PublishingSchema = z.object({
   // 'scheduled' (default): publish at the slot times. 'asap': publish each
   // video the moment generation finishes, with no scheduled time.
   mode: z.enum(['scheduled', 'asap']).optional(),
-  providers: z.array(z.string()),
+  providers: z.array(z.string()).max(MAX_REPORTED_ISSUES),
   accounts: z.record(z.string(), z.array(z.string())).optional(),
   // Required in scheduled mode, forbidden in asap mode (a stray plan would
   // be silently ignored, so it is a 400 instead).

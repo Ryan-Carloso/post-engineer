@@ -40,7 +40,7 @@
           },
           "errors": {
             "type": "array",
-            "description": "Every validation problem (generate-and-schedule 400 only). The first entry matches the top-level code, error and field.",
+            "description": "Up to 20 validation problems (generate-and-schedule 400 only). The first entry matches the top-level code, error and field.",
             "items": {
               "type": "object",
               "properties": {
@@ -4537,7 +4537,8 @@
                         "type": "array",
                         "items": {
                           "type": "string"
-                        }
+                        },
+                        "maxItems": 20
                       },
                       "accounts": {
                         "type": "object",
@@ -4605,6 +4606,7 @@
                       },
                       "segments": {
                         "type": "array",
+                        "maxItems": 12,
                         "items": {
                           "$ref": "#/components/schemas/Segment"
                         }

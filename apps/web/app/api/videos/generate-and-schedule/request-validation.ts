@@ -1,8 +1,9 @@
 //---------------
 // Request validation for POST /api/videos/generate-and-schedule. Runs before
 // auth and before any token is charged, and reports every problem it finds
-// in one 400: the top-level code/message/field describe the first problem
-// (so existing clients keep working), and `errors` lists all of them.
+// in one 400: the top-level code/error/field describe the first problem
+// (so existing clients keep working), and `errors` lists up to
+// MAX_REPORTED_ISSUES of them.
 //
 // Order is fixed (topics/script-prompt keys, shape, title, segments,
 // providers, options, persona-less rules) so the first problem reported is
@@ -19,10 +20,12 @@ import { resolveTitle } from './request-title';
 import { validateSegmentsRequest } from './segments-validation';
 import { validateProviders, type Provider } from './providers-validation';
 import { validateOptions, type OptionsInput, type ValidatedOptions } from './options-validation';
-import type { Checked, ValidationIssue } from './validation-issues';
+import { MAX_REPORTED_ISSUES, type Checked, type ValidationIssue } from './validation-issues';
+
+export { MAX_REPORTED_ISSUES };
 
 export function shapeIssues(error: z.ZodError): ValidationIssue[] {
-  return error.issues.map((issue) => ({
+  return error.issues.slice(0, MAX_REPORTED_ISSUES).map((issue) => ({
     code: 'VALIDATION_FAILED' as const,
     message: `Invalid request: ${issue.message}`,
     field: issue.path.length > 0 ? issue.path.join('.') : undefined,
@@ -85,16 +88,17 @@ export function checkSemantics(input: SemanticInput): Checked<CheckedRequest> {
   };
 }
 
-/** Track once per rejected request and return the 400 with every problem. */
+/** Track once per rejected request and return the 400 with every problem, capped. */
 export function rejectInvalidRequest(issues: ValidationIssue[]): NextResponse {
-  const [first] = issues;
+  const reported = issues.slice(0, MAX_REPORTED_ISSUES);
+  const [first] = reported;
   trackApiEvent('video_creation_validation_failed', {
     errorCode: first.code,
     field: first.field ?? null,
     errorCount: issues.length,
-    fields: issues.map((issue) => issue.field ?? null),
+    fields: reported.map((issue) => issue.field ?? null),
   });
   return coded(400, first.code, first.message, first.field, {
-    errors: issues.map((issue) => ({ code: issue.code, message: issue.message, field: issue.field })),
+    errors: reported.map((issue) => ({ code: issue.code, message: issue.message, field: issue.field })),
   });
 }

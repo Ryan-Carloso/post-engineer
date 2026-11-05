@@ -5,11 +5,20 @@
 //---------------
 
 import { VALID_SCHEDULE_PROVIDERS } from '@/app/api/schedule/route';
-import { invalid, type Checked } from './validation-issues';
+import { invalid, MAX_REPORTED_ISSUES, type Checked } from './validation-issues';
 
 export type Provider = (typeof VALID_SCHEDULE_PROVIDERS)[number];
 
 export function validateProviders(rawProviders: string[]): Checked<Provider[]> {
+  // Stop before building one issue per entry. The route also rejects this
+  // length at the schema, so a normal request never reaches the map below
+  // with more than MAX_REPORTED_ISSUES values.
+  if (rawProviders.length > MAX_REPORTED_ISSUES) {
+    return {
+      ok: false,
+      issues: [invalid(`At most ${MAX_REPORTED_ISSUES} providers.`, 'publishing.providers')],
+    };
+  }
   const providers = [...new Set(rawProviders.map((p) => p.trim()).filter((p) => p.length > 0))];
   if (providers.length === 0) {
     return { ok: false, issues: [invalid('Select at least one provider.', 'publishing.providers')] };

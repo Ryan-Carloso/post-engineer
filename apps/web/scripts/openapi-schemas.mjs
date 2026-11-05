@@ -23,7 +23,7 @@ export const componentSchemas = {
       errors: {
         type: 'array',
         description:
-          'Every validation problem (generate-and-schedule 400 only). The first entry matches the top-level code, error and field.',
+          'Up to 20 validation problems (generate-and-schedule 400 only). The first entry matches the top-level code, error and field.',
         items: object(
           {
             code: str,
@@ -82,7 +82,7 @@ const generateBody = object(
     publishing: object(
       {
         mode: { type: 'string', enum: ['scheduled', 'asap'], default: 'scheduled' },
-        providers: strArray,
+        providers: { ...strArray, maxItems: 20 },
         accounts: { type: 'object', additionalProperties: strArray },
         // OpenAPI 3.0 cannot express "required unless mode is asap"; the
         // route answers 400 when it is missing in scheduled mode.
@@ -100,7 +100,11 @@ const generateBody = object(
       fullLipsync: { type: 'boolean', description: 'Persona talks for the whole video, not only the hook. Not with faceless.' },
       audioUrl: str,
       imageId: str,
-      segments: { type: 'array', items: { $ref: '#/components/schemas/Segment' } },
+      segments: {
+        type: 'array',
+        maxItems: 12,
+        items: { $ref: '#/components/schemas/Segment' },
+      },
       webhookUrl: str,
       voiceId: str,
       videoAspect: { type: 'string', enum: ['9:16', '16:9'] },

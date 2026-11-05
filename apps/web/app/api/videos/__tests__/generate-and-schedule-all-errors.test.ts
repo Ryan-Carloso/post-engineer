@@ -17,7 +17,8 @@ vi.mock('@/lib/rate-limit', () => ({
 }));
 
 import { POST } from '../generate-and-schedule/route';
-import { checkSemantics } from '../generate-and-schedule/request-validation';
+import { checkSemantics, rejectInvalidRequest, MAX_REPORTED_ISSUES } from '../generate-and-schedule/request-validation';
+import { validateProviders } from '../generate-and-schedule/providers-validation';
 import { trackApiEvent } from '@/lib/analytics';
 
 const hook =
@@ -159,6 +160,44 @@ describe('generate-and-schedule reports every validation problem in one 400 (#35
     expect(res.status).toBe(400);
     const json = (await res.json()) as { errors: Array<{ field: string }> };
     expect(json.errors.map((e) => e.field)).toEqual(['options.faceless', 'options.voiceId']);
+  });
+
+  it('does not echo a huge provider list', async () => {
+    const providers = Array.from({ length: 50 }, (_, i) => `nope-${i}-xxxxxxxx`);
+    const res = await post(body({ publishing: { providers } }));
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { errors: Array<{ message: string }> };
+    expect(json.errors.length).toBeLessThanOrEqual(MAX_REPORTED_ISSUES);
+    expect(JSON.stringify(json)).not.toContain('nope-49');
+    expect(json.errors[0].message).toContain(`<=${MAX_REPORTED_ISSUES}`);
+  });
+
+  it('returns at most 20 problems and still counts the rest', async () => {
+    const issues = Array.from({ length: 25 }, (_, i) => ({
+      code: 'VALIDATION_FAILED' as const,
+      message: `problem ${i}`,
+      field: `field.${i}`,
+    }));
+    const res = rejectInvalidRequest(issues);
+    const json = (await res.json()) as { error: string; errors: Array<{ field: string }> };
+    expect(json.errors).toHaveLength(MAX_REPORTED_ISSUES);
+    expect(json.error).toBe('problem 0');
+    expect(json.errors.map((e) => e.field)).toEqual(issues.slice(0, MAX_REPORTED_ISSUES).map((i) => i.field));
+    const calls = vi.mocked(trackApiEvent).mock.calls.filter(
+      ([name]) => name === 'video_creation_validation_failed',
+    );
+    expect(calls.at(-1)?.[1]).toMatchObject({
+      errorCount: 25,
+      fields: issues.slice(0, MAX_REPORTED_ISSUES).map((i) => i.field),
+    });
+  });
+
+  it('rejects an oversized provider list before naming each one', () => {
+    const outcome = validateProviders(Array.from({ length: 21 }, () => 'youtube'));
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.issues).toHaveLength(1);
+    expect(outcome.issues[0].message).toBe(`At most ${MAX_REPORTED_ISSUES} providers.`);
   });
 
   it('a valid request produces no errors', async () => {
