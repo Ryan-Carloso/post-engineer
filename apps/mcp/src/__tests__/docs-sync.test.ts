@@ -107,8 +107,8 @@ describe('MCP npx install command sync', () => {
   const npxSurfaces = [
     { label: 'apps/mcp/README.md', rel: ['..', '..', 'README.md'] },
     {
-      label: 'apps/web/components/ui/mcp-docs-section.tsx',
-      rel: ['..', '..', '..', 'web', 'components', 'ui', 'mcp-docs-section.tsx'],
+      label: 'apps/web/lib/mcp-install-prompt.ts',
+      rel: ['..', '..', '..', 'web', 'lib', 'mcp-install-prompt.ts'],
     },
     { label: 'README.md', rel: ['..', '..', '..', '..', 'README.md'] },
     { label: 'README.pt-BR.md', rel: ['..', '..', '..', '..', 'README.pt-BR.md'] },

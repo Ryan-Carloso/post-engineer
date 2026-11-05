@@ -236,7 +236,7 @@ describe('app/(main)/layout — MainLayout', () => {
     } as never);
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const panelLink = screen.getByTestId('profile-api-keys-link');
-    expect(panelLink).toHaveAttribute('href', '/api-keys');
+    expect(panelLink).toHaveAttribute('href', '/recipes');
     expect(panelLink).toHaveTextContent('nav.apiKeys');
   });
 

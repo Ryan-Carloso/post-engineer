@@ -64,12 +64,12 @@ const PERSONAS = [
   { id: 'persona-2', name: 'Beto', createdAt: '2026-09-18T10:00:00.000Z' },
 ];
 
-function renderSection(): void {
+function renderSection(onKeyCreated?: (key: string) => void): void {
   const queryClient = new QueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
-  render(<ApiKeysSection />, { wrapper });
+  render(<ApiKeysSection onKeyCreated={onKeyCreated} />, { wrapper });
 }
 
 describe('ApiKeysSection', () => {
@@ -157,8 +157,10 @@ describe('ApiKeysSection', () => {
       createdAt: '2026-09-18T10:00:00.000Z',
     });
     vi.mocked(useCreateApiKeyMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
-    renderSection();
+    const onKeyCreated = vi.fn();
+    renderSection(onKeyCreated);
 
+    expect(onKeyCreated).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('generate-api-key-btn'));
     fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'CI Agent' } });
     fireEvent.click(screen.getByTestId('submit-create-key-btn'));
@@ -167,6 +169,8 @@ describe('ApiKeysSection', () => {
       expect(mutateAsync).toHaveBeenCalledWith({ name: 'CI Agent', personaIds: null });
     });
     expect(await screen.findByTestId('api-key-created-banner')).toBeInTheDocument();
+    // The hub receives the raw key once, to fill it into the install prompt.
+    expect(onKeyCreated).toHaveBeenCalledExactlyOnceWith('pe_live_abcdef1234567890abcdef1234567890');
     expect(screen.getByTestId('raw-api-key-value')).toHaveValue(
       'pe_live_abcdef1234567890abcdef1234567890',
     );
@@ -175,6 +179,7 @@ describe('ApiKeysSection', () => {
     expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(
       'pe_live_abcdef1234567890abcdef1234567890',
     );
+    expect(await screen.findByText('Copied!')).toBeInTheDocument();
   });
 
   it('lists keys and revokes after confirmation', async () => {

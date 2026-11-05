@@ -16,7 +16,7 @@
 
 - [Post Engineer](https://post-engineer.com/): create an account, create AI
   personas, generate videos, connect social accounts, schedule automated posting.
-- [API keys](https://post-engineer.com/api-keys): generate the API key used by
+- [API keys](https://post-engineer.com/recipes): generate the API key used by
   the MCP server.
 - [Prompts and recipes](https://post-engineer.com/recipes): ready-made prompts
   for the MCP server, including daily news becomes a video and GitHub PRs

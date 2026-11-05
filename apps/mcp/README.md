@@ -21,12 +21,12 @@ credits is billed by Modal.
 - Generate videos with those personas.
 - Connect YouTube / Instagram / LinkedIn / Threads accounts.
 - Schedule automated posting.
-- Generate and manage API keys at [https://post-engineer.com/api-keys](https://post-engineer.com/api-keys).
+- Generate and manage API keys at [https://post-engineer.com/recipes](https://post-engineer.com/recipes).
 
 ## Requirements
 
 - Node.js 20.10+
-- API key generated at https://post-engineer.com/api-keys
+- API key generated at https://post-engineer.com/recipes
 
 ### Telemetry
 
@@ -71,7 +71,7 @@ Configure your agent (`opencode.json`, `claude_desktop_config.json`, `.mcp.json`
 }
 ```
 
-Replace `<MY_API_KEY>` with the key you generated on https://post-engineer.com/api-keys. No repository clone or local build is required.
+Replace `<MY_API_KEY>` with the key you generated on https://post-engineer.com/recipes. No repository clone or local build is required.
 
 > The `@latest` tag matters: `npx` caches the package on first run and reuses the cached copy on later runs without checking for updates. Without `@latest` you can stay stuck on an old version (e.g. pre-1.12.0 tools that no longer exist server-side) with no error telling you why.
 
@@ -210,5 +210,5 @@ objective). The MCP needs no change: it serves whatever the web hub lists.
 ## Links
 
 - Platform: https://post-engineer.com/
-- API keys: https://post-engineer.com/api-keys
+- API keys: https://post-engineer.com/recipes
 - Recipes: [docs/recipes/daily-news.md](../../docs/recipes/daily-news.md) (daily news becomes a video), [docs/recipes/place-spotlight.md](../../docs/recipes/place-spotlight.md) (place spotlight becomes a video) and [docs/recipes/subject-spotlight.md](../../docs/recipes/subject-spotlight.md) (subject spotlight becomes a video)

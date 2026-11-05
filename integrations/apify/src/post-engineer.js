@@ -323,7 +323,7 @@ export async function runActor({ input: rawInput, fetchImpl, sleep, now, idempot
     log('No apiKey: dry run, nothing is generated or published.');
     return {
       dryRun: true,
-      message: 'Dry run: no apiKey was given, so nothing was generated, published or charged. Add your Post Engineer API key (https://post-engineer.com/api-keys) to create the video.',
+      message: 'Dry run: no apiKey was given, so nothing was generated, published or charged. Add your Post Engineer API key (https://post-engineer.com/recipes) to create the video.',
       request: buildGenerateBody(input, idempotencyKey),
     };
   }
@@ -335,7 +335,7 @@ export async function runActor({ input: rawInput, fetchImpl, sleep, now, idempot
     // Only a 400 is about the script; anything else is the key or the service.
     if (validation.status === 400) throw new ActorInputError(redact(`Script rejected: ${detail}`, input.apiKey));
     const prefix = validation.status === 401 || validation.status === 403
-      ? 'API key rejected (create one at https://post-engineer.com/api-keys)'
+      ? 'API key rejected (create one at https://post-engineer.com/recipes)'
       : 'Script validation failed';
     throw new PostEngineerApiError(redact(`${prefix}: ${detail}`, input.apiKey), validation.status);
   }

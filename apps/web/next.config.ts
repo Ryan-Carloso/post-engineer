@@ -61,6 +61,12 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async redirects() {
+    // The API key manager and the MCP setup prompt moved into the prompts
+    // hub. /api-keys stays a permanent redirect because the URL is
+    // published outside this app (npm README, MCP server.json, Apify).
+    return [{ source: '/api-keys', destination: '/recipes', permanent: true }];
+  },
   async headers() {
     // Security headers applied to every route. `unsafe-eval` is only needed in
     // dev (React refresh / Next dev overlay); production stays strict.

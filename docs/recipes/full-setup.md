@@ -29,7 +29,7 @@ never a blocker.
 ## Prerequisites (not part of the prompt)
 
 - A Post Engineer account and an API key from
-  https://post-engineer.com/api-keys, in the agent's local MCP configuration as
+  https://post-engineer.com/recipes, in the agent's local MCP configuration as
   `POST_ENGINEER_API_KEY`. Never paste the key in chat, in a prompt, or in this
   repo. Use `npx -y post-engineer-mcp@latest` so the MCP is the newest
   version instead of a stale cached copy.

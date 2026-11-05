@@ -1,12 +1,22 @@
 import '@testing-library/jest-dom/vitest';
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 
 vi.mock('@/lib/i18n/provider', () => {
   const translations: Record<string, string> = {
     'recipes.title': 'Get your prompts',
-    'recipes.subtitle':
-      'Copy-ready prompts for the Post Engineer MCP server. Copy one, paste it into your agent, done.',
+    'recipes.subtitle': 'Your key, your agent setup, and ready-made prompts — all in one place.',
+    'recipes.stepKeyTitle': 'Create your API key',
+    'recipes.stepKeyHint': 'It connects your agent to your account.',
+    'recipes.stepSetupTitle': 'Send the setup prompt to your agent',
+    'recipes.stepSetupHint': 'Paste it into your agent.',
+    'recipes.stepRecipesTitle': 'Pick a recipe',
+    'recipes.stepRecipesHint': 'Copy a prompt and paste it into your agent.',
+    'recipes.signInCta': 'Sign in or create an account',
+    'recipes.signInHint': 'Sign in to create your API key.',
+    'recipes.copyPrompt': 'Copy prompt',
+    'recipes.copiedPrompt': 'Copied!',
+    'apiKeys.copy': 'Copy',
     'recipes.dailyNewsTitle': 'Daily news becomes a video',
     'recipes.dailyNewsObjective': 'Turn one news story of the day into one persona video.',
     'recipes.placeSpotlightTitle': 'Place spotlight becomes a video',
@@ -19,9 +29,6 @@ vi.mock('@/lib/i18n/provider', () => {
     'recipes.kindRecipe': 'Recipe',
     'recipes.kindPrompt': 'Prompt',
     'recipes.openPrompt': 'Open prompt',
-    'recipes.filterAll': 'All',
-    'recipes.searchLabel': 'Search prompts',
-    'recipes.emptyState': 'No prompt matches your search.',
     'recipes.addYourPrompt': 'Add your prompt',
     'recipes.addYourPromptHint': 'Got a prompt that works? Send it in.',
   };
@@ -29,91 +36,150 @@ vi.mock('@/lib/i18n/provider', () => {
     useI18n: () => ({
       t: (key: string, vars?: Record<string, string | number>) =>
         vars === undefined ? (translations[key] ?? key) : `${key}:${JSON.stringify(vars)}`,
-      locale: 'en',
+      locale: 'en' as const,
       setLocale: vi.fn(),
     }),
   };
 });
 
-import RecipesPage from '../page';
+// The key manager is a React Query component with its own suite; here it
+// only has to hand a created key to the hub.
+vi.mock('@/components/ui/api-keys-section', () => ({
+  default: ({ onKeyCreated }: { onKeyCreated?: (key: string) => void }) => (
+    <button type="button" data-testid="api-keys-section" onClick={() => onKeyCreated?.(CREATED_KEY)}>
+      create key
+    </button>
+  ),
+}));
 
-describe('/recipes prompts hub list', () => {
+import RecipesPage from '../page';
+import { ViewerProvider } from '../viewer-context';
+import { PROMPTS } from '../prompts';
+import { buildInstallPrompt } from '@/lib/mcp-install-prompt';
+
+const CREATED_KEY = 'pe_live_abcdef1234567890abcdef1234567890';
+
+function renderHub(signedIn: boolean) {
+  return render(
+    <ViewerProvider signedIn={signedIn}>
+      <RecipesPage />
+    </ViewerProvider>,
+  );
+}
+
+describe('/recipes prompts hub', () => {
+  beforeEach(() => {
+    Object.defineProperty(window.navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      writable: true,
+      configurable: true,
+    });
+  });
+
   it('renders the hub title and subtitle', () => {
-    render(<RecipesPage />);
-    expect(screen.getByRole('heading', { name: 'Get your prompts' })).toBeInTheDocument();
+    renderHub(true);
+    expect(screen.getByRole('heading', { level: 1, name: 'Get your prompts' })).toBeInTheDocument();
     expect(
-      screen.getByText(
-        'Copy-ready prompts for the Post Engineer MCP server. Copy one, paste it into your agent, done.',
-      ),
+      screen.getByText('Your key, your agent setup, and ready-made prompts — all in one place.'),
     ).toBeInTheDocument();
   });
 
-  it('links each entry to its own detail page, not straight to GitHub', () => {
-    render(<RecipesPage />);
-    expect(screen.getByRole('link', { name: /Daily news becomes a video/ })).toHaveAttribute(
-      'href',
-      '/recipes/daily-news',
+  it('lays out three numbered steps in order: key, setup, recipes', () => {
+    renderHub(true);
+    const steps = screen.getAllByRole('region');
+    expect(steps.map((step) => step.getAttribute('aria-labelledby'))).toEqual([
+      'hub-step-1',
+      'hub-step-2',
+      'hub-step-3',
+    ]);
+    expect(within(steps[0]).getByRole('heading', { name: 'Create your API key' })).toBeInTheDocument();
+    expect(within(steps[0]).getByText('It connects your agent to your account.')).toBeInTheDocument();
+    expect(within(steps[0]).getByText('1')).toBeInTheDocument();
+    expect(
+      within(steps[1]).getByRole('heading', { name: 'Send the setup prompt to your agent' }),
+    ).toBeInTheDocument();
+    expect(within(steps[1]).getByText('Paste it into your agent.')).toBeInTheDocument();
+    expect(within(steps[1]).getByText('2')).toBeInTheDocument();
+    expect(within(steps[2]).getByRole('heading', { name: 'Pick a recipe' })).toBeInTheDocument();
+    expect(within(steps[2]).getByText('Copy a prompt and paste it into your agent.')).toBeInTheDocument();
+    expect(within(steps[2]).getByText('3')).toBeInTheDocument();
+  });
+
+  it('shows the key manager to a signed-in visitor', () => {
+    renderHub(true);
+    expect(screen.getByTestId('api-keys-section')).toBeInTheDocument();
+    expect(screen.queryByTestId('recipes-sign-in-cta')).not.toBeInTheDocument();
+  });
+
+  it('shows a sign-in call to action to a signed-out visitor, returning to the hub', () => {
+    renderHub(false);
+    expect(screen.queryByTestId('api-keys-section')).not.toBeInTheDocument();
+    const cta = screen.getByRole('link', { name: 'Sign in or create an account' });
+    expect(cta).toHaveAttribute('href', '/login?next=/recipes');
+    expect(screen.getByText('Sign in to create your API key.')).toBeInTheDocument();
+  });
+
+  it('shows the setup prompt with the placeholder to a signed-out visitor', () => {
+    renderHub(false);
+    expect(screen.getByTestId('mcp-install-prompt').textContent).toBe(
+      buildInstallPrompt('en', null),
     );
-    expect(screen.getByRole('link', { name: /Place spotlight becomes a video/ })).toHaveAttribute(
-      'href',
-      '/recipes/place-spotlight',
+  });
+
+  it('fills a key created in step 1 into the setup prompt in step 2', () => {
+    renderHub(true);
+    expect(screen.getByTestId('mcp-install-prompt').textContent).toBe(
+      buildInstallPrompt('en', null),
     );
-    expect(screen.getByRole('link', { name: /Subject spotlight becomes a video/ })).toHaveAttribute(
-      'href',
-      '/recipes/subject-spotlight',
+    fireEvent.click(screen.getByTestId('api-keys-section'));
+    expect(screen.getByTestId('mcp-install-prompt').textContent).toBe(
+      buildInstallPrompt('en', CREATED_KEY),
     );
-    expect(screen.getByRole('link', { name: /GitHub PRs become videos/ })).toHaveAttribute(
-      'href',
-      '/recipes/github-prs',
-    );
-    expect(screen.getByRole('link', { name: /Full setup becomes videos/ })).toHaveAttribute(
-      'href',
-      '/recipes/full-setup',
-    );
+    expect(screen.getByTestId('mcp-install-prompt')).toHaveTextContent(CREATED_KEY);
+  });
+
+  it('links each card title to its own detail page, not straight to GitHub', () => {
+    renderHub(true);
+    for (const [name, href] of [
+      [/Daily news becomes a video/, '/recipes/daily-news'],
+      [/Place spotlight becomes a video/, '/recipes/place-spotlight'],
+      [/Subject spotlight becomes a video/, '/recipes/subject-spotlight'],
+      [/GitHub PRs become videos/, '/recipes/github-prs'],
+      [/Full setup becomes videos/, '/recipes/full-setup'],
+    ] as const) {
+      expect(screen.getByRole('link', { name })).toHaveAttribute('href', href);
+    }
+    expect(screen.getAllByRole('link', { name: /Open prompt/ })).toHaveLength(PROMPTS.length);
     expect(
       screen.queryByText(/Turn this GitHub pull request into one persona video/),
     ).not.toBeInTheDocument();
   });
 
-  it('shows five prompts in the hero count', () => {
-    render(<RecipesPage />);
-    expect(screen.getByText('recipes.promptCount:{"count":5}')).toBeInTheDocument();
+  it('copies the exact full prompt from each card', async () => {
+    renderHub(true);
+    for (const prompt of PROMPTS) {
+      fireEvent.click(screen.getByTestId(`copy-prompt-${prompt.slug}`));
+      expect(window.navigator.clipboard.writeText).toHaveBeenLastCalledWith(prompt.prompt);
+    }
+    expect(window.navigator.clipboard.writeText).toHaveBeenCalledTimes(PROMPTS.length);
+    expect(await screen.findAllByRole('button', { name: 'Copied!' })).toHaveLength(PROMPTS.length);
   });
 
   it('labels entries by kind, not by sequence number', () => {
-    render(<RecipesPage />);
-    expect(screen.getAllByText('Recipe')).toHaveLength(5);
-    expect(screen.getAllByText('Prompt')).toHaveLength(2);
+    renderHub(true);
+    expect(screen.getAllByText('Recipe')).toHaveLength(4);
+    expect(screen.getAllByText('Prompt')).toHaveLength(1);
     expect(screen.queryByText('01')).not.toBeInTheDocument();
-    expect(screen.queryByText('02')).not.toBeInTheDocument();
   });
 
-  it('narrows the grid by kind chip', () => {
-    render(<RecipesPage />);
-    fireEvent.click(screen.getByRole('button', { name: 'Prompt' }));
-    expect(screen.getByRole('button', { name: 'Prompt' })).toHaveAttribute('aria-pressed', 'true');
-    expect(
-      screen.queryByRole('link', { name: /Daily news becomes a video/ }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /GitHub PRs become videos/ })).toBeInTheDocument();
-  });
-
-  it('shows the empty state when search matches nothing', () => {
-    render(<RecipesPage />);
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search prompts' }), {
-      target: { value: 'zzz-no-match' },
-    });
-    expect(screen.getByText('No prompt matches your search.')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /GitHub PRs/ })).not.toBeInTheDocument();
-  });
-
-  it('shows the step count on each card', () => {
-    render(<RecipesPage />);
-    expect(screen.getAllByText('recipes.stepCount:{"count":5}')).toHaveLength(5);
+  it('has no search box or kind filter', () => {
+    renderHub(true);
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'All' })).not.toBeInTheDocument();
   });
 
   it('offers a secondary "Add your prompt" link to the prompt_request template after the grid', () => {
-    const { container } = render(<RecipesPage />);
+    const { container } = renderHub(true);
     const link = screen.getByRole('link', { name: 'Add your prompt' });
     expect(link).toHaveAttribute(
       'href',
@@ -126,21 +192,7 @@ describe('/recipes prompts hub list', () => {
     // The link sits outside and after the card grid, never inside it.
     expect(grid.contains(link)).toBe(false);
     expect(
-      within(grid).queryByRole('link', { name: 'Add your prompt' }),
-    ).toBeNull();
-    expect(
       grid.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-  });
-
-  it('keeps the "Add your prompt" link visible in the empty state', () => {
-    render(<RecipesPage />);
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search prompts' }), {
-      target: { value: 'zzz-no-match' },
-    });
-    expect(screen.getByText('No prompt matches your search.')).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: 'Add your prompt' }),
-    ).toBeInTheDocument();
   });
 });

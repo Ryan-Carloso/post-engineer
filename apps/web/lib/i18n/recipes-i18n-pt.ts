@@ -1,7 +1,7 @@
 export const recipesI18nPt = {
   title: 'Pegue seus prompts',
   subtitle:
-      'Prompts prontos para copiar para o servidor MCP do Post Engineer. Copie um, cole no seu agente, pronto.',
+      'Sua key, o setup do agente e prompts prontos — tudo em um lugar.',
   dailyNewsTitle: 'Notícia do dia vira vídeo',
   dailyNewsObjective:
       'Transformar uma notícia do dia em um vídeo de persona, validado antes de gastar qualquer token.',
@@ -97,15 +97,8 @@ export const recipesI18nPt = {
   kindRecipe: 'Receita',
   kindPrompt: 'Prompt',
   copyPrompt: 'Copiar prompt',
-  viewRecipe: 'Ver receita',
-  filterAll: 'Todos',
-  searchLabel: 'Buscar prompts',
-  searchPlaceholder: 'Busque por título ou objetivo…',
-  emptyState: 'Nenhum prompt corresponde à sua busca.',
   addYourPrompt: 'Envie seu prompt',
   addYourPromptHint: 'Tem um prompt que funciona? Manda pra gente.',
-  stepCount: '{count} passos',
-  promptCount: '{count} prompts',
   fullSetupTitle: 'Setup completo vira vídeos',
   fullSetupObjective:
       'Conectar contas, criar a persona, validar o roteiro e publicar o primeiro vídeo sem pular nenhum passo.',
@@ -124,4 +117,14 @@ export const recipesI18nPt = {
   fullSetupExampleInput: 'Começando sem nenhuma conta e sem persona.',
   fullSetupExampleOutput:
       'Contas conectadas, persona criada, roteiro validado, um vídeo publicado.',
+  stepKeyTitle: 'Crie sua API key',
+  stepKeyHint:
+      'Ela conecta seu agente à sua conta. Aparece uma vez só: copie e guarde.',
+  stepSetupTitle: 'Mande o prompt de setup ao seu agente',
+  stepSetupHint:
+      'Cole no Claude, Cursor, OpenCode ou outro agente: ele instala o servidor MCP do Post Engineer. Se você acabou de criar uma key, ela já vem preenchida.',
+  stepRecipesTitle: 'Escolha uma receita',
+  stepRecipesHint: 'Com o setup feito, copie um prompt e cole no seu agente.',
+  signInCta: 'Entrar ou criar conta',
+  signInHint: 'Entre para criar sua API key. O prompt de setup e as receitas abaixo dependem dela.',
 } as const;

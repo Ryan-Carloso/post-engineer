@@ -4,10 +4,21 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useApiKeysQuery, useCreateApiKeyMutation, usePersonasQuery, useRevokeApiKeyMutation } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
+import { useCopyText } from '@/lib/use-copy-text';
 import { Button } from '@/components/ui/button';
 import { KeyIcon, SpinnerIcon } from '@/lib/ui';
 
-export default function ApiKeysSection(): ReactNode {
+//---------------
+// ApiKeysSection — step 1 of the prompts hub: list, create, and revoke
+// API keys. A freshly created key is shown once; onKeyCreated hands it
+// to the hub so the install prompt in step 2 carries it already filled in.
+//---------------
+
+export default function ApiKeysSection({
+  onKeyCreated,
+}: {
+  onKeyCreated?: (key: string) => void;
+}): ReactNode {
   const { t } = useI18n();
   const query = useApiKeysQuery();
   const createMutation = useCreateApiKeyMutation();
@@ -18,7 +29,7 @@ export default function ApiKeysSection(): ReactNode {
   const [scopeMode, setScopeMode] = useState<'all' | 'specific'>('all');
   const [selectedPersonaIds, setSelectedPersonaIds] = useState<string[]>([]);
   const [newKeyData, setNewKeyData] = useState<{ name: string; key: string } | null>(null);
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyText();
 
   const keys = query.data ?? [];
   const personasQuery = usePersonasQuery();
@@ -40,6 +51,7 @@ export default function ApiKeysSection(): ReactNode {
         personaIds: scopeMode === 'specific' ? selectedPersonaIds : null,
       });
       setNewKeyData({ name: result.name, key: result.key });
+      onKeyCreated?.(result.key);
       setKeyName('');
       setScopeMode('all');
       setSelectedPersonaIds([]);
@@ -69,10 +81,8 @@ export default function ApiKeysSection(): ReactNode {
   };
 
   const handleCopy = () => {
-    if (!newKeyData?.key) return;
-    void navigator.clipboard.writeText(newKeyData.key);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    if (newKeyData === null) return;
+    copy(newKeyData.key);
   };
 
   const handleRevoke = (id: string) => {

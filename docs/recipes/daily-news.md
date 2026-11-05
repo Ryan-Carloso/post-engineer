@@ -18,7 +18,7 @@ mechanically, and only then generates.
 
 - A Post Engineer account with social accounts connected on
   https://post-engineer.com (OAuth needs a browser; see the MCP README).
-- An API key from https://post-engineer.com/api-keys, in the agent's local MCP
+- An API key from https://post-engineer.com/recipes, in the agent's local MCP
   configuration as `POST_ENGINEER_API_KEY`. Never paste the key in chat, in a
   prompt, or in this repo.
 - A persona (`personaId` from `list_personas`), or a faceless setup

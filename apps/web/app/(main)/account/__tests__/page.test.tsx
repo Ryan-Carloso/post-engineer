@@ -105,7 +105,7 @@ describe('app/(main)/account — AccountPage', () => {
     expect(screen.getByRole('button', { name: 'PT' })).toBeInTheDocument();
     expect(screen.getByTitle('nav.signOut')).toBeInTheDocument();
     const apiKeysLink = screen.getByTestId('profile-api-keys-link');
-    expect(apiKeysLink).toHaveAttribute('href', '/api-keys');
+    expect(apiKeysLink).toHaveAttribute('href', '/recipes');
     const billingLink = screen.getByTestId('profile-billing-link');
     expect(billingLink).toHaveAttribute('href', '/billing');
   });
