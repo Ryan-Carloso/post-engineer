@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { HttpStatusError } from '@/lib/errors';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
@@ -36,7 +37,7 @@ vi.mock('@/lib/i18n/provider', () => ({
   }),
 }));
 
-import { TokenHistory } from '../token-history';
+import { TokenHistory, fetchTransactionsPage } from '../token-history';
 
 function Wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -76,6 +77,25 @@ const refundTx = tx({ id: 'tx-refund', amount: 2, type: 'generation_refund', des
 describe('TokenHistory', () => {
   beforeEach(() => {
     mockFetch.mockReset();
+  });
+
+  it('fetchTransactionsPage throws an HttpStatusError carrying the response status', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({ success: false, error: 'nope' }) });
+
+    const error = await fetchTransactionsPage(0).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(HttpStatusError);
+    expect((error as HttpStatusError).status).toBe(401);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('fetchTransactionsPage keeps a 2xx status on an invalid body (transient)', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ success: false }) });
+
+    const error = await fetchTransactionsPage(0).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(HttpStatusError);
+    expect((error as HttpStatusError).status).toBe(200);
   });
 
   it('shows a loading state while fetching', () => {
