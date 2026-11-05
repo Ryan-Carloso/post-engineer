@@ -123,10 +123,11 @@ OAuth cujos **redirect URIs correspondam exatamente** aos valores em
 - **LinkedIn** — [LinkedIn Developers](https://developer.linkedin.com): crie um
   app, registre `LINKEDIN_REDIRECT_URI` e defina `LINKEDIN_CLIENT_ID` /
   `LINKEDIN_CLIENT_SECRET`.
-- **Threads** — [Meta for Developers](https://developers.facebook.com/docs/threads):
-  crie um app com o caso de uso Threads (permissões `threads_basic`,
-  `threads_content_publish` e `threads_manage_insights`), registre
-  `THREADS_REDIRECT_URI` e defina `THREADS_CLIENT_ID` / `THREADS_CLIENT_SECRET`.
+- **Threads** — o mesmo app da Meta do Instagram
+  ([Threads API](https://developers.facebook.com/docs/threads)). Adicione o
+  produto Threads (permissões `threads_basic`, `threads_content_publish` e
+  `threads_manage_insights`) e registre `THREADS_REDIRECT_URI`. O OAuth do
+  Threads usa `INSTAGRAM_CLIENT_ID` / `INSTAGRAM_CLIENT_SECRET`.
 - **Bluesky** usa uma app password inserida no painel (criptografada em repouso)
   — não é necessário registrar app de OAuth.
 

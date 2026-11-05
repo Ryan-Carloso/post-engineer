@@ -75,10 +75,13 @@ function requireId(code: string, body: Record<string, unknown>): string {
 //---------------
 // buildThreadsAuthorizationUrl — OAuth consent URL
 //---------------
+// Threads and Instagram are products on one Meta app. The App ID and App
+// Secret are INSTAGRAM_CLIENT_ID / INSTAGRAM_CLIENT_SECRET; only the redirect
+// URI is Threads-specific.
 export function buildThreadsAuthorizationUrl(state: string, redirectUriOverride?: string): string {
   const params = new URLSearchParams({
     response_type: 'code',
-    client_id: requireEnv('THREADS_CLIENT_ID'),
+    client_id: requireEnv('INSTAGRAM_CLIENT_ID'),
     redirect_uri: redirectUriOverride ?? requireEnv('THREADS_REDIRECT_URI'),
     state,
     scope: THREADS_SCOPES.join(','),
@@ -96,12 +99,12 @@ export interface ThreadsToken {
 }
 
 export async function exchangeThreadsCodeForToken(code: string, redirectUriOverride?: string): Promise<ThreadsToken> {
-  const clientSecret = requireEnv('THREADS_CLIENT_SECRET');
+  const clientSecret = requireEnv('INSTAGRAM_CLIENT_SECRET');
   const shortLived = await threadsFetch(
     'THREADS_TOKEN_FAILED',
     `${THREADS_API}/oauth/access_token`,
     formPost({
-      client_id: requireEnv('THREADS_CLIENT_ID'),
+      client_id: requireEnv('INSTAGRAM_CLIENT_ID'),
       client_secret: clientSecret,
       grant_type: 'authorization_code',
       redirect_uri: redirectUriOverride ?? requireEnv('THREADS_REDIRECT_URI'),
