@@ -306,6 +306,41 @@ describe('ApiKeysSection', () => {
     expect(await screen.findByTestId('api-key-created-banner')).toBeInTheDocument();
   });
 
+  it('shows the last-used date for a used key and "Never used" otherwise', () => {
+    const usedAt = '2026-11-04T18:30:00.000Z';
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: [
+        {
+          id: 'key-used',
+          name: 'Used key',
+          keyPrefix: 'pe_live_used1234...',
+          personaIds: null,
+          createdAt: '2026-09-18T10:00:00.000Z',
+          lastUsedAt: usedAt,
+          revokedAt: null,
+        },
+        {
+          id: 'key-fresh',
+          name: 'Fresh key',
+          keyPrefix: 'pe_live_fresh123...',
+          personaIds: null,
+          createdAt: '2026-09-18T10:00:00.000Z',
+          lastUsedAt: null,
+          revokedAt: null,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    } as never);
+    renderSection();
+
+    const usedDate = new Date(usedAt).toLocaleDateString();
+    // Table and mobile card both render the date, so each key shows it at least once.
+    expect(screen.getAllByText(usedDate).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(`Last used: ${usedDate}`).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Never used').length).toBeGreaterThan(0);
+  });
+
   it('marks a revoked key in the list without a revoke action', () => {
     vi.mocked(useApiKeysQuery).mockReturnValue({
       data: [
