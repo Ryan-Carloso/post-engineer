@@ -139,4 +139,51 @@ describe('notifyIfSessionExpired — swallowed mutation failures', () => {
     expect(assign).toHaveBeenCalledTimes(1);
     expect(assign).toHaveBeenCalledWith('/login?next=%2Fpersona');
   });
+
+  it('deletePersona on a 401 still returns its failure object and triggers the redirect', async () => {
+    const assign = vi.fn();
+    stubWindowLocation('/persona', '', assign);
+    vi.resetModules();
+    const { deletePersona } = await import('../api');
+
+    vi.stubGlobal('fetch', vi.fn(async () => response(401)));
+    const result = await deletePersona('p-1');
+
+    expect(result.success).toBe(false);
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledWith('/login?next=%2Fpersona');
+  });
+
+  it('fetchDeletePreview on a 401 still returns its failure object and triggers the redirect', async () => {
+    const assign = vi.fn();
+    stubWindowLocation('/persona', '', assign);
+    vi.resetModules();
+    const { fetchDeletePreview } = await import('../api');
+
+    vi.stubGlobal('fetch', vi.fn(async () => response(401)));
+    const result = await fetchDeletePreview('p-1');
+
+    expect(result.success).toBe(false);
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledWith('/login?next=%2Fpersona');
+  });
+
+  it('fetchDenoisePreview on a 401 still returns its failure object and triggers the redirect', async () => {
+    const assign = vi.fn();
+    stubWindowLocation('/persona', '', assign);
+    vi.resetModules();
+    const { fetchDenoisePreview } = await import('../cloned-voices-client');
+
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      headers: { get: () => 'application/json' },
+      json: async () => ({}),
+    })));
+    const result = await fetchDenoisePreview(new Blob(['x']));
+
+    expect(result.success).toBe(false);
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledWith('/login?next=%2Fpersona');
+  });
 });

@@ -25,19 +25,28 @@ vi.mock('@/lib/api', () => ({
   useDisconnectAccountMutation: vi.fn(),
 }));
 
+// Only notifyIfSessionExpired is doubled; the module's redirect behavior is
+// pinned in lib/__tests__/session-expiry.test.tsx.
+vi.mock('@/lib/session-expiry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/session-expiry')>();
+  return {
+    ...actual,
+    notifyIfSessionExpired: vi.fn(),
+  };
+});
+
 const mockStoreState = {
   selectedAccountIds: { youtube: [] as string[], instagram: [] as string[] },
   toggleSelectedAccount: vi.fn(),
 };
 
-vi.mock('@/lib/store', () => ({
-  useUploadStore: Object.assign(
-    (selector?: (s: typeof mockStoreState) => unknown) =>
-      selector ? selector(mockStoreState) : mockStoreState,
-    {
-      getState: vi.fn(() => mockStoreState),
-    },
-  ),
+vi.mock('@/lib/store', () => ({  useUploadStore: Object.assign(
+  (selector?: (s: typeof mockStoreState) => unknown) =>
+    selector ? selector(mockStoreState) : mockStoreState,
+  {
+    getState: vi.fn(() => mockStoreState),
+  },
+),
 }));
 
 vi.mock('@/lib/oauth/google-handler', () => ({
@@ -115,6 +124,7 @@ vi.mock('@/components/account-card', () => ({
 import AccountsPage from '../page';
 import { useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery, useThreadsAccountsQuery, useDisconnectAccountMutation } from '@/lib/api';
 import { useYouTubeOAuth } from '@/lib/oauth/google-handler';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { useInstagramOAuth } from '@/lib/oauth/instagram-handler';
 import { useLinkedInOAuth } from '@/lib/oauth/linkedin-handler';
 import { useThreadsOAuth } from '@/lib/oauth/threads-handler';
@@ -426,6 +436,19 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     fireEvent.click(screen.getByTestId('instagram-disconnect-button'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'ig1' }));
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('instagram');
+  });
+
+  it('bluesky connect dialog notifies the session-expiry handler on a 401', async () => {
+    const notify = vi.mocked(notifyIfSessionExpired);
+    notify.mockClear();
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401, json: async () => ({ success: false }) })));
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    // Section order: youtube, instagram, bluesky, linkedin, threads.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[2]);
+    fireEvent.change(await screen.findByTestId('bluesky-handle-input'), { target: { value: 'voce.bsky.social' } });
+    fireEvent.change(screen.getByTestId('bluesky-password-input'), { target: { value: 'app-password' } });
+    fireEvent.click(screen.getByTestId('bluesky-connect-button'));
+    await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
   });
 
   it('disconnects a Bluesky account using its did', async () => {

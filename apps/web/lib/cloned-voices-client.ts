@@ -1,6 +1,7 @@
 import type { ClonedVoicePublicRow } from '@/lib/cloned-voices-types';
 import { narrowClonedVoiceRow } from '@/lib/cloned-voices-types';
 import { HttpStatusError } from '@/lib/errors';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 
 async function parseJson(response: Response): Promise<unknown> {
   try {
@@ -121,6 +122,7 @@ export async function fetchDenoisePreview(
       body: formData,
     });
     if (!response.ok || !(response.headers.get('content-type') ?? '').startsWith('audio/')) {
+      if (!response.ok) notifyIfSessionExpired(response);
       const data = await parseJson(response);
       const error =
         typeof data === 'object' && data !== null && 'error' in data && typeof data.error === 'string'

@@ -234,6 +234,7 @@ export async function fetchDeletePreview(personaId: string): Promise<DeletePrevi
     `/api/persona/delete-preview?personaId=${encodeURIComponent(personaId)}`,
   );
   if (!response.ok) {
+    notifyIfSessionExpired(response);
     // Surface the server's structured error (code/error) so the UI can
     // distinguish e.g. PERSONA_NOT_FOUND from a transient 500.
     const parsed = await parseErrorResponse(response, `Preview request failed (${response.status}).`);
@@ -252,6 +253,7 @@ export async function deletePersona(personaId: string): Promise<DeletePersonaRes
     { method: 'DELETE' },
   );
   if (!response.ok) {
+    notifyIfSessionExpired(response);
     const parsed = await parseErrorResponse(response, `Delete request failed (${response.status}).`);
     return { success: false, error: parsed.error, code: parsed.code };
   }
