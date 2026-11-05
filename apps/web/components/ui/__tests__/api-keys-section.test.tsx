@@ -9,7 +9,6 @@ vi.mock('@/lib/api', () => ({
   useApiKeysQuery: vi.fn(),
   useCreateApiKeyMutation: vi.fn(),
   useRevokeApiKeyMutation: vi.fn(),
-  usePersonasQuery: vi.fn(),
 }));
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -36,12 +35,6 @@ vi.mock('@/lib/i18n/provider', () => {
     'apiKeys.create': 'Create key',
     'apiKeys.cancel': 'Cancel',
     'apiKeys.loadError': 'Could not load API keys.',
-    'apiKeys.scopeLabel': 'Personas this key can access',
-    'apiKeys.scopeAll': 'All personas (including future ones)',
-    'apiKeys.scopeSpecific': 'Only selected personas',
-    'apiKeys.scopeAllBadge': 'All personas',
-    'apiKeys.scopeCount': '{count} personas',
-    'apiKeys.scopePersonasError': 'Could not load personas.',
     'apiKeys.showAll': 'Show all {count} keys',
     'apiKeys.showFewer': 'Show fewer keys',
   };
@@ -58,13 +51,7 @@ import {
   useApiKeysQuery,
   useCreateApiKeyMutation,
   useRevokeApiKeyMutation,
-  usePersonasQuery,
 } from '@/lib/api';
-
-const PERSONAS = [
-  { id: 'persona-1', name: 'Ana', createdAt: '2026-09-18T10:00:00.000Z' },
-  { id: 'persona-2', name: 'Beto', createdAt: '2026-09-18T10:00:00.000Z' },
-];
 
 function makeKey(index: number): {
   id: string;
@@ -105,11 +92,6 @@ describe('ApiKeysSection', () => {
       mutateAsync: vi.fn(),
       isPending: false,
     } as never);
-    vi.mocked(usePersonasQuery).mockReturnValue({
-      data: PERSONAS,
-      isLoading: false,
-      isError: false,
-    } as never);
     Object.defineProperty(window.navigator, 'clipboard', {
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
       writable: true,
@@ -145,13 +127,8 @@ describe('ApiKeysSection', () => {
     expect(screen.getByTestId('create-api-key-form')).toBeInTheDocument();
   });
 
-  it('shows an empty state in the scope selector when there are no personas', () => {
+  it('create form offers only a name, without persona scope controls', () => {
     vi.mocked(useApiKeysQuery).mockReturnValue({
-      data: [],
-      isLoading: false,
-      isError: false,
-    } as never);
-    vi.mocked(usePersonasQuery).mockReturnValue({
       data: [],
       isLoading: false,
       isError: false,
@@ -159,10 +136,10 @@ describe('ApiKeysSection', () => {
     renderSection();
 
     fireEvent.click(screen.getByTestId('generate-api-key-btn'));
-    fireEvent.click(screen.getByTestId('api-key-scope-specific'));
-
-    expect(screen.getByTestId('api-key-scope-empty')).toBeInTheDocument();
-    expect(screen.getByTestId('submit-create-key-btn')).toBeDisabled();
+    expect(screen.getByTestId('api-key-name-input')).toBeInTheDocument();
+    // Persona scoping was removed from the UI; the API still accepts it.
+    expect(screen.queryByTestId('api-key-scope-all')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('api-key-scope-specific')).not.toBeInTheDocument();
   });
 
   it('creates a key and shows the secret once with copy support', async () => {
@@ -255,7 +232,7 @@ describe('ApiKeysSection', () => {
   expect(screen.getByText('Could not load API keys.')).toBeInTheDocument();
   });
 
-  it('creates a scoped key limited to the selected personas', async () => {
+  it('creates a key with full persona access when the form submits', async () => {
     vi.mocked(useApiKeysQuery).mockReturnValue({
       data: [],
       isLoading: false,
@@ -266,45 +243,23 @@ describe('ApiKeysSection', () => {
       name: 'Scoped Agent',
       key: 'pe_live_abcdef1234567890abcdef1234567890',
       keyPrefix: 'pe_live_abcdef12...',
-      personaIds: ['persona-1'],
+      personaIds: null,
       createdAt: '2026-09-18T10:00:00.000Z',
     });
     vi.mocked(useCreateApiKeyMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
     renderSection();
 
     fireEvent.click(screen.getByTestId('generate-api-key-btn'));
-    expect(screen.getByTestId('api-key-scope-all')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByTestId('api-key-scope-specific'));
-    fireEvent.click(screen.getByTestId('api-key-persona-persona-1'));
     fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'Scoped Agent' } });
     fireEvent.click(screen.getByTestId('submit-create-key-btn'));
 
     await waitFor(() => {
-      expect(mutateAsync).toHaveBeenCalledWith({ name: 'Scoped Agent', personaIds: ['persona-1'] });
+      expect(mutateAsync).toHaveBeenCalledWith({ name: 'Scoped Agent', personaIds: null });
     });
     expect(await screen.findByTestId('api-key-created-banner')).toBeInTheDocument();
   });
 
-  it('requires at least one persona when scope is specific', async () => {
-    vi.mocked(useApiKeysQuery).mockReturnValue({
-      data: [],
-      isLoading: false,
-      isError: false,
-    } as never);
-    const mutateAsync = vi.fn();
-    vi.mocked(useCreateApiKeyMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
-    renderSection();
-
-    fireEvent.click(screen.getByTestId('generate-api-key-btn'));
-    fireEvent.click(screen.getByTestId('api-key-scope-specific'));
-    fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'Scoped Agent' } });
-
-    expect(screen.getByTestId('submit-create-key-btn')).toBeDisabled();
-    expect(mutateAsync).not.toHaveBeenCalled();
-  });
-
-  it('displays the persona scope badge on each key row', () => {
+  it('never renders a persona scope badge, even on legacy scoped keys', () => {
     vi.mocked(useApiKeysQuery).mockReturnValue({
       data: [
         {
@@ -316,6 +271,9 @@ describe('ApiKeysSection', () => {
           lastUsedAt: null,
           revokedAt: null,
         },
+        // Scoped keys can only exist from before scoping was removed from
+        // the UI; the server still enforces their restriction, but the hub
+        // no longer surfaces it.
         {
           id: 'key-2',
           name: 'Scoped',
@@ -331,8 +289,8 @@ describe('ApiKeysSection', () => {
     } as never);
     renderSection();
 
-    expect(screen.getByTestId('api-key-scope-badge-key-1')).toHaveTextContent('All personas');
-    expect(screen.getByTestId('api-key-scope-badge-key-2')).toHaveTextContent('2 personas');
+    expect(screen.queryByTestId('api-key-scope-badge-key-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('api-key-scope-badge-key-2')).not.toBeInTheDocument();
   });
 
   it('collapses long key lists behind a show-all toggle', () => {

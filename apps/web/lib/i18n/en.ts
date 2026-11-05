@@ -246,13 +246,6 @@ export const enDictionary: Dictionary = {
     create: 'Create key',
     cancel: 'Cancel',
     loadError: 'Could not load API keys.',
-    scopeLabel: 'Personas this key can access',
-    scopeAll: 'All personas (including future ones)',
-    scopeSpecific: 'Only selected personas',
-    scopeAllBadge: 'All personas',
-    scopeCount: '{count} personas',
-    scopePersonasError: 'Could not load personas.',
-    scopeNoPersonas: 'You have no personas yet.',
     docsTitle: 'Connect Post Engineer to your AI agent (MCP)',
     docsIntro:
       'Post Engineer offers an MCP server (Model Context Protocol) that lets AI agents like Claude, Cursor, Codex, and OpenCode create personas, generate videos, and schedule posts directly on your account.',
@@ -263,7 +256,7 @@ export const enDictionary: Dictionary = {
     docsCopyPrompt: 'Copy install prompt',
     docsCopied: 'Copied!',
     docsSecurityNote:
-      'Security: your API Key grants full access to your account. Never share the key in public repositories or messages. You can revoke it at any time.',
+      'Security: paste this prompt only into your own AI agent. Never into public chats or repositories. You can revoke the key at any time.',
     colName: 'Name',
     colCreated: 'Created',
     colPermissions: 'Permissions',

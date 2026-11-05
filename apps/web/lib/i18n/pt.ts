@@ -246,13 +246,6 @@ export const ptDictionary = {
     create: 'Criar chave',
     cancel: 'Cancelar',
     loadError: 'Não foi possível carregar as chaves de API.',
-    scopeLabel: 'Personas que esta chave pode acessar',
-    scopeAll: 'Todas as personas (inclui futuras)',
-    scopeSpecific: 'Somente personas selecionadas',
-    scopeAllBadge: 'Todas as personas',
-    scopeCount: '{count} personas',
-    scopePersonasError: 'Não foi possível carregar as personas.',
-    scopeNoPersonas: 'Você ainda não tem personas.',
     docsTitle: 'Conecte o Post Engineer ao seu agente de IA (MCP)',
     docsIntro:
       'O Post Engineer oferece um servidor MCP (Model Context Protocol) que permite a agentes de IA como Claude, Cursor, Codex e OpenCode criarem personas, gerarem vídeos e agendarem publicações diretamente na sua conta.',
@@ -263,7 +256,7 @@ export const ptDictionary = {
     docsCopyPrompt: 'Copiar prompt de instalação',
     docsCopied: 'Copiado!',
     docsSecurityNote:
-      'Segurança: sua API Key dá acesso completo à sua conta. Nunca compartilhe a chave em repositórios públicos ou mensagens. Você pode revogar a qualquer momento.',
+      'Segurança: cole este prompt só no seu próprio agente de IA. Nunca em chats públicos ou repositórios. Você pode revogar a chave a qualquer momento.',
     colName: 'Nome',
     colCreated: 'Criada em',
     colPermissions: 'Permissões',

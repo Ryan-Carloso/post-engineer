@@ -119,7 +119,7 @@ export const recipesI18nPt = {
       'Contas conectadas, persona criada, roteiro validado, um vídeo publicado.',
   stepKeyTitle: 'Crie sua API key',
   stepKeyHint:
-      'Ela conecta seu agente à sua conta. Aparece uma vez só: copie e guarde.',
+      'Ela conecta seu agente à sua conta. Você pode criar várias, uma por agente.',
   stepSetupTitle: 'Mande o prompt de setup ao seu agente',
   stepSetupHint:
       'Cole no Claude, Cursor, OpenCode ou outro agente: ele instala o servidor MCP do Post Engineer. Se você acabou de criar uma key, ela já vem preenchida.',

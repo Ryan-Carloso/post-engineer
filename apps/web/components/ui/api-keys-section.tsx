@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { useApiKeysQuery, useCreateApiKeyMutation, usePersonasQuery, useRevokeApiKeyMutation } from '@/lib/api';
+import { useApiKeysQuery, useCreateApiKeyMutation, useRevokeApiKeyMutation } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import { useCopyText } from '@/lib/use-copy-text';
 import { Button } from '@/components/ui/button';
@@ -13,8 +13,11 @@ const MAX_VISIBLE_KEYS = 4;
 
 //---------------
 // ApiKeysSection — step 1 of the prompts hub: list, create, and revoke
-// API keys. A freshly created key is shown once; onKeyCreated hands it
-// to the hub so the install prompt in step 2 carries it already filled in.
+// API keys. Keys are created with access to every persona (creating with
+// a scoped subset was removed from the UI; the API still accepts it, and
+// legacy scoped keys keep their server-side restriction). A freshly
+// created key is shown once; onKeyCreated hands it to the hub so the
+// install prompt in step 2 carries it already filled in.
 //---------------
 
 export default function ApiKeysSection({
@@ -29,8 +32,6 @@ export default function ApiKeysSection({
 
   const [isCreating, setIsCreating] = useState(false);
   const [keyName, setKeyName] = useState('');
-  const [scopeMode, setScopeMode] = useState<'all' | 'specific'>('all');
-  const [selectedPersonaIds, setSelectedPersonaIds] = useState<string[]>([]);
   const [newKeyData, setNewKeyData] = useState<{ name: string; key: string } | null>(null);
   const [showAllKeys, setShowAllKeys] = useState(false);
   const { copied, copy } = useCopyText();
@@ -40,14 +41,8 @@ export default function ApiKeysSection({
   // collapsed slice, so creation itself forces the list open.
   const visibleKeys = showAllKeys || newKeyData ? keys : keys.slice(0, MAX_VISIBLE_KEYS);
   const hasHiddenKeys = keys.length > MAX_VISIBLE_KEYS;
-  const personasQuery = usePersonasQuery();
-  const personas = personasQuery.data ?? [];
-  const personaNames = new Map(personas.map((persona) => [persona.id, persona.name]));
 
-  const canSubmit =
-    keyName.trim().length > 0 &&
-    (scopeMode === 'all' || selectedPersonaIds.length > 0) &&
-    !createMutation.isPending;
+  const canSubmit = keyName.trim().length > 0 && !createMutation.isPending;
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,36 +51,15 @@ export default function ApiKeysSection({
     try {
       const result = await createMutation.mutateAsync({
         name: keyName.trim(),
-        personaIds: scopeMode === 'specific' ? selectedPersonaIds : null,
+        personaIds: null,
       });
       setNewKeyData({ name: result.name, key: result.key });
       onKeyCreated?.(result.key);
       setKeyName('');
-      setScopeMode('all');
-      setSelectedPersonaIds([]);
       setIsCreating(false);
     } catch {
       // Error handled by mutation
     }
-  };
-
-  const togglePersona = (personaId: string) => {
-    setSelectedPersonaIds((previous) =>
-      previous.includes(personaId)
-        ? previous.filter((id) => id !== personaId)
-        : [...previous, personaId],
-    );
-  };
-
-  const scopeBadgeText = (personaIds: string[] | null): string =>
-    personaIds === null
-      ? t('apiKeys.scopeAllBadge')
-      : t('apiKeys.scopeCount').replace('{count}', String(personaIds.length));
-
-  const scopeBadgeTitle = (personaIds: string[] | null): string | undefined => {
-    if (personaIds === null) return undefined;
-    const names = personaIds.map((id) => personaNames.get(id) ?? id);
-    return names.join(', ');
   };
 
   const handleCopy = () => {
@@ -165,25 +139,23 @@ export default function ApiKeysSection({
           <form
             onSubmit={handleCreate}
             data-testid="create-api-key-form"
-            className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4"
+            className="mb-6 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4"
           >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="flex-1">
-                <label htmlFor="api-key-name-input" className="mb-1 block text-xs font-medium text-slate-700">
-                  {t('apiKeys.nameLabel')}
-                </label>
-                <input
-                  id="api-key-name-input"
-                  type="text"
-                  data-testid="api-key-name-input"
-                  placeholder={t('apiKeys.namePlaceholder')}
-                  value={keyName}
-                  onChange={(e) => setKeyName(e.target.value)}
-                  autoFocus
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none"
-                />
-              </div>
-              <div className="flex gap-2">
+            <label htmlFor="api-key-name-input" className="block text-xs font-medium text-slate-700">
+              {t('apiKeys.nameLabel')}
+            </label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                id="api-key-name-input"
+                type="text"
+                data-testid="api-key-name-input"
+                placeholder={t('apiKeys.namePlaceholder')}
+                value={keyName}
+                onChange={(e) => setKeyName(e.target.value)}
+                autoFocus
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none"
+              />
+              <div className="flex shrink-0 gap-2">
                 <Button
                   type="submit"
                   data-testid="submit-create-key-btn"
@@ -194,80 +166,13 @@ export default function ApiKeysSection({
                 </Button>
                 <Button
                   type="button"
-                  onClick={() => {
-                    setIsCreating(false);
-                    setScopeMode('all');
-                    setSelectedPersonaIds([]);
-                  }}
+                  onClick={() => setIsCreating(false)}
                   className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                 >
                   {t('apiKeys.cancel')}
                 </Button>
               </div>
             </div>
-
-            <fieldset>
-              <legend className="mb-2 block text-xs font-medium text-slate-700">
-                {t('apiKeys.scopeLabel')}
-              </legend>
-              <div className="flex flex-col gap-2">
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
-                  <input
-                    type="radio"
-                    name="api-key-scope"
-                    data-testid="api-key-scope-all"
-                    checked={scopeMode === 'all'}
-                    onChange={() => setScopeMode('all')}
-                    className="size-4 accent-slate-900"
-                  />
-                  {t('apiKeys.scopeAll')}
-                </label>
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
-                  <input
-                    type="radio"
-                    name="api-key-scope"
-                    data-testid="api-key-scope-specific"
-                    checked={scopeMode === 'specific'}
-                    onChange={() => setScopeMode('specific')}
-                    className="size-4 accent-slate-900"
-                  />
-                  {t('apiKeys.scopeSpecific')}
-                </label>
-              </div>
-
-              {scopeMode === 'specific' ? (
-                <div className="mt-3">
-                  {personasQuery.isError ? (
-                    <p className="text-xs text-red-500">{t('apiKeys.scopePersonasError')}</p>
-                  ) : personas.length === 0 ? (
-                    <div
-                      data-testid="api-key-scope-empty"
-                      className="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-4 text-center"
-                    >
-                      <p className="text-xs text-slate-500">{t('apiKeys.scopeNoPersonas')}</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-1.5">
-                      {personas.map((persona) => (
-                        <label
-                          key={persona.id}
-                          className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 hover:border-slate-300"
-                        >
-                          <input
-                            type="checkbox"
-                            data-testid={`api-key-persona-${persona.id}`}
-                            checked={selectedPersonaIds.includes(persona.id)}
-                            onChange={() => togglePersona(persona.id)}
-                            className="size-4 accent-slate-900"
-                          />
-                          {persona.name}
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : null}
-            </fieldset>
           </form>
         ) : null}
 
@@ -305,8 +210,6 @@ export default function ApiKeysSection({
               <thead>
                 <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500">
                   <th className="px-4 py-3 font-semibold">{t('apiKeys.colName')}</th>
-                  <th className="px-4 py-3 font-semibold">{t('apiKeys.colCreated')}</th>
-                  <th className="px-4 py-3 font-semibold">{t('apiKeys.colPermissions')}</th>
                   <th className="px-4 py-3 font-semibold">{t('apiKeys.colLastUsed')}</th>
                   <th className="px-4 py-3 font-semibold">{t('apiKeys.colStatus')}</th>
                   <th className="px-4 py-3 text-right font-semibold">{t('apiKeys.colActions')}</th>
@@ -315,27 +218,11 @@ export default function ApiKeysSection({
               <tbody className="divide-y divide-slate-100">
                 {visibleKeys.map((key) => {
                   const isRevoked = Boolean(key.revokedAt);
-                  const created = new Date(key.createdAt);
                   return (
                     <tr key={key.id} data-testid={`api-key-row-${key.id}`} className="text-sm">
                       <td className="px-4 py-3.5">
                         <span className="block font-semibold text-slate-900">{key.name}</span>
                         <span className="mt-0.5 block font-mono text-xs text-slate-400">{key.keyPrefix}</span>
-                      </td>
-                      <td className="px-4 py-3.5 text-slate-600">
-                        <span className="block">{created.toLocaleDateString()}</span>
-                        <span className="mt-0.5 block text-xs text-slate-400">
-                          {created.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <span
-                          data-testid={`api-key-scope-badge-${key.id}`}
-                          title={scopeBadgeTitle(key.personaIds ?? null)}
-                          className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600"
-                        >
-                          {scopeBadgeText(key.personaIds ?? null)}
-                        </span>
                       </td>
                       <td className="px-4 py-3.5 text-slate-600">
                         {key.lastUsedAt
@@ -391,17 +278,10 @@ export default function ApiKeysSection({
                       </div>
                       <div className="mt-1 flex flex-col gap-0.5 text-xs text-slate-500">
                         <span className="font-mono">{key.keyPrefix}</span>
-                        <span
-                          title={scopeBadgeTitle(key.personaIds ?? null)}
-                          className="flex flex-wrap items-center gap-x-1.5"
-                        >
-                          <span>{scopeBadgeText(key.personaIds ?? null)}</span>
-                          <span aria-hidden="true" className="text-slate-300">•</span>
-                          <span>
-                            {key.lastUsedAt
-                              ? t('apiKeys.lastUsed').replace('{date}', new Date(key.lastUsedAt).toLocaleDateString())
-                              : t('apiKeys.neverUsed')}
-                          </span>
+                        <span>
+                          {key.lastUsedAt
+                            ? t('apiKeys.lastUsed').replace('{date}', new Date(key.lastUsedAt).toLocaleDateString())
+                            : t('apiKeys.neverUsed')}
                         </span>
                       </div>
                     </div>
