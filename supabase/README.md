@@ -42,6 +42,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 034 | `migrations/034_threads-provider.sql` | Threads as a publishing provider: `schedules.threads_account_ids` (default empty) and `threads` in the `post_metrics.provider` check |
 | 035 | `migrations/035_scheduled-posts-full-lipsync.sql` | Per-post full lip-sync choice (`scheduled_posts.full_lipsync`, default false), forwarded by the engine batch pipeline so a tick-dispatched or requeued slot keeps full lip-sync instead of silently rendering intro-only b-roll |
 | 036 | `migrations/036_drop-unknown-social-accounts.sql` | Deletes social accounts stored with the placeholder `provider_account_id` `'unknown'` (a failed YouTube channel lookup used to save them; unrecoverable and every publish to them failed) so users reconnect |
+| 038 | `migrations/038_drop-placeholder-persona-default-accounts.sql` | Deletes `persona_default_accounts` rows saved under the `'unknown'` placeholder account id (no FK, so migration 036 left them dangling and the persona publishing-accounts editor could no longer be saved) |
 
 ## How to apply
 

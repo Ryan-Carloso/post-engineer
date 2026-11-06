@@ -40,13 +40,20 @@ export async function checkSchemaDrift(
     if (MISSING_TABLE_CODES.has(code)) {
       report.missing[table] = [...columns];
     } else if (MISSING_COLUMN_CODES.has(code)) {
-      // One probe per column names exactly which ones are missing.
+      // One probe per column names exactly which ones are missing. Only a
+      // probe that confirms a missing column is drift: a failure that is
+      // not (connection, auth) leaves the table unverified, and a table
+      // whose columns all answer fine was a transient schema-cache blip.
       const absent: string[] = [];
+      let unverifiable = false;
       for (const column of columns) {
         const columnCode = await probe(client, table, [column]);
-        if (columnCode !== null && MISSING_COLUMN_CODES.has(columnCode)) absent.push(column);
+        if (columnCode === null) continue;
+        if (MISSING_COLUMN_CODES.has(columnCode)) absent.push(column);
+        else unverifiable = true;
       }
-      report.missing[table] = absent.length > 0 ? absent : [...columns];
+      if (absent.length > 0) report.missing[table] = absent;
+      else if (unverifiable) report.unverified.push(table);
     } else {
       report.unverified.push(table);
     }
