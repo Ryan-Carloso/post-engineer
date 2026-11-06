@@ -23,7 +23,7 @@ import { resolvePersonaAvatar, rollbackStoragePath } from '@/lib/persona-remote-
 import { logger } from '@/lib/logger';
 import { parsePatchBody } from './patch-body';
 import { parseJsonStringArray, parsePrimaryIndex } from './form-parsing';
-import { personaValidationError } from './validation-error';
+import { forwardLibraryImagesError, personaValidationError } from './validation-error';
 import { uploadFile } from './upload-photo';
 import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
@@ -265,7 +265,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         }
       }
       await rollbackStoragePath(supabase, photoPathToRollback);
-      return errorResponse(added.status, added.error, 'POST /api/persona');
+      return forwardLibraryImagesError(added, 'POST /api/persona');
     }
     libraryImageIds = added.images.map((image) => image.id);
     // Defensive: addLibraryImages rolls back partial work and returns exactly
@@ -318,7 +318,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
   }
 
   const parsedPatch = await parsePatchBody(request);
-  if (!parsedPatch.ok) return personaValidationError(parsedPatch.error, 'PATCH /api/persona');
+  if (!parsedPatch.ok) return personaValidationError(parsedPatch.error, 'PATCH /api/persona', { logMessage: parsedPatch.logMessage });
   const patch = parsedPatch.value;
 
   // English-only launch: same gate as persona creation — the language

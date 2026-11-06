@@ -35,6 +35,15 @@ vi.mock('@/lib/supabase/service', () => ({
 import { GET, POST, PATCH, DELETE } from '../images/route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { logger } from '@/lib/logger';
+
+// The 400 log line pins the route string and the stable template: without
+// it, blanking either string in the response call changes nothing any test
+// observes (the body carries neither).
+const warnSpy = vi.spyOn(logger, 'warn');
+function loggedWarnings(): string[] {
+  return warnSpy.mock.calls.map((call) => String(call[0]));
+}
 
 const USER_ID = 'user-uuid-1';
 const PERSONA_ID = 'persona-uuid-1';
@@ -238,9 +247,11 @@ describe('GET /api/persona/images', () => {
     mockClient();
     const res = await GET(new Request('http://localhost/api/persona/images'));
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { code?: string; field?: string };
+    const body = (await res.json()) as { code?: string; field?: string; error?: string };
     expect(body.code).toBe('VALIDATION_FAILED');
     expect(body.field).toBe('personaId');
+    expect(body.error).toBe('personaId is required.');
+    expect(loggedWarnings()).toContain('[GET /api/persona/images] 400 personaId is required.');
   });
 
   it('rejects a scoped API key without access to the persona', async () => {
@@ -341,8 +352,88 @@ describe('POST /api/persona/images', () => {
       postForm({ personaId: PERSONA_ID, image: imageFile() }),
     );
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
     expect(body.error).toContain('10');
+    // A full library names no field: the image input is fine, the
+    // library is full.
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBeUndefined();
+    expect(loggedWarnings()).toContain(
+      '[POST /api/persona/images] 400 Image library is full (10 images max).',
+    );
+  });
+
+  it('returns 400 with an invalid multipart payload', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient();
+    const res = await POST(
+      new Request('http://localhost/api/persona/images', {
+        method: 'POST',
+        headers: { 'content-type': 'multipart/form-data' },
+        body: 'not multipart at all',
+      }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string };
+    expect(body.error).toBe('Invalid multipart payload.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(loggedWarnings()).toContain('[POST /api/persona/images] 400 Invalid multipart payload.');
+  });
+
+  it('returns 400 without personaId', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient();
+    const res = await POST(postForm({ image: imageFile() }));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('personaId is required.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('personaId');
+    expect(loggedWarnings()).toContain('[POST /api/persona/images] 400 personaId is required.');
+  });
+
+  it('returns 400 without an image file', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient();
+    const res = await POST(postForm({ personaId: PERSONA_ID }));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('An image file is required.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('file');
+    expect(loggedWarnings()).toContain('[POST /api/persona/images] 400 An image file is required.');
+  });
+
+  it('returns 400 for a zero-size image file', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient();
+    // imageFile() always writes magic bytes; a zero-size file needs an
+    // empty File constructed directly.
+    const empty = new File([], 'empty.png', { type: 'image/png' });
+    const res = await POST(postForm({ personaId: PERSONA_ID, image: empty }));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('An image file is required.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('file');
+  });
+
+  it('rejects a non-string description with 400 instead of silently dropping it', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient();
+    // A File under 'description' is a valid FormDataEntryValue; silently
+    // coercing it to '' would lose the caller's metadata with a 201.
+    const res = await POST(
+      postForm({ personaId: PERSONA_ID, image: imageFile(), description: imageFile() }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('description must be a string.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('description');
+    expect(loggedWarnings()).toContain(
+      '[POST /api/persona/images] 400 description must be a string.',
+    );
   });
 
   it('rejects a non-string tag with 400 instead of silently dropping it', async () => {
@@ -354,8 +445,11 @@ describe('POST /api/persona/images', () => {
       postForm({ personaId: PERSONA_ID, image: imageFile(), tag: imageFile() }),
     );
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('tag must be a string');
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('tag must be a string.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('tag');
+    expect(loggedWarnings()).toContain('[POST /api/persona/images] 400 tag must be a string.');
   });
 
   it('rejects non-image files', async () => {
@@ -386,8 +480,14 @@ describe('POST /api/persona/images', () => {
       postForm({ personaId: PERSONA_ID, image: imageFile(), tag: 'x'.repeat(101) }),
     );
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('100');
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('tag must be at most 100 characters.');
+    // The tag input failed, not the file: the UI highlights the tag input.
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('tag');
+    expect(loggedWarnings()).toContain(
+      '[POST /api/persona/images] 400 tag must be at most 100 characters.',
+    );
   });
 
   it('rejects an over-length description instead of truncating it', async () => {
@@ -397,8 +497,13 @@ describe('POST /api/persona/images', () => {
       postForm({ personaId: PERSONA_ID, image: imageFile(), description: 'x'.repeat(501) }),
     );
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('500');
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('description must be at most 500 characters.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('description');
+    expect(loggedWarnings()).toContain(
+      '[POST /api/persona/images] 400 description must be at most 500 characters.',
+    );
   });
 
   it('still reports success when the primary flag fails after upload', async () => {
@@ -487,8 +592,13 @@ describe('POST /api/persona/images', () => {
       postForm({ personaId: PERSONA_ID, image: imageFile(), isPrimary: '1' }),
     );
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('isPrimary');
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe("isPrimary must be 'true' or 'false'.");
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('isPrimary');
+    expect(loggedWarnings()).toContain(
+      "[POST /api/persona/images] 400 isPrimary must be 'true' or 'false'.",
+    );
   });
 
   it('adds a library image with a single personas query (ownership only)', async () => {
@@ -529,12 +639,67 @@ describe('PATCH /api/persona/images', () => {
     expect(res.status).toBe(500);
   });
 
+  it('returns 400 without an image id', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageRow: IMAGE_ROW });
+    const res = await PATCH(patchRequest({ tag: 'x' }));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('id is required.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('id');
+    expect(loggedWarnings()).toContain('[PATCH /api/persona/images] 400 id is required.');
+  });
+
+  it('rejects a non-string tag with 400', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageRow: IMAGE_ROW });
+    const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, tag: 42 }));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('tag must be a string.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('tag');
+    expect(loggedWarnings()).toContain('[PATCH /api/persona/images] 400 tag must be a string.');
+  });
+
+  it('rejects a non-string description with 400', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageRow: IMAGE_ROW });
+    const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, description: 42 }));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('description must be a string.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('description');
+    expect(loggedWarnings()).toContain(
+      '[PATCH /api/persona/images] 400 description must be a string.',
+    );
+  });
+
+  it('rejects a non-boolean isPrimary with 400', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageRow: IMAGE_ROW });
+    const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, isPrimary: 'yes' }));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('isPrimary must be a boolean.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('isPrimary');
+    expect(loggedWarnings()).toContain(
+      '[PATCH /api/persona/images] 400 isPrimary must be a boolean.',
+    );
+  });
+
   it('rejects an empty patch', async () => {
     mockAuth({ userId: USER_ID });
     mockClient({ imageRow: IMAGE_ROW });
     const res = await PATCH(patchRequest({ id: IMAGE_ROW.id }));
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { code?: string }).code).toBe('VALIDATION_FAILED');
+    const body = (await res.json()) as { error: string; code?: string };
+    expect(body.error).toBe('Nothing to update.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(loggedWarnings()).toContain('[PATCH /api/persona/images] 400 Nothing to update.');
   });
 
   it('updates tag and description', async () => {
@@ -665,9 +830,14 @@ describe('PATCH /api/persona/images', () => {
     mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW });
     const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, isPrimary: false }));
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string };
+    const body = (await res.json()) as { success: boolean; error: string; code?: string; field?: string };
     expect(body.success).toBe(false);
-    expect(body.error).toContain('cannot be set to false');
+    expect(body.error).toBe('isPrimary cannot be set to false. Mark another image as primary instead.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('isPrimary');
+    expect(loggedWarnings()).toContain(
+      '[PATCH /api/persona/images] 400 isPrimary cannot be set to false. Mark another image as primary instead.',
+    );
   });
 
   it('rejects an over-length tag instead of truncating it', async () => {
@@ -675,9 +845,14 @@ describe('PATCH /api/persona/images', () => {
     mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW });
     const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, tag: 'x'.repeat(101) }));
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string };
+    const body = (await res.json()) as { success: boolean; error: string; code?: string; field?: string };
     expect(body.success).toBe(false);
-    expect(body.error).toContain('at most');
+    expect(body.error).toBe('tag must be at most 100 characters.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('tag');
+    expect(loggedWarnings()).toContain(
+      '[PATCH /api/persona/images] 400 tag must be at most 100 characters.',
+    );
   });
 
   it('rejects an over-length description instead of truncating it', async () => {
@@ -685,10 +860,29 @@ describe('PATCH /api/persona/images', () => {
     mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW });
     const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, description: 'y'.repeat(501) }));
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('description must be at most 500 characters.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('description');
+    expect(loggedWarnings()).toContain(
+      '[PATCH /api/persona/images] 400 description must be at most 500 characters.',
+    );
   });
 });
 
 describe('DELETE /api/persona/images', () => {
+  it('returns 400 without an image id', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient({ imageRow: IMAGE_ROW });
+    const res = await DELETE(new Request('http://localhost/api/persona/images'));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('id is required.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('id');
+    expect(loggedWarnings()).toContain('[DELETE /api/persona/images] 400 id is required.');
+  });
+
   it('returns 404 for an unknown image', async () => {
     mockAuth({ userId: USER_ID });
     mockClient({ imageRow: null });

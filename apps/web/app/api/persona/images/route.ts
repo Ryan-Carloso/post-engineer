@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { apiErrorResponse } from '@/lib/api-error';
-import { personaValidationError } from '../validation-error';
+import { forwardLibraryImagesError, personaValidationError } from '../validation-error';
 import {
   addLibraryImages,
   IMAGE_BUCKET,
@@ -375,8 +375,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       route: 'api/persona/images',
       personaId,
     });
-    if (added.status === 400) return personaValidationError(added.error, 'POST /api/persona/images', { field: 'file' });
-    return errorResponse(added.status, added.error, 'POST /api/persona/images');
+    return forwardLibraryImagesError(added, 'POST /api/persona/images');
   }
   const image = added.images[0];
   const warnings: string[] = [];

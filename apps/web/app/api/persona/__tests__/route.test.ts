@@ -62,7 +62,17 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { trackApiEvent } from '@/lib/analytics';
+import { logger } from '@/lib/logger';
 import { restorePinnedHttp, stubPinnedHttp } from '@/test/stub-pinned-http';
+
+// The 400 log line pins the route string and the stable template: without
+// it, blanking either string in the response call changes nothing any test
+// observes (the body carries neither).
+const warnSpy = vi.spyOn(logger, 'warn');
+const errorSpy = vi.spyOn(logger, 'error');
+function loggedWarnings(): string[] {
+  return warnSpy.mock.calls.map((call) => String(call[0]));
+}
 
 const USER_ID = 'user-uuid-1';
 
@@ -412,10 +422,13 @@ describe('POST /api/persona', () => {
     const res = await POST(formRequest({ voiceId: 'chatterbox:kokoro_af_heart' }, [photo()]));
 
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string; code?: string };
+    const body = (await res.json()) as { success: boolean; error: string; code?: string; field?: string };
     expect(body.success).toBe(false);
-    expect(body.error).toBeTruthy();
+    expect(body.error).toBe('Persona name is required.');
     expect(body.code).toBe('VALIDATION_FAILED');
+    // parsePersonaForm returns no field, and the route forwards none.
+    expect(body.field).toBeUndefined();
+    expect(loggedWarnings()).toContain('[POST /api/persona] 400 Persona name is required.');
   });
 
   it('retorna 400 sem identidade visual (nem foto nem avatarUrl)', async () => {
@@ -424,6 +437,29 @@ describe('POST /api/persona', () => {
     const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }));
 
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('Provide exactly one of: photo file or avatarUrl.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    // parsePersonaForm returns no field, and the route forwards none.
+    expect(body.field).toBeUndefined();
+    expect(loggedWarnings()).toContain(
+      '[POST /api/persona] 400 Provide exactly one of: photo file or avatarUrl.',
+    );
+  });
+
+  it('returns 400 with an invalid multipart payload', async () => {
+    const res = await POST(
+      new Request('http://localhost/api/persona', {
+        method: 'POST',
+        headers: { 'content-type': 'multipart/form-data; boundary=bad' },
+        body: 'not a multipart body',
+      }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string };
+    expect(body.error).toBe('Invalid multipart payload.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(loggedWarnings()).toContain('[POST /api/persona] 400 Invalid multipart payload.');
   });
 
   it('returns 400 without a voice (missing voiceId)', async () => {
@@ -432,6 +468,12 @@ describe('POST /api/persona', () => {
     const res = await POST(formRequest({ name: 'Ana' }, [photo()]));
 
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('Provide voiceId.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    // parsePersonaForm returns no field, and the route forwards none.
+    expect(body.field).toBeUndefined();
+    expect(loggedWarnings()).toContain('[POST /api/persona] 400 Provide voiceId.');
   });
 
   it('rejeita uma voz desconhecida com 400 antes de upload ou insert (issue #353)', async () => {
@@ -478,6 +520,12 @@ describe('POST /api/persona', () => {
     const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart' }, [gif]));
 
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('Unsupported photo format: image/gif');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    // parsePersonaForm returns no field, and the route forwards none.
+    expect(body.field).toBeUndefined();
+    expect(loggedWarnings()).toContain('[POST /api/persona] 400 Unsupported photo format: image/gif');
   });
 
   it('creates a persona with an uploaded photo: uploads to Storage and inserts the row', async () => {
@@ -563,6 +611,14 @@ describe('POST /api/persona', () => {
     const body = (await res.json()) as { success: boolean; error: string };
     expect(body.success).toBe(false);
     expect(body.error).toBeTruthy();
+    // The storage failure is logged with the bucket error and the exact
+    // path, so a silent upload drop shows up in the logs, not as a
+    // mysterious 500. Pins upload-photo.ts:26 (message + path mutants).
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[api/persona] storage upload failed',
+      expect.objectContaining({ message: 'bucket down' }),
+      expect.objectContaining({ path: expect.stringContaining('/photo.png') }),
+    );
   });
 
   it('retorna 500 quando o insert na tabela falha', async () => {
@@ -988,9 +1044,11 @@ describe('PATCH /api/persona', () => {
     const res = await PATCH(request);
 
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { code?: string; field?: string };
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    expect(body.error).toBe('personaId is required.');
     expect(body.code).toBe('VALIDATION_FAILED');
     expect(body.field).toBe('personaId');
+    expect(loggedWarnings()).toContain('[PATCH /api/persona] 400 personaId is required.');
   });
 
   it('returns 404 when the persona does not exist or is not the user\'s', async () => {
@@ -1007,7 +1065,10 @@ describe('PATCH /api/persona', () => {
     const res = await PATCH(patchRequest('persona-uuid-1'));
 
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { code?: string }).code).toBe('VALIDATION_FAILED');
+    const body = (await res.json()) as { error: string; code?: string };
+    expect(body.error).toBe('Nothing to update.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(loggedWarnings()).toContain('[PATCH /api/persona] 400 Nothing to update.');
   });
 
   it('atualiza apenas o nome', async () => {
@@ -1036,8 +1097,16 @@ describe('PATCH /api/persona', () => {
     const res = await PATCH(patchRequest('persona-uuid-1', { videoLayout: 'cinematic' }));
 
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('videoLayout');
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    // The body keeps the rejected value (client bug, shown to the caller);
+    // the log line must use the stable template — no user value in PostHog.
+    expect(body.error).toBe("Invalid videoLayout: cinematic. Use one of standard, react.");
+    expect(body.code).toBe('VALIDATION_FAILED');
+    // parsePatchBody returns no field, and the route forwards none.
+    expect(body.field).toBeUndefined();
+    expect(loggedWarnings()).toContain(
+      '[PATCH /api/persona] 400 Invalid videoLayout. Use one of standard, react.',
+    );
   });
 
   it('nova foto substitui a antiga: sobe arquivo novo e remove o antigo', async () => {
@@ -1216,6 +1285,14 @@ describe('PATCH /api/persona', () => {
     const res = await PATCH(patchRequest('persona-uuid-1', {}, [gif]));
 
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string; field?: string };
+    // The body keeps the rejected MIME type; the log line must use the
+    // stable template — no user value in PostHog.
+    expect(body.error).toBe('Unsupported photo format: image/gif');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    // parsePatchBody returns no field, and the route forwards none.
+    expect(body.field).toBeUndefined();
+    expect(loggedWarnings()).toContain('[PATCH /api/persona] 400 Unsupported photo format.');
   });
 
   it('retorna 500 quando o update falha', async () => {
@@ -1419,8 +1496,16 @@ describe('PATCH /api/persona', () => {
       const res = await PATCH(patchRequest('persona-uuid-1', { videoAspect: '21:9' }));
 
       expect(res.status).toBe(400);
-      const body = (await res.json()) as { error: string };
-      expect(body.error).toContain('videoAspect');
+      const body = (await res.json()) as { error: string; code?: string; field?: string };
+      // The body keeps the rejected value; the log line must use the stable
+      // template — no user value in PostHog.
+      expect(body.error).toBe('Invalid videoAspect: 21:9. Use one of 9:16, 16:9, 1:1.');
+      expect(body.code).toBe('VALIDATION_FAILED');
+      // parsePatchBody returns no field, and the route forwards none.
+      expect(body.field).toBeUndefined();
+      expect(loggedWarnings()).toContain(
+        '[PATCH /api/persona] 400 Invalid videoAspect. Use one of 9:16, 16:9, 1:1.',
+      );
     });
 
     it('preferences: returns 400 with an invalid paragraphNumber on PATCH', async () => {
