@@ -44,6 +44,16 @@ the order — you never need to guess or read docs to know what comes next:
 | 036 | `migrations/036_drop-unknown-social-accounts.sql` | Deletes social accounts stored with the placeholder `provider_account_id` `'unknown'` (a failed YouTube channel lookup used to save them; unrecoverable and every publish to them failed) so users reconnect |
 | 037 | `migrations/037_social-accounts-threads.sql` | `threads` in the `social_accounts.provider` check — the constraint was created by hand in production (001 defines none) and rejected every Threads connect; now owned by the chain and pinned by `migration-check-constraints-sync.test.ts` |
 
+## Schema snapshot
+
+`supabase/schema.snapshot.json` is Postgres's own report of the public schema after the whole chain is applied: columns (type, NOT NULL, default), constraints, RLS flag and policies. CI (`supabase-migrations`) regenerates it on the ephemeral Postgres and fails when the committed file is stale; unit tests compare it with the code (`migration-check-constraints-sync.test.ts` pins every enum CHECK to its TypeScript list). A migration that changes the schema therefore ships with the regenerated snapshot:
+
+```bash
+node scripts/db/dump-schema.mjs --db-url postgresql://postgres@127.0.0.1:5432/<freshly migrated db> --write
+```
+
+A constraint created by hand in production is invisible to this check; write it as a migration instead.
+
 ## How to apply
 
 **Production (this repo's hosted project):** fully automated — never apply
