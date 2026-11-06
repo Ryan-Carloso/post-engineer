@@ -1,3 +1,4 @@
+import type { Database } from '@/lib/supabase/database.gen';
 import { randomUUID } from 'crypto';
 import { NextResponse, after } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -339,7 +340,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     .single();
   if (selectError || !persona) return errorResponse(404, 'Persona not found.', 'PATCH /api/persona');
 
-  const updates: Record<string, unknown> = {};
+  const updates: Database['public']['Tables']['personas']['Update'] = {};
   const stalePaths: string[] = [];
   let replacementPhotoPath: string | null = null;
 

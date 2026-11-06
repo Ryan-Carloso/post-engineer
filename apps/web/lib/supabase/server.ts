@@ -2,6 +2,7 @@ import 'server-only';
 
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import type { Database } from '@/lib/supabase/database.gen'
 
 //---------------
 // getSupabaseEnv — validates env vars with no fallback
@@ -29,7 +30,7 @@ export async function createSupabaseServerClient() {
   const cookieStore = await cookies()
   const { url, key } = getSupabaseEnv()
 
-  return createServerClient(url, key, {
+  return createServerClient<Database>(url, key, {
     cookies: {
       get(name: string) {
         return cookieStore.get(name)?.value

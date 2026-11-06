@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.gen'
 
 //---------------
 // createSupabaseServiceClient — service_role client (server-only)
@@ -25,14 +26,14 @@ function getServiceEnv() {
   return { url, serviceKey }
 }
 
-let cachedClient: SupabaseClient | null = null
+let cachedClient: SupabaseClient<Database> | null = null
 
-export function createSupabaseServiceClient(): SupabaseClient {
+export function createSupabaseServiceClient(): SupabaseClient<Database> {
   if (cachedClient) return cachedClient
 
   const { url, serviceKey } = getServiceEnv()
 
-  cachedClient = createClient(url, serviceKey, {
+  cachedClient = createClient<Database>(url, serviceKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,

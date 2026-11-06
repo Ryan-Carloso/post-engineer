@@ -2,8 +2,8 @@
 //---------------
 // dump-schema — snapshot of the public schema as Postgres itself reports it
 // after the migration chain is applied: tables, columns (type, NOT NULL,
-// default), constraints (CHECK / FK / PK / UNIQUE definitions), RLS flag and
-// policies.
+// default), constraints (CHECK / FK / PK / UNIQUE definitions), RLS flag,
+// policies and enum types.
 //
 //   node scripts/db/dump-schema.mjs --db-url <url> --write   regenerate
 //   node scripts/db/dump-schema.mjs --db-url <url> --check   fail on drift
@@ -25,7 +25,13 @@ const SNAPSHOT_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 
 // jsonb sorts object keys, so the output is deterministic; columns keep
 // attnum order and constraints/policies are keyed by name.
 const QUERY = `
-select jsonb_pretty(jsonb_build_object('tables', coalesce((
+select jsonb_pretty(jsonb_build_object('enums', coalesce((
+  select jsonb_object_agg(t.typname, (
+    select jsonb_agg(e.enumlabel order by e.enumsortorder) from pg_enum e where e.enumtypid = t.oid
+  ))
+  from pg_type t join pg_namespace n on n.oid = t.typnamespace
+  where n.nspname = 'public' and t.typtype = 'e'
+), '{}'::jsonb), 'tables', coalesce((
   select jsonb_object_agg(c.relname, jsonb_build_object(
     'rls', c.relrowsecurity,
     'columns', (

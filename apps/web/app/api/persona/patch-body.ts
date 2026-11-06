@@ -5,6 +5,10 @@
 import { PERSONA_CTA_MAX_LENGTH, photoExtensionOf, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS } from '@/lib/persona-schema';
 import { isFileLike } from '@/lib/persona-images';
 
+function isVideoLayout(value: string): value is (typeof VIDEO_LAYOUTS)[number] {
+  return (VIDEO_LAYOUTS as readonly string[]).includes(value);
+}
+
 // parsePatchBody — all fields are optional on edit; returns
 // null for the ones missing from the multipart body.
 //---------------
@@ -16,7 +20,7 @@ interface PersonaPatchBody {
   voiceId: string | null;
   language: string | null;
   videoAspect: string | null;
-  videoLayout: string | null;
+  videoLayout: (typeof VIDEO_LAYOUTS)[number] | null;
   scriptPrompt: string | null;
   ctaText: string | null;
   paragraphNumber: number | null;
@@ -53,7 +57,7 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
     return { ok: false, error: `Invalid videoAspect: ${videoAspect}. Use one of ${VALID_VIDEO_ASPECTS.join(', ')}.` };
   }
   const videoLayout = optionalString(formData.get('videoLayout'));
-  if (videoLayout !== null && !VIDEO_LAYOUTS.includes(videoLayout as (typeof VIDEO_LAYOUTS)[number])) {
+  if (videoLayout !== null && !isVideoLayout(videoLayout)) {
     return { ok: false, error: `Invalid videoLayout: ${videoLayout}. Use one of ${VIDEO_LAYOUTS.join(', ')}.` };
   }
   const scriptPrompt = optionalString(formData.get('scriptPrompt'));

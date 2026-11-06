@@ -1,4 +1,10 @@
 {
+    "enums": {
+        "face_quality": [
+            "ok",
+            "very_good"
+        ]
+    },
     "tables": {
         "personas": {
             "rls": false,
