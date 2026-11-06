@@ -91,15 +91,22 @@ describe('fetchLinkedInMemberProfile / fetchLinkedInAdminOrganizations', () => {
     mockFetch.mockReset();
   });
 
-  it('profile returns id and name', async () => {
-    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ sub: 'member-123', name: 'Ryan C' }), { status: 200 }));
+  it('profile returns id, name and picture', async () => {
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ sub: 'member-123', name: 'Ryan C', picture: 'https://media.licdn.com/p.jpg' }), { status: 200 }));
     const profile = await fetchLinkedInMemberProfile('at-1');
-    expect(profile).toEqual({ id: 'member-123', name: 'Ryan C' });
+    expect(profile).toEqual({ id: 'member-123', name: 'Ryan C', picture: 'https://media.licdn.com/p.jpg' });
     const [, init] = mockFetch.mock.calls[0];
     const headers = (init as RequestInit).headers as Record<string, string>;
     expect(headers.Authorization).toBe('Bearer at-1');
     expect(headers['Linkedin-Version']).toBe(LINKEDIN_API_VERSION);
     expect(headers['X-Restli-Protocol-Version']).toBe('2.0.0');
+  });
+
+  it('profile picture is null when userinfo omits it or sends a non-string', async () => {
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ sub: 'm', picture: 42 }), { status: 200 }));
+    expect((await fetchLinkedInMemberProfile('at-1')).picture).toBeNull();
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ sub: 'm', picture: '' }), { status: 200 }));
+    expect((await fetchLinkedInMemberProfile('at-1')).picture).toBeNull();
   });
 
   it('admin organizations return a list of {id, name}', async () => {

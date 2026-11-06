@@ -13,8 +13,9 @@ import {
   ACCOUNT_LIST_FAILED_EVENT,
   ACCOUNT_NAME_FALLBACKS,
   THUMBNAIL_HOST_ALLOWLIST,
+  THUMBNAIL_HOST_SUFFIXES,
   buildAccountCardDisplayReport,
-  instagramPictureUrlExpired,
+  pictureUrlExpired,
   thumbnailHostAllowed,
   type AccountCardDisplayInput,
 } from '@/lib/account-display-diagnostics';
@@ -121,6 +122,8 @@ describe('buildAccountCardDisplayReport', () => {
   });
 
   it('flags a blocked image host, a failed load, and an expired Instagram URL without sending the URL', () => {
+    // The facebook CDN hosts are allowed (next.config.ts matches `**.fbcdn.net`),
+    // so an unknown host is what the blocked flag covers.
     const url = 'https://scontent.xx.fbcdn.net/v/pic.jpg?oe=1&access_token=secret-token';
     const report = buildAccountCardDisplayReport(input({
       provider: 'instagram',
@@ -131,27 +134,39 @@ describe('buildAccountCardDisplayReport', () => {
       labelEl: null,
     }));
     expect(report.thumbnail_host).toBe('scontent.xx.fbcdn.net');
-    expect(report.thumbnail_host_allowed).toBe(false);
+    expect(report.thumbnail_host_allowed).toBe(true);
     expect(report.thumbnail_failed).toBe(true);
     expect(report.thumbnail_present).toBe(false);
     expect(report.thumbnail_url_expired).toBe(true);
     expect(report.reasons).toEqual(expect.arrayContaining([
       'thumbnail_failed',
-      'thumbnail_host_blocked',
       'thumbnail_url_expired',
       'secondary_missing',
     ]));
     expect(JSON.stringify(report)).not.toContain('secret-token');
+  });
+
+  it('flags an unknown image host as blocked without sending the URL', () => {
+    const report = buildAccountCardDisplayReport(input({
+      provider: 'instagram',
+      shownLabel: '@insta.travel',
+      secondaryLabel: null,
+      thumbnailUrl: 'https://images.example.com/pic.jpg',
+      thumbnailFailed: false,
+      labelEl: null,
+    }));
+    expect(report.thumbnail_host_allowed).toBe(false);
+    expect(report.reasons).toContain('thumbnail_host_blocked');
     expect(JSON.stringify(report)).not.toContain('pic.jpg');
   });
 
   it('treats a future oe timestamp as not expired and ignores a missing oe', () => {
     const future = Math.floor(Date.now() / 1000) + 86_400;
     const url = `https://scontent.cdninstagram.com/pic.jpg?oe=${future.toString(16)}`;
-    expect(instagramPictureUrlExpired(url)).toBe(false);
+    expect(pictureUrlExpired(url)).toBe(false);
     expect(thumbnailHostAllowed('scontent.cdninstagram.com')).toBe(true);
-    expect(instagramPictureUrlExpired('https://yt3.ggpht.com/a.jpg')).toBe(false);
-    expect(instagramPictureUrlExpired('not a url')).toBe(false);
+    expect(pictureUrlExpired('https://yt3.ggpht.com/a.jpg')).toBe(false);
+    expect(pictureUrlExpired('not a url')).toBe(false);
   });
 
   it('flags a provider id used as the only label', () => {
@@ -245,17 +260,20 @@ describe('account failure events', () => {
 describe('diagnostic literals stay aligned with the app', () => {
   it('pins empty-name fallbacks to the provider registry', () => {
     const registry = readFileSync(path.join(repoRoot, 'apps/web/lib/providers/registry.ts'), 'utf8');
-    expect(registry).toContain(`record.accountName || '${ACCOUNT_NAME_FALLBACKS.youtube}'`);
-    expect(registry).toContain(`record.accountName || '${ACCOUNT_NAME_FALLBACKS.instagram}'`);
-    expect(registry).toContain(`record.accountName ?? '${ACCOUNT_NAME_FALLBACKS.bluesky}'`);
+    expect(registry).toContain(`export const YOUTUBE_CHANNEL_NAME_FALLBACK = '${ACCOUNT_NAME_FALLBACKS.youtube}'`);
+    expect(registry).toContain(`export const INSTAGRAM_USERNAME_FALLBACK = '${ACCOUNT_NAME_FALLBACKS.instagram}'`);
+    expect(registry).toContain(`channelName: record.accountName || YOUTUBE_CHANNEL_NAME_FALLBACK`);
+    expect(registry).toContain(`username: record.accountName || INSTAGRAM_USERNAME_FALLBACK`);
+    expect(registry).toContain(`handle: record.accountName ?? '${ACCOUNT_NAME_FALLBACKS.bluesky}'`);
   });
 
-  it('pins thumbnail hosts to next.config.ts and the account route uses the shared expiry check', () => {
+  it('pins thumbnail hosts to next.config.ts and the account route resyncs via the shared sync module', () => {
     const config = readFileSync(path.join(repoRoot, 'apps/web/next.config.ts'), 'utf8');
     const hosts = [...config.matchAll(/hostname:\s*'([^']+)'/g)].map((match) => match[1]);
-    expect(hosts).toEqual([...THUMBNAIL_HOST_ALLOWLIST, '**.cdninstagram.com']);
+    const wildcardHosts = THUMBNAIL_HOST_SUFFIXES.map((suffix) => `**${suffix}`);
+    expect([...hosts].sort()).toEqual([...THUMBNAIL_HOST_ALLOWLIST, ...wildcardHosts].sort());
     const route = readFileSync(path.join(repoRoot, 'apps/web/app/api/account/route.ts'), 'utf8');
-    expect(route).toContain("from '@/lib/account-display-diagnostics'");
+    expect(route).toContain("from '@/lib/account-profile-sync'");
     expect(route).not.toContain('parseInt(oe');
   });
 });

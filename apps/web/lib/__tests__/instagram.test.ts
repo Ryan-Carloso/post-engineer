@@ -290,7 +290,6 @@ describe('InstagramService', () => {
       mockGet.mockResolvedValueOnce({
         data: {
           id: 'ig-1',
-          user_id: 'ig-user-1',
           username: 'testuser',
           name: 'Test User',
           profile_picture_url: 'https://example.com/pic.jpg',
@@ -303,7 +302,7 @@ describe('InstagramService', () => {
       const profile = await service.getProfile('token');
 
       expect(profile).toEqual({
-        userdId: 'ig-user-1',
+        userdId: 'ig-1',
         username: 'testuser',
         name: 'Test User',
         profilePictureUrl: 'https://example.com/pic.jpg',
@@ -312,14 +311,14 @@ describe('InstagramService', () => {
       });
     });
 
-    it('falls back to id when user_id is absent', async () => {
+    it('keeps the app-scoped id even when user_id is present', async () => {
       mockGet.mockResolvedValueOnce({
-        data: { id: 'ig-only-id', username: 'u' },
+        data: { id: 'ig-app-scoped', user_id: 'ig-professional', username: 'u' },
       });
 
       const service = new InstagramService();
       const profile = await service.getProfile('token');
-      expect(profile.userdId).toBe('ig-only-id');
+      expect(profile.userdId).toBe('ig-app-scoped');
     });
 
     it('defaults username to instagram_user', async () => {
@@ -341,7 +340,7 @@ describe('InstagramService', () => {
       await expect(service.getProfile('token')).rejects.toThrow(InstagramApiError);
     });
 
-    it('calls the correct endpoint with access_token', async () => {
+    it('requests the username, name and picture fields with the access_token', async () => {
       mockGet.mockResolvedValueOnce({ data: { id: '1', username: 'u' } });
 
       const service = new InstagramService();
@@ -350,7 +349,10 @@ describe('InstagramService', () => {
       expect(mockGet).toHaveBeenCalledWith(
         expect.stringContaining('/v23.0/me'),
         expect.objectContaining({
-          params: { access_token: 'my-token' },
+          params: {
+            fields: 'id,username,name,profile_picture_url,followers_count,media_count',
+            access_token: 'my-token',
+          },
         }),
       );
     });

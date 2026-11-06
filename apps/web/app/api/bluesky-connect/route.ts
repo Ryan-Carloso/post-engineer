@@ -7,6 +7,33 @@ import { BlueskyError, loginToBluesky } from '@/lib/bluesky';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { apiErrorResponse } from '@/lib/api-error';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { fetchBlueskyPublicProfile } from '@/lib/bluesky-profile';
+import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
+import { logger } from '@/lib/logger';
+
+//---------------
+// readBlueskyProfileMetadata — display name and avatar for the card. The
+// login already succeeded, so a failed profile read does not block the
+// connect: it is logged and reported, and the stored row (no profileSyncedAt)
+// is retried by the GET /api/account profile resync.
+//---------------
+async function readBlueskyProfileMetadata(did: string): Promise<Record<string, unknown>> {
+  try {
+    const profile = await fetchBlueskyPublicProfile(did);
+    reportProfileFetched('bluesky', 'connect', { accountName: profile.handle, pictureUrl: profile.avatar });
+    return {
+      displayName: profile.displayName,
+      avatar: profile.avatar,
+      profileSyncedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    logger.warn('[bluesky-connect] profile read failed, connecting without it', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    reportProfileFetchFailed('bluesky', 'connect', error);
+    return {};
+  }
+}
 
 //---------------
 // POST /api/bluesky-connect — connects a Bluesky account via app password.
@@ -93,6 +120,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   try {
     const { did, handle: resolvedHandle } = await loginToBluesky(handle, appPassword);
+    const accountMetadata = await readBlueskyProfileMetadata(did);
 
     const encrypted = encryptTokens({
       access_token: appPassword,
@@ -108,6 +136,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         provider: 'bluesky',
         provider_account_id: did,
         account_name: resolvedHandle,
+        account_metadata: accountMetadata,
         encrypted_tokens: encrypted,
       })
       .select('id')

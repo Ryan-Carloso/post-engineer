@@ -9,6 +9,8 @@ import { logger } from '@/lib/logger';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
+import { INSTAGRAM_USERNAME_FALLBACK } from '@/lib/providers/registry';
 
 //---------------
 // getSessionUserId — session user_id or null
@@ -169,6 +171,10 @@ async function getHandler(request: NextRequest) {
   let profile: Awaited<ReturnType<typeof instagram.getProfile>>;
   try {
     profile = await instagram.getProfile(token.accessToken);
+    reportProfileFetched('instagram', 'connect', {
+      accountName: profile.username === INSTAGRAM_USERNAME_FALLBACK ? null : profile.username,
+      pictureUrl: profile.profilePictureUrl ?? null,
+    });
     logger.info('[instagram-callback] profile fetched', {
       logId,
       stateRef,
@@ -178,6 +184,7 @@ async function getHandler(request: NextRequest) {
   } catch (profileErr) {
     const err = profileErr instanceof Error ? profileErr : new Error(String(profileErr));
     logger.error('[instagram-callback] profile fetch failed', err, { logId, stateRef });
+    reportProfileFetchFailed('instagram', 'connect', err);
     const msg = err.message;
     return oauthPopupResponse('instagram-oauth-error', {
       error: `Failed to fetch Instagram profile: ${msg}`,
@@ -206,6 +213,7 @@ async function getHandler(request: NextRequest) {
         profilePictureUrl: profile.profilePictureUrl,
         followersCount: profile.followersCount,
         mediaCount: profile.mediaCount,
+        profileSyncedAt: new Date().toISOString(),
       },
       tokens: {
         access_token: token.accessToken,

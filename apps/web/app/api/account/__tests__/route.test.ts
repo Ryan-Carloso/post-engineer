@@ -9,6 +9,10 @@ vi.mock('@/lib/social-accounts', () => ({
   deleteSocialAccount: vi.fn(),
 }));
 
+vi.mock('@/lib/account-profile-sync', () => ({
+  syncAccountProfile: vi.fn(),
+}));
+
 vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
@@ -22,7 +26,8 @@ import { GET, DELETE } from '@/app/api/account/route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { resolveApiKey } from '@/lib/api-keys';
-import { listSocialAccounts, deleteSocialAccount } from '@/lib/social-accounts';
+import { listSocialAccounts, deleteSocialAccount, type SocialAccountRecord } from '@/lib/social-accounts';
+import { syncAccountProfile } from '@/lib/account-profile-sync';
 
 function mockSession(userId = 'u1') {
   vi.mocked(createSupabaseServerClient).mockResolvedValue({
@@ -37,6 +42,8 @@ describe('GET /api/account', () => {
   beforeEach(() => {
     vi.mocked(createSupabaseServerClient).mockReset();
     vi.mocked(listSocialAccounts).mockReset();
+    vi.mocked(syncAccountProfile).mockReset();
+    vi.mocked(syncAccountProfile).mockImplementation(async (_supabase: unknown, _userId: string, rec: SocialAccountRecord) => rec);
   });
 
   it('returns 401 when no session', async () => {
@@ -117,6 +124,38 @@ describe('GET /api/account', () => {
     expect(body.accounts[0].provider).toBe('instagram');
     expect(body.accounts[0].username).toBe('instagram_user');
     expect(body.accounts[0].lastUsed).toBe(new Date('2024-01-01T00:00:00.000Z').getTime());
+  });
+
+  it('renders the synced Instagram profile, not the stored one', async () => {
+    mockSession();
+    const stored = {
+      id: 'rec-3', provider: 'instagram', providerAccountId: 'ig-3', accountName: 'old_handle',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: { profilePictureUrl: 'https://x.test/old.jpg' },
+    };
+    vi.mocked(listSocialAccounts).mockResolvedValue([stored] as never);
+    vi.mocked(syncAccountProfile).mockResolvedValue({
+      ...stored, accountName: 'new_handle', accountMetadata: { profilePictureUrl: 'https://x.test/new.jpg' },
+    } as never);
+
+    const res = await GET();
+    const body = (await res.json()) as { accounts: Array<{ username: string; profilePictureUrl?: string }> };
+    expect(syncAccountProfile).toHaveBeenCalledWith(expect.anything(), 'u1', stored);
+    expect(body.accounts[0].username).toBe('new_handle');
+    expect(body.accounts[0].profilePictureUrl).toBe('https://x.test/new.jpg');
+  });
+
+  it('keeps the stored Instagram profile when the sync fails', async () => {
+    mockSession();
+    vi.mocked(listSocialAccounts).mockResolvedValue([{
+      id: 'rec-4', provider: 'instagram', providerAccountId: 'ig-4', accountName: 'kept_handle',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {},
+    }] as never);
+    vi.mocked(syncAccountProfile).mockRejectedValue(new Error('token revoked'));
+
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { accounts: Array<{ username: string }> };
+    expect(body.accounts[0].username).toBe('kept_handle');
   });
 
   it('maps bluesky accounts with did and handle (nao vira instagram)', async () => {

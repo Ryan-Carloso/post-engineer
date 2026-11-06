@@ -29,7 +29,20 @@ vi.mock('@/lib/bluesky', async (importOriginal) => {
   };
 });
 
+vi.mock('@/lib/bluesky-profile', () => ({ fetchBlueskyPublicProfile: vi.fn() }));
+// The limiter has its own suite (rate-limit.test.ts); here it never throttles.
+vi.mock('@/lib/rate-limit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
+  return { ...actual, applyRateLimit: vi.fn().mockResolvedValue(null) };
+});
+vi.mock('@/lib/account-profile-telemetry', () => ({
+  reportProfileFetched: vi.fn(),
+  reportProfileFetchFailed: vi.fn(),
+}));
+
 import { POST } from '@/app/api/bluesky-connect/route';
+import { fetchBlueskyPublicProfile } from '@/lib/bluesky-profile';
+import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -102,6 +115,41 @@ function jsonRequest(body: Record<string, string>): Request {
 describe('POST /api/bluesky-connect', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('stores the display name, avatar and sync stamp from the public profile', async () => {
+    const { inserted } = mockSupabase();
+    vi.mocked(loginToBluesky).mockResolvedValueOnce({ did: 'did:plc:me', handle: 'eu.bsky.social' });
+    vi.mocked(fetchBlueskyPublicProfile).mockResolvedValueOnce({
+      did: 'did:plc:me', handle: 'eu.bsky.social', displayName: 'Eu', avatar: 'https://cdn.bsky.app/a.jpg',
+    });
+
+    const res = await POST(formRequest({ handle: 'eu.bsky.social', appPassword: 'x' }));
+
+    expect(res.status).toBe(200);
+    expect(fetchBlueskyPublicProfile).toHaveBeenCalledWith('did:plc:me');
+    expect(inserted[0].account_metadata).toEqual({
+      displayName: 'Eu',
+      avatar: 'https://cdn.bsky.app/a.jpg',
+      profileSyncedAt: expect.any(String),
+    });
+    expect(reportProfileFetched).toHaveBeenCalledWith('bluesky', 'connect', {
+      accountName: 'eu.bsky.social',
+      pictureUrl: 'https://cdn.bsky.app/a.jpg',
+    });
+  });
+
+  it('still connects without profile metadata when the profile read fails, and reports it', async () => {
+    const { inserted } = mockSupabase();
+    vi.mocked(loginToBluesky).mockResolvedValueOnce({ did: 'did:plc:me', handle: 'eu.bsky.social' });
+    const failure = new Error('BLUESKY_PROFILE_FAILED: status 502');
+    vi.mocked(fetchBlueskyPublicProfile).mockRejectedValueOnce(failure);
+
+    const res = await POST(formRequest({ handle: 'eu.bsky.social', appPassword: 'x' }));
+
+    expect(res.status).toBe(200);
+    expect(inserted[0].account_metadata).toEqual({});
+    expect(reportProfileFetchFailed).toHaveBeenCalledWith('bluesky', 'connect', failure);
   });
 
   it('returns 401 without session', async () => {

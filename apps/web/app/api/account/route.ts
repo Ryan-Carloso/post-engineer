@@ -1,67 +1,12 @@
 import { NextResponse } from 'next/server';
-import { listSocialAccounts, getSocialAccountTokens, updateSocialAccountMetadata, deleteSocialAccount, type SocialAccountRecord } from '@/lib/social-accounts';
+import { listSocialAccounts, deleteSocialAccount } from '@/lib/social-accounts';
 import { toPublicAccountSafe, type PublicAccountItem, SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/providers/registry';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { InstagramService } from '@/lib/instagram';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { syncAccountProfile } from '@/lib/account-profile-sync';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import { instagramPictureUrlExpired } from '@/lib/account-display-diagnostics';
-
-//---------------
-// refreshInstagramAccountPicture — when the saved profile photo expired,
-// fetch the profile from the Graph API with the account token and update
-// the metadata. Best-effort: the caller handles failure (for example a
-// revoked token) and keeps the original record.
-//---------------
-async function refreshInstagramAccountPicture(
-  supabase: SupabaseClient,
-  userId: string,
-  record: SocialAccountRecord
-): Promise<SocialAccountRecord> {
-  const savedPictureUrl = record.accountMetadata.profilePictureUrl;
-  if (typeof savedPictureUrl !== 'string' || !instagramPictureUrlExpired(savedPictureUrl)) {
-    return record;
-  }
-
-  const { tokens } = await getSocialAccountTokens(
-    supabase,
-    userId,
-    'instagram',
-    record.providerAccountId
-  );
-
-  const service = new InstagramService();
-  const profile = await service.getProfile(String(tokens.access_token));
-  if (!profile.profilePictureUrl) {
-    return record;
-  }
-
-  const metadata: Record<string, unknown> = {
-    ...record.accountMetadata,
-    profilePictureUrl: profile.profilePictureUrl,
-  };
-  if (profile.name !== undefined) metadata.name = profile.name;
-  if (profile.followersCount !== undefined) metadata.followersCount = profile.followersCount;
-  if (profile.mediaCount !== undefined) metadata.mediaCount = profile.mediaCount;
-
-  await updateSocialAccountMetadata(
-    supabase,
-    userId,
-    'instagram',
-    record.providerAccountId,
-    metadata
-  );
-
-  logger.info('[ACCOUNT] Foto de perfil do Instagram renovada', {
-    recordId: record.id,
-    igUserId: record.providerAccountId,
-  });
-
-  return { ...record, accountMetadata: metadata };
-}
 
 //---------------
 // GET /api/account — lists all social accounts of the logged-in user (NO tokens).
@@ -85,21 +30,25 @@ async function getHandler(request?: Request) {
 
   try {
     const records = await listSocialAccounts(supabase, userId);
-    const accounts: PublicAccountItem[] = [];
-    for (const record of records) {
-      let effectiveRecord = record;
-      if (record.provider === 'instagram') {
-        try {
-          effectiveRecord = await refreshInstagramAccountPicture(supabase, userId, record);
-        } catch (error) {
-          logger.error('[ACCOUNT] Falha ao renovar foto de perfil do Instagram, seguindo com a salva', error instanceof Error ? error.message : error, { recordId: record.id });
-        }
+    // Resync name/picture when stale or never synced, so a rename or new
+    // picture on the provider shows without reconnecting. Rows run in
+    // parallel (each read has its own timeout); a failed read keeps the
+    // stored profile.
+    const effectiveRecords = await Promise.all(records.map(async (record) => {
+      try {
+        return await syncAccountProfile(supabase, userId, record);
+      } catch (error) {
+        logger.error('[ACCOUNT] Profile sync failed, keeping the stored profile', error instanceof Error ? error.message : error, { recordId: record.id, provider: record.provider });
+        return record;
       }
+    }));
+    const accounts: PublicAccountItem[] = [];
+    for (const effectiveRecord of effectiveRecords) {
       const mapped = toPublicAccountSafe(effectiveRecord);
       if (mapped) {
         accounts.push(mapped);
       } else {
-        logger.error('[ACCOUNT] Registro com provider desconhecido ignorado', undefined, { recordId: record.id, provider: record.provider });
+        logger.error('[ACCOUNT] Registro com provider desconhecido ignorado', undefined, { recordId: effectiveRecord.id, provider: effectiveRecord.provider });
       }
     }
 

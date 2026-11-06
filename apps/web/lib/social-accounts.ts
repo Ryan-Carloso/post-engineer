@@ -248,11 +248,13 @@ export async function updateSocialAccountMetadata(
   provider: SocialProvider,
   providerAccountId: string,
   accountMetadata: Record<string, unknown>,
+  accountName?: string,
 ): Promise<void> {
   const { error } = await supabase
     .from('social_accounts')
     .update({
       account_metadata: accountMetadata,
+      ...(accountName === undefined ? {} : { account_name: accountName }),
       updated_at: new Date().toISOString(),
     })
     .eq('user_id', userId)

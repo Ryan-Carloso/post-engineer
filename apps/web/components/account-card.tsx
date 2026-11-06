@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { reportAccountCardDisplay } from '@/lib/account-card-telemetry';
 import type { AccountLabelOrigin } from '@/lib/account-display-diagnostics';
+import { TrashIcon } from '@/lib/ui';
 import { useI18n } from '@/lib/i18n/provider';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +35,13 @@ export interface AccountCardProps {
   showDisconnect?: boolean;
   onDisconnect?: () => void;
 }
+
+//---------------
+// Minimum visible label width (px): the floor that keeps ~8 letters of the
+// account name on the card before the truncation "…" takes over. Pinned by
+// the account-card test.
+//---------------
+export const ACCOUNT_LABEL_MIN_WIDTH_PX = 88;
 
 //---------------
 // nameInitials — avatar fallback: first two letters of the name
@@ -111,8 +119,10 @@ export default function AccountCard({
     );
   }
 
+  // The label never shrinks below this: with the inline trash button the
+  // name keeps at least ~8 letters before the "…" takes over.
   const body = (
-    <div className="flex items-center gap-3.5">
+    <div className="flex items-center gap-3">
       {thumbnail && !thumbnailFailed ? (
         <Image
           src={thumbnail}
@@ -134,7 +144,14 @@ export default function AccountCard({
       <div className="min-w-0 flex-1 leading-tight">
         <div className="flex items-center gap-2">
           <span role="img" className="size-2 shrink-0 rounded-full bg-emerald-500" aria-label={t('accounts.connectedAccount')} />
-          <h3 ref={labelRef} className="truncate text-sm font-semibold text-[#101728]">{shownLabel}</h3>
+          <h3
+            ref={labelRef}
+            title={shownLabel}
+            style={{ minWidth: ACCOUNT_LABEL_MIN_WIDTH_PX }}
+            className="truncate text-sm font-semibold text-[#101728]"
+          >
+            {shownLabel}
+          </h3>
         </div>
         {secondaryLabel ? (
           <p ref={secondaryRef} className="mt-1 truncate text-xs text-[#718096]">{secondaryLabel}</p>
@@ -155,10 +172,12 @@ export default function AccountCard({
         <button
           type="button"
           data-testid={`${type}-disconnect-button`}
-          className="shrink-0 rounded-lg border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-500 transition-colors hover:border-red-200 hover:text-red-600"
+          aria-label={t('accounts.disconnect')}
+          title={t('accounts.disconnect')}
+          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-600"
           onClick={onDisconnect}
         >
-          {t('accounts.disconnect')}
+          <span className="[&>svg]:size-4"><TrashIcon /></span>
         </button>
       ) : null}
     </div>
