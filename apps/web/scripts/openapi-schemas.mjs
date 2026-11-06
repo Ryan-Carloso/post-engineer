@@ -322,6 +322,7 @@ export const operationSchemas = {
   'POST /api/bluesky-connect': {
     request: object({ handle: str, appPassword: str }, ['handle', 'appPassword']),
     response: success({ accountId: str, did: str }),
+    extraResponses: { 422: 'Bluesky rejected the handle or app password (code BLUESKY_CREDENTIAL_REJECTED).' },
   },
   // apps/web/app/api/persona/faces/route.ts
   'GET /api/persona/faces': {
