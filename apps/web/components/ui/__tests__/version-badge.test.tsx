@@ -114,4 +114,73 @@ describe('VersionBadge', () => {
     });
     expect(parseSpy).not.toHaveBeenCalled();
   });
+
+  it('one request is shared by every badge copy mounted together', async () => {
+    // Three copies mount per page (desktop sidebar, mobile header,
+    // /account); each used to fire its own /api/version read, and each
+    // web-side read re-asked the engine. The shared in-flight request
+    // must collapse them into one.
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ version: '1.28.152', pr: 152, build: 152, commit: '8f31abc' }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <div>
+        <VersionBadge />
+        <VersionBadge />
+        <VersionBadge />
+      </div>,
+    );
+    await waitFor(() => {
+      const badges = screen.getAllByTestId('version-badge');
+      expect(badges).toHaveLength(3);
+      for (const badge of badges) {
+        expect(badge).toHaveTextContent('BETA - 1.28.152 (#152)');
+      }
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed shared read degrades every copy to BETA with a single request', async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new Error('network down');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <div>
+        <VersionBadge />
+        <VersionBadge />
+      </div>,
+    );
+    await waitFor(() => {
+      const badges = screen.getAllByTestId('version-badge');
+      for (const badge of badges) {
+        expect(badge).toHaveTextContent(/^BETA$/);
+      }
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('the shared request is dropped after settling so a later mount can retry', async () => {
+    // Only the in-flight request is shared. Once it settles, a badge
+    // mounted later by a navigation must fetch again — a permanently
+    // cached promise would stick every future copy on a stale (or
+    // failed) response for the whole session.
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ version: '1.28', pr: null, build: null, commit: null }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const first = render(<VersionBadge />);
+    await waitFor(() => {
+      expect(screen.getByTestId('version-badge')).toHaveTextContent('BETA - 1.28');
+    });
+    first.unmount();
+    render(<VersionBadge />);
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.getByTestId('version-badge')).toHaveTextContent('BETA - 1.28');
+  });
 });
