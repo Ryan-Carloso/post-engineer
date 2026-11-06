@@ -11,6 +11,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { updateSocialAccountMetadata, type SocialAccountRecord } from './social-accounts';
 import { PROFILE_SOURCES, type FetchedProfile } from './account-profile-sources';
+import { pictureUrlExpired } from './account-display-diagnostics';
 import { reportProfileFetched, reportProfileFetchFailed } from './account-profile-telemetry';
 import { logger } from './logger';
 
@@ -18,21 +19,6 @@ export const ACCOUNT_PROFILE_SYNC_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export interface AccountProfileSyncOptions {
   now?: () => Date;
-}
-
-//---------------
-// pictureUrlExpired — signed CDN URLs carry their expiry in `oe` (hex Unix
-// seconds). URLs without it never count as expired.
-//---------------
-export function pictureUrlExpired(url: string, now: Date): boolean {
-  try {
-    const oe = new URL(url).searchParams.get('oe');
-    if (oe === null || oe === '') return false;
-    const expiresAtMs = Number.parseInt(oe, 16) * 1000;
-    return Number.isFinite(expiresAtMs) && expiresAtMs < now.getTime();
-  } catch {
-    return false;
-  }
 }
 
 //---------------
@@ -47,7 +33,7 @@ export function profileNeedsSync(record: SocialAccountRecord, pictureKey: string
   if (!Number.isFinite(syncedAtMs)) return true;
   if (now.getTime() - syncedAtMs > ACCOUNT_PROFILE_SYNC_MAX_AGE_MS) return true;
   const picture = record.accountMetadata[pictureKey];
-  return typeof picture === 'string' && pictureUrlExpired(picture, now);
+  return typeof picture === 'string' && pictureUrlExpired(picture, now.getTime());
 }
 
 //---------------

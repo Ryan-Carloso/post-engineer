@@ -13,10 +13,10 @@ vi.mock('@/lib/account-profile-telemetry', () => ({
 import {
   ACCOUNT_PROFILE_SYNC_MAX_AGE_MS,
   mergeProfileMetadata,
-  pictureUrlExpired,
   profileNeedsSync,
   syncAccountProfile,
 } from '@/lib/account-profile-sync';
+import { pictureUrlExpired } from '@/lib/account-display-diagnostics';
 import { updateSocialAccountMetadata, type SocialAccountRecord } from '@/lib/social-accounts';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 
@@ -46,14 +46,16 @@ function record(overrides: Partial<SocialAccountRecord> = {}, metadata: Record<s
 
 describe('pictureUrlExpired', () => {
   it('is true only when the oe timestamp is in the past', () => {
-    expect(pictureUrlExpired(EXPIRED_PIC, NOW)).toBe(true);
-    expect(pictureUrlExpired(FRESH_PIC, NOW)).toBe(false);
+    const nowMs = NOW.getTime();
+    expect(pictureUrlExpired(EXPIRED_PIC, nowMs)).toBe(true);
+    expect(pictureUrlExpired(FRESH_PIC, nowMs)).toBe(false);
   });
 
   it('is false for URLs without oe or unparseable URLs', () => {
-    expect(pictureUrlExpired('https://cdn.bsky.app/a.jpg', NOW)).toBe(false);
-    expect(pictureUrlExpired('https://x.test/p.jpg?oe=', NOW)).toBe(false);
-    expect(pictureUrlExpired('not a url', NOW)).toBe(false);
+    const nowMs = NOW.getTime();
+    expect(pictureUrlExpired('https://cdn.bsky.app/a.jpg', nowMs)).toBe(false);
+    expect(pictureUrlExpired('https://x.test/p.jpg?oe=', nowMs)).toBe(false);
+    expect(pictureUrlExpired('not a url', nowMs)).toBe(false);
   });
 });
 
