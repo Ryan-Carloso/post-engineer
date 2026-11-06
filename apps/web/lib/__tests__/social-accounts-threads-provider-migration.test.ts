@@ -13,10 +13,11 @@ import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 // "new row for relation \"social_accounts\" violates check constraint
 // \"social_accounts_provider_check\"" (PostHog $exception, 2026-11-06).
 // Migration 034 added 'threads' to the post_metrics provider check
-// but never touched social_accounts — and no versioned migration ever
-// created social_accounts_provider_check at all, so the constraint on
-// production came from outside the versioned chain (drift) holding
-// only the four pre-Threads providers.
+// but never touched social_accounts — and the versioned migrations
+// 0015/0016 that created social_accounts_provider_check were deleted
+// in the b4037cff consolidation, so the current versioned chain never
+// creates it and production still holds only the four pre-Threads
+// providers.
 //
 // This migration re-creates the constraint with the full provider
 // list, and the sync test below pins that list to SOCIAL_PROVIDERS

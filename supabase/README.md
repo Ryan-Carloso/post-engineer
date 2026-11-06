@@ -42,7 +42,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 034 | `migrations/034_threads-provider.sql` | Threads as a publishing provider: `schedules.threads_account_ids` (default empty) and `threads` in the `post_metrics.provider` check |
 | 035 | `migrations/035_scheduled-posts-full-lipsync.sql` | Per-post full lip-sync choice (`scheduled_posts.full_lipsync`, default false), forwarded by the engine batch pipeline so a tick-dispatched or requeued slot keeps full lip-sync instead of silently rendering intro-only b-roll |
 | 036 | `migrations/036_drop-unknown-social-accounts.sql` | Deletes social accounts stored with the placeholder `provider_account_id` `'unknown'` (a failed YouTube channel lookup used to save them; unrecoverable and every publish to them failed) so users reconnect |
-| 037 | `migrations/037_social-accounts-threads-provider.sql` | Threads in the `social_accounts.provider` check: re-creates `social_accounts_provider_check` with all five providers — production carried the constraint from outside the versioned chain (drift, four pre-Threads providers) while 034 added `threads` only to `post_metrics`, so the Threads OAuth callback upsert failed with a check violation |
+| 037 | `migrations/037_social-accounts-threads-provider.sql` | Threads in the `social_accounts.provider` check: re-creates `social_accounts_provider_check` with all five providers — production carried the constraint from versioned migrations 0015/0016 deleted in the b4037cff consolidation (four pre-Threads providers) while 034 added `threads` only to `post_metrics`, so the Threads OAuth callback upsert failed with a check violation |
 
 ## How to apply
 
