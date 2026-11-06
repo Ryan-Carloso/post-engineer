@@ -90,6 +90,15 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 //---------------
+// isPlaceholderProviderAccountId — empty/sentinel ids a failed profile lookup
+// used to leave behind ('unknown'); never a valid provider identity.
+//---------------
+export function isPlaceholderProviderAccountId(id: string): boolean {
+  const normalized = id.trim().toLowerCase();
+  return normalized === '' || normalized === 'unknown';
+}
+
+//---------------
 // upsertSocialAccount — encrypts the tokens and upserts
 // (unique: user_id + provider + provider_account_id)
 //---------------
@@ -97,6 +106,14 @@ export async function upsertSocialAccount(
   supabase: SupabaseClient,
   params: UpsertSocialAccountParams,
 ): Promise<SocialAccountRecord> {
+  // A placeholder id poisons the row (every later publish targets a
+  // non-existent account and fails with a bare Unauthorized), so refuse to
+  // persist it no matter which callback produced it.
+  if (isPlaceholderProviderAccountId(params.providerAccountId)) {
+    throw new Error(
+      `Refusing to save a ${params.provider} account without a real provider account id.`,
+    );
+  }
   const encrypted = encryptTokens(params.tokens);
 
   const expiresAt = params.tokenExpiresAt
