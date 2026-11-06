@@ -54,10 +54,13 @@ describe('supabase/migrations/037_social-accounts-threads-provider.sql', () => {
 
   it('drops the drifted pre-Threads constraint before re-adding it', () => {
     const sql = readSql();
-    expect(sql).toContain(
+    const dropAt = sql.indexOf(
       'drop constraint if exists social_accounts_provider_check',
     );
-    expect(sql).toContain('add constraint social_accounts_provider_check');
+    const addAt = sql.indexOf('add constraint social_accounts_provider_check');
+    expect(dropAt).toBeGreaterThanOrEqual(0);
+    expect(addAt).toBeGreaterThanOrEqual(0);
+    expect(dropAt).toBeLessThan(addAt);
   });
 
   it('allows exactly the providers the app supports', () => {
