@@ -12,7 +12,7 @@
 //---------------
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { updateSocialAccountMetadata, type SocialAccountRecord } from './social-accounts';
+import { getSocialAccountTokens, updateSocialAccountMetadata, type SocialAccountRecord } from './social-accounts';
 import { PROFILE_SOURCES, type FetchedProfile } from './account-profile-sources';
 import { pictureUrlExpired } from './account-display-diagnostics';
 import { reportProfileFetched, reportProfileFetchFailed } from './account-profile-telemetry';
@@ -100,8 +100,16 @@ export async function syncAccountProfile(
   } catch (error) {
     reportProfileFetchFailed(record.provider, 'sync', error);
     try {
+      // Re-read the row instead of spreading the pre-read snapshot: a
+      // concurrent request may have repaired the row (or a reconnect may
+      // have rewritten it) during the provider read, and writing the
+      // snapshot back would revert that work and freeze the row for an
+      // hour. The fresh metadata keeps any concurrent success; only the
+      // failure marker is added. A re-read that itself fails is logged
+      // below and the original error is still the one rethrown.
+      const { account } = await getSocialAccountTokens(supabase, userId, record.provider, record.providerAccountId);
       await updateSocialAccountMetadata(supabase, userId, record.provider, record.providerAccountId, {
-        ...record.accountMetadata,
+        ...account.accountMetadata,
         profileSyncFailedAt: now.toISOString(),
       });
     } catch (writeError) {

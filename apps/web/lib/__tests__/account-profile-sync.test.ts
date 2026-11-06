@@ -4,7 +4,7 @@ const { sources } = vi.hoisted(() => ({
   sources: {} as Record<string, { pictureKey: string; applies: ReturnType<typeof vi.fn>; fetch: ReturnType<typeof vi.fn> }>,
 }));
 vi.mock('@/lib/account-profile-sources', () => ({ PROFILE_SOURCES: sources }));
-vi.mock('@/lib/social-accounts', () => ({ updateSocialAccountMetadata: vi.fn() }));
+vi.mock('@/lib/social-accounts', () => ({ updateSocialAccountMetadata: vi.fn(), getSocialAccountTokens: vi.fn() }));
 vi.mock('@/lib/account-profile-telemetry', () => ({
   reportProfileFetched: vi.fn(),
   reportProfileFetchFailed: vi.fn(),
@@ -20,7 +20,7 @@ import {
 } from '@/lib/account-profile-sync';
 import { logger } from '@/lib/logger';
 import { pictureUrlExpired } from '@/lib/account-display-diagnostics';
-import { updateSocialAccountMetadata, type SocialAccountRecord } from '@/lib/social-accounts';
+import { updateSocialAccountMetadata, getSocialAccountTokens, type SocialAccountRecord } from '@/lib/social-accounts';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 
 const NOW = new Date('2026-11-06T12:00:00.000Z');
@@ -142,6 +142,7 @@ describe('syncAccountProfile', () => {
     sources.instagram = { pictureKey: 'profilePictureUrl', applies: vi.fn(() => true), fetch: vi.fn() };
     vi.mocked(updateSocialAccountMetadata).mockReset();
     vi.mocked(updateSocialAccountMetadata).mockResolvedValue(undefined);
+    vi.mocked(getSocialAccountTokens).mockReset();
     vi.mocked(reportProfileFetched).mockReset();
     vi.mocked(reportProfileFetchFailed).mockReset();
     vi.mocked(logger.info).mockClear();
@@ -203,6 +204,7 @@ describe('syncAccountProfile', () => {
     const failure = new Error('token revoked');
     sources.instagram.fetch.mockRejectedValue(failure);
     const rec = record({}, { profileSyncedAt: STALE });
+    vi.mocked(getSocialAccountTokens).mockResolvedValue({ tokens: { access_token: 'tok' }, account: rec });
     await expect(
       syncAccountProfile(supabase, 'u1', rec, { now: () => NOW }),
     ).rejects.toBe(failure);
@@ -211,6 +213,41 @@ describe('syncAccountProfile', () => {
       ...rec.accountMetadata,
       profileSyncFailedAt: NOW.toISOString(),
     });
+  });
+
+  it('writes the failure marker over fresh metadata when a concurrent request repaired the row', async () => {
+    const failure = new Error('token revoked');
+    sources.instagram.fetch.mockRejectedValue(failure);
+    const rec = record({}, { profileSyncedAt: STALE });
+    // A concurrent GET repaired the row while our provider read was in
+    // flight: fresh name, fresh picture, fresh sync stamp, no marker.
+    const fresh = record(
+      { accountName: 'repaired_handle' },
+      { profilePictureUrl: 'https://x.test/repaired.jpg', profileSyncedAt: NOW.toISOString() },
+    );
+    vi.mocked(getSocialAccountTokens).mockResolvedValue({ tokens: { access_token: 'tok' }, account: fresh });
+    await expect(
+      syncAccountProfile(supabase, 'u1', rec, { now: () => NOW }),
+    ).rejects.toBe(failure);
+    expect(reportProfileFetchFailed).toHaveBeenCalledWith('instagram', 'sync', failure);
+    // The stale snapshot (old picture, STALE stamp) must not come back:
+    // the repair survives, only the failure marker is added.
+    expect(updateSocialAccountMetadata).toHaveBeenCalledWith(supabase, 'u1', 'instagram', 'ig-1', {
+      ...fresh.accountMetadata,
+      profileSyncFailedAt: NOW.toISOString(),
+    });
+  });
+
+  it('skips the marker write when the row cannot be re-read and still rethrows the original error', async () => {
+    const failure = new Error('token revoked');
+    sources.instagram.fetch.mockRejectedValue(failure);
+    vi.mocked(getSocialAccountTokens).mockRejectedValue(new Error('row gone'));
+    await expect(
+      syncAccountProfile(supabase, 'u1', record({}, { profileSyncedAt: STALE }), { now: () => NOW }),
+    ).rejects.toBe(failure);
+    expect(reportProfileFetchFailed).toHaveBeenCalledWith('instagram', 'sync', failure);
+    expect(updateSocialAccountMetadata).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalled();
   });
 
   it('skips the provider read while the failure backoff is active', async () => {
@@ -223,9 +260,11 @@ describe('syncAccountProfile', () => {
   it('still rethrows the original error when the failure marker cannot be saved', async () => {
     const failure = new Error('token revoked');
     sources.instagram.fetch.mockRejectedValue(failure);
+    const rec = record({}, { profileSyncedAt: STALE });
+    vi.mocked(getSocialAccountTokens).mockResolvedValue({ tokens: { access_token: 'tok' }, account: rec });
     vi.mocked(updateSocialAccountMetadata).mockRejectedValueOnce(new Error('db down'));
     await expect(
-      syncAccountProfile(supabase, 'u1', record({}, { profileSyncedAt: STALE }), { now: () => NOW }),
+      syncAccountProfile(supabase, 'u1', rec, { now: () => NOW }),
     ).rejects.toBe(failure);
     expect(reportProfileFetchFailed).toHaveBeenCalledWith('instagram', 'sync', failure);
     expect(logger.error).toHaveBeenCalled();
