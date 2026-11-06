@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 
 vi.mock('@/lib/account-card-telemetry', () => ({
   reportAccountCardDisplay: vi.fn(),
 }));
 
-import AccountCard from '@/components/account-card';
+import AccountCard, { ACCOUNT_LABEL_MIN_WIDTH_PX } from '@/components/account-card';
 import { reportAccountCardDisplay } from '@/lib/account-card-telemetry';
 
 //---------------
@@ -23,6 +23,7 @@ vi.mock('next/image', () => ({
 vi.mock('@/lib/ui', () => ({
   GoogleIcon: () => React.createElement('span', { 'data-testid': 'google-icon' }, 'YT'),
   InstagramIcon: () => React.createElement('span', { 'data-testid': 'instagram-icon' }, 'IG'),
+  TrashIcon: () => React.createElement('span', { 'data-testid': 'trash-icon' }, '🗑'),
 }));
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -37,6 +38,15 @@ describe('AccountCard', () => {
     type: 'youtube' as const,
     name: 'Meu Canal',
   };
+
+  it('keeps ~8 letters of label space with the inline trash button', () => {
+    render(<AccountCard type="youtube" name="Ch" showDisconnect onDisconnect={() => {}} />);
+    const label = document.querySelector('h3') as HTMLElement;
+    expect(label.style.minWidth).toBe(`${ACCOUNT_LABEL_MIN_WIDTH_PX}px`);
+    const button = screen.getByTestId('youtube-disconnect-button');
+    expect(button.getAttribute('aria-label')).toBe('accounts.disconnect');
+    expect(within(button).getByTestId('trash-icon')).toBeTruthy();
+  });
 
   it('renders the account name', () => {
     render(<AccountCard {...baseProps} />);

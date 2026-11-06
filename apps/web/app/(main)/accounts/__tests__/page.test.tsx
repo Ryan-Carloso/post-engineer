@@ -385,29 +385,32 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
   it('disconnects a YouTube account after confirmation', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({ success: true });
     vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.mocked(useYouTubeAccountsQuery, { partial: true }).mockReturnValue({
       data: { authenticated: true, accounts: [{ provider: 'youtube', recordId: 'r1', channelId: 'ch1', channelName: 'Ch1', connectedAt: 0, lastUsed: 0 }] },
       isLoading: false,
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('youtube-disconnect-button'));
+    await screen.findByTestId('disconnect-dialog');
+    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'ch1' }));
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('youtube');
     expect(reportAccountDisconnectFailed).not.toHaveBeenCalled();
   });
 
-  it('does not disconnect when the confirmation is cancelled', async () => {
+  it('does not disconnect when the confirmation dialog is cancelled', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({ success: true });
     vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     vi.mocked(useYouTubeAccountsQuery, { partial: true }).mockReturnValue({
       data: { authenticated: true, accounts: [{ provider: 'youtube', recordId: 'r1', channelId: 'ch1', channelName: 'Ch1', connectedAt: 0, lastUsed: 0 }] },
       isLoading: false,
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('youtube-disconnect-button'));
-    await waitFor(() => expect(window.confirm).toHaveBeenCalled());
+    // The dialog names the account before it can be removed.
+    expect(await screen.findByTestId('disconnect-dialog')).toBeVisible();
+    fireEvent.click(screen.getByTestId('disconnect-cancel-button'));
+    await waitFor(() => expect(screen.queryByTestId('disconnect-dialog')).not.toBeInTheDocument());
     expect(mutateAsync).not.toHaveBeenCalled();
     expect(reportAccountDisconnectFailed).not.toHaveBeenCalled();
   });
@@ -415,13 +418,14 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
   it('shows an error message when disconnect throws', async () => {
     const mutateAsync = vi.fn().mockRejectedValue(new Error('db fail'));
     vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.mocked(useYouTubeAccountsQuery, { partial: true }).mockReturnValue({
       data: { authenticated: true, accounts: [{ provider: 'youtube', recordId: 'r1', channelId: 'ch1', channelName: 'Ch1', connectedAt: 0, lastUsed: 0 }] },
       isLoading: false,
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('youtube-disconnect-button'));
+    await screen.findByTestId('disconnect-dialog');
+    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
     await waitFor(() => expect(screen.getByTestId('disconnect-error')).toBeInTheDocument());
     expect(screen.getByTestId('disconnect-error')).toHaveTextContent('accounts.disconnectError');
     expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('youtube', 'threw');
@@ -498,13 +502,14 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
   it('shows an error message when the server reports failure', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({ success: false });
     vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.mocked(useYouTubeAccountsQuery, { partial: true }).mockReturnValue({
       data: { authenticated: true, accounts: [{ provider: 'youtube', recordId: 'r1', channelId: 'ch1', channelName: 'Ch1', connectedAt: 0, lastUsed: 0 }] },
       isLoading: false,
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('youtube-disconnect-button'));
+    await screen.findByTestId('disconnect-dialog');
+    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
     await waitFor(() => expect(screen.getByTestId('disconnect-error')).toBeInTheDocument());
     expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('youtube', 'rejected');
   });
@@ -512,13 +517,14 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
   it('disconnects an Instagram account using its igUserId', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({ success: true });
     vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.mocked(useInstagramAccountsQuery, { partial: true }).mockReturnValue({
       data: { authenticated: true, accounts: [{ provider: 'instagram', recordId: 'r1', igUserId: 'ig1', username: 'instauser', connectedAt: 0, lastUsed: 0 }] },
       isLoading: false,
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('instagram-disconnect-button'));
+    await screen.findByTestId('disconnect-dialog');
+    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'ig1' }));
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('instagram');
   });
@@ -544,13 +550,14 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
   it('disconnects a Bluesky account using its did', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({ success: true });
     vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.mocked(useBlueskyAccountsQuery, { partial: true }).mockReturnValue({
       data: { authenticated: true, accounts: [{ provider: 'bluesky', recordId: 'r1', did: 'did:plc:abc', handle: 'voce.bsky.social', connectedAt: 0, lastUsed: 0 }] },
       isLoading: false,
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('bluesky-disconnect-button'));
+    await screen.findByTestId('disconnect-dialog');
+    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'did:plc:abc' }));
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('bluesky');
   });
@@ -558,7 +565,6 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
   it('disconnects a LinkedIn account using its providerAccountId', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({ success: true });
     vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.mocked(useLinkedinAccountsQuery, { partial: true }).mockReturnValue({
       data: {
         authenticated: true,
@@ -568,6 +574,8 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('linkedin-disconnect-button'));
+    await screen.findByTestId('disconnect-dialog');
+    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'member-123' }));
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('linkedin');
   });
@@ -575,7 +583,6 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
   it('reports the provider when Instagram, Bluesky, or LinkedIn disconnect throws', async () => {
     const mutateAsync = vi.fn().mockRejectedValue(new Error('db fail'));
     vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.mocked(useInstagramAccountsQuery, { partial: true }).mockReturnValue({
       data: { authenticated: true, accounts: [{ provider: 'instagram', recordId: 'r1', igUserId: 'ig1', username: 'instauser', connectedAt: 0, lastUsed: 0 }] },
       isLoading: false,
@@ -593,8 +600,14 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('instagram-disconnect-button'));
+    await screen.findByTestId('disconnect-dialog');
+    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
     fireEvent.click(screen.getByTestId('bluesky-disconnect-button'));
+    await screen.findByTestId('disconnect-dialog');
+    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
     fireEvent.click(screen.getByTestId('linkedin-disconnect-button'));
+    await screen.findByTestId('disconnect-dialog');
+    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
     await waitFor(() => expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('linkedin', 'threw'));
     expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('instagram', 'threw');
     expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('bluesky', 'threw');
@@ -664,7 +677,6 @@ describe('Threads accounts section', () => {
   it('reports a Threads disconnect failure for that provider', async () => {
     const mutateAsync = vi.fn().mockRejectedValue(new Error('db fail'));
     vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.mocked(useThreadsAccountsQuery, { partial: true }).mockReturnValue({
       data: { authenticated: true, accounts: [{ provider: 'threads', recordId: 'r1', providerAccountId: '42', accountName: 'ana', connectedAt: 0, lastUsed: 0 }] },
       isLoading: false,
@@ -673,6 +685,8 @@ describe('Threads accounts section', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('threads-disconnect-button'));
+    await screen.findByTestId('disconnect-dialog');
+    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
     await waitFor(() => expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('threads', 'threw'));
   });
 });

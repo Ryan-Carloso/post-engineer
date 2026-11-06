@@ -195,10 +195,10 @@ describe('Accounts — UI', () => {
     cy.get('[data-testid=account-card-remove]').should('not.exist');
   });
 
-  // The disconnect click opens a window.confirm first; cancelling keeps
-  // the card. The confirm-then-rejected-delete path is covered by
+  // The trash button opens the confirmation dialog; cancelling keeps the
+  // card. The confirm-then-rejected-delete path is covered by
   // 'mostra LinkedIn e Threads e o erro quando a desconexão é recusada'.
-  it('asks for confirmation before disconnecting; cancelling keeps the card', () => {
+  it('abre um popup de confirmação antes de desconectar; cancelar mantém o card', () => {
     const accounts = [
       {
         recordId: 'acc-yt-1',
@@ -219,13 +219,13 @@ describe('Accounts — UI', () => {
     cy.visit('/accounts');
     cy.wait('@getAccounts');
 
-    cy.window().then((win) => {
-      cy.wrap(cy.stub(win, 'confirm').returns(false)).as('confirmDialog');
-    });
-
     cy.get('[data-testid=youtube-disconnect-button]').first().click();
-    cy.get('@confirmDialog').should('have.been.calledOnce');
-    // Canceled confirm: the card stays and no DELETE is fired.
+    // The dialog names the exact account it would remove.
+    cy.get('[data-testid=disconnect-dialog]').should('be.visible');
+    cy.contains('[data-testid=disconnect-dialog-account]', 'Canal Alpha').should('be.visible');
+    cy.get('[data-testid=disconnect-cancel-button]').click();
+    // Cancelled: the dialog closes, the card stays and no DELETE is fired.
+    cy.get('[data-testid=disconnect-dialog]').should('not.exist');
     cy.contains('Canal Alpha').should('be.visible');
   });
 
@@ -297,10 +297,6 @@ describe('Accounts — UI', () => {
       statusCode: 200,
       body: { success: false },
     }).as('disconnectAccount');
-    cy.on('window:confirm', (message) => {
-      expect(message).to.eq('Desconectar esta conta?');
-      return true;
-    });
 
     cy.visit('/accounts');
     cy.wait('@getAccounts');
@@ -318,6 +314,8 @@ describe('Accounts — UI', () => {
     });
 
     cy.get('[data-testid=youtube-disconnect-button]').scrollIntoView().click();
+    cy.get('[data-testid=disconnect-dialog]').should('be.visible');
+    cy.get('[data-testid=disconnect-confirm-button]').click();
     cy.wait('@disconnectAccount');
     cy.get('[data-testid=disconnect-error]')
       .should('be.visible')
