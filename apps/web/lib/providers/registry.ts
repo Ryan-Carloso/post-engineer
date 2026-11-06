@@ -16,6 +16,9 @@ export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
 // Stored/shown when Instagram returned no username for the account.
 export const INSTAGRAM_USERNAME_FALLBACK = 'instagram_user';
 export const YOUTUBE_CHANNEL_NAME_FALLBACK = 'YouTube Account';
+// Channel id stored by the old callback when the channel read failed. No
+// connect writes it anymore; legacy rows are repaired through the grant.
+export const YOUTUBE_PLACEHOLDER_ACCOUNT_ID = 'unknown';
 
 //---------------
 // Public shapes (no tokens) per provider — what /api/account returns
