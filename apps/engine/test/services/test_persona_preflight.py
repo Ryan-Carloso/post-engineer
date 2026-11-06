@@ -24,7 +24,7 @@ def _params(lipsync_enabled: bool = True, photo: str | None = "https://img.test/
         video_subject="coffee",
         video_script="Hook. Body. Call to action.",
         lipsync_enabled=lipsync_enabled,
-        persona=PersonaParams(name="Ana", photo_url=photo, voice_id="calm"),
+        persona=PersonaParams(name="Ana", photo_url=photo, voice_id="chatterbox:kokoro_af_heart"),
     )
 
 

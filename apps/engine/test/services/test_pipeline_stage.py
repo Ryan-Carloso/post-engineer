@@ -90,7 +90,7 @@ class StartPhaseAttributionTests(unittest.TestCase):
     def test_crash_during_terms_phase_reports_terms_stage(self):
         # generate_script succeeds, generate_terms raises: the terms phase
         # was running, so the failure must say "terms", not "script".
-        params = VideoParams(video_subject="Lisbon trams")
+        params = VideoParams(video_subject="Lisbon trams", voice_name="chatterbox:kokoro_af_heart")
         stages = self._track_failed_stages(
             "task-terms-stage",
             params,
@@ -104,7 +104,7 @@ class StartPhaseAttributionTests(unittest.TestCase):
     def test_crash_during_script_phase_reports_script_stage(self):
         # The script phase had started when generate_script raised, so the
         # failure must say "script", not "start".
-        params = VideoParams(video_subject="Lisbon trams")
+        params = VideoParams(video_subject="Lisbon trams", voice_name="chatterbox:kokoro_af_heart")
         stages = self._track_failed_stages(
             "task-script-stage",
             params,
@@ -116,7 +116,7 @@ class StartPhaseAttributionTests(unittest.TestCase):
     def test_crash_during_audio_phase_reports_audio_stage(self):
         # terms completes, then generate_audio raises: the failure must say
         # "audio". This also pins the terms-completion path.
-        params = VideoParams(video_subject="Lisbon trams")
+        params = VideoParams(video_subject="Lisbon trams", voice_name="chatterbox:kokoro_af_heart")
         stages = self._track_failed_stages(
             "task-audio-stage",
             params,

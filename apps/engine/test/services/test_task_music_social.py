@@ -28,6 +28,7 @@ from app.services.intro_cost import IntroCostReport
 def _params(subject="Lisbon trams"):
     return VideoParams(
         video_subject=subject,
+        voice_name="chatterbox:kokoro_af_heart",
         video_materials=[MaterialInfo(provider="local", url="/tmp/a.mp4", duration=0)],
     )
 
