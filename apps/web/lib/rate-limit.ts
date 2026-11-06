@@ -36,6 +36,10 @@ export const RATE_LIMITS = {
   // Cloned-voice TTS preview (optional caller text): free, so capped per user per day
   // across all clones to keep it from becoming a free TTS service.
   voiceClonePreview: { name: 'voice-clone-preview', limit: 10, windowMs: 24 * 60 * 60 * 1000 },
+  // House-voice TTS preview (optional caller text): same daily cap as the
+  // cloned preview, but a separate bucket — comparing house voices must
+  // never eat the clone budget, or vice versa.
+  voicePreview: { name: 'voice-preview', limit: 10, windowMs: 24 * 60 * 60 * 1000 },
   // Instagram content posting
   instagramPost: { name: 'instagram-post', limit: 10, windowMs: 60_000 },
   // OAuth token endpoint: brute-force / token-farming protection

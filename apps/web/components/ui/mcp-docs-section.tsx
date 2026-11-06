@@ -41,6 +41,7 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'get_cloned_voice', descKey: 'apiKeys.toolDescGetClonedVoice', Icon: MicIcon },
   { id: 'delete_cloned_voice', descKey: 'apiKeys.toolDescDeleteClonedVoice', Icon: TrashIcon },
   { id: 'preview_cloned_voice', descKey: 'apiKeys.toolDescPreviewClonedVoice', Icon: MicIcon },
+  { id: 'preview_house_voice', descKey: 'apiKeys.toolDescPreviewHouseVoice', Icon: MicIcon },
   { id: 'list_faces', descKey: 'apiKeys.toolDescListFaces', Icon: ImageIcon },
   { id: 'create_persona', descKey: 'apiKeys.toolDescCreatePersona', Icon: SparklesIcon },
   { id: 'update_persona', descKey: 'apiKeys.toolDescUpdatePersona', Icon: ComposeIcon },

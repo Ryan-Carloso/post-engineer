@@ -328,6 +328,24 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HouseVoicePreviewRequest": {
+        "description": "Optional JSON body of the house preview endpoint: ``{\"text\": \"...\"}``.\n\nOnly the string type is enforced here — a malformed body or a\nnon-string text fails pydantic validation, which the app maps to a\n400. The trimmed-length check lives in validate_preview_text, so a\nstring longer than the cap that trims into range is still accepted.",
+        "properties": {
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "title": "HouseVoicePreviewRequest",
+        "type": "object"
+      },
       "LipSyncQuality": {
         "enum": [
           "ok",
@@ -2057,6 +2075,63 @@
           }
         },
         "summary": "Languages available for voice samples",
+        "tags": [
+          "V1"
+        ]
+      }
+    },
+    "/api/v1/personas/voices/{voice_id}/preview": {
+      "post": {
+        "operationId": "preview_house_voice_endpoint_api_v1_personas_voices__voice_id__preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "voice_id",
+            "required": true,
+            "schema": {
+              "title": "Voice Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/HouseVoicePreviewRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "TTS preview for a house voice (audio/mpeg)",
         "tags": [
           "V1"
         ]

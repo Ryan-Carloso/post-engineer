@@ -41,7 +41,7 @@ import {
   GetPersonaPublishingAccountsShape,
   SetPersonaPublishingAccountsShape,
 } from '../tools-publishing-accounts.js';
-import { GetClonedVoiceShape } from '../cloned-voice-tools.js';
+import { GetClonedVoiceShape, PreviewHouseVoiceShape } from '../cloned-voice-tools.js';
 import { GeneratePersonaVideoShape, ValidateScriptShape, ScoreDraftShape } from '../tools-single-video.js';
 import { CheckMediaShape, UploadMediaShape } from '../tools-user-media.js';
 import { GetPostShape, GetPostMetricsShape } from '../tools-posts.js';
@@ -69,6 +69,7 @@ const EXPECTED_TOOLS = [
   'get_cloned_voice',
   'delete_cloned_voice',
   'preview_cloned_voice',
+  'preview_house_voice',
   'list_faces',
   'update_persona',
   'list_social_accounts',
@@ -217,6 +218,7 @@ describe('registered tool schemas (single source of truth)', () => {
       get_cloned_voice: GetClonedVoiceShape,
       delete_cloned_voice: DeleteClonedVoiceShape,
       preview_cloned_voice: PreviewClonedVoiceShape,
+      preview_house_voice: PreviewHouseVoiceShape,
       list_faces: ListFacesShape,
       update_persona: UpdatePersonaShape,
       list_social_accounts: ListSocialAccountsShape,

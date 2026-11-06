@@ -204,6 +204,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/personas/voices/{voice_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** TTS preview for a house voice (audio/mpeg) */
+        post: operations["preview_house_voice_endpoint_api_v1_personas_voices__voice_id__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/personas/voices/{voice_id}/sample": {
         parameters: {
             query?: never;
@@ -594,6 +611,19 @@ export interface components {
          *     string longer than the cap that trims into range is still accepted.
          */
         ClonedVoicePreviewRequest: {
+            /** Text */
+            text?: string | null;
+        };
+        /**
+         * HouseVoicePreviewRequest
+         * @description Optional JSON body of the house preview endpoint: ``{"text": "..."}``.
+         *
+         *     Only the string type is enforced here — a malformed body or a
+         *     non-string text fails pydantic validation, which the app maps to a
+         *     400. The trimmed-length check lives in validate_preview_text, so a
+         *     string longer than the cap that trims into range is still accepted.
+         */
+        HouseVoicePreviewRequest: {
             /** Text */
             text?: string | null;
         };
@@ -1558,6 +1588,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseResponse"];
+                };
+            };
+        };
+    };
+    preview_house_voice_endpoint_api_v1_personas_voices__voice_id__preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                voice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["HouseVoicePreviewRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
