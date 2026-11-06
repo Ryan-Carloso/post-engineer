@@ -139,7 +139,14 @@ export function apiErrorResponse(
     errorId = fallbackErrorId();
   }
 
-  const response = NextResponse.json({ success: false, error, errorId, ...extra }, { status });
+  // extra strings are fragment-redacted by scrubSecrets. The top-level
+  // error is the same text as errors[0].message on validation 400s, so it
+  // gets the same treatment or the body would keep the only raw copy.
+  const publicError = redactCredentialFragments(error);
+  const response = NextResponse.json(
+    { success: false, error: publicError, errorId, ...extra },
+    { status },
+  );
   // logger.error (5xx) and logger.warn (other 4xx) above already reported to
   // PostHog: mark the response so withApiErrorReporting skips it instead of
   // emitting a duplicate. 401/403 and leaveReportingToWrapper responses are

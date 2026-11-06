@@ -869,6 +869,36 @@ describe('generate and schedule video client', () => {
     expect(error.message).toContain('Failed to generate and schedule video: 422');
     expect(error.message).toContain('title must be a non-empty string.');
   });
+
+  it('surfaces every listed validation problem, not only the first (#351)', async () => {
+    const { ApiError } = await import('../errors.js');
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () =>
+        JSON.stringify({
+          success: false,
+          error: 'title must be a non-empty string: the slot label for this video.',
+          code: 'VALIDATION_FAILED',
+          field: 'title',
+          errors: [
+            { code: 'VALIDATION_FAILED', field: 'title', message: 'title must be a non-empty string: the slot label for this video.' },
+            { code: 'VALIDATION_FAILED', field: 'publishing.providers', message: 'Invalid provider: "myspace". Use one of youtube.' },
+          ],
+        }),
+    });
+
+    const error: unknown = await client
+      .generatePersonaVideo(baseInput)
+      .catch((e: unknown) => e);
+
+    if (!(error instanceof ApiError)) {
+      throw new Error(`expected ApiError, got: ${String(error)}`);
+    }
+    expect(error.field).toBe('title');
+    expect(error.message).toContain('title must be a non-empty string');
+    expect(error.message).toContain('Invalid provider: "myspace"');
+  });
 });
 
   it('retrieves video task status', async () => {

@@ -1,31 +1,45 @@
 //---------------
-// Provider validation — moved verbatim from route.ts so the route file,
-// already over the 500-line cap, does not grow when the full lip-sync
-// preflight call is added. Runs BEFORE any token is charged, exactly as
-// before.
+// Provider validation for POST /api/videos/generate-and-schedule. Runs
+// BEFORE any token is charged. Every unknown provider is reported, not just
+// the first one.
 //---------------
 
-import type { NextResponse } from 'next/server';
-
 import { VALID_SCHEDULE_PROVIDERS } from '@/app/api/schedule/route';
-import { ERROR_CODES } from '@/lib/error-codes';
-import { validationFailed } from './prepare-persona';
+import { invalid, MAX_REPORTED_ISSUES, type Checked } from './validation-issues';
 
 export type Provider = (typeof VALID_SCHEDULE_PROVIDERS)[number];
 
-export function validateProviders(rawProviders: string[]): Provider[] | NextResponse {
+// A provider value is caller-controlled and is echoed in the 400 message.
+// Keep the "use one of" hint by shortening the name, not the whole sentence.
+const MAX_PROVIDER_CHARS = 100;
+
+function shownProvider(provider: string): string {
+  return provider.length > MAX_PROVIDER_CHARS ? `${provider.slice(0, MAX_PROVIDER_CHARS)}…` : provider;
+}
+
+export function validateProviders(rawProviders: string[]): Checked<Provider[]> {
+  // Stop before building one issue per entry. The route also rejects this
+  // length at the schema, so a normal request never reaches the map below
+  // with more than MAX_REPORTED_ISSUES values.
+  if (rawProviders.length > MAX_REPORTED_ISSUES) {
+    return {
+      ok: false,
+      issues: [invalid(`At most ${MAX_REPORTED_ISSUES} providers.`, 'publishing.providers')],
+    };
+  }
   const providers = [...new Set(rawProviders.map((p) => p.trim()).filter((p) => p.length > 0))];
   if (providers.length === 0) {
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Select at least one provider.', 'publishing.providers');
+    return { ok: false, issues: [invalid('Select at least one provider.', 'publishing.providers')] };
   }
-  for (const provider of providers) {
-    if (!(VALID_SCHEDULE_PROVIDERS as ReadonlyArray<string>).includes(provider)) {
-      return validationFailed(
-        ERROR_CODES.VALIDATION_FAILED,
-        `Invalid provider: "${provider}". Use one of ${VALID_SCHEDULE_PROVIDERS.join(', ')}.`,
+  const known = VALID_SCHEDULE_PROVIDERS as ReadonlyArray<string>;
+  const issues = providers
+    .filter((provider) => !known.includes(provider))
+    .map((provider) =>
+      invalid(
+        `Invalid provider: "${shownProvider(provider)}". Use one of ${VALID_SCHEDULE_PROVIDERS.join(', ')}.`,
         'publishing.providers',
-      );
-    }
-  }
-  return providers as Provider[];
+      ),
+    );
+  if (issues.length > 0) return { ok: false, issues };
+  return { ok: true, value: providers as Provider[] };
 }

@@ -45,6 +45,31 @@ describe('scrubSecrets', () => {
     expect(out[1]['n']).toBe(2);
   });
 
+  it('redacts credential fragments inside nested message strings', () => {
+    // A validation `errors` list echoes caller text. Key-name scrubbing
+    // leaves `message` alone, so a pasted token must be fragment-redacted
+    // before the list reaches PostHog.
+    const token = 'sk-' + 'a'.repeat(24);
+    const out = scrubSecrets({
+      errors: [
+        {
+          code: 'VALIDATION_FAILED',
+          message: `Invalid provider: "Bearer ${token}".`,
+          field: 'publishing.providers',
+        },
+        { code: 'VALIDATION_FAILED', message: 'Invalid provider: "myspace".' },
+      ],
+      notes: [`leaked Bearer ${token} here`],
+    });
+    const errors = out['errors'] as Array<Record<string, unknown>>;
+    // The fragment regex consumes the trailing non-space characters (the
+    // closing quote), which is the existing Bearer rule, not a new one.
+    expect(errors[0]['message']).toBe('Invalid provider: "Bearer [redacted]');
+    expect(errors[0]['message']).not.toContain(token);
+    expect(errors[1]['message']).toBe('Invalid provider: "myspace".');
+    expect(out['notes']).toEqual(['leaked Bearer [redacted] here']);
+  });
+
   it('keeps non-string values that are not secret-bearing', () => {
     const out = scrubSecrets({ count: 3, flag: true, nothing: null });
     expect(out).toEqual({ count: 3, flag: true, nothing: null });

@@ -1,4 +1,4 @@
-import { getErrorMessage, ImageTooLargeError, VideoTooLargeError, ApiError } from './errors.js';
+import { getErrorMessage, ImageTooLargeError, VideoTooLargeError, ApiError, readApiFailure } from './errors.js';
 import {
   MAX_LIBRARY_IMAGE_BYTES,
   MAX_LIBRARY_IMAGE_MB,
@@ -51,8 +51,6 @@ const REQUEST_TIMEOUT_MS = 30_000;
 // Multipart uploads can legitimately exceed the default budget: up to 10
 // 10MB library images on one request.
 const UPLOAD_TIMEOUT_MS = 120_000;
-// Bound how much of an upstream error body can flow into agent-visible output.
-const MAX_ERROR_BODY_CHARS = 200;
 // Shared with tools.ts so the client-side guards, the Zod schema limits,
 // and the field description strings can't drift apart.
 export const MAX_LIBRARY_IMAGES = 10;
@@ -305,29 +303,15 @@ export class PostEngineerClient {
 
     if (!response.ok) {
       const errorText = await response.text();
-      // Structured API error bodies ({ success: false, error, code, field })
-      // carry the platform's stable machine code: keep it on the typed
-      // error so handlers can surface { code, message, field } instead of
-      // rewording the platform's own human message. The human message (or
-      // the raw body when it is not structured JSON) stays capped at
-      // MAX_ERROR_BODY_CHARS so nothing unbounded reaches agent output.
-      let code: string | null = null;
-      let field: string | null = null;
-      let detail = errorText.slice(0, MAX_ERROR_BODY_CHARS);
-      try {
-        const parsed: unknown = JSON.parse(errorText);
-        if (typeof parsed === 'object' && parsed !== null) {
-          const record = parsed as Record<string, unknown>;
-          if (typeof record.error === 'string' && record.error.length > 0) {
-            detail = record.error.slice(0, MAX_ERROR_BODY_CHARS);
-          }
-          if (typeof record.code === 'string') code = record.code;
-          if (typeof record.field === 'string') field = record.field;
-        }
-      } catch {
-        // Non-JSON body: detail stays the capped raw text.
-      }
-      throw new ApiError(`Failed to ${action}: ${response.status} ${detail}`, code, field);
+      // Structured bodies keep code/field; `errors` lists every validation
+      // problem. readApiFailure caps the text so nothing unbounded reaches
+      // agent output.
+      const failure = readApiFailure(errorText);
+      throw new ApiError(
+        `Failed to ${action}: ${response.status} ${failure.detail}`,
+        failure.code,
+        failure.field,
+      );
     }
 
     // Some endpoints answer 204 No Content. An empty or non-JSON body on any
