@@ -54,11 +54,11 @@ def test_non_200_body_is_included_in_the_error(
     # the stored error_message.
     error = _run_with_responses(
         monkeypatch,
-        [(404, "modal-http: workspace ac-X is disabled\n")] * 3,
+        [(404, "modal-http: workspace ac-X is disabled\n")],
         tmp_path,
     )
     assert error == (
-        "Chatterbox TTS failed after 3 attempts (status 404: modal-http: workspace ac-X is disabled)"
+        "Chatterbox TTS failed after 1 attempt (status 404: modal-http: workspace ac-X is disabled)"
     )
 
 
@@ -146,9 +146,9 @@ def test_blank_body_keeps_the_bare_status(
 def test_body_is_squeezed_to_one_line(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    error = _run_with_responses(monkeypatch, [(400, "bad\n  request ")] * 3, tmp_path)
+    error = _run_with_responses(monkeypatch, [(400, "bad\n  request ")], tmp_path)
     assert error == (
-        "Chatterbox TTS failed after 3 attempts (status 400: bad request)"
+        "Chatterbox TTS failed after 1 attempt (status 400: bad request)"
     )
 
 
