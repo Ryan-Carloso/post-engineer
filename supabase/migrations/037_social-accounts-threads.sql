@@ -1,5 +1,5 @@
 -- ============================================================================
--- 036 — social_accounts accepts the threads provider.
+-- 037 — social_accounts accepts the threads provider.
 -- Production carries a `social_accounts_provider_check` constraint that was
 -- created by hand (001_schema.sql defines none), so it never listed
 -- 'threads' and every Threads connect failed at the upsert with a check

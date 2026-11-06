@@ -26,7 +26,7 @@ import { GENERATION_PUBLISH_MODES } from '@/lib/generation/video-generation';
 //
 // Limits: a constraint created by hand in production and never written
 // as a migration stays invisible to CI. The fix is always a migration
-// that drops and recreates it (see 036_social-accounts-threads.sql).
+// that drops and recreates it (see 037_social-accounts-threads.sql).
 //---------------
 
 const repoRoot = findRepoRoot(import.meta.url);
