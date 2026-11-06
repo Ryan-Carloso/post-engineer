@@ -61,6 +61,7 @@ const mockQueries = vi.hoisted(() => ({
   instagram: { data: null as null | { accounts: unknown[] }, isLoading: false },
   bluesky: { data: null as null | { accounts: unknown[] }, isLoading: false },
   linkedin: { data: null as null | { accounts: unknown[] }, isLoading: false },
+  threads: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -68,10 +69,15 @@ vi.mock('@/lib/api', () => ({
   useInstagramAccountsQuery: () => mockQueries.instagram,
   useBlueskyAccountsQuery: () => mockQueries.bluesky,
   useLinkedinAccountsQuery: () => mockQueries.linkedin,
-  useThreadsAccountsQuery: () => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null }),
+  useThreadsAccountsQuery: () => mockQueries.threads,
+}));
+
+vi.mock('@/lib/account-card-telemetry', () => ({
+  reportAccountCardDisplay: vi.fn(),
 }));
 
 import { PersonaPublishingAccountsSection } from '../persona-publishing-accounts-section';
+import { reportAccountCardDisplay } from '@/lib/account-card-telemetry';
 
 const PERSONA_ID = '11111111-2222-3333-4444-555555555555';
 const DEFAULTS_URL = `/api/persona/publishing-accounts?personaId=${PERSONA_ID}`;
@@ -117,6 +123,7 @@ function setConnectedAccounts() {
   mockQueries.instagram = { ...connectedAccounts.instagram };
   mockQueries.bluesky = { ...connectedAccounts.bluesky };
   mockQueries.linkedin = { ...connectedAccounts.linkedin };
+  mockQueries.threads = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
 }
 
 beforeEach(() => {
@@ -295,18 +302,55 @@ describe('PersonaPublishingAccountsSection', () => {
   it('renders and toggles linkedin accounts', async () => {
     mockFetchOnce({ success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [] } });
     mockQueries.linkedin = {
-      data: { accounts: [{ provider: 'linkedin', providerAccountId: 'li-1', accountName: 'Li One' }] },
+      data: {
+        accounts: [
+          { provider: 'linkedin', providerAccountId: 'li-1', accountName: 'Li One', accountMetadata: { name: 'Li Display' } },
+          { provider: 'linkedin', providerAccountId: 'li-2' },
+        ],
+      },
       isLoading: false,
+    };
+    mockQueries.threads = {
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'threads', providerAccountId: 'th-1', accountName: 'Thread Name' },
+          { provider: 'threads', providerAccountId: 'th-2' },
+        ],
+      },
+      isLoading: false,
+      error: null,
     };
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
     await screen.findByTestId('publishing-accounts-save');
 
     const checkboxes = () => screen.getAllByTestId('account-card-select') as HTMLInputElement[];
-    // 2 youtube + 1 instagram + 1 bluesky + 1 linkedin
-    expect(checkboxes()).toHaveLength(5);
+    // 2 youtube + 1 instagram + 1 bluesky + 2 linkedin + 2 threads
+    expect(checkboxes()).toHaveLength(8);
     expect(checkboxes()[4].checked).toBe(false);
     fireEvent.click(checkboxes()[4]);
     expect(checkboxes()[4].checked).toBe(true);
+    expect(reportAccountCardDisplay).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'linkedin',
+      shownLabel: 'Li One',
+      storedDisplayName: 'Li Display',
+      labelOrigin: 'stored',
+    }));
+    expect(reportAccountCardDisplay).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'linkedin',
+      shownLabel: 'li-2',
+      labelOrigin: 'provider_id',
+    }));
+    expect(reportAccountCardDisplay).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'threads',
+      shownLabel: 'Thread Name',
+      labelOrigin: 'stored',
+    }));
+    expect(reportAccountCardDisplay).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'threads',
+      shownLabel: 'th-2',
+      labelOrigin: 'provider_id',
+    }));
   });
 
   it('ignores non-string ids in the server defaults', async () => {

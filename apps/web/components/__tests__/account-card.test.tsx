@@ -178,5 +178,62 @@ describe('AccountCard', () => {
         thumbnailUrl: 'https://cdn.example/a.jpg',
       }));
     });
+
+    it('measures the disconnect card through its ref', () => {
+      render(<AccountCard {...baseProps} />);
+      const input = vi.mocked(reportAccountCardDisplay).mock.calls.at(-1)?.[0];
+      expect(input?.cardEl).toBeInstanceOf(HTMLElement);
+      expect(input?.labelEl).toBeInstanceOf(HTMLHeadingElement);
+    });
+
+    it('measures the selectable card through its ref', () => {
+      render(<AccountCard {...baseProps} onSelect={() => {}} />);
+      const input = vi.mocked(reportAccountCardDisplay).mock.calls.at(-1)?.[0];
+      expect(input?.cardEl).toBeInstanceOf(HTMLElement);
+    });
+  });
+
+  describe('resize observation', () => {
+    function installObserver() {
+      const observe = vi.fn();
+      const disconnect = vi.fn();
+      let notify = (): void => {};
+      class ResizeObserverStub {
+        constructor(callback: () => void) {
+          notify = callback;
+        }
+        observe = observe;
+        unobserve = vi.fn();
+        disconnect = disconnect;
+      }
+      vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+      return { observe, disconnect, fire: () => notify() };
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('publishes again when the card resizes', () => {
+      const observer = installObserver();
+      render(<AccountCard {...baseProps} />);
+      expect(observer.observe).toHaveBeenCalled();
+      const before = vi.mocked(reportAccountCardDisplay).mock.calls.length;
+      observer.fire();
+      expect(vi.mocked(reportAccountCardDisplay).mock.calls.length).toBe(before + 1);
+    });
+
+    it('disconnects the observer when the card unmounts', () => {
+      const observer = installObserver();
+      const view = render(<AccountCard {...baseProps} />);
+      view.unmount();
+      expect(observer.disconnect).toHaveBeenCalled();
+    });
+
+    it('skips observation when ResizeObserver is missing', () => {
+      vi.stubGlobal('ResizeObserver', undefined);
+      expect(() => render(<AccountCard {...baseProps} />)).not.toThrow();
+      expect(reportAccountCardDisplay).toHaveBeenCalled();
+    });
   });
 });
