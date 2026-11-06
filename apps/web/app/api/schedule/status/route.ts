@@ -248,4 +248,9 @@ async function getHandler(request?: Request): Promise<NextResponse> {
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const GET = withApiErrorReporting('GET /api/schedule/status', getHandler, { getUserId: resolveReportingUserId });
+export const GET = withApiErrorReporting('GET /api/schedule/status', getHandler, {
+  // Polling route: the schedule page refetches every 60s, so a success
+  // event per read is noise; 4xx/5xx still report.
+  reportSuccess: false,
+  getUserId: resolveReportingUserId,
+});
