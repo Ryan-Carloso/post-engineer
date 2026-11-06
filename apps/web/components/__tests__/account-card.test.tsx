@@ -1,10 +1,16 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
+
+vi.mock('@/lib/account-card-telemetry', () => ({
+  reportAccountCardDisplay: vi.fn(),
+}));
+
 import AccountCard from '@/components/account-card';
+import { reportAccountCardDisplay } from '@/lib/account-card-telemetry';
 
 //---------------
-// AccountCard — testes unitários
+// AccountCard — unit tests
 //---------------
 
 // Mock next/image (não renderiza em testes unitários)
@@ -32,83 +38,83 @@ describe('AccountCard', () => {
     name: 'Meu Canal',
   };
 
-  it('renderiza nome da conta', () => {
+  it('renders the account name', () => {
     render(<AccountCard {...baseProps} />);
     expect(screen.getByText('Meu Canal')).toBeTruthy();
   });
 
-  it('renderiza email quando fornecido', () => {
+  it('renders the email when provided', () => {
     render(<AccountCard {...baseProps} email="canal@example.com" />);
     expect(screen.getByText('canal@example.com')).toBeTruthy();
   });
 
-  it('usa as iniciais quando não há thumbnail (YouTube)', () => {
+  it('uses initials when there is no thumbnail (YouTube)', () => {
     render(<AccountCard {...baseProps} />);
     expect(screen.getByRole('img', { name: 'Meu Canal' }).textContent).toBe('ME');
   });
 
-  it('usa as iniciais quando não há thumbnail (Instagram)', () => {
+  it('uses initials when there is no thumbnail (Instagram)', () => {
     render(<AccountCard type="instagram" name="@perfil" />);
     expect(screen.getByRole('img', { name: '@perfil' }).textContent).toBe('PE');
   });
 
-  it('usa as iniciais quando o thumbnail retorna erro', () => {
+  it('uses initials when the thumbnail fails to load', () => {
     render(<AccountCard {...baseProps} thumbnail="https://img.example/avatar.jpg" />);
     fireEvent.error(screen.getByRole('img', { name: 'Meu Canal' }));
     expect(screen.getByRole('img', { name: 'Meu Canal' }).textContent).toBe('ME');
   });
 
-  describe('modo seleção (onSelect)', () => {
-    it('renderiza checkbox quando onSelect é fornecido', () => {
+  describe('selection mode (onSelect)', () => {
+    it('renders a checkbox when onSelect is provided', () => {
       render(<AccountCard {...baseProps} onSelect={() => {}} />);
       expect(screen.getByTestId('account-card-select')).toBeTruthy();
     });
 
-    it('renderiza como <label> quando onSelect é fornecido', () => {
+    it('renders a label when onSelect is provided', () => {
       const { container } = render(<AccountCard {...baseProps} onSelect={() => {}} />);
       const label = container.querySelector('label');
       expect(label).toBeTruthy();
     });
 
-    it('chama onSelect ao clicar no checkbox', () => {
+    it('calls onSelect when the checkbox is clicked', () => {
       const onSelect = vi.fn();
       render(<AccountCard {...baseProps} onSelect={onSelect} />);
       fireEvent.click(screen.getByTestId('account-card-select'));
       expect(onSelect).toHaveBeenCalledTimes(1);
     });
 
-    it('reflete selected={true} no checkbox', () => {
+    it('reflects selected={true} on the checkbox', () => {
       render(<AccountCard {...baseProps} onSelect={() => {}} selected />);
       expect((screen.getByTestId('account-card-select') as HTMLInputElement).checked).toBe(true);
     });
 
-    it('reflete selected={false} no checkbox (default)', () => {
+    it('reflects selected={false} on the checkbox by default', () => {
       render(<AccountCard {...baseProps} onSelect={() => {}} />);
       expect((screen.getByTestId('account-card-select') as HTMLInputElement).checked).toBe(false);
     });
   });
 
-  describe('modo compacto (compact)', () => {
-    it('renderiza apenas o avatar, sem o nome visível', () => {
+  describe('compact mode', () => {
+    it('renders only the avatar, with no visible name', () => {
       render(<AccountCard {...baseProps} compact onSelect={() => {}} />);
       expect(screen.queryByText('Meu canal')).toBeNull();
       expect(screen.getByRole('img', { name: 'Meu Canal' })).toBeTruthy();
     });
 
-    it('sem imagem exibe o fallback com as iniciais do nome', () => {
+    it('shows initials when there is no image', () => {
       render(<AccountCard {...baseProps} compact />);
       const fallback = screen.getByRole('img', { name: 'Meu Canal' });
       expect(fallback.textContent).toBe('ME');
     });
 
-    it('imagem que falha ao carregar troca para as iniciais', () => {
+    it('switches to initials when the image fails to load', () => {
       render(<AccountCard {...baseProps} compact thumbnail="https://img/x.jpg" />);
       const image = screen.getByRole('img', { name: 'Meu Canal' });
       fireEvent.error(image);
       expect(screen.getByRole('img', { name: 'Meu Canal' }).textContent).toBe('ME');
     });
 
-    it('não renderiza checkbox e usa a cor apenas quando selecionado', () => {
+    it('hides the checkbox and uses color only when selected', () => {
       const onSelect = vi.fn();
       const { rerender } = render(<AccountCard {...baseProps} compact onSelect={onSelect} />);
       expect(screen.queryByTestId('account-card-select')).toBeNull();
@@ -123,23 +129,115 @@ describe('AccountCard', () => {
     });
   });
 
-  describe('acessibilidade', () => {
-    it('card selecionável tem cursor-pointer no label', () => {
+  describe('accessibility', () => {
+    it('a selectable card has cursor-pointer on the label', () => {
       const { container } = render(<AccountCard {...baseProps} onSelect={() => {}} />);
       const label = container.querySelector('label');
       expect(label?.className).toContain('cursor-pointer');
     });
 
-    it('card selecionado tem border highlight', () => {
+    it('a selected card has a highlighted border', () => {
       const { container } = render(<AccountCard {...baseProps} onSelect={() => {}} selected />);
       const label = container.querySelector('label');
       expect(label?.className).toContain('border-neutral-900');
     });
 
-    it('card não selecionado tem border neutro', () => {
+    it('an unselected card has a neutral border', () => {
       const { container } = render(<AccountCard {...baseProps} onSelect={() => {}} />);
       const label = container.querySelector('label');
       expect(label?.className).toContain('border-neutral-200');
+    });
+  });
+
+  describe('display telemetry', () => {
+    beforeEach(() => {
+      vi.mocked(reportAccountCardDisplay).mockClear();
+    });
+
+    it('reports the painted label', () => {
+      render(<AccountCard {...baseProps} email="canal@example.com" />);
+      expect(reportAccountCardDisplay).toHaveBeenCalledWith(expect.objectContaining({
+        provider: 'youtube',
+        shownLabel: 'Meu Canal',
+        secondaryLabel: 'canal@example.com',
+        compact: false,
+        thumbnailFailed: false,
+      }));
+    });
+
+    it('does not report compact cards', () => {
+      render(<AccountCard {...baseProps} compact />);
+      expect(reportAccountCardDisplay).not.toHaveBeenCalled();
+    });
+
+    it('reports a thumbnail load failure', () => {
+      render(<AccountCard {...baseProps} thumbnail="https://cdn.example/a.jpg" />);
+      fireEvent.error(screen.getByRole('img', { name: 'Meu Canal' }));
+      expect(reportAccountCardDisplay).toHaveBeenCalledWith(expect.objectContaining({
+        thumbnailFailed: true,
+        thumbnailUrl: 'https://cdn.example/a.jpg',
+      }));
+    });
+
+    it('measures the disconnect card through its ref', () => {
+      render(<AccountCard {...baseProps} />);
+      const input = vi.mocked(reportAccountCardDisplay).mock.calls.at(-1)?.[0];
+      expect(input?.cardEl).toBeInstanceOf(HTMLElement);
+      expect(input?.labelEl).toBeInstanceOf(HTMLHeadingElement);
+    });
+
+    it('measures the selectable card through its ref', () => {
+      render(<AccountCard {...baseProps} onSelect={() => {}} />);
+      const input = vi.mocked(reportAccountCardDisplay).mock.calls.at(-1)?.[0];
+      expect(input?.cardEl).toBeInstanceOf(HTMLElement);
+    });
+  });
+
+  describe('resize observation', () => {
+    function installObserver() {
+      const observe = vi.fn();
+      const disconnect = vi.fn();
+      let notify = (): void => {};
+      class ResizeObserverStub {
+        constructor(callback: () => void) {
+          notify = callback;
+        }
+        observe = observe;
+        unobserve = vi.fn();
+        disconnect = disconnect;
+      }
+      vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+      return { observe, disconnect, fire: () => notify() };
+    }
+
+    beforeEach(() => {
+      vi.mocked(reportAccountCardDisplay).mockClear();
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('publishes again when the card resizes', () => {
+      const observer = installObserver();
+      render(<AccountCard {...baseProps} />);
+      expect(observer.observe).toHaveBeenCalled();
+      const before = vi.mocked(reportAccountCardDisplay).mock.calls.length;
+      observer.fire();
+      expect(vi.mocked(reportAccountCardDisplay).mock.calls.length).toBe(before + 1);
+    });
+
+    it('disconnects the observer when the card unmounts', () => {
+      const observer = installObserver();
+      const view = render(<AccountCard {...baseProps} />);
+      view.unmount();
+      expect(observer.disconnect).toHaveBeenCalled();
+    });
+
+    it('skips observation when ResizeObserver is missing', () => {
+      vi.stubGlobal('ResizeObserver', undefined);
+      expect(() => render(<AccountCard {...baseProps} />)).not.toThrow();
+      expect(reportAccountCardDisplay).toHaveBeenCalledTimes(1);
     });
   });
 });
