@@ -67,6 +67,43 @@ describe('checkSchemaDrift', () => {
   });
 });
 
+describe('checkSchemaDrift per-column probes', () => {
+  // The combined probe says a column is missing (42703), then the per-column
+  // probes answer whatever the script says, in order.
+  function scriptedClient(perColumn: Array<string | null>): SupabaseClient {
+    let calls = 0;
+    return {
+      from: () => ({
+        select: () => ({
+          limit: async () => {
+            const code = calls === 0 ? '42703' : perColumn[calls - 1];
+            calls += 1;
+            return code === null ? { error: null } : { error: { code, message: 'probe' } };
+          },
+        }),
+      }),
+    } as unknown as SupabaseClient;
+  }
+
+  const ONE_TABLE = { scheduled_posts: ['faceless_material', 'full_lipsync'] };
+
+  it('leaves the table unverified when a per-column probe fails for a reason that is not drift', async () => {
+    const report = await checkSchemaDrift(scriptedClient(['08006', null]), ONE_TABLE);
+    expect(report).toEqual({ missing: {}, unverified: ['scheduled_posts'] });
+  });
+
+  it('reports no drift when every column answers fine after a transient combined failure', async () => {
+    const report = await checkSchemaDrift(scriptedClient([null, null]), ONE_TABLE);
+    expect(report).toEqual({ missing: {}, unverified: [] });
+  });
+
+  it('still names the confirmed missing column when another probe fails', async () => {
+    const report = await checkSchemaDrift(scriptedClient(['42703', '08006']), ONE_TABLE);
+    expect(report.missing).toEqual({ scheduled_posts: ['faceless_material'] });
+    expect(report.unverified).toEqual([]);
+  });
+});
+
 describe('describeDrift', () => {
   it('formats table.column pairs', () => {
     expect(describeDrift({ a: ['x', 'y'], b: ['z'] })).toBe('a.x, a.y, b.z');
