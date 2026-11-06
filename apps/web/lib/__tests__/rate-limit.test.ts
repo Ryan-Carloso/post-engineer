@@ -113,6 +113,12 @@ describe('rate-limit', () => {
       expect(RATE_LIMITS.instagramPost.name).toBe('instagram-post');
     });
 
+    it('gives video downloads their own bucket with more headroom than uploads', () => {
+      expect(RATE_LIMITS.videoDownload.name).toBe('video-download');
+      expect(RATE_LIMITS.videoDownload.name).not.toBe(RATE_LIMITS.mediaUpload.name);
+      expect(RATE_LIMITS.videoDownload.limit).toBeGreaterThan(RATE_LIMITS.mediaUpload.limit);
+    });
+
     it('caps cloned-voice previews at 10 per user per day', () => {
       expect(RATE_LIMITS.voiceClonePreview).toEqual({
         name: 'voice-clone-preview',

@@ -166,13 +166,14 @@ describe('POST /api/bluesky-connect', () => {
     expect(noPassword.status).toBe(400);
   });
 
-  it('rejects invalid credentials with 401 and saves nothing', async () => {
+  it('rejects invalid credentials with 422 + BLUESKY_CREDENTIAL_REJECTED (not 401) and saves nothing', async () => {
     mockSupabase();
     vi.mocked(loginToBluesky).mockRejectedValueOnce(
       Object.assign(new Error('Invalid Bluesky handle or app password.'), { name: 'BlueskyError' }),
     );
     const res = await POST(formRequest({ handle: 'wrong.bsky.social', appPassword: 'wrong' }));
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ success: false, code: 'BLUESKY_CREDENTIAL_REJECTED' });
   });
 
   it('connects: validates credential, encrypts password and saves social_accounts', async () => {
