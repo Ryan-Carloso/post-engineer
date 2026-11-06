@@ -24,6 +24,7 @@ export const ERROR_CODES = {
   INSUFFICIENT_TOKENS: 'INSUFFICIENT_TOKENS',
   RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
   VALIDATION_FAILED: 'VALIDATION_FAILED',
+  BLUESKY_CREDENTIAL_REJECTED: 'BLUESKY_CREDENTIAL_REJECTED',
   VOICE_UNAVAILABLE: 'VOICE_UNAVAILABLE',
   UNKNOWN_VOICE: 'UNKNOWN_VOICE',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
@@ -48,6 +49,7 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   INSUFFICIENT_TOKENS: 'You need {need} tokens, but only have {have}.',
   RATE_LIMIT_EXCEEDED: 'Too many video generation requests. Please try again later.',
   VALIDATION_FAILED: 'Request validation failed.',
+  BLUESKY_CREDENTIAL_REJECTED: 'Invalid Bluesky handle or app password.',
   VOICE_UNAVAILABLE: 'The persona’s voice is unavailable and there is no default voice for its language. Update the persona.',
   UNKNOWN_VOICE:
     'Unknown voice "{attempt}". Not a house voice and not one of your clones. Pick one from GET /api/persona/voices.',

@@ -25,7 +25,10 @@ interface PersonaPatchBody {
 
 type ParsePatchResult =
   | { ok: true; value: PersonaPatchBody }
-  | { ok: false; error: string };
+  // logMessage is set only where the error embeds user input: the body
+  // keeps the rejected value for the caller, the log line uses the stable
+  // template so PostHog groups by template, not one issue per input.
+  | { ok: false; error: string; logMessage?: string };
 
 export async function parsePatchBody(request: Request): Promise<ParsePatchResult> {
   let formData: FormData;
@@ -44,17 +47,29 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
   const photo = asFile(formData.get('photo'));
   const photoExtension = photoExtensionOf(photo);
   if (photo && !photoExtension) {
-    return { ok: false, error: `Unsupported photo format: ${photo.type}` };
+    return {
+      ok: false,
+      error: `Unsupported photo format: ${photo.type}`,
+      logMessage: 'Unsupported photo format.',
+    };
   }
 
   const language = optionalString(formData.get('language'));
   const videoAspect = optionalString(formData.get('videoAspect'));
   if (videoAspect !== null && !VALID_VIDEO_ASPECTS.includes(videoAspect as (typeof VALID_VIDEO_ASPECTS)[number])) {
-    return { ok: false, error: `Invalid videoAspect: ${videoAspect}. Use one of ${VALID_VIDEO_ASPECTS.join(', ')}.` };
+    return {
+      ok: false,
+      error: `Invalid videoAspect: ${videoAspect}. Use one of ${VALID_VIDEO_ASPECTS.join(', ')}.`,
+      logMessage: `Invalid videoAspect. Use one of ${VALID_VIDEO_ASPECTS.join(', ')}.`,
+    };
   }
   const videoLayout = optionalString(formData.get('videoLayout'));
   if (videoLayout !== null && !VIDEO_LAYOUTS.includes(videoLayout as (typeof VIDEO_LAYOUTS)[number])) {
-    return { ok: false, error: `Invalid videoLayout: ${videoLayout}. Use one of ${VIDEO_LAYOUTS.join(', ')}.` };
+    return {
+      ok: false,
+      error: `Invalid videoLayout: ${videoLayout}. Use one of ${VIDEO_LAYOUTS.join(', ')}.`,
+      logMessage: `Invalid videoLayout. Use one of ${VIDEO_LAYOUTS.join(', ')}.`,
+    };
   }
   const scriptPrompt = optionalString(formData.get('scriptPrompt'));
   // ctaText is the one field the user can also clear: a present but blank

@@ -88,8 +88,8 @@ describe('Bluesky — conectar conta na página de contas', () => {
 
   it('mostra erro quando a credencial é inválida, sem vazar a senha', () => {
     cy.intercept('POST', '/api/bluesky-connect', {
-      statusCode: 401,
-      body: { success: false, error: 'Invalid Bluesky handle or app password.' },
+      statusCode: 422,
+      body: { success: false, error: 'Invalid Bluesky handle or app password.', code: 'BLUESKY_CREDENTIAL_REJECTED' },
     }).as('blueskyConnectFail');
 
     cy.visit('/accounts');

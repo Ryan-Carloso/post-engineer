@@ -5,7 +5,7 @@ import { findRepoRoot } from '@/test/repo-root';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 
 //---------------
-// supabase/migrations/036_social-accounts-threads-provider.sql — the
+// supabase/migrations/037_social-accounts-threads-provider.sql — the
 // invariant the Threads OAuth callback depends on.
 //
 // GET /api/threads-auth/callback upserts provider='threads' into
@@ -28,7 +28,7 @@ const migrationPath = join(
   repoRoot,
   'supabase',
   'migrations',
-  '036_social-accounts-threads-provider.sql',
+  '037_social-accounts-threads-provider.sql',
 );
 
 function readSql(): string {
@@ -39,7 +39,7 @@ function checkProviders(sql: string): string[] {
   const match = /check \(provider in \(([^)]*)\)\)/.exec(sql);
   if (match === null) {
     throw new Error(
-      '036 must declare a provider check on social_accounts',
+      '037 must declare a provider check on social_accounts',
     );
   }
   return match[1]
@@ -47,7 +47,7 @@ function checkProviders(sql: string): string[] {
     .map((entry) => entry.trim().replace(/^'|'$/g, ''));
 }
 
-describe('supabase/migrations/036_social-accounts-threads-provider.sql', () => {
+describe('supabase/migrations/037_social-accounts-threads-provider.sql', () => {
   it('exists', () => {
     expect(existsSync(migrationPath)).toBe(true);
   });

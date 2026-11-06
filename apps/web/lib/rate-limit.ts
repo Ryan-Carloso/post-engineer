@@ -26,6 +26,10 @@ export const RATE_LIMITS = {
   youtubeUpload: { name: 'youtube-upload', limit: 5, windowMs: 60_000 },
   // Instagram media upload: writes up to 100MB to disk
   mediaUpload: { name: 'media-upload', limit: 10, windowMs: 60_000 },
+  // Video download proxy: a list page loads one thumbnail per row and a player
+  // issues a range request per seek, so playback needs far more headroom than
+  // an upload. Separate bucket so browsing never eats the upload budget.
+  videoDownload: { name: 'video-download', limit: 120, windowMs: 60_000 },
   // Voice clone registration: GPU/registry cost — stricter than media upload.
   voiceCloneCreate: { name: 'voice-clone-create', limit: 3, windowMs: 60 * 60 * 1000 },
   voiceCloneDenoisePreview: { name: 'voice-clone-denoise-preview', limit: 20, windowMs: 60 * 60 * 1000 },

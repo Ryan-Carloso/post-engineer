@@ -22,8 +22,9 @@ async function getHandler(request: Request, context: DownloadContext): Promise<N
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
 
-  // The proxy streams arbitrary-size bodies — rate-limit the heavy surface.
-  const limited = await applyRateLimit(request, RATE_LIMITS.mediaUpload, auth.userId);
+  // The proxy streams arbitrary-size bodies — rate-limit the heavy surface,
+  // with its own playback-sized budget (not the upload one).
+  const limited = await applyRateLimit(request, RATE_LIMITS.videoDownload, auth.userId);
   if (limited) return limited;
 
   const baseUrl = process.env.MONEYPRINT_API_URL?.replace(/\/+$/, '');

@@ -1,5 +1,5 @@
 -- ============================================================================
--- 036 — Threads in the social_accounts provider check.
+-- 037 — Threads in the social_accounts provider check.
 --
 -- GET /api/threads-auth/callback upserts provider='threads' into
 -- social_accounts, but production rejected the insert: the live

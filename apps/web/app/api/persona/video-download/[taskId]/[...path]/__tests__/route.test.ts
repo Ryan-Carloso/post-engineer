@@ -61,6 +61,19 @@ describe('GET /api/persona/video-download', () => {
     expect(response.status).toBe(429);
   });
 
+  it('rate-limits with the video download profile, not the upload one', async () => {
+    const { applyRateLimit, RATE_LIMITS } = await import('@/lib/rate-limit');
+    vi.mocked(applyRateLimit).mockClear();
+
+    await GET(new Request('https://app.test/api/persona/video-download/task-1/final-1.mp4'), {
+      params: Promise.resolve({ taskId: 'task-1', path: ['final-1.mp4'] }),
+    });
+
+    expect(applyRateLimit).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(applyRateLimit).mock.calls[0][1]).toBe(RATE_LIMITS.videoDownload);
+    expect(vi.mocked(applyRateLimit).mock.calls[0][1]).not.toBe(RATE_LIMITS.mediaUpload);
+  });
+
   it('streams through when the requested file exists upstream', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('video-bytes', {
       status: 200,
