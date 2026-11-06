@@ -186,7 +186,7 @@ describe('/api/google-oauth/callback', () => {
     sessionMock(true);
     serviceKeyMock(true);
     await GET(makeRequest('?code=c&state=s'));
-    expect(channelsList).toHaveBeenCalledWith({ part: ['snippet', 'statistics'], mine: true });
+    expect(channelsList).toHaveBeenCalledWith({ part: ['snippet', 'statistics'], mine: true }, { timeout: 15_000 });
     expect(upsertSocialAccount).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
