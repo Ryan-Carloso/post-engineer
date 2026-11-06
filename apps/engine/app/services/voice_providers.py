@@ -422,6 +422,20 @@ def chatterbox_tts(
                 logger.error(
                     f"chatterbox tts failed with status {response.status_code}: {body}"
                 )
+                # A 4xx means the request itself is wrong (bad voice, bad
+                # model, auth): retrying the identical request can never
+                # change the answer, so fail fast on the first attempt
+                # instead of burning 3 attempts before giving up. Transient
+                # client errors (408 request timeout, 429 rate limited) are
+                # excluded and keep the normal retry loop, matching
+                # elevenlabs_tts and openrouter_tts.
+                if (
+                    400 <= response.status_code < 500
+                    and response.status_code not in (408, 429)
+                ):
+                    return TtsResult(
+                        error=f"Chatterbox TTS failed after 1 attempt ({last_error or 'unknown error'})"
+                    )
                 continue
 
             with open(voice_file, "wb") as f:

@@ -387,7 +387,83 @@ class TestVoiceService(unittest.TestCase):
         self.assertIn("500", result.error or "")
         self.assertEqual(post.call_count, 3)
 
+    def test_chatterbox_tts_fails_fast_on_404(self):
+        """A 404 means the requested voice/model does not exist: retrying
+        the identical request can never change that answer, so Chatterbox
+        is asked exactly once and the error is returned immediately."""
 
+        class _FakeResponse:
+            status_code = 404
+            content = b""
+            text = "voice not found"
+
+        with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
+            app_config, "chatterbox", {"base_url": "http://localhost:4123/v1"}
+        ), patch.object(
+            vs.requests, "post", return_value=_FakeResponse()
+        ) as post:
+            voice_file = str(Path(tmp_dir) / "chatterbox.mp3")
+            result = vp.chatterbox_tts(
+                text="hi", voice="default", voice_file=voice_file
+            )
+        self.assertIsNone(result.sub_maker)
+        self.assertIn("404", result.error or "")
+        self.assertEqual(post.call_count, 1)
+
+    def test_chatterbox_tts_fails_fast_on_other_4xx(self):
+        """Any 4xx (auth, validation, bad request) is non-retryable: a
+        single request, then fail. 408 (request timeout) and 429 (rate
+        limited) are transient and keep retrying, matching elevenlabs_tts."""
+
+        for status_code in (400, 401, 403):
+            with self.subTest(status_code=status_code):
+                class _FakeResponse:
+                    pass
+
+                _FakeResponse.status_code = status_code
+                _FakeResponse.content = b""
+                _FakeResponse.text = "rejected"
+
+                with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
+                    app_config, "chatterbox", {"base_url": "http://localhost:4123/v1"}
+                ), patch.object(
+                    vs.requests, "post", return_value=_FakeResponse()
+                ) as post:
+                    voice_file = str(Path(tmp_dir) / "chatterbox.mp3")
+                    result = vp.chatterbox_tts(
+                        text="hi", voice="default", voice_file=voice_file
+                    )
+                self.assertIsNone(result.sub_maker)
+                self.assertIn(str(status_code), result.error or "")
+                self.assertEqual(post.call_count, 1)
+
+
+
+    def test_chatterbox_tts_retries_transient_408_and_429(self):
+        """408 (request timeout) and 429 (rate limited) are transient: retry
+        up to 3 times, matching elevenlabs_tts and openrouter_tts."""
+        for status_code in (408, 429):
+            with self.subTest(status_code=status_code):
+
+                class _FakeResponse:
+                    pass
+
+                _FakeResponse.status_code = status_code
+                _FakeResponse.content = b""
+                _FakeResponse.text = "try again"
+
+                with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
+                    app_config, "chatterbox", {"base_url": "http://localhost:4123/v1"}
+                ), patch.object(
+                    vs.requests, "post", return_value=_FakeResponse()
+                ) as post:
+                    voice_file = str(Path(tmp_dir) / "chatterbox.mp3")
+                    result = vp.chatterbox_tts(
+                        text="hi", voice="default", voice_file=voice_file
+                    )
+                self.assertIsNone(result.sub_maker)
+                self.assertIn(str(status_code), result.error or "")
+                self.assertEqual(post.call_count, 3)
 
     def test_chatterbox_success_is_returned_as_is(self):
         """A successful Chatterbox result is returned untouched.
