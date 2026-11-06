@@ -73,6 +73,19 @@ describe('social-accounts', () => {
       expect(result.providerAccountId).toBe('ig-1');
     });
 
+    it.each(['unknown', 'UNKNOWN', '', '  '])(
+      'refuses the placeholder provider account id %j without touching the database',
+      async (providerAccountId) => {
+        fromReturn.upsert.mockClear();
+        await expect(
+          upsertSocialAccount(mockSupabase as never, {
+            userId: 'u1', provider: 'youtube', providerAccountId, tokens: { access_token: 'tok' },
+          })
+        ).rejects.toThrow('without a real provider account id');
+        expect(fromReturn.upsert).not.toHaveBeenCalled();
+      },
+    );
+
     it('throws on supabase error', async () => {
       fromReturn.upsert.mockReturnValue({ select: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: null, error: { message: 'db fail' } }) });
 
