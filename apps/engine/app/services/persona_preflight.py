@@ -16,9 +16,15 @@ from app.services.lipsync_active import persona_lipsync_active
 def preflight_persona_image(task_id: str, params: VideoParams, max_bytes: int) -> None:
     """Download and validate the persona image when lip-sync will need it.
 
-    Raises ``longcat.LongCatError`` (reason already scrubbed of the source
-    URL by the SSRF-safe downloader) when the image is unusable; a job
+    Raises ``longcat.LongCatError`` when the image is unusable; the reason
+    has every URL replaced (``resolve_persona_image`` scrubs it). A job
     without an active lip-sync persona is untouched.
+
+    Intro-only jobs (``full_lipsync`` off) are preflighted too: a dead image
+    already failed them whenever the hook was measurable, so failing at the
+    start only moves that failure before the spend. The rare job whose hook
+    cannot be measured used to ship the normal video without ever touching
+    the image; it now fails and is refunded, like every other dead-image job.
     """
     if not persona_lipsync_active(params):
         return

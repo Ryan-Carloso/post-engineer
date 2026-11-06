@@ -121,3 +121,53 @@ class StartAbortsOnDeadImageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DownloadFailureReasonTests(unittest.TestCase):
+    """The stored/alerted reason never carries the image URL (host, path, token)."""
+
+    def _resolve_with(self, error: BaseException) -> str:
+        with tempfile.TemporaryDirectory() as task_dir:
+            with (
+                patch.object(full_lipsync.utils, "task_dir", return_value=task_dir),
+                patch.object(full_lipsync.ssrf, "download_public_file", side_effect=error),
+            ):
+                with self.assertRaises(longcat.LongCatError) as ctx:
+                    full_lipsync.resolve_persona_image("task-url", _params(), _MAX_BYTES)
+        return str(ctx.exception)
+
+    def test_a_network_error_message_loses_the_request_url(self):
+        reason = self._resolve_with(
+            OSError("Max retries exceeded with url https://img.test/p.png?token=abc123 (Caused by X)")
+        )
+        self.assertIn("persona image download failed", reason)
+        self.assertNotIn("img.test", reason)
+        self.assertNotIn("abc123", reason)
+        self.assertIn("<url>", reason)
+
+    def test_the_http_status_stays_readable(self):
+        self.assertIn("HTTP 404", self._resolve_with(OSError("HTTP 404")))
+
+    def test_a_rejected_unsafe_url_loses_the_url_too(self):
+        reason = self._resolve_with(full_lipsync.ssrf.UnsafeUrlError("blocked http://10.0.0.1/secret.png"))
+        self.assertIn("persona image download rejected", reason)
+        self.assertNotIn("10.0.0.1", reason)
+
+
+class IntroOnlyJobsArePreflightedTests(unittest.TestCase):
+    def test_a_dead_image_fails_an_intro_only_video_run_at_the_start(self):
+        params = _params()
+        self.assertFalse(params.full_lipsync)  # intro-only: no full lip-sync
+        failure = longcat.LongCatError("persona image download failed: HTTP 404")
+        with (
+            patch.object(persona_preflight, "preflight_persona_image", side_effect=failure),
+            patch.object(task_service.video_storage, "require_r2_configuration"),
+            patch.object(task_service, "generate_script", MagicMock()) as generate_script,
+            patch.object(task_service, "track_generation_started"),
+            patch.object(task_service, "_update_task"),
+            patch.object(task_service, "_fail_task") as fail_task,
+            patch.object(task_service, "cleanup_task_intermediates"),
+        ):
+            task_service.start("task-intro", params, stop_at="video")
+        generate_script.assert_not_called()
+        self.assertEqual(fail_task.call_args.kwargs["stage"], "persona_image")
