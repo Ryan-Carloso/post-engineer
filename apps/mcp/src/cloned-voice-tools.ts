@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import type { PostEngineerClient } from './client.js';
 import {
+  createClonedVoiceFromFile,
   createClonedVoiceFromUrl,
   deleteClonedVoice,
   getClonedVoice,
@@ -10,14 +11,27 @@ import {
 } from './cloned-voice-client.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 import { isEnglishLanguage, ONLY_ENGLISH_CLONE_MESSAGE } from './language.js';
-import { CLONE_PREVIEW_TEXT_MAX_CHARS } from './limits.js';
+import { CLONE_PREVIEW_TEXT_MAX_CHARS, MAX_CLONE_AUDIO_MB } from './limits.js';
 
 export const ListClonedVoicesShape = {};
 
 export const ListClonedVoicesSchema = z.object(ListClonedVoicesShape);
 
 export const CreateClonedVoiceShape = {
-  audioUrl: z.string().url().describe('HTTPS URL of a short reference recording (MP3, WAV, M4A, or WebM, max 20MB)'),
+  audioUrl: z
+    .string()
+    .url()
+    .optional()
+    .describe(
+      `HTTPS URL of a short reference recording (MP3, WAV, M4A, or WebM, max ${MAX_CLONE_AUDIO_MB}MB). Send exactly one of audioUrl or audioPath.`,
+    ),
+  audioPath: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      `Local file path of a short reference recording on this computer (.mp3, .wav, .m4a, or .webm, max ${MAX_CLONE_AUDIO_MB}MB). Send exactly one of audioUrl or audioPath.`,
+    ),
   language: z
     .string()
     .min(1)
@@ -29,7 +43,15 @@ export const CreateClonedVoiceShape = {
     .describe('Clean background noise from the recording before cloning (recommended true; false for studio audio)'),
 };
 
-export const CreateClonedVoiceSchema = z.object(CreateClonedVoiceShape);
+export const CREATE_CLONE_AUDIO_SOURCE_MESSAGE = 'Send exactly one of audioUrl or audioPath.';
+
+// The tool registers the raw shape (no object-level refine), so the handler
+// re-parses with this schema to enforce exactly one audio source.
+export const CreateClonedVoiceSchema = z
+  .object(CreateClonedVoiceShape)
+  .refine((args) => (args.audioUrl === undefined) !== (args.audioPath === undefined), {
+    message: CREATE_CLONE_AUDIO_SOURCE_MESSAGE,
+  });
 
 export const DeleteClonedVoiceShape = {
   cloneId: z.string().min(1).describe('Cloned voice id from list_cloned_voices'),
@@ -71,10 +93,23 @@ export async function handleListClonedVoices(
 
 export async function handleCreateClonedVoice(
   client: PostEngineerClient,
-  args: z.infer<typeof CreateClonedVoiceSchema>,
+  rawArgs: z.infer<typeof CreateClonedVoiceSchema>,
 ): Promise<McpToolResponse> {
   return handleLibraryCall(
-    () => createClonedVoiceFromUrl(client, args.audioUrl, args.language, args.consent, args.denoise),
+    () => {
+      const parsed = CreateClonedVoiceSchema.safeParse(rawArgs);
+      if (!parsed.success) {
+        throw new Error(parsed.error.issues.map((issue) => issue.message).join('; '));
+      }
+      const args = parsed.data;
+      if (args.audioPath !== undefined) {
+        return createClonedVoiceFromFile(client, args.audioPath, args.language, args.consent, args.denoise);
+      }
+      if (args.audioUrl !== undefined) {
+        return createClonedVoiceFromUrl(client, args.audioUrl, args.language, args.consent, args.denoise);
+      }
+      throw new Error(CREATE_CLONE_AUDIO_SOURCE_MESSAGE);
+    },
     'creating cloned voice',
     'Voice clone registration started',
   );

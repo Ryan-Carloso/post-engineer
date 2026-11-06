@@ -155,7 +155,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'create_cloned_voice',
-    'Register a voice clone from a short HTTPS audio URL (requires explicit consent).',
+    'Register a voice clone from a short HTTPS audio URL or a local audio file path (requires explicit consent).',
     CreateClonedVoiceShape,
     withTracking('create_cloned_voice', async (args) => {
       return handleCreateClonedVoice(apiClient, args);
