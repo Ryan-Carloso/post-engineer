@@ -1,6 +1,6 @@
 //---------------
 // Accounts — UI tests para a página /accounts.
-  // Testa o fluxo único de conexão, listas de contas e OAuth.
+// Testa o fluxo único de conexão, listas de contas e OAuth.
 //---------------
 
 describe('Accounts — UI', () => {
@@ -193,6 +193,52 @@ describe('Accounts — UI', () => {
     cy.contains('Canal Alpha').should('be.visible');
     cy.contains('@meu.perfil').should('be.visible');
     cy.get('[data-testid=account-card-remove]').should('not.exist');
+  });
+
+  // The disconnect click always opens a window.confirm first; cancelling
+  // keeps the card, and confirming calls DELETE /api/account. When the
+  // server rejects the delete, the section shows the localized error.
+  it('asks for confirmation before disconnecting; the server error surfaces in the section', () => {
+    const accounts = [
+      {
+        recordId: 'acc-yt-1',
+        channelId: 'ch-alpha',
+        channelName: 'Canal Alpha',
+        email: 'alpha@example.com',
+        connectedAt: 1_700_000_000_000,
+        lastUsed: 1_700_000_000_000,
+        provider: 'youtube',
+      },
+    ];
+
+    cy.intercept('GET', '/api/account', {
+      statusCode: 200,
+      body: { authenticated: true, accounts, message: 'ok' },
+    }).as('getAccounts');
+    cy.intercept('DELETE', '**/api/account*', {
+      statusCode: 200,
+      body: { success: false, error: 'rejected' },
+    }).as('disconnectAccount');
+
+    cy.visit('/accounts');
+    cy.wait('@getAccounts');
+
+    cy.window().then((win) => {
+      const confirmDialog = cy.stub(win, 'confirm');
+      confirmDialog.onFirstCall().returns(false);
+      confirmDialog.onSecondCall().returns(true);
+      cy.wrap(confirmDialog).as('confirmDialog');
+    });
+
+    cy.get('[data-testid=youtube-disconnect-button]').first().click();
+    cy.get('@confirmDialog').should('have.been.calledOnce');
+    // Canceled confirm: the card stays.
+    cy.contains('Canal Alpha').should('be.visible');
+
+    cy.get('[data-testid=youtube-disconnect-button]').first().click();
+    cy.wait('@disconnectAccount');
+    // Rejected delete: the localized error is shown, never a raw server body.
+    cy.get('[data-testid=disconnect-error]').should('be.visible').and('contain.text', 'Não foi possível desconectar');
   });
 
   it('mantém os painéis utilizáveis sem rolagem horizontal no celular', () => {
