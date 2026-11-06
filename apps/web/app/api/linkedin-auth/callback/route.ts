@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 
 //---------------
 // getSessionUserId — session user_id or null
@@ -81,14 +82,18 @@ async function getHandler(request: NextRequest) {
   // Step 4: member profile
   let memberId: string;
   let memberName: string | null;
+  let memberPicture: string | null;
   try {
     const { fetchLinkedInMemberProfile } = await import('@/lib/linkedin');
     const profile = await fetchLinkedInMemberProfile(accessToken);
     memberId = profile.id;
     memberName = profile.name;
+    memberPicture = profile.picture;
+    reportProfileFetched('linkedin', 'connect', { accountName: profile.name, pictureUrl: profile.picture });
   } catch (profileErr) {
     const msg = profileErr instanceof Error ? profileErr.message : String(profileErr);
     logger.error('[linkedin-auth/callback] profile fetch failed', profileErr);
+    reportProfileFetchFailed('linkedin', 'connect', profileErr);
     return oauthPopupResponse('linkedin-oauth-error', {
       error: `Failed to fetch LinkedIn profile: ${msg}`,
     });
@@ -120,7 +125,12 @@ async function getHandler(request: NextRequest) {
       provider: 'linkedin',
       providerAccountId: memberId,
       accountName: memberName,
-      accountMetadata: { kind: 'member', name: memberName },
+      accountMetadata: {
+        kind: 'member',
+        name: memberName,
+        picture: memberPicture,
+        profileSyncedAt: new Date().toISOString(),
+      },
       tokens: {
         access_token: accessToken,
         token_type: 'bearer',

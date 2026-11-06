@@ -4,7 +4,7 @@ import { toPublicAccountSafe, type PublicAccountItem, SOCIAL_PROVIDERS, type Soc
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { syncInstagramProfile } from '@/lib/instagram-profile-sync';
+import { syncAccountProfile } from '@/lib/account-profile-sync';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
@@ -30,23 +30,25 @@ async function getHandler(request?: Request) {
 
   try {
     const records = await listSocialAccounts(supabase, userId);
-    const accounts: PublicAccountItem[] = [];
-    for (const record of records) {
-      let effectiveRecord = record;
-      if (record.provider === 'instagram') {
-        try {
-          // Resyncs username/name/picture when stale or incomplete, so an
-          // Instagram rename or new picture shows up without reconnecting.
-          effectiveRecord = await syncInstagramProfile(supabase, userId, record);
-        } catch (error) {
-          logger.error('[ACCOUNT] Instagram profile sync failed, keeping the stored profile', error instanceof Error ? error.message : error, { recordId: record.id });
-        }
+    // Resync name/picture when stale or never synced, so a rename or new
+    // picture on the provider shows without reconnecting. Rows run in
+    // parallel (each read has its own timeout); a failed read keeps the
+    // stored profile.
+    const effectiveRecords = await Promise.all(records.map(async (record) => {
+      try {
+        return await syncAccountProfile(supabase, userId, record);
+      } catch (error) {
+        logger.error('[ACCOUNT] Profile sync failed, keeping the stored profile', error instanceof Error ? error.message : error, { recordId: record.id, provider: record.provider });
+        return record;
       }
+    }));
+    const accounts: PublicAccountItem[] = [];
+    for (const effectiveRecord of effectiveRecords) {
       const mapped = toPublicAccountSafe(effectiveRecord);
       if (mapped) {
         accounts.push(mapped);
       } else {
-        logger.error('[ACCOUNT] Registro com provider desconhecido ignorado', undefined, { recordId: record.id, provider: record.provider });
+        logger.error('[ACCOUNT] Registro com provider desconhecido ignorado', undefined, { recordId: effectiveRecord.id, provider: effectiveRecord.provider });
       }
     }
 

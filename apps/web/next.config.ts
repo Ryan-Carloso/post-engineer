@@ -59,6 +59,25 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: '**.cdninstagram.com',
       },
+      // Account avatars: new YouTube channels serve from googleusercontent,
+      // Instagram/Threads sometimes from fbcdn, plus Bluesky and LinkedIn.
+      // A host missing here makes next/image refuse the card picture.
+      {
+        protocol: 'https',
+        hostname: 'yt3.googleusercontent.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.fbcdn.net',
+      },
+      {
+        protocol: 'https',
+        hostname: 'cdn.bsky.app',
+      },
+      {
+        protocol: 'https',
+        hostname: 'media.licdn.com',
+      },
     ],
   },
   async redirects() {

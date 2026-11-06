@@ -94,21 +94,25 @@ export async function exchangeLinkedInCodeForToken(code: string, redirectUriOver
 }
 
 //---------------
-// fetchLinkedInMemberProfile — member id (sub) and name; required for the
-// author URN of the personal post
+// fetchLinkedInMemberProfile — member id (sub, the author URN of the
+// personal post), name and profile picture
 //---------------
-export async function fetchLinkedInMemberProfile(accessToken: string): Promise<{ id: string; name: string | null }> {
+export async function fetchLinkedInMemberProfile(
+  accessToken: string,
+): Promise<{ id: string; name: string | null; picture: string | null }> {
   const response = await fetch(`${LINKEDIN_API}/v2/userinfo`, {
     headers: linkedinHeaders(accessToken),
+    signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) {
     throw new LinkedinError(`LINKEDIN_PROFILE_FAILED: status ${response.status}`, response.status);
   }
-  const body = (await response.json()) as { sub?: string; name?: string };
+  const body = (await response.json()) as { sub?: string; name?: string; picture?: unknown };
   if (!body.sub) {
     throw new LinkedinError('LINKEDIN_PROFILE_FAILED: missing sub', 502);
   }
-  return { id: body.sub, name: body.name ?? null };
+  const picture = typeof body.picture === 'string' && body.picture !== '' ? body.picture : null;
+  return { id: body.sub, name: body.name ?? null, picture };
 }
 
 //---------------

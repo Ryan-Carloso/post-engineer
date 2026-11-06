@@ -186,7 +186,7 @@ function BlueskyAccountsSection(): ReactNode {
       description={t('accounts.blueskyDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
       count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="bluesky" name={account.handle} handle={account.handle} showDisconnect onDisconnect={() => { setDisconnectError(null); void handleDisconnect(t, disconnect, account.did, setDisconnectError); }} />)}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="bluesky" name={account.displayName ?? account.handle} handle={account.handle} thumbnail={account.avatar} showDisconnect onDisconnect={() => { setDisconnectError(null); void handleDisconnect(t, disconnect, account.did, setDisconnectError); }} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
@@ -219,7 +219,7 @@ function LinkedinAccountsSection(): ReactNode {
       description={t('accounts.linkedinDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
       count={accounts.length}
-      accounts={accounts.map((account) => <LinkedinAccountCard key={account.recordId} name={account.accountName || account.providerAccountId} isOrganization={account.providerAccountId.startsWith('urn:li:organization:')} showDisconnect onDisconnect={() => { setDisconnectError(null); void handleDisconnect(t, disconnect, account.providerAccountId, setDisconnectError); }} />)}
+      accounts={accounts.map((account) => <LinkedinAccountCard key={account.recordId} name={account.accountName || account.providerAccountId} thumbnail={account.profilePictureUrl} isOrganization={account.providerAccountId.startsWith('urn:li:organization:')} showDisconnect onDisconnect={() => { setDisconnectError(null); void handleDisconnect(t, disconnect, account.providerAccountId, setDisconnectError); }} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
@@ -302,9 +302,9 @@ function ThreadsAccountsSection(): ReactNode {
 // Card LinkedIn com distinção entre perfil e página.
 //---------------
 
-function LinkedinAccountCard({ name, isOrganization, showDisconnect, onDisconnect }: { name: string; isOrganization: boolean; showDisconnect?: boolean; onDisconnect?: () => void }): ReactNode {
+function LinkedinAccountCard({ name, thumbnail, isOrganization, showDisconnect, onDisconnect }: { name: string; thumbnail?: string; isOrganization: boolean; showDisconnect?: boolean; onDisconnect?: () => void }): ReactNode {
   const { t } = useI18n();
-  return <div className="relative"><AccountCard type="linkedin" name={name} showDisconnect={showDisconnect} onDisconnect={onDisconnect} /><span className="absolute top-2 right-2 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">{t(isOrganization ? 'accounts.pageBadge' : 'accounts.memberBadge')}</span></div>;
+  return <div className="relative"><AccountCard type="linkedin" name={name} thumbnail={thumbnail} showDisconnect={showDisconnect} onDisconnect={onDisconnect} /><span className="absolute top-2 right-2 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">{t(isOrganization ? 'accounts.pageBadge' : 'accounts.memberBadge')}</span></div>;
 }
 
 function BlueskyIcon(): ReactNode {

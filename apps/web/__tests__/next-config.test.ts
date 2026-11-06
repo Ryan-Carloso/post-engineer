@@ -58,3 +58,21 @@ describe('next.config redirects', () => {
     ]);
   });
 });
+
+describe('next.config images', () => {
+  it('allows every host the providers serve account avatars from', () => {
+    const hosts = (nextConfig.images?.remotePatterns ?? []).map((pattern) =>
+      pattern instanceof URL ? pattern.hostname : pattern.hostname,
+    );
+    for (const host of [
+      'yt3.ggpht.com',
+      'yt3.googleusercontent.com',
+      '**.cdninstagram.com',
+      '**.fbcdn.net',
+      'cdn.bsky.app',
+      'media.licdn.com',
+    ]) {
+      expect(hosts).toContain(host);
+    }
+  });
+});

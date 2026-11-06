@@ -15,6 +15,7 @@ export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
 
 // Stored/shown when Instagram returned no username for the account.
 export const INSTAGRAM_USERNAME_FALLBACK = 'instagram_user';
+export const YOUTUBE_CHANNEL_NAME_FALLBACK = 'YouTube Account';
 
 //---------------
 // Public shapes (no tokens) per provider — what /api/account returns
@@ -25,6 +26,8 @@ export interface BlueskyAccountData {
   recordId: string;
   did: string;
   handle: string;
+  displayName?: string;
+  avatar?: string;
   connectedAt: number;
   lastUsed: number;
 }
@@ -35,6 +38,7 @@ export interface LinkedinAccountData {
   providerAccountId: string;
   accountName: string | null;
   accountMetadata?: { kind?: 'member' | 'organization'; name?: string | null };
+  profilePictureUrl?: string;
   connectedAt: number;
   lastUsed: number;
 }
@@ -119,7 +123,7 @@ const youtubeDef: ProviderDef<true> = {
       provider: 'youtube',
       recordId: record.id,
       channelId: record.providerAccountId,
-      channelName: record.accountName || 'YouTube Account',
+      channelName: record.accountName || YOUTUBE_CHANNEL_NAME_FALLBACK,
       email: '',
       thumbnail: asOptionalString(metadata.thumbnail),
       customUrl: asOptionalString(metadata.customUrl),
@@ -157,6 +161,8 @@ const blueskyDef: ProviderDef<false> = {
       recordId: record.id,
       did: record.providerAccountId,
       handle: record.accountName ?? 'bluesky.user',
+      displayName: asOptionalString(record.accountMetadata.displayName),
+      avatar: asOptionalString(record.accountMetadata.avatar),
       connectedAt: createdAtTimestamp(record),
       lastUsed: lastUsedTimestamp(record),
     };
@@ -180,6 +186,7 @@ const linkedinDef: ProviderDef<true> = {
         kind,
         name: asOptionalString(metadata.name),
       },
+      profilePictureUrl: asOptionalString(metadata.picture),
       connectedAt: createdAtTimestamp(record),
       lastUsed: lastUsedTimestamp(record),
     };
