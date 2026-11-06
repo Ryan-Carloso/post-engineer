@@ -271,14 +271,16 @@ describe('Accounts — UI', () => {
     cy.visit('/accounts');
     cy.wait('@getAccounts');
 
-    cy.contains('section', 'LinkedIn').within(() => {
-      cy.contains('Ada Lovelace').should('be.visible');
-      cy.contains('Perfil').should('be.visible');
-      cy.contains('Acme').should('be.visible');
-      cy.contains('Página').should('be.visible');
+    // Names sit in a truncated heading. A parent with overflow:hidden clips
+    // them, so Cypress does not count the heading as visible.
+    cy.contains('section', 'LinkedIn').scrollIntoView().within(() => {
+      cy.contains('h3', 'Ada Lovelace').should('exist');
+      cy.contains('Perfil').should('exist');
+      cy.contains('h3', 'Acme').should('exist');
+      cy.contains('Página').should('exist');
     });
-    cy.contains('section', 'Threads').within(() => {
-      cy.contains('ana.threads').should('be.visible');
+    cy.contains('section', 'Threads').scrollIntoView().within(() => {
+      cy.contains('h3', 'ana.threads').should('exist');
     });
 
     cy.get('[data-testid=youtube-disconnect-button]').scrollIntoView().click();
