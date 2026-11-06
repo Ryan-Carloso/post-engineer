@@ -31,7 +31,7 @@ describe('fetchYouTubeChannel', () => {
 
     const channel = await fetchYouTubeChannel(client, { mine: true });
 
-    expect(list).toHaveBeenCalledWith({ part: ['snippet', 'statistics'], mine: true });
+    expect(list).toHaveBeenCalledWith({ part: ['snippet', 'statistics'], mine: true }, { timeout: 15_000 });
     expect(channel).toEqual({
       id: 'UC1',
       title: 'Chan',
@@ -46,7 +46,7 @@ describe('fetchYouTubeChannel', () => {
 
     const channel = await fetchYouTubeChannel(client, { id: 'UC2' });
 
-    expect(list).toHaveBeenCalledWith({ part: ['snippet', 'statistics'], id: ['UC2'] });
+    expect(list).toHaveBeenCalledWith({ part: ['snippet', 'statistics'], id: ['UC2'] }, { timeout: 15_000 });
     expect(channel).toEqual({ id: 'UC2', title: null, thumbnail: 'https://yt3.ggpht.com/s', customUrl: null, statistics: null });
   });
 

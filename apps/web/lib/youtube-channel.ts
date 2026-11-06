@@ -11,6 +11,9 @@ import { getYouTubeClient } from '@/lib/youtube';
 // never swallow.
 //---------------
 
+// gaxios `timeout` (ms): the request deadline for `channels.list`.
+export const YOUTUBE_CHANNEL_TIMEOUT_MS = 15_000;
+
 export interface YouTubeChannelProfile {
   id: string;
   title: string | null;
@@ -33,10 +36,17 @@ export async function fetchYouTubeChannel(
   channel: { mine: true } | { id: string },
 ): Promise<YouTubeChannelProfile | null> {
   const youtube = getYouTubeClient(authClient);
-  const response = await youtube.channels.list({
-    part: ['snippet', 'statistics'],
-    ...('mine' in channel ? { mine: true } : { id: [channel.id] }),
-  });
+  const response = await youtube.channels.list(
+    {
+      part: ['snippet', 'statistics'],
+      ...('mine' in channel ? { mine: true } : { id: [channel.id] }),
+    },
+    // Same bound as the other profile readers (Instagram/Threads/LinkedIn are
+    // 8-15s): without it a stalled Google response hangs the whole
+    // `Promise.all` in GET /api/account, and the resync comment promises a
+    // deadline per read.
+    { timeout: YOUTUBE_CHANNEL_TIMEOUT_MS },
+  );
   const item = response.data.items?.[0];
   const id = nonEmpty(item?.id);
   if (item === undefined || id === null) return null;
