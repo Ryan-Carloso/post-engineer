@@ -1,5 +1,7 @@
 import type { ClonedVoicePublicRow } from '@/lib/cloned-voices-types';
 import { narrowClonedVoiceRow } from '@/lib/cloned-voices-types';
+import { HttpStatusError } from '@/lib/errors';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 
 async function parseJson(response: Response): Promise<unknown> {
   try {
@@ -17,7 +19,7 @@ export async function fetchClonedVoices(): Promise<ClonedVoicePublicRow[]> {
       typeof data === 'object' && data !== null && 'error' in data && typeof data.error === 'string'
         ? data.error
         : 'Failed to load cloned voices.';
-    throw new Error(message);
+    throw new HttpStatusError(message, response.status);
   }
   if (
     typeof data !== 'object' ||
@@ -40,7 +42,7 @@ export async function fetchClonedVoice(cloneId: string): Promise<ClonedVoicePubl
       typeof data === 'object' && data !== null && 'error' in data && typeof data.error === 'string'
         ? data.error
         : 'Failed to load cloned voice.';
-    throw new Error(message);
+    throw new HttpStatusError(message, response.status);
   }
   const row =
     typeof data === 'object' && data !== null && 'voice' in data
@@ -73,7 +75,7 @@ export async function createClonedVoice(
       typeof data === 'object' && data !== null && 'error' in data && typeof data.error === 'string'
         ? data.error
         : 'Could not create voice clone.';
-    throw new Error(message);
+    throw new HttpStatusError(message, response.status);
   }
   const row =
     typeof data === 'object' && data !== null && 'voice' in data
@@ -95,7 +97,7 @@ export async function deleteClonedVoice(cloneId: string): Promise<void> {
       typeof data === 'object' && data !== null && 'error' in data && typeof data.error === 'string'
         ? data.error
         : 'Could not delete cloned voice.';
-    throw new Error(message);
+    throw new HttpStatusError(message, response.status);
   }
 }
 
@@ -120,6 +122,7 @@ export async function fetchDenoisePreview(
       body: formData,
     });
     if (!response.ok || !(response.headers.get('content-type') ?? '').startsWith('audio/')) {
+      if (!response.ok) notifyIfSessionExpired(response);
       const data = await parseJson(response);
       const error =
         typeof data === 'object' && data !== null && 'error' in data && typeof data.error === 'string'

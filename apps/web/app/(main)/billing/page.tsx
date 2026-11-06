@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { fetchTokenBalance, type TokenBalance } from '@/lib/token-balance';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import type { TokenPackId } from '@/lib/billing';
 import { TokenPackCards, EnterpriseCard, packActionClassName } from '@/components/ui/token-pack-cards';
 import { CheckoutCancelDialog } from '@/components/ui/checkout-cancel-dialog';
@@ -150,7 +151,9 @@ const BillingPacks = () => {
     setLoading(packId); setError(null);
     try {
       const response = await fetch('/api/billing/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ packId }) });
-      const data: unknown = await response.json();
+      // Notify before parsing: a non-JSON 401 body must still redirect.
+      if (!response.ok) notifyIfSessionExpired(response);
+      const data: unknown = await response.json().catch(() => null);
       const result = typeof data === 'object' && data !== null ? data as { url?: unknown; error?: unknown } : {};
       if (!response.ok || typeof result.url !== 'string') { setError(typeof result.error === 'string' ? result.error : t('pricing.checkoutError')); return; }
       router.push(result.url);

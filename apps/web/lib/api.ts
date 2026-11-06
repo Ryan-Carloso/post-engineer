@@ -18,6 +18,8 @@ import type {
 } from '@/lib/types';
 import { isVoiceOption } from './voice-catalog';
 import { logger } from '@/lib/logger';
+import { HttpStatusError } from '@/lib/errors';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import type { PublishLink } from '@/lib/publish-links';
 import { narrowGeneration, narrowProgressHistory, narrowPublishLinks, type GenerationFacts, type ProgressHistoryEntry } from './slot-detail';
 import { narrowScriptAngle } from './script-angle';
@@ -26,7 +28,6 @@ import type { PersonaRecord } from './persona-record';
 // Re-exported so existing import sites (`@/lib/api`) keep working.
 export type { ProgressHistoryEntry };
 export type { PersonaRecord };
-
 
 //---------------
 // API — typed fetch clients
@@ -63,7 +64,7 @@ async function fetchServerAccounts(): Promise<ServerAccountPayload> {
   try {
     const response = await fetch('/api/account');
     if (!response.ok) {
-      throw new Error(`Account request failed with status ${response.status}`);
+      throw new HttpStatusError(`Account request failed with status ${response.status}`, response.status);
     }
     const data: ServerAccountPayload = await response.json();
     return data;
@@ -98,6 +99,7 @@ export interface BlueskyAccountResponse {
 
 async function createPersona(formData: FormData): Promise<CreatePersonaResult> {
   const response = await fetch('/api/persona', { method: 'POST', body: formData });
+  notifyIfSessionExpired(response);
   const data = (await response.json()) as CreatePersonaResult;
   // The server only sends string arrays here, but narrow defensively: a
   // non-string entry would break the i18n warning mapper downstream.
@@ -124,13 +126,15 @@ async function generatePersonaAvatar(prompt: string): Promise<GeneratePersonaAva
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt }),
   });
+  notifyIfSessionExpired(response);
   const data: GeneratePersonaAvatarResult = await response.json();
   return data;
 }
 
 async function fetchVoices(): Promise<VoiceOption[]> {
   const response = await fetch('/api/persona/voices');
-  const data: unknown = await response.json();
+  // Guarded: a non-JSON error page must still surface the status.
+  const data: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
     const message =
@@ -140,7 +144,7 @@ async function fetchVoices(): Promise<VoiceOption[]> {
       typeof data.error === 'string'
         ? data.error
         : 'Failed to fetch voices.';
-    throw new Error(message);
+    throw new HttpStatusError(message, response.status);
   }
 
   if (
@@ -159,7 +163,7 @@ async function fetchVoices(): Promise<VoiceOption[]> {
 async function fetchPersonaList(): Promise<PersonaRecord[]> {
   const response = await fetch('/api/persona/list');
   if (!response.ok) {
-    throw new Error(`Persona list request failed with status ${response.status}`);
+    throw new HttpStatusError(`Persona list request failed with status ${response.status}`, response.status);
   }
   const data: { authenticated: boolean; personas: PersonaRecord[] } =
     await response.json();
@@ -231,6 +235,7 @@ export async function fetchDeletePreview(personaId: string): Promise<DeletePrevi
     `/api/persona/delete-preview?personaId=${encodeURIComponent(personaId)}`,
   );
   if (!response.ok) {
+    notifyIfSessionExpired(response);
     // Surface the server's structured error (code/error) so the UI can
     // distinguish e.g. PERSONA_NOT_FOUND from a transient 500.
     const parsed = await parseErrorResponse(response, `Preview request failed (${response.status}).`);
@@ -249,6 +254,7 @@ export async function deletePersona(personaId: string): Promise<DeletePersonaRes
     { method: 'DELETE' },
   );
   if (!response.ok) {
+    notifyIfSessionExpired(response);
     const parsed = await parseErrorResponse(response, `Delete request failed (${response.status}).`);
     return { success: false, error: parsed.error, code: parsed.code };
   }
@@ -278,6 +284,7 @@ export async function updatePersona(
     { method: 'PATCH', body: formData },
   );
   if (!response.ok) {
+    notifyIfSessionExpired(response);
     const parsed = await parseErrorResponse(response, `Update request failed (${response.status}).`);
     return { success: false, error: parsed.error };
   }
@@ -339,7 +346,7 @@ async function fetchPersonaImages(personaId: string): Promise<PersonaImageRecord
   // paths do — a generic status message is less actionable.
   const serverError = data && typeof data.error === 'string' ? data.error : null;
   if (!response.ok) {
-    throw new Error(serverError ?? `Persona images request failed with status ${response.status}`);
+    throw new HttpStatusError(serverError ?? `Persona images request failed with status ${response.status}`, response.status);
   }
   if (!data || data.success !== true || !Array.isArray(data.images)) {
     throw new Error(serverError ?? 'Persona images request returned an unexpected payload.');
@@ -410,6 +417,7 @@ async function parseImageMutationResult(
   const data: { success?: unknown; error?: unknown; warnings?: unknown } | null =
     await response.json().catch(() => null);
   if (!response.ok || !data || data.success !== true) {
+    if (!response.ok) notifyIfSessionExpired(response);
     return {
       success: false,
       error:
@@ -629,6 +637,7 @@ export async function disconnectAccount(
     `/api/account?provider=${encodeURIComponent(provider)}&providerAccountId=${encodeURIComponent(providerAccountId)}`,
     { method: 'DELETE' },
   );
+  notifyIfSessionExpired(response);
   return response.json();
 }
 
@@ -736,8 +745,8 @@ interface SlotRow {
 
 async function fetchSchedules(): Promise<ScheduleConfig[]> {
   const response = await fetch('/api/schedule');
-  const data: { success: boolean; schedules?: ScheduleRow[] } = await response.json();
-  if (!response.ok || !data.success) throw new Error('Failed to fetch schedules');
+  const data: { success: boolean; schedules?: ScheduleRow[] } | null = await response.json().catch(() => null);
+  if (!response.ok || !data?.success) throw new HttpStatusError('Failed to fetch schedules', response.status);
   return (data.schedules ?? []).map(mapSchedule);
 }
 
@@ -768,8 +777,8 @@ function mapSlot(row: SlotRow): ScheduledSlot {
 async function fetchScheduleStatus(limit?: number): Promise<{ upcoming: ScheduledSlot[]; recent: ScheduledSlot[] }> {
   const url = typeof limit === 'number' ? `/api/schedule/status?limit=${limit}` : '/api/schedule/status';
   const response = await fetch(url);
-  const data: ScheduleStatusPayload = await response.json();
-  if (!response.ok || !data.success) throw new Error('Failed to fetch schedule status');
+  const data: ScheduleStatusPayload | null = await response.json().catch(() => null);
+  if (!response.ok || !data?.success) throw new HttpStatusError('Failed to fetch schedule status', response.status);
   return {
     upcoming: (data.upcoming ?? []).map(mapSlot),
     recent: (data.recent ?? []).map(mapSlot),
@@ -784,78 +793,15 @@ export function useSchedulesQuery() {
   });
 }
 
-export interface ApiKeyItem {
-  id: string;
-  name: string;
-  keyPrefix: string;
-  personaIds: string[] | null;
-  createdAt: string;
-  lastUsedAt: string | null;
-  revokedAt: string | null;
-}
-
-export async function fetchApiKeys(): Promise<ApiKeyItem[]> {
-  const response = await fetch('/api/api-keys');
-  if (!response.ok) throw new Error('Failed to fetch API keys');
-  const data = await response.json();
-  return data.keys ?? [];
-}
-
-export interface CreateApiKeyInput {
-  name: string;
-  personaIds?: string[] | null;
-}
-
-export async function createApiKey(input: CreateApiKeyInput): Promise<{
-  id: string;
-  name: string;
-  key: string;
-  keyPrefix: string;
-  personaIds: string[] | null;
-  createdAt: string;
-}> {
-  const response = await fetch('/api/api-keys', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: input.name, personaIds: input.personaIds ?? null }),
-  });
-  if (!response.ok) throw new Error('Failed to create API key');
-  return response.json();
-}
-
-export async function revokeApiKey(id: string): Promise<void> {
-  const response = await fetch(`/api/api-keys/${id}`, {
-    method: 'DELETE',
-  });
-  if (!response.ok) throw new Error('Failed to revoke API key');
-}
-
-export function useApiKeysQuery() {
-  return useQuery<ApiKeyItem[]>({
-    queryKey: ['user-api-keys'],
-    queryFn: fetchApiKeys,
-  });
-}
-
-export function useCreateApiKeyMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: CreateApiKeyInput) => createApiKey(input),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['user-api-keys'] });
-    },
-  });
-}
-
-export function useRevokeApiKeyMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => revokeApiKey(id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['user-api-keys'] });
-    },
-  });
-}
+export {
+  createApiKey,
+  fetchApiKeys,
+  revokeApiKey,
+  useApiKeysQuery,
+  useCreateApiKeyMutation,
+  useRevokeApiKeyMutation,
+} from './api-keys-client';
+export type { ApiKeyItem, CreateApiKeyInput } from './api-keys-client';
 
 export function useScheduleStatusQuery(limit?: number) {
   return useQuery<{ upcoming: ScheduledSlot[]; recent: ScheduledSlot[] }>({
@@ -888,8 +834,8 @@ async function fetchVideoGenerations(limit?: number): Promise<VideoGeneration[]>
       ? `/api/persona/video-generations?limit=${limit}`
       : '/api/persona/video-generations';
   const response = await fetch(url);
-  const data: { success?: boolean; generations?: VideoGeneration[] } = await response.json();
-  if (!response.ok || !data.success) throw new Error('Failed to fetch video generations');
+  const data: { success?: boolean; generations?: VideoGeneration[] } | null = await response.json().catch(() => null);
+  if (!response.ok || !data?.success) throw new HttpStatusError('Failed to fetch video generations', response.status);
   return data.generations ?? [];
 }
 
@@ -920,7 +866,7 @@ async function parseJsonBody<T>(response: Response): Promise<T | null> {
 async function throwForBadResponse(response: Response, fallback: string): Promise<never> {
   const data = await parseJsonBody<{ error?: string }>(response);
   const message = typeof data?.error === 'string' && data.error.length > 0 ? data.error : fallback;
-  throw new Error(message);
+  throw new HttpStatusError(message, response.status);
 }
 
 //---------------

@@ -82,6 +82,23 @@ describe('fetchMetrics', () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
     await expect(fetchMetrics(query)).resolves.toEqual({ success: false, error: 'offline' });
   });
+
+  it('keeps the failure contract on a 401 but notifies the session-expiry handler once', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('window', { location: { pathname: '/metrics', search: '', assign } });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: false }), { status: 401 })));
+    await expect(fetchMetrics(query)).resolves.toEqual({ success: false, error: 'status 401' });
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledWith('/login?next=%2Fmetrics');
+  });
+
+  it('does not notify on non-401 failures', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('window', { location: { pathname: '/metrics', search: '', assign } });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 500 })));
+    await expect(fetchMetrics(query)).resolves.toEqual({ success: false, error: 'status 500' });
+    expect(assign).not.toHaveBeenCalled();
+  });
 });
 
 describe('parseMetricsQuery / metricsSearchParams', () => {
