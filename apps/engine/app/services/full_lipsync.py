@@ -33,6 +33,7 @@ from typing import Callable, Sequence
 from app.config import config
 from app.models.schema import VideoLayout, VideoParams
 from app.services import longcat, persona_image
+from app.services.analytics import scrub_error_text
 from app.services.lipsync_active import persona_lipsync_active
 from app.utils import ssrf, utils
 
@@ -222,6 +223,15 @@ def build_concat_command(
     ]
 
 
+def _download_failure_reason(exc: BaseException) -> str:
+    """The downloader's failure text with every URL replaced.
+
+    A requests error echoes the request URL (host, path, signed token), and
+    the reason is stored on the task and sent to Discord and PostHog.
+    """
+    return scrub_error_text(re.sub(r"https?://\S+", "<url>", str(exc)), max_chars=200)
+
+
 def resolve_persona_image(
     task_id: str,
     params: VideoParams,
@@ -264,9 +274,13 @@ def resolve_persona_image(
                 tls_verify=config.app.get("tls_verify", True),
             )
         except ssrf.UnsafeUrlError as exc:
-            raise longcat.LongCatError(f"persona image download rejected: {exc}") from exc
+            raise longcat.LongCatError(
+                f"persona image download rejected: {_download_failure_reason(exc)}"
+            ) from exc
         except OSError as exc:
-            raise longcat.LongCatError(f"persona image download failed: {exc}") from exc
+            raise longcat.LongCatError(
+                f"persona image download failed: {_download_failure_reason(exc)}"
+            ) from exc
     return image_path
 
 
