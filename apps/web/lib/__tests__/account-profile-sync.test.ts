@@ -120,8 +120,9 @@ describe('syncAccountProfile', () => {
   });
 
   it('returns an unknown-provider row untouched without consulting the sources map', async () => {
-    // social_accounts.provider is an unconstrained text column; the route's
-    // registry drop+log owns these rows, not the resync.
+    // social_accounts.provider is check-constrained to SOCIAL_PROVIDERS
+    // (migration 037); rows outside the registry can only predate it, and
+    // the route's registry drop+log owns these rows, not the resync.
     const rec = record({ provider: 'mastodon' as never }, { profileSyncedAt: STALE });
     expect(await syncAccountProfile(supabase, 'u1', rec, { now: () => NOW })).toBe(rec);
     expect(sources.instagram.applies).not.toHaveBeenCalled();

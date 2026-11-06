@@ -7,8 +7,9 @@
 -- no versioned migration ever created (drift — it holds only the
 -- four pre-Threads providers), while 034 added 'threads' only to the
 -- post_metrics check. Drop and re-add the constraint with the full
--- provider list; a no-op on databases that never had the drifted
--- constraint. Idempotent.
+-- provider list; on databases built from the versioned chain (which
+-- never had the check) the drop is a no-op and the add introduces it
+-- for the first time. Idempotent.
 -- ============================================================================
 
 alter table public.social_accounts
