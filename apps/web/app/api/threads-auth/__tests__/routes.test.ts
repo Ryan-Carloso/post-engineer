@@ -39,10 +39,10 @@ function session(user: { id: string } | null): void {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubEnv('INSTAGRAM_CLIENT_ID', 'cid');
-  vi.stubEnv('INSTAGRAM_CLIENT_SECRET', 'secret');
-  vi.stubEnv('THREADS_CLIENT_ID', undefined);
-  vi.stubEnv('THREADS_CLIENT_SECRET', undefined);
+  vi.stubEnv('INSTAGRAM_CLIENT_ID', undefined);
+  vi.stubEnv('INSTAGRAM_CLIENT_SECRET', undefined);
+  vi.stubEnv('THREADS_CLIENT_ID', 'tcid');
+  vi.stubEnv('THREADS_CLIENT_SECRET', 'tsecret');
   session({ id: 'user-1' });
 });
 
@@ -58,11 +58,13 @@ describe('GET /api/threads-auth/start', () => {
     expect((await startGET(new NextRequest(START))).status).toBe(401);
   });
 
-  it('500s when the Instagram app credentials are missing', async () => {
-    vi.stubEnv('INSTAGRAM_CLIENT_SECRET', undefined);
+  it('500s when the Threads credentials are missing even with Instagram credentials set', async () => {
+    vi.stubEnv('INSTAGRAM_CLIENT_ID', 'cid');
+    vi.stubEnv('INSTAGRAM_CLIENT_SECRET', 'secret');
+    vi.stubEnv('THREADS_CLIENT_SECRET', undefined);
     const response = await startGET(new NextRequest(START));
     expect(response.status).toBe(500);
-    expect((await response.json()).error).toContain('INSTAGRAM_CLIENT_SECRET');
+    expect((await response.json()).error).toContain('THREADS_CLIENT_SECRET');
   });
 });
 

@@ -193,11 +193,11 @@ export async function buildOAuthConnectUrl(
       return { ok: true, authUrl, state, nonce };
     }
     if (provider === 'threads') {
-      if (!process.env.INSTAGRAM_CLIENT_ID || !process.env.INSTAGRAM_CLIENT_SECRET) {
+      if (!process.env.THREADS_CLIENT_ID || !process.env.THREADS_CLIENT_SECRET) {
         return {
           ok: false,
           error:
-            'Threads uses the Instagram app credentials, which are not configured (INSTAGRAM_CLIENT_ID / INSTAGRAM_CLIENT_SECRET).',
+            'Threads credentials are not configured (THREADS_CLIENT_ID / THREADS_CLIENT_SECRET).',
         };
       }
       const { buildThreadsAuthorizationUrl } = await import('./threads');
