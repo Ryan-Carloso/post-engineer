@@ -210,6 +210,10 @@ describe('AccountCard', () => {
       return { observe, disconnect, fire: () => notify() };
     }
 
+    beforeEach(() => {
+      vi.mocked(reportAccountCardDisplay).mockClear();
+    });
+
     afterEach(() => {
       vi.unstubAllGlobals();
     });
@@ -233,7 +237,7 @@ describe('AccountCard', () => {
     it('skips observation when ResizeObserver is missing', () => {
       vi.stubGlobal('ResizeObserver', undefined);
       expect(() => render(<AccountCard {...baseProps} />)).not.toThrow();
-      expect(reportAccountCardDisplay).toHaveBeenCalled();
+      expect(reportAccountCardDisplay).toHaveBeenCalledTimes(1);
     });
   });
 });
