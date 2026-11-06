@@ -5,21 +5,20 @@
 // picture URLs (Instagram/Threads `oe`) stop loading once they expire.
 // GET /api/account calls this per row: it rereads the provider when the row
 // was never synced, the last sync is older than ACCOUNT_PROFILE_SYNC_MAX_AGE_MS,
-// or the stored picture URL expired. A failed read stamps profileSyncFailedAt
-// and is not retried for ACCOUNT_PROFILE_SYNC_FAILED_BACKOFF_MS, so a row
-// whose grant stays broken costs one provider read per hour, not one per
-// list. Readers live in account-profile-sources.ts.
+// or the stored picture URL expired. A failed read is reported and rethrown
+// with no write: the next list retries the row, so a fixed account shows up
+// on the next page load instead of waiting out a backoff window.
+// Readers live in account-profile-sources.ts.
 //---------------
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getSocialAccountTokens, updateSocialAccountMetadata, type SocialAccountRecord } from './social-accounts';
+import { updateSocialAccountMetadata, type SocialAccountRecord } from './social-accounts';
 import { PROFILE_SOURCES, type FetchedProfile } from './account-profile-sources';
 import { pictureUrlExpired } from './account-display-diagnostics';
 import { reportProfileFetched, reportProfileFetchFailed } from './account-profile-telemetry';
 import { logger } from './logger';
 
 export const ACCOUNT_PROFILE_SYNC_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-export const ACCOUNT_PROFILE_SYNC_FAILED_BACKOFF_MS = 60 * 60 * 1000;
 
 export interface AccountProfileSyncOptions {
   now?: () => Date;
@@ -29,16 +28,8 @@ export interface AccountProfileSyncOptions {
 // profileNeedsSync — pure decision. A row that was synced recently is left
 // alone even if it has no picture (the account may simply have none), so a
 // picture-less account costs one provider read per day, not one per list.
-// A recent failure suppresses the retry even for a never-synced or stale
-// row: the failure stamp is the freshest signal, and a permanently broken
-// grant must not pay a token refresh plus a provider call on every list.
 //---------------
 export function profileNeedsSync(record: SocialAccountRecord, pictureKey: string, now: Date): boolean {
-  const failedAt = record.accountMetadata.profileSyncFailedAt;
-  if (typeof failedAt === 'string') {
-    const failedAtMs = Date.parse(failedAt);
-    if (Number.isFinite(failedAtMs) && now.getTime() - failedAtMs < ACCOUNT_PROFILE_SYNC_FAILED_BACKOFF_MS) return false;
-  }
   const syncedAt = record.accountMetadata.profileSyncedAt;
   if (typeof syncedAt !== 'string') return true;
   const syncedAtMs = Date.parse(syncedAt);
@@ -51,8 +42,6 @@ export function profileNeedsSync(record: SocialAccountRecord, pictureKey: string
 //---------------
 // mergeProfileMetadata — fetched fields over stored ones; a field the
 // provider did not return (null/undefined) keeps the stored value.
-// A successful sync clears the failure marker, so the next stale cycle
-// retries instead of carrying a dead stamp.
 //---------------
 export function mergeProfileMetadata(
   stored: Record<string, unknown>,
@@ -64,18 +53,14 @@ export function mergeProfileMetadata(
     if (value !== null && value !== undefined) merged[key] = value;
   }
   merged.profileSyncedAt = now.toISOString();
-  delete merged.profileSyncFailedAt;
   return merged;
 }
 
 //---------------
 // syncAccountProfile — returns the record to render: the updated one, or the
 // original when no sync is needed. Throws on credential/provider/DB failure
-// (reported to PostHog first); the failure time is persisted first, so the
-// next list backs off instead of retrying the same broken grant — the
-// caller logs and keeps the stored record. A marker write that itself
-// fails is logged, never a second throw: the original error is the one
-// the caller must see.
+// (reported to PostHog first); nothing is written on failure, so the next
+// list retries the row — the caller logs and keeps the stored record.
 //---------------
 export async function syncAccountProfile(
   supabase: SupabaseClient,
@@ -99,26 +84,6 @@ export async function syncAccountProfile(
     fetched = await source.fetch(supabase, userId, record);
   } catch (error) {
     reportProfileFetchFailed(record.provider, 'sync', error);
-    try {
-      // Re-read the row instead of spreading the pre-read snapshot: a
-      // concurrent request may have repaired the row (or a reconnect may
-      // have rewritten it) during the provider read, and writing the
-      // snapshot back would revert that work and freeze the row for an
-      // hour. The fresh metadata keeps any concurrent success; only the
-      // failure marker is added. A re-read that itself fails is logged
-      // below and the original error is still the one rethrown.
-      const { account } = await getSocialAccountTokens(supabase, userId, record.provider, record.providerAccountId);
-      await updateSocialAccountMetadata(supabase, userId, record.provider, record.providerAccountId, {
-        ...account.accountMetadata,
-        profileSyncFailedAt: now.toISOString(),
-      });
-    } catch (writeError) {
-      logger.error(
-        '[ACCOUNT] Profile sync failure marker not saved',
-        writeError instanceof Error ? writeError.message : writeError,
-        { recordId: record.id, provider: record.provider },
-      );
-    }
     throw error;
   }
 
