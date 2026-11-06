@@ -529,14 +529,8 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('instagram');
   });
 
-  it('bluesky connect dialog does NOT log the user out when the credential 401s', async () => {
-    const notify = vi.mocked(notifyIfSessionExpired);
-    notify.mockClear();
-    // /api/bluesky-connect overloads 401: a rejected app password is reported
-    // with the same status as a dead hub session, so this dialog must show
-    // the credential error locally instead of redirecting (cypress spec
-    // bluesky-connect.cy.ts: mostra erro quando a credencial é inválida).
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401, json: async () => ({ success: false, error: 'Invalid Bluesky handle or app password.' }) })));
+  async function submitBlueskyConnect(status: number, body: unknown): Promise<void> {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status, json: async () => body })));
     render(<AccountsPage />, { wrapper: createWrapper() });
     // Section order: youtube, instagram, bluesky, linkedin, threads.
     fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[2]);
@@ -544,7 +538,24 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     fireEvent.change(screen.getByTestId('bluesky-password-input'), { target: { value: 'app-password' } });
     fireEvent.click(screen.getByTestId('bluesky-connect-button'));
     expect(await screen.findByTestId('bluesky-connect-error')).toBeInTheDocument();
-    expect(notify).not.toHaveBeenCalled();
+  }
+
+  it('bluesky connect dialog does NOT log the user out when the credential is rejected (422)', async () => {
+    const notify = vi.mocked(notifyIfSessionExpired);
+    notify.mockClear();
+    await submitBlueskyConnect(422, { success: false, code: 'BLUESKY_CREDENTIAL_REJECTED' });
+    // The 422 response still goes through the session-expiry check, which
+    // only acts on 401 (pinned in lib/__tests__/session-expiry.test.tsx).
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(notify).mock.calls[0][0]).toMatchObject({ status: 422 });
+  });
+
+  it('bluesky connect dialog reports a dead hub session (401) to the session-expiry handler', async () => {
+    const notify = vi.mocked(notifyIfSessionExpired);
+    notify.mockClear();
+    await submitBlueskyConnect(401, { success: false, error: 'Authentication required.' });
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(notify).mock.calls[0][0]).toMatchObject({ status: 401 });
   });
 
   it('disconnects a Bluesky account using its did', async () => {

@@ -6,6 +6,7 @@ import { encryptTokens } from '@/lib/token-crypto';
 import { BlueskyError, loginToBluesky } from '@/lib/bluesky';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { apiErrorResponse } from '@/lib/api-error';
+import { ERROR_CODES, errorMessage } from '@/lib/error-codes';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { fetchBlueskyPublicProfile } from '@/lib/bluesky-profile';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
@@ -55,7 +56,7 @@ function errorResponse(
   status: number,
   error: string,
   route: string,
-  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown> },
+  options?: { cause?: unknown; code?: string; logMessage?: string; metadata?: Record<string, unknown> },
 ): NextResponse {
   return apiErrorResponse(status, error, { route, ...options });
 }
@@ -157,7 +158,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
       (error instanceof BlueskyError && error.code === 'invalid_credentials') ||
       (error instanceof Error && error.name === 'BlueskyError' && /Invalid Bluesky/i.test(error.message));
     if (isInvalidCredentials) {
-      return errorResponse(401, 'Invalid Bluesky handle or app password.', 'POST /api/bluesky-connect');
+      // 422, not 401: Bluesky rejected the credential, the hub session is fine.
+      // 401 stays reserved for a missing/expired hub session so clients can
+      // react to every 401 as a session expiry.
+      return errorResponse(422, errorMessage(ERROR_CODES.BLUESKY_CREDENTIAL_REJECTED), 'POST /api/bluesky-connect', {
+        code: ERROR_CODES.BLUESKY_CREDENTIAL_REJECTED,
+      });
     }
     return errorResponse(500, 'Could not connect the Bluesky account.', 'POST /api/bluesky-connect', {
       cause: error,
