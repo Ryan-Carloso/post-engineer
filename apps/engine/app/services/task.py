@@ -1073,10 +1073,10 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
     try:
         if stop_at == "video":
             video_storage.require_r2_configuration()
+            phases.begin("persona_image")
+            persona_preflight.preflight_persona_image(task_id, params, _PERSONA_IMAGE_MAX_BYTES)
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=5)
         track_generation_started(task_id)
-        phases.begin("persona_image")
-        persona_preflight.preflight_persona_image(task_id, params, _PERSONA_IMAGE_MAX_BYTES)
 
         # 1. Generate script
         phases.begin("script")

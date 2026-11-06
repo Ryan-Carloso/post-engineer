@@ -88,35 +88,34 @@ class ResolvePersonaImageReuseTests(unittest.TestCase):
 
 
 class StartAbortsOnDeadImageTests(unittest.TestCase):
-    def test_dead_image_fails_the_task_before_the_script_stage(self):
-        failure = longcat.LongCatError("persona image download failed: HTTP 404")
+    def _run_start(self, stop_at: str, preflight_side_effect=None):
         generate_script = MagicMock(return_value="script")
         with (
-            patch.object(persona_preflight, "preflight_persona_image", side_effect=failure),
+            patch.object(persona_preflight, "preflight_persona_image", side_effect=preflight_side_effect) as preflight,
+            patch.object(task_service.video_storage, "require_r2_configuration"),
             patch.object(task_service, "generate_script", generate_script),
             patch.object(task_service, "track_generation_started"),
             patch.object(task_service, "_update_task"),
             patch.object(task_service, "_fail_task") as fail_task,
+            patch.object(task_service, "_complete_task"),
+            patch.object(task_service, "save_script_data"),
             patch.object(task_service, "cleanup_task_intermediates"),
         ):
-            task_service.start("task-8", _params(), stop_at="script")
+            task_service.start("task-8", _params(), stop_at=stop_at)
+        return preflight, generate_script, fail_task
+
+    def test_dead_image_fails_a_video_run_before_the_script_stage(self):
+        failure = longcat.LongCatError("persona image download failed: HTTP 404")
+        _, generate_script, fail_task = self._run_start("video", preflight_side_effect=failure)
         generate_script.assert_not_called()
         fail_task.assert_called_once()
         self.assertEqual(fail_task.call_args.kwargs["stage"], "persona_image")
         self.assertIn("HTTP 404", fail_task.call_args.args[1])
 
-    def test_a_good_image_lets_the_script_stage_run(self):
-        generate_script = MagicMock(return_value="script")
-        with (
-            patch.object(persona_preflight, "preflight_persona_image"),
-            patch.object(task_service, "generate_script", generate_script),
-            patch.object(task_service, "track_generation_started"),
-            patch.object(task_service, "_update_task"),
-            patch.object(task_service, "_complete_task"),
-            patch.object(task_service, "save_script_data"),
-            patch.object(task_service, "cleanup_task_intermediates"),
-        ):
-            task_service.start("task-9", _params(), stop_at="script")
+    def test_partial_runs_never_download_the_image(self):
+        # Only the render needs the image: a script-only run must stay free.
+        preflight, generate_script, _ = self._run_start("script")
+        preflight.assert_not_called()
         generate_script.assert_called_once()
 
 
