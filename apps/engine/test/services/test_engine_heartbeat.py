@@ -52,6 +52,91 @@ class ResourceSnapshotTests(unittest.TestCase):
         self.assertTrue(vram is None or vram >= 0)
 
 
+class RssFallbackUnitTests(unittest.TestCase):
+    """The ru_maxrss fallback runs where /proc is missing (e.g. macOS).
+
+    Its unit is platform-dependent — kilobytes on Linux, bytes on macOS —
+    so the fallback MUST divide once on Linux and twice on macOS, or the
+    boot chart mixes real Linux readings with Mac readings ~1024x too
+    large. Both branches are pinned with fakes; the CI host is Linux, so
+    /proc is forced to fail to reach the fallback.
+    """
+
+    # A fake resource module ride-along value: one ru_maxrss reading used
+    # by both platform branches so the results are directly comparable.
+    RU_MAXRSS = 150_000_000
+
+    def _fallback(self, fake_platform: str) -> float | None:
+        """Force the code past /proc (OSError) into the ru_maxrss fallback.
+
+        The fake ``resource`` module rides in sys.modules, where the
+        function's ``import resource`` finds it instead of the real one.
+        """
+        import builtins
+        import types
+
+        real_open = builtins.open
+
+        def fake_open(path, *args, **kwargs):
+            if str(path).startswith("/proc"):
+                raise OSError("no /proc in this fake host")
+            return real_open(path, *args, **kwargs)
+
+        fake_resource = types.ModuleType("resource")
+        # The function passes resource.RUSAGE_SELF to getrusage: the fake
+        # module carries the constant the call reads.
+        fake_resource.RUSAGE_SELF = 0  # type: ignore[attr-defined]
+
+        def fake_getrusage(_who: int):
+            usage = types.SimpleNamespace()
+            usage.ru_maxrss = self.RU_MAXRSS
+            return usage
+
+        fake_resource.getrusage = fake_getrusage  # type: ignore[attr-defined]
+
+        with (
+            patch.object(builtins, "open", fake_open),
+            patch.dict(sys.modules, {"resource": fake_resource}),
+            patch.object(sys, "platform", fake_platform),
+        ):
+            return engine_heartbeat.current_rss_mb()
+
+    def test_linux_fallback_divides_once_kilobytes_to_mib(self):
+        # 150_000_000 kB → 146484.375 MiB.
+        rss = self._fallback("linux")
+        self.assertAlmostEqual(rss, self.RU_MAXRSS / 1024, places=3)
+
+    def test_macos_fallback_divides_twice_bytes_to_mib(self):
+        # 150_000_000 bytes → 143.05 MiB.
+        rss = self._fallback("darwin")
+        self.assertAlmostEqual(rss, self.RU_MAXRSS / 1024 / 1024, places=3)
+
+    def test_macos_result_is_1024x_smaller_than_linux_for_the_same_value(self):
+        # The bug this pins: the same ru_maxrss number used to produce the
+        # same MB on both platforms, inflating every Mac reading 1024x.
+        linux = self._fallback("linux")
+        macos = self._fallback("darwin")
+        self.assertAlmostEqual(linux / macos, 1024.0, places=3)
+
+    def test_fallback_returns_none_when_resource_read_raises(self):
+        import builtins
+
+        real_open = builtins.open
+
+        def fake_open(path, *args, **kwargs):
+            if str(path).startswith("/proc"):
+                raise OSError("no /proc in this fake host")
+            return real_open(path, *args, **kwargs)
+
+        with (
+            patch.object(builtins, "open", fake_open),
+            patch.object(sys, "platform", "darwin"),
+            patch.dict(sys.modules, {"resource": None}),
+        ):
+            rss = engine_heartbeat.current_rss_mb()
+        self.assertIsNone(rss)
+
+
 class HeartbeatIoTests(unittest.TestCase):
     def test_write_beat_upserts_row_one(self):
         requests_mock = MagicMock()

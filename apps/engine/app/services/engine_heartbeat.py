@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime, timezone
@@ -42,7 +43,14 @@ _vram_cache: dict[str, Any] = {"at": 0.0, "value": None}
 
 
 def current_rss_mb() -> float | None:
-    """Current process RSS in MiB (Linux /proc; ru_maxrss fallback)."""
+    """Current process RSS in MiB.
+
+    The ``/proc`` read is the live *current* RSS (Linux only, in kB).
+    Where ``/proc`` is missing (e.g. every macOS run) the fallback reads
+    the process's *peak* RSS so far (``ru_maxrss``), whose unit is
+    platform-dependent: kilobytes on Linux, bytes on macOS — so the two
+    paths measure slightly different values even after the unit fix.
+    """
     try:
         with open("/proc/self/status", encoding="utf-8") as handle:
             for line in handle:
@@ -53,8 +61,13 @@ def current_rss_mb() -> float | None:
     try:
         import resource
 
-        # Linux reports ru_maxrss in kilobytes (peak, not current).
-        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+        ru_maxrss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        if sys.platform == "darwin":
+            # macOS: ru_maxrss is in BYTES (the same name is in kilobytes
+            # on Linux) — divide twice or the dashboard plot reports a
+            # memory ~1024x too large for Mac-only runs.
+            return ru_maxrss / 1024 / 1024
+        return ru_maxrss / 1024
     except Exception:  # noqa: BLE001 - diagnostics only
         return None
 
