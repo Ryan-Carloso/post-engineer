@@ -211,4 +211,80 @@ describe('Accounts — UI', () => {
       expect(browserWindow.document.documentElement.scrollWidth).to.be.at.most(browserWindow.innerWidth);
     });
   });
+
+  // LinkedIn and Threads cards, plus a rejected disconnect, are the account
+  // page lines the Cypress coverage gate was missing.
+  it('mostra LinkedIn e Threads e o erro quando a desconexão é recusada', () => {
+    cy.intercept('GET', '/api/account', {
+      statusCode: 200,
+      body: {
+        authenticated: true,
+        message: 'ok',
+        accounts: [
+          {
+            provider: 'youtube',
+            recordId: 'acc-yt-1',
+            channelId: 'ch-alpha',
+            channelName: 'Canal Alpha',
+            email: 'alpha@example.com',
+            connectedAt: 1_700_000_000_000,
+            lastUsed: 1_700_000_000_000,
+          },
+          {
+            provider: 'linkedin',
+            recordId: 'li-member',
+            providerAccountId: 'member-1',
+            accountName: 'Ada Lovelace',
+            accountMetadata: { kind: 'member', name: 'Ada Lovelace' },
+            connectedAt: 1_700_000_000_000,
+            lastUsed: 1_700_000_000_000,
+          },
+          {
+            provider: 'linkedin',
+            recordId: 'li-org',
+            providerAccountId: 'urn:li:organization:9',
+            accountName: 'Acme',
+            accountMetadata: { kind: 'organization', name: 'Acme' },
+            connectedAt: 1_700_000_000_000,
+            lastUsed: 1_700_000_000_000,
+          },
+          {
+            provider: 'threads',
+            recordId: 'th-1',
+            providerAccountId: '42',
+            accountName: 'ana.threads',
+            connectedAt: 1_700_000_000_000,
+            lastUsed: 1_700_000_000_000,
+          },
+        ],
+      },
+    }).as('getAccounts');
+    cy.intercept('DELETE', '/api/account*', {
+      statusCode: 200,
+      body: { success: false },
+    }).as('disconnectAccount');
+    cy.on('window:confirm', (message) => {
+      expect(message).to.eq('Desconectar esta conta?');
+      return true;
+    });
+
+    cy.visit('/accounts');
+    cy.wait('@getAccounts');
+
+    cy.contains('section', 'LinkedIn').within(() => {
+      cy.contains('Ada Lovelace').should('be.visible');
+      cy.contains('Perfil').should('be.visible');
+      cy.contains('Acme').should('be.visible');
+      cy.contains('Página').should('be.visible');
+    });
+    cy.contains('section', 'Threads').within(() => {
+      cy.contains('ana.threads').should('be.visible');
+    });
+
+    cy.get('[data-testid=youtube-disconnect-button]').scrollIntoView().click();
+    cy.wait('@disconnectAccount');
+    cy.get('[data-testid=disconnect-error]')
+      .should('be.visible')
+      .and('contain', 'Não foi possível desconectar a conta');
+  });
 });
