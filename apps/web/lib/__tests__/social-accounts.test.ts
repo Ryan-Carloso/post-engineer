@@ -73,6 +73,19 @@ describe('social-accounts', () => {
       expect(result.providerAccountId).toBe('ig-1');
     });
 
+    it.each(['unknown', 'UNKNOWN', '', '  '])(
+      'refuses the placeholder provider account id %j without touching the database',
+      async (providerAccountId) => {
+        fromReturn.upsert.mockClear();
+        await expect(
+          upsertSocialAccount(mockSupabase as never, {
+            userId: 'u1', provider: 'youtube', providerAccountId, tokens: { access_token: 'tok' },
+          })
+        ).rejects.toThrow('without a real provider account id');
+        expect(fromReturn.upsert).not.toHaveBeenCalled();
+      },
+    );
+
     it('throws on supabase error', async () => {
       fromReturn.upsert.mockReturnValue({ select: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: null, error: { message: 'db fail' } }) });
 
@@ -238,6 +251,24 @@ describe('social-accounts', () => {
       await expect(
         updateSocialAccountMetadata(mockSupabase as never, 'u1', 'instagram', 'ig-1', { username: 'x' })
       ).resolves.toBeUndefined();
+      const payload = fromReturn.update.mock.calls[0][0] as Record<string, unknown>;
+      expect(payload.account_metadata).toEqual({ username: 'x' });
+      expect('account_name' in payload).toBe(false);
+    });
+
+    it('also writes account_name when one is given', async () => {
+      fromReturn.update.mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ error: null }),
+          }),
+        }),
+      });
+
+      await updateSocialAccountMetadata(mockSupabase as never, 'u1', 'instagram', 'ig-1', { username: 'y' }, 'y');
+      const payload = fromReturn.update.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      expect(payload.account_name).toBe('y');
+      expect(payload.account_metadata).toEqual({ username: 'y' });
     });
   });
 });

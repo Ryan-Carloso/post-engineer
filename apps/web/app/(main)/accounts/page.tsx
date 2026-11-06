@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import AccountCard from '@/components/account-card';
+import DisconnectAccountDialog from '@/components/ui/disconnect-account-dialog';
 import SocialAccountsSection from '@/components/ui/social-accounts-section';
 import { BlueskyConnectDialog } from '@/components/ui/social-accounts-section';
 import {
@@ -12,6 +13,7 @@ import {
   useLinkedinAccountsQuery,
   useThreadsAccountsQuery,
   useYouTubeAccountsQuery,
+  type DisconnectableProvider,
   type DisconnectAccountResult,
 } from '@/lib/api';
 import { useUploadStore } from '@/lib/store';
@@ -22,6 +24,7 @@ import { useThreadsOAuth } from '@/lib/oauth/threads-handler';
 import { ProviderIcon } from '@/components/provider-icon';
 import { useAccountListErrorTelemetry, reportAccountDisconnectFailed } from '@/lib/account-card-telemetry';
 import { useI18n } from '@/lib/i18n/provider';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { AccountsIcon, GoogleIcon, InstagramIcon } from '@/lib/ui';
 
 export default function AccountsPage(): React.ReactElement {
@@ -66,16 +69,11 @@ function YoutubeAccountsSection(): ReactNode {
   const { t } = useI18n();
   const query = useYouTubeAccountsQuery();
   const oauth = useYouTubeOAuth();
-  const disconnect = useDisconnectAccountMutation('youtube');
-  const [disconnectError, setDisconnectError] = useState<string | null>(null);
+  const flow = useDisconnectFlow('youtube');
   const selectedIds = useUploadStore((state) => state.selectedAccountIds.youtube);
   const toggle = useUploadStore((state) => state.toggleSelectedAccount);
   const accounts = query.data?.accounts ?? [];
   useAccountListErrorTelemetry('youtube', query.error?.message ?? null);
-  const onDisconnectAccount = (providerAccountId: string): void => {
-    setDisconnectError(null);
-    void handleDisconnect(t, disconnect, 'youtube', providerAccountId, setDisconnectError);
-  };
   return (
     <SocialAccountsSection
       icon={<BrandIcon className="bg-red-50 text-red-600"><GoogleIcon /></BrandIcon>}
@@ -83,16 +81,17 @@ function YoutubeAccountsSection(): ReactNode {
       description={t('accounts.youtubeDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
       count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="youtube" name={account.channelName} email={account.email} thumbnail={account.thumbnail} customUrl={account.customUrl} onSelect={() => toggle('youtube', account.channelId)} selected={selectedIds.includes(account.channelId)} showDisconnect onDisconnect={() => onDisconnectAccount(account.channelId)} />)}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="youtube" name={account.channelName} email={account.email} thumbnail={account.thumbnail} customUrl={account.customUrl} onSelect={() => toggle('youtube', account.channelId)} selected={selectedIds.includes(account.channelId)} showDisconnect onDisconnect={() => flow.onDisconnect(account.channelId, account.channelName)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
       connectError={oauth.error}
-      disconnectError={disconnectError}
+      disconnectError={flow.disconnectError}
       connectDisabled={oauth.isLoading}
       retryLabel={t('accounts.tryAgain')}
       onConnect={() => void oauth.startOAuth()}
       onRetry={() => void query.refetch()}
+      dialog={flow.dialog}
     />
   );
 }
@@ -105,16 +104,11 @@ function InstagramAccountsSection(): ReactNode {
   const { t } = useI18n();
   const query = useInstagramAccountsQuery();
   const oauth = useInstagramOAuth();
-  const disconnect = useDisconnectAccountMutation('instagram');
-  const [disconnectError, setDisconnectError] = useState<string | null>(null);
+  const flow = useDisconnectFlow('instagram');
   const selectedIds = useUploadStore((state) => state.selectedAccountIds.instagram);
   const toggle = useUploadStore((state) => state.toggleSelectedAccount);
   const accounts = query.data?.accounts ?? [];
   useAccountListErrorTelemetry('instagram', query.error?.message ?? null);
-  const onDisconnectAccount = (providerAccountId: string): void => {
-    setDisconnectError(null);
-    void handleDisconnect(t, disconnect, 'instagram', providerAccountId, setDisconnectError);
-  };
   return (
     <SocialAccountsSection
       icon={<BrandIcon className="bg-pink-50 text-pink-600"><InstagramIcon /></BrandIcon>}
@@ -122,16 +116,17 @@ function InstagramAccountsSection(): ReactNode {
       description={t('accounts.instagramDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
       count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="instagram" name={`@${account.username}`} storedDisplayName={account.name} thumbnail={account.profilePictureUrl} onSelect={() => toggle('instagram', account.igUserId)} selected={selectedIds.includes(account.igUserId)} showDisconnect onDisconnect={() => onDisconnectAccount(account.igUserId)} />)}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="instagram" name={`@${account.username}`} storedDisplayName={account.name} thumbnail={account.profilePictureUrl} onSelect={() => toggle('instagram', account.igUserId)} selected={selectedIds.includes(account.igUserId)} showDisconnect onDisconnect={() => flow.onDisconnect(account.igUserId, `@${account.username}`)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
       connectError={oauth.error}
-      disconnectError={disconnectError}
+      disconnectError={flow.disconnectError}
       connectDisabled={oauth.isLoading}
       retryLabel={t('accounts.tryAgain')}
       onConnect={() => void oauth.startOAuth()}
       onRetry={() => void query.refetch()}
+      dialog={flow.dialog}
     />
   );
 }
@@ -143,8 +138,7 @@ function InstagramAccountsSection(): ReactNode {
 function BlueskyAccountsSection(): ReactNode {
   const { t } = useI18n();
   const query = useBlueskyAccountsQuery();
-  const disconnect = useDisconnectAccountMutation('bluesky');
-  const [disconnectError, setDisconnectError] = useState<string | null>(null);
+  const flow = useDisconnectFlow('bluesky');
   const [open, setOpen] = useState(false);
   const [handle, setHandle] = useState('');
   const [appPassword, setAppPassword] = useState('');
@@ -163,10 +157,9 @@ function BlueskyAccountsSection(): ReactNode {
       formData.append('appPassword', appPassword);
       const response = await fetch('/api/bluesky-connect', { method: 'POST', body: formData });
       if (!response.ok) {
-        // NOTE: /api/bluesky-connect returns 401 both for a dead hub session
-        // and for a rejected Bluesky credential, so a 401 here must not
-        // trigger the host-wide session-expiry redirect — the dialog shows
-        // the credential error locally instead (tracked in issue #403).
+        // 401 here means a dead hub session (a rejected Bluesky credential
+        // is 422), so it triggers the host-wide session-expiry redirect.
+        notifyIfSessionExpired(response);
         setError(t('accounts.blueskyConnectError'));
         setAppPassword('');
         return;
@@ -190,17 +183,22 @@ function BlueskyAccountsSection(): ReactNode {
       description={t('accounts.blueskyDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
       count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="bluesky" name={account.handle} handle={account.handle} showDisconnect onDisconnect={() => { setDisconnectError(null); void handleDisconnect(t, disconnect, 'bluesky', account.did, setDisconnectError); }} />)}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="bluesky" name={account.displayName ?? account.handle} thumbnail={account.avatar} showDisconnect onDisconnect={() => flow.onDisconnect(account.did, account.displayName ?? account.handle)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
       connectError={null}
-      disconnectError={disconnectError}
+      disconnectError={flow.disconnectError}
       connectDisabled={false}
       retryLabel={t('accounts.tryAgain')}
       onConnect={() => setOpen(true)}
       onRetry={() => void query.refetch()}
-      dialog={open ? <BlueskyConnectDialog title={t('accounts.blueskyConnectTitle')} hint={t('accounts.blueskyConnectHint')} handleLabel={t('accounts.blueskyHandleLabel')} passwordLabel={t('accounts.blueskyPasswordLabel')} submitLabel={t('accounts.blueskyConnect')} securityHint={t('accounts.blueskySecurityHint')} closeLabel={t('accounts.closeDialog')} handle={handle} appPassword={appPassword} error={error} pending={pending} onHandleChange={setHandle} onPasswordChange={setAppPassword} onSubmit={() => void connect()} onClose={() => setOpen(false)} /> : null}
+      dialog={
+        <>
+          {flow.dialog}
+          {open ? <BlueskyConnectDialog title={t('accounts.blueskyConnectTitle')} hint={t('accounts.blueskyConnectHint')} handleLabel={t('accounts.blueskyHandleLabel')} passwordLabel={t('accounts.blueskyPasswordLabel')} submitLabel={t('accounts.blueskyConnect')} securityHint={t('accounts.blueskySecurityHint')} closeLabel={t('accounts.closeDialog')} handle={handle} appPassword={appPassword} error={error} pending={pending} onHandleChange={setHandle} onPasswordChange={setAppPassword} onSubmit={() => void connect()} onClose={() => setOpen(false)} /> : null}
+        </>
+      }
     />
   );
 }
@@ -213,8 +211,7 @@ function LinkedinAccountsSection(): ReactNode {
   const { t } = useI18n();
   const query = useLinkedinAccountsQuery();
   const oauth = useLinkedInOAuth();
-  const disconnect = useDisconnectAccountMutation('linkedin');
-  const [disconnectError, setDisconnectError] = useState<string | null>(null);
+  const flow = useDisconnectFlow('linkedin');
   const accounts = query.data?.accounts ?? [];
   useAccountListErrorTelemetry('linkedin', query.error?.message ?? null);
   return (
@@ -224,16 +221,17 @@ function LinkedinAccountsSection(): ReactNode {
       description={t('accounts.linkedinDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
       count={accounts.length}
-      accounts={accounts.map((account) => <LinkedinAccountCard key={account.recordId} name={account.accountName || account.providerAccountId} storedDisplayName={account.accountMetadata?.name ?? undefined} labelOrigin={account.accountName ? 'stored' : 'provider_id'} isOrganization={account.providerAccountId.startsWith('urn:li:organization:')} showDisconnect onDisconnect={() => { setDisconnectError(null); void handleDisconnect(t, disconnect, 'linkedin', account.providerAccountId, setDisconnectError); }} />)}
+      accounts={accounts.map((account) => <LinkedinAccountCard key={account.recordId} name={account.accountName || account.providerAccountId} thumbnail={account.profilePictureUrl} storedDisplayName={account.accountMetadata?.name ?? undefined} labelOrigin={account.accountName ? 'stored' : 'provider_id'} isOrganization={account.providerAccountId.startsWith('urn:li:organization:')} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName || account.providerAccountId)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
       connectError={oauth.error}
-      disconnectError={disconnectError}
+      disconnectError={flow.disconnectError}
       connectDisabled={oauth.isLoading}
       retryLabel={t('accounts.tryAgain')}
       onConnect={() => void oauth.startOAuth()}
       onRetry={() => void query.refetch()}
+      dialog={flow.dialog}
     />
   );
 }
@@ -251,8 +249,60 @@ function connectedLabel(t: ReturnType<typeof useI18n>['t'], count: number): stri
 }
 
 //---------------
-// handleDisconnect — confirm before disconnect (same as persona delete).
-// A throw or success:false is shown in the section and sent to PostHog.
+// useDisconnectFlow — one dialog-backed disconnect flow per provider
+// section. The trash button on the card opens the confirmation dialog;
+// confirming runs the disconnect, and a throw or success:false is shown
+// in the section and sent to PostHog.
+//---------------
+
+interface PendingDisconnect {
+  providerAccountId: string;
+  label: string;
+}
+
+function useDisconnectFlow(provider: DisconnectableProvider): {
+  disconnectError: string | null;
+  onDisconnect: (providerAccountId: string, label: string) => void;
+  dialog: ReactNode;
+} {
+  const { t } = useI18n();
+  const disconnect = useDisconnectAccountMutation(provider);
+  const [disconnectError, setDisconnectError] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingDisconnect | null>(null);
+
+  // Opening the dialog clears a previous section error, so the fresh
+  // attempt starts from a clean panel.
+  const onDisconnect = (providerAccountId: string, label: string): void => {
+    setDisconnectError(null);
+    setPending({ providerAccountId, label });
+  };
+
+  const confirm = (): void => {
+    if (pending === null || disconnect.isPending) return;
+    void handleDisconnect(t, disconnect, provider, pending.providerAccountId, setDisconnectError)
+      .finally(() => setPending(null));
+  };
+
+  const dialog = (
+    <DisconnectAccountDialog
+      open={pending !== null}
+      onClose={() => { if (!disconnect.isPending) setPending(null); }}
+      onConfirm={confirm}
+      pending={disconnect.isPending}
+      accountName={pending?.label ?? ''}
+      title={t('accounts.disconnectQuestion')}
+      body={t('accounts.disconnectBody')}
+      cancelLabel={t('accounts.disconnectCancel')}
+      confirmLabel={t('accounts.disconnectConfirm')}
+    />
+  );
+
+  return { disconnectError, onDisconnect, dialog };
+}
+
+//---------------
+// handleDisconnect — runs the disconnect for one account. A throw or
+// success:false is shown in the section and sent to PostHog.
 //---------------
 
 async function handleDisconnect(
@@ -262,7 +312,6 @@ async function handleDisconnect(
   providerAccountId: string,
   onError: (message: string) => void,
 ): Promise<void> {
-  if (!window.confirm(t('accounts.disconnectQuestion'))) return;
   try {
     const result = await disconnect.mutateAsync({ providerAccountId });
     if (!result.success) {
@@ -283,8 +332,7 @@ function ThreadsAccountsSection(): ReactNode {
   const { t } = useI18n();
   const query = useThreadsAccountsQuery();
   const oauth = useThreadsOAuth();
-  const disconnect = useDisconnectAccountMutation('threads');
-  const [disconnectError, setDisconnectError] = useState<string | null>(null);
+  const flow = useDisconnectFlow('threads');
   const accounts = query.data?.accounts ?? [];
   useAccountListErrorTelemetry('threads', query.error?.message ?? null);
   return (
@@ -294,16 +342,17 @@ function ThreadsAccountsSection(): ReactNode {
       description={t('accounts.threadsDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
       count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="threads" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} showDisconnect onDisconnect={() => { setDisconnectError(null); void handleDisconnect(t, disconnect, 'threads', account.providerAccountId, setDisconnectError); }} />)}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="threads" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
       connectError={oauth.error}
-      disconnectError={disconnectError}
+      disconnectError={flow.disconnectError}
       connectDisabled={oauth.isLoading}
       retryLabel={t('accounts.tryAgain')}
       onConnect={() => void oauth.startOAuth()}
       onRetry={() => void query.refetch()}
+      dialog={flow.dialog}
     />
   );
 }
@@ -312,9 +361,9 @@ function ThreadsAccountsSection(): ReactNode {
 // LinkedIn card that distinguishes a member profile from a company page.
 //---------------
 
-function LinkedinAccountCard({ name, storedDisplayName, labelOrigin, isOrganization, showDisconnect, onDisconnect }: { name: string; storedDisplayName?: string; labelOrigin?: 'stored' | 'provider_id'; isOrganization: boolean; showDisconnect?: boolean; onDisconnect?: () => void }): ReactNode {
+function LinkedinAccountCard({ name, thumbnail, storedDisplayName, labelOrigin, isOrganization, showDisconnect, onDisconnect }: { name: string; thumbnail?: string; storedDisplayName?: string; labelOrigin?: 'stored' | 'provider_id'; isOrganization: boolean; showDisconnect?: boolean; onDisconnect?: () => void }): ReactNode {
   const { t } = useI18n();
-  return <div className="relative"><AccountCard type="linkedin" name={name} storedDisplayName={storedDisplayName} labelOrigin={labelOrigin} showDisconnect={showDisconnect} onDisconnect={onDisconnect} /><span className="absolute top-2 right-2 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">{t(isOrganization ? 'accounts.pageBadge' : 'accounts.memberBadge')}</span></div>;
+  return <div className="relative"><AccountCard type="linkedin" name={name} thumbnail={thumbnail} storedDisplayName={storedDisplayName} labelOrigin={labelOrigin} showDisconnect={showDisconnect} onDisconnect={onDisconnect} /><span className="absolute top-2 right-2 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">{t(isOrganization ? 'accounts.pageBadge' : 'accounts.memberBadge')}</span></div>;
 }
 
 function BlueskyIcon(): ReactNode {

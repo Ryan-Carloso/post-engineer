@@ -4,6 +4,7 @@ import axios, { AxiosError } from 'axios';
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';
 import { InstagramApiError } from '@/lib/errors';
+import { INSTAGRAM_USERNAME_FALLBACK } from '@/lib/providers/registry';
 
 //---------------
 // InstagramService — Instagram API with Instagram Login (direct, no Facebook).
@@ -17,6 +18,11 @@ export interface InstagramLongLivedToken {
   tokenType: string;
   expiresIn: number; // segundos
 }
+
+export const INSTAGRAM_PROFILE_TIMEOUT_MS = 8000;
+
+export const INSTAGRAM_PROFILE_FIELDS =
+  'id,username,name,profile_picture_url,followers_count,media_count';
 
 export interface InstagramProfile {
   userdId: string; // app-scoped user id (IG)
@@ -307,7 +313,8 @@ export class InstagramService {
   }
 
   //---------------
-  // getProfile — data of the authenticated IG user
+  // getProfile — /me returns only `id` unless `fields` is passed, so every
+  // shown field is requested; app-scoped `id` stays the identity rows key on.
   //---------------
   async getProfile(accessToken: string): Promise<InstagramProfile> {
     try {
@@ -315,14 +322,15 @@ export class InstagramService {
         `https://graph.instagram.com/${this.apiVersion}/me`,
         {
           params: {
+            fields: INSTAGRAM_PROFILE_FIELDS,
             access_token: accessToken,
           },
+          timeout: INSTAGRAM_PROFILE_TIMEOUT_MS,
         }
       );
 
       const data = response.data as {
         id: string;
-        user_id?: string;
         username?: string;
         name?: string;
         profile_picture_url?: string;
@@ -331,8 +339,8 @@ export class InstagramService {
       };
 
       const profile = {
-        userdId: data.user_id || data.id,
-        username: data.username || 'instagram_user',
+        userdId: data.id,
+        username: data.username || INSTAGRAM_USERNAME_FALLBACK,
         name: data.name,
         profilePictureUrl: data.profile_picture_url,
         followersCount: data.followers_count,

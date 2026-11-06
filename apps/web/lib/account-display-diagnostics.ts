@@ -23,9 +23,14 @@ export const ACCOUNT_NAME_FALLBACKS = {
 export const THUMBNAIL_HOST_ALLOWLIST = [
   'avatars.githubusercontent.com',
   'yt3.ggpht.com',
+  'yt3.googleusercontent.com',
+  'cdn.bsky.app',
+  'media.licdn.com',
 ] as const;
 
-export const THUMBNAIL_HOST_SUFFIX = '.cdninstagram.com';
+// Wildcard hosts in next/image remotePatterns (next.config.ts): the
+// Instagram/Threads/Facebook CDNs are matched by suffix, not exact hostname.
+export const THUMBNAIL_HOST_SUFFIXES = ['.cdninstagram.com', '.fbcdn.net'] as const;
 
 const LABEL_CAP = 200;
 
@@ -100,12 +105,15 @@ export function thumbnailHost(url: string): string | null {
 
 export function thumbnailHostAllowed(host: string): boolean {
   if ((THUMBNAIL_HOST_ALLOWLIST as readonly string[]).includes(host)) return true;
-  return host === 'cdninstagram.com' || host.endsWith(THUMBNAIL_HOST_SUFFIX);
+  return THUMBNAIL_HOST_SUFFIXES.some(
+    (suffix) => host.endsWith(suffix) || host === suffix.slice(1),
+  );
 }
 
-// Instagram CDN media URLs are signed and expire (`oe` = Unix seconds, hex).
-// Shared with GET /api/account, which refreshes the saved photo when this is true.
-export function instagramPictureUrlExpired(url: string, now = Date.now()): boolean {
+// Signed CDN picture URLs expire (`oe` = Unix seconds, hex). Shared with
+// lib/account-profile-sync.ts, whose resync re-reads the profile when this
+// is true.
+export function pictureUrlExpired(url: string, now = Date.now()): boolean {
   try {
     const oe = new URL(url).searchParams.get('oe');
     if (oe === null || oe.length === 0) return false;
@@ -137,7 +145,7 @@ export function buildAccountCardDisplayReport(input: AccountCardDisplayInput): A
   const thumbnailUrl = presentText(input.thumbnailUrl);
   const host = thumbnailUrl === null ? null : thumbnailHost(thumbnailUrl);
   const hostAllowed = host === null ? null : thumbnailHostAllowed(host);
-  const expired = thumbnailUrl !== null && instagramPictureUrlExpired(thumbnailUrl);
+  const expired = thumbnailUrl !== null && pictureUrlExpired(thumbnailUrl);
   const fallback = nameIsFallback(input.provider, shown);
   const labelIsProviderId = input.labelOrigin === 'provider_id';
   const displayNameNotRendered = stored !== null && !shown.includes(stored);

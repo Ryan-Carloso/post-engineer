@@ -6,7 +6,35 @@ import { encryptTokens } from '@/lib/token-crypto';
 import { BlueskyError, loginToBluesky } from '@/lib/bluesky';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { apiErrorResponse } from '@/lib/api-error';
+import { ERROR_CODES, errorMessage } from '@/lib/error-codes';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { fetchBlueskyPublicProfile } from '@/lib/bluesky-profile';
+import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
+import { logger } from '@/lib/logger';
+
+//---------------
+// readBlueskyProfileMetadata — display name and avatar for the card. The
+// login already succeeded, so a failed profile read does not block the
+// connect: it is logged and reported, and the stored row (no profileSyncedAt)
+// is retried by the GET /api/account profile resync.
+//---------------
+async function readBlueskyProfileMetadata(did: string): Promise<Record<string, unknown>> {
+  try {
+    const profile = await fetchBlueskyPublicProfile(did);
+    reportProfileFetched('bluesky', 'connect', { accountName: profile.handle, pictureUrl: profile.avatar });
+    return {
+      displayName: profile.displayName,
+      avatar: profile.avatar,
+      profileSyncedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    logger.warn('[bluesky-connect] profile read failed, connecting without it', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    reportProfileFetchFailed('bluesky', 'connect', error);
+    return {};
+  }
+}
 
 //---------------
 // POST /api/bluesky-connect — connects a Bluesky account via app password.
@@ -28,7 +56,7 @@ function errorResponse(
   status: number,
   error: string,
   route: string,
-  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown> },
+  options?: { cause?: unknown; code?: string; logMessage?: string; metadata?: Record<string, unknown> },
 ): NextResponse {
   return apiErrorResponse(status, error, { route, ...options });
 }
@@ -93,6 +121,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   try {
     const { did, handle: resolvedHandle } = await loginToBluesky(handle, appPassword);
+    const accountMetadata = await readBlueskyProfileMetadata(did);
 
     const encrypted = encryptTokens({
       access_token: appPassword,
@@ -108,6 +137,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         provider: 'bluesky',
         provider_account_id: did,
         account_name: resolvedHandle,
+        account_metadata: accountMetadata,
         encrypted_tokens: encrypted,
       })
       .select('id')
@@ -128,7 +158,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
       (error instanceof BlueskyError && error.code === 'invalid_credentials') ||
       (error instanceof Error && error.name === 'BlueskyError' && /Invalid Bluesky/i.test(error.message));
     if (isInvalidCredentials) {
-      return errorResponse(401, 'Invalid Bluesky handle or app password.', 'POST /api/bluesky-connect');
+      // 422, not 401: Bluesky rejected the credential, the hub session is fine.
+      // 401 stays reserved for a missing/expired hub session so clients can
+      // react to every 401 as a session expiry.
+      return errorResponse(422, errorMessage(ERROR_CODES.BLUESKY_CREDENTIAL_REJECTED), 'POST /api/bluesky-connect', {
+        code: ERROR_CODES.BLUESKY_CREDENTIAL_REJECTED,
+      });
     }
     return errorResponse(500, 'Could not connect the Bluesky account.', 'POST /api/bluesky-connect', {
       cause: error,

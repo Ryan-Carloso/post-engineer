@@ -16,8 +16,15 @@ vi.mock('@/lib/oauth-utils', () => ({
   verifyOAuthNonce: vi.fn(),
   oauthPopupResponse: vi.fn(() => new Response('popup')),
 }));
+const { channelsList } = vi.hoisted(() => ({ channelsList: vi.fn() }));
 vi.mock('@/lib/youtube', () => ({
   createGoogleOAuth2Client: vi.fn(),
+  getYouTubeClient: vi.fn(() => ({ channels: { list: channelsList } })),
+}));
+vi.mock('server-only', () => ({}));
+vi.mock('@/lib/account-profile-telemetry', () => ({
+  reportProfileFetched: vi.fn(),
+  reportProfileFetchFailed: vi.fn(),
 }));
 vi.mock('@/lib/logger', () => ({
   logger: {
@@ -27,29 +34,18 @@ vi.mock('@/lib/logger', () => ({
     debug: vi.fn(),
   },
 }));
-vi.mock('googleapis', () => ({
-  google: {
-    youtube: vi.fn(() => ({
-      channels: {
-        list: vi.fn().mockResolvedValue({
-          data: {
-            items: [
-              {
-                id: 'chan-1',
-                snippet: {
-                  title: 'My Channel',
-                  thumbnails: { default: { url: 'https://t.jpg' } },
-                  customUrl: '@mychannel',
-                },
-                statistics: { subscriberCount: '10', viewCount: '100', videoCount: '5' },
-              },
-            ],
-          },
-        }),
-      },
-    })),
+const CHANNEL = {
+  id: 'chan-1',
+  snippet: {
+    title: 'My Channel',
+    thumbnails: {
+      default: { url: 'https://yt3.googleusercontent.com/small.jpg' },
+      medium: { url: 'https://yt3.googleusercontent.com/medium.jpg' },
+    },
+    customUrl: '@mychannel',
   },
-}));
+  statistics: { subscriberCount: '10', viewCount: '100', videoCount: '5' },
+};
 
 import { GET } from '@/app/api/google-oauth/callback/route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -58,6 +54,7 @@ import { decodeOAuthState, verifyOAuthNonce, oauthPopupResponse } from '@/lib/oa
 import { upsertSocialAccount } from '@/lib/social-accounts';
 import { createGoogleOAuth2Client } from '@/lib/youtube';
 import { logger } from '@/lib/logger';
+import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 
 const user = { id: 'user-1' };
 
@@ -131,6 +128,10 @@ describe('/api/google-oauth/callback', () => {
       setCredentials: vi.fn(),
     } as never);
     vi.mocked(oauthPopupResponse).mockReturnValue(new Response('popup') as never);
+    channelsList.mockReset();
+    channelsList.mockResolvedValue({ data: { items: [CHANNEL] } });
+    vi.mocked(reportProfileFetched).mockReset();
+    vi.mocked(reportProfileFetchFailed).mockReset();
   });
 
   it('returns error popup on oauth error param', async () => {
@@ -178,6 +179,61 @@ describe('/api/google-oauth/callback', () => {
     expect(oauthPopupResponse).toHaveBeenCalledWith(
       'youtube-oauth-success',
       expect.objectContaining({ account: expect.objectContaining({ channelId: 'chan-1' }) }),
+    );
+  });
+
+  it('stores the medium avatar, channel name and sync stamp, and reports the profile', async () => {
+    sessionMock(true);
+    serviceKeyMock(true);
+    await GET(makeRequest('?code=c&state=s'));
+    expect(channelsList).toHaveBeenCalledWith({ part: ['snippet', 'statistics'], mine: true }, { timeout: 15_000 });
+    expect(upsertSocialAccount).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        providerAccountId: 'chan-1',
+        accountName: 'My Channel',
+        accountMetadata: expect.objectContaining({
+          thumbnail: 'https://yt3.googleusercontent.com/medium.jpg',
+          customUrl: '@mychannel',
+          profileSyncedAt: expect.any(String),
+        }),
+      }),
+    );
+    expect(reportProfileFetched).toHaveBeenCalledWith('youtube', 'connect', {
+      accountName: 'My Channel',
+      pictureUrl: 'https://yt3.googleusercontent.com/medium.jpg',
+    });
+  });
+
+  it('fails the connect (no placeholder row) when the channel read throws', async () => {
+    sessionMock(true);
+    serviceKeyMock(true);
+    const failure = new Error('quota');
+    channelsList.mockRejectedValue(failure);
+    await GET(makeRequest('?code=c&state=s'));
+    expect(upsertSocialAccount).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith('[youtube-oauth] channel read failed', failure);
+    expect(reportProfileFetchFailed).toHaveBeenCalledWith('youtube', 'connect', failure);
+    expect(oauthPopupResponse).toHaveBeenCalledWith(
+      'youtube-oauth-error',
+      { error: 'Could not read your YouTube channel. Please try again.' },
+    );
+  });
+
+  it('fails the connect when the Google account has no YouTube channel', async () => {
+    sessionMock(true);
+    serviceKeyMock(true);
+    channelsList.mockResolvedValue({ data: { items: [] } });
+    await GET(makeRequest('?code=c&state=s'));
+    expect(upsertSocialAccount).not.toHaveBeenCalled();
+    expect(reportProfileFetchFailed).toHaveBeenCalledWith(
+      'youtube',
+      'connect',
+      expect.objectContaining({ message: 'YOUTUBE_NO_CHANNEL: no channel' }),
+    );
+    expect(oauthPopupResponse).toHaveBeenCalledWith(
+      'youtube-oauth-error',
+      expect.objectContaining({ error: expect.stringContaining('has no YouTube channel') }),
     );
   });
 

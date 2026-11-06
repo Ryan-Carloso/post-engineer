@@ -118,7 +118,7 @@ describe('GET /api/linkedin-auth/callback', () => {
 
   it('success: saves member account AND each admin organization as separate accounts', async () => {
     vi.mocked(exchangeLinkedInCodeForToken).mockResolvedValueOnce({ access_token: 'at-1', expires_in: 5_184_000 });
-    vi.mocked(fetchLinkedInMemberProfile).mockResolvedValueOnce({ id: 'member-123', name: 'Ryan C' });
+    vi.mocked(fetchLinkedInMemberProfile).mockResolvedValueOnce({ id: 'member-123', name: 'Ryan C', picture: 'https://media.licdn.com/p.jpg' });
     vi.mocked(fetchLinkedInAdminOrganizations).mockResolvedValueOnce([
       { id: 'urn:li:organization:111', name: 'Page Um' },
       { id: 'urn:li:organization:222', name: null },
@@ -191,7 +191,7 @@ describe('GET /api/linkedin-auth/callback', () => {
       })),
     } as never);
     vi.mocked(exchangeLinkedInCodeForToken).mockResolvedValueOnce({ access_token: 'at-1', expires_in: 5_184_000 });
-    vi.mocked(fetchLinkedInMemberProfile).mockResolvedValueOnce({ id: 'member-123', name: 'Ryan C' });
+    vi.mocked(fetchLinkedInMemberProfile).mockResolvedValueOnce({ id: 'member-123', name: 'Ryan C', picture: 'https://media.licdn.com/p.jpg' });
     vi.mocked(fetchLinkedInAdminOrganizations).mockResolvedValueOnce([]);
     vi.mocked(upsertSocialAccount).mockResolvedValue({ id: 'row-1' } as never);
 

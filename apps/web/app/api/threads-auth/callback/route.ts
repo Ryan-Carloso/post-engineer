@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { reportProfileFetched } from '@/lib/account-profile-telemetry';
 
 //---------------
 // getSessionUserId — session user_id or null
@@ -56,6 +57,10 @@ async function getHandler(request: NextRequest) {
     const { exchangeThreadsCodeForToken, fetchThreadsProfile } = await import('@/lib/threads');
     const token = await exchangeThreadsCodeForToken(code, callbackAuth.redirectUri);
     const profile = await fetchThreadsProfile(token.access_token);
+    reportProfileFetched('threads', 'connect', {
+      accountName: profile.username,
+      pictureUrl: profile.profilePictureUrl,
+    });
     const tokenExpiresAt = new Date(Date.now() + token.expires_in * 1000);
 
     // MCP (no browser session): persists with service role, owner = userId
@@ -70,7 +75,10 @@ async function getHandler(request: NextRequest) {
       provider: 'threads',
       providerAccountId: profile.id,
       accountName: profile.username,
-      accountMetadata: { profilePictureUrl: profile.profilePictureUrl },
+      accountMetadata: {
+        profilePictureUrl: profile.profilePictureUrl,
+        profileSyncedAt: new Date().toISOString(),
+      },
       tokens: {
         access_token: token.access_token,
         token_type: 'bearer',

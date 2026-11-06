@@ -71,4 +71,9 @@ async function getHandler(
 // A 404 here is always a genuine miss (no more guessing between two
 // endpoints), so it keeps warning.
 //---------------
-export const GET = withApiErrorReporting('GET /api/posts/[id]', getHandler, { getUserId: resolveReportingUserId });
+export const GET = withApiErrorReporting('GET /api/posts/[id]', getHandler, {
+  // Polling route: the post detail page refetches every 60s, so a success
+  // event per read is noise; 4xx/5xx still report.
+  reportSuccess: false,
+  getUserId: resolveReportingUserId,
+});
