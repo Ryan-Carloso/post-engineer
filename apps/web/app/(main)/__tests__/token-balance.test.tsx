@@ -31,7 +31,18 @@ vi.mock('next/link', () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
+// Only notifyIfSessionExpired is doubled; the module's redirect behavior is
+// pinned in lib/__tests__/session-expiry.test.tsx.
+vi.mock('@/lib/session-expiry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/session-expiry')>();
+  return {
+    ...actual,
+    notifyIfSessionExpired: vi.fn(),
+  };
+});
+
 import { TokenBalance } from '../token-balance';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 
 describe('TokenBalance', () => {
   beforeEach(() => {
@@ -73,6 +84,17 @@ describe('TokenBalance', () => {
     await waitFor(() => {
       expect(screen.getByTestId('token-balance')).toHaveTextContent('0');
     });
+  });
+
+  it('dispara a sessão expirada uma única vez quando a API responde 401', async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 401, json: async () => ({ success: false }) });
+
+    render(<TokenBalance />);
+
+    // Zero balance (fail-safe contract) while the session handler runs.
+    await waitFor(() => expect(notifyIfSessionExpired).toHaveBeenCalledTimes(1));
+    const response = vi.mocked(notifyIfSessionExpired).mock.calls[0]?.[0];
+    expect((response as Response).status).toBe(401);
   });
 
   it('does not render subscription-era percentage state', async () => {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { logger } from '@/lib/logger';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import Link from 'next/link';
 import AccountCard from '@/components/account-card';
 import { ProviderIcon } from '@/components/provider-icon';
@@ -87,6 +88,7 @@ async function fetchDefaults(personaId: string, loadError: string): Promise<Publ
     return { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [] };
   }
   const res = await fetch(`/api/persona/publishing-accounts?personaId=${encodeURIComponent(personaId)}`);
+  if (!res.ok) notifyIfSessionExpired(res);
   const body = (await res.json()) as DefaultsResponse;
   if (!res.ok || body.success !== true) throw new Error(describeFailure(loadError, body));
   return normalizeDefaults(body.defaults);
@@ -102,6 +104,7 @@ async function saveDefaults(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ accounts }),
   });
+  if (!res.ok) notifyIfSessionExpired(res);
   const body = (await res.json()) as DefaultsResponse;
   if (!res.ok || body.success !== true) throw new Error(describeFailure(saveError, body));
   return normalizeDefaults(body.defaults);

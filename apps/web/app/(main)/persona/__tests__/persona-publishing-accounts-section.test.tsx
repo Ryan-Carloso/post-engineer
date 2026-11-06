@@ -76,8 +76,19 @@ vi.mock('@/lib/account-card-telemetry', () => ({
   reportAccountCardDisplay: vi.fn(),
 }));
 
+// Only notifyIfSessionExpired is doubled; the redirect behavior of the
+// module is pinned in lib/__tests__/session-expiry.test.tsx.
+vi.mock('@/lib/session-expiry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/session-expiry')>();
+  return {
+    ...actual,
+    notifyIfSessionExpired: vi.fn(),
+  };
+});
+
 import { PersonaPublishingAccountsSection } from '../persona-publishing-accounts-section';
 import { reportAccountCardDisplay } from '@/lib/account-card-telemetry';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 
 const PERSONA_ID = '11111111-2222-3333-4444-555555555555';
 const DEFAULTS_URL = `/api/persona/publishing-accounts?personaId=${PERSONA_ID}`;
@@ -189,6 +200,27 @@ describe('PersonaPublishingAccountsSection', () => {
     mockFetchOnce({ success: false }, false, 500);
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
     expect(await screen.findByText('Could not load the default accounts.')).toBeInTheDocument();
+  });
+
+  it('notifies the session-expiry handler when the defaults GET answers 401', async () => {
+    const notify = vi.mocked(notifyIfSessionExpired);
+    notify.mockClear();
+    mockFetchOnce({ success: false }, false, 401);
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    expect(await screen.findByText('Could not load the default accounts.')).toBeInTheDocument();
+    await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+  });
+
+  it('notifies the session-expiry handler when the PUT save answers 401', async () => {
+    const notify = vi.mocked(notifyIfSessionExpired);
+    notify.mockClear();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(serverDefaults) })
+      .mockResolvedValueOnce({ ok: false, status: 401, json: () => Promise.resolve({ success: false }) });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    fireEvent.click(await screen.findByTestId('publishing-accounts-save'));
+    await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
   });
 
   it('toggling a checkbox updates the local selection only', async () => {

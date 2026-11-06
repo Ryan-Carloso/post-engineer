@@ -4,6 +4,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import type { TokenTransaction, TokenTransactionsPage } from '@/lib/token-transactions';
+import { HttpStatusError } from '@/lib/errors';
 
 //---------------
 // TokenHistory — the user's full token ledger: purchases, video
@@ -46,11 +47,14 @@ function isTransactionsPage(value: unknown): value is TokenTransactionsPage {
   );
 }
 
-async function fetchTransactionsPage(offset: number): Promise<TokenTransactionsPage> {
+export async function fetchTransactionsPage(offset: number): Promise<TokenTransactionsPage> {
   const response = await fetch(`/api/billing/transactions?limit=${PAGE_SIZE}&offset=${offset}`);
   const data: unknown = await response.json().catch(() => null);
   if (!response.ok || !isTransactionsPage(data)) {
-    throw new Error('Failed to load token transactions');
+    // The used HttpStatusError keeps the shared 4xx/no-retry policy and the
+    // host-wide session-expiry redirect working for the billing history too;
+    // a 2xx answer with an invalid body keeps its 2xx status (transient).
+    throw new HttpStatusError('Failed to load token transactions', response.status);
   }
   return data;
 }

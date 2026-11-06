@@ -212,3 +212,13 @@ export function getErrorSuggestions(error: Error): string[] {
 
   return suggestions;
 }
+// A fetch whose response failed, carrying the HTTP status so a retry policy
+// (lib/query-retry) can tell a permanent client error (4xx) from a
+// transient one (5xx). A 2xx answer with an unsuccessful body keeps its 2xx
+// status and is treated as transient.
+export class HttpStatusError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+    this.name = 'HttpStatusError';
+  }
+}

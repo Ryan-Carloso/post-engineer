@@ -6,6 +6,7 @@
 
 import { toFiniteNumber } from '@/lib/tokens';
 import { logger } from '@/lib/logger';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 
 export interface TokenBalance {
   balance: number;
@@ -24,7 +25,12 @@ const EMPTY_BALANCE: TokenBalance = {
 export async function fetchTokenBalance(): Promise<TokenBalance> {
   try {
     const res = await fetch('/api/billing/tokens');
-    if (!res.ok) return EMPTY_BALANCE;
+    if (!res.ok) {
+      // Fail-safe contract kept (zero balance, never throws), but a dead
+      // session must still trigger the host-wide redirect.
+      notifyIfSessionExpired(res);
+      return EMPTY_BALANCE;
+    }
     const data = await res.json() as {
       success?: boolean;
       balance?: unknown;

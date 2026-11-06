@@ -16,40 +16,50 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => ({ get: (key: string) => (key === 'checkout' ? checkoutParam.value : null) }),
 }));
 
-vi.mock('@/lib/i18n/provider', () => ({
-  useI18n: () => ({
-    t: (key: string, vars?: Record<string, string | number>) => {
-      const dict: Record<string, string> = {
-        'pricing.title': 'Buy tokens',
-        'pricing.subtitle': 'Prepaid tokens for video generation.',
-        'pricing.successDesc': 'Payment received.',
-        'pricing.cancelDesc': 'Checkout canceled.',
-        'pricing.currentPlan': 'Remaining tokens',
-        'pricing.tokens': 'tokens',
-        'pricing.perMonth': 'One-time purchase',
-        'pricing.activate': 'Buy tokens',
-        'pricing.buyPack': 'Buy tokens',
-        'pricing.cancelDialogTitle': 'Why did you cancel?',
-        'pricing.cancelDialogDesc': 'Tell us why.',
-        'pricing.cancelReasonPrice': 'Too expensive',
-        'pricing.cancelReasonTesting': 'Just testing',
-        'pricing.cancelReasonOther': 'Other',
-        'pricing.cancelDetailsLabel': 'Details?',
-        'pricing.cancelDetailsPlaceholder': 'Details…',
-        'pricing.cancelWhatsappCta': 'Send via WhatsApp',
-        'pricing.cancelClose': 'Close',
-        'pricing.whatsappCancel': 'Hi! I canceled. Reason: {reason}',
-      };
-      let out = dict[key] ?? key;
-      if (vars) {
-        for (const [name, value] of Object.entries(vars)) out = out.split(`{${name}}`).join(String(value));
-      }
-      return out;
-    },
-  }),
+// Only notifyIfSessionExpired is doubled; the module's redirect behavior is
+// pinned in lib/__tests__/session-expiry.test.tsx.
+vi.mock('@/lib/session-expiry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/session-expiry')>();
+  return {
+    ...actual,
+    notifyIfSessionExpired: vi.fn(),
+  };
+});
+
+vi.mock('@/lib/i18n/provider', () => ({  useI18n: () => ({
+  t: (key: string, vars?: Record<string, string | number>) => {
+    const dict: Record<string, string> = {
+      'pricing.title': 'Buy tokens',
+      'pricing.subtitle': 'Prepaid tokens for video generation.',
+      'pricing.successDesc': 'Payment received.',
+      'pricing.cancelDesc': 'Checkout canceled.',
+      'pricing.currentPlan': 'Remaining tokens',
+      'pricing.tokens': 'tokens',
+      'pricing.perMonth': 'One-time purchase',
+      'pricing.activate': 'Buy tokens',
+      'pricing.buyPack': 'Buy tokens',
+      'pricing.cancelDialogTitle': 'Why did you cancel?',
+      'pricing.cancelDialogDesc': 'Tell us why.',
+      'pricing.cancelReasonPrice': 'Too expensive',
+      'pricing.cancelReasonTesting': 'Just testing',
+      'pricing.cancelReasonOther': 'Other',
+      'pricing.cancelDetailsLabel': 'Details?',
+      'pricing.cancelDetailsPlaceholder': 'Details…',
+      'pricing.cancelWhatsappCta': 'Send via WhatsApp',
+      'pricing.cancelClose': 'Close',
+      'pricing.whatsappCancel': 'Hi! I canceled. Reason: {reason}',
+    };
+    let out = dict[key] ?? key;
+    if (vars) {
+      for (const [name, value] of Object.entries(vars)) out = out.split(`{${name}}`).join(String(value));
+    }
+    return out;
+  },
+}),
 }));
 
 import BillingPage from '../page';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 
 function Wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -90,6 +100,39 @@ describe('BillingPage', () => {
       expect.objectContaining({ body: JSON.stringify({ packId: 'pack_50' }) }),
     ));
     await waitFor(() => expect(routerPush).toHaveBeenCalledWith('https://checkout.stripe.com/session'));
+  });
+
+  it('notifies the session-expiry handler when checkout 401s', async () => {
+    const notify = vi.mocked(notifyIfSessionExpired);
+    notify.mockClear();
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, balance: 0 }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, transactions: [], total: 0, limit: 20, offset: 0 }) })
+      .mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({ success: false, error: 'Session expired' }) });
+    render(<BillingPage />, { wrapper: Wrapper });
+
+    await waitFor(() => expect(screen.getByText('10 tokens')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Buy tokens' })[1]);
+
+    await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    // The failure object still drives the ordinary error state in the UI.
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it('notifies on a checkout 401 whose body is not JSON (proxy error page)', async () => {
+    const notify = vi.mocked(notifyIfSessionExpired);
+    notify.mockClear();
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, balance: 0 }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, transactions: [], total: 0, limit: 20, offset: 0 }) })
+      .mockResolvedValueOnce({ ok: false, status: 401, json: async () => { throw new SyntaxError('Unexpected token <'); } });
+    render(<BillingPage />, { wrapper: Wrapper });
+
+    await waitFor(() => expect(screen.getByText('10 tokens')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Buy tokens' })[1]);
+
+    await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
   it('opens the cancel feedback dialog with WhatsApp CTA on ?checkout=canceled', async () => {
