@@ -3,6 +3,7 @@
 // the route stays under the file-size ratchet.
 //---------------
 
+import type { FacelessMaterial } from '@/lib/generation/faceless-materials';
 import type { DistributedSlot } from '@/lib/schedule/slot-distribution';
 import type { ScriptSegment } from '@/lib/generation/script-segments';
 
@@ -12,7 +13,7 @@ export interface SlotRowInput {
   scheduleId: string;
   userId: string;
   faceless: boolean;
-  facelessMaterial: 'broll' | 'svg' | undefined;
+  facelessMaterial: FacelessMaterial | undefined;
   fullLipsync?: boolean;
   segments: ScriptSegment[] | undefined;
 }

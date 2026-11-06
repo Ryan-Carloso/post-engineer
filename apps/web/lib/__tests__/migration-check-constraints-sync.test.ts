@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
+import { FACELESS_MATERIALS } from '@/lib/generation/faceless-materials';
 import { GENERATION_PUBLISH_MODES } from '@/lib/generation/video-generation';
+import { METRICS_WINDOWS } from '@/lib/metrics/metrics-query';
 import { VIDEO_LAYOUTS } from '@/lib/persona-schema';
 
 //---------------
@@ -73,12 +75,11 @@ const EXPECTED: Record<string, readonly string[]> = {
   schedules_publish_mode_check: GENERATION_PUBLISH_MODES,
   video_generations_publish_mode_check: GENERATION_PUBLISH_MODES,
   personas_video_layout_check: VIDEO_LAYOUTS,
-  // Mirrors z.enum(['broll', 'svg']) in app/api/videos/generate-and-schedule/route.ts.
-  scheduled_posts_faceless_material_check: ['broll', 'svg'],
-  // Mirrors the window options in app/(main)/metrics/page.tsx.
-  post_metrics_metrics_window_check: ['24h', '7d'],
-  post_metrics_done_metrics_window_check: ['24h', '7d'],
-  // Mirrors the cloned-voice status values written by the voices routes.
+  scheduled_posts_faceless_material_check: FACELESS_MATERIALS,
+  post_metrics_metrics_window_check: METRICS_WINDOWS,
+  post_metrics_done_metrics_window_check: METRICS_WINDOWS,
+  // No TypeScript list exists: the status is written by the engine voice
+  // registration, so this literal is the pinned contract.
   cloned_voices_status_check: ['pending', 'ready', 'failed'],
 };
 

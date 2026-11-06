@@ -10,7 +10,7 @@ import { ProviderIcon } from '@/components/provider-icon';
 import { MetricsBarChart } from '@/components/ui/metrics-bar-chart';
 import { PROVIDER_LABELS, accountOption } from '@/lib/account-options';
 import { SOCIAL_PROVIDERS, isSocialProvider } from '@/lib/providers/registry';
-import { METRICS_NONE, METRICS_ROW_LIMIT, type MetricsQuery, type MetricsRowView } from '@/lib/metrics/metrics-query';
+import { METRICS_NONE, METRICS_ROW_LIMIT, METRICS_WINDOWS, type MetricsQuery, type MetricsRowView } from '@/lib/metrics/metrics-query';
 import {
   GROUP_KEYS,
   METRIC_KEYS,
@@ -117,7 +117,7 @@ export default function MetricsPage(): React.ReactElement {
       <section className={cn(CARD_CLASS, 'flex flex-col gap-4 p-4 lg:p-5')}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Segmented
-            options={(['24h', '7d'] as const).map((value) => ({
+            options={METRICS_WINDOWS.map((value) => ({
               value,
               label: t(value === '24h' ? 'metrics.window24h' : 'metrics.window7d'),
             }))}

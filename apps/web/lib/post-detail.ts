@@ -1,3 +1,4 @@
+import type { FacelessMaterial } from '@/lib/generation/faceless-materials';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enrichSlot } from './schedule-slot-presentation';
 import {
@@ -74,7 +75,7 @@ export interface SlotPostDetail {
   persona: { id: string; name: string } | null;
   generation: {
     faceless: boolean;
-    material: 'broll' | 'svg';
+    material: FacelessMaterial;
     language: string | null;
     voiceId: string | null;
     videoAspect: string | null;
