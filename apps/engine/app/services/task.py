@@ -19,6 +19,7 @@ from app.services import (
     longcat,
     material,
     persona_hook,
+    persona_preflight,
     place_photos,
     segment_panels,
     stock_terms,
@@ -905,9 +906,7 @@ def generate_final_videos(
                 "full_lipsync requires a persona with a photo and lipsync enabled"
             )
         logger.info("generating full lip-sync video (no b-roll)")
-        full_image = full_lipsync.resolve_persona_image(
-            task_id, params, _PERSONA_IMAGE_MAX_BYTES
-        )
+        full_image = full_lipsync.resolve_persona_image(task_id, params, _PERSONA_IMAGE_MAX_BYTES)
         full_path, full_cost, full_job_ids = full_lipsync.render_full_lipsync(
             task_id=task_id,
             params=params,
@@ -1037,9 +1036,7 @@ def prepare_persona_lipsync_video(
         return None
     # Shared with full lip-sync: one SSRF-safe download for both paths.
     task_dir = utils.task_dir(task_id)
-    image_path = full_lipsync.resolve_persona_image(
-        task_id, params, _PERSONA_IMAGE_MAX_BYTES
-    )
+    image_path = full_lipsync.resolve_persona_image(task_id, params, _PERSONA_IMAGE_MAX_BYTES)
 
     lipsync_path = path.join(task_dir, f"lipsync-intro-{index}.mp4")
     _, intro_cost_usd, intro_job_id, intro_job_cost = longcat.generate_intro_with_container(
@@ -1076,6 +1073,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
     try:
         if stop_at == "video":
             video_storage.require_r2_configuration()
+            phases.begin("persona_image")
+            persona_preflight.preflight_persona_image(task_id, params, _PERSONA_IMAGE_MAX_BYTES)
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=5)
         track_generation_started(task_id)
 

@@ -242,6 +242,9 @@ def resolve_persona_image(
         raise longcat.LongCatError("lip sync requires a persona image")
     task_dir = utils.task_dir(task_id)
     image_path = path.join(task_dir, "persona-lipsync-image.png")
+    if path.isfile(image_path) and path.getsize(image_path) > 0:
+        # Already fetched by persona_preflight at the start of the task.
+        return image_path
     if image_url.startswith("data:image/"):
         try:
             encoded = image_url.split(",", 1)[1]
