@@ -239,7 +239,7 @@ class TerminalWriteWiringTests(unittest.TestCase):
 
 class StartCrashStageTests(unittest.TestCase):
     def _run_start_until_crash(self, fail_in):
-        params = TaskVideoRequest(video_subject="topic")
+        params = TaskVideoRequest(video_subject="topic", voice_name="chatterbox:kokoro_af_heart")
         task_id = "crash-task"
         task_service.sm.state.update_task(task_id, user_id="u-1")
         with (
@@ -297,7 +297,7 @@ class StartCrashStageTests(unittest.TestCase):
         # phase tracker must persist the last completed phase there on
         # complete(). Run a minimal start(): patch everything after the
         # script phase so start() returns early at stop_at="script".
-        params = TaskVideoRequest(video_subject="topic")
+        params = TaskVideoRequest(video_subject="topic", voice_name="chatterbox:kokoro_af_heart")
         task_id = "stage-task"
         task_service.sm.state.update_task(task_id, user_id="u-1")
         with (
