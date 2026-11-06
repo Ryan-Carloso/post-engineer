@@ -26,8 +26,11 @@ const apiDir = join(here, '..', '..', 'app', 'api');
 // Routes a client re-reads on an interval: one success event per poll is
 // noise. Every other route keeps its semantic 2xx event.
 const POLLING_ROUTE_LABELS = new Set([
+  'GET /api/persona/video-generations',
   'GET /api/persona/video-status/[taskId]',
+  'GET /api/posts/[id]',
   'GET /api/schedule/slots/[slotId]',
+  'GET /api/schedule/status',
 ]);
 
 function collectRouteFiles(dir: string): string[] {
