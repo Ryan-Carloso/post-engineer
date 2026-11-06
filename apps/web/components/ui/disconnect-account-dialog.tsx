@@ -8,7 +8,7 @@
 // Initial focus lands on the cancel button, never the confirm.
 //---------------
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { SpinnerIcon } from '@/lib/ui';
 
@@ -36,11 +36,6 @@ export default function DisconnectAccountDialog({
   pending = false,
 }: DisconnectAccountDialogProps): ReactNode {
   const cancelRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (open) cancelRef.current?.focus();
-  }, [open]);
-
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogPrimitive.Portal>
@@ -49,7 +44,6 @@ export default function DisconnectAccountDialog({
           data-testid="disconnect-dialog"
           aria-label={title}
           className="fixed top-1/2 left-1/2 z-50 w-full max-w-sm -translate-1/2 rounded-2xl bg-white p-6 shadow-xl"
-          onInteractOutside={(event) => { if (!pending) { event.preventDefault(); onClose(); } }}
         >
           <DialogPrimitive.Title className="text-lg font-bold tracking-tight text-[#101728]">{title}</DialogPrimitive.Title>
           <DialogPrimitive.Description className="mt-2 text-sm leading-5 text-[#718096]">{body}</DialogPrimitive.Description>
@@ -65,6 +59,7 @@ export default function DisconnectAccountDialog({
               ref={cancelRef}
               type="button"
               data-testid="disconnect-cancel-button"
+              autoFocus
               className="rounded-lg border border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:border-neutral-400 hover:text-neutral-900"
               onClick={onClose}
             >
