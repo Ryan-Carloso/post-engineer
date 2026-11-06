@@ -6,8 +6,8 @@
 // GET /api/account calls this per row: it rereads the provider when the row
 // was never synced, the last sync is older than ACCOUNT_PROFILE_SYNC_MAX_AGE_MS,
 // or the stored picture URL expired. A failed read is reported and rethrown
-// with no write: the next list retries the row, so a fixed account shows up
-// on the next page load instead of waiting out a backoff window.
+// with no write and no backoff: the next list retries the row immediately,
+// so a fixed account shows up on the next page load.
 // Readers live in account-profile-sources.ts.
 //---------------
 

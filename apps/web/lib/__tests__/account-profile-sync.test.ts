@@ -29,7 +29,7 @@ const FRESH_PIC = `https://scontent.cdninstagram.com/p.jpg?oe=${hexSeconds(NOW.g
 const EXPIRED_PIC = `https://scontent.cdninstagram.com/p.jpg?oe=${hexSeconds(NOW.getTime() - 1000)}`;
 const RECENT = new Date(NOW.getTime() - 60_000).toISOString();
 const STALE = new Date(NOW.getTime() - ACCOUNT_PROFILE_SYNC_MAX_AGE_MS - 1).toISOString();
-const STALE_FAILURE_MARKER = new Date(NOW.getTime() - 60_000).toISOString();
+const LEFTOVER_FAILURE_MARKER = new Date(NOW.getTime() - 60_000).toISOString();
 
 function record(overrides: Partial<SocialAccountRecord> = {}, metadata: Record<string, unknown> = {}): SocialAccountRecord {
   return {
@@ -91,7 +91,7 @@ describe('profileNeedsSync', () => {
     // Rows synced before the removal may still carry profileSyncFailedAt;
     // it is inert data now and must not suppress a sync.
     expect(
-      profileNeedsSync(record({}, { profileSyncedAt: undefined, profileSyncFailedAt: STALE_FAILURE_MARKER }), 'profilePictureUrl', NOW),
+      profileNeedsSync(record({}, { profileSyncedAt: undefined, profileSyncFailedAt: LEFTOVER_FAILURE_MARKER }), 'profilePictureUrl', NOW),
     ).toBe(true);
   });
 });
