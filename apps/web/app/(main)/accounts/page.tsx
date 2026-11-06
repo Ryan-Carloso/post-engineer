@@ -190,7 +190,7 @@ function BlueskyAccountsSection(): ReactNode {
       description={t('accounts.blueskyDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
       count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="bluesky" name={account.displayName ?? account.handle} handle={account.handle} thumbnail={account.avatar} showDisconnect onDisconnect={() => { setDisconnectError(null); void handleDisconnect(t, disconnect, 'bluesky', account.did, setDisconnectError); }} />)}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="bluesky" name={account.displayName ?? account.handle} thumbnail={account.avatar} showDisconnect onDisconnect={() => { setDisconnectError(null); void handleDisconnect(t, disconnect, 'bluesky', account.did, setDisconnectError); }} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}

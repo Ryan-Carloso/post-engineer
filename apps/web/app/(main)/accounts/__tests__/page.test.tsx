@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
@@ -475,6 +475,24 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     fireEvent.click(screen.getByTestId('account-card-select'));
     expect(mockStoreState.toggleSelectedAccount).toHaveBeenCalledWith('instagram', 'ig1');
     expect(screen.getByTestId('account-card')).toHaveAttribute('data-stored-display-name', 'Insta Name');
+  });
+
+  it('shows a Bluesky display name over the handle when the row carries one', () => {
+    vi.mocked(useBlueskyAccountsQuery, { partial: true }).mockReturnValue({
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'bluesky', recordId: 'r1', did: 'did:plc:a', handle: 'a.bsky.social', displayName: 'Habit Loom', connectedAt: 0, lastUsed: 0 },
+          { provider: 'bluesky', recordId: 'r2', did: 'did:plc:b', handle: 'b.bsky.social', connectedAt: 0, lastUsed: 0 },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const cards = screen.getAllByTestId('account-card').filter((el) => el.getAttribute('data-provider') === 'bluesky');
+    expect(cards).toHaveLength(2);
+    expect(within(cards[0]).getByText('Habit Loom')).toBeTruthy();
+    expect(within(cards[1]).getByText('b.bsky.social')).toBeTruthy();
   });
 
   it('shows an error message when the server reports failure', async () => {
