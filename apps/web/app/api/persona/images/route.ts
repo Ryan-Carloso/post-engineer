@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { apiErrorResponse } from '@/lib/api-error';
+import { forwardLibraryImagesError, personaValidationError } from '../validation-error';
 import {
   addLibraryImages,
   IMAGE_BUCKET,
@@ -248,7 +249,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, supabase } = authed;
 
   const personaId = new URL(request.url).searchParams.get('personaId');
-  if (!personaId) return errorResponse(400, 'personaId is required.', 'GET /api/persona/images');
+  if (!personaId) return personaValidationError('personaId is required.', 'GET /api/persona/images', { field: 'personaId' });
   const owned = await assertPersonaOwned(supabase, auth, personaId, 'GET');
   if ('response' in owned) return owned.response;
 
@@ -310,19 +311,19 @@ async function postHandler(request: Request): Promise<NextResponse> {
   try {
     formData = await request.formData();
   } catch {
-    return errorResponse(400, 'Invalid multipart payload.', 'POST /api/persona/images');
+    return personaValidationError('Invalid multipart payload.', 'POST /api/persona/images');
   }
 
   const personaId = formData.get('personaId');
   if (typeof personaId !== 'string' || personaId.length === 0) {
-    return errorResponse(400, 'personaId is required.', 'POST /api/persona/images');
+    return personaValidationError('personaId is required.', 'POST /api/persona/images', { field: 'personaId' });
   }
   const owned = await assertPersonaOwned(supabase, auth, personaId, 'POST');
   if ('response' in owned) return owned.response;
 
   const file = formData.get('image');
   if (!isFileLike(file) || file.size === 0) {
-    return errorResponse(400, 'An image file is required.', 'POST /api/persona/images');
+    return personaValidationError('An image file is required.', 'POST /api/persona/images', { field: 'file' });
   }
   const tag = formData.get('tag');
   const description = formData.get('description');
@@ -330,10 +331,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // Silently coercing a File to '' would lose the caller's metadata with a
   // 201; fail loudly instead. Missing fields are fine (they default to '').
   if (tag !== null && typeof tag !== 'string') {
-    return errorResponse(400, 'tag must be a string.', 'POST /api/persona/images');
+    return personaValidationError('tag must be a string.', 'POST /api/persona/images', { field: 'tag' });
   }
   if (description !== null && typeof description !== 'string') {
-    return errorResponse(400, 'description must be a string.', 'POST /api/persona/images');
+    return personaValidationError('description must be a string.', 'POST /api/persona/images', { field: 'description' });
   }
   // The form field is a string: anything other than the exact 'true'/'false'
   // literals ('1', 'yes', 'True') is a client bug. Silently coercing to
@@ -342,7 +343,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   let isPrimary = false;
   if (rawIsPrimary !== null) {
     if (rawIsPrimary !== 'true' && rawIsPrimary !== 'false') {
-      return errorResponse(400, "isPrimary must be 'true' or 'false'.", 'POST /api/persona/images');
+      return personaValidationError("isPrimary must be 'true' or 'false'.", 'POST /api/persona/images', { field: 'isPrimary' });
     }
     isPrimary = rawIsPrimary === 'true';
   }
@@ -374,7 +375,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       route: 'api/persona/images',
       personaId,
     });
-    return errorResponse(added.status, added.error, 'POST /api/persona/images');
+    return forwardLibraryImagesError(added, 'POST /api/persona/images');
   }
   const image = added.images[0];
   const warnings: string[] = [];
@@ -412,7 +413,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
       ? (body as { id: unknown }).id
       : undefined;
   if (typeof id !== 'string' || id.length === 0) {
-    return errorResponse(400, 'id is required.', 'PATCH /api/persona/images');
+    return personaValidationError('id is required.', 'PATCH /api/persona/images', { field: 'id' });
   }
   const { image, error: ownershipError } = await getOwnedImage(supabase, auth, id, 'PATCH');
   if (ownershipError) return ownershipError;
@@ -421,40 +422,38 @@ async function patchHandler(request: Request): Promise<NextResponse> {
   if (typeof body === 'object' && body !== null) {
     const patch = body as { tag?: unknown; description?: unknown; isPrimary?: unknown };
     if (patch.tag !== undefined) {
-      if (typeof patch.tag !== 'string') return errorResponse(400, 'tag must be a string.', 'PATCH /api/persona/images');
+      if (typeof patch.tag !== 'string') return personaValidationError('tag must be a string.', 'PATCH /api/persona/images', { field: 'tag' });
       if (patch.tag.trim().length > MAX_TAG_LENGTH) {
-        return errorResponse(400, `tag must be at most ${MAX_TAG_LENGTH} characters.`, 'PATCH /api/persona/images');
+        return personaValidationError(`tag must be at most ${MAX_TAG_LENGTH} characters.`, 'PATCH /api/persona/images', { field: 'tag' });
       }
       updates.tag = patch.tag.trim();
     }
     if (patch.description !== undefined) {
       if (typeof patch.description !== 'string') {
-        return errorResponse(400, 'description must be a string.', 'PATCH /api/persona/images');
+        return personaValidationError('description must be a string.', 'PATCH /api/persona/images', { field: 'description' });
       }
       if (patch.description.trim().length > MAX_DESCRIPTION_LENGTH) {
-        return errorResponse(400, `description must be at most ${MAX_DESCRIPTION_LENGTH} characters.`, 'PATCH /api/persona/images');
+        return personaValidationError(`description must be at most ${MAX_DESCRIPTION_LENGTH} characters.`, 'PATCH /api/persona/images', { field: 'description' });
       }
       updates.description = patch.description.trim();
     }
     if (patch.isPrimary !== undefined) {
       if (typeof patch.isPrimary !== 'boolean') {
-        return errorResponse(400, 'isPrimary must be a boolean.', 'PATCH /api/persona/images');
+        return personaValidationError('isPrimary must be a boolean.', 'PATCH /api/persona/images', { field: 'isPrimary' });
       }
       // Demoting to false is rejected: with no demote-only target the
       // library would end up with zero primary images, and every consumer
       // would fall back to nondeterministic selection. Set isPrimary: true
       // on the new image instead — the swap atomically demotes the old one.
       if (patch.isPrimary === false) {
-        return errorResponse(
-          400,
-          'isPrimary cannot be set to false. Mark another image as primary instead.', 'PATCH /api/persona/images',
-        );
+        const message = 'isPrimary cannot be set to false. Mark another image as primary instead.';
+        return personaValidationError(message, 'PATCH /api/persona/images', { field: 'isPrimary' });
       }
       updates.is_primary = patch.isPrimary;
     }
   }
   if (Object.keys(updates).length === 0) {
-    return errorResponse(400, 'Nothing to update.', 'PATCH /api/persona/images');
+    return personaValidationError('Nothing to update.', 'PATCH /api/persona/images');
   }
 
   // The warning-style success below is only honest when a primary swap
@@ -521,7 +520,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   const { auth, supabase } = authed;
 
   const id = new URL(request.url).searchParams.get('id');
-  if (!id) return errorResponse(400, 'id is required.', 'DELETE /api/persona/images');
+  if (!id) return personaValidationError('id is required.', 'DELETE /api/persona/images', { field: 'id' });
   const { image, error: ownershipError } = await getOwnedImage(supabase, auth, id, 'DELETE');
   if (ownershipError) return ownershipError;
 
