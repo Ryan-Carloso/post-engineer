@@ -550,6 +550,16 @@
               }
             }
           },
+          "422": {
+            "description": "Bluesky rejected the handle or app password (code BLUESKY_CREDENTIAL_REJECTED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limited.",
             "content": {
