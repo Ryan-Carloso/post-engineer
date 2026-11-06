@@ -50,11 +50,7 @@ import {
   hasNonEmptyString,
   type JobPersona,
 } from '@/lib/generation/video-job-payload';
-import {
-  recordGenerationStart,
-  recordGenerationUpdate,
-  startEngineVideoTask,
-} from '@/lib/generation/video-generation';
+import { recordGenerationStart, recordGenerationUpdate, startEngineVideoTask } from '@/lib/generation/video-generation';
 import { FACELESS_MATERIALS } from '@/lib/generation/faceless-materials';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
 import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
