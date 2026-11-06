@@ -306,6 +306,10 @@ async function patchHandler(
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.
 //---------------
-export const GET = withApiErrorReporting('GET /api/schedule/slots/[slotId]', getHandler, { getUserId: resolveReportingUserId });
+export const GET = withApiErrorReporting('GET /api/schedule/slots/[slotId]', getHandler, {
+  // Polling route: a success event per poll is noise; 4xx/5xx still report.
+  reportSuccess: false,
+  getUserId: resolveReportingUserId,
+});
 export const DELETE = withApiErrorReporting('DELETE /api/schedule/slots/[slotId]', deleteHandler, { getUserId: resolveReportingUserId });
 export const PATCH = withApiErrorReporting('PATCH /api/schedule/slots/[slotId]', patchHandler, { getUserId: resolveReportingUserId });
