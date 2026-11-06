@@ -238,6 +238,24 @@ describe('social-accounts', () => {
       await expect(
         updateSocialAccountMetadata(mockSupabase as never, 'u1', 'instagram', 'ig-1', { username: 'x' })
       ).resolves.toBeUndefined();
+      const payload = fromReturn.update.mock.calls[0][0] as Record<string, unknown>;
+      expect(payload.account_metadata).toEqual({ username: 'x' });
+      expect('account_name' in payload).toBe(false);
+    });
+
+    it('also writes account_name when one is given', async () => {
+      fromReturn.update.mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ error: null }),
+          }),
+        }),
+      });
+
+      await updateSocialAccountMetadata(mockSupabase as never, 'u1', 'instagram', 'ig-1', { username: 'y' }, 'y');
+      const payload = fromReturn.update.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      expect(payload.account_name).toBe('y');
+      expect(payload.account_metadata).toEqual({ username: 'y' });
     });
   });
 });

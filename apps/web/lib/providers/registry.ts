@@ -13,6 +13,9 @@ export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 
 
 export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
 
+// Stored/shown when Instagram returned no username for the account.
+export const INSTAGRAM_USERNAME_FALLBACK = 'instagram_user';
+
 //---------------
 // Public shapes (no tokens) per provider — what /api/account returns
 //---------------
@@ -135,7 +138,7 @@ const instagramDef: ProviderDef<true> = {
       provider: 'instagram',
       recordId: record.id,
       igUserId: record.providerAccountId,
-      username: record.accountName || 'instagram_user',
+      username: record.accountName || INSTAGRAM_USERNAME_FALLBACK,
       name: asOptionalString(metadata.name) ?? '',
       profilePictureUrl: asOptionalString(metadata.profilePictureUrl),
       followersCount: asOptionalNumber(metadata.followersCount),
