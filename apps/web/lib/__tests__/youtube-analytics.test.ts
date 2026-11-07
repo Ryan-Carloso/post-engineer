@@ -15,6 +15,7 @@ import {
   aggregateVideoStats,
   analyticsDate,
   isInsufficientScopeError,
+  queryRetentionCurve,
   queryVideoStats,
   reportTable,
 } from '@/lib/youtube-analytics';
@@ -95,6 +96,38 @@ describe('youtube-analytics queryVideoStats', () => {
   it('never queries with a malformed video id', async () => {
     await expect(queryVideoStats(client, { ...range, videoId: 'x;views>0' })).rejects.toThrow('Invalid YouTube video id');
     expect(mockQuery).not.toHaveBeenCalled();
+  });
+});
+
+describe('youtube-analytics queryRetentionCurve', () => {
+  it('queries elapsedVideoTimeRatio for one video and returns sorted points', async () => {
+    mockQuery.mockResolvedValueOnce({
+      data: {
+        columnHeaders: [{ name: 'elapsedVideoTimeRatio' }, { name: 'audienceWatchRatio' }, { name: 'relativeRetentionPerformance' }],
+        rows: [[0.02, 0.9, 0.6], [0.01, 1.1, 0.55], ['bad', 1, 1]],
+      },
+    });
+    const result = await queryRetentionCurve(client, range);
+    expect(mockQuery).toHaveBeenCalledWith({
+      ids: 'channel==MINE',
+      startDate: '2026-10-01',
+      endDate: '2026-10-08',
+      metrics: 'audienceWatchRatio,relativeRetentionPerformance',
+      dimensions: 'elapsedVideoTimeRatio',
+      filters: 'video==abc_DEF-123',
+    });
+    expect(result).toEqual({
+      kind: 'ok',
+      points: [
+        { ratio: 0.01, audienceWatchRatio: 1.1, relativeRetentionPerformance: 0.55 },
+        { ratio: 0.02, audienceWatchRatio: 0.9, relativeRetentionPerformance: 0.6 },
+      ],
+    });
+  });
+
+  it('maps the insufficient-scope 403 to scope_missing', async () => {
+    mockQuery.mockRejectedValueOnce(gaxiosError(403, null, 'Request had insufficient authentication scopes.'));
+    await expect(queryRetentionCurve(client, range)).resolves.toEqual({ kind: 'scope_missing' });
   });
 });
 

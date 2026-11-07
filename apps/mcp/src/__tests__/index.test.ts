@@ -44,7 +44,7 @@ import {
 import { GetClonedVoiceShape, PreviewHouseVoiceShape } from '../cloned-voice-tools.js';
 import { GeneratePersonaVideoShape, ValidateScriptShape, ScoreDraftShape } from '../tools-single-video.js';
 import { CheckMediaShape, UploadMediaShape } from '../tools-user-media.js';
-import { GetPostShape, GetPostMetricsShape } from '../tools-posts.js';
+import { GetPostShape, GetPostMetricsShape, GetYouTubeRetentionCurveShape } from '../tools-posts.js';
 import { CancelVideoTaskShape } from '../video-task-tools.js';
 import { ListPromptsShape, GetPromptShape } from '../tools-prompts.js';
 import type { PostEngineerClient } from '../client.js';
@@ -87,6 +87,7 @@ const EXPECTED_TOOLS = [
   'cancel_video_task',
   'get_post',
   'get_post_metrics',
+  'get_youtube_retention_curve',
   'list_token_transactions',
   'get_persona_delete_preview',
   'delete_persona',
@@ -236,6 +237,7 @@ describe('registered tool schemas (single source of truth)', () => {
       cancel_video_task: CancelVideoTaskShape,
       get_post: GetPostShape,
       get_post_metrics: GetPostMetricsShape,
+      get_youtube_retention_curve: GetYouTubeRetentionCurveShape,
       list_token_transactions: ListTokenTransactionsShape,
       get_persona_delete_preview: GetPersonaDeletePreviewShape,
       delete_persona: DeletePersonaShape,

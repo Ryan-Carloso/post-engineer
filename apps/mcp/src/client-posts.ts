@@ -1,8 +1,9 @@
 import type { PostEngineerClient } from './client.js';
 
 //---------------
-// Unified post detail (GET /api/posts/[id], issue #208) and per-video
-// metrics (GET /api/metrics) — HTTP calls.
+// Unified post detail (GET /api/posts/[id], issue #208), per-video
+// metrics (GET /api/metrics) and the YouTube retention curve
+// (GET /api/metrics/retention-curve) — HTTP calls.
 //
 // Standalone functions (not client methods) because client.ts is
 // grandfathered over the 500-line cap and may not grow.
@@ -39,6 +40,18 @@ export async function getPostMetrics(
     `/api/metrics?${params.toString()}`,
     { method: 'GET', headers: client.getHeaders() },
     'get post metrics',
+  );
+}
+
+export async function getYouTubeRetentionCurve(
+  client: PostEngineerClient,
+  query: { account: string; video: string },
+): Promise<unknown> {
+  const params = new URLSearchParams({ account: query.account, video: query.video });
+  return client.request(
+    `/api/metrics/retention-curve?${params.toString()}`,
+    { method: 'GET', headers: client.getHeaders() },
+    'get YouTube retention curve',
   );
 }
 

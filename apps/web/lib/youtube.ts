@@ -87,7 +87,7 @@ export async function createGoogleOAuth2Client(redirectUriOverride?: string): Pr
 }
 
 // The scopes the YouTube connect flow requests. yt-analytics.readonly reads
-// the owner's own channel reports (engaged views, watch time); tokens
+// the owner's own channel reports (engaged views, watch time, retention curve); tokens
 // granted before it was added get a 403 from the Analytics API and the
 // metrics page asks the user to reconnect.
 export const GOOGLE_OAUTH_SCOPES = [

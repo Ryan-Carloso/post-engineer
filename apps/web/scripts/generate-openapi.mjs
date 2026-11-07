@@ -16,7 +16,7 @@ const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 // Version of the HTTP API contract, bumped by hand when the contract changes.
 // Deliberately not the MCP package version: the MCP auto-bump rewrites only
 // the MCP package.json and would leave the committed spec stale.
-export const API_SPEC_VERSION = '1.1.0';
+export const API_SPEC_VERSION = '1.2.0';
 
 // `<method>_<first tool>`; when two endpoints share it (one MCP tool fronting
 // two routes, e.g. connect_account), the last route segment disambiguates.

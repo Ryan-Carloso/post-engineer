@@ -70,8 +70,10 @@ import { registerClonedVoiceTools } from './cloned-voice-tools.js';
 import {
   GetPostShape,
   GetPostMetricsShape,
+  GetYouTubeRetentionCurveShape,
   handleGetPost,
   handleGetPostMetrics,
+  handleGetYouTubeRetentionCurve,
 } from './tools-posts.js';
 import {
   CancelVideoTaskShape,
@@ -290,6 +292,15 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
     GetPostMetricsShape,
     withTracking('get_post_metrics', async (args) => {
       return handleGetPostMetrics(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'get_youtube_retention_curve',
+    'Get the audience retention curve of one of the user\'s own published YouTube videos, read live from YouTube Analytics: points of ratio (elapsed share of the video, 0.01-1.0), audienceWatchRatio and relativeRetentionPerformance (vs. YouTube videos of similar length). Pass account and video from a youtube get_post_metrics row. Only the user\'s own channel is ever queried; a 403 YOUTUBE_ANALYTICS_SCOPE_MISSING means the user must reconnect YouTube.',
+    GetYouTubeRetentionCurveShape,
+    withTracking('get_youtube_retention_curve', async (args) => {
+      return handleGetYouTubeRetentionCurve(apiClient, args);
     })
   );
 

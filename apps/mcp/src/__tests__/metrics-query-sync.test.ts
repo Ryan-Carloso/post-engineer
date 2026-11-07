@@ -7,6 +7,7 @@ import {
   METRICS_NONE,
   METRICS_PROVIDERS,
   METRICS_WINDOWS,
+  YOUTUBE_VIDEO_ID,
 } from '../limits.js';
 
 // get_post_metrics validates its arguments locally with the same contract
@@ -19,6 +20,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const webLib = join(here, '..', '..', '..', 'web', 'lib');
 const metricsQuery = readFileSync(join(webLib, 'metrics', 'metrics-query.ts'), 'utf8');
 const registry = readFileSync(join(webLib, 'providers', 'registry.ts'), 'utf8');
+const youtubeAnalytics = readFileSync(join(webLib, 'youtube-analytics.ts'), 'utf8');
 
 describe('get_post_metrics contract sync with GET /api/metrics', () => {
   it('uses the same filter max length', () => {
@@ -35,6 +37,10 @@ describe('get_post_metrics contract sync with GET /api/metrics', () => {
     const list = METRICS_WINDOWS.map((w) => `'${w}'`).join(', ');
     expect(metricsQuery).toContain(`export const METRICS_WINDOWS = [${list}] as const`);
     expect(metricsQuery).toContain('if (!isMetricsWindow(window))');
+  });
+
+  it('validates retention-curve video ids with the same pattern', () => {
+    expect(youtubeAnalytics).toContain(`export const VIDEO_ID = /${YOUTUBE_VIDEO_ID.source}/;`);
   });
 
   it('accepts the same providers', () => {

@@ -120,6 +120,39 @@ describe('metrics dashboard', () => {
     cy.contains('a', 'Ir para Contas').should('have.attr', 'href', '/accounts');
   });
 
+  it('opens the retention curve of a long-form video on demand', () => {
+    interceptMetrics({
+      success: true,
+      truncated: false,
+      rows: [{ ...ROWS[0], contentType: 'VIDEO_ON_DEMAND', analyticsStatus: 'ok', provisional: false }],
+    });
+    cy.intercept('GET', '/api/metrics/retention-curve**', {
+      statusCode: 200,
+      body: {
+        success: true,
+        provisional: false,
+        points: [
+          { ratio: 0, audienceWatchRatio: 1, relativeRetentionPerformance: 0.8 },
+          { ratio: 0.5, audienceWatchRatio: 0.7, relativeRetentionPerformance: 0.9 },
+          { ratio: 1, audienceWatchRatio: 0.4, relativeRetentionPerformance: null },
+        ],
+      },
+    }).as('getCurve');
+
+    cy.visit('/metrics');
+    cy.wait('@getMetrics');
+    // Nothing is read from Analytics until the user asks for the curve.
+    cy.get('@getCurve.all').should('have.length', 0);
+    cy.contains('button', 'Curva de retenção').scrollIntoView().click();
+    cy.wait('@getCurve');
+    // The bar chart plus the opened retention line chart.
+    cy.get('.recharts-wrapper').should('have.length', 2);
+    cy.get('.recharts-wrapper').last().trigger('mousemove', { clientX: 200, clientY: 90 });
+    cy.contains('Público assistindo:').should('be.visible');
+    cy.contains('button', 'Esconder curva de retenção').click();
+    cy.get('.recharts-wrapper').should('have.length', 1);
+  });
+
   it('shows the empty state when nothing was measured', () => {
     interceptMetrics({ success: true, truncated: false, rows: [] });
     cy.visit('/metrics');
