@@ -212,8 +212,23 @@ jobs:
             " 2>/dev/null || true
           }
           if git ls-remote --heads origin "refs/heads/${BRANCH}" | grep -q .; then
-            git fetch origin "$BRANCH"
-            REMOTE_BASE="$(git merge-base "origin/main" "origin/${BRANCH}")"
+            # Fetch with an explicit refspec: a bare `git fetch origin
+            # "$BRANCH"` only writes FETCH_HEAD in a single-branch clone and
+            # leaves origin/$BRANCH unresolved.
+            git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
+            # The checkout is shallow (fetch-depth: 2) and the bump branch
+            # may be based on an older main tip, so the two refs can share no
+            # locally walkable common ancestor and merge-base would die under
+            # set -e with no diagnostic. Unshallow first — this path runs
+            # only when a stale branch exists, so the one-time full-history
+            # fetch is worth it.
+            if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+              git fetch --unshallow origin main
+            fi
+            if ! REMOTE_BASE="$(git merge-base "origin/main" "origin/${BRANCH}")"; then
+              echo "::error::Cannot determine the base of ${BRANCH} against origin/main — refusing to reuse it. Delete it by hand (git push origin --delete ${BRANCH}) and re-run this job."
+              exit 1
+            fi
             REMOTE_PKG_VERSION="$(git show "origin/${BRANCH}:apps/mcp/package.json" 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version" 2>/dev/null || true)"
             REMOTE_SERVER_VERSIONS="$(git show "origin/${BRANCH}:apps/mcp/server.json" 2>/dev/null | node -p "const s = JSON.parse(require('fs').readFileSync(0, 'utf8')); s.version + ' ' + s.packages[0].version" 2>/dev/null || true)"
             REMOTE_EXTRA_FILES="$(git diff --name-only "$REMOTE_BASE" "origin/${BRANCH}" | grep -v -e '^apps/mcp/package.json$' -e '^apps/mcp/server.json$' || true)"
