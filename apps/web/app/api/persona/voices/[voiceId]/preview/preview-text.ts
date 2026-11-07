@@ -10,6 +10,8 @@ export const HOUSE_PREVIEW_TEXT_MAX_CHARS = 300;
 
 export const PREVIEW_TEXT_INVALID_MESSAGE = `Preview text must be 1 to ${HOUSE_PREVIEW_TEXT_MAX_CHARS} characters after trimming.`;
 
+export const PREVIEW_TEXT_NOT_STRING_MESSAGE = 'Preview text must be a string.';
+
 export type PreviewTextParse =
   | { ok: true; text: string | null }
   | { ok: false; error: string };
@@ -36,7 +38,7 @@ export function parsePreviewTextBody(rawBody: string): PreviewTextParse {
   }
   const value: unknown = parsed.text;
   if (typeof value !== 'string') {
-    return { ok: false, error: PREVIEW_TEXT_INVALID_MESSAGE };
+    return { ok: false, error: PREVIEW_TEXT_NOT_STRING_MESSAGE };
   }
   const text = value.trim();
   if (text.length === 0 || text.length > HOUSE_PREVIEW_TEXT_MAX_CHARS) {

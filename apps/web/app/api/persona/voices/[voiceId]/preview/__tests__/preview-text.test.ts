@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { HOUSE_PREVIEW_TEXT_MAX_CHARS, PREVIEW_TEXT_INVALID_MESSAGE, parsePreviewTextBody } from '../preview-text';
+import { HOUSE_PREVIEW_TEXT_MAX_CHARS, PREVIEW_TEXT_INVALID_MESSAGE, PREVIEW_TEXT_NOT_STRING_MESSAGE, parsePreviewTextBody } from '../preview-text';
 
 describe('parsePreviewTextBody', () => {
   it('treats an empty body as no caller text', () => {
@@ -36,8 +36,8 @@ describe('parsePreviewTextBody', () => {
   });
 
   it('rejects a non-string text', () => {
-    expect(parsePreviewTextBody(JSON.stringify({ text: 123 }))).toEqual({ ok: false, error: PREVIEW_TEXT_INVALID_MESSAGE });
-    expect(parsePreviewTextBody(JSON.stringify({ text: null }))).toEqual({ ok: false, error: PREVIEW_TEXT_INVALID_MESSAGE });
+    expect(parsePreviewTextBody(JSON.stringify({ text: 123 }))).toEqual({ ok: false, error: PREVIEW_TEXT_NOT_STRING_MESSAGE });
+    expect(parsePreviewTextBody(JSON.stringify({ text: null }))).toEqual({ ok: false, error: PREVIEW_TEXT_NOT_STRING_MESSAGE });
   });
 
   it('rejects invalid JSON, non-objects and unknown keys', () => {
