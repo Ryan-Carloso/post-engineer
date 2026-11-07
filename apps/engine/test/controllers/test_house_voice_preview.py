@@ -107,7 +107,9 @@ class HouseVoicePreviewControllerTests(unittest.TestCase):
     def test_openapi_documents_mpeg_success_and_error_responses(self):
         # The endpoint streams MP3, not JSON: the committed spec must say
         # audio/mpeg for 200 and document the 400/404/502 the handler
-        # returns (422 comes from FastAPI's request validation).
+        # returns. The spec's 422 is FastAPI's auto-documented default for
+        # body params; the app's handler (app/asgi.py) maps actual
+        # validation failures to 400, so no 422 is ever returned.
         responses = app.openapi()["paths"][
             "/api/v1/personas/voices/{voice_id}/preview"
         ]["post"]["responses"]
