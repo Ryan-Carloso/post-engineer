@@ -5,7 +5,7 @@ import { findRepoRoot } from '@/test/repo-root';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 import { FACELESS_MATERIALS } from '@/lib/generation/faceless-materials';
 import { GENERATION_PUBLISH_MODES } from '@/lib/generation/video-generation';
-import { METRICS_WINDOWS } from '@/lib/metrics/metrics-query';
+import { ANALYTICS_STATUSES, METRICS_WINDOWS } from '@/lib/metrics/metrics-query';
 import { VIDEO_LAYOUTS } from '@/lib/persona-schema';
 
 //---------------
@@ -78,6 +78,7 @@ const EXPECTED: Record<string, readonly string[]> = {
   scheduled_posts_faceless_material_check: FACELESS_MATERIALS,
   post_metrics_metrics_window_check: METRICS_WINDOWS,
   post_metrics_done_metrics_window_check: METRICS_WINDOWS,
+  post_metrics_analytics_status_check: ANALYTICS_STATUSES,
   // No TypeScript list exists: the status is written by the engine voice
   // registration, so this literal is the pinned contract.
   cloned_voices_status_check: ['pending', 'ready', 'failed'],

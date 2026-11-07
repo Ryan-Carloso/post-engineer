@@ -445,6 +445,54 @@
                     "type": "text",
                     "default": null,
                     "notNull": false
+                },
+                {
+                    "name": "analytics_views",
+                    "type": "bigint",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "engaged_views",
+                    "type": "bigint",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "average_view_duration_seconds",
+                    "type": "numeric",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "average_view_percentage",
+                    "type": "numeric",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "content_type",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "analytics_start_date",
+                    "type": "date",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "analytics_end_date",
+                    "type": "date",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "analytics_status",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
                 }
             ],
             "policies": {
@@ -458,7 +506,8 @@
                 "post_metrics_pkey": "PRIMARY KEY (id)",
                 "post_metrics_post_id_fkey": "FOREIGN KEY (post_id) REFERENCES scheduled_posts(id) ON DELETE CASCADE",
                 "post_metrics_provider_check": "CHECK ((provider = ANY (ARRAY['youtube'::text, 'instagram'::text, 'bluesky'::text, 'linkedin'::text, 'threads'::text])))",
-                "post_metrics_metrics_window_check": "CHECK ((metrics_window = ANY (ARRAY['24h'::text, '7d'::text])))",
+                "post_metrics_metrics_window_check": "CHECK ((metrics_window = ANY (ARRAY['24h'::text, '7d'::text, '28d'::text])))",
+                "post_metrics_analytics_status_check": "CHECK ((analytics_status = ANY (ARRAY['ok'::text, 'scope_missing'::text, 'not_owned'::text, 'no_data'::text])))",
                 "post_metrics_post_id_provider_external_id_metrics_window_key": "UNIQUE (post_id, provider, external_id, metrics_window)"
             }
         },
@@ -1097,7 +1146,7 @@
             "constraints": {
                 "post_metrics_done_pkey": "PRIMARY KEY (post_id, metrics_window)",
                 "post_metrics_done_post_id_fkey": "FOREIGN KEY (post_id) REFERENCES scheduled_posts(id) ON DELETE CASCADE",
-                "post_metrics_done_metrics_window_check": "CHECK ((metrics_window = ANY (ARRAY['24h'::text, '7d'::text])))"
+                "post_metrics_done_metrics_window_check": "CHECK ((metrics_window = ANY (ARRAY['24h'::text, '7d'::text, '28d'::text])))"
             }
         },
         "video_generations": {

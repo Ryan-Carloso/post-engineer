@@ -311,7 +311,7 @@ export interface Database {
         provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads';
         account_id: string;
         external_id: string;
-        metrics_window: '24h' | '7d';
+        metrics_window: '24h' | '7d' | '28d';
         views: number | null;
         likes: number | null;
         comments: number | null;
@@ -319,6 +319,14 @@ export interface Database {
         collected_at: string;
         persona_id: string | null;
         script_angle: string | null;
+        analytics_views: number | null;
+        engaged_views: number | null;
+        average_view_duration_seconds: number | null;
+        average_view_percentage: number | null;
+        content_type: string | null;
+        analytics_start_date: string | null;
+        analytics_end_date: string | null;
+        analytics_status: 'ok' | 'scope_missing' | 'not_owned' | 'no_data' | null;
         };
         Insert: {
         id?: string;
@@ -327,7 +335,7 @@ export interface Database {
         provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads';
         account_id: string;
         external_id: string;
-        metrics_window: '24h' | '7d';
+        metrics_window: '24h' | '7d' | '28d';
         views?: number | null;
         likes?: number | null;
         comments?: number | null;
@@ -335,6 +343,14 @@ export interface Database {
         collected_at?: string;
         persona_id?: string | null;
         script_angle?: string | null;
+        analytics_views?: number | null;
+        engaged_views?: number | null;
+        average_view_duration_seconds?: number | null;
+        average_view_percentage?: number | null;
+        content_type?: string | null;
+        analytics_start_date?: string | null;
+        analytics_end_date?: string | null;
+        analytics_status?: 'ok' | 'scope_missing' | 'not_owned' | 'no_data' | null;
         };
         Update: {
         id?: string;
@@ -343,7 +359,7 @@ export interface Database {
         provider?: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads';
         account_id?: string;
         external_id?: string;
-        metrics_window?: '24h' | '7d';
+        metrics_window?: '24h' | '7d' | '28d';
         views?: number | null;
         likes?: number | null;
         comments?: number | null;
@@ -351,23 +367,31 @@ export interface Database {
         collected_at?: string;
         persona_id?: string | null;
         script_angle?: string | null;
+        analytics_views?: number | null;
+        engaged_views?: number | null;
+        average_view_duration_seconds?: number | null;
+        average_view_percentage?: number | null;
+        content_type?: string | null;
+        analytics_start_date?: string | null;
+        analytics_end_date?: string | null;
+        analytics_status?: 'ok' | 'scope_missing' | 'not_owned' | 'no_data' | null;
         };
         Relationships: [];
       };
       post_metrics_done: {
         Row: {
         post_id: string;
-        metrics_window: '24h' | '7d';
+        metrics_window: '24h' | '7d' | '28d';
         done_at: string;
         };
         Insert: {
         post_id: string;
-        metrics_window: '24h' | '7d';
+        metrics_window: '24h' | '7d' | '28d';
         done_at?: string;
         };
         Update: {
         post_id?: string;
-        metrics_window?: '24h' | '7d';
+        metrics_window?: '24h' | '7d' | '28d';
         done_at?: string;
         };
         Relationships: [];
