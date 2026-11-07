@@ -18,6 +18,7 @@ from typing import Optional
 from urllib.parse import urljoin, urlparse
 
 import requests
+from urllib3.util.url import parse_url
 
 # Redirect statuses that carry a Location header worth following manually.
 _REDIRECT_STATUSES = {301, 302, 303, 307, 308}
@@ -66,11 +67,34 @@ def assert_public_url(url: str, *, what: str = "URL") -> None:
     Blocks non-http(s) schemes, missing hostnames, literal private IPs,
     hostnames resolving to private IPs, and hosts that do not resolve at all
     (fail closed). Raises :class:`UnsafeUrlError`.
+
+    The host checked is the one the HTTP client dials: requests connects
+    where urllib3's parser says, and urllib3 ends the authority at a
+    backslash while ``urlparse`` takes the host after the last ``@``. A URL
+    the two parsers read differently (backslash, whitespace or control
+    characters, or any scheme/host/port mismatch) is rejected outright.
     """
-    parsed = urlparse(url)
+    try:
+        parsed = urlparse(url)
+        parsed_port = parsed.port
+    except ValueError as exc:
+        raise UnsafeUrlError(f"{what} must be a valid http(s) URL.") from exc
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise UnsafeUrlError(f"{what} must be a valid http(s) URL.")
-    ips = _resolve_global_ips(parsed.hostname)
+    if any(char == "\\" or ord(char) <= 0x20 or ord(char) == 0x7F for char in url):
+        raise UnsafeUrlError(f"{what} must be a canonical http(s) URL.")
+    try:
+        wire = parse_url(url)
+    except ValueError as exc:
+        raise UnsafeUrlError(f"{what} must be a valid http(s) URL.") from exc
+    wire_host = (wire.host or "").strip("[]")
+    if (
+        wire.scheme != parsed.scheme
+        or wire_host != parsed.hostname
+        or wire.port != parsed_port
+    ):
+        raise UnsafeUrlError(f"{what} must be a canonical http(s) URL.")
+    ips = _resolve_global_ips(wire_host)
     if not all(ip.is_global for ip in ips):
         raise UnsafeUrlError(
             f"{what} must use a public address — private/internal URLs "
