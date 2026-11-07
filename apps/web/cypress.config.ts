@@ -26,6 +26,11 @@ export default defineConfig({
     supportFile: 'cypress/support/e2e.ts',
     specPattern: 'cypress/e2e/**/*.cy.ts',
     video: false,
+    // CI quarantine for intermittent app-side failures (React hydration error
+    // #418 in a `before each` hook hits a different spec on every run, issue
+    // #199): a failed test is re-run up to twice in `cypress run`. Interactive
+    // `cypress open` never retries, so a real failure stays visible locally.
+    retries: { runMode: 2, openMode: 0 },
     screenshotOnRunFailure: true,
     env: {
       supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,

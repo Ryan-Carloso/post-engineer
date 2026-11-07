@@ -52,6 +52,13 @@ export const personaVoiceCloneEn = {
   voicePickerChoose: 'Choose voice',
   voicePickerChange: 'Change voice',
   voicePlaySample: 'Play {name}',
+  voicePreviewTextLabel: 'Hear this voice say your line',
+  voicePreviewTextPlaceholder: 'Type a line in English…',
+  voicePreviewListen: 'Listen with my text',
+  voicePreviewListening: 'Synthesizing…',
+  voicePreviewRateLimited: 'Daily preview limit reached. Try again tomorrow.',
+  voicePreviewTextTooLong: 'Preview text must be 300 characters or less.',
+  voicePreviewFailed: 'Could not play the preview.',
   voiceTagCharacter: 'Character',
   voiceTagCloned: 'My cloned voice',
 } as const;
@@ -62,4 +69,5 @@ export const voiceCloneApiToolDescEn = {
   toolDescCreateClonedVoice: 'Create a voice clone from an audio URL',
   toolDescDeleteClonedVoice: 'Delete a voice clone',
   toolDescPreviewClonedVoice: 'Preview a ready voice clone',
+  toolDescPreviewHouseVoice: 'Preview a house voice',
 } as const;

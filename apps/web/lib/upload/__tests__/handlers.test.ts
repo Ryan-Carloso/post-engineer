@@ -5,10 +5,13 @@ import {
   handleYoutubeUpload,
 } from '@/lib/upload/handlers';
 import { ValidationError, AuthError, UploadError, InstagramApiError } from '@/lib/errors';
+import { trackApiEvent } from '@/lib/analytics';
 
 //---------------
 // Upload handlers — unit tests
 //---------------
+
+vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 
 vi.mock('@/lib/logger', () => ({
   logger: {
@@ -336,6 +339,41 @@ describe('handleInstagramUpload', () => {
     }
   });
 
+  it('emits publish_account_unauthorized for the instagram account the provider rejected with 401', async () => {
+    const { InstagramService } = await import('@/lib/instagram');
+    vi.mocked(trackApiEvent).mockClear();
+    vi.mocked(InstagramService).mockImplementationOnce(function () {
+      return {
+        publishMedia: vi.fn().mockRejectedValue(new InstagramApiError('Invalid OAuth access token', 401)),
+      } as never;
+    });
+    const file = new File([new Uint8Array(50)], 'img.jpg', { type: 'image/jpeg' });
+
+    await handleInstagramUpload(makeFormData({ caption: 'Test' }, file), OWNER_USER_ID, logId, startTime);
+
+    expect(trackApiEvent).toHaveBeenCalledWith('publish_account_unauthorized', {
+      provider: 'instagram',
+      account_id: expect.any(String),
+      user_id: OWNER_USER_ID,
+      status: 401,
+    });
+  });
+
+  it('does not emit publish_account_unauthorized when the instagram failure is not a 401', async () => {
+    const { InstagramService } = await import('@/lib/instagram');
+    vi.mocked(trackApiEvent).mockClear();
+    vi.mocked(InstagramService).mockImplementationOnce(function () {
+      return {
+        publishMedia: vi.fn().mockRejectedValue(new InstagramApiError('Publish failed', 400)),
+      } as never;
+    });
+    const file = new File([new Uint8Array(50)], 'img.jpg', { type: 'image/jpeg' });
+
+    await handleInstagramUpload(makeFormData({ caption: 'Test' }, file), OWNER_USER_ID, logId, startTime);
+
+    expect(trackApiEvent).not.toHaveBeenCalled();
+  });
+
   it('handles multiple account IDs', async () => {
     const { InstagramService } = await import('@/lib/instagram');
     const publishMedia = vi.fn().mockResolvedValue({
@@ -421,6 +459,24 @@ describe('handleYoutubeUpload', () => {
       expect(response.results[0].videoId).toBe('yt-123');
       expect(response.results[0].videoUrl).toBe('https://youtube.com/watch?v=yt-123');
     }
+  });
+
+  it('emits publish_account_unauthorized with the real channel id when YouTube answers Unauthorized', async () => {
+    const { uploadYouTubeVideo } = await import('@/lib/youtube');
+    vi.mocked(trackApiEvent).mockClear();
+    vi.mocked(uploadYouTubeVideo).mockRejectedValueOnce(new Error('Unauthorized'));
+    const file = new File([new Uint8Array(100)], 'video.mp4', { type: 'video/mp4' });
+    const fd = makeVideoFormData({ ...validFields, accountIds: 'UC-real-channel' }, file);
+
+    const response = await handleYoutubeUpload(fd, OWNER_USER_ID, logId, startTime);
+
+    expect(response.success && response.results[0].success).toBe(false);
+    expect(trackApiEvent).toHaveBeenCalledWith('publish_account_unauthorized', {
+      provider: 'youtube',
+      account_id: 'UC-real-channel',
+      user_id: OWNER_USER_ID,
+      status: 401,
+    });
   });
 
   it('throws ValidationError when no accountIds', async () => {

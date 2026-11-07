@@ -250,6 +250,13 @@ describe('withApiErrorReporting', () => {
       status: 500,
       code: 'INTERNAL_ERROR',
     });
+    // Never a blind exception: message and type travel as explicit
+    // properties (the stable route + status + code string, no user text).
+    expect(properties).toMatchObject({
+      $exception_message: '[POST /api/videos/generate-and-schedule] 500 INTERNAL_ERROR',
+      $exception_type: 'Error',
+    });
+    expect(error.message).toBe('[POST /api/videos/generate-and-schedule] 500 INTERNAL_ERROR');
     // The client-visible response is never mutated by reporting.
     expect(await res.json()).toMatchObject({
       success: false,

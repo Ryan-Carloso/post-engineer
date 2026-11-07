@@ -5,12 +5,19 @@ database (Supabase). This module only validates and normalizes the
 persona payload that arrives inline on a video job.
 """
 
+import os
+import tempfile
 from typing import Any, Optional
 
 from loguru import logger
 
+from app.services import voice as voice_service
+from app.services.cloned_voices.preview_text import (
+    PREVIEW_TEXT_INVALID_MESSAGE,
+    validate_preview_text,
+)
 from app.services.openrouter_tts import get_openrouter_voices
-from app.services.voice_catalog import load_catalog
+from app.services.voice_catalog import find_voice, load_catalog
 
 # Short Instagram/TikTok-style video hook used for the house voice
 # preview samples, per language: hook question, then the pitch.
@@ -19,16 +26,71 @@ VOICE_SAMPLE_TEXTS: dict[str, str] = {
     "Pronta pra usar, direto no seu próximo post.",
     "en-us": "Your video needs a voiceover? This is it. "
     "Ready to drop straight into your next post.",
-    "en-uk": "Need a voiceover for your video? This is the one. "
-    "Ready for your next post.",
-    "es": "¿Tu video necesita narración? Esta es la voz. "
-    "Lista para usar en tu próximo post.",
-    "fr": "Ta vidéo a besoin d'une voix off ? La voilà. "
-    "Prête pour ton prochain post.",
+    "en-uk": "Need a voiceover for your video? This is the one. Ready for your next post.",
+    "es": "¿Tu video necesita narración? Esta es la voz. Lista para usar en tu próximo post.",
+    "fr": "Ta vidéo a besoin d'une voix off ? La voilà. Prête pour ton prochain post.",
 }
+
 
 class PersonaValidationError(Exception):
     """Raised when the persona payload is missing or invalid."""
+
+
+class HouseVoicePreviewError(Exception):
+    """A house voice preview that cannot be rendered.
+
+    Carries the HTTP status the controller answers with, so the message
+    stays fixed: synthesis failures never leak provider internals.
+    """
+
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+        self.message = message
+
+
+def preview_house_voice_mp3(user_id: str, voice_id: str, text: str | None = None) -> bytes:
+    """Synthesize a short preview for a house catalog voice.
+
+    The voice id is the catalog id callers store on the persona
+    (``chatterbox:<name>``); a bare catalog name is accepted too. Anything
+    outside the house catalog is a 404: clones have their own preview
+    endpoint, OpenRouter voices have no catalog entry. No text renders the
+    fixed English sample. Custom text is never cached: every preview
+    synthesizes. Renders through voice.tts — the same path video jobs use —
+    so the preview is the voice the video gets.
+    """
+    bare_name = voice_id[len("chatterbox:") :] if voice_id.startswith("chatterbox:") else voice_id
+    if find_voice(bare_name) is None:
+        raise HouseVoicePreviewError(404, "voice not found")
+    try:
+        spoken_text = validate_preview_text(text)
+    except ValueError:
+        raise HouseVoicePreviewError(400, PREVIEW_TEXT_INVALID_MESSAGE) from None
+    if spoken_text is None:
+        spoken_text = VOICE_SAMPLE_TEXTS["en-us"]
+    tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+    tmp.close()
+    voice_file = tmp.name
+    try:
+        result = voice_service.tts(
+            spoken_text,
+            voice_service.parse_voice_name(voice_id),
+            1.0,
+            voice_file,
+            language="en",
+            user_id=user_id,
+        )
+        if not result.ok:
+            raise HouseVoicePreviewError(502, "voice preview failed")
+        with open(voice_file, "rb") as audio_file:
+            audio = audio_file.read()
+        if not audio:
+            raise HouseVoicePreviewError(502, "voice preview failed")
+    finally:
+        if os.path.exists(voice_file):
+            os.remove(voice_file)
+    return audio
 
 
 def get_house_voices(user_id: str | None = None) -> list[dict[str, Any]]:
@@ -66,17 +128,19 @@ def get_house_voices(user_id: str | None = None) -> list[dict[str, Any]]:
         }
         for voice in load_catalog()
     ]
-    voices.extend(_unclassified_voice(voice_id, "openrouter") for voice_id in get_openrouter_voices())
+    voices.extend(
+        _unclassified_voice(voice_id, "openrouter") for voice_id in get_openrouter_voices()
+    )
     if user_id:
         try:
             from app.services.cloned_voices.service import list_catalog_entries
 
             for entry in list_catalog_entries(user_id):
-                voices.append({**_unclassified_voice(entry["id"], "chatterbox_nano"), "kind": "cloned"})
+                voices.append(
+                    {**_unclassified_voice(entry["id"], "chatterbox_nano"), "kind": "cloned"}
+                )
         except Exception:
-            logger.warning(
-                "cloned voice catalog merge failed; serving house voices only"
-            )
+            logger.warning("cloned voice catalog merge failed; serving house voices only")
     return voices
 
 
@@ -90,12 +154,6 @@ def _unclassified_voice(voice_id: str, provider: str) -> dict[str, Any]:
         "kind": "standard",
         "description": None,
     }
-
-
-
-
-
-
 
 
 def _require_exactly_one(
@@ -123,8 +181,12 @@ def validate_persona(
     if not name or not name.strip():
         raise PersonaValidationError("name is required")
 
-    _require_exactly_one({"photo_url": photo_url, "avatar_url": avatar_url}, "photo_url or avatar_url")
-    _require_exactly_one({"voice_id": voice_id, "voice_audio_url": voice_audio_url}, "voice_id or voice_audio_url")
+    _require_exactly_one(
+        {"photo_url": photo_url, "avatar_url": avatar_url}, "photo_url or avatar_url"
+    )
+    _require_exactly_one(
+        {"voice_id": voice_id, "voice_audio_url": voice_audio_url}, "voice_id or voice_audio_url"
+    )
 
     return {
         "name": name.strip(),

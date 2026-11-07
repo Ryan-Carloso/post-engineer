@@ -258,3 +258,43 @@ export async function previewClonedVoice(
     contentType: response.headers.get('content-type'),
   };
 }
+
+// House-voice preview: same own-fetch pattern as previewClonedVoice, but
+// the voice is a catalog id (`chatterbox:<name>`) and there is no language
+// override — house voices are English-only.
+export async function previewHouseVoice(
+  client: ClonedVoiceClientHost,
+  voiceId: string,
+  text?: string,
+): Promise<unknown> {
+  const path = `/api/persona/voices/${encodeURIComponent(voiceId)}/preview`;
+  // The preview route answers with raw audio bytes, not JSON, so it cannot
+  // go through the client's JSON request path: fetch the bytes here and
+  // surface them as base64 (same own-fetch pattern as the download above).
+  // The upload timeout applies: preview synthesis can cold-start the local TTS server.
+  const response = await fetch(`${client.baseUrl}${path}`, {
+    method: 'POST',
+    headers: client.getHeaders(),
+    // Caller text travels in the JSON body, never the URL.
+    ...(text === undefined ? {} : { body: JSON.stringify({ text }) }),
+    redirect: 'error',
+    signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    // Same contract as client.request: structured `error`, and every
+    // message in an `errors` list, capped inside readApiFailure.
+    const failure = readApiFailure(errorText);
+    throw new Error(`Failed to preview house voice: ${response.status} ${failure.detail}`);
+  }
+  const bytes = await readBodyWithCap(response, MAX_CLONE_AUDIO_BYTES, 'Preview audio');
+  if (bytes.length === 0) {
+    throw new Error(
+      `Failed to preview house voice: preview audio was empty (status ${response.status}).`,
+    );
+  }
+  return {
+    audioBase64: bytes.toString('base64'),
+    contentType: response.headers.get('content-type'),
+  };
+}

@@ -25,6 +25,7 @@ vi.mock('@/lib/voice-catalog-fetch', () => ({
 }));
 
 import { POST } from '../route';
+import { logger } from '@/lib/logger';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -198,7 +199,46 @@ describe('POST /api/persona with image library', () => {
     const images = Array.from({ length: 11 }, (_, i) => png(`img-${i}.png`));
     const res = await POST(createRequest(BASE_FIELDS, images));
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string; code?: string; field?: string };
+    expect(body.error).toBe('Image library accepts at most 10 images.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('images');
     expect(calls.personaInserts).toBe(0);
+  });
+
+  it('tags an over-length library tag VALIDATION_FAILED on the tag field', async () => {
+    // addLibraryImages rejects the tag after the persona row exists: the
+    // creation rollback deletes the row and the 400 still carries the
+    // stable code (no bare errorResponse forward).
+    const calls = mockClient();
+    const res = await POST(
+      createRequest(
+        { ...BASE_FIELDS, imageTags: JSON.stringify(['x'.repeat(101)]) },
+        [png('a.png')],
+      ),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string; code?: string; field?: string };
+    expect(body.error).toBe('tag must be at most 100 characters.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('tag');
+    expect(calls.personaDeletes).toBe(1);
+  });
+
+  it('tags an over-length library description VALIDATION_FAILED on the description field', async () => {
+    const calls = mockClient();
+    const res = await POST(
+      createRequest(
+        { ...BASE_FIELDS, imageDescriptions: JSON.stringify(['x'.repeat(501)]) },
+        [png('a.png')],
+      ),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string; code?: string; field?: string };
+    expect(body.error).toBe('description must be at most 500 characters.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('description');
+    expect(calls.personaDeletes).toBe(1);
   });
 
   it('rejects an invalid file before creating anything', async () => {
@@ -217,6 +257,25 @@ describe('POST /api/persona with image library', () => {
     const body = (await res.json()) as { error?: string };
     // The second file (index 1) is the bad one; the error names it.
     expect(body.error).toContain('(image 2: doc.pdf)');
+  });
+
+  it('tags a bad library file VALIDATION_FAILED and keeps its file name out of the PostHog message', async () => {
+    mockClient();
+    const warn = vi.spyOn(logger, 'warn');
+    const bad = new File(['x'], 'secret-plan.pdf', { type: 'application/pdf' });
+    const res = await POST(createRequest(BASE_FIELDS, [png('a.png'), bad]));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string; code?: string; field?: string };
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('images');
+    // The client still gets the file name; the logged template does not.
+    expect(body.error).toContain('secret-plan.pdf');
+    const messages = warn.mock.calls.map((call) => String(call[0]));
+    const routeWarning = messages.find((m) => m.startsWith('[POST /api/persona] 400'));
+    expect(routeWarning).toBeDefined();
+    expect(routeWarning?.includes('secret-plan.pdf')).toBe(false);
+    expect(routeWarning?.includes('(image 2')).toBe(false);
+    warn.mockRestore();
   });
 
   it('reads each library file once at creation (validated bytes are reused)', async () => {
@@ -274,9 +333,11 @@ describe('POST /api/persona with image library', () => {
       createRequest({ ...BASE_FIELDS, imagePrimaryIndex: 'abc' }, [png('a.png'), png('b.png')]),
     );
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string };
+    const body = (await res.json()) as { success: boolean; error: string; code?: string; field?: string };
     expect(body.success).toBe(false);
-    expect(body.error).toContain('imagePrimaryIndex');
+    expect(body.error).toBe('imagePrimaryIndex must be a non-negative integer.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('imagePrimaryIndex');
     expect(calls.personaInserts).toBe(0);
   });
 
@@ -311,9 +372,11 @@ describe('POST /api/persona with image library', () => {
       createRequest({ ...BASE_FIELDS, imagePrimaryIndex: '5' }, [png('a.png'), png('b.png')]),
     );
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: string };
+    const body = (await res.json()) as { success: boolean; error: string; code?: string; field?: string };
     expect(body.success).toBe(false);
-    expect(body.error).toContain('imagePrimaryIndex');
+    expect(body.error).toBe('imagePrimaryIndex is out of range for the provided images.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('imagePrimaryIndex');
     expect(calls.personaInserts).toBe(0);
   });
 
@@ -362,6 +425,28 @@ describe('POST /api/persona with image library', () => {
       createRequest({ ...BASE_FIELDS, imageTags: 'not-json[' }, [png('a.png')]),
     );
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string; code?: string; field?: string };
+    expect(body.error).toBe('imageTags/imageDescriptions must be a JSON array of strings.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('imageTags');
+    expect(calls.personaInserts).toBe(0);
+  });
+
+  it('rejects imageTags that do not cover every image with a 400', async () => {
+    // Tags/descriptions are matched to files by index: a non-empty array
+    // that does not cover every file is a client bug, not a silent default.
+    const calls = mockClient();
+    const res = await POST(
+      createRequest(
+        { ...BASE_FIELDS, imageTags: JSON.stringify(['only-one']) },
+        [png('a.png'), png('b.png')],
+      ),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string; code?: string; field?: string };
+    expect(body.error).toBe('imageTags/imageDescriptions must match the number of images.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('imageTags');
     expect(calls.personaInserts).toBe(0);
   });
 
@@ -404,6 +489,10 @@ describe('POST /api/persona with image library', () => {
       ),
     );
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string; code?: string; field?: string };
+    expect(body.error).toBe('An image file is required. (image 2: empty.png)');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('images');
     expect(calls.personaInserts).toBe(0);
   });
 
@@ -419,6 +508,10 @@ describe('POST /api/persona with image library', () => {
     form.append('imageTags', JSON.stringify(['stray', 'first']));
     const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string; code?: string; field?: string };
+    expect(body.error).toBe('images must be a list of image files.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.field).toBe('images');
     expect(calls.personaInserts).toBe(0);
   });
 
