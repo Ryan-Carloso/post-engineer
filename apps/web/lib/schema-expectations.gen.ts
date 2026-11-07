@@ -3,6 +3,7 @@
 // Regenerate: node apps/web/scripts/generate-schema-expectations.mjs
 
 export const REQUIRED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
+  experiments: ['persona_id'],
   mcp_oauth_refresh_tokens: ['client_id', 'consumed_at', 'created_at', 'expires_at', 'resource', 'scope', 'user_id'],
   personas: ['cta_text', 'recent_image_ids', 'video_layout'],
   post_metrics: ['analytics_end_date', 'analytics_start_date', 'analytics_status', 'analytics_views', 'average_view_duration_seconds', 'average_view_percentage', 'content_type', 'engaged_views', 'experiment_id', 'experiment_pair', 'persona_id', 'script_angle', 'variant_id'],
