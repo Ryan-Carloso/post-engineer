@@ -230,10 +230,15 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
     }
 
     let failed = false;
+    // A token without yt-analytics.readonly is not terminal: leave the
+    // window open so the next hourly run retries with the new token after
+    // the user reconnects. The Data API counters are already saved.
+    let missingAnalyticsScope = false;
     for (const target of targets) {
       if (post.collectedKeys.has(targetKey(target))) continue;
       try {
         const counters = await deps.fetchCounters(post.userId, target, { window: post.window, now: deps.now() });
+        if (counters.retention?.status === 'scope_missing') missingAnalyticsScope = true;
         await deps.saveMetrics({
           postId: post.id, userId: post.userId, window: post.window, scriptAngle, ...target, ...counters,
         });
@@ -272,8 +277,9 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
       }
     }
     // Every video is in (or there is none to measure): stop re-reading this
-    // post for the window. A failed video keeps it open for the next run.
-    if (!failed) {
+    // post for the window. A failed video and a missing Analytics scope keep
+    // it open for the next run.
+    if (!failed && !missingAnalyticsScope) {
       try {
         await deps.markDone(post.id, post.window);
       } catch (error) {

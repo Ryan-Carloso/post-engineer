@@ -11,6 +11,7 @@ import { logger } from '@/lib/logger';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 import { YOUTUBE_CHANNEL_NAME_FALLBACK } from '@/lib/providers/registry';
+import { resetYouTubeRetentionWindows } from '@/lib/metrics/reset-retention';
 
 //---------------
 // getSessionUserId — session user_id or null
@@ -122,6 +123,11 @@ async function getHandler(request: NextRequest) {
     });
 
     await touchSocialAccount(supabase, userId, 'youtube', channelId);
+
+    // A token granted before yt-analytics.readonly left those windows
+    // marked done. Clearing them lets the hourly metrics job backfill
+    // retention while each window is still open.
+    await resetYouTubeRetentionWindows(userId, channelId);
 
     // Returns only public data — tokens NEVER go to the client
     return oauthPopupResponse('youtube-oauth-success', {

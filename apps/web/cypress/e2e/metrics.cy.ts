@@ -115,7 +115,8 @@ describe('metrics dashboard', () => {
     cy.contains('Ficaram para assistir (derivado: views engajadas / views)').should('be.visible');
     cy.contains('64,1%').should('be.visible');
     cy.contains('Provisório').should('be.visible');
-    cy.contains('Reconecte o YouTube para ativar as estatísticas de retenção').should('be.visible');
+    // The banner sits above the rows; bring it back after scrolling the list.
+    cy.contains('Reconecte o YouTube para ativar as estatísticas de retenção').scrollIntoView().should('be.visible');
     cy.contains('a', 'Ir para Contas').should('have.attr', 'href', '/accounts');
   });
 

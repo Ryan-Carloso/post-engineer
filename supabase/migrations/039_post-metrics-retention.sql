@@ -111,7 +111,16 @@ as $$
       (
         select array_agg(pm.provider || ':' || pm.external_id)
         from public.post_metrics pm
-        where pm.post_id = d.id and pm.metrics_window = d.metrics_window
+        where pm.post_id = d.id
+          and pm.metrics_window = d.metrics_window
+          -- A YouTube snapshot collected without the Analytics scope (or
+          -- before these columns existed) is not "collected": the hourly
+          -- run retries it until the token is reconnected or the window
+          -- closes, so retention is not lost for the whole video.
+          and not (
+            pm.provider = 'youtube'
+            and (pm.analytics_status is null or pm.analytics_status = 'scope_missing')
+          )
       ),
       '{}'
     )
@@ -123,6 +132,26 @@ as $$
     ),
     d.published_at
   limit p_limit;
+$$;
+
+-- reset_post_metrics_windows — clears the done marks of a YouTube channel
+-- whose snapshots have no Analytics scope (or predate the Analytics
+-- columns), so reconnecting the channel re-collects every window that is
+-- still inside its age range. Scoped to the account's own snapshots.
+create or replace function public.reset_post_metrics_windows(p_user_id uuid, p_account_id text)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  delete from public.post_metrics_done pmd
+  using public.post_metrics pm
+  where pmd.post_id = pm.post_id
+    and pmd.metrics_window = pm.metrics_window
+    and pm.user_id = p_user_id
+    and pm.provider = 'youtube'
+    and pm.account_id = p_account_id
+    and (pm.analytics_status is null or pm.analytics_status = 'scope_missing');
 $$;
 
 -- create or replace keeps grants, but re-assert them: cron/service-role only.
@@ -137,5 +166,21 @@ begin
   end if;
   if exists (select 1 from pg_roles where rolname = 'service_role') then
     grant execute on function public.find_post_metrics_due(timestamptz, integer) to service_role;
+  end if;
+end $$;
+
+-- Reconnecting a channel is a service-role action: the web OAuth callback
+-- calls this with the service client (post_metrics_done has no RLS policy).
+do $$
+begin
+  revoke execute on function public.reset_post_metrics_windows(uuid, text) from public;
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke execute on function public.reset_post_metrics_windows(uuid, text) from anon;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    revoke execute on function public.reset_post_metrics_windows(uuid, text) from authenticated;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.reset_post_metrics_windows(uuid, text) to service_role;
   end if;
 end $$;

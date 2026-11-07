@@ -186,6 +186,24 @@ describe('collectPostMetrics', () => {
     expect(d.markDone).toHaveBeenCalledWith('post-1', '24h');
   });
 
+  it('keeps the post open when the Analytics scope is missing, so a reconnect backfills it', async () => {
+    const scopeMissing = {
+      status: 'scope_missing' as const,
+      analyticsViews: null,
+      engagedViews: null,
+      averageViewDurationSeconds: null,
+      averageViewPercentage: null,
+      contentType: null,
+      startDate: null,
+      endDate: null,
+    };
+    const d = deps({ fetchCounters: vi.fn(async () => ({ ...COUNTERS, retention: scopeMissing })) });
+    await collectPostMetrics(d);
+
+    expect(d.saveMetrics).toHaveBeenCalledWith(expect.objectContaining({ retention: scopeMissing }));
+    expect(d.markDone).not.toHaveBeenCalled();
+  });
+
   it('marks a post with nothing to measure done so it stops coming back', async () => {
     const d = deps({ fetchTaskSource: vi.fn(async () => ({ publishResults: [], scriptAngle: null })) });
     const report = await collectPostMetrics(d);
@@ -488,6 +506,18 @@ describe('migration 039 (post metrics retention + 28d window)', () => {
     const fn = sql.slice(sql.indexOf('create or replace function public.find_post_metrics_due'));
     expect(fn).toContain("values ('24h', 24), ('7d', 168), ('28d', 672)");
     expect(fn).toContain('from public.post_metrics_done pmd');
+    // A scope-less YouTube snapshot stays uncollected so the next run retries it.
+    expect(fn).toContain("and (pm.analytics_status is null or pm.analytics_status = 'scope_missing')");
     expect(fn).toContain('grant execute on function public.find_post_metrics_due(timestamptz, integer) to service_role');
+  });
+
+  it('defines the reconnect reset for snapshots without an Analytics scope', () => {
+    const fn = sql.slice(sql.indexOf('create or replace function public.reset_post_metrics_windows'));
+    expect(fn).toContain('delete from public.post_metrics_done pmd');
+    expect(fn).toContain('and pmd.metrics_window = pm.metrics_window');
+    expect(fn).toContain("and pm.provider = 'youtube'");
+    expect(fn).toContain('and pm.account_id = p_account_id');
+    expect(fn).toContain("and (pm.analytics_status is null or pm.analytics_status = 'scope_missing')");
+    expect(sql).toContain('grant execute on function public.reset_post_metrics_windows(uuid, text) to service_role');
   });
 });

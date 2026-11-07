@@ -9,9 +9,9 @@ import type { MetricsTarget, MetricsWindow, RetentionSnapshot } from './post-met
 //---------------
 // youtube-retention — the Analytics half of a YouTube snapshot: engaged
 // views and watch time for the owner's own video over publish date ..
-// end date. The Data API counters are saved either way; a transient
-// Analytics failure throws, so the collector retries the whole snapshot
-// next hour.
+// end date. A transient Analytics failure throws before the snapshot is
+// saved, so the collector retries the whole target (Data API counters
+// included) next hour.
 //---------------
 
 // Analytics data is provisional for ~48-72h. The '28d' window queries up to
