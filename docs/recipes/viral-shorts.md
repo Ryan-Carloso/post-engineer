@@ -26,6 +26,12 @@ downloaded, cut, or re-uploaded: `yt-dlp` is used for metadata and
 subtitles only (`--skip-download`), and the "cut" is the user's
 brand-new video.
 
+View count is treated as popularity, not retention: since 2026-08-24
+YouTube counts a view at play start, and another creator's retention is
+private. So the breakdown words every hook conclusion as a hypothesis
+and reports `retention_evidence: 'unavailable'` with the source URL and
+the fetch date.
+
 ## Prerequisites (not part of the prompt)
 
 - A Post Engineer account and an API key from

@@ -457,4 +457,37 @@ describe('prompts hub data', () => {
     expect(text).toContain('pip install');
     expect(text).not.toContain('issue #');
   });
+
+  it('guards the viral-shorts breakdown: views are popularity, retention conclusions are hypotheses', () => {
+    const fullText = getPrompt('viral-shorts')?.prompt ?? '';
+    const text = fullText.slice(SHARED_PROMPT_BASE.join('\n').length + 2);
+    // (a) view count is popularity, not retention, since views count at play start.
+    expect(text).toContain('measures popularity, not retention');
+    expect(text).toContain('since 2026-08-24');
+    // (b) hook conclusions from public data are hypotheses, never measured causes.
+    expect(text).toContain('HYPOTHESES, never measured causes');
+    // (c) never compare Short and long-form view counts.
+    expect(text).toContain("Never compare a Short's view count with a long-form video's view count");
+    // (d) Stayed to watch is not a per-second curve.
+    expect(text).toContain('never treat "Stayed to watch" as a per-second retention curve');
+    // (e) every breakdown carries the missing-evidence fields.
+    expect(text).toContain("retention_evidence: 'unavailable'");
+    expect(text).toContain('source video URL');
+    expect(text).toContain('fetch date (YYYY-MM-DD)');
+    // Metadata + subtitles only, and an explicit refusal to fetch video bytes.
+    expect(text).toContain('--write-subs --write-auto-subs --skip-download');
+    expect(text).toContain('Never download the video bytes');
+    expect(text).toContain('refuse');
+    // The guard sits between the study step and the script, and the
+    // missing-evidence block comes before validation.
+    const order = [
+      '--skip-download',
+      'HYPOTHESES, never measured causes',
+      "retention_evidence: 'unavailable'",
+      'Write MY script from MY content',
+      'validate_script',
+    ].map((needle) => text.indexOf(needle));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
 });
