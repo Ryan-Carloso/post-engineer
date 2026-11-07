@@ -192,6 +192,9 @@ web reaches every install without a package update.
 - `/place-spotlight`: Place spotlight becomes a video — turn one real place into one persona video with the place's own photos checked and attached as segment media, validated before any token is spent.
 - `/subject-spotlight`: Subject spotlight becomes a video — turn one concrete subject (a car, a product, a gadget) into one persona video with its own photos and its real price on screen, validated before any token is spent.
 - `/github-prs`: GitHub PRs become videos — turn a GitHub pull request into one persona video.
+- `/last-30-days`: Last 30 days become a video — turn what happened in your niche in the last 30 days into one persona video, validated before any token is spent.
+- `/multi-rede`: One week, one video per network — publish one video per network this week: LinkedIn, YouTube, Instagram, Bluesky, each scored for its own network.
+- `/viral-shorts`: A viral video becomes your Short — learn from the most-viewed video in your niche and write a fresh Shorts script in your own voice, hook, content, CTA.
 - `/full-setup`: Full setup becomes videos — connect accounts, create a persona, validate the script, and publish your first video without skipping a step.
 
 An agent that arrives without a human typing a slash command can still self-serve
@@ -212,4 +215,4 @@ objective). The MCP needs no change: it serves whatever the web hub lists.
 
 - Platform: https://post-engineer.com/
 - API keys: https://post-engineer.com/recipes
-- Recipes: [docs/recipes/daily-news.md](../../docs/recipes/daily-news.md) (daily news becomes a video), [docs/recipes/place-spotlight.md](../../docs/recipes/place-spotlight.md) (place spotlight becomes a video) and [docs/recipes/subject-spotlight.md](../../docs/recipes/subject-spotlight.md) (subject spotlight becomes a video)
+- Recipes: [docs/recipes/daily-news.md](../../docs/recipes/daily-news.md) (daily news becomes a video), [docs/recipes/place-spotlight.md](../../docs/recipes/place-spotlight.md) (place spotlight becomes a video), [docs/recipes/subject-spotlight.md](../../docs/recipes/subject-spotlight.md) (subject spotlight becomes a video), [docs/recipes/last-30-days.md](../../docs/recipes/last-30-days.md) (last 30 days become a video), [docs/recipes/multi-rede.md](../../docs/recipes/multi-rede.md) (one week, one video per network) and [docs/recipes/viral-shorts.md](../../docs/recipes/viral-shorts.md) (a viral video becomes your Short)

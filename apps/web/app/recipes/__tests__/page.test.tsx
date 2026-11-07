@@ -25,6 +25,13 @@ vi.mock('@/lib/i18n/provider', () => {
     'recipes.subjectSpotlightObjective': 'Turn one concrete subject into one persona video.',
     'recipes.githubPrsTitle': 'GitHub PRs become videos',
     'recipes.githubPrsObjective': 'Turn your GitHub pull requests into persona videos.',
+    'recipes.last30DaysTitle': 'Last 30 days become a video',
+    'recipes.last30DaysObjective':
+      'Turn what happened in your niche in the last 30 days into one persona video.',
+    'recipes.multiRedeTitle': 'One week, one video per network',
+    'recipes.multiRedeObjective': 'Publish one video per network this week.',
+    'recipes.viralShortsTitle': 'A viral video becomes your Short',
+    'recipes.viralShortsObjective': 'Learn from the most-viewed video in your niche.',
     'recipes.fullSetupTitle': 'Full setup becomes videos',
     'recipes.kindRecipe': 'Recipe',
     'recipes.kindPrompt': 'Prompt',
@@ -145,6 +152,9 @@ describe('/recipes prompts hub', () => {
       [/Place spotlight becomes a video/, '/recipes/place-spotlight'],
       [/Subject spotlight becomes a video/, '/recipes/subject-spotlight'],
       [/GitHub PRs become videos/, '/recipes/github-prs'],
+      [/Last 30 days become a video/, '/recipes/last-30-days'],
+      [/One week, one video per network/, '/recipes/multi-rede'],
+      [/A viral video becomes your Short/, '/recipes/viral-shorts'],
       [/Full setup becomes videos/, '/recipes/full-setup'],
     ] as const) {
       expect(screen.getByRole('link', { name })).toHaveAttribute('href', href);
@@ -167,8 +177,8 @@ describe('/recipes prompts hub', () => {
 
   it('labels entries by kind, not by sequence number', () => {
     renderHub(true);
-    expect(screen.getAllByText('Recipe')).toHaveLength(4);
-    expect(screen.getAllByText('Prompt')).toHaveLength(1);
+    expect(screen.getAllByText('Recipe')).toHaveLength(6);
+    expect(screen.getAllByText('Prompt')).toHaveLength(2);
     expect(screen.queryByText('01')).not.toBeInTheDocument();
   });
 
