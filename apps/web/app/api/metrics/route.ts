@@ -11,7 +11,11 @@ import {
   METRICS_NONE,
   METRICS_ROW_LIMIT,
   UUID,
+  isAnalyticsStatus,
+  isProvisional,
+  numericOrNull,
   parseMetricsQuery,
+  stayedToWatchPct,
   type MetricsRowView,
 } from '@/lib/metrics/metrics-query';
 
@@ -46,7 +50,8 @@ async function getHandler(request: Request): Promise<NextResponse> {
   let select = supabase
     .from('post_metrics')
     .select(
-      'post_id, persona_id, provider, account_id, external_id, script_angle, views, likes, comments, saves, collected_at',
+      // One literal: supabase-js parses it for the row type.
+      'post_id, persona_id, provider, account_id, external_id, script_angle, views, likes, comments, saves, collected_at, analytics_status, analytics_views, engaged_views, average_view_duration_seconds, average_view_percentage, content_type, analytics_end_date',
     )
     // Ownership: service role bypasses RLS.
     .eq('user_id', auth.userId)
@@ -101,6 +106,15 @@ async function getHandler(request: Request): Promise<NextResponse> {
       likes: record.likes,
       comments: record.comments,
       saves: record.saves,
+      analyticsViews: record.analytics_views,
+      engagedViews: record.engaged_views,
+      stayedToWatchPct: stayedToWatchPct(record.engaged_views, record.analytics_views),
+      // numeric columns come back from PostgREST as numbers or strings.
+      averageViewDurationSeconds: numericOrNull(record.average_view_duration_seconds),
+      averageViewPercentage: numericOrNull(record.average_view_percentage),
+      contentType: record.content_type,
+      analyticsStatus: isAnalyticsStatus(record.analytics_status) ? record.analytics_status : null,
+      provisional: isProvisional(record.analytics_end_date, record.collected_at),
       collectedAt: record.collected_at,
     });
   }

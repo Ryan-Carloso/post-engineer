@@ -1,6 +1,7 @@
 // Hand-written request/response schemas for generate-openapi.mjs, keyed by
 // "METHOD /api/path". Each entry mirrors the route's own validation (cited in
 // the comment); endpoints without an entry keep the generic responses.
+import { metricsOperationSchemas } from './openapi-metrics-schemas.mjs';
 
 const object = (properties, required = []) => ({
   type: 'object',
@@ -378,15 +379,7 @@ export const operationSchemas = {
     request: object({ url: { type: 'string', format: 'uri', description: 'http(s) URL.' } }, ['url']),
     response: success({ code: str }),
   },
-  // apps/web/app/api/metrics/route.ts (KNOWN_PARAMS)
-  'GET /api/metrics': {
-    // Verified live: omitting window returns 400 "window must be 24h or 7d."
-    query: [
-      { name: 'window', required: true, enum: ['24h', '7d'] },
-      ...['persona', 'account', 'provider', 'angle'].map((name) => ({ name, required: false })),
-    ],
-    response: success({ rows: { type: 'array', items: anyObject }, truncated: { type: 'boolean' } }),
-  },
+  ...metricsOperationSchemas({ success, anyObject }),
   // apps/web/app/api/posts/[id]/route.ts
   'GET /api/posts/[id]': {
     response: success({

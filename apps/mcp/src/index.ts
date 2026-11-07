@@ -286,7 +286,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'get_post_metrics',
-    'Get per-video performance snapshots (views, likes, comments, saves) of published posts for one window (24h or 7d), newest first, optionally filtered by persona, account, provider (network) and script angle. Returns rows plus truncated (true when more rows exist than the server cap).',
+    'Get per-video performance snapshots (views, likes, comments, saves) of published posts for one window (24h, 7d or 28d), newest first, optionally filtered by persona, account, provider (network) and script angle. YouTube rows also carry YouTube Analytics retention for the user\'s own videos: engagedViews, stayedToWatchPct (derived: engaged views / views), averageViewPercentage, contentType, provisional (data may still change), and analyticsStatus (scope_missing = the user must reconnect YouTube). Returns rows plus truncated (true when more rows exist than the server cap).',
     GetPostMetricsShape,
     withTracking('get_post_metrics', async (args) => {
       return handleGetPostMetrics(apiClient, args);

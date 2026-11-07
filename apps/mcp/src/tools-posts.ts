@@ -34,7 +34,9 @@ const metricsFilter = z.string().min(1).max(METRICS_FILTER_MAX_LENGTH);
 export const GetPostMetricsShape = {
   window: z
     .enum(METRICS_WINDOWS)
-    .describe('Snapshot window: 24h (first day after publishing) or 7d (first week).'),
+    .describe(
+      'Snapshot window: 24h (first day after publishing), 7d (first week) or 28d (four weeks; YouTube Analytics values are final).',
+    ),
   persona: metricsFilter
     .refine((value) => value === METRICS_NONE || UUID.test(value), {
       message: `persona must be a uuid or ${METRICS_NONE}`,
@@ -51,6 +53,7 @@ export const GetPostMetricsShape = {
 };
 
 export const GetPostMetricsSchema = z.object(GetPostMetricsShape);
+
 
 export async function handleGetPost(
   client: PostEngineerClient,

@@ -20,6 +20,7 @@ import {
 } from '../post-metrics';
 import { logger } from '@/lib/logger';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
+import { ANALYTICS_STATUSES } from '../metrics-query';
 
 const COUNTERS = { views: 1200, likes: 80, comments: 9, saves: null };
 
@@ -143,7 +144,31 @@ describe('collectPostMetrics', () => {
       provider: 'instagram',
       window: '24h',
       ...COUNTERS,
+      engaged_views: null,
+      analytics_status: null,
     });
+  });
+
+  it('passes the window and clock to the fetcher and tracks only retention counts and status', async () => {
+    const retention = {
+      status: 'ok' as const, analyticsViews: 1000, engagedViews: 640, averageViewDurationSeconds: 21.4,
+      averageViewPercentage: 78.2, contentType: 'SHORTS', startDate: '2026-10-20', endDate: '2026-10-21',
+    };
+    const d = deps({
+      listDuePosts: vi.fn(async () => [duePost({ window: '28d' })]),
+      fetchCounters: vi.fn(async () => ({ ...COUNTERS, retention })),
+    });
+    await collectPostMetrics(d);
+
+    expect(d.fetchCounters).toHaveBeenCalledWith('user-1', expect.objectContaining({ provider: 'youtube' }), {
+      window: '28d',
+      now: new Date('2026-10-21T12:00:00.000Z'),
+    });
+    expect(d.saveMetrics).toHaveBeenCalledWith(expect.objectContaining({ window: '28d', retention }));
+    const tracked = vi.mocked(d.track).mock.calls[0]?.[1];
+    expect(tracked).toMatchObject({ engaged_views: 640, analytics_status: 'ok', window: '28d' });
+    // The nested snapshot (dates, content type) never reaches PostHog.
+    expect(tracked).not.toHaveProperty('retention');
   });
 
   it('reports an unknown provider as an error and still snapshots the known ones', async () => {
@@ -202,7 +227,7 @@ describe('collectPostMetrics', () => {
       provider: 'instagram',
       accountId: 'ig-acct',
       externalId: 'media-9',
-    });
+    }, { window: '24h', now: new Date('2026-10-21T12:00:00.000Z') });
   });
 
   it('keeps going after one video fails and reports the failure', async () => {
@@ -274,6 +299,7 @@ describe('createPostMetricsStore', () => {
           metrics_window: '24h',
           collected_keys: ['youtube:abc123'],
         },
+        { post_id: 'post-2', user_id: 'user-1', task_id: 'task-2', metrics_window: '28d', collected_keys: [] },
         { post_id: 'bad', user_id: 'user-1', task_id: 'task-x', metrics_window: '30d', collected_keys: [] },
       ],
       error: null,
@@ -287,6 +313,7 @@ describe('createPostMetricsStore', () => {
     });
     expect(posts).toEqual([
       { id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h', collectedKeys: new Set(['youtube:abc123']) },
+      { id: 'post-2', userId: 'user-1', taskId: 'task-2', window: '28d', collectedKeys: new Set() },
     ]);
   });
 
@@ -325,6 +352,14 @@ describe('createPostMetricsStore', () => {
         comments: 9,
         saves: null,
         script_angle: 'myth',
+        analytics_status: null,
+        analytics_views: null,
+        engaged_views: null,
+        average_view_duration_seconds: null,
+        average_view_percentage: null,
+        content_type: null,
+        analytics_start_date: null,
+        analytics_end_date: null,
       },
       { onConflict: 'post_id,provider,external_id,metrics_window' },
     );
@@ -405,5 +440,54 @@ describe('migration 026 (post metrics dimensions)', () => {
     expect(sql.includes('update public.post_metrics pm')).toBe(true);
     expect(sql.includes('set persona_id = s.persona_id')).toBe(true);
     expect(sql.includes('where pm.post_id = sp.id and pm.persona_id is null')).toBe(true);
+  });
+});
+
+describe('migration 039 (post metrics retention + 28d window)', () => {
+  const sql = readFileSync(join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '039_post-metrics-retention.sql'), 'utf8');
+
+  it('adds every retention column saveMetrics writes', async () => {
+    const upsert = vi.fn(async (_row: unknown, _options: unknown) => ({ error: null }));
+    const store = createPostMetricsStore({ from: vi.fn(() => ({ upsert })) } as unknown as SupabaseClient);
+    await store.saveMetrics({
+      postId: 'p', userId: 'u', provider: 'youtube', accountId: 'a', externalId: 'v', window: '28d', scriptAngle: null,
+      ...COUNTERS,
+      retention: {
+        status: 'ok', analyticsViews: 1000, engagedViews: 640, averageViewDurationSeconds: 21.4,
+        averageViewPercentage: 78.2, contentType: 'SHORTS', startDate: '2026-10-01', endDate: '2026-10-26',
+      },
+    });
+    const written: unknown = upsert.mock.calls[0]?.[0];
+    expect(written).toMatchObject({
+      metrics_window: '28d',
+      analytics_status: 'ok',
+      analytics_views: 1000,
+      engaged_views: 640,
+      average_view_duration_seconds: 21.4,
+      average_view_percentage: 78.2,
+      content_type: 'SHORTS',
+      analytics_start_date: '2026-10-01',
+      analytics_end_date: '2026-10-26',
+    });
+    const retentionKeys = Object.keys(typeof written === 'object' && written !== null ? written : {})
+      .filter((key) => key.startsWith('analytics_') || ['engaged_views', 'average_view_duration_seconds', 'average_view_percentage', 'content_type'].includes(key));
+    expect(retentionKeys).toHaveLength(8);
+    for (const key of retentionKeys) {
+      expect(sql.includes(`add column if not exists ${key} `)).toBe(true);
+    }
+  });
+
+  it('pins the analytics_status values to the AnalyticsStatus union', () => {
+    const quoted = ANALYTICS_STATUSES.map((status) => `'${status}'`).join(', ');
+    expect(sql).toContain(`check (analytics_status in (${quoted}))`);
+  });
+
+  it('opens the 28d window on both window checks and in find_post_metrics_due', () => {
+    expect(sql).toContain("alter table public.post_metrics\n  add constraint post_metrics_metrics_window_check\n  check (metrics_window in ('24h', '7d', '28d'))");
+    expect(sql).toContain("alter table public.post_metrics_done\n  add constraint post_metrics_done_metrics_window_check\n  check (metrics_window in ('24h', '7d', '28d'))");
+    const fn = sql.slice(sql.indexOf('create or replace function public.find_post_metrics_due'));
+    expect(fn).toContain("values ('24h', 24), ('7d', 168), ('28d', 672)");
+    expect(fn).toContain('from public.post_metrics_done pmd');
+    expect(fn).toContain('grant execute on function public.find_post_metrics_due(timestamptz, integer) to service_role');
   });
 });

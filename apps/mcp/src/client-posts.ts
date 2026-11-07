@@ -9,7 +9,7 @@ import type { PostEngineerClient } from './client.js';
 //---------------
 
 export interface PostMetricsQuery {
-  window: '24h' | '7d';
+  window: '24h' | '7d' | '28d';
   persona?: string;
   account?: string;
   provider?: string;

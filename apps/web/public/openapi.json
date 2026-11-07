@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Post Engineer API",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "description": "Generate and schedule short videos for social accounts. Authenticate with an API key created in the dashboard: Authorization: Bearer <key>."
   },
   "servers": [
@@ -2041,7 +2041,8 @@
               "type": "string",
               "enum": [
                 "24h",
-                "7d"
+                "7d",
+                "28d"
               ]
             }
           },

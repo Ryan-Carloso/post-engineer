@@ -32,9 +32,9 @@ describe('get_post_metrics contract sync with GET /api/metrics', () => {
   });
 
   it('accepts the same windows', () => {
-    const [first, second] = METRICS_WINDOWS;
-    expect(METRICS_WINDOWS).toHaveLength(2);
-    expect(metricsQuery).toContain(`if (window !== '${first}' && window !== '${second}')`);
+    const list = METRICS_WINDOWS.map((w) => `'${w}'`).join(', ');
+    expect(metricsQuery).toContain(`export const METRICS_WINDOWS = [${list}] as const`);
+    expect(metricsQuery).toContain('if (!isMetricsWindow(window))');
   });
 
   it('accepts the same providers', () => {

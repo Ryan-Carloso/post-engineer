@@ -85,10 +85,11 @@ describe('getPostMetrics', () => {
 });
 
 describe('GetPostMetricsSchema', () => {
-  it('requires a window of 24h or 7d', () => {
+  it('requires a window of 24h, 7d or 28d', () => {
     expect(GetPostMetricsSchema.safeParse({}).success).toBe(false);
     expect(GetPostMetricsSchema.safeParse({ window: '30d' }).success).toBe(false);
     expect(GetPostMetricsSchema.safeParse({ window: '24h' }).success).toBe(true);
+    expect(GetPostMetricsSchema.safeParse({ window: '28d' }).success).toBe(true);
   });
 
   it('accepts a uuid or the none sentinel as persona, nothing else', () => {

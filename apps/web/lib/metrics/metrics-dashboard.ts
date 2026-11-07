@@ -14,7 +14,9 @@ import { notifyIfSessionExpired } from '@/lib/session-expiry';
 // grouping that feeds the chart.
 //---------------
 
-export const METRIC_KEYS = ['views', 'likes', 'comments', 'saves'] as const;
+export const METRIC_KEYS = ['views', 'engagedViews', 'stayedToWatchPct', 'likes', 'comments', 'saves'] as const;
+// Percent metrics average to one decimal; counts average to whole numbers.
+export const PERCENT_METRICS: ReadonlySet<MetricKey> = new Set(['stayedToWatchPct']);
 export const GROUP_KEYS = ['angle', 'persona', 'account', 'provider'] as const;
 export type MetricKey = (typeof METRIC_KEYS)[number];
 export type GroupKey = (typeof GROUP_KEYS)[number];
@@ -80,6 +82,10 @@ export function useMetricsQuery(query: MetricsQuery): UseQueryResult<MetricsFetc
   });
 }
 
+export function roundAverage(value: number, metric: MetricKey): number {
+  return PERCENT_METRICS.has(metric) ? Math.round(value * 10) / 10 : Math.round(value);
+}
+
 function groupValue(row: MetricsRowView, group: GroupKey): string {
   if (group === 'persona') return row.personaId ?? METRICS_NONE;
   if (group === 'account') return row.accountId;
@@ -104,7 +110,7 @@ export function groupMetrics(rows: MetricsRowView[], group: GroupKey, metric: Me
     sums.set(key, entry);
   }
   return [...sums.entries()]
-    .map(([key, { total, count }]) => ({ key, average: Math.round(total / count), count }))
+    .map(([key, { total, count }]) => ({ key, average: roundAverage(total / count, metric), count }))
     .sort((a, b) => b.average - a.average || a.key.localeCompare(b.key));
 }
 
