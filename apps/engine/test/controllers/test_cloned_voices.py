@@ -459,7 +459,7 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(
             response.json()["message"],
-            "preview text must be 1 to 300 characters after trimming",
+            "Preview text must be 1 to 300 characters after trimming.",
         )
         service.preview_mp3.assert_not_called()
 
@@ -477,7 +477,7 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(
             response.json()["message"],
-            "preview text must be 1 to 300 characters after trimming",
+            "Preview text must be 1 to 300 characters after trimming.",
         )
         service.preview_mp3.assert_not_called()
 
