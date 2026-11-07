@@ -7,7 +7,7 @@ GET  /api/v1/personas/voices  — house voice catalog
 from typing import Optional
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.controllers import base
 from pydantic import BaseModel
@@ -51,9 +51,7 @@ def validate_persona_endpoint(request: PersonaRequest):
     return BaseResponse(body=normalized)
 
 
-@persona_router.get(
-    "/personas/voices", response_model=BaseResponse, summary="House voice catalog"
-)
+@persona_router.get("/personas/voices", response_model=BaseResponse, summary="House voice catalog")
 def list_house_voices_endpoint(request: Request):
     auth = base.get_auth_context(request)
     return BaseResponse(body=persona_service.get_house_voices(user_id=auth.user_id))
@@ -88,6 +86,40 @@ def voice_sample_endpoint(voice_id: str, language: str = "pt"):
             "maps per-language samples",
         ),
     )
+
+
+class HouseVoicePreviewRequest(BaseModel):
+    """Optional JSON body of the house preview endpoint: ``{"text": "..."}``.
+
+    Only the string type is enforced here — a malformed body or a
+    non-string text fails pydantic validation, which the app maps to a
+    400. The trimmed-length check lives in validate_preview_text, so a
+    string longer than the cap that trims into range is still accepted.
+    """
+
+    text: str | None = None
+
+
+@persona_router.post(
+    "/personas/voices/{voice_id}/preview",
+    summary="TTS preview for a house voice (audio/mpeg)",
+)
+def preview_house_voice_endpoint(
+    request: Request,
+    voice_id: str,
+    body: HouseVoicePreviewRequest | None = None,
+):
+    auth = base.get_auth_context(request)
+    try:
+        audio = persona_service.preview_house_voice_mp3(
+            auth.user_id, voice_id, text=body.text if body is not None else None
+        )
+    except persona_service.HouseVoicePreviewError as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=utils.get_response(status=exc.status_code, message=exc.message),
+        )
+    return Response(content=audio, media_type="audio/mpeg")
 
 
 router.include_router(persona_router)

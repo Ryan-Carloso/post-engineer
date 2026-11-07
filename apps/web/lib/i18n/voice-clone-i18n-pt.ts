@@ -52,6 +52,13 @@ export const personaVoiceClonePt = {
   voicePickerChoose: 'Escolher voz',
   voicePickerChange: 'Trocar voz',
   voicePlaySample: 'Ouvir {name}',
+  voicePreviewTextLabel: 'Ouça esta voz dizer a sua frase',
+  voicePreviewTextPlaceholder: 'Escreva uma frase em inglês…',
+  voicePreviewListen: 'Ouvir com o meu texto',
+  voicePreviewListening: 'A gerar áudio…',
+  voicePreviewRateLimited: 'Limite diário de prévias atingido. Tente amanhã.',
+  voicePreviewTextTooLong: 'O texto da prévia tem de ter 300 caracteres ou menos.',
+  voicePreviewFailed: 'Não foi possível reproduzir a prévia.',
   voiceTagCharacter: 'Personagem',
   voiceTagCloned: 'Minha voz clonada',
 } as const;
@@ -62,4 +69,5 @@ export const voiceCloneApiToolDescPt = {
   toolDescCreateClonedVoice: 'Crie um clone de voz a partir de uma URL de áudio',
   toolDescDeleteClonedVoice: 'Exclua um clone de voz',
   toolDescPreviewClonedVoice: 'Ouça a prévia de um clone pronto',
+  toolDescPreviewHouseVoice: 'Ouça a prévia de uma voz da casa',
 } as const;

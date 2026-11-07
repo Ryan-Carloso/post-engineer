@@ -100,6 +100,7 @@ POST   /api/persona/cloned-voices                             create cloned voic
 GET    /api/persona/cloned-voices/{cloneId}                   get cloned voice
 DELETE /api/persona/cloned-voices/{cloneId}                   delete cloned voice
 POST   /api/persona/cloned-voices/{cloneId}/preview           preview cloned voice
+POST   /api/persona/voices/{voiceId}/preview                  preview house voice
 GET    /api/persona/publishing-accounts                       get persona publishing accounts
 PUT    /api/persona/publishing-accounts                       set persona publishing accounts
 GET    /api/account                                           list social accounts

@@ -81,7 +81,7 @@ describe('McpDocsSection', () => {
     expect(screen.queryByTestId('mcp-docs-help-cta')).toBeNull();
   });
 
-  it('renders the tools grid with all 44 tools', () => {
+  it('renders the tools grid with all 45 tools', () => {
     render(<McpDocsSection apiKey={null} />);
 
     const grid = screen.getByTestId('mcp-tools-grid');
@@ -99,6 +99,7 @@ describe('McpDocsSection', () => {
       'get_cloned_voice',
       'delete_cloned_voice',
       'preview_cloned_voice',
+      'preview_house_voice',
       'list_faces',
       'create_persona',
       'update_persona',

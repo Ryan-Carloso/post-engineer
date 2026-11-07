@@ -54,6 +54,9 @@
   "GET /api/persona/voices": [
     "list_voices"
   ],
+  "POST /api/persona/voices/[voiceId]/preview": [
+    "preview_house_voice"
+  ],
   "GET /api/persona/cloned-voices": [
     "list_cloned_voices"
   ],

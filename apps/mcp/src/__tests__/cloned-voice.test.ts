@@ -13,6 +13,7 @@ import {
   getClonedVoice,
   listClonedVoices,
   previewClonedVoice,
+  previewHouseVoice,
   readCloneReferenceFile,
   type ClonedVoiceClientHost,
 } from '../cloned-voice-client.js';
@@ -22,7 +23,9 @@ import {
   handleGetClonedVoice,
   handleListClonedVoices,
   handlePreviewClonedVoice,
+  handlePreviewHouseVoice,
   PreviewClonedVoiceSchema,
+  PreviewHouseVoiceSchema,
 } from '../cloned-voice-tools.js';
 import { createPostEngineerMcpServer } from '../index.js';
 import type { PostEngineerClient } from '../client.js';
@@ -319,6 +322,65 @@ describe('cloned voice client calls', () => {
       'Preview audio exceeds 20 MB'
     );
   });
+
+  it('previewHouseVoice fetches the house preview audio for an encoded voice id', async () => {
+    global.fetch = vi.fn().mockResolvedValue(audioResponse([0x49, 0x44, 0x33], 'audio/mpeg'));
+    const host = fakeHost(vi.fn());
+    const result = await previewHouseVoice(host, 'chatterbox:phonon_zoey');
+    expect(result).toEqual({
+      audioBase64: Buffer.from([0x49, 0x44, 0x33]).toString('base64'),
+      contentType: 'audio/mpeg',
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.test/api/persona/voices/chatterbox%3Aphonon_zoey/preview',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer test-token',
+        },
+      })
+    );
+  });
+
+  it('previewHouseVoice sends caller text in the JSON body, never in the URL', async () => {
+    global.fetch = vi.fn().mockResolvedValue(audioResponse([1], 'audio/mpeg'));
+    const host = fakeHost(vi.fn());
+    await previewHouseVoice(host, 'chatterbox:phonon_zoey', 'say this');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.test/api/persona/voices/chatterbox%3Aphonon_zoey/preview',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ text: 'say this' }) })
+    );
+  });
+
+  it('previewHouseVoice sends no body when no caller text is given', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(audioResponse([1], 'audio/mpeg'));
+    global.fetch = fetchMock;
+    const host = fakeHost(vi.fn());
+    await previewHouseVoice(host, 'chatterbox:phonon_zoey');
+    const init: unknown = fetchMock.mock.calls[0][1];
+    expect(typeof init === 'object' && init !== null && 'body' in init).toBe(false);
+  });
+
+  it('previewHouseVoice throws the structured API error message on a non-ok preview', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: async () => JSON.stringify({ success: false, error: 'Voice not found.' }),
+    });
+    const host = fakeHost(vi.fn());
+    await expect(previewHouseVoice(host, 'chatterbox:unknown')).rejects.toThrow(
+      'Failed to preview house voice: 404 Voice not found.'
+    );
+  });
+
+  it('previewHouseVoice rejects an empty preview audio body', async () => {
+    global.fetch = vi.fn().mockResolvedValue(audioResponse([], 'audio/mpeg'));
+    const host = fakeHost(vi.fn());
+    await expect(previewHouseVoice(host, 'chatterbox:phonon_zoey')).rejects.toThrow(
+      'preview audio was empty'
+    );
+  });
 });
 
 describe('createClonedVoiceFromUrl', () => {
@@ -559,6 +621,26 @@ describe('cloned voice tool handlers', () => {
     expect(result.isError).toBe(true);
     expect(firstText(result)).toContain('Error previewing cloned voice');
   });
+
+  it('handlePreviewHouseVoice returns the audio payload', async () => {
+    global.fetch = vi.fn().mockResolvedValue(audioResponse([0x41, 0x42, 0x43], 'audio/mpeg'));
+    const client = fakeHost(vi.fn()) as unknown as PostEngineerClient;
+    const result = await handlePreviewHouseVoice(client, { voiceId: 'chatterbox:phonon_zoey' });
+    expect(result.isError).toBeFalsy();
+    expect(firstText(result)).toContain('QUJD');
+  });
+
+  it('handlePreviewHouseVoice maps a failed preview to an error response', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: async () => JSON.stringify({ success: false, error: 'Voice not found.' }),
+    });
+    const client = fakeHost(vi.fn()) as unknown as PostEngineerClient;
+    const result = await handlePreviewHouseVoice(client, { voiceId: 'chatterbox:unknown' });
+    expect(result.isError).toBe(true);
+    expect(firstText(result)).toContain('Error previewing house voice');
+  });
 });
 
 describe('cloned voice tools run through the MCP server', () => {
@@ -749,6 +831,23 @@ describe('cloned voice tools run through the MCP server', () => {
       expect.objectContaining({ method: 'POST' })
     );
   });
+
+  it('preview_house_voice fetches the house preview audio', async () => {
+    global.fetch = vi.fn().mockResolvedValue(audioResponse([0x41, 0x42, 0x43], 'audio/mpeg'));
+    const result = await callTool(
+      'preview_house_voice',
+      { voiceId: 'chatterbox:phonon_zoey', text: 'hello there' },
+      vi.fn(),
+    );
+    expect(firstText(result as { content?: unknown })).toContain('QUJD');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.test/api/persona/voices/chatterbox%3Aphonon_zoey/preview',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ text: 'hello there' }),
+      })
+    );
+  });
 });
 
 describe('PreviewClonedVoiceSchema text', () => {
@@ -773,6 +872,38 @@ describe('PreviewClonedVoiceSchema text', () => {
     await handlePreviewClonedVoice(client, { cloneId: 'clone-1', text: 'hello there' });
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.test/api/persona/cloned-voices/clone-1/preview',
+      expect.objectContaining({ body: JSON.stringify({ text: 'hello there' }) })
+    );
+  });
+});
+
+describe('PreviewHouseVoiceSchema text', () => {
+  it('accepts and trims text up to 300 chars', () => {
+    const parsed = PreviewHouseVoiceSchema.parse({
+      voiceId: 'chatterbox:phonon_zoey',
+      text: `  ${'a'.repeat(300)}  `,
+    });
+    expect(parsed.text).toBe('a'.repeat(300));
+  });
+
+  it('rejects 301 chars and empty-after-trim text', () => {
+    expect(
+      PreviewHouseVoiceSchema.safeParse({ voiceId: 'v', text: 'a'.repeat(301) }).success,
+    ).toBe(false);
+    expect(PreviewHouseVoiceSchema.safeParse({ voiceId: 'v', text: '   ' }).success).toBe(false);
+  });
+
+  it('keeps text optional', () => {
+    expect(PreviewHouseVoiceSchema.parse({ voiceId: 'chatterbox:phonon_zoey' }).text).toBeUndefined();
+  });
+
+  it('handlePreviewHouseVoice forwards the text to the client', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(audioResponse([1], 'audio/mpeg'));
+    global.fetch = fetchMock;
+    const client = fakeHost(vi.fn()) as unknown as PostEngineerClient;
+    await handlePreviewHouseVoice(client, { voiceId: 'chatterbox:phonon_zoey', text: 'hello there' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.test/api/persona/voices/chatterbox%3Aphonon_zoey/preview',
       expect.objectContaining({ body: JSON.stringify({ text: 'hello there' }) })
     );
   });

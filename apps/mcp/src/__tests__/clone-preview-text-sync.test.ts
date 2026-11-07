@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { CLONE_PREVIEW_TEXT_MAX_CHARS } from '../limits.js';
+import { CLONE_PREVIEW_TEXT_MAX_CHARS, HOUSE_PREVIEW_TEXT_MAX_CHARS } from '../limits.js';
 
 function findRepoRoot(fromUrl: string): string {
   let dir = dirname(fileURLToPath(fromUrl));
@@ -23,6 +23,7 @@ function findRepoRoot(fromUrl: string): string {
 
 const ENGINE = join('apps', 'engine', 'app', 'services', 'cloned_voices', 'preview_text.py');
 const WEB = join('apps', 'web', 'app', 'api', 'persona', 'cloned-voices', '[cloneId]', 'preview', 'preview-text.ts');
+const WEB_HOUSE = join('apps', 'web', 'app', 'api', 'persona', 'voices', '[voiceId]', 'preview', 'preview-text.ts');
 
 describe('cloned-voice preview text cap', () => {
   it('is 300 in the MCP limits module', () => {
@@ -37,5 +38,23 @@ describe('cloned-voice preview text cap', () => {
   it('is the same literal in the web preview route parser', () => {
     const source = readFileSync(join(findRepoRoot(import.meta.url), WEB), 'utf8');
     expect(source.includes(`export const CLONE_PREVIEW_TEXT_MAX_CHARS = ${CLONE_PREVIEW_TEXT_MAX_CHARS};`)).toBe(true);
+  });
+});
+
+// The house preview reuses the cloned-voice validator on the engine side, so
+// its cap lives in only two more places: the web house preview route parser
+// and the MCP limits module. Same 300, pinned the same way.
+describe('house-voice preview text cap', () => {
+  it('is 300 in the MCP limits module', () => {
+    expect(HOUSE_PREVIEW_TEXT_MAX_CHARS).toBe(300);
+  });
+
+  it('is the same literal in the web house preview route parser', () => {
+    const source = readFileSync(join(findRepoRoot(import.meta.url), WEB_HOUSE), 'utf8');
+    expect(source.includes(`export const HOUSE_PREVIEW_TEXT_MAX_CHARS = ${HOUSE_PREVIEW_TEXT_MAX_CHARS};`)).toBe(true);
+  });
+
+  it('matches the cloned-voice cap it shares the validator with', () => {
+    expect(HOUSE_PREVIEW_TEXT_MAX_CHARS).toBe(CLONE_PREVIEW_TEXT_MAX_CHARS);
   });
 });
