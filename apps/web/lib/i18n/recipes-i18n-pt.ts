@@ -79,6 +79,62 @@ export const recipesI18nPt = {
       'O hatch elétrico 2026 com 400 km de autonomia e preço de lançamento.',
   subjectSpotlightExampleOutput:
       'Gancho sobre o preço real, um corpo com as fotos do carro, CTA — 2 fotos, um cartão em cada.',
+  last30DaysTitle: 'Últimos 30 dias viram vídeo',
+  last30DaysObjective:
+      'Transformar o que aconteceu no seu nicho nos últimos 30 dias em um vídeo de persona, validado antes de gastar qualquer token.',
+  last30DaysStep1: 'Para criadores que publicam o que acabou de acontecer no nicho.',
+  last30DaysStep2:
+      'Busca os últimos 30 dias e escolhe um evento claro, sem adivinhar.',
+  last30DaysStep3: 'Escolha um evento com lugar, pessoa ou número nomeado.',
+  last30DaysStep4:
+      'Escreva o gancho primeiro, o CTA por último, e valide antes de gastar qualquer token.',
+  last30DaysStep5: 'Gere um vídeo e publique onde você pediu.',
+  last30DaysDeliver1: 'Um vídeo de persona dos últimos 30 dias do seu nicho.',
+  last30DaysDeliver2:
+      'Um roteiro validado: 60–200 palavras, gancho primeiro, CTA por último.',
+  last30DaysDeliver3: 'Um post publicado nas suas contas conectadas.',
+  last30DaysExampleInput:
+      'Um evento do nicho dos últimos 30 dias com um lugar nomeado.',
+  last30DaysExampleOutput:
+      'Gancho sobre o evento, corpo sobre o que aconteceu, CTA — um vídeo.',
+  multiRedeTitle: 'Uma semana, um vídeo por rede',
+  multiRedeObjective:
+      'Publicar um vídeo por rede nesta semana — LinkedIn, YouTube, Instagram, Bluesky — cada um avaliado para a sua rede.',
+  multiRedeStep1: 'Para criadores que publicam a mesma semana em todas as redes.',
+  multiRedeStep2:
+      'Planeja um vídeo por rede a partir de um tema semanal.',
+  multiRedeStep3: 'Cada roteiro é escrito e avaliado para a sua rede.',
+  multiRedeStep4:
+      'Escreva o gancho primeiro, o CTA por último, e valide antes de gastar qualquer token.',
+  multiRedeStep5: 'Gere um vídeo por rede e publique onde você pediu.',
+  multiRedeDeliver1: 'Um vídeo de persona por rede na semana.',
+  multiRedeDeliver2:
+      'Um roteiro validado por rede: 60–200 palavras, gancho primeiro, CTA por último.',
+  multiRedeDeliver3: 'Um post publicado em cada conta conectada.',
+  multiRedeExampleInput:
+      'Um tema semanal para LinkedIn, YouTube, Instagram e Bluesky.',
+  multiRedeExampleOutput:
+      'Quatro roteiros, quatro vídeos, um por rede — mesma semana.',
+  viralShortsTitle: 'Um vídeo viral vira seu Short',
+  viralShortsObjective:
+      'Aprender com o vídeo mais visto do seu nicho e escrever um roteiro de Shorts novo com a sua voz — gancho, conteúdo, CTA.',
+  viralShortsStep1:
+      'Para criadores que querem seus Shorts aprendendo com o que já funciona.',
+  viralShortsStep2:
+      'Encontra o vídeo mais visto do seu nicho e estuda a estrutura dele.',
+  viralShortsStep3: 'O vídeo em si nunca é baixado, cortado ou republicado.',
+  viralShortsStep4:
+      'Escreva o gancho primeiro, o CTA por último, e valide antes de gastar qualquer token.',
+  viralShortsStep5: 'Gere um vídeo e publique onde você pediu.',
+  viralShortsDeliver1:
+      'Um vídeo de persona com estrutura comprovada e conteúdo seu.',
+  viralShortsDeliver2:
+      'Um roteiro validado: 60–200 palavras, gancho primeiro, CTA por último.',
+  viralShortsDeliver3: 'Um post publicado nas suas contas conectadas.',
+  viralShortsExampleInput:
+      'O vídeo mais visto do seu nicho neste ano.',
+  viralShortsExampleOutput:
+      'Gancho, corpo, CTA na estrutura viral — seus fatos, sua voz.',
   stepsTitle: 'O que este prompt faz',
   deliversTitle: 'O que você recebe',
   examplesTitle: 'Exemplo',

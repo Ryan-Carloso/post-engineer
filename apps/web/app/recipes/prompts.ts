@@ -25,16 +25,22 @@ import {
   DAILY_NEWS_PROMPT,
   FULL_SETUP_PROMPT,
   GITHUB_PRS_PROMPT,
+  LAST_30_DAYS_PROMPT,
+  MULTI_REDE_PROMPT,
   PLACE_SPOTLIGHT_PROMPT,
   SUBJECT_SPOTLIGHT_PROMPT,
+  VIRAL_SHORTS_PROMPT,
 } from '@/lib/generation/prompt-base';
 
 export {
   DAILY_NEWS_PROMPT,
   FULL_SETUP_PROMPT,
   GITHUB_PRS_PROMPT,
+  LAST_30_DAYS_PROMPT,
+  MULTI_REDE_PROMPT,
   PLACE_SPOTLIGHT_PROMPT,
   SUBJECT_SPOTLIGHT_PROMPT,
+  VIRAL_SHORTS_PROMPT,
 };
 
 export type PromptIcon = 'globe' | 'compose';
@@ -149,6 +155,78 @@ export const PROMPTS: PromptEntry[] = [
     docHref:
       'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/github-prs.md',
     prompt: GITHUB_PRS_PROMPT,
+  },
+  {
+    slug: 'last-30-days',
+    icon: 'globe',
+    titleKey: 'recipes.last30DaysTitle',
+    objectiveKey: 'recipes.last30DaysObjective',
+    kindKey: 'recipes.kindRecipe',
+    stepKeys: [
+      'recipes.last30DaysStep1',
+      'recipes.last30DaysStep2',
+      'recipes.last30DaysStep3',
+      'recipes.last30DaysStep4',
+      'recipes.last30DaysStep5',
+    ],
+    deliverKeys: [
+      'recipes.last30DaysDeliver1',
+      'recipes.last30DaysDeliver2',
+      'recipes.last30DaysDeliver3',
+    ],
+    exampleInputKey: 'recipes.last30DaysExampleInput',
+    exampleOutputKey: 'recipes.last30DaysExampleOutput',
+    docHref:
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/last-30-days.md',
+    prompt: LAST_30_DAYS_PROMPT,
+  },
+  {
+    slug: 'multi-rede',
+    icon: 'globe',
+    titleKey: 'recipes.multiRedeTitle',
+    objectiveKey: 'recipes.multiRedeObjective',
+    kindKey: 'recipes.kindRecipe',
+    stepKeys: [
+      'recipes.multiRedeStep1',
+      'recipes.multiRedeStep2',
+      'recipes.multiRedeStep3',
+      'recipes.multiRedeStep4',
+      'recipes.multiRedeStep5',
+    ],
+    deliverKeys: [
+      'recipes.multiRedeDeliver1',
+      'recipes.multiRedeDeliver2',
+      'recipes.multiRedeDeliver3',
+    ],
+    exampleInputKey: 'recipes.multiRedeExampleInput',
+    exampleOutputKey: 'recipes.multiRedeExampleOutput',
+    docHref:
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/multi-rede.md',
+    prompt: MULTI_REDE_PROMPT,
+  },
+  {
+    slug: 'viral-shorts',
+    icon: 'compose',
+    titleKey: 'recipes.viralShortsTitle',
+    objectiveKey: 'recipes.viralShortsObjective',
+    kindKey: 'recipes.kindPrompt',
+    stepKeys: [
+      'recipes.viralShortsStep1',
+      'recipes.viralShortsStep2',
+      'recipes.viralShortsStep3',
+      'recipes.viralShortsStep4',
+      'recipes.viralShortsStep5',
+    ],
+    deliverKeys: [
+      'recipes.viralShortsDeliver1',
+      'recipes.viralShortsDeliver2',
+      'recipes.viralShortsDeliver3',
+    ],
+    exampleInputKey: 'recipes.viralShortsExampleInput',
+    exampleOutputKey: 'recipes.viralShortsExampleOutput',
+    docHref:
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/viral-shorts.md',
+    prompt: VIRAL_SHORTS_PROMPT,
   },
   {
     slug: 'full-setup',

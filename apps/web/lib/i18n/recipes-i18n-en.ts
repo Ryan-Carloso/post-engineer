@@ -80,6 +80,62 @@ export const recipesI18nEn = {
       'The 2026 electric hatch with a 400 km range and a launch price.',
   subjectSpotlightExampleOutput:
       'Hook about the real price, one body with the car photos, CTA — 2 photos, one card each.',
+  last30DaysTitle: 'Last 30 days become a video',
+  last30DaysObjective:
+      'Turn what happened in your niche in the last 30 days into one persona video, validated before any token is spent.',
+  last30DaysStep1: 'For creators who publish what just happened in their niche.',
+  last30DaysStep2:
+      'It searches the last 30 days and picks one clear event, without guessing.',
+  last30DaysStep3: 'Pick one event with a named place, person, or number.',
+  last30DaysStep4:
+      'Write hook first, CTA last, then validate before any token is spent.',
+  last30DaysStep5: 'Generate one video and publish it where you asked.',
+  last30DaysDeliver1: 'One persona video from the last 30 days in your niche.',
+  last30DaysDeliver2:
+      'A validated script: 60–200 words, hook first, CTA last.',
+  last30DaysDeliver3: 'A published post on your connected accounts.',
+  last30DaysExampleInput:
+      'A niche event from the last 30 days with a named place.',
+  last30DaysExampleOutput:
+      'Hook on the event, body on what happened, CTA — one video.',
+  multiRedeTitle: 'One week, one video per network',
+  multiRedeObjective:
+      'Publish one video per network this week — LinkedIn, YouTube, Instagram, Bluesky — each scored for its own network.',
+  multiRedeStep1: 'For creators who publish the same week on every network.',
+  multiRedeStep2:
+      'It plans one video per network from one weekly topic.',
+  multiRedeStep3: 'Each script is written and scored for its own network.',
+  multiRedeStep4:
+      'Write hook first, CTA last, then validate before any token is spent.',
+  multiRedeStep5: 'Generate one video per network and publish it where you asked.',
+  multiRedeDeliver1: 'One persona video per network for the week.',
+  multiRedeDeliver2:
+      'A validated script per network: 60–200 words, hook first, CTA last.',
+  multiRedeDeliver3: 'A published post on each connected account.',
+  multiRedeExampleInput:
+      'One weekly topic for LinkedIn, YouTube, Instagram, and Bluesky.',
+  multiRedeExampleOutput:
+      'Four scripts, four videos, one per network — same week.',
+  viralShortsTitle: 'A viral video becomes your Short',
+  viralShortsObjective:
+      'Learn from the most-viewed video in your niche and write a fresh Shorts script in your own voice — hook, content, CTA.',
+  viralShortsStep1:
+      'For creators who want their Shorts to learn from what already works.',
+  viralShortsStep2:
+      'It finds the most-viewed video in your niche and studies its structure.',
+  viralShortsStep3: 'The video itself is never downloaded, cut, or re-uploaded.',
+  viralShortsStep4:
+      'Write hook first, CTA last, then validate before any token is spent.',
+  viralShortsStep5: 'Generate one video and publish it where you asked.',
+  viralShortsDeliver1:
+      'One persona video built on a proven structure, with your own content.',
+  viralShortsDeliver2:
+      'A validated script: 60–200 words, hook first, CTA last.',
+  viralShortsDeliver3: 'A published post on your connected accounts.',
+  viralShortsExampleInput:
+      'The most-viewed video in your niche this year.',
+  viralShortsExampleOutput:
+      'Hook, body, CTA in the viral structure — your facts, your voice.',
   stepsTitle: 'What this prompt does',
   deliversTitle: 'What you get',
   examplesTitle: 'Example',

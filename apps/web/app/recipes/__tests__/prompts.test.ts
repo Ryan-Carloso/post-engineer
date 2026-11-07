@@ -9,6 +9,9 @@ describe('prompts hub data', () => {
       'place-spotlight',
       'subject-spotlight',
       'github-prs',
+      'last-30-days',
+      'multi-rede',
+      'viral-shorts',
       'full-setup',
     ]);
     for (const prompt of PROMPTS) {
@@ -158,6 +161,9 @@ describe('prompts hub data', () => {
       'place-spotlight',
       'subject-spotlight',
       'github-prs',
+      'last-30-days',
+      'multi-rede',
+      'viral-shorts',
       'full-setup',
     ]);
     const fullSetup = getPrompt('full-setup');
@@ -289,5 +295,166 @@ describe('prompts hub data', () => {
     expect(githubPrs.docHref).toBe(
       'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/github-prs.md',
     );
+  });
+
+  it('adds last-30-days, ordered after github-prs with the globe icon and recipe kind', () => {
+    const last30Days = getPrompt('last-30-days');
+    if (last30Days === undefined) {
+      throw new Error('last-30-days prompt entry is missing');
+    }
+    expect(last30Days.icon).toBe('globe');
+    expect(last30Days.kindKey).toBe('recipes.kindRecipe');
+    expect(last30Days.objectiveKey).toBe('recipes.last30DaysObjective');
+    expect(last30Days.stepKeys).toEqual([
+      'recipes.last30DaysStep1',
+      'recipes.last30DaysStep2',
+      'recipes.last30DaysStep3',
+      'recipes.last30DaysStep4',
+      'recipes.last30DaysStep5',
+    ]);
+    expect(last30Days.deliverKeys).toEqual([
+      'recipes.last30DaysDeliver1',
+      'recipes.last30DaysDeliver2',
+      'recipes.last30DaysDeliver3',
+    ]);
+    expect(last30Days.exampleInputKey).toBe('recipes.last30DaysExampleInput');
+    expect(last30Days.exampleOutputKey).toBe('recipes.last30DaysExampleOutput');
+    expect(last30Days.docHref).toEqual(
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/last-30-days.md',
+    );
+  });
+
+  it('orders the last-30-days flow: niche, 30-day search, facts only, validate, score, generate', () => {
+    const fullText = getPrompt('last-30-days')?.prompt ?? '';
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(fullText.startsWith(baseText)).toBe(true);
+    const text = fullText.slice(baseText.length + 2);
+    const positions = [
+      'last 30 days',
+      'Ask me my niche',
+      'Search the web with your own search tool',
+      'at most 5 results',
+      'single event',
+      'ONLY facts from those results',
+      'validate_script',
+      'score_draft',
+      'generate_persona_video',
+      'get_video_task_progress',
+      'get_video_status',
+    ].map((needle) => text.indexOf(needle));
+    expect(positions.every((i) => i >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    expect(text).toContain('never invent a replacement fact');
+    expect(text).toContain('Skip round-ups, opinion pieces');
+  });
+
+  it('adds multi-rede, ordered after last-30-days with the globe icon and recipe kind', () => {
+    const multiRede = getPrompt('multi-rede');
+    if (multiRede === undefined) {
+      throw new Error('multi-rede prompt entry is missing');
+    }
+    expect(multiRede.icon).toBe('globe');
+    expect(multiRede.kindKey).toBe('recipes.kindRecipe');
+    expect(multiRede.objectiveKey).toBe('recipes.multiRedeObjective');
+    expect(multiRede.stepKeys).toEqual([
+      'recipes.multiRedeStep1',
+      'recipes.multiRedeStep2',
+      'recipes.multiRedeStep3',
+      'recipes.multiRedeStep4',
+      'recipes.multiRedeStep5',
+    ]);
+    expect(multiRede.deliverKeys).toEqual([
+      'recipes.multiRedeDeliver1',
+      'recipes.multiRedeDeliver2',
+      'recipes.multiRedeDeliver3',
+    ]);
+    expect(multiRede.exampleInputKey).toBe('recipes.multiRedeExampleInput');
+    expect(multiRede.exampleOutputKey).toBe('recipes.multiRedeExampleOutput');
+    expect(multiRede.docHref).toEqual(
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/multi-rede.md',
+    );
+  });
+
+  it('orders the multi-rede flow: one video per network, per-network score, confirm the week, generate each', () => {
+    const fullText = getPrompt('multi-rede')?.prompt ?? '';
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(fullText.startsWith(baseText)).toBe(true);
+    const text = fullText.slice(baseText.length + 2);
+    const positions = [
+      'one video per network',
+      'Ask me the niche',
+      'list_social_accounts',
+      'one topic for the week',
+      '60–200 words',
+      'validate_script',
+      'score_draft',
+      'wait for my yes',
+      'generate_persona_video',
+      'get_video_task_progress',
+      'get_video_status',
+    ].map((needle) => text.indexOf(needle));
+    expect(positions.every((i) => i >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    expect(text).toContain('LinkedIn');
+    expect(text).toContain('YouTube');
+    expect(text).toContain('Instagram');
+    expect(text).toContain('Bluesky');
+    expect(text).toContain('four networks');
+    expect(text).toContain('never bends the facts to gain points');
+  });
+
+  it('adds viral-shorts, ordered after multi-rede with the compose icon and prompt kind', () => {
+    const viralShorts = getPrompt('viral-shorts');
+    if (viralShorts === undefined) {
+      throw new Error('viral-shorts prompt entry is missing');
+    }
+    expect(viralShorts.icon).toBe('compose');
+    expect(viralShorts.kindKey).toBe('recipes.kindPrompt');
+    expect(viralShorts.objectiveKey).toBe('recipes.viralShortsObjective');
+    expect(viralShorts.stepKeys).toEqual([
+      'recipes.viralShortsStep1',
+      'recipes.viralShortsStep2',
+      'recipes.viralShortsStep3',
+      'recipes.viralShortsStep4',
+      'recipes.viralShortsStep5',
+    ]);
+    expect(viralShorts.deliverKeys).toEqual([
+      'recipes.viralShortsDeliver1',
+      'recipes.viralShortsDeliver2',
+      'recipes.viralShortsDeliver3',
+    ]);
+    expect(viralShorts.exampleInputKey).toBe('recipes.viralShortsExampleInput');
+    expect(viralShorts.exampleOutputKey).toBe('recipes.viralShortsExampleOutput');
+    expect(viralShorts.docHref).toEqual(
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/viral-shorts.md',
+    );
+  });
+
+  it('orders the viral-shorts flow: niche, top 5 by views, study without downloading, fresh script, generate', () => {
+    const fullText = getPrompt('viral-shorts')?.prompt ?? '';
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(fullText.startsWith(baseText)).toBe(true);
+    const text = fullText.slice(baseText.length + 2);
+    const positions = [
+      'Find a proven video',
+      'Do not download its video file',
+      'Ask me my niche',
+      'most-viewed YouTube',
+      'top 5',
+      'Never invent a view count',
+      'yt-dlp',
+      '--skip-download',
+      'Break down its structure',
+      'Write MY script from MY content',
+      'validate_script',
+      'score_draft',
+      'generate_persona_video',
+      'get_video_task_progress',
+    ].map((needle) => text.indexOf(needle));
+    expect(positions.every((i) => i >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    expect(text).toContain('never reuse its exact lines');
+    expect(text).toContain('pip install');
+    expect(text).not.toContain('issue #');
   });
 });
