@@ -43,6 +43,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 035 | `migrations/035_scheduled-posts-full-lipsync.sql` | Per-post full lip-sync choice (`scheduled_posts.full_lipsync`, default false), forwarded by the engine batch pipeline so a tick-dispatched or requeued slot keeps full lip-sync instead of silently rendering intro-only b-roll |
 | 036 | `migrations/036_drop-unknown-social-accounts.sql` | Deletes social accounts stored with the placeholder `provider_account_id` `'unknown'` (a failed YouTube channel lookup used to save them; unrecoverable and every publish to them failed) so users reconnect |
 | 037 | `migrations/037_social-accounts-threads-provider.sql` | Threads in the `social_accounts.provider` check: re-creates `social_accounts_provider_check` with all five providers — production carried the constraint from versioned migrations 0015/0016 deleted in the b4037cff consolidation (four pre-Threads providers) while 034 added `threads` only to `post_metrics`, so the Threads OAuth callback upsert failed with a check violation |
+| 038 | `migrations/038_drop-placeholder-persona-default-accounts.sql` | Deletes `persona_default_accounts` rows saved under the `'unknown'` placeholder account id (no FK, so migration 036 left them dangling and the persona publishing-accounts editor could no longer be saved) |
 
 ## How to apply
 
@@ -125,6 +126,13 @@ builds these paths, and the tests pin the shape per writer.
   test that parses the SQL file and asserts the literals (see the
   `supabase/migrations/002_persona-images.sql literals` describe block in
   `apps/web/lib/__tests__/persona-images.test.ts` for the pattern).
+- If the migration adds a column (`alter table ... add column`), regenerate
+  the boot-time schema expectations:
+  `node apps/web/scripts/generate-schema-expectations.mjs`. The web checks
+  those columns against the live database at startup and reports a missing
+  one (a deploy that went out before its migration), and
+  `apps/web/lib/__tests__/schema-expectations-gen.test.ts` fails when the
+  committed `lib/schema-expectations.gen.ts` is stale.
 - Update the table above. It is the single migration list:
   `docs/SELF_HOSTING.md` links here instead of duplicating it.
 

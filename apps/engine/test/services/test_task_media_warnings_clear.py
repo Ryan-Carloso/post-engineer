@@ -81,20 +81,20 @@ class MediaWarningsClearTests(unittest.TestCase):
         return writes
 
     def test_clean_segments_retry_clears_the_previous_warnings(self):
-        params = TaskVideoRequest(video_subject="Porto walks", segments=SEGMENTS)
+        params = TaskVideoRequest(video_subject="Porto walks", segments=SEGMENTS, voice_name="chatterbox:kokoro_af_heart")
         writes = self._run_to_materials(params, [])
         warning_writes = [w for w in writes if "media_warnings" in w]
         self.assertEqual(warning_writes, [{"media_warnings": []}])
 
     def test_skips_are_still_recorded_when_present(self):
-        params = TaskVideoRequest(video_subject="Porto walks", segments=SEGMENTS)
+        params = TaskVideoRequest(video_subject="Porto walks", segments=SEGMENTS, voice_name="chatterbox:kokoro_af_heart")
         skipped = ["segment 1 media skipped: bad url"]
         writes = self._run_to_materials(params, skipped)
         warning_writes = [w for w in writes if "media_warnings" in w]
         self.assertEqual(warning_writes, [{"media_warnings": skipped}])
 
     def test_no_segments_run_writes_no_media_warnings(self):
-        params = VideoParams(video_subject="Porto walks")
+        params = VideoParams(video_subject="Porto walks", voice_name="chatterbox:kokoro_af_heart")
         writes = self._run_to_materials(params, [])
         self.assertEqual([w for w in writes if "media_warnings" in w], [])
 

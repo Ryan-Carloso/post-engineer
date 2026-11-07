@@ -17,6 +17,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { parseMediaUpload } from '@/lib/media/upload-schema';
 import type { SocialProvider } from '@/lib/types';
 import { InstagramService } from '@/lib/instagram';
+import { httpStatusOf, reportAccountUnauthorized } from './account-unauthorized';
 import type { OAuth2Client } from 'google-auth-library';
 
 //---------------
@@ -202,6 +203,7 @@ export async function handleYoutubeUpload(
         logId,
         metadata: { accountId, error: message },
       });
+      reportAccountUnauthorized('youtube', accountId, ownerUserId, error);
       results.push({ accountId, success: false, error: message });
     }
   }
@@ -422,13 +424,11 @@ export async function handleInstagramUpload(
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown publishing error';
-      const axiosData = error && typeof error === 'object' && 'response' in error
-        ? (error as { response?: { status?: number; data?: unknown } })
-        : undefined;
       logger.warn('upload-content/instagram: one account failed (continuing with the rest)', {
         logId,
-        metadata: { igUserId, error: message, status: axiosData?.response?.status },
+        metadata: { igUserId, error: message, status: httpStatusOf(error) },
       });
+      reportAccountUnauthorized('instagram', igUserId, ownerUserId, error);
       results.push({ accountId: igUserId, success: false, error: message });
     }
   }

@@ -10,7 +10,7 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSocialAccountTokens, type SocialAccountRecord } from './social-accounts';
-import { INSTAGRAM_USERNAME_FALLBACK, type SocialProvider } from './providers/registry';
+import { INSTAGRAM_USERNAME_FALLBACK, YOUTUBE_PLACEHOLDER_ACCOUNT_ID, type SocialProvider } from './providers/registry';
 import { InstagramService } from './instagram';
 import { fetchThreadsProfile } from './threads';
 import { fetchLinkedInMemberProfile } from './linkedin';
@@ -77,13 +77,18 @@ const threads: ProfileSource = {
 
 const youtube: ProfileSource = {
   pictureKey: 'thumbnail',
-  // Legacy rows saved before connect failed closed carry a placeholder id.
-  applies: (record) => record.providerAccountId !== 'unknown',
+  applies: always,
   async fetch(supabase, userId, record) {
     const { tokens } = await getSocialAccountTokens(supabase, userId, 'youtube', record.providerAccountId);
     const client = await createGoogleOAuth2Client();
     client.setCredentials(tokens);
-    const channel = await fetchYouTubeChannel(client, { id: record.providerAccountId });
+    // Legacy rows saved before connect failed closed carry a placeholder id:
+    // read the channel the stored grant belongs to instead of looking it up
+    // by an id that does not exist.
+    const channel = await fetchYouTubeChannel(
+      client,
+      record.providerAccountId === YOUTUBE_PLACEHOLDER_ACCOUNT_ID ? { mine: true } : { id: record.providerAccountId },
+    );
     if (channel === null) throw new Error('YOUTUBE_CHANNEL_NOT_FOUND: channel not returned');
     return {
       accountName: channel.title,
