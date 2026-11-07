@@ -42,14 +42,32 @@ export function describeImageSource(value: string | null | undefined): string | 
   }
 }
 
+/** Directories under public/ whose files may be stored as a persona asset path. */
+const PUBLIC_ASSET_DIRS: readonly string[] = ['caracter-samples', 'voice-samples'];
+
 /**
- * isPublicAssetPath — true when the value points at a file this app serves
- * from public/ (e.g. /caracter-samples/file-3.png), including an absolute URL
- * on any host that ends with that path. Used to normalize stored absolute
- * URLs back to same-origin so local dev does not depend on production.
+ * One path segment of an asset file: plain characters only, never starting
+ * with a dot. That excludes `.`/`..` traversal, hidden files, backslashes,
+ * percent-encoding (`%2F`, `%5C`, `%2e`), query/fragment markers, whitespace
+ * and control characters.
+ */
+const ASSET_SEGMENT = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
+
+/**
+ * isPublicAssetPath — true when the value is a same-origin path to a file
+ * this app serves from public/ (e.g. /caracter-samples/file-3.png). It is the
+ * single gate for "safe to fetch against our own origin" (issue #448): every
+ * form that would change the host or leave the asset directory once resolved
+ * by `new URL(value, origin)` — `//host`, `/\host`, `..` segments, encoded
+ * slashes — is refused. Callers holding an absolute URL pass its pathname.
  */
 export function isPublicAssetPath(value: string | null | undefined): value is string {
-  return typeof value === 'string' && /^\/(caracter-samples|voice-samples)\//.test(value.trim());
+  if (typeof value !== 'string') return false;
+  const segments = value.trim().split('/');
+  const [root, dir, ...rest] = segments;
+  if (root !== '' || dir === undefined || !PUBLIC_ASSET_DIRS.includes(dir)) return false;
+  if (rest.length === 0) return false;
+  return rest.every((segment) => ASSET_SEGMENT.test(segment));
 }
 
 /**

@@ -18,9 +18,11 @@
 import { isIP } from 'node:net';
 
 import { isHttpUrl, isPublicIp } from '@/lib/generation/custom-audio';
+import { isPublicAssetPath } from '@/lib/image-source';
 
 const IMAGE_BUCKET = 'personas';
 const MAX_ASSET_BYTES = 5 * 1024 * 1024;
+const ASSET_FETCH_TIMEOUT_MS = 15_000;
 
 export interface EngineImageUrlDeps {
   supabase: {
@@ -56,18 +58,21 @@ function isDirectlyUsable(url: string): boolean {
 // prepare_persona_lipsync_video + ssrf.assert_public_url in the engine
 // (the engine re-checks everything at download time; this pre-flight check
 // exists only so a bad stored URL fails before any token charge):
-// - a site path (`/caracter-samples/...`): ensureEngineImageUrl re-hosts it
-//   into a public URL before the engine ever sees it;
+// - a public asset path (`/caracter-samples/...`, isPublicAssetPath):
+//   ensureEngineImageUrl re-hosts it into a public URL before the engine
+//   ever sees it. Any other `/`-prefixed value — notably `//host/...` and
+//   `/\host/...`, which change the host when resolved (issue #448) — is
+//   rejected;
 // - a `data:image/` URI with the payload separator the engine splits on;
 // - an http(s) URL with a hostname, where a literal IP host must be public
 //   (hostnames are left to the engine's resolve-and-check, like the other
 //   pre-flight URL checks in the generate-and-schedule route).
-// Anything else (a relative non-site path, a non-http scheme, a host-less
+// Anything else (a relative non-asset path, a non-http scheme, a host-less
 // URL) is guaranteed to die mid-pipeline, so callers reject it up front.
 //---------------
 export function isEngineUsablePersonaImageUrl(value: string): boolean {
   const candidate = value.trim();
-  if (candidate.startsWith('/')) return true;
+  if (candidate.startsWith('/')) return isPublicAssetPath(candidate);
   if (candidate.startsWith('data:image/')) return candidate.includes(',');
   if (!isHttpUrl(candidate)) return false;
   let hostname: string;
@@ -99,15 +104,26 @@ export async function ensureEngineImageUrl(
   if (candidate.length === 0) return undefined;
   if (isDirectlyUsable(candidate)) return candidate;
 
-  if (!candidate.startsWith('/')) {
-    throw new Error(
-      `persona image is not usable by the engine and is not a site path: ${candidate}`,
-    );
+  // Only our own public assets are fetched server-side (issue #448). The
+  // stored value is user-controlled, so it is never echoed in the message.
+  if (!isPublicAssetPath(candidate)) {
+    throw new Error('persona image is not usable by the engine and is not a site asset path');
+  }
+
+  // Defense in depth: the resolved URL must stay on our own origin. An asset
+  // path cannot change the host today; this holds if that check ever loosens.
+  const origin = new URL(deps.origin).origin;
+  const resolved = new URL(candidate, origin);
+  if (resolved.origin !== origin) {
+    throw new Error('persona image is not usable by the engine and is not a site asset path');
   }
 
   const doFetch = deps.fetchImpl ?? fetch;
-  const source = new URL(candidate, deps.origin).toString();
-  const response = await doFetch(source);
+  // redirect:'error' — a 3xx can never move the read off our origin.
+  const response = await doFetch(resolved.toString(), {
+    redirect: 'error',
+    signal: AbortSignal.timeout(ASSET_FETCH_TIMEOUT_MS),
+  });
   if (!response.ok) {
     throw new Error(
       `could not read the persona image asset ${candidate}: HTTP ${response.status}`,

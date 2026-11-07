@@ -1,6 +1,7 @@
 //---------------
 // persona-remote-face — ingest a remote http(s) avatar into the personas
-// bucket. Public sample assets and data:image URLs stay on avatar_url.
+// bucket. Public sample assets and data:image URLs stay on avatar_url; any
+// other non-http(s) value is refused at write time (issue #448).
 // SSRF: public DNS, fail closed, redirect: 'error', http(s) only, timeout.
 //---------------
 
@@ -285,8 +286,10 @@ export async function resolvePersonaAvatar(
   if (isKeptAvatarUrl(trimmed)) {
     return { ok: true, photoPath: null, avatarUrl: trimmed };
   }
+  // Neither kept nor http(s): refuse it instead of storing an opaque string
+  // that dispatch would later resolve against our origin (issue #448).
   if (!isRemoteAvatarUrl(trimmed)) {
-    return { ok: true, photoPath: null, avatarUrl: trimmed };
+    return { ok: false, error: REMOTE_FACE_ERROR };
   }
   const downloaded = await downloadPublicImage(trimmed, deps);
   if ('error' in downloaded) {
