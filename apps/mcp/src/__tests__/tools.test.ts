@@ -515,19 +515,22 @@ describe('persona image library tools', () => {
     ).not.toThrow();
   });
 
-  it('create_persona handler fails on a missing avatarUrl before the client call', async () => {
+  it('create_persona handler fails on a missing avatarUrl and avatarPath before the client call', async () => {
     // Simulates args that bypassed the SDK's raw-shape validation: the
     // handler re-parses with the full schema, so the required avatarUrl
     // becomes a loud isError — no file is read, no fetch happens.
     vi.clearAllMocks();
     vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true });
+    // voiceId is valid so the parse reaches the face refine (zod skips
+    // superRefine while any field is still invalid).
     const sdkArgs = {
       name: 'X',
+      voiceId: 'en-US-AriaNeural',
       images: [{ path: '/tmp/a.jpg' }],
     } as unknown as z.infer<typeof CreatePersonaSchema>;
     const response = await handleCreatePersona(mockClient, sdkArgs);
     expect(response.isError).toBe(true);
-    expect(textOf(response)).toMatch(/avatarUrl/);
+    expect(textOf(response)).toMatch(/avatarUrl or avatarPath is required/);
     expect(mockClient.createPersona).not.toHaveBeenCalled();
   });
 

@@ -131,14 +131,14 @@ describe('PostEngineerClient', () => {
   });
 
   it.each([undefined, null, ''])(
-    'createPersona rejects %p avatarUrl before any fetch',
+    'createPersona rejects %p avatarUrl with no avatarPath before any fetch',
     async (avatarUrl) => {
       // Every persona has a face: the client fails fast with an actionable
       // error instead of uploading bytes the server would reject.
       global.fetch = vi.fn();
       await expect(
         client.createPersona({ name: 'No Face', avatarUrl } as never),
-      ).rejects.toThrow(/avatarUrl is required/);
+      ).rejects.toThrow(/avatarUrl or avatarPath is required/);
       expect(global.fetch).not.toHaveBeenCalled();
     },
   );

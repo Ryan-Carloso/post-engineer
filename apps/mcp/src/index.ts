@@ -111,7 +111,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'create_persona',
-    'Create a new AI persona with avatar, voice, language, and niche prompt. avatarUrl is REQUIRED: every persona has a face. A video without a face is a per-video choice — set options.faceless on generate_persona_video.',
+    'Create a new AI persona with avatar, voice, language, and niche prompt. A face is REQUIRED: pass avatarUrl (public URL or list_faces) or avatarPath (local photo file, uploaded directly). A video without a face is a per-video choice — set options.faceless on generate_persona_video.',
     CreatePersonaShape,
     withTracking('create_persona', withRecipeNudge(recipeSession, 'create_persona', async (args) => {
       return handleCreatePersona(apiClient, args);
@@ -151,7 +151,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'update_persona',
-    'Update an existing AI persona (only the provided fields change).',
+    'Update an existing AI persona (only the provided fields change). Replace the face with avatarUrl or avatarPath (local photo file).',
     UpdatePersonaShape,
     withTracking('update_persona', async (args) => {
       return handleUpdatePersona(apiClient, args);
