@@ -50,10 +50,11 @@ jobs:
           pip install --quiet pytest
           python3 -m pytest .github/scripts/tests -q
 
-  # Regression test for the MCP auto-release bump path (release-mcp-auto.yml):
-  # simulates orphan/stale/foreign/shallow bump branches against scratch git
-  # remotes. Fast, no network, no secrets.
-  test-release-mcp-auto-bump:
+  # Regression tests for the MCP release workflows (release-mcp-auto.yml bump
+  # path and release-mcp.yml npm-propagation wait): simulates orphan/stale/
+  # foreign/shallow bump branches against scratch git remotes, and the wait
+  # step against the live npm registry. Fast, no secrets.
+  test-release-workflows:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -64,11 +65,12 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
 
-      - name: Test the MCP auto-bump path
+      - name: Test the MCP release workflows
         run: |
           set -euo pipefail
           python3 -c "import yaml" || pip install --quiet --break-system-packages pyyaml
           bash .github/scripts/test-release-mcp-auto-bump.sh
+          bash .github/scripts/test-release-mcp-registry-wait.sh
 
   # Fails if secret-bearing files are tracked in git. config.toml may hold
   # provider API keys and real .env files must never be committed (see the
