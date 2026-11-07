@@ -18,7 +18,7 @@ from app.services.cloned_voices.preview_text import (
 
 # The stable client-facing message: pinned verbatim so a rewording is a
 # deliberate, visible change.
-EXPECTED_MESSAGE = "preview text must be 1 to 300 characters after trimming"
+EXPECTED_MESSAGE = "Preview text must be 1 to 300 characters after trimming."
 
 
 class ValidatePreviewTextTests(unittest.TestCase):

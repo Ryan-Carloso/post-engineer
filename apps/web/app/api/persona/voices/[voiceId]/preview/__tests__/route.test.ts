@@ -202,6 +202,62 @@ describe('POST /api/persona/voices/:voiceId/preview error branches', () => {
     expect((await response.json()).error).toBe('Voice not found.');
   });
 
+  it('forwards a 422 from the engine with its validation detail', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 422,
+        json: async () => ({ detail: 'Field required.' }),
+      })),
+    );
+
+    const response = await POST(
+      new Request('http://localhost/api/persona/voices/chatterbox:phonon_zoey/preview', { method: 'POST' }),
+      ctx(VOICE_ID),
+    );
+    expect(response.status).toBe(422);
+    expect((await response.json()).error).toBe('Field required.');
+  });
+
+  it('returns a generic validation error when the engine 422 has no string detail', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 422,
+        json: async () => ({ detail: [{ loc: ['body', 'text'], msg: 'field required' }] }),
+      })),
+    );
+
+    const response = await POST(
+      new Request('http://localhost/api/persona/voices/chatterbox:phonon_zoey/preview', { method: 'POST' }),
+      ctx(VOICE_ID),
+    );
+    expect(response.status).toBe(422);
+    expect((await response.json()).error).toBe('Validation error.');
+  });
+
+  it('returns a generic validation error when the engine 422 body is not JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 422,
+        json: async () => {
+          throw new Error('not json');
+        },
+      })),
+    );
+
+    const response = await POST(
+      new Request('http://localhost/api/persona/voices/chatterbox:phonon_zoey/preview', { method: 'POST' }),
+      ctx(VOICE_ID),
+    );
+    expect(response.status).toBe(422);
+    expect((await response.json()).error).toBe('Validation error.');
+  });
+
   it('returns 502 when the engine preview fails with a non-404 status', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503 })));
 

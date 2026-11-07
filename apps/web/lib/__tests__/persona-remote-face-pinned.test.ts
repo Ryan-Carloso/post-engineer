@@ -51,6 +51,23 @@ describe('downloadPublicImage requestPinned', () => {
     expect(result).toMatchObject({ mime: 'image/png', extension: 'png' });
   });
 
+  it('downloads through a hostname URL by connecting to the pinned address', async () => {
+    // Node skips the custom lookup for IP-literal hosts, so only a hostname
+    // exercises it. `face.invalid` never resolves in real DNS: success proves
+    // the socket used the pinned address from lookupImpl.
+    const started = await listen((_req: IncomingMessage, res: ServerResponse) => {
+      res.writeHead(200, { 'content-type': 'image/png' });
+      res.end(Buffer.from(PNG_BYTES));
+    });
+    server = started.server;
+    const lookupImpl = vi.fn(async () => [{ address: '127.0.0.1' }]);
+    const result = await downloadPublicImage(started.url.replace('127.0.0.1', 'face.invalid'), {
+      lookupImpl,
+    });
+    expect(lookupImpl).toHaveBeenCalledWith('face.invalid', { all: true });
+    expect(result).toMatchObject({ mime: 'image/png', extension: 'png' });
+  });
+
   it('returns REMOTE_FACE_ERROR on 302 without following the redirect', async () => {
     const started = await listen((_req: IncomingMessage, res: ServerResponse) => {
       res.writeHead(302, { Location: 'http://evil.example/steal' });

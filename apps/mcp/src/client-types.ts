@@ -31,8 +31,10 @@ export type VideoLayout = (typeof VIDEO_LAYOUTS)[number];
 
 export interface CreatePersonaInput {
   name: string;
-  /** REQUIRED — every persona has a face. */
-  avatarUrl: string;
+  /** Every persona has a face: exactly one of avatarUrl or avatarPath. */
+  avatarUrl?: string;
+  /** Local face photo, uploaded as the multipart `photo` file. */
+  avatarPath?: string;
   voiceId: string;
   language?: string;
   videoAspect?: '9:16' | '16:9';
@@ -106,6 +108,7 @@ export interface UpdatePersonaInput {
   personaId: string;
   name?: string;
   avatarUrl?: string;
+  avatarPath?: string;
   voiceId?: string;
   language?: string;
   videoAspect?: '9:16' | '16:9';

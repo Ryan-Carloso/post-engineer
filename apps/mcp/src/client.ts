@@ -1,4 +1,4 @@
-import { getErrorMessage, ImageTooLargeError, VideoTooLargeError, ApiError, readApiFailure } from './errors.js';
+import { getErrorMessage, VideoTooLargeError, ApiError, readApiFailure } from './errors.js';
 import {
   MAX_LIBRARY_IMAGE_BYTES,
   MAX_LIBRARY_IMAGE_MB,
@@ -63,50 +63,7 @@ export const MAX_LIBRARY_DESCRIPTION_LENGTH = 500;
 // Re-exported from image-guards.ts so existing import sites
 // (`../client.js`) keep working after the extraction.
 export { assertImageSize } from './image-guards.js';
-import { assertImageSize, mimeTypeForImagePath } from './image-guards.js';
-
-async function imageFormFile(path: string): Promise<Blob> {
-  // Validate before uploading: the API rejects the file anyway, so an
-  // oversized or unsupported image fails fast locally instead of wasting an
-  // upload. A stat() pre-check bounds memory before readFile — a multi-GB
-  // file misnamed .png would otherwise load fully into this stdio process.
-  // The TOCTOU window is benign: the authoritative size check still runs on
-  // the buffer after read. Any failure surfaces with the full path for a
-  // consistent, actionable message.
-  // Note: the extension is trusted as a hint only; the server re-validates
-  // content via magic bytes, so a mislabeled file still fails server-side
-  // (duplicating magic-byte sniffing locally would be a second source of
-  // truth that can drift).
-  const mimeType = mimeTypeForImagePath(path);
-  try {
-    const fileStat = await stat(path);
-    assertImageSize(fileStat.size, path);
-  } catch (error) {
-    // Discriminate by type, not by message text: the typed size error
-    // passes through untouched, while stat failures become the actionable
-    // "Failed to read image" wrapper. Message sniffing would misclassify
-    // any future error whose prose happens to match.
-    if (error instanceof ImageTooLargeError) throw error;
-    throw new Error(`Failed to read image "${path}": ${getErrorMessage(error)}`);
-  }
-  let buffer: Buffer;
-  try {
-    buffer = await readFile(path);
-  } catch (error) {
-    throw new Error(`Failed to read image "${path}": ${getErrorMessage(error)}`);
-  }
-  if (buffer.length === 0) {
-    // A 0-byte file would pass the local gate but shift the index-aligned
-    // imageTags/imageDescriptions (the server 400s when the tag/description
-    // counts don't match the file count), so reject it here with a clear
-    // message instead of a confusing server 400.
-    throw new Error(`Image "${path}" is empty.`);
-  }
-  // The post-read check reuses the shared guard: same limit, same message,
-  // full path — and it covers the (benign) TOCTOU window after stat.
-  assertImageSize(buffer.length, path);
-  return new Blob([buffer], { type: mimeType });
-}
+import { appendPersonaAvatar, imageFormFile } from './persona-avatar.js';
 
 /**
  * Shared size guard for direct-publish videos: the server rejects anything
@@ -330,17 +287,10 @@ export class PostEngineerClient {
 
   async createPersona(input: CreatePersonaInput): Promise<unknown> {
     const formData = new FormData();
-    // Every persona has a face: the server requires exactly one visual
-    // identity (photo or avatarUrl), so a programmatic caller that omitted it
-    // fails here, before any bytes are uploaded.
-    const hasAvatar = input.avatarUrl !== undefined && input.avatarUrl !== null && input.avatarUrl.length > 0;
-    if (!hasAvatar) {
-      throw new Error(
-        'avatarUrl is required: every persona has a face. Use list_faces for a stock face URL, and generate_persona_video options.faceless for videos without a face.',
-      );
-    }
+    // Every persona has a face: exactly one of avatarUrl or avatarPath (the
+    // `photo` file), checked before any other file is read.
+    await appendPersonaAvatar(formData, input, true);
     formData.set('name', input.name);
-    formData.set('avatarUrl', input.avatarUrl);
     formData.set('voiceId', input.voiceId);
     formData.set('language', input.language ?? 'en-US');
     formData.set('videoAspect', input.videoAspect ?? '9:16');
@@ -419,7 +369,7 @@ export class PostEngineerClient {
   async updatePersona(input: UpdatePersonaInput): Promise<unknown> {
     const formData = new FormData();
     if (input.name !== undefined) formData.set('name', input.name);
-    if (input.avatarUrl !== undefined && input.avatarUrl.length > 0) formData.set('avatarUrl', input.avatarUrl);
+    await appendPersonaAvatar(formData, input, false);
     if (input.voiceId !== undefined) formData.set('voiceId', input.voiceId);
     if (input.language !== undefined) formData.set('language', input.language);
     if (input.videoAspect !== undefined) formData.set('videoAspect', input.videoAspect);
