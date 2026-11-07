@@ -89,4 +89,9 @@ export const VIDEO_LAYOUTS = ['standard', 'react'] as const;
 export const METRICS_FILTER_MAX_LENGTH = 200;
 export const METRICS_NONE = '^@none';
 export const METRICS_WINDOWS = ['24h', '7d', '28d'] as const;
+/**
+ * GET /api/metrics/retention-curve `video` param, mirrored from VIDEO_ID in
+ * `apps/web/lib/youtube-analytics.ts` (pinned by `metrics-query-sync.test.ts`).
+ */
+export const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{1,64}$/;
 export const METRICS_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads'] as const;

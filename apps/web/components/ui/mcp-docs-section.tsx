@@ -74,6 +74,7 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'get_video_generation', descKey: 'apiKeys.toolDescGetVideoGeneration', Icon: FilmIcon },
   { id: 'get_post', descKey: 'apiKeys.toolDescGetPost', Icon: ExternalLinkIcon },
   { id: 'get_post_metrics', descKey: 'apiKeys.toolDescGetPostMetrics', Icon: HistoryIcon },
+  { id: 'get_youtube_retention_curve', descKey: 'apiKeys.toolDescGetYouTubeRetentionCurve', Icon: HistoryIcon },
   { id: 'cancel_video_task', descKey: 'apiKeys.toolDescCancelVideoTask', Icon: TrashIcon },
   { id: 'list_token_transactions', descKey: 'apiKeys.toolDescListTokenTransactions', Icon: CoinsIcon },
   { id: 'get_persona_delete_preview', descKey: 'apiKeys.toolDescGetPersonaDeletePreview', Icon: AlertIcon },

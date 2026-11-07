@@ -8,8 +8,9 @@ import { httpStatusOf } from '@/lib/upload/account-unauthorized';
 //---------------
 // YouTube Analytics API v2 for the owner's own videos. Every query uses
 // ids=channel==MINE with the account's own OAuth token, so YouTube itself
-// only answers for the authorizing user's channel; the caller also checks
-// the video belongs to that channel before querying (youtube-retention).
+// only answers for the authorizing user's channel; callers also check the
+// video belongs to that channel before querying (provider-counters,
+// retention-curve route).
 //
 // Errors:
 //   403 insufficient scopes  -> { kind: 'scope_missing' } (token predates
@@ -34,6 +35,15 @@ export type VideoStatsResult =
   | { kind: 'no_data' }
   | { kind: 'scope_missing' };
 
+export interface RetentionPoint {
+  // elapsedVideoTimeRatio: exclusive end of the interval, 0.01..1.0.
+  ratio: number;
+  audienceWatchRatio: number;
+  relativeRetentionPerformance: number | null;
+}
+
+export type RetentionCurveResult = { kind: 'ok'; points: RetentionPoint[] } | { kind: 'scope_missing' };
+
 export interface AnalyticsRange {
   videoId: string;
   // YYYY-MM-DD, inclusive.
@@ -53,7 +63,7 @@ export function analyticsDate(date: Date): string {
 }
 
 // Video ids are [A-Za-z0-9_-]; anything else must never reach the filter string.
-const VIDEO_ID = /^[A-Za-z0-9_-]{1,64}$/;
+export const VIDEO_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 // The snippet of a Data API videos.list item ({} when absent): channelId
 // (ownership) and publishedAt (report start date).
@@ -190,4 +200,29 @@ export async function queryVideoStats(client: OAuth2Client, range: AnalyticsRang
   }
   const stats = aggregateVideoStats(reportTable(data));
   return stats === null ? { kind: 'no_data' } : { kind: 'ok', stats };
+}
+
+export async function queryRetentionCurve(client: OAuth2Client, range: AnalyticsRange): Promise<RetentionCurveResult> {
+  assertRange(range);
+  let data: unknown;
+  try {
+    data = await runQuery(client, {
+      startDate: range.startDate,
+      endDate: range.endDate,
+      metrics: 'audienceWatchRatio,relativeRetentionPerformance',
+      dimensions: 'elapsedVideoTimeRatio',
+      filters: `video==${range.videoId}`,
+    });
+  } catch (error) {
+    return classify(error, 'retention curve');
+  }
+  const points: RetentionPoint[] = [];
+  for (const row of reportTable(data)) {
+    const ratio = num(row.elapsedVideoTimeRatio);
+    const watch = num(row.audienceWatchRatio);
+    if (ratio === null || watch === null) continue;
+    points.push({ ratio, audienceWatchRatio: watch, relativeRetentionPerformance: num(row.relativeRetentionPerformance) });
+  }
+  points.sort((a, b) => a.ratio - b.ratio);
+  return { kind: 'ok', points };
 }

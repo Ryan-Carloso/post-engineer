@@ -44,6 +44,9 @@
   "GET /api/metrics": [
     "get_post_metrics"
   ],
+  "GET /api/metrics/retention-curve": [
+    "get_youtube_retention_curve"
+  ],
   "GET /api/posts/[id]": [
     "get_post"
   ],

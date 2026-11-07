@@ -80,6 +80,9 @@ export const RATE_LIMITS = {
   publishingAccounts: { name: 'publishing-accounts', limit: 60, windowMs: 60_000 },
   // Metrics dashboard: one bounded read per filter change.
   metrics: { name: 'metrics', limit: 60, windowMs: 60_000 },
+  // Retention curve: two live Google calls (Data API ownership check +
+  // Analytics report) per request, opened on demand per video.
+  retentionCurve: { name: 'retention-curve', limit: 30, windowMs: 60_000 },
   // Draft scoring: one capped metrics read per call, no writes, no
   // engine call — cheaper than metrics, so it shares the same budget.
   draftScore: { name: 'draft-score', limit: 60, windowMs: 60_000 },

@@ -35,6 +35,10 @@ vi.mock('@/lib/ui', () => ({
   SpinnerIcon: () => <span data-testid="icon-spinner" />,
 }));
 
+vi.mock('@/components/ui/retention-curve-chart', () => ({
+  RetentionCurveChart: ({ points }: { points: unknown[] }) => <div data-testid="retention-curve">{points.length} points</div>,
+}));
+
 vi.mock('@/components/provider-icon', () => ({
   ProviderIcon: ({ provider }: { provider: string }) => <span data-testid={`provider-${provider}`} />,
 }));
@@ -296,6 +300,9 @@ describe('MetricsPage', () => {
     expect(screen.getByText('metrics.stayedToWatchDerived:')).toBeInTheDocument();
     expect(screen.getByText('64.1%')).toBeInTheDocument();
     expect(screen.getByText('metrics.provisional')).toHaveAttribute('title', 'metrics.provisionalHint');
+    // Shorts get the no-curve note instead of a curve toggle.
+    expect(screen.getByText('metrics.curveShortsNote')).toBeInTheDocument();
+    expect(screen.queryByText('metrics.curveShow')).toBeNull();
     expect(screen.queryByText('metrics.reconnectTitle')).toBeNull();
   });
 
@@ -336,5 +343,32 @@ describe('MetricsPage', () => {
     stubMetricsFetch({ success: true, rows: [row({ analyticsStatus: 'not_owned' })], truncated: false });
     renderPage();
     await waitFor(() => expect(screen.getByText('metrics.retentionUnavailable')).toBeInTheDocument());
+  });
+
+  it('opens the retention curve of a long-form video on demand', async () => {
+    const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(
+      url.startsWith('/api/metrics/retention-curve')
+        ? { success: true, points: [{ ratio: 0.01, audienceWatchRatio: 1, relativeRetentionPerformance: 0.5 }], provisional: true }
+        : { success: true, rows: [row({ analyticsStatus: 'ok', contentType: 'VIDEO_ON_DEMAND', stayedToWatchPct: 50 })], truncated: false },
+    )));
+    vi.stubGlobal('fetch', fetchMock);
+    renderPage();
+    const toggle = await screen.findByRole('button', { name: 'metrics.curveShow' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    // Nothing is fetched from Analytics until the user asks.
+    expect(fetchMock.mock.calls.some(([url]) => url.startsWith('/api/metrics/retention-curve'))).toBe(false);
+    fireEvent.click(toggle);
+    await waitFor(() => expect(screen.getByTestId('retention-curve')).toHaveTextContent('1 points'));
+    expect(fetchMock).toHaveBeenCalledWith('/api/metrics/retention-curve?account=UC1&video=v1');
+    expect(screen.getByRole('button', { name: 'metrics.curveHide' })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('shows the reconnect copy when the curve endpoint reports a missing scope', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.startsWith('/api/metrics/retention-curve')
+      ? new Response(JSON.stringify({ success: false, code: 'YOUTUBE_ANALYTICS_SCOPE_MISSING' }), { status: 403 })
+      : new Response(JSON.stringify({ success: true, rows: [row({ analyticsStatus: 'ok', contentType: 'VIDEO_ON_DEMAND' })], truncated: false })))));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'metrics.curveShow' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('metrics.reconnectTitle'));
   });
 });

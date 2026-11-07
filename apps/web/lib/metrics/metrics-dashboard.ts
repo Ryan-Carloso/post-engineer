@@ -122,3 +122,64 @@ export function distinctAngles(rows: MetricsRowView[]): string[] {
   for (const row of rows) if (row.scriptAngle !== null) angles.add(row.scriptAngle);
   return [...angles].sort((a, b) => a.localeCompare(b));
 }
+
+//---------------
+// Retention curve (GET /api/metrics/retention-curve) — opened on demand
+// per long-form YouTube video. Same never-throw contract as fetchMetrics;
+// a reconnect code is surfaced so the page can show the reconnect prompt.
+//---------------
+
+export interface RetentionCurvePoint {
+  ratio: number;
+  audienceWatchRatio: number;
+  relativeRetentionPerformance: number | null;
+}
+
+export type RetentionCurveFetchResult =
+  | { success: true; points: RetentionCurvePoint[]; provisional: boolean }
+  | { success: false; reconnect: boolean; error: string };
+
+const RECONNECT_CODES = new Set(['YOUTUBE_ANALYTICS_SCOPE_MISSING', 'YOUTUBE_RECONNECT_REQUIRED']);
+
+function isCurvePoint(value: unknown): value is RetentionCurvePoint {
+  if (typeof value !== 'object' || value === null) return false;
+  const point = value as Record<string, unknown>;
+  return typeof point.ratio === 'number'
+    && typeof point.audienceWatchRatio === 'number'
+    && (point.relativeRetentionPerformance === null || typeof point.relativeRetentionPerformance === 'number');
+}
+
+export async function fetchRetentionCurve(accountId: string, videoId: string): Promise<RetentionCurveFetchResult> {
+  try {
+    const params = new URLSearchParams({ account: accountId, video: videoId });
+    const response = await fetch(`/api/metrics/retention-curve?${params.toString()}`);
+    const body: unknown = await response.json().catch(() => null);
+    const record = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
+    if (!response.ok) {
+      notifyIfSessionExpired(response);
+      const code = typeof record.code === 'string' ? record.code : '';
+      return { success: false, reconnect: RECONNECT_CODES.has(code), error: `status ${response.status}` };
+    }
+    const points = record.points;
+    if (record.success !== true || !Array.isArray(points) || !points.every(isCurvePoint) || typeof record.provisional !== 'boolean') {
+      return { success: false, reconnect: false, error: 'unexpected response' };
+    }
+    return { success: true, points, provisional: record.provisional };
+  } catch (error) {
+    return { success: false, reconnect: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export function useRetentionCurveQuery(
+  accountId: string,
+  videoId: string,
+  enabled: boolean,
+): UseQueryResult<RetentionCurveFetchResult, Error> {
+  return useQuery<RetentionCurveFetchResult, Error>({
+    queryKey: ['retention-curve', accountId, videoId],
+    queryFn: () => fetchRetentionCurve(accountId, videoId),
+    enabled,
+    // A live Analytics read: keep it for the session instead of refetching.
+    staleTime: 10 * 60_000,
+  });
+}
