@@ -307,6 +307,68 @@
                 "schedules_post_cta_text_length_check": "CHECK (((post_cta_text IS NULL) OR (char_length(post_cta_text) <= 200)))"
             }
         },
+        "experiments": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "schedule_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "name",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "variable",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "target_pairs",
+                    "type": "integer",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+                "experiments_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                }
+            },
+            "constraints": {
+                "experiments_pkey": "PRIMARY KEY (id)",
+                "experiments_variable_check": "CHECK ((variable = 'hook'::text))",
+                "experiments_schedule_id_key": "UNIQUE (schedule_id)",
+                "experiments_schedule_id_fkey": "FOREIGN KEY (schedule_id) REFERENCES schedules(id) ON DELETE CASCADE",
+                "experiments_name_length_check": "CHECK (((char_length(name) >= 1) AND (char_length(name) <= 120)))",
+                "experiments_target_pairs_check": "CHECK (((target_pairs >= 3) AND (target_pairs <= 20)))"
+            }
+        },
         "oauth_states": {
             "rls": false,
             "columns": [
@@ -491,6 +553,24 @@
                 {
                     "name": "analytics_status",
                     "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "experiment_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "variant_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "experiment_pair",
+                    "type": "integer",
                     "default": null,
                     "notNull": false
                 }
@@ -866,13 +946,34 @@
                     "type": "boolean",
                     "default": "false",
                     "notNull": true
+                },
+                {
+                    "name": "experiment_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "variant_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "experiment_pair",
+                    "type": "integer",
+                    "default": null,
+                    "notNull": false
                 }
             ],
             "policies": {
             },
             "constraints": {
                 "scheduled_posts_pkey": "PRIMARY KEY (id)",
-                "scheduled_posts_faceless_material_check": "CHECK ((faceless_material = ANY (ARRAY['broll'::text, 'svg'::text])))"
+                "scheduled_posts_experiment_link_check": "CHECK ((((experiment_id IS NULL) = (variant_id IS NULL)) AND ((experiment_id IS NULL) OR (experiment_pair IS NOT NULL)) AND ((experiment_pair IS NULL) OR (experiment_pair >= 1))))",
+                "scheduled_posts_experiment_variant_fkey": "FOREIGN KEY (experiment_id, variant_id) REFERENCES experiment_variants(experiment_id, variant_id) ON DELETE SET NULL",
+                "scheduled_posts_faceless_material_check": "CHECK ((faceless_material = ANY (ARRAY['broll'::text, 'svg'::text])))",
+                "scheduled_posts_experiment_pair_variant_key": "UNIQUE (experiment_id, experiment_pair, variant_id)"
             }
         },
         "social_accounts": {
@@ -1349,6 +1450,63 @@
             },
             "constraints": {
                 "token_transactions_pkey": "PRIMARY KEY (id)"
+            }
+        },
+        "experiment_variants": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "experiment_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "variant_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "position",
+                    "type": "integer",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "name",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "description",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+                "experiment_variants_select_own": {
+                    "cmd": "r",
+                    "qual": "(EXISTS ( SELECT 1\n   FROM experiments e\n  WHERE ((e.id = experiment_variants.experiment_id) AND (e.user_id = auth.uid()))))",
+                    "withCheck": null
+                }
+            },
+            "constraints": {
+                "experiment_variants_pkey": "PRIMARY KEY (experiment_id, variant_id)",
+                "experiment_variants_position_key": "UNIQUE (experiment_id, \"position\")",
+                "experiment_variants_position_check": "CHECK (((\"position\" >= 0) AND (\"position\" <= 1)))",
+                "experiment_variants_name_length_check": "CHECK (((char_length(name) >= 1) AND (char_length(name) <= 80)))",
+                "experiment_variants_experiment_id_fkey": "FOREIGN KEY (experiment_id) REFERENCES experiments(id) ON DELETE CASCADE",
+                "experiment_variants_variant_id_format_check": "CHECK ((variant_id ~ '^[a-z0-9][a-z0-9-]{0,47}$'::text))",
+                "experiment_variants_description_length_check": "CHECK (((char_length(description) >= 1) AND (char_length(description) <= 500)))"
             }
         },
         "test_deploy_supabase": {
