@@ -7,9 +7,10 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 // resetYouTubeRetentionWindows — after a YouTube reconnect, clear the done
 // marks of snapshots that had no Analytics scope (or predate the Analytics
 // columns) so the hourly job re-collects every window still inside its age
-// range. The service role is required: post_metrics_done has RLS on with no
-// policy. A reset failure is logged, never hidden, and never fails the
-// connect itself.
+// range. Closed windows can never be back-filled: their stale scope_missing
+// rows become no_data so the reconnect prompt stops. The service role is
+// required: post_metrics_done has RLS on with no policy. A reset failure is
+// logged, never hidden, and never fails the connect itself.
 //---------------
 export async function resetYouTubeRetentionWindows(userId: string, channelId: string): Promise<void> {
   try {
