@@ -3,6 +3,7 @@
 // every failing check is reported (not just the first one).
 //---------------
 
+import type { FacelessMaterial } from '@/lib/generation/faceless-materials';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import { isHttpUrl } from '@/lib/generation/custom-audio';
 import { MAX_TITLE_CHARS } from './prepare-persona';
@@ -16,7 +17,7 @@ const MAX_LANGUAGE_CHARS = 32;
 /** Raw options as parsed from the request body (subset validateOptions reads). */
 export interface OptionsInput {
   faceless?: boolean;
-  facelessMaterial?: 'broll' | 'svg';
+  facelessMaterial?: FacelessMaterial;
   fullLipsync?: boolean;
   audioUrl?: string;
   imageId?: string;
@@ -35,7 +36,7 @@ export interface ValidatedOptions {
   faceless: boolean;
   /** Resolved here: 'broll' when omitted. Applies to every post, with or
    *  without a face (stock only, or illustrations only). */
-  facelessMaterial: 'broll' | 'svg';
+  facelessMaterial: FacelessMaterial;
   /** Opt-in full lip-sync (whole video talking head, no b-roll). */
   fullLipsync?: boolean;
   audioUrl?: string;

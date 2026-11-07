@@ -45,6 +45,16 @@ the order — you never need to guess or read docs to know what comes next:
 | 037 | `migrations/037_social-accounts-threads-provider.sql` | Threads in the `social_accounts.provider` check: re-creates `social_accounts_provider_check` with all five providers — production carried the constraint from versioned migrations 0015/0016 deleted in the b4037cff consolidation (four pre-Threads providers) while 034 added `threads` only to `post_metrics`, so the Threads OAuth callback upsert failed with a check violation |
 | 038 | `migrations/038_drop-placeholder-persona-default-accounts.sql` | Deletes `persona_default_accounts` rows saved under the `'unknown'` placeholder account id (no FK, so migration 036 left them dangling and the persona publishing-accounts editor could no longer be saved) |
 
+## Schema snapshot
+
+`supabase/schema.snapshot.json` is Postgres's own report of the public schema after the whole chain is applied: columns (type, NOT NULL, default), constraints, RLS flag and policies. CI (`supabase-migrations`) regenerates it on the ephemeral Postgres and fails when the committed file is stale; unit tests compare it with the code (`migration-check-constraints-sync.test.ts` pins every enum CHECK to its TypeScript list). A migration that changes the schema therefore ships with the regenerated snapshot:
+
+```bash
+node scripts/db/dump-schema.mjs --db-url postgresql://postgres@127.0.0.1:5432/<freshly migrated db> --write
+```
+
+A constraint created by hand in production is invisible to this check; write it as a migration instead.
+
 ## How to apply
 
 **Production (this repo's hosted project):** fully automated — never apply

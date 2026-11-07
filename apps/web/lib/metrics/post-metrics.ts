@@ -3,6 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import type { SocialProvider } from '@/lib/providers/registry';
+import { isMetricsWindow, type MetricsWindow } from './metrics-query';
 
 //---------------
 // post-metrics — per-video performance snapshots for A/B content tests.
@@ -22,7 +23,7 @@ import type { SocialProvider } from '@/lib/providers/registry';
 // tests never reach Supabase, the engine, or a social API.
 //---------------
 
-export type MetricsWindow = '24h' | '7d';
+export type { MetricsWindow };
 export type MeasuredProvider = SocialProvider;
 
 // Bound the fan-out of one run: each post costs one engine read plus one
@@ -268,7 +269,7 @@ export function createPostMetricsStore(
           typeof row.post_id !== 'string'
           || typeof row.user_id !== 'string'
           || typeof row.task_id !== 'string'
-          || (window !== '24h' && window !== '7d')
+          || !isMetricsWindow(window)
         ) {
           continue;
         }

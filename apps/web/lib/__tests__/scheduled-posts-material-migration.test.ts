@@ -22,7 +22,12 @@ describe('scheduled_posts.faceless_material', () => {
 
   it('allows exactly the values the API accepts', () => {
     expect(migration).toContain("check (faceless_material in ('broll', 'svg'))");
-    expect(route).toContain("facelessMaterial: z.enum(['broll', 'svg']).optional()");
+    // The route validates through the shared FACELESS_MATERIALS list, not
+    // an inline literal — pin the list and the enum call, so a one-sided
+    // change still fails here.
+    const materials = readFileSync(join(root, 'apps/web/lib/generation/faceless-materials.ts'), 'utf8');
+    expect(materials).toContain("export const FACELESS_MATERIALS = ['broll', 'svg'] as const;");
+    expect(route).toContain('facelessMaterial: z.enum(FACELESS_MATERIALS).optional()');
   });
 
   it('is written on every slot insert', () => {

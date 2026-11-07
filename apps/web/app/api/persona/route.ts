@@ -1,3 +1,4 @@
+import type { Database } from '@/lib/supabase/database.gen';
 import { randomUUID } from 'crypto';
 import { NextResponse, after } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -23,6 +24,7 @@ import { resolvePersonaAvatar, rollbackStoragePath } from '@/lib/persona-remote-
 import { logger } from '@/lib/logger';
 import { parsePatchBody } from './patch-body';
 import { parseJsonStringArray, parsePrimaryIndex } from './form-parsing';
+import { errorResponse } from './error-response';
 import { forwardLibraryImagesError, personaValidationError } from './validation-error';
 import { uploadFile } from './upload-photo';
 import { apiErrorResponse } from '@/lib/api-error';
@@ -34,15 +36,6 @@ import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 const ENGINE_CLEANUP_BUDGET_MS = 20_000;
-
-function errorResponse(
-  status: number,
-  error: string,
-  route: string,
-  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown>; code?: string; leaveReportingToWrapper?: boolean },
-): NextResponse {
-  return apiErrorResponse(status, error, { route, ...options });
-}
 
 async function postHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
@@ -339,7 +332,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     .single();
   if (selectError || !persona) return errorResponse(404, 'Persona not found.', 'PATCH /api/persona');
 
-  const updates: Record<string, unknown> = {};
+  const updates: Database['public']['Tables']['personas']['Update'] = {};
   const stalePaths: string[] = [];
   let replacementPhotoPath: string | null = null;
 

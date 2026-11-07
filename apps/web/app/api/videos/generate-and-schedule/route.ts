@@ -50,11 +50,8 @@ import {
   hasNonEmptyString,
   type JobPersona,
 } from '@/lib/generation/video-job-payload';
-import {
-  recordGenerationStart,
-  recordGenerationUpdate,
-  startEngineVideoTask,
-} from '@/lib/generation/video-generation';
+import { recordGenerationStart, recordGenerationUpdate, startEngineVideoTask } from '@/lib/generation/video-generation';
+import { FACELESS_MATERIALS } from '@/lib/generation/faceless-materials';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
 import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { resolveIdempotency } from '@/lib/idempotency';
@@ -93,7 +90,7 @@ const PublishingSchema = z.object({
 const OptionsSchema = z
   .object({
     faceless: z.boolean().optional(),
-    facelessMaterial: z.enum(['broll', 'svg']).optional(),
+    facelessMaterial: z.enum(FACELESS_MATERIALS).optional(),
     // Opt-in full lip-sync: the whole video is the persona talking, with
     // no b-roll. False (the default) keeps the intro-only lip-sync over
     // stock material. Rejected with faceless below: no face to render.

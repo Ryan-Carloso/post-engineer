@@ -1,5 +1,11 @@
 import { isSocialProvider, type SocialProvider } from '@/lib/providers/registry';
-import type { MetricsWindow } from './post-metrics';
+
+export const METRICS_WINDOWS = ['24h', '7d'] as const;
+export type MetricsWindow = (typeof METRICS_WINDOWS)[number];
+
+export function isMetricsWindow(value: unknown): value is MetricsWindow {
+  return METRICS_WINDOWS.some((candidate) => candidate === value);
+}
 
 //---------------
 // metrics-query — the GET /api/metrics contract, shared by the route and
@@ -79,7 +85,7 @@ export function parseMetricsQuery(params: URLSearchParams): ParseResult {
   for (const value of [window, persona, account, provider, angle]) {
     if (typeof value === 'object' && value !== null) return { ok: false, error: value.error };
   }
-  if (window !== '24h' && window !== '7d') return { ok: false, error: 'window must be 24h or 7d.' };
+  if (!isMetricsWindow(window)) return { ok: false, error: `window must be ${METRICS_WINDOWS.join(' or ')}.` };
   if (typeof persona === 'string' && persona !== METRICS_NONE && !UUID.test(persona)) {
     return { ok: false, error: `persona must be a uuid or ${METRICS_NONE}.` };
   }

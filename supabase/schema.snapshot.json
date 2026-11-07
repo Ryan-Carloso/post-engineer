@@ -1,0 +1,1511 @@
+{
+    "enums": {
+        "face_quality": [
+            "ok",
+            "very_good"
+        ]
+    },
+    "tables": {
+        "personas": {
+            "rls": false,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "name",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "photo_path",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "avatar_url",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "voice_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "voice_audio_path",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "language",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "video_aspect",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "script_prompt",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "paragraph_number",
+                    "type": "integer",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "niche",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "face_quality",
+                    "type": "face_quality",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "recent_image_ids",
+                    "type": "uuid[]",
+                    "default": "'{}'::uuid[]",
+                    "notNull": true
+                },
+                {
+                    "name": "video_layout",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "cta_text",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "personas_pkey": "PRIMARY KEY (id)",
+                "personas_video_layout_check": "CHECK (((video_layout IS NULL) OR (video_layout = ANY (ARRAY['standard'::text, 'react'::text]))))",
+                "personas_cta_text_length_check": "CHECK (((cta_text IS NULL) OR (char_length(cta_text) <= 200)))",
+                "personas_visual_identity_check": "CHECK (((photo_path IS NULL) OR (avatar_url IS NULL))) NOT VALID"
+            }
+        },
+        "schedules": {
+            "rls": false,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "persona_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "providers",
+                    "type": "text[]",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "days_of_week",
+                    "type": "integer[]",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "start_hour",
+                    "type": "integer",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "end_hour",
+                    "type": "integer",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "posts_per_day",
+                    "type": "integer",
+                    "default": "1",
+                    "notNull": true
+                },
+                {
+                    "name": "timezone",
+                    "type": "text",
+                    "default": "'UTC'::text",
+                    "notNull": true
+                },
+                {
+                    "name": "active",
+                    "type": "boolean",
+                    "default": "true",
+                    "notNull": true
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "youtube_account_ids",
+                    "type": "text[]",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "instagram_account_ids",
+                    "type": "text[]",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "times",
+                    "type": "text[]",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "linkedin_account_ids",
+                    "type": "text[]",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "scheduled_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "bluesky_account_ids",
+                    "type": "text[]",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "post_voice_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "post_voice_audio_url",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "post_niche",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "post_language",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "post_video_aspect",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "post_paragraph_number",
+                    "type": "integer",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "post_face_quality",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "publish_mode",
+                    "type": "text",
+                    "default": "'scheduled'::text",
+                    "notNull": true
+                },
+                {
+                    "name": "post_video_layout",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "post_cta_text",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "threads_account_ids",
+                    "type": "text[]",
+                    "default": "'{}'::text[]",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "schedules_pkey": "PRIMARY KEY (id)",
+                "schedules_publish_mode_check": "CHECK ((publish_mode = ANY (ARRAY['scheduled'::text, 'asap'::text])))",
+                "schedules_post_cta_text_length_check": "CHECK (((post_cta_text IS NULL) OR (char_length(post_cta_text) <= 200)))"
+            }
+        },
+        "oauth_states": {
+            "rls": false,
+            "columns": [
+                {
+                    "name": "state_hash",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "provider",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "nonce",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "redirect_uri",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "expires_at",
+                    "type": "timestamp with time zone",
+                    "default": "(now() + '00:15:00'::interval)",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "oauth_states_pkey": "PRIMARY KEY (state_hash)"
+            }
+        },
+        "post_metrics": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "post_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "provider",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "account_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "external_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "metrics_window",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "views",
+                    "type": "bigint",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "likes",
+                    "type": "bigint",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "comments",
+                    "type": "bigint",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "saves",
+                    "type": "bigint",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "collected_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "persona_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "script_angle",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                }
+            ],
+            "policies": {
+                "post_metrics_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                }
+            },
+            "constraints": {
+                "post_metrics_pkey": "PRIMARY KEY (id)",
+                "post_metrics_post_id_fkey": "FOREIGN KEY (post_id) REFERENCES scheduled_posts(id) ON DELETE CASCADE",
+                "post_metrics_provider_check": "CHECK ((provider = ANY (ARRAY['youtube'::text, 'instagram'::text, 'bluesky'::text, 'linkedin'::text, 'threads'::text])))",
+                "post_metrics_metrics_window_check": "CHECK ((metrics_window = ANY (ARRAY['24h'::text, '7d'::text])))",
+                "post_metrics_post_id_provider_external_id_metrics_window_key": "UNIQUE (post_id, provider, external_id, metrics_window)"
+            }
+        },
+        "cloned_voices": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "status",
+                    "type": "text",
+                    "default": "'pending'::text",
+                    "notNull": true
+                },
+                {
+                    "name": "consent_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "storage_path",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "engine_voice_key",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "language",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "error_code",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+                "cloned_voices_owner_all": {
+                    "cmd": "*",
+                    "qual": "(user_id = auth.uid())",
+                    "withCheck": "(user_id = auth.uid())"
+                }
+            },
+            "constraints": {
+                "cloned_voices_pkey": "PRIMARY KEY (id)",
+                "cloned_voices_status_check": "CHECK ((status = ANY (ARRAY['pending'::text, 'ready'::text, 'failed'::text])))",
+                "cloned_voices_user_voice_key_unique": "UNIQUE (user_id, engine_voice_key)"
+            }
+        },
+        "user_api_keys": {
+            "rls": false,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "name",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "key_hash",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "key_prefix",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "last_used_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "revoked_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "persona_ids",
+                    "type": "uuid[]",
+                    "default": null,
+                    "notNull": false
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "user_api_keys_pkey": "PRIMARY KEY (id)"
+            }
+        },
+        "user_profiles": {
+            "rls": false,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "stripe_customer_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "tokens_balance",
+                    "type": "numeric",
+                    "default": "0",
+                    "notNull": true
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "free_tokens_balance",
+                    "type": "numeric",
+                    "default": "0",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "user_profiles_pkey": "PRIMARY KEY (id)"
+            }
+        },
+        "persona_images": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "persona_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "image_path",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "tag",
+                    "type": "text",
+                    "default": "''::text",
+                    "notNull": true
+                },
+                {
+                    "name": "description",
+                    "type": "text",
+                    "default": "''::text",
+                    "notNull": true
+                },
+                {
+                    "name": "is_primary",
+                    "type": "boolean",
+                    "default": "false",
+                    "notNull": true
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+                "persona_images_owner_all": {
+                    "cmd": "*",
+                    "qual": "((auth.uid() = user_id) AND (EXISTS ( SELECT 1\n   FROM personas p\n  WHERE ((p.id = persona_images.persona_id) AND (p.user_id = auth.uid())))))",
+                    "withCheck": "((auth.uid() = user_id) AND (EXISTS ( SELECT 1\n   FROM personas p\n  WHERE ((p.id = persona_images.persona_id) AND (p.user_id = auth.uid())))))"
+                }
+            },
+            "constraints": {
+                "persona_images_pkey": "PRIMARY KEY (id)",
+                "fk_persona_images_persona": "FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE CASCADE"
+            }
+        },
+        "scheduled_posts": {
+            "rls": false,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "schedule_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "slot_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "status",
+                    "type": "text",
+                    "default": "'pending'::text",
+                    "notNull": true
+                },
+                {
+                    "name": "task_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "error",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "published_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "faceless",
+                    "type": "boolean",
+                    "default": "false",
+                    "notNull": true
+                },
+                {
+                    "name": "publish_attempts",
+                    "type": "integer",
+                    "default": "0",
+                    "notNull": true
+                },
+                {
+                    "name": "publish_not_before",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "faceless_material",
+                    "type": "text",
+                    "default": "'broll'::text",
+                    "notNull": true
+                },
+                {
+                    "name": "segments",
+                    "type": "jsonb",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "title",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "full_lipsync",
+                    "type": "boolean",
+                    "default": "false",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "scheduled_posts_pkey": "PRIMARY KEY (id)",
+                "scheduled_posts_faceless_material_check": "CHECK ((faceless_material = ANY (ARRAY['broll'::text, 'svg'::text])))"
+            }
+        },
+        "social_accounts": {
+            "rls": false,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "provider",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "provider_account_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "account_name",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "account_metadata",
+                    "type": "jsonb",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "encrypted_tokens",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "token_expires_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "last_used_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "social_accounts_pkey": "PRIMARY KEY (id)",
+                "social_accounts_provider_check": "CHECK ((provider = ANY (ARRAY['youtube'::text, 'instagram'::text, 'bluesky'::text, 'linkedin'::text, 'threads'::text])))"
+            }
+        },
+        "engine_heartbeat": {
+            "rls": false,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "integer",
+                    "default": "1",
+                    "notNull": true
+                },
+                {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "pid",
+                    "type": "integer",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "uptime_s",
+                    "type": "double precision",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "rss_mb",
+                    "type": "double precision",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "vram_mb",
+                    "type": "double precision",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "clean_shutdown_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "engine_heartbeat_pkey": "PRIMARY KEY (id)",
+                "engine_heartbeat_id_check": "CHECK ((id = 1))"
+            }
+        },
+        "scheduler_leases": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "job",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "lease_until",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "holder",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "last_success_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "scheduler_leases_pkey": "PRIMARY KEY (job)"
+            }
+        },
+        "engine_task_state": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "task_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "state",
+                    "type": "integer",
+                    "default": "0",
+                    "notNull": true
+                },
+                {
+                    "name": "progress",
+                    "type": "integer",
+                    "default": "0",
+                    "notNull": true
+                },
+                {
+                    "name": "data",
+                    "type": "jsonb",
+                    "default": "'{}'::jsonb",
+                    "notNull": true
+                },
+                {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "engine_task_state_pkey": "PRIMARY KEY (task_id)"
+            }
+        },
+        "mcp_oauth_clients": {
+            "rls": false,
+            "columns": [
+                {
+                    "name": "client_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "client_name",
+                    "type": "text",
+                    "default": "'MCP client'::text",
+                    "notNull": true
+                },
+                {
+                    "name": "redirect_uris",
+                    "type": "text[]",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "mcp_oauth_clients_pkey": "PRIMARY KEY (client_id)"
+            }
+        },
+        "post_metrics_done": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "post_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "metrics_window",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "done_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "post_metrics_done_pkey": "PRIMARY KEY (post_id, metrics_window)",
+                "post_metrics_done_post_id_fkey": "FOREIGN KEY (post_id) REFERENCES scheduled_posts(id) ON DELETE CASCADE",
+                "post_metrics_done_metrics_window_check": "CHECK ((metrics_window = ANY (ARRAY['24h'::text, '7d'::text])))"
+            }
+        },
+        "video_generations": {
+            "rls": false,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "generation_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "engine_task_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "persona_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "persona_name",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "video_subject",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "status",
+                    "type": "text",
+                    "default": "'pending'::text",
+                    "notNull": true
+                },
+                {
+                    "name": "error_code",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "error_message",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "tokens_refunded",
+                    "type": "boolean",
+                    "default": "false",
+                    "notNull": true
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "completed_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "params",
+                    "type": "jsonb",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "publish_mode",
+                    "type": "text",
+                    "default": "'asap'::text",
+                    "notNull": true
+                },
+                {
+                    "name": "scheduled_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "video_generations_pkey": "PRIMARY KEY (id)",
+                "video_generations_publish_mode_check": "CHECK ((publish_mode = ANY (ARRAY['asap'::text, 'scheduled'::text])))"
+            }
+        },
+        "token_transactions": {
+            "rls": false,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "amount",
+                    "type": "numeric",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "type",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "description",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "reference_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "reason",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "stripe_checkout_session_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "stripe_payment_intent_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "generation_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "free_amount",
+                    "type": "numeric",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "engine_task_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "token_transactions_pkey": "PRIMARY KEY (id)"
+            }
+        },
+        "test_deploy_supabase": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "note",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "test_deploy_supabase_pkey": "PRIMARY KEY (id)"
+            }
+        },
+        "stripe_webhook_events": {
+            "rls": false,
+            "columns": [
+                {
+                    "name": "event_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "event_type",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "stripe_webhook_events_pkey": "PRIMARY KEY (event_id)"
+            }
+        },
+        "mcp_oauth_refresh_tokens": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "jti",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "client_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "resource",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "scope",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "expires_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "consumed_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "mcp_oauth_refresh_tokens_pkey": "PRIMARY KEY (jti)"
+            }
+        },
+        "persona_default_accounts": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "persona_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "provider",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "provider_account_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+                "persona_default_accounts_owner_all": {
+                    "cmd": "*",
+                    "qual": "(EXISTS ( SELECT 1\n   FROM personas p\n  WHERE ((p.id = persona_default_accounts.persona_id) AND (p.user_id = auth.uid()))))",
+                    "withCheck": "(EXISTS ( SELECT 1\n   FROM personas p\n  WHERE ((p.id = persona_default_accounts.persona_id) AND (p.user_id = auth.uid()))))"
+                }
+            },
+            "constraints": {
+                "persona_default_accounts_pkey": "PRIMARY KEY (persona_id, provider, provider_account_id)",
+                "persona_default_accounts_persona_id_fkey": "FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE CASCADE"
+            }
+        },
+        "scheduled_post_progress_history": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "post_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "progress",
+                    "type": "integer",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "stage",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "recorded_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+                "progress_history_owner_all": {
+                    "cmd": "*",
+                    "qual": "((auth.uid() = user_id) AND (EXISTS ( SELECT 1\n   FROM scheduled_posts p\n  WHERE ((p.id = scheduled_post_progress_history.post_id) AND (p.user_id = auth.uid())))))",
+                    "withCheck": "((auth.uid() = user_id) AND (EXISTS ( SELECT 1\n   FROM scheduled_posts p\n  WHERE ((p.id = scheduled_post_progress_history.post_id) AND (p.user_id = auth.uid())))))"
+                }
+            },
+            "constraints": {
+                "fk_progress_history_post": "FOREIGN KEY (post_id) REFERENCES scheduled_posts(id) ON DELETE CASCADE",
+                "scheduled_post_progress_history_pkey": "PRIMARY KEY (id)"
+            }
+        }
+    }
+}
