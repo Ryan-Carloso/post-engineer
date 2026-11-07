@@ -1,7 +1,6 @@
 import type { Database } from '@/lib/supabase/database.gen';
 import { randomUUID } from 'crypto';
 import { NextResponse, after } from 'next/server';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
@@ -15,7 +14,6 @@ import {
   addLibraryImages,
   IMAGE_BUCKET,
   isFileLike,
-  personaAssetPath,
   removeOrphanedUploadPaths,
   setPrimaryLibraryImage,
   PERSONA_IMAGE_WARNING_CODES,
@@ -26,6 +24,7 @@ import { resolvePersonaAvatar, rollbackStoragePath } from '@/lib/persona-remote-
 import { logger } from '@/lib/logger';
 import { parsePatchBody } from './patch-body';
 import { parseJsonStringArray, parsePrimaryIndex } from './form-parsing';
+import { uploadFile } from './upload-file';
 import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
@@ -707,32 +706,6 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   });
 }
 
-
-//---------------
-// uploadFile — uploads to the 'personas' bucket under the user's folder; exported for other persona routes.
-//---------------
-export async function uploadFile(
-  supabase: SupabaseClient,
-  userId: string,
-  personaId: string,
-  file: File,
-  extension: string,
-): Promise<string | null> {
-  // Fixed file name: a persona has exactly ONE visual identity (enforced by
-  // personas_visual_identity_check), so the dashboard can answer "does this
-  // folder hold a photo?" without opening the database.
-  const path = personaAssetPath(userId, personaId, `photo.${extension}`);
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, bytes, {
-    contentType: file.type,
-  });
-
-  if (error) {
-    logger.error('[api/persona] storage upload failed', error, { path });
-    return null;
-  }
-  return path;
-}
 
 //---------------
 // 5xx reporting: handled server errors reach PostHog error tracking.

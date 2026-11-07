@@ -34,7 +34,11 @@ describe('get_post_metrics contract sync with GET /api/metrics', () => {
   it('accepts the same windows', () => {
     const [first, second] = METRICS_WINDOWS;
     expect(METRICS_WINDOWS).toHaveLength(2);
-    expect(metricsQuery).toContain(`if (window !== '${first}' && window !== '${second}')`);
+    // The web side validates through the shared METRICS_WINDOWS list
+    // (isMetricsWindow), not an inline literal comparison — pin the list
+    // and the guard, so a one-sided window change still fails here.
+    expect(metricsQuery).toContain(`export const METRICS_WINDOWS = ['${first}', '${second}'] as const;`);
+    expect(metricsQuery).toContain('if (!isMetricsWindow(window))');
   });
 
   it('accepts the same providers', () => {
