@@ -24,7 +24,9 @@ const STALE_STATUS_PHRASES = ['currently being fixed', 'being fixed', 'issue #',
 // returns face_detected as a photo-check code, it is never called as a
 // tool, so it is excluded from the registration check by name, with the
 // reason recorded here instead of silently passing an unknown token.
-const NON_TOOL_TOKENS = new Set(['face_detected']);
+// retention_evidence is an output field the viral-shorts prompt asks the
+// agent to print ('unavailable' for another creator's video), not a tool.
+const NON_TOOL_TOKENS = new Set(['face_detected', 'retention_evidence']);
 
 function servedPromptTexts(): Array<{ name: string; text: string }> {
   const texts: Array<{ name: string; text: string }> = [];
