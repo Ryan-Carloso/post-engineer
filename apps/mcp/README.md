@@ -156,7 +156,8 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `list_video_generations`: list the video generation history, newest first (status, error code, token refunds).
 - `get_video_generation`: get one video generation's detail by generation ID.
 - `get_post`: get one post's full detail by id, whether the id is a slot id or a generation id (the server resolves it; the response says `kind: "slot"` or `kind: "generation"`). Both kinds carry live generation progress.
-- `get_post_metrics`: per-video performance snapshots (views, likes, comments, saves) for a `window` of `24h` or `7d`, newest first. Optional exact-match filters: `persona` (uuid, or `^@none` for posts without a persona), `account`, `provider`, `angle` (or `^@none`). Returns `rows` and `truncated`.
+- `get_post_metrics`: per-video performance snapshots (views, likes, comments, saves) for a `window` of `24h`, `7d` or `28d`, newest first. Optional exact-match filters: `persona` (uuid, or `^@none` for posts without a persona), `account`, `provider`, `angle` (or `^@none`). Returns `rows` and `truncated`. YouTube rows also carry YouTube Analytics retention for your own videos: `engagedViews`, `stayedToWatchPct` (derived: engaged views / views, not a native metric), `averageViewPercentage`, `contentType`, `provisional` (Analytics data is not final for ~3 days; `28d` rows are final), and `analyticsStatus` (`scope_missing` = reconnect YouTube to grant `yt-analytics.readonly`).
+- `get_youtube_retention_curve`: the audience retention curve of one of your own published YouTube videos (`account` + `video` from a youtube `get_post_metrics` row), read live from YouTube Analytics: `points` of `ratio` (0.01–1.0 of the video), `audienceWatchRatio`, `relativeRetentionPerformance`. Only your own channel is queried. Shorts have no per-second curve in YouTube Studio; long-form videos do.
 - `list_token_transactions`: list the token ledger — every credit and debit (purchases, generation spends, refunds), newest first.
 - `get_persona_delete_preview`: preview what deleting a persona would remove (counts + per-video download links). Read-only.
 - `delete_persona`: DESTRUCTIVE — delete a persona with all its schedules, slots, videos, and image library. No token refunds.
@@ -192,6 +193,9 @@ web reaches every install without a package update.
 - `/place-spotlight`: Place spotlight becomes a video — turn one real place into one persona video with the place's own photos checked and attached as segment media, validated before any token is spent.
 - `/subject-spotlight`: Subject spotlight becomes a video — turn one concrete subject (a car, a product, a gadget) into one persona video with its own photos and its real price on screen, validated before any token is spent.
 - `/github-prs`: GitHub PRs become videos — turn a GitHub pull request into one persona video.
+- `/last-30-days`: Last 30 days become a video — turn what happened in your niche in the last 30 days into one persona video, validated before any token is spent.
+- `/multi-rede`: One week, one video per network — publish one video per network this week: LinkedIn, YouTube, Instagram, Bluesky, each scored for its own network.
+- `/viral-shorts`: A viral video becomes your Short — learn from the most-viewed video in your niche and write a fresh Shorts script in your own voice, hook, content, CTA.
 - `/full-setup`: Full setup becomes videos — connect accounts, create a persona, validate the script, and publish your first video without skipping a step.
 
 An agent that arrives without a human typing a slash command can still self-serve
@@ -212,4 +216,4 @@ objective). The MCP needs no change: it serves whatever the web hub lists.
 
 - Platform: https://post-engineer.com/
 - API keys: https://post-engineer.com/recipes
-- Recipes: [docs/recipes/daily-news.md](../../docs/recipes/daily-news.md) (daily news becomes a video), [docs/recipes/place-spotlight.md](../../docs/recipes/place-spotlight.md) (place spotlight becomes a video) and [docs/recipes/subject-spotlight.md](../../docs/recipes/subject-spotlight.md) (subject spotlight becomes a video)
+- Recipes: [docs/recipes/daily-news.md](../../docs/recipes/daily-news.md) (daily news becomes a video), [docs/recipes/place-spotlight.md](../../docs/recipes/place-spotlight.md) (place spotlight becomes a video), [docs/recipes/subject-spotlight.md](../../docs/recipes/subject-spotlight.md) (subject spotlight becomes a video), [docs/recipes/last-30-days.md](../../docs/recipes/last-30-days.md) (last 30 days become a video), [docs/recipes/multi-rede.md](../../docs/recipes/multi-rede.md) (one week, one video per network) and [docs/recipes/viral-shorts.md](../../docs/recipes/viral-shorts.md) (a viral video becomes your Short)

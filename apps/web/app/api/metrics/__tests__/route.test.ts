@@ -21,6 +21,9 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     post_id: 'post-1', persona_id: PERSONA, provider: 'youtube', account_id: 'yt', external_id: 'v1',
     script_angle: 'myth', views: 10, likes: 2, comments: 1, saves: null, collected_at: '2026-10-21T12:00:00Z',
+    // Migration 039 columns: null on non-YouTube or not-collected rows.
+    analytics_status: null, analytics_views: null, engaged_views: null, average_view_duration_seconds: null,
+    average_view_percentage: null, content_type: null, analytics_end_date: null,
     ...overrides,
   };
 }
@@ -64,8 +67,43 @@ describe('GET /api/metrics', () => {
       rows: [{
         postId: 'post-1', personaId: PERSONA, provider: 'youtube', accountId: 'yt', externalId: 'v1',
         scriptAngle: 'myth', views: 10, likes: 2, comments: 1, saves: null, collectedAt: '2026-10-21T12:00:00Z',
+        analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
+        averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
       }],
     });
+  });
+
+  it('maps the YouTube Analytics columns, derives stayed-to-watch and the provisional flag', async () => {
+    const { calls } = mockQuery({
+      data: [
+        row({
+          analytics_status: 'ok', analytics_views: 1000, engaged_views: 641, average_view_duration_seconds: '21.4',
+          average_view_percentage: 78.2, content_type: 'SHORTS', analytics_end_date: '2026-10-21',
+        }),
+        row({
+          post_id: 'post-2', analytics_status: 'ok', analytics_views: 0, engaged_views: 0,
+          analytics_end_date: '2026-10-18', collected_at: '2026-10-21T12:00:00Z',
+        }),
+        row({ post_id: 'post-3', analytics_status: 'scope_missing' }),
+        row({ post_id: 'post-4', analytics_status: 'garbage' }),
+      ],
+      error: null,
+    });
+    const response = await get('?window=28d');
+    expect(calls).toContainEqual(['eq', 'metrics_window', '28d']);
+    const selected = calls.find(([method]) => method === 'select')?.[1];
+    expect(typeof selected === 'string' ? selected : '').toContain('engaged_views, average_view_duration_seconds');
+    const body: unknown = await response.json();
+    const rows = typeof body === 'object' && body !== null && 'rows' in body && Array.isArray(body.rows) ? body.rows : [];
+    expect(rows[0]).toMatchObject({
+      analyticsViews: 1000, engagedViews: 641, stayedToWatchPct: 64.1, averageViewDurationSeconds: 21.4,
+      averageViewPercentage: 78.2, contentType: 'SHORTS', analyticsStatus: 'ok', provisional: true,
+    });
+    // 0 views is no signal (null), never 0%; a range ending 3+ days before collection is final.
+    expect(rows[1]).toMatchObject({ stayedToWatchPct: null, provisional: false });
+    expect(rows[2]).toMatchObject({ analyticsStatus: 'scope_missing', engagedViews: null, stayedToWatchPct: null });
+    // An unknown stored status never reaches the client.
+    expect(rows[3]).toMatchObject({ analyticsStatus: null });
   });
 
   it('applies every filter, with the none sentinel mapping to null', async () => {

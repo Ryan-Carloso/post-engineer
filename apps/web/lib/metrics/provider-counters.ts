@@ -8,7 +8,8 @@ import { getLinkedInSocialActions } from '@/lib/linkedin';
 import { getThreadsInsights } from '@/lib/threads';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { PROVIDER_LABELS } from '@/lib/account-options';
-import type { MeasuredProvider, MetricsCounters, MetricsTarget } from './post-metrics';
+import type { CounterContext, MeasuredProvider, MetricsCounters, MetricsTarget } from './post-metrics';
+import { youtubeRetention } from './youtube-retention';
 
 // Bluesky's public AppView serves post counters without authentication.
 const BSKY_APPVIEW = 'https://public.api.bsky.app';
@@ -107,14 +108,15 @@ async function ownerAccessToken(userId: string, provider: 'instagram' | 'linkedi
   return tokens.access_token;
 }
 
-type CounterFetcher = (userId: string, target: MetricsTarget) => Promise<MetricsCounters>;
+type CounterFetcher = (userId: string, target: MetricsTarget, context: CounterContext) => Promise<MetricsCounters>;
 
 // Exhaustive over SOCIAL_PROVIDERS: a new provider fails the typecheck
 // until it has a fetcher here.
 export const COUNTER_FETCHERS: Record<MeasuredProvider, CounterFetcher> = {
-  async youtube(userId, target) {
+  async youtube(userId, target, context) {
     const client = await getAuthenticatedClient(userId, target.accountId);
-    return youtubeCounters(await getYouTubeVideoInfo(client, target.externalId));
+    const videoInfo = await getYouTubeVideoInfo(client, target.externalId);
+    return { ...youtubeCounters(videoInfo), retention: await youtubeRetention(client, videoInfo, target, context) };
   },
   async instagram(userId, target) {
     const token = await ownerAccessToken(userId, 'instagram', target.accountId);
@@ -137,6 +139,10 @@ export const COUNTER_FETCHERS: Record<MeasuredProvider, CounterFetcher> = {
   },
 };
 
-export async function fetchProviderCounters(userId: string, target: MetricsTarget): Promise<MetricsCounters> {
-  return COUNTER_FETCHERS[target.provider](userId, target);
+export async function fetchProviderCounters(
+  userId: string,
+  target: MetricsTarget,
+  context: CounterContext,
+): Promise<MetricsCounters> {
+  return COUNTER_FETCHERS[target.provider](userId, target, context);
 }

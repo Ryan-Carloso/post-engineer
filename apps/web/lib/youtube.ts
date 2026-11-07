@@ -86,18 +86,25 @@ export async function createGoogleOAuth2Client(redirectUriOverride?: string): Pr
   return oauth2Client;
 }
 
+// The scopes the YouTube connect flow requests. yt-analytics.readonly reads
+// the owner's own channel reports (engaged views, watch time, retention curve); tokens
+// granted before it was added get a 403 from the Analytics API and the
+// metrics page asks the user to reconnect.
+export const GOOGLE_OAUTH_SCOPES = [
+  'openid',
+  'profile',
+  'email',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile',
+  'https://www.googleapis.com/auth/youtube.upload',
+  'https://www.googleapis.com/auth/youtube.readonly',
+  'https://www.googleapis.com/auth/yt-analytics.readonly',
+] as const;
+
 export function generateGoogleAuthUrl(oauth2Client: OAuth2Client, state?: string): string {
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline',
-    scope: [
-      'openid',
-      'profile',
-      'email',
-      'https://www.googleapis.com/auth/userinfo.email',
-      'https://www.googleapis.com/auth/userinfo.profile',
-      'https://www.googleapis.com/auth/youtube.upload',
-      'https://www.googleapis.com/auth/youtube.readonly'
-    ],
+    scope: [...GOOGLE_OAUTH_SCOPES],
     prompt: 'consent', // Force consent to get refresh token
     ...(state ? { state } : {}),
   });
@@ -110,15 +117,7 @@ export function generateGoogleAuthUrl(oauth2Client: OAuth2Client, state?: string
     component: 'generateGoogleAuthUrl',
     authUrlGenerated: true,
     authUrlPreview: authUrl.substring(0, 100) + '...',
-    scopes: [
-      'openid',
-      'profile',
-      'email',
-      'https://www.googleapis.com/auth/userinfo.email',
-      'https://www.googleapis.com/auth/userinfo.profile',
-      'https://www.googleapis.com/auth/youtube.upload',
-      'https://www.googleapis.com/auth/youtube.readonly'
-    ],
+    scopes: [...GOOGLE_OAUTH_SCOPES],
     accessType: 'offline',
     prompt: 'consent',
     timestamp: new Date().toISOString()

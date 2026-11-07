@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { distinctAngles, fetchMetrics, groupMetrics, isGroupKey, isMetricKey } from '../metrics-dashboard';
-import { METRICS_FILTER_MAX_LENGTH, METRICS_NONE, metricsSearchParams, parseMetricsQuery, type MetricsRowView } from '../metrics-query';
+import {
+  METRICS_FILTER_MAX_LENGTH, METRICS_NONE, isProvisional, metricsSearchParams, numericOrNull, parseMetricsQuery, stayedToWatchPct,
+  type MetricsRowView,
+} from '../metrics-query';
 import { accountOption, PROVIDER_LABELS } from '@/lib/account-options';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 
@@ -8,6 +11,8 @@ function view(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
   return {
     postId: 'p', personaId: 'persona-a', provider: 'youtube', accountId: 'yt', externalId: 'v',
     scriptAngle: 'myth', views: 100, likes: null, comments: 3, saves: null, collectedAt: '2026-10-21T12:00:00Z',
+    analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
+    averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
     ...overrides,
   };
 }
@@ -135,5 +140,35 @@ describe('accountOption', () => {
 
   it('has a label for every provider', () => {
     expect(Object.keys(PROVIDER_LABELS).sort()).toEqual([...SOCIAL_PROVIDERS].sort());
+  });
+});
+
+describe('retention helpers (metrics-query)', () => {
+  it('derives stayed-to-watch with one decimal and null for no views', () => {
+    expect(stayedToWatchPct(641, 1000)).toBe(64.1);
+    expect(stayedToWatchPct(2, 3)).toBe(66.7);
+    expect(stayedToWatchPct(0, 0)).toBeNull();
+    expect(stayedToWatchPct(null, 10)).toBeNull();
+    expect(stayedToWatchPct(5, null)).toBeNull();
+  });
+
+  it('flags a range ending within 3 days of collection as provisional', () => {
+    expect(isProvisional('2026-10-21', '2026-10-21T12:00:00Z')).toBe(true);
+    expect(isProvisional('2026-10-19', '2026-10-21T12:00:00Z')).toBe(true);
+    expect(isProvisional('2026-10-18', '2026-10-21T12:00:00Z')).toBe(false);
+    expect(isProvisional(null, '2026-10-21T12:00:00Z')).toBe(false);
+  });
+
+  it('accepts the 28d window and rejects anything else', () => {
+    expect(parseMetricsQuery(new URLSearchParams({ window: '28d' })).ok).toBe(true);
+    expect(parseMetricsQuery(new URLSearchParams({ window: '30d' }))).toEqual({ ok: false, error: 'window must be 24h, 7d or 28d.' });
+  });
+
+  it('reads numeric columns from numbers or decimal strings only', () => {
+    expect(numericOrNull('21.4')).toBe(21.4);
+    expect(numericOrNull(3)).toBe(3);
+    expect(numericOrNull('')).toBeNull();
+    expect(numericOrNull('x')).toBeNull();
+    expect(numericOrNull(null)).toBeNull();
   });
 });

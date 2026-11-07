@@ -1,16 +1,17 @@
 import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
-import { getPost, getPostMetrics } from './client-posts.js';
+import { getPost, getPostMetrics, getYouTubeRetentionCurve } from './client-posts.js';
 import {
   METRICS_FILTER_MAX_LENGTH,
   METRICS_NONE,
   METRICS_PROVIDERS,
   METRICS_WINDOWS,
+  YOUTUBE_VIDEO_ID,
 } from './limits.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
 //---------------
-// get_post and get_post_metrics — MCP tools.
+// get_post, get_post_metrics and get_youtube_retention_curve — MCP tools.
 //
 // Extracted from tools.ts so the tools module stays under the file-size
 // ratchet.
@@ -34,7 +35,9 @@ const metricsFilter = z.string().min(1).max(METRICS_FILTER_MAX_LENGTH);
 export const GetPostMetricsShape = {
   window: z
     .enum(METRICS_WINDOWS)
-    .describe('Snapshot window: 24h (first day after publishing) or 7d (first week).'),
+    .describe(
+      'Snapshot window: 24h (first day after publishing), 7d (first week) or 28d (four weeks; YouTube Analytics values are final).',
+    ),
   persona: metricsFilter
     .refine((value) => value === METRICS_NONE || UUID.test(value), {
       message: `persona must be a uuid or ${METRICS_NONE}`,
@@ -52,6 +55,16 @@ export const GetPostMetricsShape = {
 
 export const GetPostMetricsSchema = z.object(GetPostMetricsShape);
 
+export const GetYouTubeRetentionCurveShape = {
+  account: metricsFilter.describe('The YouTube account id (channel id) the video was published on: accountId from get_post_metrics rows.'),
+  video: z
+    .string()
+    .regex(YOUTUBE_VIDEO_ID, 'video must be a YouTube video id')
+    .describe('The YouTube video id: externalId from a youtube get_post_metrics row.'),
+};
+
+export const GetYouTubeRetentionCurveSchema = z.object(GetYouTubeRetentionCurveShape);
+
 export async function handleGetPost(
   client: PostEngineerClient,
   args: z.infer<typeof GetPostSchema>,
@@ -64,4 +77,11 @@ export async function handleGetPostMetrics(
   args: z.infer<typeof GetPostMetricsSchema>,
 ): Promise<McpToolResponse> {
   return handleLibraryCall(() => getPostMetrics(client, args), 'getting post metrics');
+}
+
+export async function handleGetYouTubeRetentionCurve(
+  client: PostEngineerClient,
+  args: z.infer<typeof GetYouTubeRetentionCurveSchema>,
+): Promise<McpToolResponse> {
+  return handleLibraryCall(() => getYouTubeRetentionCurve(client, args), 'getting YouTube retention curve');
 }

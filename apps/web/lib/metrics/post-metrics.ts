@@ -3,17 +3,18 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import type { SocialProvider } from '@/lib/providers/registry';
-import { isMetricsWindow, type MetricsWindow } from './metrics-query';
+import { isMetricsWindow, type AnalyticsStatus, type MetricsWindow } from './metrics-query';
 
 //---------------
 // post-metrics — per-video performance snapshots for A/B content tests.
 //
 // Hourly (in-app scheduler -> runPostMetricsTick in lib/scheduler-jobs.ts), every published slot is
-// snapshotted twice: once 24-48h after publish ('24h') and once 168-192h
-// after publish ('7d'). A window that was missed (engine down, token
+// snapshotted three times: 24-48h after publish ('24h'), 168-192h after
+// publish ('7d'), and 672-696h after publish ('28d', when YouTube
+// Analytics numbers are final). A window that was missed (engine down, token
 // expired for the whole 24h) is skipped, never back-filled with a late
 // number that would not be comparable. The windows live in SQL
-// (public.find_post_metrics_due, migration 025).
+// (public.find_post_metrics_due, migrations 025 and 039).
 //
 // Every provider in SOCIAL_PROVIDERS is measured: TARGET_EXTRACTORS here
 // and COUNTER_FETCHERS (provider-counters.ts) are exhaustive Records, so a
@@ -27,8 +28,8 @@ export type { MetricsWindow };
 export type MeasuredProvider = SocialProvider;
 
 // Bound the fan-out of one run: each post costs one engine read plus one
-// provider call per published video. Which posts are due (the 24h/7d
-// windows) is decided in SQL: public.find_post_metrics_due (migration 025).
+// provider call per published video. Which posts are due (the 24h/7d/28d
+// windows) is decided in SQL: public.find_post_metrics_due (migration 039).
 export const MAX_POSTS_PER_RUN = 50;
 export const RUN_TIME_BUDGET_MS = 45_000;
 
@@ -37,6 +38,25 @@ export interface MetricsCounters {
   likes: number | null;
   comments: number | null;
   saves: number | null;
+  // YouTube only: the Analytics API half of the snapshot (youtube-retention.ts).
+  retention?: RetentionSnapshot;
+}
+
+export interface RetentionSnapshot {
+  status: AnalyticsStatus;
+  analyticsViews: number | null;
+  engagedViews: number | null;
+  averageViewDurationSeconds: number | null;
+  averageViewPercentage: number | null;
+  contentType: string | null;
+  // YYYY-MM-DD range the Analytics numbers cover; null when not queried.
+  startDate: string | null;
+  endDate: string | null;
+}
+
+export interface CounterContext {
+  window: MetricsWindow;
+  now: Date;
 }
 
 export interface DuePost {
@@ -69,7 +89,7 @@ export interface MetricsTarget {
 export interface PostMetricsDeps {
   listDuePosts: (now: Date, limit: number) => Promise<DuePost[]>;
   fetchTaskSource: (taskId: string, userId: string) => Promise<{ publishResults: unknown[]; scriptAngle: string | null }>;
-  fetchCounters: (userId: string, target: MetricsTarget) => Promise<MetricsCounters>;
+  fetchCounters: (userId: string, target: MetricsTarget, context: CounterContext) => Promise<MetricsCounters>;
   saveMetrics: (row: MetricsRow) => Promise<void>;
   markDone: (postId: string, window: MetricsWindow) => Promise<void>;
   track: (event: string, properties: Record<string, unknown>) => void;
@@ -81,6 +101,20 @@ export interface PostMetricsReport {
   recorded: number;
   errors: string[];
   truncated: boolean;
+}
+
+// The 039 columns: null for every non-YouTube row (no retention snapshot).
+function retentionColumns(retention: RetentionSnapshot | undefined): Record<string, string | number | null> {
+  return {
+    analytics_status: retention?.status ?? null,
+    analytics_views: retention?.analyticsViews ?? null,
+    engaged_views: retention?.engagedViews ?? null,
+    average_view_duration_seconds: retention?.averageViewDurationSeconds ?? null,
+    average_view_percentage: retention?.averageViewPercentage ?? null,
+    content_type: retention?.contentType ?? null,
+    analytics_start_date: retention?.startDate ?? null,
+    analytics_end_date: retention?.endDate ?? null,
+  };
 }
 
 export function targetKey(target: Pick<MetricsTarget, 'provider' | 'externalId'>): string {
@@ -196,10 +230,15 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
     }
 
     let failed = false;
+    // A token without yt-analytics.readonly is not terminal: leave the
+    // window open so the next hourly run retries with the new token after
+    // the user reconnects. The Data API counters are already saved.
+    let missingAnalyticsScope = false;
     for (const target of targets) {
       if (post.collectedKeys.has(targetKey(target))) continue;
       try {
-        const counters = await deps.fetchCounters(post.userId, target);
+        const counters = await deps.fetchCounters(post.userId, target, { window: post.window, now: deps.now() });
+        if (counters.retention?.status === 'scope_missing') missingAnalyticsScope = true;
         await deps.saveMetrics({
           postId: post.id, userId: post.userId, window: post.window, scriptAngle, ...target, ...counters,
         });
@@ -219,7 +258,12 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
           user_id: post.userId,
           provider: target.provider,
           window: post.window,
-          ...counters,
+          views: counters.views,
+          likes: counters.likes,
+          comments: counters.comments,
+          saves: counters.saves,
+          engaged_views: counters.retention?.engagedViews ?? null,
+          analytics_status: counters.retention?.status ?? null,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -233,8 +277,9 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
       }
     }
     // Every video is in (or there is none to measure): stop re-reading this
-    // post for the window. A failed video keeps it open for the next run.
-    if (!failed) {
+    // post for the window. A failed video and a missing Analytics scope keep
+    // it open for the next run.
+    if (!failed && !missingAnalyticsScope) {
       try {
         await deps.markDone(post.id, post.window);
       } catch (error) {
@@ -300,6 +345,7 @@ export function createPostMetricsStore(
           comments: row.comments,
           saves: row.saves,
           script_angle: row.scriptAngle,
+          ...retentionColumns(row.retention),
         },
         { onConflict: 'post_id,provider,external_id,metrics_window' },
       );

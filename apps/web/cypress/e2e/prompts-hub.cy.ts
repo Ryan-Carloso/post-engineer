@@ -24,10 +24,16 @@ describe('Prompts hub', () => {
     cy.contains('Place spotlight becomes a video').should('be.visible');
     cy.contains('Subject spotlight becomes a video').should('be.visible');
     cy.contains('GitHub PRs become videos').should('be.visible');
+    cy.contains('Last 30 days become a video').should('be.visible');
+    cy.contains('One week, one video per network').should('be.visible');
+    cy.contains('A viral video becomes your Short').should('be.visible');
     cy.get('a[href="/recipes/daily-news"]').should('be.visible');
     cy.get('a[href="/recipes/place-spotlight"]').should('be.visible');
     cy.get('a[href="/recipes/subject-spotlight"]').should('be.visible');
     cy.get('a[href="/recipes/github-prs"]').should('be.visible');
+    cy.get('a[href="/recipes/last-30-days"]').should('be.visible');
+    cy.get('a[href="/recipes/multi-rede"]').should('be.visible');
+    cy.get('a[href="/recipes/viral-shorts"]').should('be.visible');
     cy.get('a[href="/recipes/full-setup"]').should('be.visible');
   });
 

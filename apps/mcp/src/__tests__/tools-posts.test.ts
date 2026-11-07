@@ -1,11 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { getPost, getPostMetrics } from '../client-posts.js';
+import { getPost, getPostMetrics, getYouTubeRetentionCurve } from '../client-posts.js';
 import {
   GetPostMetricsSchema,
+  GetYouTubeRetentionCurveSchema,
   handleGetPost,
   handleGetPostMetrics,
+  handleGetYouTubeRetentionCurve,
 } from '../tools-posts.js';
 import { createPostEngineerMcpServer } from '../index.js';
 import type { PostEngineerClient } from '../client.js';
@@ -85,10 +87,11 @@ describe('getPostMetrics', () => {
 });
 
 describe('GetPostMetricsSchema', () => {
-  it('requires a window of 24h or 7d', () => {
+  it('requires a window of 24h, 7d or 28d', () => {
     expect(GetPostMetricsSchema.safeParse({}).success).toBe(false);
     expect(GetPostMetricsSchema.safeParse({ window: '30d' }).success).toBe(false);
     expect(GetPostMetricsSchema.safeParse({ window: '24h' }).success).toBe(true);
+    expect(GetPostMetricsSchema.safeParse({ window: '28d' }).success).toBe(true);
   });
 
   it('accepts a uuid or the none sentinel as persona, nothing else', () => {
@@ -139,6 +142,34 @@ describe('get_post / get_post_metrics handlers', () => {
   });
 });
 
+describe('get_youtube_retention_curve', () => {
+  it('validates account and video like the route', () => {
+    expect(GetYouTubeRetentionCurveSchema.safeParse({ account: 'UC1', video: 'abc-_9' }).success).toBe(true);
+    expect(GetYouTubeRetentionCurveSchema.safeParse({ account: '', video: 'abc' }).success).toBe(false);
+    expect(GetYouTubeRetentionCurveSchema.safeParse({ account: 'UC1', video: 'a'.repeat(65) }).success).toBe(false);
+    expect(GetYouTubeRetentionCurveSchema.safeParse({ account: 'UC1' }).success).toBe(false);
+  });
+
+  it('getYouTubeRetentionCurve sends account and video encoded', async () => {
+    const request = vi.fn().mockResolvedValue({ success: true, points: [] });
+    await getYouTubeRetentionCurve(fakeClient(request), { account: 'UC&1', video: 'v1' });
+    expect(request).toHaveBeenCalledWith(
+      '/api/metrics/retention-curve?account=UC%261&video=v1',
+      { method: 'GET', headers: HEADERS },
+      'get YouTube retention curve',
+    );
+  });
+
+  it('handleGetYouTubeRetentionCurve returns the points and maps failures to an error response', async () => {
+    const ok = await handleGetYouTubeRetentionCurve(fakeClient(vi.fn().mockResolvedValue({ success: true, points: [{ ratio: 0.01 }] })), { account: 'UC1', video: 'v1' });
+    expect(ok.isError).toBeFalsy();
+    expect(textOf(ok)).toContain('"ratio": 0.01');
+    const failed = await handleGetYouTubeRetentionCurve(fakeClient(vi.fn().mockRejectedValue(new Error('403 YOUTUBE_ANALYTICS_SCOPE_MISSING'))), { account: 'UC1', video: 'v1' });
+    expect(failed.isError).toBe(true);
+    expect(textOf(failed)).toContain('getting YouTube retention curve');
+  });
+});
+
 describe('registered get_post / get_post_metrics tools', () => {
   async function callTool(name: string, args: Record<string, unknown>, request: ReturnType<typeof vi.fn>) {
     const server = createPostEngineerMcpServer(fakeClient(request));
@@ -168,6 +199,25 @@ describe('registered get_post / get_post_metrics tools', () => {
       { method: 'GET', headers: HEADERS },
       'get post metrics',
     );
+  });
+
+  it('get_youtube_retention_curve calls GET /api/metrics/retention-curve through the server', async () => {
+    const request = vi.fn().mockResolvedValue({ success: true, points: [] });
+    const result = await callTool('get_youtube_retention_curve', { account: 'UC own', video: 'vid_1' }, request);
+    expect(result.isError).toBeFalsy();
+    expect(request).toHaveBeenCalledWith(
+      '/api/metrics/retention-curve?account=UC+own&video=vid_1',
+      { method: 'GET', headers: HEADERS },
+      'get YouTube retention curve',
+    );
+  });
+
+  it('get_youtube_retention_curve rejects a malformed video id before any request', async () => {
+    const request = vi.fn();
+    const result = await callTool('get_youtube_retention_curve', { account: 'UC1', video: 'a;b' }, request);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('video must be a YouTube video id');
+    expect(request).not.toHaveBeenCalled();
   });
 
   it('get_post_metrics rejects a bad persona before any request', async () => {
