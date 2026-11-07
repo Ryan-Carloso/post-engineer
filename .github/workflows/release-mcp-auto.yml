@@ -194,13 +194,32 @@ jobs:
           # This branch is owned by this workflow and its only legitimate
           # content is this exact version bump, so reuse it when it already
           # is that bump; a stale ref must never fail the release again.
+          # versions_only prints a version file with every version field
+          # reset, so two files compare equal exactly when they differ only
+          # by the version bump itself — a changed description, script, or
+          # env entry inside package.json/server.json must refuse, not reuse.
+          versions_only() {
+            local ref="$1"
+            local file="$2"
+            git show "${ref}:${file}" 2>/dev/null | node -e "
+              let s = '';
+              process.stdin.on('data', (d) => { s += d; }).on('end', () => {
+                const j = JSON.parse(s);
+                j.version = '0.0.0';
+                if (Array.isArray(j.packages)) j.packages.forEach((p) => { p.version = '0.0.0'; });
+                console.log(JSON.stringify(j));
+              });
+            " 2>/dev/null || true
+          }
           if git ls-remote --heads origin "refs/heads/${BRANCH}" | grep -q .; then
             git fetch origin "$BRANCH"
             REMOTE_BASE="$(git merge-base "origin/main" "origin/${BRANCH}")"
             REMOTE_PKG_VERSION="$(git show "origin/${BRANCH}:apps/mcp/package.json" 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version" 2>/dev/null || true)"
             REMOTE_SERVER_VERSIONS="$(git show "origin/${BRANCH}:apps/mcp/server.json" 2>/dev/null | node -p "const s = JSON.parse(require('fs').readFileSync(0, 'utf8')); s.version + ' ' + s.packages[0].version" 2>/dev/null || true)"
             REMOTE_EXTRA_FILES="$(git diff --name-only "$REMOTE_BASE" "origin/${BRANCH}" | grep -v -e '^apps/mcp/package.json$' -e '^apps/mcp/server.json$' || true)"
-            if [ "$REMOTE_PKG_VERSION" = "$NEW_VERSION" ] && [ "$REMOTE_SERVER_VERSIONS" = "${NEW_VERSION} ${NEW_VERSION}" ] && [ -z "$REMOTE_EXTRA_FILES" ]; then
+            if [ "$REMOTE_PKG_VERSION" = "$NEW_VERSION" ] && [ "$REMOTE_SERVER_VERSIONS" = "${NEW_VERSION} ${NEW_VERSION}" ] && [ -z "$REMOTE_EXTRA_FILES" ] \
+              && [ "$(versions_only "$REMOTE_BASE" apps/mcp/package.json)" = "$(versions_only "origin/${BRANCH}" apps/mcp/package.json)" ] \
+              && [ "$(versions_only "$REMOTE_BASE" apps/mcp/server.json)" = "$(versions_only "origin/${BRANCH}" apps/mcp/server.json)" ]; then
               echo "Remote bump branch ${BRANCH} already contains the ${NEW_VERSION} bump — reusing it."
               git checkout -B "$BRANCH" "origin/${BRANCH}"
             else
