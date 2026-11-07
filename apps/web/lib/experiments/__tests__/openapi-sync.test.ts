@@ -8,7 +8,7 @@ import {
   EXPERIMENT_VARIANT_ID_PATTERN,
   EXPERIMENT_VARIANT_NAME_MAX_LENGTH,
 } from '@/lib/experiments/limits';
-import { experimentOperationSchemas } from '../../../scripts/openapi-experiments-schemas.mjs';
+import { experimentLinkSchema, experimentOperationSchemas } from '../../../scripts/openapi-experiments-schemas.mjs';
 
 //---------------
 // The OpenAPI schemas repeat the experiment limits as literals (the
@@ -38,5 +38,11 @@ describe('experiment OpenAPI schemas match lib/experiments/limits.ts', () => {
     expect(variant.properties.name).toMatchObject({ maxLength: EXPERIMENT_VARIANT_NAME_MAX_LENGTH });
     expect(variant.properties.description).toMatchObject({ maxLength: EXPERIMENT_VARIANT_DESCRIPTION_MAX_LENGTH });
     expect(variant.properties.variantId).toMatchObject({ pattern: EXPERIMENT_VARIANT_ID_PATTERN.source });
+  });
+
+  it('generate-and-schedule experiment link limits', () => {
+    const link = experimentLinkSchema as Schema;
+    expect(link.properties.variantId).toMatchObject({ pattern: EXPERIMENT_VARIANT_ID_PATTERN.source });
+    expect(link.properties.pair).toMatchObject({ minimum: 1, maximum: EXPERIMENT_TARGET_PAIRS_MAX });
   });
 });

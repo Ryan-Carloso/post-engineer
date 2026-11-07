@@ -59,6 +59,8 @@ export interface GeneratePersonaVideoInput {
   personaId?: string;
   /** The slot label for the single video. */
   title: string;
+  /** Paired A/B experiment link (issue #476); checked server-side before the charge. */
+  experiment?: { experimentId: string; variantId: string; pair: number };
   providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads')[];
   youtubeAccountIds?: string[];
   instagramAccountIds?: string[];

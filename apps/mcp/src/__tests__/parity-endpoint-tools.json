@@ -124,7 +124,8 @@
     "publish_video_direct"
   ],
   "POST /api/videos/generate-and-schedule": [
-    "generate_persona_video"
+    "generate_persona_video",
+    "add_experiment_pair"
   ],
   "POST /api/videos/validate-script": [
     "validate_script"

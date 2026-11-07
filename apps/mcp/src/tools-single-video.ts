@@ -166,6 +166,7 @@ export async function handleGeneratePersonaVideo(
           ...(language === undefined ? {} : { language }),
         },
         idempotencyKey: args.idempotencyKey,
+        experiment: args.experiment,
       }),
     );
     const scheduleId = narrowed.schedule.id ?? '(unknown id)';

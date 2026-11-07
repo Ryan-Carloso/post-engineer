@@ -77,6 +77,7 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'get_youtube_retention_curve', descKey: 'apiKeys.toolDescGetYouTubeRetentionCurve', Icon: HistoryIcon },
   { id: 'create_experiment', descKey: 'apiKeys.toolDescCreateExperiment', Icon: SparklesIcon },
   { id: 'list_experiments', descKey: 'apiKeys.toolDescListExperiments', Icon: HistoryIcon },
+  { id: 'add_experiment_pair', descKey: 'apiKeys.toolDescAddExperimentPair', Icon: FilmIcon },
   { id: 'get_experiment_results', descKey: 'apiKeys.toolDescGetExperimentResults', Icon: CheckIcon },
   { id: 'cancel_video_task', descKey: 'apiKeys.toolDescCancelVideoTask', Icon: TrashIcon },
   { id: 'list_token_transactions', descKey: 'apiKeys.toolDescListTokenTransactions', Icon: CoinsIcon },

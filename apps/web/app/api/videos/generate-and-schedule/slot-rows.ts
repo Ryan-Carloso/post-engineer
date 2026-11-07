@@ -6,6 +6,7 @@
 import type { FacelessMaterial } from '@/lib/generation/faceless-materials';
 import type { DistributedSlot } from '@/lib/schedule/slot-distribution';
 import type { ScriptSegment } from '@/lib/generation/script-segments';
+import type { ExperimentLink } from './experiment-link';
 
 export interface SlotRowInput {
   slots: DistributedSlot[];
@@ -16,6 +17,8 @@ export interface SlotRowInput {
   facelessMaterial: FacelessMaterial | undefined;
   fullLipsync?: boolean;
   segments: ScriptSegment[] | undefined;
+  /** Paired A/B experiment link (migration 041), checked before the charge. */
+  experiment?: ExperimentLink;
 }
 
 // One row per slot, pending. The id is database-generated; the returned
@@ -38,5 +41,8 @@ export function buildSlotRows(input: SlotRowInput) {
     faceless_material: input.facelessMaterial,
     full_lipsync: input.fullLipsync ?? false,
     segments: input.segments ?? null,
+    experiment_id: input.experiment?.experimentId ?? null,
+    variant_id: input.experiment?.variantId ?? null,
+    experiment_pair: input.experiment?.pair ?? null,
   }));
 }

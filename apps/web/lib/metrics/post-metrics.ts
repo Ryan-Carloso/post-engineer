@@ -86,11 +86,18 @@ export interface MetricsTarget {
   externalId: string;
 }
 
+/** The snapshot's experiment link, filled by the post_metrics trigger (migration 041). */
+export interface ExperimentTag {
+  experimentId: string | null;
+  variantId: string | null;
+  experimentPair: number | null;
+}
+
 export interface PostMetricsDeps {
   listDuePosts: (now: Date, limit: number) => Promise<DuePost[]>;
   fetchTaskSource: (taskId: string, userId: string) => Promise<{ publishResults: unknown[]; scriptAngle: string | null }>;
   fetchCounters: (userId: string, target: MetricsTarget, context: CounterContext) => Promise<MetricsCounters>;
-  saveMetrics: (row: MetricsRow) => Promise<void>;
+  saveMetrics: (row: MetricsRow) => Promise<ExperimentTag>;
   markDone: (postId: string, window: MetricsWindow) => Promise<void>;
   track: (event: string, properties: Record<string, unknown>) => void;
   now: () => Date;
@@ -239,7 +246,7 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
       try {
         const counters = await deps.fetchCounters(post.userId, target, { window: post.window, now: deps.now() });
         if (counters.retention?.status === 'scope_missing') missingAnalyticsScope = true;
-        await deps.saveMetrics({
+        const tag = await deps.saveMetrics({
           postId: post.id, userId: post.userId, window: post.window, scriptAngle, ...target, ...counters,
         });
         report.recorded += 1;
@@ -264,6 +271,10 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
           saves: counters.saves,
           engaged_views: counters.retention?.engagedViews ?? null,
           analytics_status: counters.retention?.status ?? null,
+          // Paired A/B split (issue #476): ids only, never variant names.
+          experiment_id: tag.experimentId,
+          variant_id: tag.variantId,
+          experiment_pair: tag.experimentPair,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -332,7 +343,7 @@ export function createPostMetricsStore(
       return posts;
     },
     async saveMetrics(row) {
-      const { error } = await supabase.from('post_metrics').upsert(
+      const { data, error } = await supabase.from('post_metrics').upsert(
         {
           post_id: row.postId,
           user_id: row.userId,
@@ -348,8 +359,13 @@ export function createPostMetricsStore(
           ...retentionColumns(row.retention),
         },
         { onConflict: 'post_id,provider,external_id,metrics_window' },
-      );
+      )
+        // The trigger fills the experiment link; reading it back here
+        // saves a second query per snapshot.
+        .select('experiment_id, variant_id, experiment_pair')
+        .single();
       if (error) throw new Error(`metrics write failed: ${error.message}`);
+      return { experimentId: data.experiment_id, variantId: data.variant_id, experimentPair: data.experiment_pair };
     },
     async markDone(postId, window) {
       const { error } = await supabase

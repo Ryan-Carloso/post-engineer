@@ -4893,6 +4893,31 @@
                       "segments"
                     ]
                   },
+                  "experiment": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "experimentId",
+                      "variantId",
+                      "pair"
+                    ],
+                    "description": "Join a paired A/B experiment: this video is one variant of one pair. Checked before the charge.",
+                    "properties": {
+                      "experimentId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "variantId": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,47}$"
+                      },
+                      "pair": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 20
+                      }
+                    }
+                  },
                   "idempotencyKey": {
                     "type": "string"
                   }
