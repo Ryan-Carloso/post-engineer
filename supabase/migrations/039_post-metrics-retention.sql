@@ -137,13 +137,16 @@ $$;
 -- reset_post_metrics_windows — clears the done marks of a YouTube channel
 -- whose snapshots have no Analytics scope (or predate the Analytics
 -- columns), so reconnecting the channel re-collects every window that is
--- still inside its age range. Scoped to the account's own snapshots.
+-- still inside its age range. A closed window can never be back-filled, so
+-- its stale scope_missing row stops asking for a reconnect and becomes
+-- no_data ("Retention n/a"). Scoped to the account's own snapshots.
 create or replace function public.reset_post_metrics_windows(p_user_id uuid, p_account_id text)
 returns void
-language sql
+language plpgsql
 security definer
 set search_path = public
 as $$
+begin
   delete from public.post_metrics_done pmd
   using public.post_metrics pm
   where pmd.post_id = pm.post_id
@@ -152,6 +155,23 @@ as $$
     and pm.provider = 'youtube'
     and pm.account_id = p_account_id
     and (pm.analytics_status is null or pm.analytics_status = 'scope_missing');
+
+  update public.post_metrics pm
+  set analytics_status = 'no_data'
+  where pm.user_id = p_user_id
+    and pm.provider = 'youtube'
+    and pm.account_id = p_account_id
+    and pm.analytics_status = 'scope_missing'
+    and not exists (
+      select 1
+      from public.scheduled_posts sp
+      join (values ('24h', 24), ('7d', 168), ('28d', 672)) w(metrics_window, start_hours)
+        on w.metrics_window = pm.metrics_window
+      where sp.id = pm.post_id
+        and sp.published_at <= now() - make_interval(hours => w.start_hours)
+        and sp.published_at > now() - make_interval(hours => w.start_hours + 24)
+    );
+end;
 $$;
 
 -- create or replace keeps grants, but re-assert them: cron/service-role only.

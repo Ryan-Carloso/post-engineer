@@ -518,6 +518,12 @@ describe('migration 039 (post metrics retention + 28d window)', () => {
     expect(fn).toContain("and pm.provider = 'youtube'");
     expect(fn).toContain('and pm.account_id = p_account_id');
     expect(fn).toContain("and (pm.analytics_status is null or pm.analytics_status = 'scope_missing')");
+    // A closed window cannot be back-filled: stop the reconnect prompt.
+    expect(fn).toContain('update public.post_metrics pm');
+    expect(fn).toContain("set analytics_status = 'no_data'");
+    expect(fn).toContain("and pm.analytics_status = 'scope_missing'");
+    expect(fn).toContain('and not exists (');
+    expect(fn).toContain("join (values ('24h', 24), ('7d', 168), ('28d', 672)) w(metrics_window, start_hours)");
     expect(sql).toContain('grant execute on function public.reset_post_metrics_windows(uuid, text) to service_role');
   });
 });
