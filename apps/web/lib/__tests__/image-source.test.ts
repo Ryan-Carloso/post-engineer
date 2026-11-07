@@ -63,6 +63,34 @@ describe('isPublicAssetPath', () => {
     expect(isPublicAssetPath('/api/persona/images')).toBe(false);
     expect(isPublicAssetPath(null)).toBe(false);
   });
+
+  // Issue #448: the asset-path check gates a server-side fetch against the
+  // app origin, so any form that changes the host or escapes the asset
+  // directory once resolved by `new URL(value, origin)` must be refused.
+  it.each([
+    '//169.254.169.254/latest/meta-data/',
+    '/\\169.254.169.254/x',
+    '/caracter-samples/..\\x',
+    '/caracter-samples/../api/secret',
+    '/caracter-samples/./file-1.png',
+    '/caracter-samples/%2F%2Fhost/x',
+    '/caracter-samples/%2e%2e/x',
+    '/caracter-samples/a%5Cb.png',
+    '/caracter-samples/file-1.png?x=1',
+    '/caracter-samples/file-1.png#frag',
+    '/caracter-samples/file\n1.png',
+    '/caracter-samples/',
+    '/caracter-samples//file-1.png',
+    '/caracter-samples',
+    'caracter-samples/file-1.png',
+    'x/caracter-samples/file-1.png',
+  ])('rejects the host-changing or traversing form %s', (value) => {
+    expect(isPublicAssetPath(value)).toBe(false);
+  });
+
+  it('accepts a nested asset file', () => {
+    expect(isPublicAssetPath('/voice-samples/en/voice-1.mp3')).toBe(true);
+  });
 });
 
 describe('toSameOriginAssetPath', () => {

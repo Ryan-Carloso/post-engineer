@@ -161,14 +161,37 @@ describe('resolvePersonaAvatar', () => {
     expect(uploaded[0]?.path).not.toBe('user-1/persona-1/photo.png');
   });
 
-  it('keeps a non-http path as avatar_url without fetching', async () => {
+  // Issue #448: anything that is neither a kept avatar (public asset path,
+  // data:image, our own asset URL) nor an http(s) URL for the DNS-pinned
+  // download is refused, so it never lands in personas.avatar_url.
+  it.each([
+    'not-a-url',
+    '//169.254.169.254/latest/meta-data/iam/security-credentials/',
+    '//10.0.0.5/admin',
+    '/\\169.254.169.254/x',
+    '/%2F%2Fhost/x',
+    '/caracter-samples/../x',
+    '/api/persona/images',
+    'ftp://cdn.example/face.png',
+    'javascript:alert(1)',
+  ])('refuses %s without fetching or storing it', async (value) => {
     const fetchImpl = vi.fn();
     const supabase = mockSupabase({});
-    const result = await resolvePersonaAvatar(supabase as never, 'u', 'p', 'not-a-url', {
+    const result = await resolvePersonaAvatar(supabase as never, 'u', 'p', value, {
       fetchImpl: fetchImpl as never,
     });
-    expect(result).toEqual({ ok: true, photoPath: null, avatarUrl: 'not-a-url' });
+    expect(result).toEqual({ ok: false, error: REMOTE_FACE_ERROR });
     expect(fetchImpl).not.toHaveBeenCalled();
+    expect(supabase.storage.from).not.toHaveBeenCalled();
+  });
+
+  it('keeps an absolute asset url on our own domain as avatar_url', async () => {
+    const supabase = mockSupabase({});
+    const value = 'https://post-engineer.com/caracter-samples/file-3.png';
+    const result = await resolvePersonaAvatar(supabase as never, 'u', 'p', value, {
+      fetchImpl: vi.fn() as never,
+    });
+    expect(result).toEqual({ ok: true, photoPath: null, avatarUrl: value });
   });
 
   it('returns upload failure when storage rejects the bytes', async () => {

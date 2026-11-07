@@ -74,8 +74,13 @@ describe('ensureEngineImageUrl', () => {
       fetchImpl: fetchImpl as never,
     });
 
-    // The asset is read from our own origin, never from the user.
-    expect(fetchImpl).toHaveBeenCalledWith('http://localhost:3434/caracter-samples/file-1.png');
+    // The asset is read from our own origin, never from the user, with
+    // redirects refused and a timeout so a hop cannot leave the origin.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [source, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(source).toBe('http://localhost:3434/caracter-samples/file-1.png');
+    expect(init.redirect).toBe('error');
+    expect(init.signal).toBeInstanceOf(AbortSignal);
     expect(upload).toHaveBeenCalledTimes(1);
     expect(storage.from).toHaveBeenCalledWith('personas');
     const [objectPath, , options] = upload.mock.calls[0] as [string, ArrayBuffer, { contentType: string }];
@@ -113,6 +118,52 @@ describe('ensureEngineImageUrl', () => {
         fetchImpl: fetchImpl as never,
       }),
     ).rejects.toThrow(/bucket full/);
+  });
+
+  // Issue #448: a stored avatar that only LOOKS like a site path must never
+  // reach fetch — '//host' and '/\\host' are authority-relative and change
+  // the host when resolved against the origin.
+  it.each([
+    '//169.254.169.254/latest/meta-data/',
+    '//10.0.0.5/admin',
+    '/\\169.254.169.254/x',
+    '/%2F%2Fhost/x',
+    '/caracter-samples/%2F%2Fhost/x',
+    '/caracter-samples/../x',
+    '/api/persona/images',
+  ])('refuses %s before any fetch or upload', async (value) => {
+    const { storage, upload } = fakeStorage();
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(ORIGINAL_BLOB, { status: 200 }));
+
+    await expect(
+      ensureEngineImageUrl(value, {
+        supabase: { storage } as never,
+        userId: 'u-1',
+        origin: 'https://post-engineer.com',
+        fetchImpl: fetchImpl as never,
+      }),
+    ).rejects.toThrow(/not usable by the engine/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it('does not re-host an asset whose fetch hits a redirect', async () => {
+    const { storage, upload } = fakeStorage();
+    // fetch with redirect:'error' rejects with a TypeError on any 3xx.
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.redirect === 'error') throw new TypeError('fetch failed: redirect');
+      return new Response(ORIGINAL_BLOB, { status: 200 });
+    });
+
+    await expect(
+      ensureEngineImageUrl('/caracter-samples/file-1.png', {
+        supabase: { storage } as never,
+        userId: 'u-1',
+        origin: 'https://post-engineer.com',
+        fetchImpl: fetchImpl as never,
+      }),
+    ).rejects.toThrow(/redirect/);
+    expect(upload).not.toHaveBeenCalled();
   });
 
   it('returns undefined for an absent url without touching storage', async () => {
@@ -162,6 +213,14 @@ describe('isEngineUsablePersonaImageUrl', () => {
     'https://192.168.1.10/avatar.png',
     'http://169.254.169.254/latest/meta-data',
     'http://[::1]/avatar.png',
+    // Authority-relative and traversing site paths change the host or
+    // leave the asset directory once resolved against the origin (#448).
+    '//169.254.169.254/latest/meta-data/',
+    '//10.0.0.5/admin',
+    '/\\169.254.169.254/x',
+    '/%2F%2Fhost/x',
+    '/caracter-samples/../x',
+    '/api/persona/images',
     // Plain garbage.
     'not-a-url',
     '',

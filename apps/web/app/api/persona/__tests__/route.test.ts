@@ -64,6 +64,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
 import { restorePinnedHttp, stubPinnedHttp } from '@/test/stub-pinned-http';
+import { REMOTE_FACE_ERROR } from '@/lib/persona-remote-face';
 
 // The 400 log line pins the route string and the stable template: without
 // it, blanking either string in the response call changes nothing any test
@@ -861,6 +862,27 @@ describe('POST /api/persona — face quality (no mix, no mode)', () => {
     vi.unstubAllGlobals();
   });
 
+  // Issue #448: an authority-relative avatarUrl would be resolved against
+  // the app origin at dispatch and fetched server-side; it is a 400 here.
+  it.each([
+    '//169.254.169.254/latest/meta-data/',
+    '/\\169.254.169.254/x',
+  ])('rejects the protocol-relative avatarUrl %s with a 400 and no insert', async (avatarUrl) => {
+    const { uploaded, inserted } = mockSupabase();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await POST(
+      formRequest({ name: 'Probe', avatarUrl, voiceId: 'chatterbox:kokoro_af_heart' }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe(REMOTE_FACE_ERROR);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(inserted).toHaveLength(0);
+    expect(uploaded).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
+
   it('404 remote avatar fails the save without inserting', async () => {
     const { uploaded, inserted } = mockSupabase();
     stubFetchResponse(new Response('gone', { status: 404, headers: { 'content-type': 'text/plain' } }));
@@ -1177,6 +1199,22 @@ describe('PATCH /api/persona', () => {
       photo_path: `${USER_ID}/persona-uuid-1/photo.png`,
       avatar_url: null,
     });
+    vi.unstubAllGlobals();
+  });
+
+  it('PATCH rejects a protocol-relative avatarUrl with a 400 and no update', async () => {
+    const { uploaded, updated } = mockSupabaseForPatch();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await PATCH(
+      patchRequest('persona-uuid-1', { avatarUrl: '//169.254.169.254/latest/meta-data/' }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe(REMOTE_FACE_ERROR);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(uploaded).toEqual([]);
+    expect(updated).toEqual([]);
     vi.unstubAllGlobals();
   });
 
