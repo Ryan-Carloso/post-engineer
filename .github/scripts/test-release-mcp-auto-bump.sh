@@ -133,7 +133,7 @@ mk_repo repoB
 echo "--- B: run tail with no remote branch ---"
 run_tail "$SIM/repoB"
 check "B exits 0" test "$(cat "$SIM/last.code")" = "0"
-check "B branch exists on remote" git ls-remote --heads origin refs/heads/chore/mcp-auto-bump-1.42.0 | grep -q .
+check "B branch exists on remote" test -n "$(git ls-remote --heads origin refs/heads/chore/mcp-auto-bump-1.42.0)"
 check "B commit message" test "$(git log -1 --format=%s)" = "chore(mcp): auto-bump to 1.42.0 for release"
 check "B package.json is 1.42.0" test "$(node -p "require('./apps/mcp/package.json').version")" = "1.42.0"
 
