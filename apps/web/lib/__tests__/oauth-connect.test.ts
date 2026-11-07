@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { makeOAuthStateStore } from '@/test/oauth-state-store';
 
 vi.mock('@/lib/logger', () => ({
   logger: {
@@ -10,66 +11,9 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-interface OAuthStateRow {
-  state_hash: string;
-  user_id: string;
-  provider: string;
-  nonce: string;
-  redirect_uri: string;
-  expires_at: string;
-}
-
-// Minimal supabase fake for the oauth_states table.
-// Implements the chain used by the atomic consume:
-//   delete().eq('state_hash', h).gt('expires_at', now).select(...)
-// and the best-effort cleanup:
-//   delete().eq('state_hash', h).lte('expires_at', now)
-function makeStore(rows: Map<string, OAuthStateRow> = new Map()) {
-  return {
-    rows,
-    from() {
-      return {
-        insert: async (row: Record<string, string>) => {
-          rows.set(row.state_hash, row as unknown as OAuthStateRow);
-          return { error: null };
-        },
-        // diagnostic read used on consume miss: was the state expired or unknown?
-        select: (_cols: string) => ({
-          eq: (_col: string, val: string) => ({
-            maybeSingle: async () => {
-              const row = rows.get(val);
-              return {
-                data: row ? { expires_at: row.expires_at } : null,
-                error: null,
-              };
-            },
-          }),
-        }),
-        delete: () => ({
-          eq: (_col: string, val: string) => ({
-            // DELETE ... WHERE expires_at > now RETURNING ... (atomic)
-            gt: (_c2: string, nowIso: string) => ({
-              select: async (_cols: string) => {
-                const row = rows.get(val);
-                if (row && row.expires_at > nowIso) {
-                  rows.delete(val);
-                  return { data: [row], error: null };
-                }
-                return { data: [], error: null };
-              },
-            }),
-            // best-effort cleanup of expired rows
-            lte: (_c2: string, nowIso: string) => {
-              const row = rows.get(val);
-              if (row && row.expires_at <= nowIso) rows.delete(val);
-              return Promise.resolve({ error: null });
-            },
-          }),
-        }),
-      };
-    },
-  };
-}
+// Shared in-memory oauth_states fake: applies every filter of the real
+// query chains, including the user_id ownership predicate.
+const makeStore = makeOAuthStateStore;
 
 const REDIRECT = 'https://post-engineer.com/api/instagram-auth/callback';
 
@@ -97,7 +41,7 @@ describe('oauth-connect', () => {
       nonce: 'nonce-1',
       redirectUri: REDIRECT,
     });
-    const consumed = await consumeOAuthState(store as never, 'raw-state-abc');
+    const consumed = await consumeOAuthState(store as never, 'raw-state-abc', 'user-1');
     expect(consumed).toMatchObject({
       userId: 'user-1',
       provider: 'instagram',
@@ -105,7 +49,7 @@ describe('oauth-connect', () => {
       redirectUri: REDIRECT,
     });
     // single-use: second read returns null (row was deleted on consumption)
-    expect(await consumeOAuthState(store as never, 'raw-state-abc')).toBeNull();
+    expect(await consumeOAuthState(store as never, 'raw-state-abc', 'user-1')).toBeNull();
     expect(store.rows.has(hashOAuthState('raw-state-abc'))).toBe(false);
   });
 
@@ -120,9 +64,34 @@ describe('oauth-connect', () => {
       redirectUri: 'https://post-engineer.com/api/google-oauth/callback',
       expiresInSeconds: -10,
     });
-    expect(await consumeOAuthState(store as never, 'raw-state-exp')).toBeNull();
+    expect(await consumeOAuthState(store as never, 'raw-state-exp', 'user-1')).toBeNull();
     // expired is not returned, but the row is cleaned (best-effort)
     expect(store.rows.has(hashOAuthState('raw-state-exp'))).toBe(false);
+  });
+
+  it('consumeOAuthState leaves a state owned by another user in place', async () => {
+    const { storeOAuthState, consumeOAuthState, hashOAuthState } = await import('@/lib/oauth-connect');
+    const store = makeStore();
+    await storeOAuthState(store as never, {
+      state: 'raw-state-owned',
+      userId: 'owner-user',
+      provider: 'instagram',
+      nonce: 'nonce-o',
+      redirectUri: REDIRECT,
+    });
+    const { logger } = await import('@/lib/logger');
+    vi.mocked(logger.warn).mockClear();
+    expect(await consumeOAuthState(store as never, 'raw-state-owned', 'other-user')).toBeNull();
+    // a mismatching caller cannot burn the owner's single-use state
+    expect(store.rows.has(hashOAuthState('raw-state-owned'))).toBe(true);
+    // logged distinctly from expired/unknown, by state reference only
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/another user/i),
+      { stateRef: hashOAuthState('raw-state-owned').slice(0, 12) }
+    );
+    expect(await consumeOAuthState(store as never, 'raw-state-owned', 'owner-user')).toMatchObject({
+      userId: 'owner-user',
+    });
   });
 
   it('consumeOAuthState: atomic DELETE first, diagnostic SELECT only on miss', async () => {
@@ -134,13 +103,18 @@ describe('oauth-connect', () => {
           calls.push('delete');
           return {
             eq: (_col: string, _val: string) => ({
-              // atomic consumption: DELETE ... WHERE expires_at > now RETURNING ...
-              gt: (_c2: string, _nowIso: string) => ({
-                select: async (_cols: string) => {
-                  calls.push('select-after-delete');
-                  return { data: [], error: null };
-                },
-              }),
+              // atomic consumption: DELETE ... WHERE user_id = owner AND expires_at > now RETURNING ...
+              eq: (col: string, val: string) => {
+                calls.push(`owner-filter:${col}=${val}`);
+                return {
+                  gt: (_c2: string, _nowIso: string) => ({
+                    select: async (_cols: string) => {
+                      calls.push('select-after-delete');
+                      return { data: [], error: null };
+                    },
+                  }),
+                };
+              },
               // best-effort cleanup of expired rows
               lte: (_c2: string, _nowIso: string) => {
                 calls.push('cleanup-delete');
@@ -160,11 +134,16 @@ describe('oauth-connect', () => {
         },
       })),
     };
-    await consumeOAuthState(fake as never, 'whatever');
-    // the consumption itself never reads first: single conditional DELETE;
-    // on a miss exactly one diagnostic SELECT follows, and with no expired
-    // row there is no cleanup DELETE.
-    expect(calls).toEqual(['delete', 'select-after-delete', 'diagnostic-select']);
+    await consumeOAuthState(fake as never, 'whatever', 'owner-1');
+    // the consumption itself never reads first: single conditional DELETE
+    // whose predicate carries the owner; on a miss exactly one diagnostic
+    // SELECT follows, and with no expired row there is no cleanup DELETE.
+    expect(calls).toEqual([
+      'delete',
+      'owner-filter:user_id=owner-1',
+      'select-after-delete',
+      'diagnostic-select',
+    ]);
     expect(fake.from).toHaveBeenCalledWith('oauth_states');
   });
 
@@ -287,18 +266,61 @@ describe('resolveOAuthCallbackAuth', () => {
     }
   });
 
-  it('MCP flow: no cookie, consumes the stored state and returns the API key owner userId', async () => {
+  it('MCP flow: no cookie, owner session consumes the stored state and returns the owner userId', async () => {
     const { resolveOAuthCallbackAuth } = await import('@/lib/oauth-connect');
     const store = makeStore();
-    const { state } = await storedState(store);
+    const { state, hash } = await storedState(store);
     const request = await webRequest(state, null);
-    const result = await resolveOAuthCallbackAuth(request, state, null, () => store as never, 'instagram');
+    const result = await resolveOAuthCallbackAuth(request, state, 'api-key-owner', () => store as never, 'instagram');
     expect(result).toEqual({
       ok: true,
       userId: 'api-key-owner',
       viaMcp: true,
       redirectUri: REDIRECT,
     });
+    expect(store.rows.has(hash)).toBe(false);
+  });
+
+  it('MCP flow: no session returns 401 without touching the stored state', async () => {
+    const { resolveOAuthCallbackAuth } = await import('@/lib/oauth-connect');
+    const store = makeStore();
+    const { state, hash } = await storedState(store);
+    store.tables.length = 0;
+    const request = await webRequest(state, null);
+    const result = await resolveOAuthCallbackAuth(request, state, null, () => store as never, 'instagram');
+    expect(result).toEqual({
+      ok: false,
+      error: 'Authentication required. Please log in.',
+      status: 401,
+    });
+    // the owner can still finish the flow after signing in
+    expect(store.rows.has(hash)).toBe(true);
+    expect(store.tables).toEqual([]);
+  });
+
+  it('MCP flow: a session of another user is rejected (403) and the owner state survives', async () => {
+    const { resolveOAuthCallbackAuth } = await import('@/lib/oauth-connect');
+    const store = makeStore();
+    const { state, hash } = await storedState(store, { userId: 'attacker-user' });
+    const request = await webRequest(state, 'victim-cookie-not-the-state-nonce');
+    const result = await resolveOAuthCallbackAuth(
+      request,
+      state,
+      'victim-session-user',
+      () => store as never,
+      'instagram'
+    );
+    expect(result).toEqual({ ok: false, error: 'Invalid or expired OAuth state.', status: 403 });
+    expect(store.rows.has(hash)).toBe(true);
+    // the real owner, signed in, still completes the flow
+    const ownerResult = await resolveOAuthCallbackAuth(
+      await webRequest(state, null),
+      state,
+      'attacker-user',
+      () => store as never,
+      'instagram'
+    );
+    expect(ownerResult).toMatchObject({ ok: true, userId: 'attacker-user' });
   });
 
   it('MCP flow: state from another provider is rejected (403) and consumed', async () => {
@@ -306,7 +328,7 @@ describe('resolveOAuthCallbackAuth', () => {
     const store = makeStore();
     const { state, hash } = await storedState(store, { provider: 'instagram' });
     const request = await webRequest(state, null);
-    const result = await resolveOAuthCallbackAuth(request, state, null, () => store as never, 'youtube');
+    const result = await resolveOAuthCallbackAuth(request, state, 'api-key-owner', () => store as never, 'youtube');
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe(403);
     // single-use: the state was consumed even though it was rejected
@@ -324,11 +346,11 @@ describe('resolveOAuthCallbackAuth', () => {
       state,
       userId: 'api-key-owner',
       provider: 'instagram',
-      nonce: 'nonce-adulterado',
+      nonce: 'tampered-nonce',
       redirectUri: REDIRECT,
     });
     const request = await webRequest(state, null);
-    const result = await resolveOAuthCallbackAuth(request, state, null, () => store as never, 'instagram');
+    const result = await resolveOAuthCallbackAuth(request, state, 'api-key-owner', () => store as never, 'instagram');
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.status).toBe(403);
@@ -341,7 +363,7 @@ describe('resolveOAuthCallbackAuth', () => {
     const { createOAuthState } = await import('@/lib/oauth-utils');
     const { state } = createOAuthState({ provider: 'instagram', redirectUri: REDIRECT });
     const request = await webRequest(state, null);
-    const result = await resolveOAuthCallbackAuth(request, state, null, () => makeStore() as never, 'instagram');
+    const result = await resolveOAuthCallbackAuth(request, state, 'session-user', () => makeStore() as never, 'instagram');
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe(403);
   });
@@ -474,7 +496,7 @@ describe('oauth-connect logging', () => {
       redirectUri: REDIRECT,
     });
     vi.clearAllMocks();
-    await consumeOAuthState(store as never, 'raw-state-log-2');
+    await consumeOAuthState(store as never, 'raw-state-log-2', 'user-2');
     expect(logger.info).toHaveBeenCalledWith(
       expect.stringContaining('consumed'),
       expect.objectContaining({ provider: 'youtube', userId: 'user-2' })
@@ -496,7 +518,7 @@ describe('oauth-connect logging', () => {
       expiresInSeconds: -10,
     });
     vi.clearAllMocks();
-    expect(await consumeOAuthState(store as never, 'raw-state-exp-log')).toBeNull();
+    expect(await consumeOAuthState(store as never, 'raw-state-exp-log', 'user-3')).toBeNull();
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringMatching(/expired/i),
       expect.objectContaining({ stateRef: oauthStateRef('raw-state-exp-log') })
@@ -506,7 +528,7 @@ describe('oauth-connect logging', () => {
   it('consumeOAuthState logs unknown states distinctly', async () => {
     const { consumeOAuthState, oauthStateRef } = await import('@/lib/oauth-connect');
     const { logger } = await import('@/lib/logger');
-    expect(await consumeOAuthState(makeStore() as never, 'never-stored-state')).toBeNull();
+    expect(await consumeOAuthState(makeStore() as never, 'never-stored-state', 'user-1')).toBeNull();
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringMatching(/unknown/i),
       expect.objectContaining({ stateRef: oauthStateRef('never-stored-state') })
@@ -522,10 +544,12 @@ describe('oauth-connect logging', () => {
       from: () => ({
         delete: () => ({
           eq: () => ({
-            gt: () => ({
-              select: async () => ({
-                data: null,
-                error: { code: 'PGRST301', message: 'jwt expired' },
+            eq: () => ({
+              gt: () => ({
+                select: async () => ({
+                  data: null,
+                  error: { code: 'PGRST301', message: 'jwt expired' },
+                }),
               }),
             }),
           }),
@@ -537,7 +561,7 @@ describe('oauth-connect logging', () => {
         }),
       }),
     };
-    expect(await consumeOAuthState(failingStore as never, 'db-error-state')).toBeNull();
+    expect(await consumeOAuthState(failingStore as never, 'db-error-state', 'user-1')).toBeNull();
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringMatching(/state consumption failed/i),
       expect.any(Error),
@@ -593,7 +617,7 @@ describe('oauth-connect logging', () => {
     const result = await resolveOAuthCallbackAuth(
       request,
       state,
-      null,
+      'api-key-owner',
       () => store as never,
       'instagram'
     );

@@ -12,9 +12,10 @@ import {
 // oauth-connect — helpers for the "connect via MCP/API key" flow.
 //
 // The traditional /start requires a browser session (httpOnly cookie for the nonce).
-// When the flow is initiated via API key (MCP server), there is no browser: the
-// state is stored server-side in the oauth_states table and the callback
-// consumes it as a fallback when the cookie does not exist.
+// When the flow is initiated via API key (MCP server), the start has no
+// browser: the state is stored server-side in the oauth_states table (owned by
+// the caller) and the callback consumes it as a fallback when the cookie does
+// not exist — only for a browser signed in as that same owner.
 //---------------
 
 export const OAUTH_CONNECT_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'threads'] as const;
@@ -85,13 +86,16 @@ export async function storeOAuthState(
   });
 }
 
-// Atomic single-use: a single DELETE with an expiry condition.
-// The row is only returned (and removed) if it exists AND is not expired —
-// two concurrent callbacks can never consume the same state,
-// because Postgres executes the DELETE as an atomic operation.
+// Atomic single-use: a single DELETE with an owner and an expiry condition.
+// The row is only returned (and removed) if it exists, belongs to ownerUserId
+// AND is not expired — two concurrent callbacks can never consume the same
+// state, because Postgres executes the DELETE as an atomic operation.
+// The owner is part of the predicate (not a check after the read), so a
+// browser signed in as another user can neither use nor burn the state.
 export async function consumeOAuthState(
   supabase: SupabaseClient,
-  state: string
+  state: string,
+  ownerUserId: string
 ): Promise<StoredOAuthState | null> {
   const stateHash = hashOAuthState(state);
   const stateRef = stateHash.slice(0, 12);
@@ -100,6 +104,7 @@ export async function consumeOAuthState(
     .from('oauth_states')
     .delete()
     .eq('state_hash', stateHash)
+    .eq('user_id', ownerUserId)
     .gt('expires_at', nowIso)
     .select('state_hash,user_id,provider,nonce,redirect_uri');
   if (!error && data && data.length > 0) {
@@ -126,19 +131,28 @@ export async function consumeOAuthState(
     );
     return null;
   }
-  // Miss path only: distinguish "the state existed but expired" from
-  // "unknown or already-consumed state" — the single most useful answer
-  // when a user authorizes and no account appears.
+  // Miss path only: distinguish "the state belongs to another user",
+  // "the state existed but expired" and "unknown or already-consumed state"
+  // — the single most useful answer when a user authorizes and no account appears.
   let expiredAt: string | undefined;
+  let ownedByAnotherUser = false;
   try {
     const { data: existing } = await supabase
       .from('oauth_states')
-      .select('expires_at')
+      .select('expires_at,user_id')
       .eq('state_hash', stateHash)
       .maybeSingle();
-    expiredAt = existing?.expires_at;
+    if (existing !== null && existing !== undefined) {
+      ownedByAnotherUser = existing.user_id !== ownerUserId;
+      expiredAt = existing.expires_at;
+    }
   } catch {
     expiredAt = undefined;
+  }
+  if (ownedByAnotherUser) {
+    // Left in place for its owner; the user ids stay out of this line.
+    logger.warn('[oauth-connect] state belongs to another user', { stateRef });
+    return null;
   }
   if (expiredAt) {
     logger.warn('[oauth-connect] state expired', { stateRef, expiredAt });
@@ -230,6 +244,11 @@ export type ResolveOAuthCallbackAuthResult =
 // Resolves who is completing the OAuth in the callback.
 // 1st: traditional web flow (httpOnly nonce cookie + session).
 // 2nd: fallback for the flow initiated via API key (state stored in oauth_states).
+// Both flows require a signed-in session and always return the session user:
+// a connect-url state is only consumed by the user who created it, so a
+// browser signed in as someone else (or not signed in) can never attach its
+// provider tokens to the state owner's account. viaMcp only tells which flow
+// ran (for logs); persistence always goes through the session client.
 // The store is only built (getStore) if the fallback is needed.
 // expectedProvider binds the callback to the provider: an Instagram state
 // is never accepted in the YouTube callback (and vice-versa), in both flows.
@@ -274,6 +293,16 @@ export async function resolveOAuthCallbackAuth(
   }
 
   // MCP fallback: the state was created via API key and stored server-side.
+  // The browser completing the consent must be signed in as the state owner.
+  // Checked before the store is touched, so a session-less browser cannot
+  // burn the owner's single-use state.
+  if (sessionUserId === null) {
+    logger.warn('[oauth-connect] MCP fallback without session', {
+      provider: expectedProvider,
+      stateRef,
+    });
+    return { ok: false, error: 'Authentication required. Please log in.', status: 401 };
+  }
   // Fail closed: any store read error becomes "invalid state"
   // instead of crashing the callback — the fallback must never break the web flow.
   logger.debug('[oauth-connect] trying MCP fallback', {
@@ -283,7 +312,8 @@ export async function resolveOAuthCallbackAuth(
   let stored: StoredOAuthState | null = null;
   if (rawState) {
     try {
-      stored = await consumeOAuthState(getStore(), rawState);
+      // Consumed only when owned by the session user (predicate in the DELETE).
+      stored = await consumeOAuthState(getStore(), rawState, sessionUserId);
     } catch (err) {
       // A thrown store failure (e.g. network) must be visible in the logs:
       // otherwise a failed authorization looks identical to an invalid state.
@@ -315,8 +345,8 @@ export async function resolveOAuthCallbackAuth(
   }
   logger.info('[oauth-connect] MCP flow auth ok', {
     provider: expectedProvider,
-    userId: stored.userId,
+    userId: sessionUserId,
     stateRef,
   });
-  return { ok: true, userId: stored.userId, viaMcp: true, redirectUri: stored.redirectUri };
+  return { ok: true, userId: sessionUserId, viaMcp: true, redirectUri: stored.redirectUri };
 }

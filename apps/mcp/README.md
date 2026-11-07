@@ -146,7 +146,7 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `list_social_accounts`: list connected social accounts with the account IDs needed for scheduling.
 - `get_persona_publishing_accounts`: list a persona's default publishing accounts per provider. `generate_persona_video` falls back to these when no account IDs are passed; explicit IDs always win.
 - `set_persona_publishing_accounts`: replace a persona's default publishing accounts per provider (account IDs from `list_social_accounts`; providers mapped to `[]` keep no defaults).
-- `connect_account`: connect a social account. For youtube/instagram/linkedin/threads: returns an authorization URL — the user must open it in a browser and authorize, then the account connects automatically (verify with `list_social_accounts`). For bluesky: connects directly with handle + app password.
+- `connect_account`: connect a social account. For youtube/instagram/linkedin/threads: returns an authorization URL — the user must open it in a browser where they are signed in to Post Engineer with the same account, and authorize; the account then connects automatically (verify with `list_social_accounts`). A browser that is not signed in, or signed in as another user, is rejected. For bluesky: connects directly with handle + app password.
 - `list_schedules`: list automation schedules.
 - `list_posts`: list upcoming (scheduled) and past (published/failed) posts across all connected accounts.
 - `cancel_schedule`: cancel a schedule by its ID.

@@ -419,7 +419,7 @@ export async function handleConnectAccount(
         {
           type: 'text',
           text:
-            `To connect your ${args.provider} account, open this URL in your browser and authorize Post Engineer:\n\n` +
+            `To connect your ${args.provider} account, open this URL in a browser where you are signed in to Post Engineer with the same account as this API key, and authorize Post Engineer:\n\n` +
             `${result.auth_url}\n\n` +
             `Once you authorize, the account is connected automatically. Verify with list_social_accounts.`,
         },
