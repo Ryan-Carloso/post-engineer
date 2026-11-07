@@ -1,38 +1,55 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { usePersonasQuery, useSocialAccountsQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { AlertIcon, ChartIcon, SpinnerIcon } from '@/lib/ui';
 import { cn } from '@/lib/utils';
-import { ProviderIcon } from '@/components/provider-icon';
 import { MetricsBarChart } from '@/components/ui/metrics-bar-chart';
+import { MetricsRow } from './metrics-row';
 import { PROVIDER_LABELS, accountOption } from '@/lib/account-options';
 import { SOCIAL_PROVIDERS, isSocialProvider } from '@/lib/providers/registry';
-import { METRICS_NONE, METRICS_ROW_LIMIT, type MetricsQuery, type MetricsRowView } from '@/lib/metrics/metrics-query';
+import {
+  METRICS_NONE,
+  METRICS_ROW_LIMIT,
+  METRICS_WINDOWS,
+  type MetricsQuery,
+  type MetricsRowView,
+} from '@/lib/metrics/metrics-query';
 import {
   GROUP_KEYS,
   METRIC_KEYS,
+  PERCENT_METRICS,
   distinctAngles,
   groupMetrics,
   isGroupKey,
+  roundAverage,
   useMetricsQuery,
   type GroupKey,
   type MetricKey,
 } from '@/lib/metrics/metrics-dashboard';
 
 //---------------
-// MetricsPage — per-video performance at the same age (24h or 7d after
-// publishing), filtered by persona, account, network and script angle and
+// MetricsPage — per-video performance at the same age (24h, 7d or 28d
+// after publishing), filtered by persona, account, network and script angle and
 // compared as averages per group.
 //---------------
 
 const METRIC_LABEL_KEYS: Record<MetricKey, TranslationKey> = {
   views: 'metrics.metricViews',
+  engagedViews: 'metrics.metricEngagedViews',
+  stayedToWatchPct: 'metrics.metricStayedToWatch',
   likes: 'metrics.metricLikes',
   comments: 'metrics.metricComments',
   saves: 'metrics.metricSaves',
+};
+
+const WINDOW_LABEL_KEYS: Record<MetricsQuery['window'], TranslationKey> = {
+  '24h': 'metrics.window24h',
+  '7d': 'metrics.window7d',
+  '28d': 'metrics.window28d',
 };
 
 const GROUP_LABEL_KEYS: Record<GroupKey, TranslationKey> = {
@@ -99,8 +116,16 @@ export default function MetricsPage(): React.ReactElement {
   const metricLabel = t(METRIC_LABEL_KEYS[metric]);
   const groupLabel = t(GROUP_LABEL_KEYS[group]);
   const formatNumber = (value: number): string => value.toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US');
+  const formatMetric = (value: number, key: MetricKey): string =>
+    PERCENT_METRICS.has(key) ? `${formatNumber(value)}%` : formatNumber(value);
+  const formatSelected = (value: number): string => formatMetric(value, metric);
   const reported = rows.flatMap((row) => (row[metric] === null ? [] : [row[metric]]));
-  const overallAverage = reported.length === 0 ? null : Math.round(reported.reduce((sum, value) => sum + value, 0) / reported.length);
+  const overallAverage = reported.length === 0
+    ? null
+    : roundAverage(reported.reduce((sum, value) => sum + value, 0) / reported.length, metric);
+  // Tokens granted before yt-analytics.readonly: one prompt for the page,
+  // never zeros in the rows.
+  const needsReconnect = rows.some((row) => row.analyticsStatus === 'scope_missing');
 
   return (
     <div className="mx-auto flex w-full max-w-375 flex-col gap-5 lg:gap-6">
@@ -117,10 +142,7 @@ export default function MetricsPage(): React.ReactElement {
       <section className={cn(CARD_CLASS, 'flex flex-col gap-4 p-4 lg:p-5')}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Segmented
-            options={(['24h', '7d'] as const).map((value) => ({
-              value,
-              label: t(value === '24h' ? 'metrics.window24h' : 'metrics.window7d'),
-            }))}
+            options={METRICS_WINDOWS.map((value) => ({ value, label: t(WINDOW_LABEL_KEYS[value]) }))}
             value={query.window}
             onChange={(value) => update({ window: value })}
           />
@@ -162,17 +184,29 @@ export default function MetricsPage(): React.ReactElement {
         </div>
       </section>
 
+      {needsReconnect && (
+        <section role="status" className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-amber-900">{t('metrics.reconnectTitle')}</p>
+            <p className="mt-0.5 text-xs text-amber-800">{t('metrics.reconnectBody')}</p>
+          </div>
+          <Link href="/accounts" className="shrink-0 rounded-xl bg-white px-4 py-2 text-center text-sm font-semibold text-amber-900 shadow-sm hover:bg-amber-100">
+            {t('metrics.reconnectAction')}
+          </Link>
+        </section>
+      )}
+
       {rows.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <StatTile label={t('metrics.statVideos')} value={formatNumber(rows.length)} />
           <StatTile
             label={t('metrics.statAverage', { metric: metricLabel.toLowerCase() })}
-            value={overallAverage === null ? t('metrics.notReported') : formatNumber(overallAverage)}
+            value={overallAverage === null ? t('metrics.notReported') : formatSelected(overallAverage)}
           />
           <StatTile
             label={t('metrics.statBest', { group: groupLabel.toLowerCase() })}
             value={groups.length === 0 ? t('metrics.notReported') : labelFor(groups[0].key)}
-            hint={groups.length === 0 ? undefined : formatNumber(groups[0].average)}
+            hint={groups.length === 0 ? undefined : formatSelected(groups[0].average)}
           />
         </div>
       )}
@@ -207,7 +241,7 @@ export default function MetricsPage(): React.ReactElement {
         ) : rows.length === 0 ? (
           <StatePanel tone="empty" message={t(filtered ? 'metrics.emptyFiltered' : 'metrics.empty')} />
         ) : (
-          <MetricsBarChart data={chartData} metricLabel={metricLabel} formatValue={formatNumber} />
+          <MetricsBarChart data={chartData} metricLabel={metricLabel} formatValue={formatSelected} />
         )}
         {result !== undefined && result.success && result.truncated && (
           <p className="mt-3 text-xs text-[#718096]">{t('metrics.truncated', { limit: METRICS_ROW_LIMIT })}</p>
@@ -219,23 +253,15 @@ export default function MetricsPage(): React.ReactElement {
           <h2 className="mb-2 text-lg font-semibold tracking-[-0.02em] text-[#101728]">{t('metrics.tableTitle')}</h2>
           <ul className="divide-y divide-[#edf0f4]">
             {rows.map((row) => (
-              <li key={`${row.postId}:${row.provider}:${row.externalId}`} className="flex items-center gap-3 py-3">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#f7f8fa]">
-                  <ProviderIcon provider={row.provider} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-[#101728]">{row.scriptAngle ?? t('metrics.noAngle')}</p>
-                  <p className="truncate text-xs text-[#718096]">
-                    {personaLabel(row.personaId)} · {accountLabels.get(row.accountId) ?? row.accountId}
-                  </p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-base font-bold tabular-nums text-[#101728]">
-                    {row[metric] === null ? t('metrics.notReported') : formatNumber(row[metric])}
-                  </p>
-                  <p className="text-[11px] font-medium tracking-wide text-[#718096] uppercase">{metricLabel}</p>
-                </div>
-              </li>
+              <MetricsRow
+                key={`${row.postId}:${row.provider}:${row.externalId}`}
+                row={row}
+                metric={metric}
+                metricLabel={metricLabel}
+                title={row.scriptAngle ?? t('metrics.noAngle')}
+                subtitle={`${personaLabel(row.personaId)} · ${accountLabels.get(row.accountId) ?? row.accountId}`}
+                formatMetric={formatMetric}
+              />
             ))}
           </ul>
         </section>

@@ -51,6 +51,8 @@ function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
   return {
     postId: 'post-1', personaId: PERSONA_A, provider: 'youtube', accountId: 'UC1', externalId: 'v1',
     scriptAngle: 'myth', views: 100, likes: 10, comments: 3, saves: 1, collectedAt: '2026-10-21T12:00:00Z',
+    analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
+    averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
     ...overrides,
   };
 }
@@ -270,5 +272,69 @@ describe('MetricsPage', () => {
     const angleSelect = screen.getByLabelText(/metrics\.filterAngle/);
     expect(angleSelect).toHaveTextContent('myth');
     expect(angleSelect).toHaveValue('myth');
+  });
+
+  it('offers the 28d window and fetches it', async () => {
+    const fetchMock = stubMetricsFetch({ success: true, rows: [row()], truncated: false });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('metrics.window28d'));
+    await waitFor(() => expect(lastFetchUrl(fetchMock)).toBe('/api/metrics?window=28d'));
+  });
+
+  it('shows engaged views, the derived stayed-to-watch label and the provisional chip on YouTube rows', async () => {
+    stubMetricsFetch({
+      success: true,
+      rows: [row({
+        analyticsStatus: 'ok', analyticsViews: 1000, engagedViews: 641, stayedToWatchPct: 64.1,
+        contentType: 'SHORTS', provisional: true,
+      })],
+      truncated: false,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.engagedViewsValue {"count":"641"}')).toBeInTheDocument());
+    expect(screen.getByText('metrics.stayedToWatchDerived:')).toBeInTheDocument();
+    expect(screen.getByText('64.1%')).toBeInTheDocument();
+    expect(screen.getByText('metrics.provisional')).toHaveAttribute('title', 'metrics.provisionalHint');
+    expect(screen.queryByText('metrics.reconnectTitle')).toBeNull();
+  });
+
+  it('charts stayed-to-watch as a percentage with one decimal', async () => {
+    stubMetricsFetch({
+      success: true,
+      rows: [
+        row({ analyticsStatus: 'ok', stayedToWatchPct: 60.5 }),
+        row({ postId: 'post-2', analyticsStatus: 'ok', stayedToWatchPct: 70.2 }),
+      ],
+      truncated: false,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('metrics.metricStayedToWatch'));
+    // Overall average (60.5 + 70.2) / 2 = 65.35 -> 65.4%, never rounded to a whole number.
+    expect(screen.getAllByText('65.4%').length).toBeGreaterThan(0);
+  });
+
+  it('shows one reconnect prompt and "—" instead of zeros for a token without the Analytics scope', async () => {
+    stubMetricsFetch({
+      success: true,
+      rows: [
+        row({ analyticsStatus: 'scope_missing' }),
+        row({ postId: 'post-2', analyticsStatus: 'scope_missing' }),
+      ],
+      truncated: false,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.reconnectTitle')).toBeInTheDocument());
+    expect(screen.getAllByText('metrics.reconnectTitle')).toHaveLength(1);
+    expect(screen.getByRole('link', { name: 'metrics.reconnectAction' })).toHaveAttribute('href', '/accounts');
+    expect(screen.getAllByText('metrics.reconnectNeeded')).toHaveLength(2);
+    expect(screen.queryByText('0%')).toBeNull();
+  });
+
+  it('marks non-measured analytics as unavailable', async () => {
+    stubMetricsFetch({ success: true, rows: [row({ analyticsStatus: 'not_owned' })], truncated: false });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.retentionUnavailable')).toBeInTheDocument());
   });
 });

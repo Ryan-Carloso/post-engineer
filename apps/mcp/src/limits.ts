@@ -88,5 +88,5 @@ export const VIDEO_LAYOUTS = ['standard', 'react'] as const;
  */
 export const METRICS_FILTER_MAX_LENGTH = 200;
 export const METRICS_NONE = '^@none';
-export const METRICS_WINDOWS = ['24h', '7d'] as const;
+export const METRICS_WINDOWS = ['24h', '7d', '28d'] as const;
 export const METRICS_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads'] as const;

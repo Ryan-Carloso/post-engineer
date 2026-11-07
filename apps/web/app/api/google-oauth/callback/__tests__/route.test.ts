@@ -26,6 +26,9 @@ vi.mock('@/lib/account-profile-telemetry', () => ({
   reportProfileFetched: vi.fn(),
   reportProfileFetchFailed: vi.fn(),
 }));
+vi.mock('@/lib/metrics/reset-retention', () => ({
+  resetYouTubeRetentionWindows: vi.fn(),
+}));
 vi.mock('@/lib/logger', () => ({
   logger: {
     info: vi.fn(),
@@ -55,6 +58,7 @@ import { upsertSocialAccount } from '@/lib/social-accounts';
 import { createGoogleOAuth2Client } from '@/lib/youtube';
 import { logger } from '@/lib/logger';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
+import { resetYouTubeRetentionWindows } from '@/lib/metrics/reset-retention';
 
 const user = { id: 'user-1' };
 
@@ -176,6 +180,8 @@ describe('/api/google-oauth/callback', () => {
     const res = await GET(makeRequest('?code=c&state=s'));
     expect(await res.text()).toBe('popup');
     expect(upsertSocialAccount).toHaveBeenCalledTimes(1);
+    // A reconnect must reopen the retention windows the old token closed.
+    expect(resetYouTubeRetentionWindows).toHaveBeenCalledWith('user-1', 'chan-1');
     expect(oauthPopupResponse).toHaveBeenCalledWith(
       'youtube-oauth-success',
       expect.objectContaining({ account: expect.objectContaining({ channelId: 'chan-1' }) }),

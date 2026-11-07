@@ -41,6 +41,23 @@ describe('youtube generateGoogleAuthUrl', () => {
     );
   });
 
+  it('requests yt-analytics.readonly and keeps every upload/read scope', () => {
+    mockGenerateAuthUrl.mockClear();
+    generateGoogleAuthUrl(fakeAuth);
+    const options: unknown = mockGenerateAuthUrl.mock.calls[0]?.[0];
+    const scope = typeof options === 'object' && options !== null && 'scope' in options ? options.scope : undefined;
+    expect(scope).toEqual([
+      'openid',
+      'profile',
+      'email',
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/userinfo.profile',
+      'https://www.googleapis.com/auth/youtube.upload',
+      'https://www.googleapis.com/auth/youtube.readonly',
+      'https://www.googleapis.com/auth/yt-analytics.readonly',
+    ]);
+  });
+
   it('passes state through when provided', () => {
     generateGoogleAuthUrl(fakeAuth, 'my-state');
     expect(mockGenerateAuthUrl).toHaveBeenCalledWith(
