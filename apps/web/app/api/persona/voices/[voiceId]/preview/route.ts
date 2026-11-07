@@ -63,6 +63,19 @@ async function postHandler(request: Request, context: RouteContext): Promise<Nex
     if (upstream.status === 404) {
       return NextResponse.json({ success: false, error: 'Voice not found.' }, { status: 404 });
     }
+    if (upstream.status === 422) {
+      // Forward the engine's validation detail: a 422 is a malformed
+      // request, not a down service, so it must not become a generic 502.
+      // FastAPI's detail is a list of field errors; only a string detail
+      // is forwarded verbatim.
+      const data: unknown = await upstream.json().catch(() => null);
+      const detail =
+        typeof data === 'object' && data !== null && 'detail' in data ? data.detail : undefined;
+      return NextResponse.json(
+        { success: false, error: typeof detail === 'string' ? detail : 'Validation error.' },
+        { status: 422 },
+      );
+    }
     if (!upstream.ok) {
       return NextResponse.json({ success: false, error: 'Preview unavailable.' }, { status: 502 });
     }

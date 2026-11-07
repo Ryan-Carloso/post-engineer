@@ -70,7 +70,8 @@ export async function syncAccountProfile(
 ): Promise<SocialAccountRecord> {
   const source = PROFILE_SOURCES[record.provider];
   if (source === undefined) {
-    // Unconstrained provider column: unknown rows exist. The route's
+    // provider is check-constrained to SOCIAL_PROVIDERS (migration 037);
+    // rows outside the registry can only predate it. The route's
     // registry mapping drops them with its own log — the resync leaves
     // the record untouched instead of throwing past its own try/catch.
     return record;

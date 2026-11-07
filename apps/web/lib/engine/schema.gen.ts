@@ -1607,13 +1607,31 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description MP3 audio preview */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "audio/mpeg": string;
+                };
+            };
+            /** @description Invalid preview text (empty after trim or over 300 chars) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseResponse"];
+                };
+            };
+            /** @description Voice not found in the house catalog */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1623,6 +1641,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description TTS synthesis failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseResponse"];
                 };
             };
         };

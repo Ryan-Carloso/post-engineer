@@ -103,6 +103,35 @@ class HouseVoicePreviewRequest(BaseModel):
 @persona_router.post(
     "/personas/voices/{voice_id}/preview",
     summary="TTS preview for a house voice (audio/mpeg)",
+    # Plain Response (no media type): the handler always returns an
+    # explicit Response/JSONResponse, so this only stops FastAPI from
+    # auto-documenting a 200 application/json — the 200 content below
+    # is then exactly audio/mpeg.
+    response_class=Response,
+    responses={
+        200: {
+            "description": "MP3 audio preview",
+            "content": {"audio/mpeg": {"schema": {"type": "string", "format": "binary"}}},
+        },
+        400: {
+            "description": "Invalid preview text (empty after trim or over 300 chars)",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/BaseResponse"}}
+            },
+        },
+        404: {
+            "description": "Voice not found in the house catalog",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/BaseResponse"}}
+            },
+        },
+        502: {
+            "description": "TTS synthesis failed",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/BaseResponse"}}
+            },
+        },
+    },
 )
 def preview_house_voice_endpoint(
     request: Request,

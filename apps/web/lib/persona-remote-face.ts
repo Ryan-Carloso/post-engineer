@@ -105,9 +105,19 @@ function requestPinned(url: string, addresses: string[]): Promise<Response> {
     const req = transport.request(
       parsed,
       {
-        lookup(_hostname, _options, callback) {
-          const address = addresses[0];
-          callback(null, address, address.includes(':') ? 6 : 4);
+        // Node 20+ connects with autoSelectFamily, which calls lookup with
+        // { all: true } and expects an address array; the single-address
+        // form then fails every hostname URL with ERR_INVALID_IP_ADDRESS.
+        lookup(_hostname, options, callback) {
+          const pinned = addresses.map((address) => ({
+            address,
+            family: address.includes(':') ? 6 : 4,
+          }));
+          if (options.all === true) {
+            callback(null, pinned);
+            return;
+          }
+          callback(null, pinned[0].address, pinned[0].family);
         },
       },
       (incoming) => {
@@ -191,7 +201,11 @@ export async function downloadPublicImage(
         signal: AbortSignal.timeout(REMOTE_FACE_TIMEOUT_MS),
       })
       : await requestPinned(url, safety.addresses);
-  } catch {
+  } catch (error) {
+    // Hostname only: the full URL can carry signed-link tokens.
+    logger.error('[persona-remote-face] image request failed', error, {
+      host: new URL(url).hostname,
+    });
     return { error: REMOTE_FACE_ERROR };
   }
   if (!response.ok) {

@@ -45,6 +45,7 @@ import {
 } from './client.js';
 import { getErrorMessage, ApiError } from './errors.js';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
+import { CreatePersonaAvatarFields, refinePersonaAvatar, UpdatePersonaAvatarFields } from './persona-avatar.js';
 
 export type { McpToolResponse } from './tools-call.js';
 
@@ -63,14 +64,8 @@ const PersonaLibraryImageInputShape = z.object(LibraryImageFields);
 
 export const CreatePersonaShape = {
   name: z.string().min(1, 'Name is required').describe('Name of the persona'),
-  // REQUIRED: every persona has a face. A video without one is a per-video
-  // choice (generate_persona_video options.faceless), never a persona one.
-  avatarUrl: z
-    .string()
-    .url()
-    .describe(
-      'REQUIRED. Public URL to the persona avatar image (use list_faces for stock face URLs). Every persona has a face; "no face" is chosen per video with generate_persona_video options.faceless.',
-    ),
+  // Every persona has a face (avatarUrl or avatarPath); faceless is per video.
+  ...CreatePersonaAvatarFields,
   voiceId: personaVoiceField('voiceId is required').describe('id or label from list_voices. Never type a provider prefix.'),
   language: z
     .string()
@@ -92,7 +87,7 @@ export const CreatePersonaShape = {
   imagePrimaryIndex: z.number().int().min(0).max(MAX_LIBRARY_IMAGES - 1).optional().describe('Index into images[] marking the primary library image (no primary is set when omitted)'),
 };
 
-export const CreatePersonaSchema = z.object(CreatePersonaShape);
+export const CreatePersonaSchema = z.object(CreatePersonaShape).superRefine(refinePersonaAvatar(true));
 
 export const ListPersonasShape = {};
 
@@ -118,8 +113,7 @@ export const ListFacesSchema = z.object(ListFacesShape);
 export const UpdatePersonaShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to update'),
   name: z.string().min(1).optional().describe('New name for the persona'),
-  // No .nullable(): the API has no "clear avatar" sentinel — null would be silently ignored.
-  avatarUrl: z.string().url().optional().describe('New public avatar image URL'),
+  ...UpdatePersonaAvatarFields,
   voiceId: personaVoiceField().optional().describe('New voice id or label from list_voices. Never type a provider prefix.'),
   language: z
     .string()
@@ -133,7 +127,7 @@ export const UpdatePersonaShape = {
   niche: z.string().max(300).optional().describe('New content niche'),
 };
 
-export const UpdatePersonaSchema = z.object(UpdatePersonaShape);
+export const UpdatePersonaSchema = z.object(UpdatePersonaShape).superRefine(refinePersonaAvatar(false));
 
 export const ListSocialAccountsShape = {};
 

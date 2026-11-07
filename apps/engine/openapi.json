@@ -2114,11 +2114,34 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {}
+              "audio/mpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
               }
             },
-            "description": "Successful Response"
+            "description": "MP3 audio preview"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaseResponse"
+                }
+              }
+            },
+            "description": "Invalid preview text (empty after trim or over 300 chars)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaseResponse"
+                }
+              }
+            },
+            "description": "Voice not found in the house catalog"
           },
           "422": {
             "content": {
@@ -2129,6 +2152,16 @@
               }
             },
             "description": "Validation Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaseResponse"
+                }
+              }
+            },
+            "description": "TTS synthesis failed"
           }
         },
         "summary": "TTS preview for a house voice (audio/mpeg)",

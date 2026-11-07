@@ -13,8 +13,7 @@ CLONE_PREVIEW_TEXT_MAX_CHARS = 300
 # Stable client-facing message: it carries only the bound, never the
 # submitted text, so a rejection can never echo what was typed.
 PREVIEW_TEXT_INVALID_MESSAGE = (
-    "preview text must be 1 to "
-    f"{CLONE_PREVIEW_TEXT_MAX_CHARS} characters after trimming"
+    f"Preview text must be 1 to {CLONE_PREVIEW_TEXT_MAX_CHARS} characters after trimming."
 )
 
 
