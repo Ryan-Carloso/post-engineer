@@ -37,6 +37,8 @@ vi.mock('@/lib/instagram', () => ({
 import { GET } from '@/app/api/instagram-auth/callback/route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { hashOAuthState } from '@/lib/oauth-connect';
+import { makeOAuthStateStore, type FakeOAuthStateStore } from '@/test/oauth-state-store';
 import { decodeOAuthState, verifyOAuthNonce, oauthPopupResponse } from '@/lib/oauth-utils';
 import { upsertSocialAccount } from '@/lib/social-accounts';
 import { InstagramService } from '@/lib/instagram';
@@ -74,22 +76,36 @@ function makeRequest(query: string): NextRequest {
   return new NextRequest(`http://localhost/api/instagram-auth/callback${query}`);
 }
 
-// Fake service client for the MCP flow: oauth_states returns the row
-// stored in the atomic DELETE; the rest of the client is untouched because
-// upsertSocialAccount/touchSocialAccount are mocked.
-function oauthStateStoreMock(row: Record<string, string>): void {
-  vi.mocked(createSupabaseServiceClient).mockReturnValue({
-    from: vi.fn(() => ({
-      delete: () => ({
-        eq: () => ({
-          gt: () => ({
-            select: async () => ({ data: [row], error: null }),
-          }),
-          lte: () => Promise.resolve({ error: null }),
-        }),
-      }),
-    })),
-  } as never);
+// Connect-url (MCP) flow: the service client only serves oauth_states,
+// backed by the shared fake that applies every filter of the real chain.
+// The mocked decodeOAuthState (beforeEach) yields provider 'instagram', nonce 'n'.
+function connectUrlState(ownerId: string): { store: FakeOAuthStateStore; hash: string } {
+  const store = makeOAuthStateStore();
+  const hash = hashOAuthState('s');
+  store.rows.set(hash, {
+    state_hash: hash,
+    user_id: ownerId,
+    provider: 'instagram',
+    nonce: 'n',
+    redirect_uri: 'https://post-engineer.com/api/instagram-auth/callback',
+    expires_at: new Date(Date.now() + 600_000).toISOString(),
+  });
+  vi.mocked(createSupabaseServiceClient).mockReturnValue(store as never);
+  return { store, hash };
+}
+
+function sessionAs(userId: string | null): { auth: { getUser: ReturnType<typeof vi.fn> } } {
+  const client = {
+    auth: {
+      getUser: vi.fn().mockResolvedValue(
+        userId === null
+          ? { data: { user: null }, error: { message: 'no session' } }
+          : { data: { user: { id: userId } }, error: null },
+      ),
+    },
+  };
+  vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+  return client;
 }
 
 describe('/api/instagram-auth/callback', () => {
@@ -260,18 +276,10 @@ describe('/api/instagram-auth/callback', () => {
     );
   });
 
-  it('MCP flow: no session, consumes the state and persists with service client under the API key owner', async () => {
-    sessionMock(false);
+  it('MCP flow: the signed-in owner consumes the state and persists with the session client', async () => {
+    const sessionClient = sessionAs('api-key-owner');
     vi.mocked(verifyOAuthNonce).mockReturnValue(false);
-    // mocked decodeOAuthState (beforeEach) returns provider 'instagram', nonce 'n'
-    oauthStateStoreMock({
-      state_hash: 'hash-s',
-      user_id: 'api-key-owner',
-      provider: 'instagram',
-      nonce: 'n',
-      redirect_uri: 'https://post-engineer.com/api/instagram-auth/callback',
-      expires_at: new Date(Date.now() + 600_000).toISOString(),
-    });
+    const { store, hash } = connectUrlState('api-key-owner');
     exchangeCodeForLongLivedToken.mockResolvedValue({
       accessToken: 'at',
       expiresIn: 1000,
@@ -293,13 +301,42 @@ describe('/api/instagram-auth/callback', () => {
       'instagram-oauth-success',
       expect.objectContaining({ account: expect.objectContaining({ igUserId: 'ig-1' }) }),
     );
-    // account persists under the API key owner, not the session (which does not exist)
+    expect(store.rows.has(hash)).toBe(false);
+    // persisted under the signed-in owner through the RLS-bound session client
     expect(upsertSocialAccount).toHaveBeenCalledWith(
-      expect.anything(),
+      sessionClient,
       expect.objectContaining({ userId: 'api-key-owner', provider: 'instagram' }),
     );
-    // without a browser session, persistence uses the service client
-    expect(createSupabaseServiceClient).toHaveBeenCalled();
+    // the service role only ever touched oauth_states
+    expect(store.tables).toEqual(['oauth_states']);
+  });
+
+  it('MCP flow: another signed-in user cannot complete the owner connect URL', async () => {
+    sessionAs('victim-session-user');
+    vi.mocked(verifyOAuthNonce).mockReturnValue(false);
+    const { store, hash } = connectUrlState('attacker-user');
+    await GET(makeRequest('?code=c&state=s'));
+    expect(oauthPopupResponse).toHaveBeenCalledWith(
+      'instagram-oauth-error',
+      expect.objectContaining({ error: 'Invalid or expired OAuth state.' }),
+    );
+    expect(exchangeCodeForLongLivedToken).not.toHaveBeenCalled();
+    expect(upsertSocialAccount).not.toHaveBeenCalled();
+    expect(store.rows.has(hash)).toBe(true);
+  });
+
+  it('MCP flow: a browser without a session cannot complete the connect URL', async () => {
+    sessionAs(null);
+    vi.mocked(verifyOAuthNonce).mockReturnValue(false);
+    const { store, hash } = connectUrlState('api-key-owner');
+    await GET(makeRequest('?code=c&state=s'));
+    expect(oauthPopupResponse).toHaveBeenCalledWith(
+      'instagram-oauth-error',
+      expect.objectContaining({ error: 'Authentication required. Please log in.' }),
+    );
+    expect(exchangeCodeForLongLivedToken).not.toHaveBeenCalled();
+    expect(upsertSocialAccount).not.toHaveBeenCalled();
+    expect(store.rows.has(hash)).toBe(true);
   });
 });
 

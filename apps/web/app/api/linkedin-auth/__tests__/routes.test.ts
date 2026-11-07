@@ -40,6 +40,8 @@ import { GET as startGET } from '@/app/api/linkedin-auth/start/route';
 import { GET as callbackGET } from '@/app/api/linkedin-auth/callback/route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { hashOAuthState } from '@/lib/oauth-connect';
+import { makeOAuthStateStore, type FakeOAuthStateStore } from '@/test/oauth-state-store';
 import { verifyOAuthNonce } from '@/lib/oauth-utils';
 import {
   exchangeLinkedInCodeForToken,
@@ -54,7 +56,7 @@ function mockSupabase(overrides: { user?: { id: string } | null } = {}) {
   const client = {
     auth: {
       getUser: vi.fn(async () => ({
-        data: { user: overrides.user === null ? null : { id: USER_ID } },
+        data: { user: overrides.user === undefined ? { id: USER_ID } : overrides.user },
         error: null,
       })),
     },
@@ -166,47 +168,72 @@ describe('GET /api/linkedin-auth/callback', () => {
     expect(body.popup).toBe('linkedin-oauth-error');
   });
 
-  it('MCP flow: no session, consumes the state and persists with service client under the API key owner', async () => {
-    mockSupabase({ user: null });
-    vi.mocked(verifyOAuthNonce).mockReturnValue(false);
-    // mocked decodeOAuthState returns provider 'linkedin', nonce 'nonce-1'
-    const storedRow = {
-      state_hash: 'hash-state-xyz',
-      user_id: 'api-key-owner',
+  // Connect-url (MCP) flow: the service client only serves oauth_states,
+  // backed by the shared fake that applies every filter of the real chain.
+  // The mocked decodeOAuthState yields provider 'linkedin', nonce 'nonce-1'.
+  function connectUrlState(ownerId: string): { store: FakeOAuthStateStore; hash: string } {
+    const store = makeOAuthStateStore();
+    const hash = hashOAuthState('state-xyz');
+    store.rows.set(hash, {
+      state_hash: hash,
+      user_id: ownerId,
       provider: 'linkedin',
       nonce: 'nonce-1',
       redirect_uri: 'https://post-engineer.com/api/linkedin-auth/callback',
       expires_at: new Date(Date.now() + 600_000).toISOString(),
-    };
-    vi.mocked(createSupabaseServiceClient).mockReturnValue({
-      from: vi.fn(() => ({
-        delete: () => ({
-          eq: () => ({
-            gt: () => ({
-              select: async () => ({ data: [storedRow], error: null }),
-            }),
-            lte: () => Promise.resolve({ error: null }),
-          }),
-        }),
-      })),
-    } as never);
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(store as never);
+    return { store, hash };
+  }
+
+  const CONNECT_URL_CALLBACK = 'http://localhost/api/linkedin-auth/callback?code=code-1&state=state-xyz';
+
+  it('MCP flow: the signed-in owner consumes the state and persists with the session client', async () => {
+    const sessionClient = mockSupabase({ user: { id: 'api-key-owner' } });
+    vi.mocked(verifyOAuthNonce).mockReturnValue(false);
+    const { store, hash } = connectUrlState('api-key-owner');
     vi.mocked(exchangeLinkedInCodeForToken).mockResolvedValueOnce({ access_token: 'at-1', expires_in: 5_184_000 });
     vi.mocked(fetchLinkedInMemberProfile).mockResolvedValueOnce({ id: 'member-123', name: 'Ryan C', picture: 'https://media.licdn.com/p.jpg' });
     vi.mocked(fetchLinkedInAdminOrganizations).mockResolvedValueOnce([]);
     vi.mocked(upsertSocialAccount).mockResolvedValue({ id: 'row-1' } as never);
 
-    const url = 'http://localhost/api/linkedin-auth/callback?code=code-1&state=state-xyz';
-    const res = await callbackGET(new Request(url) as never);
+    const res = await callbackGET(new Request(CONNECT_URL_CALLBACK) as never);
     const body = (await res.json()) as { popup: string };
 
     expect(body.popup).toBe('linkedin-oauth-success');
-    // account persists under the API key owner, not the session (which does not exist)
+    expect(store.rows.has(hash)).toBe(false);
+    // persisted under the signed-in owner through the RLS-bound session client
+    expect(vi.mocked(upsertSocialAccount).mock.calls[0][0]).toBe(sessionClient);
     expect(vi.mocked(upsertSocialAccount).mock.calls[0][1]).toMatchObject({
       userId: 'api-key-owner',
       provider: 'linkedin',
       providerAccountId: 'member-123',
     });
-    // without a browser session, persistence uses the service client
-    expect(createSupabaseServiceClient).toHaveBeenCalled();
+    // the service role only ever touched oauth_states
+    expect(store.tables).toEqual(['oauth_states']);
+  });
+
+  it('MCP flow: another signed-in user cannot complete the owner connect URL', async () => {
+    mockSupabase({ user: { id: 'victim-session-user' } });
+    vi.mocked(verifyOAuthNonce).mockReturnValue(false);
+    const { store, hash } = connectUrlState('attacker-user');
+    const res = await callbackGET(new Request(CONNECT_URL_CALLBACK) as never);
+    const body = (await res.json()) as { popup: string; error?: string };
+    expect(body).toMatchObject({ popup: 'linkedin-oauth-error', error: 'Invalid or expired OAuth state.' });
+    expect(exchangeLinkedInCodeForToken).not.toHaveBeenCalled();
+    expect(upsertSocialAccount).not.toHaveBeenCalled();
+    expect(store.rows.has(hash)).toBe(true);
+  });
+
+  it('MCP flow: a browser without a session cannot complete the connect URL', async () => {
+    mockSupabase({ user: null });
+    vi.mocked(verifyOAuthNonce).mockReturnValue(false);
+    const { store, hash } = connectUrlState('api-key-owner');
+    const res = await callbackGET(new Request(CONNECT_URL_CALLBACK) as never);
+    const body = (await res.json()) as { popup: string; error?: string };
+    expect(body).toMatchObject({ popup: 'linkedin-oauth-error', error: 'Authentication required. Please log in.' });
+    expect(exchangeLinkedInCodeForToken).not.toHaveBeenCalled();
+    expect(upsertSocialAccount).not.toHaveBeenCalled();
+    expect(store.rows.has(hash)).toBe(true);
   });
 });

@@ -78,6 +78,8 @@ async function getHandler(request: NextRequest) {
     request,
     state,
     await getSessionUserId(),
+    // Service role only for the server-side oauth_states table; ownership is
+    // enforced by the user_id predicate on the consume (session user only).
     () => createSupabaseServiceClient(),
     'instagram'
   );
@@ -192,15 +194,13 @@ async function getHandler(request: NextRequest) {
   }
 
   // Step 7: persist in Supabase.
-  // MCP (no browser session): the session client would have no valid RLS,
-  // so it persists with service role — the owner is the userId resolved from the state.
-  // Web: persists with the session client (RLS as the user).
+  // Both flows resolve to the signed-in session user (the connect-url
+  // fallback only accepts the state owner), so persistence always runs
+  // with the session client (RLS as the user), never the service role.
   const tokenExpiresAt = new Date(Date.now() + token.expiresIn * 1000);
 
   try {
-    const supabase = callbackAuth.viaMcp
-      ? createSupabaseServiceClient()
-      : await createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
 
     await upsertSocialAccount(supabase, {
       userId,

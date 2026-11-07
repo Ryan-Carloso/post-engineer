@@ -46,6 +46,8 @@ async function getHandler(request: NextRequest) {
     request,
     state,
     await getSessionUserId(),
+    // Service role only for the server-side oauth_states table; ownership is
+    // enforced by the user_id predicate on the consume (session user only).
     () => createSupabaseServiceClient(),
     'threads'
   );
@@ -63,11 +65,10 @@ async function getHandler(request: NextRequest) {
     });
     const tokenExpiresAt = new Date(Date.now() + token.expires_in * 1000);
 
-    // MCP (no browser session): persists with service role, owner = userId
-    // resolved from the state. Web: session client (RLS as the user).
-    const supabase = callbackAuth.viaMcp
-      ? createSupabaseServiceClient()
-      : await createSupabaseServerClient();
+    // Both flows resolve to the signed-in session user (the connect-url
+    // fallback only accepts the state owner), so persistence always runs
+    // with the session client (RLS as the user), never the service role.
+    const supabase = await createSupabaseServerClient();
     const { upsertSocialAccount } = await import('@/lib/social-accounts');
 
     await upsertSocialAccount(supabase, {

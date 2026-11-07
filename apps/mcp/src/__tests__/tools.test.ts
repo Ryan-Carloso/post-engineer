@@ -301,6 +301,8 @@ describe('MCP Tool Handlers', () => {
     expect(text).toContain('https://www.instagram.com/oauth/authorize?state=abc');
     expect(text).toMatch(/open/i);
     expect(text).toMatch(/authorize/i);
+    // the callback only accepts a browser signed in as the connect URL owner
+    expect(text).toMatch(/signed in to Post Engineer/i);
     expect(text).toContain('list_social_accounts');
   });
 

@@ -62,7 +62,7 @@ const EN_LINES: readonly string[] = [
   '- get_video_status: check generation status with a taskId and get the final video URL.',
   '- get_video_task_progress: poll one video task for machine-readable progress ({task_id, state, progress, stage, error}); error is the failure reason when state is -1, null otherwise; use for the video after generate_persona_video.',
   '- list_social_accounts: list my connected social accounts with the account IDs needed for scheduling.',
-  '- connect_account: connect a social account (youtube/instagram/linkedin return an authorization URL for me to open in a browser; bluesky connects directly with handle + app password).',
+  '- connect_account: connect a social account (youtube/instagram/linkedin return an authorization URL for me to open in a browser where I am signed in to Post Engineer; bluesky connects directly with handle + app password).',
   '- list_schedules: list my automation schedules.',
   // list_posts limit contract mirrors the MCP server (verified): the
   // ListPostsSchema (mcp src/tools.ts) defaults limit to 20 (max 500),
@@ -140,7 +140,7 @@ const PT_LINES: readonly string[] = [
   '- get_video_status: conferir o status da geração com o taskId e pegar a URL do vídeo final.',
   '- get_video_task_progress: acompanhar o progresso legível por máquina de uma tarefa de vídeo ({task_id, state, progress, stage, error}); error é o motivo da falha quando state é -1, null caso contrário; use para o vídeo após generate_persona_video.',
   '- list_social_accounts: listar minhas contas sociais conectadas com os IDs necessários para agendar.',
-  '- connect_account: conectar uma conta social (youtube/instagram/linkedin retornam uma URL de autorização para eu abrir no navegador; bluesky conecta direto com handle + app password).',
+  '- connect_account: conectar uma conta social (youtube/instagram/linkedin retornam uma URL de autorização para eu abrir no navegador em que estou logado no Post Engineer; bluesky conecta direto com handle + app password).',
   '- list_schedules: listar meus agendamentos.',
   // list_posts limit contract mirrors the MCP server (verified): the
   // ListPostsSchema (mcp src/tools.ts) defaults limit to 20 (max 500),

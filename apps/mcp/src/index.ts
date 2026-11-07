@@ -189,7 +189,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'connect_account',
-    'Connect a social account. For youtube/instagram/linkedin/threads: returns an authorization URL — the user must open it in a browser and authorize, then the account connects automatically (verify with list_social_accounts). For bluesky: connects directly with handle + appPassword (app password, not the main account password).',
+    'Connect a social account. For youtube/instagram/linkedin/threads: returns an authorization URL — the user must open it in a browser where they are signed in to Post Engineer with the same account, and authorize; the account then connects automatically (verify with list_social_accounts). A browser that is not signed in, or signed in as another user, is rejected. For bluesky: connects directly with handle + appPassword (app password, not the main account password).',
     ConnectAccountShape,
     withTracking('connect_account', async (args) => {
       return handleConnectAccount(apiClient, args);
