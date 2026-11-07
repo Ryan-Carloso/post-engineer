@@ -949,7 +949,8 @@
             },
             "constraints": {
                 "social_accounts_pkey": "PRIMARY KEY (id)",
-                "social_accounts_provider_check": "CHECK ((provider = ANY (ARRAY['youtube'::text, 'instagram'::text, 'bluesky'::text, 'linkedin'::text, 'threads'::text])))"
+                "social_accounts_provider_check": "CHECK ((provider = ANY (ARRAY['youtube'::text, 'instagram'::text, 'bluesky'::text, 'linkedin'::text, 'threads'::text])))",
+                "social_accounts_user_provider_account_key": "UNIQUE (user_id, provider, provider_account_id)"
             }
         },
         "engine_heartbeat": {

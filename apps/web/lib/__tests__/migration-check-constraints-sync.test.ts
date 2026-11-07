@@ -110,3 +110,14 @@ describe('database enum checks match the code', () => {
     });
   }
 });
+
+describe('upsert targets have their unique key', () => {
+  // upsertSocialAccount plans ON CONFLICT (user_id, provider,
+  // provider_account_id): without this key Postgres refuses the
+  // statement (42P10) on any database built from the migration chain.
+  it('social_accounts has the unique key the upsert targets', () => {
+    expect(snapshot.tables.social_accounts.constraints['social_accounts_user_provider_account_key']).toBe(
+      'UNIQUE (user_id, provider, provider_account_id)',
+    );
+  });
+});
