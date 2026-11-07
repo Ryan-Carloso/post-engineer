@@ -1,10 +1,14 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useVoicesQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import { usePersonaStore } from '@/lib/store';
-import { MicIcon, PlayIcon } from '@/lib/ui';
+import { INPUT_CLASS, MicIcon, PlayIcon } from '@/lib/ui';
+import {
+  fetchHouseVoicePreview,
+  HOUSE_PREVIEW_TEXT_MAX_CHARS,
+} from '@/lib/house-voice-preview-client';
 import {
   filterHouseVoices,
   isCloneVoiceId,
@@ -91,6 +95,32 @@ export const PersonaHouseVoicePicker = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+  // Custom-text preview: the typed line persists when the voice changes —
+  // the point is to hear the same line in several voices. It lives here,
+  // not in the dialog, so picking a voice never clears it.
+  const [previewText, setPreviewText] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<'rate-limited' | 'too-long' | 'failed' | null>(null);
+  const customAudioRef = useRef<HTMLAudioElement | null>(null);
+  const customObjectUrlRef = useRef<string | null>(null);
+
+  // Revoke the preview object URL when the picker unmounts mid-play.
+  useEffect(() => {
+    return () => {
+      customAudioRef.current?.pause();
+      if (customObjectUrlRef.current !== null) {
+        URL.revokeObjectURL(customObjectUrlRef.current);
+      }
+    };
+  }, []);
+
+  const stopCustomPreview = (): void => {
+    customAudioRef.current?.pause();
+    if (customObjectUrlRef.current !== null) {
+      URL.revokeObjectURL(customObjectUrlRef.current);
+      customObjectUrlRef.current = null;
+    }
+  };
 
   const houseVoices = filterHouseVoices(voicesQuery.data ?? [], 'all', 'all');
   // Looked up in the full catalog: the persona may use a clone picked in the
@@ -111,6 +141,7 @@ export const PersonaHouseVoicePicker = () => {
     if (sampleName === null) {
       return;
     }
+    stopCustomPreview();
     audioRef.current?.pause();
     const audio = new Audio(`/voice-samples/${encodeURIComponent(sampleName)}.mp3`);
     audioRef.current = audio;
@@ -122,10 +153,70 @@ export const PersonaHouseVoicePicker = () => {
     }
   };
 
+  // Custom-text preview: the selected house voice speaks the typed line,
+  // synthesized live (the static sample above cannot say it). The button
+  // stays enabled past the cap so an over-long line reaches the server and
+  // comes back as the 400 state instead of being silently truncated.
+  const playCustomPreview = (): void => {
+    if (selected === null || previewLoading) {
+      return;
+    }
+    const text = previewText.trim();
+    if (text === '') {
+      return;
+    }
+    stopCustomPreview();
+    audioRef.current?.pause();
+    setPlayingVoiceId(null);
+    setPreviewError(null);
+    setPreviewLoading(true);
+    void fetchHouseVoicePreview(selected.id, text)
+      .then((result) => {
+        if (!result.success) {
+          setPreviewError(
+            result.status === 429 ? 'rate-limited' : result.status === 400 ? 'too-long' : 'failed',
+          );
+          return;
+        }
+        const objectUrl = URL.createObjectURL(result.audio);
+        customObjectUrlRef.current = objectUrl;
+        const audio = new Audio(objectUrl);
+        customAudioRef.current = audio;
+        audio.onended = () => {
+          if (customObjectUrlRef.current === objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            customObjectUrlRef.current = null;
+          }
+        };
+        const playResult = audio.play();
+        if (playResult) {
+          void playResult.catch(() => {
+            setPreviewError('failed');
+          });
+        }
+      })
+      .catch(() => {
+        setPreviewError('failed');
+      })
+      .finally(() => {
+        setPreviewLoading(false);
+      });
+  };
+
   const handlePickVoice = (voice: VoiceOption) => {
+    stopCustomPreview();
     usePersonaStore.getState().setVoiceId(voice.id);
     setDialogOpen(false);
   };
+
+  const previewErrorMessage =
+    previewError === 'rate-limited'
+      ? t('persona.voicePreviewRateLimited')
+      : previewError === 'too-long'
+        ? t('persona.voicePreviewTextTooLong')
+        : previewError === 'failed'
+          ? t('persona.voicePreviewFailed')
+          : null;
 
   return (
     <div className="mt-4">
@@ -173,6 +264,58 @@ export const PersonaHouseVoicePicker = () => {
           </button>
         </div>
       </div>
+      {selected !== null && voiceSampleName(selected) !== null && (
+        <div className="mt-3 rounded-xl border border-neutral-200 bg-white p-4">
+          <label
+            htmlFor="house-voice-preview-text"
+            className="text-sm font-semibold text-neutral-900"
+          >
+            {t('persona.voicePreviewTextLabel')}
+          </label>
+          <div className="mt-2 flex gap-2">
+            <div className="min-w-0 flex-1">
+              <input
+                id="house-voice-preview-text"
+                type="text"
+                value={previewText}
+                onChange={(event) => {
+                  setPreviewText(event.target.value);
+                  setPreviewError(null);
+                }}
+                placeholder={t('persona.voicePreviewTextPlaceholder')}
+                disabled={previewLoading}
+                className={INPUT_CLASS}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={playCustomPreview}
+              disabled={previewLoading || previewText.trim() === ''}
+              className="shrink-0 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-800 disabled:opacity-50"
+            >
+              {previewLoading ? t('persona.voicePreviewListening') : t('persona.voicePreviewListen')}
+            </button>
+          </div>
+          <div className="mt-1 flex items-baseline justify-between gap-2">
+            {previewErrorMessage !== null ? (
+              <p role="alert" className="text-xs text-red-600">
+                {previewErrorMessage}
+              </p>
+            ) : (
+              <span />
+            )}
+            <span
+              className={`shrink-0 text-xs ${
+                previewText.length > HOUSE_PREVIEW_TEXT_MAX_CHARS
+                  ? 'font-semibold text-red-600'
+                  : 'text-neutral-400'
+              }`}
+            >
+              {previewText.length}/{HOUSE_PREVIEW_TEXT_MAX_CHARS}
+            </span>
+          </div>
+        </div>
+      )}
       <VoicePickerDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}

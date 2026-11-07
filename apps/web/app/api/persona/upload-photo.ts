@@ -3,7 +3,8 @@ import { IMAGE_BUCKET, personaAssetPath } from '@/lib/persona-images';
 import { logger } from '@/lib/logger';
 
 //---------------
-// uploadFile — uploads to the 'personas' bucket under the user's folder; exported for other persona routes.
+// uploadFile — uploads the persona photo to the 'personas' bucket under the
+// user's folder. Lives beside the route (route files export only handlers).
 //---------------
 export async function uploadFile(
   supabase: SupabaseClient,

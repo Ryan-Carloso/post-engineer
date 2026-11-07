@@ -21,7 +21,7 @@ import { fetchLinkedInMemberProfile } from '@/lib/linkedin';
 import { fetchBlueskyPublicProfile } from '@/lib/bluesky-profile';
 import { createGoogleOAuth2Client } from '@/lib/youtube';
 import { fetchYouTubeChannel } from '@/lib/youtube-channel';
-import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
+import { SOCIAL_PROVIDERS, YOUTUBE_PLACEHOLDER_ACCOUNT_ID } from '@/lib/providers/registry';
 
 const supabase = {} as never;
 
@@ -87,12 +87,25 @@ describe('PROFILE_SOURCES', () => {
     expect(PROFILE_SOURCES.youtube.pictureKey).toBe('thumbnail');
   });
 
-  it('youtube throws a coded error when the channel is gone, and skips placeholder rows', async () => {
+  it('youtube throws a coded error when the channel is gone', async () => {
     vi.mocked(createGoogleOAuth2Client).mockResolvedValue({ setCredentials: vi.fn() } as never);
     vi.mocked(fetchYouTubeChannel).mockResolvedValue(null);
     await expect(PROFILE_SOURCES.youtube.fetch(supabase, 'u1', record('youtube', 'UC1'))).rejects.toThrow('YOUTUBE_CHANNEL_NOT_FOUND');
-    expect(PROFILE_SOURCES.youtube.applies(record('youtube', 'unknown'))).toBe(false);
     expect(PROFILE_SOURCES.youtube.applies(record('youtube', 'UC1'))).toBe(true);
+  });
+
+  it('youtube rereads a legacy placeholder row through the grant (mine) since it has no channel id', async () => {
+    const setCredentials = vi.fn();
+    vi.mocked(createGoogleOAuth2Client).mockResolvedValue({ setCredentials } as never);
+    vi.mocked(fetchYouTubeChannel).mockResolvedValue({
+      id: 'UC9', title: 'Real Channel', thumbnail: 'https://yt9', customUrl: '@real', statistics: null,
+    });
+    expect(PROFILE_SOURCES.youtube.applies(record('youtube', YOUTUBE_PLACEHOLDER_ACCOUNT_ID))).toBe(true);
+    const fetched = await PROFILE_SOURCES.youtube.fetch(supabase, 'u1', record('youtube', YOUTUBE_PLACEHOLDER_ACCOUNT_ID));
+    expect(fetchYouTubeChannel).toHaveBeenCalledWith({ setCredentials }, { mine: true });
+    expect(fetched.accountName).toBe('Real Channel');
+    expect(fetched.pictureUrl).toBe('https://yt9');
+    expect(fetched.metadata).toEqual({ thumbnail: 'https://yt9', customUrl: '@real', statistics: null });
   });
 
   it('bluesky reads the public profile by DID without credentials', async () => {

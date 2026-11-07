@@ -24,7 +24,9 @@ import { resolvePersonaAvatar, rollbackStoragePath } from '@/lib/persona-remote-
 import { logger } from '@/lib/logger';
 import { parsePatchBody } from './patch-body';
 import { parseJsonStringArray, parsePrimaryIndex } from './form-parsing';
-import { uploadFile } from './upload-file';
+import { errorResponse } from './error-response';
+import { forwardLibraryImagesError, personaValidationError } from './validation-error';
+import { uploadFile } from './upload-photo';
 import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
@@ -34,15 +36,6 @@ import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 const ENGINE_CLEANUP_BUDGET_MS = 20_000;
-
-function errorResponse(
-  status: number,
-  error: string,
-  route: string,
-  options?: { cause?: unknown; logMessage?: string; metadata?: Record<string, unknown>; code?: string; leaveReportingToWrapper?: boolean },
-): NextResponse {
-  return apiErrorResponse(status, error, { route, ...options });
-}
 
 async function postHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
@@ -61,11 +54,11 @@ async function postHandler(request: Request): Promise<NextResponse> {
   try {
     formData = await request.formData();
   } catch {
-    return errorResponse(400, 'Invalid multipart payload.', 'POST /api/persona');
+    return personaValidationError('Invalid multipart payload.', 'POST /api/persona');
   }
   const parsed = parsePersonaForm(formData, 'create');
   if (!parsed.ok) {
-    return errorResponse(400, parsed.error, 'POST /api/persona');
+    return personaValidationError(parsed.error, 'POST /api/persona');
   }
   const body = parsed.value;
 
@@ -77,19 +70,19 @@ async function postHandler(request: Request): Promise<NextResponse> {
     body.values.language.trim().length > 0 &&
     !isEnglishLanguage(body.values.language)
   ) {
-    return errorResponse(400, ONLY_ENGLISH_VIDEOS_MESSAGE, 'POST /api/persona');
+    return personaValidationError(ONLY_ENGLISH_VIDEOS_MESSAGE, 'POST /api/persona', { field: 'language' });
   }
 
   const hasPhoto = body.photo !== null;
   const hasAvatarUrl = body.values.avatarUrl !== null;
   const visualError = validateVisualCues(hasPhoto, hasAvatarUrl);
   if (visualError) {
-    return errorResponse(400, visualError, 'POST /api/persona');
+    return personaValidationError(visualError, 'POST /api/persona');
   }
 
   const voiceError = await validatePersonaVoiceInput(supabase, user.id, body.values.voiceId);
   if (voiceError) {
-    return errorResponse(400, voiceError, 'POST /api/persona', personaVoiceRejectionOptions(body.values.voiceId));
+    return personaValidationError(voiceError, 'POST /api/persona', personaVoiceRejectionOptions(body.values.voiceId));
   }
 
   // Optional image library at creation: `images` (files) with parallel
@@ -102,7 +95,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // non-file entry is a hard 400, not a silent filter.
   const allImageEntries = formData.getAll('images');
   if (allImageEntries.some((value) => !isFileLike(value))) {
-    return errorResponse(400, 'images must be a list of image files.', 'POST /api/persona');
+    return personaValidationError('images must be a list of image files.', 'POST /api/persona', { field: 'images' });
   }
   const libraryFiles = allImageEntries.filter((value): value is File => isFileLike(value));
   // Parsed once: parseJsonStringArray is pure JSON parsing, no need to
@@ -113,7 +106,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     imageTags = parseJsonStringArray(formData.get('imageTags'));
     imageDescriptions = parseJsonStringArray(formData.get('imageDescriptions'));
   } catch (error) {
-    return errorResponse(400, error instanceof Error ? error.message : 'Invalid imageTags/imageDescriptions.', 'POST /api/persona');
+    return personaValidationError(error instanceof Error ? error.message : 'Invalid imageTags/imageDescriptions.', 'POST /api/persona', { field: 'imageTags' });
   }
   // Tags/descriptions are matched to files by index: a non-empty array that
   // does not cover every file is a client bug, not a silent default.
@@ -121,7 +114,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     (imageTags.length > 0 && imageTags.length !== libraryFiles.length) ||
     (imageDescriptions.length > 0 && imageDescriptions.length !== libraryFiles.length)
   ) {
-    return errorResponse(400, 'imageTags/imageDescriptions must match the number of images.', 'POST /api/persona');
+    return personaValidationError('imageTags/imageDescriptions must match the number of images.', 'POST /api/persona', { field: 'imageTags' });
   }
   const libraryInputs: LibraryImageInput[] = libraryFiles.map((file, index) => ({
     file,
@@ -135,18 +128,18 @@ async function postHandler(request: Request): Promise<NextResponse> {
   try {
     primaryIndex = parsePrimaryIndex(formData.get('imagePrimaryIndex'));
   } catch (error) {
-    return errorResponse(
-      400,
+    return personaValidationError(
       error instanceof Error ? error.message : 'Invalid imagePrimaryIndex.',
       'POST /api/persona',
+      { field: 'imagePrimaryIndex' },
     );
   }
   if (primaryIndex !== null && primaryIndex >= libraryFiles.length) {
-    return errorResponse(400, 'imagePrimaryIndex is out of range for the provided images.', 'POST /api/persona');
+    return personaValidationError('imagePrimaryIndex is out of range for the provided images.', 'POST /api/persona', { field: 'imagePrimaryIndex' });
   }
   const libraryValidation = await validateLibraryInputs(libraryInputs);
   if ('error' in libraryValidation) {
-    return errorResponse(400, libraryValidation.error, 'POST /api/persona');
+    return personaValidationError(libraryValidation.error, 'POST /api/persona', { field: 'images', logMessage: libraryValidation.logMessage });
   }
   const validatedLibraryInputs = libraryValidation.inputs;
 
@@ -166,7 +159,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (photoPathToRollback === null && typeof avatarUrl === 'string') {
     const resolved = await resolvePersonaAvatar(supabase, user.id, personaId, avatarUrl);
     if (!resolved.ok) {
-      return errorResponse(400, resolved.error, 'POST /api/persona');
+      return personaValidationError(resolved.error, 'POST /api/persona', { field: 'avatarUrl' });
     }
     photoPathToRollback = resolved.photoPath;
     avatarUrl = resolved.avatarUrl;
@@ -265,7 +258,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         }
       }
       await rollbackStoragePath(supabase, photoPathToRollback);
-      return errorResponse(added.status, added.error, 'POST /api/persona');
+      return forwardLibraryImagesError(added, 'POST /api/persona');
     }
     libraryImageIds = added.images.map((image) => image.id);
     // Defensive: addLibraryImages rolls back partial work and returns exactly
@@ -312,13 +305,13 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     : await createSupabaseServerClient();
 
   const personaId = new URL(request.url).searchParams.get('personaId');
-  if (!personaId) return errorResponse(400, 'personaId is required.', 'PATCH /api/persona');
+  if (!personaId) return personaValidationError('personaId is required.', 'PATCH /api/persona', { field: 'personaId' });
   if (!isPersonaAllowed(auth.personaIds, personaId)) {
     return errorResponse(403, 'This API key does not have access to this persona.', 'PATCH /api/persona');
   }
 
   const parsedPatch = await parsePatchBody(request);
-  if (!parsedPatch.ok) return errorResponse(400, parsedPatch.error, 'PATCH /api/persona');
+  if (!parsedPatch.ok) return personaValidationError(parsedPatch.error, 'PATCH /api/persona', { logMessage: parsedPatch.logMessage });
   const patch = parsedPatch.value;
 
   // English-only launch: same gate as persona creation — the language
@@ -328,7 +321,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     patch.language.trim().length > 0 &&
     !isEnglishLanguage(patch.language)
   ) {
-    return errorResponse(400, ONLY_ENGLISH_VIDEOS_MESSAGE, 'PATCH /api/persona');
+    return personaValidationError(ONLY_ENGLISH_VIDEOS_MESSAGE, 'PATCH /api/persona', { field: 'language' });
   }
 
   const { data: persona, error: selectError } = await supabase
@@ -351,7 +344,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     supabase, user.id, persona, patch.voiceId, updates, stalePaths,
   );
   if (voicePatchError) {
-    return errorResponse(400, voicePatchError, 'PATCH /api/persona', personaVoiceRejectionOptions(patch.voiceId));
+    return personaValidationError(voicePatchError, 'PATCH /api/persona', personaVoiceRejectionOptions(patch.voiceId));
   }
 
   if (patch.photo && patch.photoExtension) {
@@ -368,7 +361,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
       existingPhotoPath: typeof persona.photo_path === 'string' ? persona.photo_path : null,
     });
     if (!resolved.ok) {
-      return errorResponse(400, resolved.error, 'PATCH /api/persona');
+      return personaValidationError(resolved.error, 'PATCH /api/persona', { field: 'avatarUrl' });
     }
     updates.avatar_url = resolved.avatarUrl;
     updates.photo_path = resolved.photoPath;
@@ -391,7 +384,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
   if (patch.niche !== null) updates.niche = patch.niche;
 
   if (Object.keys(updates).length === 0) {
-    return errorResponse(400, 'Nothing to update.', 'PATCH /api/persona');
+    return personaValidationError('Nothing to update.', 'PATCH /api/persona');
   }
 
   const { error: updateError } = await supabase

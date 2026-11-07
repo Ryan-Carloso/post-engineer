@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { PostEngineerClient } from './client.js';
+import { withTracking } from './analytics.js';
 import {
   createClonedVoiceFromFile,
   createClonedVoiceFromUrl,
@@ -8,10 +10,15 @@ import {
   getClonedVoice,
   listClonedVoices,
   previewClonedVoice,
+  previewHouseVoice,
 } from './cloned-voice-client.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 import { isEnglishLanguage, ONLY_ENGLISH_CLONE_MESSAGE } from './language.js';
-import { CLONE_PREVIEW_TEXT_MAX_CHARS, MAX_CLONE_AUDIO_MB } from './limits.js';
+import {
+  CLONE_PREVIEW_TEXT_MAX_CHARS,
+  HOUSE_PREVIEW_TEXT_MAX_CHARS,
+  MAX_CLONE_AUDIO_MB,
+} from './limits.js';
 
 export const ListClonedVoicesShape = {};
 
@@ -85,6 +92,24 @@ export const PreviewClonedVoiceShape = {
 
 export const PreviewClonedVoiceSchema = z.object(PreviewClonedVoiceShape);
 
+export const PreviewHouseVoiceShape = {
+  voiceId: z
+    .string()
+    .min(1)
+    .describe('House voice id from list_voices (e.g. chatterbox:phonon_zoey)'),
+  text: z
+    .string()
+    .trim()
+    .min(1)
+    .max(HOUSE_PREVIEW_TEXT_MAX_CHARS)
+    .optional()
+    .describe(
+      `Optional words for the house voice to speak (1-${HOUSE_PREVIEW_TEXT_MAX_CHARS} chars, English). Omit to hear the fixed sample. Previews are free and limited to 10 per user per day.`,
+    ),
+};
+
+export const PreviewHouseVoiceSchema = z.object(PreviewHouseVoiceShape);
+
 export async function handleListClonedVoices(
   client: PostEngineerClient,
 ): Promise<McpToolResponse> {
@@ -140,5 +165,74 @@ export async function handlePreviewClonedVoice(
   return handleLibraryCall(
     () => previewClonedVoice(client, args.cloneId, args.language, args.text),
     'previewing cloned voice',
+  );
+}
+
+export async function handlePreviewHouseVoice(
+  client: PostEngineerClient,
+  args: z.infer<typeof PreviewHouseVoiceSchema>,
+): Promise<McpToolResponse> {
+  return handleLibraryCall(
+    () => previewHouseVoice(client, args.voiceId, args.text),
+    'previewing house voice',
+  );
+}
+
+// Registers the cloned-voice tools (list/create/get/delete/preview, plus the
+// house-voice preview) on the server. Kept here, next to their shapes and
+// handlers, so index.ts stays under the 500-line cap.
+export function registerClonedVoiceTools(server: McpServer, apiClient: PostEngineerClient): void {
+  server.tool(
+    'list_cloned_voices',
+    'List per-user Chatterbox voice clones (status, voice_id when ready).',
+    ListClonedVoicesShape,
+    withTracking('list_cloned_voices', async () => {
+      return handleListClonedVoices(apiClient);
+    }),
+  );
+
+  server.tool(
+    'create_cloned_voice',
+    'Register a voice clone from a short HTTPS audio URL or a local audio file path (requires explicit consent).',
+    CreateClonedVoiceShape,
+    withTracking('create_cloned_voice', async (args) => {
+      return handleCreateClonedVoice(apiClient, args);
+    }),
+  );
+
+  server.tool(
+    'get_cloned_voice',
+    'Get one voice clone by id: its status (poll after create_cloned_voice until ready or failed) and voice_id once ready.',
+    GetClonedVoiceShape,
+    withTracking('get_cloned_voice', async (args) => {
+      return handleGetClonedVoice(apiClient, args);
+    }),
+  );
+
+  server.tool(
+    'delete_cloned_voice',
+    'Delete one of your voice clones by id.',
+    DeleteClonedVoiceShape,
+    withTracking('delete_cloned_voice', async (args) => {
+      return handleDeleteClonedVoice(apiClient, args);
+    }),
+  );
+
+  server.tool(
+    'preview_cloned_voice',
+    'Synthesize a short MP3 preview for a ready voice clone, optionally speaking your own text (returns base64 audio; 10 previews per day).',
+    PreviewClonedVoiceShape,
+    withTracking('preview_cloned_voice', async (args) => {
+      return handlePreviewClonedVoice(apiClient, args);
+    }),
+  );
+
+  server.tool(
+    'preview_house_voice',
+    'Synthesize a short MP3 preview for a house voice, optionally speaking your own text (returns base64 audio; 10 previews per day).',
+    PreviewHouseVoiceShape,
+    withTracking('preview_house_voice', async (args) => {
+      return handlePreviewHouseVoice(apiClient, args);
+    }),
   );
 }

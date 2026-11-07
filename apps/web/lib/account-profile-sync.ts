@@ -5,7 +5,10 @@
 // picture URLs (Instagram/Threads `oe`) stop loading once they expire.
 // GET /api/account calls this per row: it rereads the provider when the row
 // was never synced, the last sync is older than ACCOUNT_PROFILE_SYNC_MAX_AGE_MS,
-// or the stored picture URL expired. Readers live in account-profile-sources.ts.
+// or the stored picture URL expired. A failed read is reported and rethrown
+// with no write and no backoff: the next list retries the row immediately,
+// so a fixed account shows up on the next page load.
+// Readers live in account-profile-sources.ts.
 //---------------
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -56,7 +59,8 @@ export function mergeProfileMetadata(
 //---------------
 // syncAccountProfile — returns the record to render: the updated one, or the
 // original when no sync is needed. Throws on credential/provider/DB failure
-// (reported to PostHog first); the caller logs and keeps the stored record.
+// (reported to PostHog first); nothing is written on failure, so the next
+// list retries the row — the caller logs and keeps the stored record.
 //---------------
 export async function syncAccountProfile(
   supabase: SupabaseClient,

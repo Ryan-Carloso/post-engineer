@@ -47,6 +47,12 @@ export async function register() {
   // does not resolve.
   //---------------
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    if (process.env.NODE_ENV === 'production') {
+      // Fire and forget: reports migrations the database is missing (#308)
+      // without delaying the boot; it never throws.
+      const { reportSchemaDrift } = await import('./lib/schema-drift');
+      void reportSchemaDrift();
+    }
     const { startInternalScheduler, isSchedulerEnabled } = await import('./lib/scheduler-jobs');
     if (isSchedulerEnabled()) {
       startInternalScheduler();

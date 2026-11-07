@@ -25,9 +25,11 @@ vi.mock('@/lib/posthog-server', () => ({
   flushPostHog: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('@/lib/scheduler-jobs', () => schedulerJobsMock);
+vi.mock('@/lib/schema-drift', () => ({ reportSchemaDrift: vi.fn().mockResolvedValue(undefined) }));
 
 import { register, onRequestError } from '@/instrumentation';
 import { getPostHogServer } from '@/lib/posthog-server';
+import { reportSchemaDrift } from '@/lib/schema-drift';
 
 describe('onRequestError', () => {
   beforeEach(() => {
@@ -122,6 +124,33 @@ describe('register() scheduler startup', () => {
     schedulerJobsMock.isSchedulerEnabled.mockReturnValue(false);
     await register();
     expect(schedulerJobsMock.startInternalScheduler).not.toHaveBeenCalled();
+  });
+
+  it('checks for schema drift at boot in the nodejs runtime in production (issue #308)', async () => {
+    (process.env as Record<string, string>).NEXT_RUNTIME = 'nodejs';
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.mocked(reportSchemaDrift).mockClear();
+    await register();
+    expect(reportSchemaDrift).toHaveBeenCalledTimes(1);
+    vi.unstubAllEnvs();
+  });
+
+  it('skips the schema drift check outside production', async () => {
+    (process.env as Record<string, string>).NEXT_RUNTIME = 'nodejs';
+    vi.stubEnv('NODE_ENV', 'development');
+    vi.mocked(reportSchemaDrift).mockClear();
+    await register();
+    expect(reportSchemaDrift).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+
+  it('never runs the schema drift check in the edge runtime', async () => {
+    (process.env as Record<string, string>).NEXT_RUNTIME = 'edge';
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.mocked(reportSchemaDrift).mockClear();
+    await register();
+    expect(reportSchemaDrift).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
   });
 
   it('never touches the scheduler in the edge runtime', async () => {

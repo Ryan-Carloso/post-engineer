@@ -9,6 +9,7 @@ vi.mock('@/lib/account-profile-telemetry', () => ({
   reportProfileFetched: vi.fn(),
   reportProfileFetchFailed: vi.fn(),
 }));
+vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn() } }));
 
 import {
   ACCOUNT_PROFILE_SYNC_MAX_AGE_MS,
@@ -16,6 +17,7 @@ import {
   profileNeedsSync,
   syncAccountProfile,
 } from '@/lib/account-profile-sync';
+import { logger } from '@/lib/logger';
 import { pictureUrlExpired } from '@/lib/account-display-diagnostics';
 import { updateSocialAccountMetadata, type SocialAccountRecord } from '@/lib/social-accounts';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
@@ -27,6 +29,7 @@ const FRESH_PIC = `https://scontent.cdninstagram.com/p.jpg?oe=${hexSeconds(NOW.g
 const EXPIRED_PIC = `https://scontent.cdninstagram.com/p.jpg?oe=${hexSeconds(NOW.getTime() - 1000)}`;
 const RECENT = new Date(NOW.getTime() - 60_000).toISOString();
 const STALE = new Date(NOW.getTime() - ACCOUNT_PROFILE_SYNC_MAX_AGE_MS - 1).toISOString();
+const LEFTOVER_FAILURE_MARKER = new Date(NOW.getTime() - 60_000).toISOString();
 
 function record(overrides: Partial<SocialAccountRecord> = {}, metadata: Record<string, unknown> = {}): SocialAccountRecord {
   return {
@@ -83,6 +86,14 @@ describe('profileNeedsSync', () => {
     expect(profileNeedsSync(record({}, { profilePictureUrl: EXPIRED_PIC }), 'profilePictureUrl', NOW)).toBe(true);
     expect(profileNeedsSync(record({}, { avatar: EXPIRED_PIC }), 'profilePictureUrl', NOW)).toBe(false);
   });
+
+  it('ignores a leftover failure marker from before the guard was removed', () => {
+    // Rows synced before the removal may still carry profileSyncFailedAt;
+    // it is inert data now and must not suppress a sync.
+    expect(
+      profileNeedsSync(record({}, { profileSyncedAt: undefined, profileSyncFailedAt: LEFTOVER_FAILURE_MARKER }), 'profilePictureUrl', NOW),
+    ).toBe(true);
+  });
 });
 
 describe('mergeProfileMetadata', () => {
@@ -104,6 +115,8 @@ describe('syncAccountProfile', () => {
     vi.mocked(updateSocialAccountMetadata).mockResolvedValue(undefined);
     vi.mocked(reportProfileFetched).mockReset();
     vi.mocked(reportProfileFetchFailed).mockReset();
+    vi.mocked(logger.info).mockClear();
+    vi.mocked(logger.error).mockClear();
   });
 
   it('returns the record untouched when no sync is needed', async () => {
@@ -160,8 +173,9 @@ describe('syncAccountProfile', () => {
   it('reports and rethrows a provider failure without writing', async () => {
     const failure = new Error('token revoked');
     sources.instagram.fetch.mockRejectedValue(failure);
+    const rec = record({}, { profileSyncedAt: STALE });
     await expect(
-      syncAccountProfile(supabase, 'u1', record({}, { profileSyncedAt: STALE }), { now: () => NOW }),
+      syncAccountProfile(supabase, 'u1', rec, { now: () => NOW }),
     ).rejects.toBe(failure);
     expect(reportProfileFetchFailed).toHaveBeenCalledWith('instagram', 'sync', failure);
     expect(updateSocialAccountMetadata).not.toHaveBeenCalled();

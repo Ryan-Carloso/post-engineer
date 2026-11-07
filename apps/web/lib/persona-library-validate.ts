@@ -17,21 +17,22 @@ export function withImageContext(error: string, index: number, fileName: string)
 
 export async function validateLibraryInputs(
   inputs: LibraryImageInput[],
-): Promise<{ inputs: LibraryImageInput[] } | { error: string }> {
+): Promise<{ inputs: LibraryImageInput[] } | { error: string; logMessage: string }> {
   if (inputs.length === 0) return { inputs: [] };
   if (inputs.length > MAX_PERSONA_IMAGES) {
-    return { error: `Image library accepts at most ${MAX_PERSONA_IMAGES} images.` };
+    const error = `Image library accepts at most ${MAX_PERSONA_IMAGES} images.`;
+    return { error, logMessage: error };
   }
   const validated: LibraryImageInput[] = [];
   for (let index = 0; index < inputs.length; index += 1) {
     const input = inputs[index] as LibraryImageInput;
     const fileCheck = validateImageFile(input.file);
     if ('error' in fileCheck) {
-      return { error: withImageContext(fileCheck.error, index, input.file.name) };
+      return { error: withImageContext(fileCheck.error, index, input.file.name), logMessage: fileCheck.error };
     }
     const content = await readValidatedImage(fileCheck.file);
     if ('error' in content) {
-      return { error: withImageContext(content.error, index, input.file.name) };
+      return { error: withImageContext(content.error, index, input.file.name), logMessage: content.error };
     }
     validated.push({
       ...input,

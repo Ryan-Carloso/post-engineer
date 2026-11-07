@@ -228,6 +228,12 @@ async function reportApiIssue(
     // never by user-controlled text.
     const message = `[${route}] ${status}${codeStr !== undefined ? ` ${codeStr}` : ''}`;
     if (status >= 500) {
+      // The Error is synthetic (the handler returned a response instead of
+      // throwing), so name it explicitly the way logger.ts does: without
+      // $exception_message/$exception_type these events reach PostHog as
+      // untyped, message-less "blind" exceptions (issue #301).
+      properties.$exception_message = message;
+      properties.$exception_type = 'Error';
       // Attribute the $exception to the real user when the route opted in —
       // the shared service identity hides affected people in error tracking.
       if (user !== undefined) {
