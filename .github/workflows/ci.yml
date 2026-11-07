@@ -691,6 +691,16 @@ jobs:
           supabase db push --yes --db-url "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
           echo "migrations applied cleanly"
 
+      - name: Check the schema snapshot is up to date
+        run: |
+          set -euo pipefail
+          # supabase/schema.snapshot.json is Postgres's own report of the
+          # migrated schema (columns, NOT NULL, CHECK/FK, RLS, policies). The
+          # unit tests compare the code's enum lists against it; this step
+          # keeps the snapshot honest. Regenerate locally with
+          # `node scripts/db/dump-schema.mjs --db-url <url> --write`.
+          node scripts/db/dump-schema.mjs --check --db-url "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+
   # UI coverage gates: when a PR changes UI files (apps/web/app/** or
   # apps/web/components/**, *.ts/*.tsx excluding tests), enforce minimum
   # coverage on exactly those files:

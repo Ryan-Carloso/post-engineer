@@ -1,5 +1,4 @@
 import { isSocialProvider, type SocialProvider } from '@/lib/providers/registry';
-import type { MetricsWindow } from './post-metrics';
 
 //---------------
 // metrics-query — the GET /api/metrics contract, shared by the route and
@@ -17,9 +16,10 @@ export const METRICS_FILTER_MAX_LENGTH = 200;
 // instead). Persona ids are uuids, so the sentinel is safe for them too.
 export const METRICS_NONE = '^@none';
 
-export const METRICS_WINDOWS = ['24h', '7d', '28d'] as const satisfies readonly MetricsWindow[];
+export const METRICS_WINDOWS = ['24h', '7d', '28d'] as const;
+export type MetricsWindow = (typeof METRICS_WINDOWS)[number];
 
-function isMetricsWindow(value: unknown): value is MetricsWindow {
+export function isMetricsWindow(value: unknown): value is MetricsWindow {
   return typeof value === 'string' && (METRICS_WINDOWS as readonly string[]).includes(value);
 }
 

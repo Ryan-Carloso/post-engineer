@@ -5,6 +5,7 @@
 // payload at the fetch boundary: a malformed or missing block narrows to a
 // safe default instead of handing the UI an undefined it would have to
 // feature-detect at every render.
+import type { FacelessMaterial } from '@/lib/generation/faceless-materials';
 import { isPublishProvider, type PublishLink } from '@/lib/publish-links';
 
 //---------------
@@ -26,7 +27,7 @@ export interface ProgressHistoryEntry {
 export interface GenerationFacts {
   faceless: boolean;
   /** Stock only or drawings only (migration 029); 'broll' for older posts. */
-  material: 'broll' | 'svg';
+  material: FacelessMaterial;
   language: string | null;
   voiceId: string | null;
   videoAspect: string | null;

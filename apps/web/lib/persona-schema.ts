@@ -102,7 +102,7 @@ export type ParsedPersonaForm = {
     voiceId: string | null;
     language: string | null;
     videoAspect: string | null;
-    videoLayout: string | null;
+    videoLayout: (typeof VIDEO_LAYOUTS)[number] | null;
     scriptPrompt: string | null;
     ctaText: string | null;
     paragraphNumber: number | null;

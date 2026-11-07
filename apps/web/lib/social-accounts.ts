@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/database.gen';
 import { encryptTokens, decryptTokens } from '@/lib/token-crypto';
 import type { SocialProvider } from '@/lib/providers/registry';
 
@@ -103,7 +104,7 @@ export function isPlaceholderProviderAccountId(id: string): boolean {
 // (unique: user_id + provider + provider_account_id)
 //---------------
 export async function upsertSocialAccount(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   params: UpsertSocialAccountParams,
 ): Promise<SocialAccountRecord> {
   // A placeholder id poisons the row (every later publish targets a
@@ -149,7 +150,7 @@ export async function upsertSocialAccount(
 // listSocialAccounts — lists a user's accounts (NO tokens)
 //---------------
 export async function listSocialAccounts(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   userId: string,
   provider?: SocialProvider,
 ): Promise<SocialAccountRecord[]> {
@@ -175,7 +176,7 @@ export async function listSocialAccounts(
 // getSocialAccountTokens — fetches the account and decrypts the tokens
 //---------------
 export async function getSocialAccountTokens(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   userId: string,
   provider: SocialProvider,
   providerAccountId: string,
@@ -208,7 +209,7 @@ export async function getSocialAccountTokens(
 // touchSocialAccount — atualiza last_used_at
 //---------------
 export async function touchSocialAccount(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   userId: string,
   provider: SocialProvider,
   providerAccountId: string,
@@ -229,7 +230,7 @@ export async function touchSocialAccount(
 // updateSocialAccountTokens — re-encrypts tokens after refresh
 //---------------
 export async function updateSocialAccountTokens(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   userId: string,
   provider: SocialProvider,
   providerAccountId: string,
@@ -260,7 +261,7 @@ export async function updateSocialAccountTokens(
 // updateSocialAccountMetadata — updates the account's public data
 //---------------
 export async function updateSocialAccountMetadata(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   userId: string,
   provider: SocialProvider,
   providerAccountId: string,
@@ -287,7 +288,7 @@ export async function updateSocialAccountMetadata(
 // deleteSocialAccount — removes an account from a user (logout)
 //---------------
 export async function deleteSocialAccount(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   userId: string,
   provider: SocialProvider,
   providerAccountId: string,
