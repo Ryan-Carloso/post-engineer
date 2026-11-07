@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Post Engineer API",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "Generate and schedule short videos for social accounts. Authenticate with an API key created in the dashboard: Authorization: Bearer <key>."
   },
   "servers": [
@@ -2074,6 +2074,148 @@
             "name": "angle",
             "in": "query",
             "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/metrics/retention-curve": {
+      "get": {
+        "operationId": "get_get_youtube_retention_curve",
+        "summary": "get youtube retention curve",
+        "tags": [
+          "metrics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "ratio": {
+                            "type": "number"
+                          },
+                          "audienceWatchRatio": {
+                            "type": "number"
+                          },
+                          "relativeRetentionPerformance": {
+                            "type": "number",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    },
+                    "startDate": {
+                      "type": "string"
+                    },
+                    "endDate": {
+                      "type": "string"
+                    },
+                    "provisional": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "YOUTUBE_ANALYTICS_SCOPE_MISSING or YOUTUBE_RECONNECT_REQUIRED: reconnect YouTube.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "YOUTUBE_ANALYTICS_REJECTED or YOUTUBE_ANALYTICS_UNAVAILABLE: retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "account",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "video",
+            "in": "query",
+            "required": true,
             "schema": {
               "type": "string"
             }

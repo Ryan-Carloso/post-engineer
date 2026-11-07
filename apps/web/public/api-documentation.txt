@@ -115,6 +115,7 @@ PATCH  /api/schedule/slots/{slotId}                           update slot title
 DELETE /api/schedule/slots/{slotId}                           delete slot
 GET    /api/posts/{id}                                        get post
 GET    /api/metrics                                           get post metrics
+GET    /api/metrics/retention-curve                           get YouTube retention curve
 GET    /api/billing/tokens                                    get token balance
 GET    /api/billing/transactions                              list token transactions
 GET    /api/prompts                                           list recipe prompts

@@ -379,7 +379,7 @@ export const operationSchemas = {
     request: object({ url: { type: 'string', format: 'uri', description: 'http(s) URL.' } }, ['url']),
     response: success({ code: str }),
   },
-  ...metricsOperationSchemas({ success, anyObject }),
+  ...metricsOperationSchemas({ success, object, anyObject, str }),
   // apps/web/app/api/posts/[id]/route.ts
   'GET /api/posts/[id]': {
     response: success({

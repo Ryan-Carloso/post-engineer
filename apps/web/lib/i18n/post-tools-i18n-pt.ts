@@ -8,5 +8,6 @@ export const postToolDescPt = {
   toolDescGetVideoGeneration: 'Ver o detalhe de uma geração de vídeo',
   toolDescGetPost: 'Ver o detalhe de um post (slot ou geração)',
   toolDescGetPostMetrics: 'Ver métricas de desempenho por vídeo',
+  toolDescGetYouTubeRetentionCurve: 'Ver a curva de retenção de um vídeo seu do YouTube',
   toolDescCancelVideoTask: 'Cancelar/remover uma das suas tarefas de vídeo',
 } as const;
