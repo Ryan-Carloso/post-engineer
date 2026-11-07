@@ -252,6 +252,35 @@ describe('/api/instagram-auth/callback', () => {
     );
   });
 
+  it('persists the token expiry as now plus expiresIn seconds', async () => {
+    const now = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
+    sessionMock(true);
+    serviceKeyMock(true);
+    exchangeCodeForLongLivedToken.mockResolvedValue({
+      accessToken: 'at',
+      expiresIn: 5184000,
+      tokenType: 'Bearer',
+    });
+    getProfile.mockResolvedValue({
+      userdId: 'ig-1',
+      username: 'user',
+      name: 'Name',
+      profilePictureUrl: 'https://p.jpg',
+      followersCount: 5,
+      mediaCount: 2,
+    });
+    try {
+      await GET(makeRequest('?code=c&state=s'));
+    } finally {
+      nowSpy.mockRestore();
+    }
+    expect(upsertSocialAccount).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ tokenExpiresAt: new Date(now + 5184000 * 1000) }),
+    );
+  });
+
   it('returns error popup when database save fails', async () => {
     sessionMock(true);
     serviceKeyMock(true);
