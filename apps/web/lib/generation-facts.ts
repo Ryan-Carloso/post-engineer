@@ -1,3 +1,5 @@
+import type { FacelessMaterial } from '@/lib/generation/faceless-materials';
+
 // Generation facts for one slot: the read-only record of what the post
 // was generated with.
 //
@@ -25,7 +27,7 @@ export function buildGenerationFacts(
   },
 ): {
   faceless: boolean;
-  material: 'broll' | 'svg';
+  material: FacelessMaterial;
   language: string | null;
   voiceId: string | null;
   videoAspect: string | null;
