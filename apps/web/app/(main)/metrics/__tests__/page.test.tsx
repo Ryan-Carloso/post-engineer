@@ -364,11 +364,20 @@ describe('MetricsPage', () => {
   });
 
   it('shows the reconnect copy when the curve endpoint reports a missing scope', async () => {
+    const curveFetch = vi.fn();
     vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.startsWith('/api/metrics/retention-curve')
-      ? new Response(JSON.stringify({ success: false, code: 'YOUTUBE_ANALYTICS_SCOPE_MISSING' }), { status: 403 })
+      ? (curveFetch(), new Response(JSON.stringify({ success: false, code: 'YOUTUBE_ANALYTICS_SCOPE_MISSING' }), { status: 403 }))
       : new Response(JSON.stringify({ success: true, rows: [row({ analyticsStatus: 'ok', contentType: 'VIDEO_ON_DEMAND' })], truncated: false })))));
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'metrics.curveShow' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('metrics.reconnectTitle'));
+    expect(curveFetch).toHaveBeenCalledTimes(1);
+
+    // A failed read is an errored (stale) query: closing and reopening the
+    // panel retries instead of serving the cached failure.
+    fireEvent.click(screen.getByRole('button', { name: 'metrics.curveHide' }));
+    fireEvent.click(screen.getByRole('button', { name: 'metrics.curveShow' }));
+    await waitFor(() => expect(curveFetch).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('metrics.reconnectTitle'));
   });
 });

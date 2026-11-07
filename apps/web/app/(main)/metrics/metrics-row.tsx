@@ -104,8 +104,8 @@ function RetentionCurvePanel({ accountId, videoId }: { accountId: string; videoI
   let body: React.ReactNode;
   if (curve.isLoading) {
     body = <p className="flex items-center gap-2 text-xs text-[#718096]"><SpinnerIcon />{t('metrics.curveLoading')}</p>;
-  } else if (curve.isError || result === undefined || !result.success) {
-    const reconnect = result !== undefined && !result.success && result.reconnect;
+  } else if (curve.isError || result === undefined) {
+    const reconnect = curve.isError && curve.error.reconnect;
     body = (
       <p role="alert" className={cn('text-xs', reconnect ? 'text-amber-700' : 'text-red-600')}>
         {t(reconnect ? 'metrics.reconnectTitle' : 'metrics.curveError')}

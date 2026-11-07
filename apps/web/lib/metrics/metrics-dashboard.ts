@@ -135,8 +135,10 @@ export interface RetentionCurvePoint {
   relativeRetentionPerformance: number | null;
 }
 
+export type RetentionCurveSuccess = { success: true; points: RetentionCurvePoint[]; provisional: boolean };
+
 export type RetentionCurveFetchResult =
-  | { success: true; points: RetentionCurvePoint[]; provisional: boolean }
+  | RetentionCurveSuccess
   | { success: false; reconnect: boolean; error: string };
 
 const RECONNECT_CODES = new Set(['YOUTUBE_ANALYTICS_SCOPE_MISSING', 'YOUTUBE_RECONNECT_REQUIRED']);
@@ -170,16 +172,35 @@ export async function fetchRetentionCurve(accountId: string, videoId: string): P
   }
 }
 
+export class RetentionCurveFetchError extends Error {
+  readonly reconnect: boolean;
+
+  constructor(message: string, reconnect: boolean) {
+    super(message);
+    this.name = 'RetentionCurveFetchError';
+    this.reconnect = reconnect;
+  }
+}
+
 export function useRetentionCurveQuery(
   accountId: string,
   videoId: string,
   enabled: boolean,
-): UseQueryResult<RetentionCurveFetchResult, Error> {
-  return useQuery<RetentionCurveFetchResult, Error>({
+): UseQueryResult<RetentionCurveSuccess, RetentionCurveFetchError> {
+  return useQuery<RetentionCurveSuccess, RetentionCurveFetchError>({
     queryKey: ['retention-curve', accountId, videoId],
-    queryFn: () => fetchRetentionCurve(accountId, videoId),
+    // A failed fetch becomes a query error, never successful cached data:
+    // an errored query is stale, so closing and reopening the panel
+    // refetches instead of serving the failure for staleTime.
+    queryFn: async () => {
+      const result = await fetchRetentionCurve(accountId, videoId);
+      if (!result.success) throw new RetentionCurveFetchError(result.error, result.reconnect);
+      return result;
+    },
     enabled,
-    // A live Analytics read: keep it for the session instead of refetching.
+    // Reopening the panel is the retry; do not auto-retry a 4xx/5xx.
+    retry: false,
+    // A live Analytics read: keep a successful result for the session.
     staleTime: 10 * 60_000,
   });
 }
