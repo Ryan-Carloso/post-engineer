@@ -33,7 +33,7 @@ import { VIDEO_LAYOUTS } from '@/lib/persona-schema';
 //
 // Limit: a constraint created by hand in production and never written as a
 // migration is invisible to CI. The fix is always a migration that drops
-// and recreates it (see 037_social-accounts-threads.sql).
+// and recreates it (see 037_social-accounts-threads-provider.sql).
 //---------------
 
 interface SnapshotTable {
