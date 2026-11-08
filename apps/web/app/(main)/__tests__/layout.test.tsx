@@ -321,9 +321,9 @@ describe('app/(main)/layout — MainLayout', () => {
     vi.mocked(usePathname).mockReturnValue('/personas');
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const personaLink = screen.getAllByText('nav.persona')[0].closest('a');
-    expect(personaLink?.className).toContain('bg-[#fff3f2]');
+    expect(personaLink?.className).toContain('bg-brand-soft');
     const accountsLink = screen.getAllByText('nav.accounts')[0].closest('a');
-    expect(accountsLink?.className).not.toContain('bg-[#fff3f2]');
+    expect(accountsLink?.className).not.toContain('bg-brand-soft');
   });
 
   it('switches locale when PT/EN buttons clicked', () => {
@@ -435,19 +435,19 @@ describe('app/(main)/layout — MainLayout', () => {
         const active = link.getAttribute('href') === href;
         expect(link.getAttribute('aria-current')).toBe(active ? 'page' : null);
         expect(link.className).toContain('flex-col');
-        expect(link.className).toContain(active ? 'font-semibold' : 'text-[#60758a]');
+        expect(link.className).toContain(active ? 'font-semibold' : 'text-muted-text');
       }
 
       const sidebar = screen.getByTestId('nav-brand').closest('aside');
       const sidebarLinks = within(within(sidebar as HTMLElement).getByRole('navigation')).getAllByRole('link');
-      const activeSidebar = sidebarLinks.filter((link) => link.className.includes('bg-[#fff3f2]'));
+      const activeSidebar = sidebarLinks.filter((link) => link.className.includes('bg-brand-soft'));
       expect(activeSidebar.map((link) => link.getAttribute('href'))).toEqual([href]);
       for (const link of sidebarLinks) {
         const active = activeSidebar.includes(link);
         const iconSpan = link.querySelector('span');
-        expect(link.className).toContain(active ? 'bg-[#fff3f2]' : 'hover:bg-[#f8fafc]');
+        expect(link.className).toContain(active ? 'bg-brand-soft' : 'hover:bg-surface');
         expect(iconSpan?.className).toContain('shrink-0');
-        expect(iconSpan?.className).toContain(active ? 'text-[#ff544c]' : 'group-hover:text-[#101728]');
+        expect(iconSpan?.className).toContain(active ? 'text-brand' : 'group-hover:text-ink');
       }
     });
 

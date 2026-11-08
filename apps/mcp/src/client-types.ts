@@ -120,6 +120,7 @@ export interface UpdatePersonaInput {
   scriptPrompt?: string;
   paragraphNumber?: number;
   niche?: string;
+  faceQuality?: 'ok' | 'very_good';
 }
 
 /** Input for publishing a user-provided video directly, without generation. */

@@ -31,7 +31,7 @@ const toPercent = (value: number): number => Math.round(value * 1000) / 10;
 export function RetentionCurveChart({ points, watchingLabel, relativeLabel, axisLabel }: RetentionCurveChartProps): React.ReactElement {
   const config: ChartConfig = {
     watching: { label: watchingLabel, color: '#ff544c' },
-    relative: { label: relativeLabel, color: '#94a3b8' },
+    relative: { label: relativeLabel, theme: { light: '#94a3b8', dark: '#7f8da3' } },
   };
   const data = points.map((point) => ({
     elapsed: toPercent(point.ratio),

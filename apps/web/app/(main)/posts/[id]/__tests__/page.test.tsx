@@ -595,7 +595,7 @@ describe('PostDetailPage', () => {
     expect(video?.getAttribute('src')).toBe('/api/persona/video-download/task-3/final-1.mp4');
     expect(screen.getByRole('heading', { name: 'Viva Leve' })).toBeInTheDocument();
     expect(screen.getByText('posts.statusCompleted')).toBeInTheDocument();
-    expect(screen.getByText('posts.statusCompleted').className).toContain('bg-[#cff5df]');
+    expect(screen.getByText('posts.statusCompleted').className).toContain('bg-success-soft');
     expect(screen.getByRole('region', { name: 'posts.detailsTitle' })).toHaveTextContent('Launch recap');
     expect(screen.queryByText('posts.errorUnknown')).not.toBeInTheDocument();
     expect(screen.queryByText('posts.refundedBadge')).not.toBeInTheDocument();
@@ -917,7 +917,7 @@ describe('PostDetailPage — direct generation progress', () => {
     expect(screen.getByRole('progressbar')).toBeInTheDocument();
     expect(screen.getByText('67%')).toBeInTheDocument();
     expect(screen.getByText('posts.statusRunning')).toBeInTheDocument();
-    expect(screen.getByText('posts.statusRunning').className).toContain('bg-[#e3f0ff]');
+    expect(screen.getByText('posts.statusRunning').className).toContain('bg-info-soft');
     expect(screen.queryByText('posts.coverNoVideo')).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'posts.detailsTitle' })?.querySelector('video')).toBeNull();
   });
@@ -996,12 +996,12 @@ describe('PostDetailPage — direct generation progress', () => {
 
 describe('PostDetailPage — status badge', () => {
   it.each([
-    ['pending', 'posts.statusPending', 'bg-[#e8edf1]'],
-    ['generating', 'posts.statusGenerating', 'bg-[#e3f0ff]'],
-    ['ready', 'posts.statusReady', 'bg-[#fff4d6]'],
-    ['publishing', 'posts.statusPublishing', 'bg-[#e3f0ff]'],
-    ['published', 'posts.statusPublished', 'bg-[#cff5df]'],
-    ['failed', 'posts.statusFailed', 'bg-[#ffe1de]'],
+    ['pending', 'posts.statusPending', 'bg-sunken'],
+    ['generating', 'posts.statusGenerating', 'bg-info-soft'],
+    ['ready', 'posts.statusReady', 'bg-warning-soft'],
+    ['publishing', 'posts.statusPublishing', 'bg-info-soft'],
+    ['published', 'posts.statusPublished', 'bg-success-soft'],
+    ['failed', 'posts.statusFailed', 'bg-destructive-soft'],
   ] as const)('labels a %s slot with %s', (status, label, style) => {
     mockQueries({ slot: slotPayload({ id: 'u1', status, taskId: 'task-status' }) });
     vi.mocked(useParams).mockReturnValue({ id: 'u1' });

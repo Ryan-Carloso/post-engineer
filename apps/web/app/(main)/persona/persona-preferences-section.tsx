@@ -25,8 +25,8 @@ const PersonaLayoutFieldset = () => {
   const { t } = useI18n();
   return (
     <fieldset>
-      <legend className="text-sm font-semibold text-neutral-800">{t('personas.layoutLabel')}</legend>
-      <p className="mt-1 text-xs leading-5 text-neutral-500">{t('personas.layoutHint')}</p>
+      <legend className="text-sm font-semibold text-ink">{t('personas.layoutLabel')}</legend>
+      <p className="mt-1 text-xs leading-5 text-muted-text">{t('personas.layoutHint')}</p>
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {VIDEO_LAYOUTS.map((layout) => {
           const isSelected = videoLayout === layout;
@@ -38,8 +38,8 @@ const PersonaLayoutFieldset = () => {
               onClick={() => usePersonaStore.getState().setVideoLayout(layout)}
               className={`flex min-h-14 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
                 isSelected
-                  ? 'border-accent bg-red-50 text-accent ring-2 ring-accent/10'
-                  : 'border-neutral-200 bg-neutral-50 text-neutral-700 hover:border-neutral-400 hover:bg-white'
+                  ? 'border-accent bg-destructive-soft text-accent ring-2 ring-accent/10'
+                  : 'border-line bg-surface text-ink-soft hover:border-muted-text hover:bg-card'
               }`}
             >
               {t(`personas.layout${layout === 'standard' ? 'Standard' : 'React'}`)}
@@ -59,9 +59,9 @@ export function PersonaPreferencesSection() {
   return (
     <section>
       <SectionDivider label={t('personas.preferencesLabel')} />
-      <div className="mt-4 space-y-5 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="mt-4 space-y-5 rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
         <fieldset>
-          <legend className="text-sm font-semibold text-neutral-800">{t('personas.aspectLabel')}</legend>
+          <legend className="text-sm font-semibold text-ink">{t('personas.aspectLabel')}</legend>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
             {['9:16', '16:9', '1:1'].map((aspect) => {
               const isSelected = videoAspect === aspect;
@@ -73,8 +73,8 @@ export function PersonaPreferencesSection() {
                   onClick={() => usePersonaStore.getState().setVideoAspect(aspect)}
                   className={`flex min-h-14 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
                     isSelected
-                      ? 'border-accent bg-red-50 text-accent ring-2 ring-accent/10'
-                      : 'border-neutral-200 bg-neutral-50 text-neutral-700 hover:border-neutral-400 hover:bg-white'
+                      ? 'border-accent bg-destructive-soft text-accent ring-2 ring-accent/10'
+                      : 'border-line bg-surface text-ink-soft hover:border-muted-text hover:bg-card'
                   }`}
                 >
                   {aspect}
@@ -84,7 +84,7 @@ export function PersonaPreferencesSection() {
           </div>
         </fieldset>
         <PersonaLayoutFieldset />
-        <label className="block text-sm font-semibold text-neutral-800">
+        <label className="block text-sm font-semibold text-ink">
           {t('personas.nicheLabel')}
           <input
             type="text"
@@ -94,17 +94,17 @@ export function PersonaPreferencesSection() {
             {...register('niche')}
           />
           {errors.niche ? (
-            <span role="alert" className="mt-1 block text-sm font-normal text-red-600">{t('personas.nicheMaxError')}</span>
+            <span role="alert" className="mt-1 block text-sm font-normal text-destructive">{t('personas.nicheMaxError')}</span>
           ) : null}
         </label>
-        <label className="block text-sm font-semibold text-neutral-800" data-error-field="script">
+        <label className="block text-sm font-semibold text-ink" data-error-field="script">
           {t('personas.scriptLabel')}
           <textarea className={`${INPUT_CLASS} min-h-28 resize-y`} placeholder={t('personas.scriptPlaceholder')} {...register('scriptPrompt')} />
           {errors.scriptPrompt ? (
-            <span role="alert" className="mt-1 block text-sm font-normal text-red-600">{t('personas.scriptMaxError')}</span>
+            <span role="alert" className="mt-1 block text-sm font-normal text-destructive">{t('personas.scriptMaxError')}</span>
           ) : null}
         </label>
-        <label className="block text-sm font-semibold text-neutral-800">
+        <label className="block text-sm font-semibold text-ink">
           {t('personas.ctaLabel')}
           <input
             type="text"
@@ -115,7 +115,7 @@ export function PersonaPreferencesSection() {
           />
           <span className="mt-1 block text-xs font-normal text-muted-foreground">{t('personas.ctaHint')}</span>
           {errors.ctaText ? (
-            <span role="alert" className="mt-1 block text-sm font-normal text-red-600">{t('personas.ctaMaxError', { max: PERSONA_CTA_MAX_LENGTH })}</span>
+            <span role="alert" className="mt-1 block text-sm font-normal text-destructive">{t('personas.ctaMaxError', { max: PERSONA_CTA_MAX_LENGTH })}</span>
           ) : null}
         </label>
         {result && !result.success && result.error === 'prompt_rejected' ? (

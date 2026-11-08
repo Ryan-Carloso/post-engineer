@@ -9,7 +9,7 @@ export function SectionDivider({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-3">
       <span className={SECTION_LABEL_CLASS}>{label}</span>
-      <span className="h-px flex-1 bg-neutral-200" />
+      <span className="h-px flex-1 bg-sunken" />
     </div>
   );
 }
@@ -19,6 +19,6 @@ export function SectionDivider({ label }: { label: string }) {
 //---------------
 export function InlineFieldError({ message }: { message: string }) {
   return (
-    <p role="alert" className="mt-2 text-sm font-medium text-red-700">{message}</p>
+    <p role="alert" className="mt-2 text-sm font-medium text-destructive">{message}</p>
   );
 }

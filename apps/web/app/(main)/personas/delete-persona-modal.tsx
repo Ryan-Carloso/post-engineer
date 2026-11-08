@@ -152,24 +152,24 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="delete-persona-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/60 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/60 p-4"
     >
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
-        <h2 id="delete-persona-title" className="text-lg font-semibold text-neutral-900">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-card p-6 shadow-xl">
+        <h2 id="delete-persona-title" className="text-lg font-semibold text-ink">
           {t('personas.deleteDialogTitle')}
         </h2>
 
         {phase === 'loading' && (
-          <p className="mt-4 text-sm text-neutral-500">{t('personas.deleteDialogIntro')}</p>
+          <p className="mt-4 text-sm text-muted-text">{t('personas.deleteDialogIntro')}</p>
         )}
 
         {phase === 'loadError' && (
           <div className="mt-4">
-            <p className="text-sm text-red-600">{t('personas.deleteDialogLoadError')}</p>
+            <p className="text-sm text-destructive">{t('personas.deleteDialogLoadError')}</p>
             <button
               type="button"
               onClick={() => setAttempt((n) => n + 1)}
-              className="mt-3 inline-flex min-h-11 items-center justify-center rounded-lg border border-neutral-200 px-5 py-2.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50"
+              className="mt-3 inline-flex min-h-11 items-center justify-center rounded-lg border border-line px-5 py-2.5 text-sm font-semibold text-ink-soft hover:bg-surface"
             >
               {t('personas.tryAgain')}
             </button>
@@ -178,10 +178,10 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
 
         {(phase === 'ready' || phase === 'deleting' || phase === 'deleteError') && counts && (
           <>
-            <p className="mt-2 text-sm leading-6 text-neutral-600">
+            <p className="mt-2 text-sm leading-6 text-muted-text">
               {t('personas.deleteDialogIntro')}
             </p>
-            <ul className="mt-3 space-y-1.5 text-sm text-neutral-800">
+            <ul className="mt-3 space-y-1.5 text-sm text-ink">
               <li>
                 <strong className="font-semibold">{counts.schedules}</strong>{' '}
                 {t(counts.schedules === 1 ? 'personas.deleteDialogSchedule' : 'personas.deleteDialogSchedules')}
@@ -220,17 +220,17 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
               </li>
             </ul>
 
-            <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm leading-6 text-amber-900">
+            <div className="mt-4 rounded-lg bg-warning-soft p-3 text-sm leading-6 text-warning">
               {t('personas.deleteDialogNoRefund')}
             </div>
 
             {videos.length > 0 && (
               <div className="mt-4">
-                <p className="text-sm font-medium text-neutral-700">
+                <p className="text-sm font-medium text-ink-soft">
                   {t('personas.deleteDialogDownloadHint')}
                 </p>
                 {preview?.videosTruncated === true && (
-                  <p className="mt-1 text-xs text-neutral-500">
+                  <p className="mt-1 text-xs text-muted-text">
                     {t('personas.deleteDialogVideosTruncated', {
                       shown: videos.length,
                       total: counts?.generatedVideos ?? videos.length,
@@ -238,7 +238,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
                   </p>
                 )}
                 {preview?.linksIncomplete === true && (
-                  <p className="mt-1 text-xs text-amber-700">
+                  <p className="mt-1 text-xs text-warning">
                     {t('personas.deleteDialogLinksIncomplete')}{' '}
                     <button
                       type="button"
@@ -256,19 +256,19 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
                       key={video.taskId ?? `video-${index}`}
                       className="flex items-center justify-between gap-3 text-sm"
                     >
-                      <span className="min-w-0 flex-1 truncate text-neutral-700">
+                      <span className="min-w-0 flex-1 truncate text-ink-soft">
                         {video.title ?? video.taskId ?? `video-${index + 1}`}
                       </span>
                       {video.downloadUrl ? (
                         <a
                           href={video.downloadUrl}
                           download
-                          className="shrink-0 font-medium text-blue-700 hover:underline"
+                          className="shrink-0 font-medium text-info hover:underline"
                         >
                           {t('personas.deleteDialogDownload')}
                         </a>
                       ) : (
-                        <span className="shrink-0 text-xs text-neutral-400">
+                        <span className="shrink-0 text-xs text-faint">
                           {t('personas.deleteDialogDownloadUnavailable')}
                         </span>
                       )}
@@ -279,12 +279,12 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
             )}
 
             {phase === 'deleteError' && (
-              <p className="mt-4 text-sm text-red-600">{t('personas.deleteDialogDeleteError')}</p>
+              <p className="mt-4 text-sm text-destructive">{t('personas.deleteDialogDeleteError')}</p>
             )}
 
             <label
               htmlFor="delete-persona-confirm-name"
-              className="mt-5 block text-sm font-medium text-neutral-700"
+              className="mt-5 block text-sm font-medium text-ink-soft"
             >
               {t('personas.deleteDialogTypeName')}
             </label>
@@ -298,10 +298,10 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
               autoComplete="off"
               disabled={phase === 'deleting'}
               aria-describedby={typedName !== '' && !nameMatches ? 'delete-persona-name-hint' : undefined}
-              className="mt-1.5 w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-red-500 focus:outline-none"
+              className="mt-1.5 w-full rounded-lg border border-line px-3 py-2.5 text-sm text-ink placeholder:text-faint focus:border-destructive focus:outline-none"
             />
             {typedName !== '' && !nameMatches && (
-              <p id="delete-persona-name-hint" className="mt-1.5 text-xs text-neutral-500">
+              <p id="delete-persona-name-hint" className="mt-1.5 text-xs text-muted-text">
                 {t('personas.deleteDialogNameMismatch')}
               </p>
             )}
@@ -313,7 +313,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
             type="button"
             onClick={onClose}
             disabled={phase === 'deleting'}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-neutral-200 px-5 py-2.5 text-sm font-semibold text-neutral-700 transition-colors hover:bg-neutral-50 disabled:opacity-50"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-line px-5 py-2.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-surface disabled:opacity-50"
           >
             {t('personas.cancel')}
           </button>
@@ -322,7 +322,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
               type="button"
               onClick={handleDelete}
               disabled={!nameMatches || phase === 'deleting'}
-              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-40"
+              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-destructive px-5 py-2.5 text-sm font-semibold text-destructive-foreground transition-colors hover:bg-destructive-hover disabled:opacity-40"
             >
               {t('personas.deleteConfirm')}
             </button>

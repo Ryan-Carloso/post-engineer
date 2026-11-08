@@ -344,13 +344,13 @@ describe('PersonaVoiceClonePanel', () => {
     const { rerender } = render(<VoiceTabButton active label="Clone" onSelect={onSelect} />);
     const tab = screen.getByRole('tab', { name: 'Clone' });
     expect(tab).toHaveAttribute('aria-selected', 'true');
-    expect(tab.className).toContain('bg-white');
+    expect(tab.className).toContain('bg-card');
     await user.click(tab);
     expect(onSelect).toHaveBeenCalledTimes(1);
 
     rerender(<VoiceTabButton active={false} label="Clone" onSelect={onSelect} />);
     expect(tab).toHaveAttribute('aria-selected', 'false');
-    expect(tab.className).toContain('text-neutral-500');
+    expect(tab.className).toContain('text-muted-text');
   });
 
   it('shows the list error when loading cloned voices fails', async () => {

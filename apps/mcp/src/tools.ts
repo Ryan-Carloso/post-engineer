@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { filterVoicesPayload, ListVoicesSchema, type ListVoicesArgs } from './voice-filters.js';
-import { personaVoiceField, withResolvedPersonaVoice, withResolvedPersonaVoiceForUpdate } from './voice-filters.js';
+import { personaVoiceField, withResolvedPersonaVoice } from './voice-filters.js';
 import {
   CancelScheduleSchema,
   CancelScheduleShape,
@@ -45,7 +45,7 @@ import {
 } from './client.js';
 import { getErrorMessage, ApiError } from './errors.js';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
-import { CreatePersonaAvatarFields, refinePersonaAvatar, UpdatePersonaAvatarFields } from './persona-avatar.js';
+import { CreatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar.js';
 
 export type { McpToolResponse } from './tools-call.js';
 
@@ -110,24 +110,9 @@ export const ListFacesShape = {};
 
 export const ListFacesSchema = z.object(ListFacesShape);
 
-export const UpdatePersonaShape = {
-  personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to update'),
-  name: z.string().min(1).optional().describe('New name for the persona'),
-  ...UpdatePersonaAvatarFields,
-  voiceId: personaVoiceField().optional().describe('New voice id or label from list_voices. Never type a provider prefix.'),
-  language: z
-    .string()
-    .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })
-    .optional()
-    .describe('New language code — English only for now (e.g. en-US, en-GB)'),
-  videoAspect: z.enum(['9:16', '16:9']).optional().describe('New video aspect ratio'),
-  videoLayout: z.enum(VIDEO_LAYOUTS).optional().describe('New persona-hook layout (standard or react)'),
-  scriptPrompt: z.string().optional().describe('New system prompt instructions for video scripts'),
-  paragraphNumber: z.number().int().min(1).max(10).optional().describe('New number of paragraphs'),
-  niche: z.string().max(300).optional().describe('New content niche'),
-};
-
-export const UpdatePersonaSchema = z.object(UpdatePersonaShape).superRefine(refinePersonaAvatar(false));
+// update_persona lives in persona-update.ts (shape, schema and handler);
+// re-exported here so existing import sites keep working.
+export { UpdatePersonaShape, UpdatePersonaSchema, handleUpdatePersona } from './persona-update.js';
 
 export const ListSocialAccountsShape = {};
 
@@ -329,17 +314,6 @@ export async function handleListFaces(
   client: PostEngineerClient
 ): Promise<McpToolResponse> {
   return handleLibraryCall(() => client.listFaces(), 'listing faces');
-}
-
-export async function handleUpdatePersona(
-  client: PostEngineerClient,
-  args: z.infer<typeof UpdatePersonaSchema>
-): Promise<McpToolResponse> {
-  // Full-schema parse, then voice routing BEFORE the POST; no voiceId keeps the stored voice (#353).
-  return handleLibraryCall(
-    async () => client.updatePersona(await withResolvedPersonaVoiceForUpdate(client, UpdatePersonaSchema.parse(args))),
-    'updating persona', 'Persona updated successfully'
-  );
 }
 
 export async function handleListSocialAccounts(

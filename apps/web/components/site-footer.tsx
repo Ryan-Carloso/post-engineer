@@ -10,19 +10,19 @@ export default function SiteFooter() {
   const { t } = useI18n();
 
   return (
-    <footer className="w-full border-t border-[#edf0f4] bg-white px-5 py-6">
-      <div className="mx-auto flex max-w-3xl flex-col items-center gap-2 text-sm text-[#657184] sm:flex-row sm:justify-center sm:gap-6">
-        <Link href="/privacy" className="hover:text-[#101728]">
+    <footer className="w-full border-t border-hairline bg-card px-5 py-6">
+      <div className="mx-auto flex max-w-3xl flex-col items-center gap-2 text-sm text-muted-text sm:flex-row sm:justify-center sm:gap-6">
+        <Link href="/privacy" className="hover:text-ink">
           {t('footer.privacy')}
         </Link>
-        <Link href="/terms" className="hover:text-[#101728]">
+        <Link href="/terms" className="hover:text-ink">
           {t('footer.terms')}
         </Link>
-        <a href="mailto:madebyryandev@gmail.com" className="hover:text-[#101728]">
+        <a href="mailto:madebyryandev@gmail.com" className="hover:text-ink">
           madebyryandev@gmail.com
         </a>
       </div>
-      <p className="mt-2 text-center text-xs text-[#8a94a8]">
+      <p className="mt-2 text-center text-xs text-faint">
         {t('footer.rights', { year: new Date().getFullYear() })}
       </p>
     </footer>

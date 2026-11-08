@@ -227,8 +227,8 @@ interface PersonaFormState {
   ctaText: string;
   niche: string;
   result: CreatePersonaResult | null;
-  /** Avatar resolution: 'ok' (480p, 1 token/video) or 'very_good' (720p,
-      2 tokens/video). The face is always present, so this is the only
+  /** Avatar resolution: 'ok' (480p, 2 tokens/video) or 'very_good' (720p,
+      3 tokens/video). The face is always present, so this is the only
       face-related choice on this screen. */
   faceQuality: FaceQuality;
   setName: (value: string) => void;
@@ -251,6 +251,7 @@ interface PersonaFormState {
   setFaceQuality: (quality: FaceQuality) => void;
   resetForm: () => void;
   buildPersonaFormData: (language?: string) => FormData;
+  buildPersonaEditFormData: () => FormData;
 }
 
 const initialPersonaState = {
@@ -328,6 +329,28 @@ export const usePersonaStore = create<PersonaFormState>()(
       if (s.niche.trim()) formData.append('niche', s.niche.trim());
       const videoSubject = s.niche.trim() || s.scriptPrompt.trim();
       if (videoSubject) formData.append('video_subject', videoSubject);
+      return formData;
+    },
+    // Edit payload: the same fields the edit submit used to append inline,
+    // plus the stored faceQuality — the PATCH accepts it now, so changing
+    // the quality picker on the edit screen reaches the persona row instead
+    // of being silently dropped. Photo changes do not ride this payload
+    // (the avatar section uploads them separately).
+    buildPersonaEditFormData: () => {
+      const s = get();
+      const formData = new FormData();
+      formData.append('name', s.name.trim());
+      if (s.avatarUrl) formData.append('avatarUrl', s.avatarUrl);
+      if (s.voiceId) formData.append('voiceId', s.voiceId);
+      if (s.videoAspect) formData.append('videoAspect', s.videoAspect);
+      if (s.videoLayout) formData.append('videoLayout', s.videoLayout);
+      if (s.scriptPrompt.trim()) formData.append('scriptPrompt', s.scriptPrompt.trim());
+      // Always sent on edit: a blank value clears the persona's CTA
+      // (the PATCH parser maps present-but-blank to ''), omitting the
+      // field would leave the old CTA in place forever.
+      formData.append('ctaText', s.ctaText.trim());
+      if (s.niche.trim()) formData.append('niche', s.niche.trim());
+      formData.append('faceQuality', s.faceQuality);
       return formData;
     },
   }),

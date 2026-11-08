@@ -27,10 +27,10 @@ export default function PromptDetailPage() {
         <PromptDetail prompt={prompt} />
       ) : (
         <div>
-          <p className="leading-relaxed text-[#414d63]">{t('recipes.notFound')}</p>
+          <p className="leading-relaxed text-ink-soft">{t('recipes.notFound')}</p>
           <Link
             href="/recipes"
-            className="mt-4 inline-block font-medium text-[#ff544c] hover:underline"
+            className="mt-4 inline-block font-medium text-brand hover:underline"
           >
             ← {t('recipes.backToPrompts')}
           </Link>

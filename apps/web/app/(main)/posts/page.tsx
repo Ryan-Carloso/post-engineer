@@ -27,6 +27,7 @@ import type { TranslationKey } from '@/lib/i18n';
 import { SpinnerIcon } from '@/lib/ui';
 import { PROVIDER_LABELS, accountOption, type AccountOption, scheduleAccountIds } from '@/lib/account-options';
 import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
+import { STATUS_KEY, STATUS_STYLE } from './status';
 
 //---------------
 // PostsPage — post history + upcoming posts on the same page, across all
@@ -56,26 +57,6 @@ function resolveAccountFilter(
 }
 
 const PROVIDER_FILTERS: ProviderFilter[] = ['all', 'youtube', 'instagram', 'linkedin', 'bluesky', 'threads'];
-
-const STATUS_STYLE: Record<string, string> = {
-  pending: 'bg-[#e8edf1] text-[#60758a]',
-  generating: 'bg-[#e3f0ff] text-[#1d5bbf]',
-  running: 'bg-[#e3f0ff] text-[#1d5bbf]',
-  ready: 'bg-[#fff4d6] text-[#9a6b00]',
-  publishing: 'bg-[#e3f0ff] text-[#1d5bbf]',
-  published: 'bg-[#cff5df] text-[#167246]',
-  completed: 'bg-[#cff5df] text-[#167246]',
-  failed: 'bg-[#ffe1de] text-[#c2301e]',
-};
-
-const STATUS_KEY: Record<string, TranslationKey> = {
-  pending: 'posts.statusPending',
-  generating: 'posts.statusGenerating',
-  ready: 'posts.statusReady',
-  publishing: 'posts.statusPublishing',
-  published: 'posts.statusPublished',
-  failed: 'posts.statusFailed',
-};
 
 //---------------
 // Generation history cards — standalone video generations (manual/debug),
@@ -113,7 +94,7 @@ const GenerationCard = ({
         </div>
         <div className="mt-3 flex gap-3">
           <div className="flex-1">
-            <p className="line-clamp-3 text-sm leading-snug text-[#0d2b45]">
+            <p className="line-clamp-3 text-sm leading-snug text-primary">
               <span className="font-semibold">{generation.personaName ?? t('posts.personaFallback')}</span>
               {' — '}
               <span className="text-muted-foreground">{generation.videoSubject ?? t('posts.unknownTitle')}</span>
@@ -130,7 +111,7 @@ const GenerationCard = ({
           <span className="min-w-0 truncate text-xs text-muted-foreground">{generation.videoSubject ?? t('posts.unknownTitle')}</span>
           <div className="flex shrink-0 items-center gap-2">
             {generation.tokensRefunded && (
-              <Badge variant="outline" className="border-transparent bg-[#cff5df] text-[#167246]">
+              <Badge variant="outline" className="border-transparent bg-success-soft text-success">
                 {t('posts.refundedBadge')}
               </Badge>
             )}
@@ -207,7 +188,7 @@ const PostCard = ({
           </p>
         </div>
         <div className="mt-3 flex gap-3">
-          <p className="line-clamp-3 flex-1 text-sm leading-snug text-[#0d2b45]">
+          <p className="line-clamp-3 flex-1 text-sm leading-snug text-primary">
             <span className="font-semibold">{personaName}</span>
             {' — '}
             <span className="text-muted-foreground">{slot.title ?? t('posts.unknownTitle')}</span>
@@ -222,14 +203,14 @@ const PostCard = ({
               aria-valuenow={slot.progress}
               aria-valuemin={0}
               aria-valuemax={100}
-              className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#dce6ee]"
+              className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken"
             >
               <div
-                className="h-full rounded-full bg-[#0d2b45] transition-all"
+                className="h-full rounded-full bg-primary transition-all"
                 style={{ width: `${slot.progress}%` }}
               />
             </div>
-            <span className="shrink-0 text-[11px] font-semibold text-[#0d2b45] tabular-nums">
+            <span className="shrink-0 text-[11px] font-semibold text-primary tabular-nums">
               {slot.progress}%
             </span>
           </div>
@@ -262,7 +243,7 @@ const AccountAvatarGroup = ({ accounts }: { accounts: AccountOption[] }) => (
   <div className="flex -space-x-1.5">
     {accounts.slice(0, 4).map((account) => (
       <Avatar key={`${account.provider}:${account.id}`} className="size-6 ring-2 ring-white">
-        <AvatarFallback className="bg-secondary text-[9px] font-semibold text-[#0d2b45]">
+        <AvatarFallback className="bg-secondary text-[9px] font-semibold text-primary">
           {accountInitials(account.label)}
         </AvatarFallback>
       </Avatar>
@@ -282,7 +263,7 @@ const PostThumb = ({ src }: { src: string | null }) => {
   const thumbSrc = src ? `${src}#t=0.1` : null;
   return (
     <div className="relative w-18 shrink-0">
-      <AspectRatio ratio={1} className="w-18 rounded-[9px] bg-[#e8edf1]">
+      <AspectRatio ratio={1} className="w-18 rounded-[9px] bg-sunken">
         {thumbSrc ? (
           <video src={thumbSrc} preload="metadata" muted playsInline className="size-full object-cover" />
         ) : null}
@@ -296,7 +277,7 @@ const PostThumb = ({ src }: { src: string | null }) => {
   );
 };
 
-const CARD_BORDER = 'border-[#e3ebf1] shadow-[0_1px_2px_rgba(13,43,69,0.05)] hover:border-[#c8d6e0]';
+const CARD_BORDER = 'border-line shadow-[0_1px_2px_rgba(13,43,69,0.05)] hover:border-line';
 
 //---------------
 // videoUrlFor — the engine download proxy serves the final render for a
@@ -405,7 +386,7 @@ export default function PostsPage() {
     <div className="mx-auto max-w-6xl">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-[-0.02em] text-[#0d2b45]">{t('posts.title')}</h1>
+          <h1 className="text-2xl font-bold tracking-[-0.02em] text-primary">{t('posts.title')}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t('posts.subtitle')}</p>
         </div>
         <div className="flex gap-2">
@@ -413,18 +394,18 @@ export default function PostsPage() {
             type="button"
             onClick={handleRetry}
             disabled={statusQuery.isFetching}
-            className="rounded-xl border border-input bg-white px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb] disabled:opacity-50"
+            className="rounded-xl border border-input bg-card px-4 py-2 text-sm font-semibold text-primary hover:bg-background disabled:opacity-50"
           >
             {t('posts.refresh')}
           </button>
           {/* The mobile bottom bar has no Metrics tab (pinned at four tabs in layout.test.tsx); this button is how phones reach /metrics. */}
-          <Link href="/metrics" className="rounded-xl border border-input bg-white px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]">
+          <Link href="/metrics" className="rounded-xl border border-input bg-card px-4 py-2 text-sm font-semibold text-primary hover:bg-background">
             {t('nav.metrics')}
           </Link>
         </div>
       </div>
 
-      <div className="mt-6 flex gap-1 rounded-xl bg-[#edf2f5] p-1">
+      <div className="mt-6 flex gap-1 rounded-xl bg-sunken p-1">
         {(['upcoming', 'history'] as const).map((value) => (
           <button
             key={value}
@@ -432,7 +413,7 @@ export default function PostsPage() {
             onClick={() => setTab(value)}
             aria-pressed={tab === value}
             className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === value ? 'bg-white text-[#0d2b45] shadow-sm' : 'text-muted-foreground hover:text-[#0d2b45]'
+              tab === value ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground hover:text-primary'
             }`}
           >
             {t(value === 'upcoming' ? 'posts.tabUpcoming' : 'posts.tabHistory')} ({value === 'upcoming' ? upcomingCount : historyCount})
@@ -457,7 +438,7 @@ export default function PostsPage() {
               // switching back — reset it instead.
               setAccountFilter((current) => resolveAccountFilter(current, next, accountOptions));
             }}
-            className="rounded-xl border border-input bg-white px-3 py-2 text-sm font-medium text-[#0d2b45]"
+            className="rounded-xl border border-input bg-card px-3 py-2 text-sm font-medium text-primary"
           >
             <option value="all">{t('posts.allProviders')}</option>
             {PROVIDER_FILTERS.filter(
@@ -474,7 +455,7 @@ export default function PostsPage() {
           <select
             value={effectiveAccountFilter}
             onChange={(event) => setAccountFilter(event.target.value)}
-            className="rounded-xl border border-input bg-white px-3 py-2 text-sm font-medium text-[#0d2b45]"
+            className="rounded-xl border border-input bg-card px-3 py-2 text-sm font-medium text-primary"
           >
             <option value="all">{t('posts.allAccounts')}</option>
             {visibleAccounts.map((account) => (
@@ -492,12 +473,12 @@ export default function PostsPage() {
             <SpinnerIcon /> {t('posts.refresh')}…
           </div>
         ) : isError ? (
-          <div className="rounded-xl border border-input bg-white p-8 text-center">
-            <p className="text-sm font-semibold text-[#0d2b45]">{t('posts.loadError')}</p>
+          <div className="rounded-xl border border-input bg-card p-8 text-center">
+            <p className="text-sm font-semibold text-primary">{t('posts.loadError')}</p>
             <button
               type="button"
               onClick={handleRetry}
-              className="mt-3 rounded-xl bg-[#0d2b45] px-4 py-2 text-sm font-semibold text-white hover:bg-[#123a5e]"
+              className="mt-3 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-ink hover:bg-accent-hover"
             >
               {t('posts.refresh')}
             </button>
@@ -506,7 +487,7 @@ export default function PostsPage() {
           <>
             {tab === 'history' && (
               <section aria-label={t('posts.generationsTitle')} className="mb-8">
-                <h2 className="text-base font-bold tracking-[-0.01em] text-[#0d2b45]">
+                <h2 className="text-base font-bold tracking-[-0.01em] text-primary">
                   {t('posts.generationsTitle')}
                 </h2>
                 {generations.length === 0 ? (
@@ -525,7 +506,7 @@ export default function PostsPage() {
               </section>
             )}
             {filteredSlots.length === 0 ? (
-              <div className="rounded-xl border border-input bg-white p-8 text-center text-sm text-muted-foreground">
+              <div className="rounded-xl border border-input bg-card p-8 text-center text-sm text-muted-foreground">
                 {hasActiveFilter
                   ? t('posts.noResultsForFilter')
                   : t(tab === 'upcoming' ? 'posts.noUpcoming' : 'posts.noHistory')}

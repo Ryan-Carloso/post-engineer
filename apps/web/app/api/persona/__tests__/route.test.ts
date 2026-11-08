@@ -1113,6 +1113,27 @@ describe('PATCH /api/persona', () => {
     expect(updated[0]).toMatchObject({ video_layout: 'react' });
   });
 
+  it('updates face_quality alone, without recreating the persona', async () => {
+    const { updated } = mockSupabaseForPatch();
+
+    const res = await PATCH(patchRequest('persona-uuid-1', { faceQuality: 'ok' }));
+
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { success: boolean }).toEqual({ success: true });
+    expect(updated[0]).toMatchObject({ face_quality: 'ok' });
+  });
+
+  it('returns 400 with an invalid faceQuality', async () => {
+    mockSupabaseForPatch();
+
+    const res = await PATCH(patchRequest('persona-uuid-1', { faceQuality: 'ultra' }));
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code?: string };
+    expect(body.error).toBe('Invalid faceQuality: ultra. Use one of ok, very_good.');
+    expect(body.code).toBe('VALIDATION_FAILED');
+  });
+
   it('returns 400 with an invalid videoLayout', async () => {
     mockSupabaseForPatch();
 

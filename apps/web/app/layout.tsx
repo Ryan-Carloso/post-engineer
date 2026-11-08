@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import Providers from "./providers";
 import WhatsAppFloatingButton from "@/components/ui/whatsapp-button";
@@ -57,10 +57,19 @@ export const metadata: Metadata = {
   },
 };
 
+// Browser chrome color follows the active theme; values match --background.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f8fb" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b1220" },
+  ],
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="pt-BR"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-dvh flex-col">
