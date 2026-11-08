@@ -137,5 +137,14 @@
   ],
   "GET /api/prompts/[slug]": [
     "get_prompt"
+  ],
+  "POST /api/experiments": [
+    "create_experiment"
+  ],
+  "GET /api/experiments": [
+    "list_experiments"
+  ],
+  "GET /api/experiments/[id]": [
+    "get_experiment_results"
   ]
 }

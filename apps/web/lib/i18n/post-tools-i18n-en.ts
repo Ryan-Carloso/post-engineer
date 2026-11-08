@@ -10,4 +10,7 @@ export const postToolDescEn = {
   toolDescGetPostMetrics: 'Get per-video performance metrics',
   toolDescGetYouTubeRetentionCurve: "Get one of your YouTube videos' retention curve",
   toolDescCancelVideoTask: 'Cancel/remove one of your video tasks',
+  toolDescCreateExperiment: 'Create an A/B test of two hook styles',
+  toolDescListExperiments: 'List your A/B tests',
+  toolDescGetExperimentResults: 'Compare the two variants of an A/B test',
 } as const;
