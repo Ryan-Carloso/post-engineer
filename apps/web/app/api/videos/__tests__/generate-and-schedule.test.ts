@@ -149,10 +149,13 @@ interface DbConfig {
   replaySlots?: Array<{ id: string; slot_at: string; title: string; task_id: string | null; status: string }>;
   slotCount?: number | null;
   ledgerIds?: string[];
+  /** Typed ledger rows for the generation_id: when set, replaces ledgerIds
+   *  (which defaults every row to a 2-token video_generation spend).
+   *  Amounts mirror production: spends negative, refunds positive. */
+  ledgerRows?: Array<{ id: string; type: string; amount: number }>;
   ledgerError?: boolean;
   spend?: { spent: boolean; balance: number };
   spendErrorCode?: string;
-  refundErrorCode?: string;
   scheduleInsertErrorCode?: string;
   /** Constraint named by a 23505 on the schedule insert, mirroring the
    *  Postgres message (`duplicate key value violates unique constraint "…"`). */
@@ -333,7 +336,9 @@ function makeClient(cfg: DbConfig): unknown {
           if (cfg.ledgerError) {
             return Promise.resolve({ data: null, error: { code: 'XX000', message: 'db down' } }).then(resolve, reject);
           }
-          return Promise.resolve({ data: (cfg.ledgerIds ?? []).map((id) => ({ id })), error: null }).then(resolve, reject);
+          const rows =
+            cfg.ledgerRows ?? (cfg.ledgerIds ?? []).map((id) => ({ id, type: 'video_generation', amount: -2 }));
+          return Promise.resolve({ data: rows, error: null }).then(resolve, reject);
         }
         if (name === 'scheduled_posts') {
           if (isCountQuery) {
@@ -363,11 +368,8 @@ function makeClient(cfg: DbConfig): unknown {
         }
         return { data: cfg.spend ?? { spent: true, balance: 100 }, error: null };
       }
-      if (name === 'refund_batch_tokens' || name === 'refund_generation_tokens') {
-        if (name === 'refund_generation_tokens' && cfg.refundErrorCode) {
-          return { data: null, error: { code: cfg.refundErrorCode, message: 'refund failed' } };
-        }
-        if (name === 'refund_batch_tokens' && cfg.refundBatchErrorCode) {
+      if (name === 'refund_batch_tokens') {
+        if (cfg.refundBatchErrorCode) {
           return { data: null, error: { code: cfg.refundBatchErrorCode, message: 'refund failed' } };
         }
         return { data: { refunded: true }, error: null };
@@ -1041,6 +1043,57 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(inserts['schedules']).toBeUndefined();
     });
 
+    it('re-charges when the prior spend was fully refunded', async () => {
+      // Attempt 1 charged, then the slot-insert rollback (or the
+      // experiment-pair recheck) refunded under the same generation_id.
+      // The refund inserts a credit row and never deletes the spend row,
+      // so the ledger holds both — only the net counts: fully refunded
+      // means the retry must charge again, or the video renders for free.
+      setup({
+        ...DEFAULT_CFG,
+        ledgerRows: [
+          { id: 'tx-spend', type: 'video_generation', amount: -2 },
+          { id: 'tx-refund', type: 'generation_refund', amount: 2 },
+        ],
+      });
+      const res = await post(baseBody({ idempotencyKey: 'spent-and-refunded-key' }));
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
+    });
+
+    it('does not charge when the ledger holds an unrefunded spend row', async () => {
+      // Same fixture shape as the refunded case, but with no refund row:
+      // the retry resumes without charging.
+      setup({
+        ...DEFAULT_CFG,
+        ledgerRows: [{ id: 'tx-spend', type: 'video_generation', amount: -2 }],
+      });
+      const res = await post(baseBody({ idempotencyKey: 'spend-row-key' }));
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('does not charge when the ledger holds a spend with only a partial refund', async () => {
+      // A partial refund leaves a net spend standing: the retry resumes
+      // without charging.
+      setup({
+        ...DEFAULT_CFG,
+        ledgerRows: [
+          { id: 'tx-spend', type: 'video_generation', amount: -2 },
+          { id: 'tx-refund', type: 'generation_refund', amount: 1 },
+        ],
+      });
+      const res = await post(baseBody({ idempotencyKey: 'spend-partial-refund-key' }));
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
     it('accepts the Idempotency-Key header', async () => {
       const key = 'header-key-9';
       const expectedId = deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:${key}`);
@@ -1054,6 +1107,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const key = 'race-key-1';
       // Step 7 misses the schedule (race), we spend, then the insert hits
       // the PK: our spend is redundant, refund it before replaying.
+      vi.mocked(logger.error).mockClear();
       setup({
         ...DEFAULT_CFG,
         scheduleInsertErrorCode: '23505',
@@ -1067,9 +1121,19 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // Our spend did not create the schedule: undo it so the retry is not
       // charged twice. The winner's own spend under the same generation_id
       // is the single charge.
-      const refunds = rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+      const refunds = rpcCalls.filter((c) => c.name === 'refund_batch_tokens');
       expect(refunds).toHaveLength(1);
       expect(refunds[0].args.p_reason).toMatch(/PK race/);
+      // The rollback refunds our whole spend, not a single slot's share.
+      expect(refunds[0].args.p_amount).toBe(2);
+      expect(String(refunds[0].args.p_refund_key)).toMatch(/^batch:.*:rollback:/);
+      // The rollback refund landed: the success path logs it (a mutant
+      // that inverts the refunded flag would drop this log).
+      expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+        expect.stringMatching(/refunded redundant spend, replaying winner/),
+        expect.anything(),
+        expect.objectContaining({ userId: USER_ID }),
+      );
     });
 
     it('does not refund on a schedule PK conflict when we skipped our spend (already spent)', async () => {
@@ -1090,7 +1154,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(200);
       expect(json.replayed).toBe(true);
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
-      const refunds = rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+      const refunds = rpcCalls.filter((c) => c.name === 'refund_batch_tokens');
       expect(refunds).toHaveLength(0);
     });
 
@@ -1105,14 +1169,14 @@ describe('POST /api/videos/generate-and-schedule', () => {
         ...DEFAULT_CFG,
         scheduleInsertErrorCode: '23505',
         scheduleInsertConstraint: 'schedules_pkey',
-        refundErrorCode: 'XX000',
+        refundBatchErrorCode: 'XX000',
         replaySlots: [],
       });
       const res = await post(baseBody({ idempotencyKey: key }));
       const json = await res.json();
       expect(res.status).toBe(200);
       expect(json.replayed).toBe(true);
-      const refunds = rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+      const refunds = rpcCalls.filter((c) => c.name === 'refund_batch_tokens');
       expect(refunds).toHaveLength(1);
       expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
         expect.stringMatching(/PK race refund failed/),
@@ -1261,9 +1325,9 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.replayed).toBeUndefined();
       expect(json.slots).toBeUndefined();
       // Our spend bought nothing: give it back.
-      const refunds = rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+      const refunds = rpcCalls.filter((c) => c.name === 'refund_batch_tokens');
       expect(refunds).toHaveLength(1);
-      expect(refunds[0].args.p_generation_id).toMatch(/^batch:/);
+      expect(refunds[0].args.p_batch_generation_id).toMatch(/^batch:/);
     });
 
     it('does not refund the persona-already-scheduled conflict when we skipped our spend', async () => {
@@ -1279,7 +1343,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const res = await post(baseBody({ idempotencyKey: 'persona-owner-ledger-key' }));
       expect(res.status).toBe(409);
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
-      expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(0);
+      expect(rpcCalls.filter((c) => c.name === 'refund_batch_tokens')).toHaveLength(0);
     });
 
     it('refunds and 500s on a unique violation from an unclassified constraint', async () => {
@@ -1295,7 +1359,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(res.status).toBe(500);
       expect(json.replayed).toBeUndefined();
-      expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(1);
+      expect(rpcCalls.filter((c) => c.name === 'refund_batch_tokens')).toHaveLength(1);
     });
   });
 
@@ -1320,6 +1384,34 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
       const failedUpdates = updates.filter((u) => u.table === 'scheduled_posts' && u.fields.status === 'failed');
       expect(failedUpdates).toHaveLength(1);
+    });
+
+    it('refunds the re-charge when a fully-refunded retry fails dispatch', async () => {
+      // Attempt 1 spent and was fully refunded (net 0), so the retry
+      // re-charges under the same generation_id. If its dispatch then
+      // fails, the per-slot refund must still be attempted for the fresh
+      // charge — a refund cap counting only the first charge would answer
+      // nothing_to_refund and the user would pay for a failed video
+      // (migration 044 makes the cap net-aware; this pins the route half).
+      setup({
+        ...DEFAULT_CFG,
+        ledgerRows: [
+          { id: 'tx-spend', type: 'video_generation', amount: -2 },
+          { id: 'tx-refund', type: 'generation_refund', amount: 2 },
+        ],
+        engineFailSubjects: ['Porto trip'],
+      });
+      const res = await post(baseBody({ idempotencyKey: 'refunded-retry-dispatch-key' }));
+      const json = await res.json();
+      expect(res.status).toBe(502);
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', taskId: null, status: 'failed' });
+      // The retry charged again (net 0 before it) ...
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
+      // ... and the failed dispatch still attempts a refund of that charge.
+      const refunds = rpcCalls.filter((c) => c.name === 'refund_batch_tokens');
+      expect(refunds).toHaveLength(1);
+      expect(refunds[0].args.p_amount).toBe(2);
+      expect(refunds[0].args.p_refund_key).toMatch(/^batch:.*:slot:slot-0$/);
     });
 
     it('returns 502 when the slot fails', async () => {
@@ -2159,7 +2251,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(500);
       expect(json.code).toBe('INTERNAL_ERROR');
       expect(json.replayed).toBeUndefined();
-      expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(1);
+      expect(rpcCalls.filter((c) => c.name === 'refund_batch_tokens')).toHaveLength(1);
     });
 
     it('still 409s when the persona-owner refund fails', async () => {
@@ -2170,14 +2262,14 @@ describe('POST /api/videos/generate-and-schedule', () => {
         ...DEFAULT_CFG,
         scheduleInsertErrorCode: '23505',
         scheduleInsertConstraint: 'schedules_persona_owner',
-        refundErrorCode: 'XX000',
+        refundBatchErrorCode: 'XX000',
       });
       const res = await post(baseBody({ idempotencyKey: 'owner-refund-fail-key' }));
       const json = await res.json();
       expect(res.status).toBe(409);
       expect(json.code).toBe('PERSONA_ALREADY_SCHEDULED');
       expect(json.replayed).toBeUndefined();
-      expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(1);
+      expect(rpcCalls.filter((c) => c.name === 'refund_batch_tokens')).toHaveLength(1);
       expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
         '[generate-and-schedule] persona-already-scheduled refund failed',
         expect.anything(),
@@ -2194,9 +2286,41 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // Compensating rollback: no half-created schedule survives.
       expect(deletes).toContain('scheduled_posts');
       expect(deletes).toContain('schedules');
-      const refunds = rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+      const refunds = rpcCalls.filter((c) => c.name === 'refund_batch_tokens');
       expect(refunds).toHaveLength(1);
       expect(refunds[0].args.p_reason).toBe('Unified generate+schedule: slot insert failed; tokens refunded');
+      // The rollback refunds the whole spend through the net-aware RPC,
+      // with a per-attempt key (see the fresh-key test below).
+      expect(refunds[0].args.p_amount).toBe(2);
+      expect(String(refunds[0].args.p_refund_key)).toMatch(/^batch:.*:rollback:/);
+    });
+
+    it('uses a fresh rollback refund key on each attempt', async () => {
+      // Attempt 1 spends and rolls back (slot insert fails); the retry
+      // re-charges (net 0) and rolls back again. The second rollback refund
+      // must carry a different key, or the RPC answers already_refunded
+      // and the retry's fresh charge is never returned.
+      setup({
+        ...DEFAULT_CFG,
+        ledgerRows: [
+          { id: 'tx-spend', type: 'video_generation', amount: -2 },
+          { id: 'tx-refund', type: 'generation_refund', amount: 2 },
+        ],
+        slotInsertFails: true,
+      });
+      const body = baseBody({ idempotencyKey: 'rollback-key-freshness' });
+      const first = await post(body);
+      expect((await first.json()).code).toBe('INTERNAL_ERROR');
+      const second = await post(body);
+      expect((await second.json()).code).toBe('INTERNAL_ERROR');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(2);
+      const keys = rpcCalls
+        .filter((c) => c.name === 'refund_batch_tokens')
+        .map((c) => String(c.args.p_refund_key));
+      expect(keys).toHaveLength(2);
+      expect(keys[0]).toMatch(/^batch:.*:rollback:/);
+      expect(keys[1]).toMatch(/^batch:.*:rollback:/);
+      expect(keys[0]).not.toBe(keys[1]);
     });
   });
 
@@ -2412,7 +2536,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(500);
       expect(json.code).toBe('INTERNAL_ERROR');
       expect(json.replayed).toBeUndefined();
-      expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(0);
+      expect(rpcCalls.filter((c) => c.name === 'refund_batch_tokens')).toHaveLength(0);
     });
   });
 
@@ -2938,7 +3062,7 @@ describe('POST /api/videos/generate-and-schedule — experiment link (issue #476
     expect(verifyExperimentPairAfterInsert).toHaveBeenCalledTimes(1);
     expect(vi.mocked(verifyExperimentPairAfterInsert).mock.calls[0][1]).toMatchObject({ link: EXPERIMENT, userId: USER_ID, facts: { providers: ['youtube'], segments: DEFAULT_SEGMENTS } });
     expect(deletes).toEqual([]);
-    expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(0);
+    expect(rpcCalls.filter((c) => c.name === 'refund_batch_tokens')).toHaveLength(0);
     expect(vi.mocked(startEngineVideoTask)).toHaveBeenCalledTimes(1);
   });
 
@@ -2950,9 +3074,10 @@ describe('POST /api/videos/generate-and-schedule — experiment link (issue #476
     expect(json).toMatchObject({ code: 'VALIDATION_FAILED', field: 'options.niche' });
     expect(deletes).toContain('scheduled_posts');
     expect(deletes).toContain('schedules');
-    const refunds = rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+    const refunds = rpcCalls.filter((c) => c.name === 'refund_batch_tokens');
     expect(refunds).toHaveLength(1);
     expect(refunds[0].args.p_reason).toBe('Unified generate+schedule: experiment pair mismatch; tokens refunded');
+    expect(refunds[0].args.p_amount).toBe(2);
     expect(vi.mocked(startEngineVideoTask)).not.toHaveBeenCalled();
   });
 
@@ -2962,7 +3087,7 @@ describe('POST /api/videos/generate-and-schedule — experiment link (issue #476
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('INTERNAL_ERROR');
     expect(deletes).toContain('schedules');
-    expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(1);
+    expect(rpcCalls.filter((c) => c.name === 'refund_batch_tokens')).toHaveLength(1);
     expect(vi.mocked(startEngineVideoTask)).not.toHaveBeenCalled();
   });
 
