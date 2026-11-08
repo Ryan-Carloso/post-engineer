@@ -58,6 +58,10 @@ class BatchReconciler:
                 # unit-economics tracking (or the reason it is missing).
                 # Never in API responses — PostHog dashboard only.
                 properties.update(cost_event_props(task))
+                # The resolved BGM mood rides the task row (task.py stores it
+                # at the music_mood phase); "unknown" when the row has none,
+                # mirroring the direct-flow event in _complete_task.
+                properties["music_mood"] = task.get("music_mood") or "unknown"
                 track_event("video_generated", properties)
             elif task.get("state") == const.TASK_STATE_FAILED:
                 user_id = slot_user_id(slot)
