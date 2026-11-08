@@ -15,6 +15,11 @@ describe('buildGenerationRows', () => {
     expect(rows).toHaveLength(3);
   });
 
+  it('labels the images material', () => {
+    const rows = buildGenerationRows({ ...narrowGeneration(null), material: 'images' }, 'Ana', t);
+    expect(rows[2]).toEqual({ label: 'posts.generationMaterialLabel', value: 'posts.generationMaterialImages' });
+  });
+
   it('labels stock material and keeps the optional facts after it', () => {
     const rows = buildGenerationRows(
       { ...narrowGeneration(null), faceless: true, language: 'en-US', paragraphNumber: 3 },

@@ -192,7 +192,7 @@ describe('validate_script tool', () => {
     const response = await handleValidateScript(client, { segments });
     expect(response.isError).toBeUndefined();
     expect(vi.mocked(client.validateScript)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(client.validateScript)).toHaveBeenCalledWith(segments);
+    expect(vi.mocked(client.validateScript)).toHaveBeenCalledWith(segments, undefined);
     const text = textOf(response);
     expect(text).toContain('3 segment(s)');
     expect(text).toContain('75 words total');
