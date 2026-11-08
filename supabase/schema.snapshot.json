@@ -962,6 +962,12 @@
                     "type": "integer",
                     "default": null,
                     "notNull": false
+                },
+                {
+                    "name": "music_mood",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
                 }
             ],
             "policies": {

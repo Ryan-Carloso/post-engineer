@@ -587,6 +587,20 @@ describe('POST /api/videos/generate-and-schedule', () => {
       }
     });
 
+    it('stores the requested music mood on every slot (the engine rebuilds a requeued slot from it)', async () => {
+      // scheduled_posts.music_mood is where the per-post choice lives: the
+      // engine's batch pipeline reads it when it rebuilds a tick-dispatched
+      // or requeued slot. A slot created without it would render with the
+      // engine's default mood instead of the requested one.
+      const res = await post(baseBody({ options: { musicMood: 'calm' } }));
+      expect(res.status).toBe(200);
+      const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
+      expect(slotRows).toHaveLength(1);
+      for (const row of slotRows) {
+        expect(row).toMatchObject({ music_mood: 'calm' });
+      }
+    });
+
     it('stores faceless: false and the default broll material for a post with the persona face', async () => {
       const res = await post(baseBody());
       expect(res.status).toBe(200);

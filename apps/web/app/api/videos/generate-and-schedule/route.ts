@@ -803,6 +803,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         faceless: prep.faceless,
         facelessMaterial: validatedOptions.facelessMaterial,
         fullLipsync: validatedOptions.fullLipsync,
+        musicMood: validatedOptions.musicMood,
         segments: options?.segments,
         experiment,
       }),
@@ -924,8 +925,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         lipsync: !prep.faceless,
         // The material choice rides the payload under its snake_case name on every post, face or not.
         faceless_material: validatedOptions.facelessMaterial,
-        // Opt-in full lip-sync rides the same way; omitted when unset so
-        // every existing post keeps the intro-only behaviour exactly.
+        // Opt-in full lip-sync rides the same way; omitted when unset, existing posts keep intro-only.
         full_lipsync: validatedOptions.fullLipsync,
         music_mood: validatedOptions.musicMood,
         segments: options?.segments, // Segment media rides to the engine here, next to the joined script.
