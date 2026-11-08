@@ -106,6 +106,7 @@ function mockQueries(overrides: {
     // The calendar reads the range; `upcoming` fixtures feed it too.
     data: { slots: (overrides.range ?? overrides.upcoming ?? [UPCOMING_SLOT]) as never, truncated: overrides.rangeTruncated ?? false },
     isLoading: false,
+    isFetching: false,
     isError: false,
     refetch: vi.fn(),
   } as never);
@@ -247,7 +248,7 @@ describe('PostsPage', () => {
   });
 
   it('shows a loading spinner while the calendar range is loading', () => {
-    vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() } as never);
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: true, isFetching: false, isError: false, refetch: vi.fn() } as never);
 
     render(<PostsPage />);
     expect(screen.getByTestId('icon-spinner')).toBeInTheDocument();
@@ -580,9 +581,24 @@ describe('PostsPage calendar view', () => {
 
   it('shows the load error state when the range read fails', () => {
     mockQueries();
-    vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch: vi.fn() } as never);
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isFetching: false, isError: true, refetch: vi.fn() } as never);
     render(<PostsPage />);
 
     expect(screen.getByText('posts.loadError')).toBeInTheDocument();
+  });
+
+  it('disables the refresh button while a refetch is in flight', () => {
+    // The header refresh stays clickable while idle but must not fire a
+    // second refetch while one is already running.
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({
+      data: { slots: [UPCOMING_SLOT], truncated: false },
+      isLoading: false,
+      isFetching: true,
+      isError: false,
+      refetch: vi.fn(),
+    } as never);
+    render(<PostsPage />);
+
+    expect(screen.getByRole('button', { name: 'posts.refresh' })).toBeDisabled();
   });
 });
