@@ -56,7 +56,7 @@ function AvatarCircle({
 }) {
   if (avatarUrl) {
     return (
-      <div className={`relative shrink-0 overflow-hidden rounded-full bg-[#e8edf2] ring-2 ring-white ${className}`}>
+      <div className={`relative shrink-0 overflow-hidden rounded-full bg-sunken ring-2 ring-white ${className}`}>
         <Image
           src={avatarUrl}
           alt={userName || 'User'}
@@ -69,7 +69,7 @@ function AvatarCircle({
   }
   return (
     <div
-      className={`flex shrink-0 items-center justify-center rounded-full bg-[#e8edf2] font-semibold text-[#657184] ring-2 ring-white ${className}`}
+      className={`flex shrink-0 items-center justify-center rounded-full bg-sunken font-semibold text-muted-text ring-2 ring-white ${className}`}
     >
       {userName?.charAt(0).toUpperCase() || 'U'}
     </div>
@@ -82,7 +82,7 @@ function AvatarCircle({
 export function LocaleSwitcher() {
   const { locale, setLocale } = useI18n();
   return (
-    <div className="flex items-center justify-center gap-1 rounded-xl border border-[#edf0f4] bg-[#f8fafc] p-1 md:justify-start">
+    <div className="flex items-center justify-center gap-1 rounded-xl border border-hairline bg-surface p-1 md:justify-start">
       {LOCALES.map((option) => {
         const isActive = option.value === locale;
         return (
@@ -93,8 +93,8 @@ export function LocaleSwitcher() {
             aria-pressed={isActive}
             className={`flex-1 rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors md:flex-none md:px-3 ${
               isActive
-                ? 'bg-white text-[#101728] shadow-sm'
-                : 'text-[#718096] hover:bg-white hover:text-[#101728]'
+                ? 'bg-card text-ink shadow-sm'
+                : 'text-muted-text hover:bg-card hover:text-ink'
             }`}
           >
             {option.label}
@@ -126,7 +126,7 @@ export function SignOutButton() {
       type="button"
       onClick={handleSignOut}
       title={t('nav.signOut')}
-      className="flex w-full items-center gap-3.5 rounded-[18px] bg-[#f8fafc] px-4 py-3 text-left text-[15px] text-[#718096] transition-colors hover:bg-[#f1f4f7] hover:text-[#101728] lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
+      className="flex w-full items-center gap-3.5 rounded-[18px] bg-surface px-4 py-3 text-left text-[15px] text-muted-text transition-colors hover:bg-sunken hover:text-ink lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
     >
       <svg className="size-5 lg:size-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7} aria-hidden="true">
         <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0-4-4m4 4H7m6 4v1a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v1" />
@@ -230,7 +230,7 @@ export function SignOutAllButton() {
         }}
         title={t('account.signOutAllDevices')}
         data-testid="sign-out-all-button"
-        className="flex w-full items-center gap-3.5 rounded-[18px] bg-[#f8fafc] px-4 py-3 text-left text-[15px] text-[#718096] transition-colors hover:bg-[#f1f4f7] hover:text-[#101728] lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
+        className="flex w-full items-center gap-3.5 rounded-[18px] bg-surface px-4 py-3 text-left text-[15px] text-muted-text transition-colors hover:bg-sunken hover:text-ink lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
       >
         <svg className="size-5 lg:size-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7} aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.36 6.36-.7-.7M6.34 6.34l-.7-.7m12.72 0-.7.7M6.34 17.66l-.7.7M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
@@ -244,20 +244,20 @@ export function SignOutAllButton() {
           aria-labelledby="sign-out-all-title"
           aria-describedby="sign-out-all-desc"
           data-testid="sign-out-all-dialog"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/60 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/60 p-4"
         >
-          <div ref={dialogRef} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h2 id="sign-out-all-title" className="text-lg font-semibold text-neutral-900">
+          <div ref={dialogRef} className="w-full max-w-md rounded-2xl bg-card p-6 shadow-xl">
+            <h2 id="sign-out-all-title" className="text-lg font-semibold text-ink">
               {t('account.signOutAllDevicesTitle')}
             </h2>
-            <p id="sign-out-all-desc" className="mt-1 text-sm leading-6 text-neutral-600">
+            <p id="sign-out-all-desc" className="mt-1 text-sm leading-6 text-muted-text">
               {t('account.signOutAllDevicesDesc')}
             </p>
             {failed && (
               <p
                 role="alert"
                 data-testid="sign-out-all-error"
-                className="mt-3 text-sm font-medium text-[#b91c1c]"
+                className="mt-3 text-sm font-medium text-destructive"
               >
                 {t('account.signOutAllDevicesError')}
               </p>
@@ -269,7 +269,7 @@ export function SignOutAllButton() {
                 onClick={() => setConfirming(false)}
                 disabled={pending}
                 data-testid="sign-out-all-cancel"
-                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-neutral-200 px-5 py-2.5 text-sm font-semibold text-neutral-700 transition-colors hover:bg-neutral-50 disabled:opacity-50"
+                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-line px-5 py-2.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-surface disabled:opacity-50"
               >
                 {t('account.signOutAllDevicesCancel')}
               </button>
@@ -278,7 +278,7 @@ export function SignOutAllButton() {
                 onClick={handleConfirm}
                 disabled={pending}
                 data-testid="sign-out-all-confirm"
-                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#ff514a] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#e64842] disabled:opacity-50"
+                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-hover disabled:opacity-50"
               >
                 {t('account.signOutAllDevicesConfirm')}
               </button>
@@ -304,7 +304,7 @@ export function MobileProfileLink() {
       href="/account"
       data-testid="mobile-profile-link"
       aria-label={t('nav.profile')}
-      className="ml-auto flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#e8edf2] text-[#657184] ring-2 ring-white"
+      className="ml-auto flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sunken text-muted-text ring-2 ring-white"
     >
       {avatarUrl ? (
         <Image
@@ -339,8 +339,8 @@ export function AccountPanel({ showVersionBadge = false }: { showVersionBadge?: 
       <LocaleSwitcher />
       <TokenBalance />
       {showVersionBadge && (
-        <div className="flex items-center justify-between rounded-[28px] border border-[#f0f2f5] bg-[#f8fafc] px-5 py-3">
-          <span className="text-sm font-medium text-[#657184]">{t('account.version')}</span>
+        <div className="flex items-center justify-between rounded-[28px] border border-hairline bg-surface px-5 py-3">
+          <span className="text-sm font-medium text-muted-text">{t('account.version')}</span>
           <VersionBadge />
         </div>
       )}
@@ -350,11 +350,11 @@ export function AccountPanel({ showVersionBadge = false }: { showVersionBadge?: 
             href="/account"
             data-testid="profile-user-link"
             aria-label={t('nav.profile')}
-            className="flex items-center gap-3 border-t border-[#edf0f4] px-1 pt-4 lg:gap-3 lg:pt-5"
+            className="flex items-center gap-3 border-t border-hairline px-1 pt-4 lg:gap-3 lg:pt-5"
           >
             <AvatarCircle avatarUrl={avatarUrl} userName={userName} className="size-10 text-sm lg:size-12" />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[15px] leading-tight font-semibold tracking-[-0.02em] text-[#101728] lg:text-[18px]">
+              <p className="truncate text-[15px] leading-tight font-semibold tracking-[-0.02em] text-ink lg:text-[18px]">
                 {userName || 'GitHub User'}
               </p>
             </div>
@@ -380,7 +380,7 @@ export function ApiKeysRow() {
     <Link
       href="/recipes"
       data-testid="profile-api-keys-link"
-      className="flex w-full items-center gap-3.5 rounded-[18px] bg-[#f8fafc] px-4 py-3 text-left text-[15px] text-[#718096] transition-colors hover:bg-[#f1f4f7] hover:text-[#101728] lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
+      className="flex w-full items-center gap-3.5 rounded-[18px] bg-surface px-4 py-3 text-left text-[15px] text-muted-text transition-colors hover:bg-sunken hover:text-ink lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
     >
       <span className="[&>svg]:size-5 lg:[&>svg]:size-7">
         <KeyIcon />
@@ -402,7 +402,7 @@ export function BillingRow() {
     <Link
       href="/billing"
       data-testid="profile-billing-link"
-      className="flex w-full items-center gap-3.5 rounded-[18px] bg-[#f8fafc] px-4 py-3 text-left text-[15px] text-[#718096] transition-colors hover:bg-[#f1f4f7] hover:text-[#101728] lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
+      className="flex w-full items-center gap-3.5 rounded-[18px] bg-surface px-4 py-3 text-left text-[15px] text-muted-text transition-colors hover:bg-sunken hover:text-ink lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
     >
       <span className="[&>svg]:size-5 lg:[&>svg]:size-7">
         <CoinsIcon />

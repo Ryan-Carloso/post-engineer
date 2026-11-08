@@ -275,7 +275,7 @@ describe('PersonaHouseVoicePicker custom-text preview', () => {
     fireEvent.change(textField, { target: { value: 'x'.repeat(301) } });
 
     expect(screen.getByText('301/300')).toBeInTheDocument();
-    expect(screen.getByText('301/300').className).toContain('text-red-600');
+    expect(screen.getByText('301/300').className).toContain('text-destructive');
     expect(listenButton).not.toBeDisabled();
     await userEvent.setup().click(listenButton);
 

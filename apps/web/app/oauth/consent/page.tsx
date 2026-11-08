@@ -44,20 +44,20 @@ export default async function OAuthConsentPage({
   const displayName = sanitizeClientName(client?.clientName, 'o aplicativo');
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f7f8fa] px-5 py-12">
-      <div className="w-full max-w-md rounded-3xl border border-[#edf0f4] bg-white p-8 shadow-[0_20px_60px_rgba(20,32,51,0.08)] sm:p-10">
-        <h1 className="text-2xl font-bold tracking-tight text-[#101728]">
+    <div className="flex min-h-screen items-center justify-center bg-surface px-5 py-12">
+      <div className="w-full max-w-md rounded-3xl border border-hairline bg-card p-8 shadow-[0_20px_60px_rgba(20,32,51,0.08)] sm:p-10">
+        <h1 className="text-2xl font-bold tracking-tight text-ink">
           Conectar {displayName}?
         </h1>
-        <p className="mt-3 text-sm leading-relaxed text-[#657184]">
+        <p className="mt-3 text-sm leading-relaxed text-muted-text">
           Este aplicativo quer agir no seu Post Engineer (criar personas, gerar vídeos e agendar
-          posts) com a sua conta <span className="font-medium text-[#101728]">{user.email}</span>.
+          posts) com a sua conta <span className="font-medium text-ink">{user.email}</span>.
         </p>
         <ul className="mt-5 space-y-2">
           {scopes.map((scope) => (
             <li
               key={scope}
-              className="rounded-xl bg-[#f8fafc] px-4 py-2.5 text-sm font-medium text-[#101728] ring-1 ring-[#edf0f4]"
+              className="rounded-xl bg-surface px-4 py-2.5 text-sm font-medium text-ink ring-1 ring-hairline"
             >
               <code>{scope}</code>
             </li>
@@ -69,7 +69,7 @@ export default async function OAuthConsentPage({
             type="submit"
             name="decision"
             value="approve"
-            className="w-full rounded-2xl bg-[#ff544c] px-4 py-3.5 text-sm font-semibold text-white transition-all hover:-translate-y-px hover:bg-[#e04540] sm:text-base"
+            className="w-full rounded-2xl bg-brand px-4 py-3.5 text-sm font-semibold text-white transition-all hover:-translate-y-px hover:bg-brand-hover sm:text-base"
           >
             Autorizar acesso
           </button>
@@ -77,7 +77,7 @@ export default async function OAuthConsentPage({
             type="submit"
             name="decision"
             value="deny"
-            className="w-full rounded-2xl border border-[#edf0f4] bg-white px-4 py-3.5 text-sm font-semibold text-[#101728] transition-all hover:border-[#dfe4ec] sm:text-base"
+            className="w-full rounded-2xl border border-hairline bg-card px-4 py-3.5 text-sm font-semibold text-ink transition-all hover:border-line sm:text-base"
           >
             Negar
           </button>

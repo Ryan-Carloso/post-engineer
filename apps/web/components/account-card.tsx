@@ -108,10 +108,10 @@ export default function AccountCard({
         title={handle || name}
         onClick={onSelect}
         className={cn(
-          'relative block size-16 cursor-pointer overflow-hidden rounded-xl border bg-white transition-colors',
+          'relative block size-16 cursor-pointer overflow-hidden rounded-xl border bg-card transition-colors',
           selected
             ? 'border-accent ring-2 ring-accent/15'
-            : 'border-neutral-200 hover:border-neutral-400',
+            : 'border-line hover:border-muted-text',
         )}
       >
         <AccountAvatar name={handle || name} thumbnail={thumbnail} selected={selected} />
@@ -136,7 +136,7 @@ export default function AccountCard({
         <span
           role="img"
           aria-label={handle || name}
-          className="flex size-12 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-base font-bold text-neutral-600"
+          className="flex size-12 shrink-0 items-center justify-center rounded-full bg-sunken text-base font-bold text-muted-text"
         >
           {nameInitials(handle || name)}
         </span>
@@ -148,13 +148,13 @@ export default function AccountCard({
             ref={labelRef}
             title={shownLabel}
             style={{ minWidth: ACCOUNT_LABEL_MIN_WIDTH_PX }}
-            className="truncate text-sm font-semibold text-[#101728]"
+            className="truncate text-sm font-semibold text-ink"
           >
             {shownLabel}
           </h3>
         </div>
         {secondaryLabel ? (
-          <p ref={secondaryRef} className="mt-1 truncate text-xs text-[#718096]">{secondaryLabel}</p>
+          <p ref={secondaryRef} className="mt-1 truncate text-xs text-muted-text">{secondaryLabel}</p>
         ) : null}
       </div>
 
@@ -164,7 +164,7 @@ export default function AccountCard({
           data-testid="account-card-select"
           checked={selected}
           onChange={onSelect}
-          className="size-4 shrink-0 accent-[#101728]"
+          className="size-4 shrink-0 accent-ink"
         />
       ) : null}
 
@@ -174,7 +174,7 @@ export default function AccountCard({
           data-testid={`${type}-disconnect-button`}
           aria-label={t('accounts.disconnect')}
           title={t('accounts.disconnect')}
-          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-600"
+          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-faint transition-colors hover:bg-destructive-soft hover:text-destructive"
           onClick={onDisconnect}
         >
           <span className="[&>svg]:size-4"><TrashIcon /></span>
@@ -189,8 +189,8 @@ export default function AccountCard({
         ref={(node) => { cardRef.current = node; }}
         data-testid="account-card"
         className={cn(
-          'block cursor-pointer rounded-xl border bg-white p-4 transition-colors focus-within:ring-2 focus-within:ring-[#101728]/15',
-          selected ? 'border-neutral-900' : 'border-neutral-200 hover:border-[#b9c5d2] hover:bg-[#fbfcfd]',
+          'block cursor-pointer rounded-xl border bg-card p-4 transition-colors focus-within:ring-2 focus-within:ring-ink/15',
+          selected ? 'border-ink' : 'border-line hover:border-muted-text hover:bg-surface',
         )}
       >
         {body}
@@ -198,7 +198,7 @@ export default function AccountCard({
     );
   }
 
-  return <div ref={(node) => { cardRef.current = node; }} data-testid="account-card" className="rounded-xl border border-[#dfe5ec] bg-white p-4">{body}</div>;
+  return <div ref={(node) => { cardRef.current = node; }} data-testid="account-card" className="rounded-xl border border-line bg-card p-4">{body}</div>;
 }
 
 //---------------
@@ -223,7 +223,7 @@ const AccountAvatar = ({
       role="img"
       aria-label={name}
       className={cn(
-        'flex size-full items-center justify-center bg-pink-50 text-base font-bold text-pink-600',
+        'flex size-full items-center justify-center bg-brand-soft text-base font-bold text-brand',
         !selected && 'grayscale',
       )}
     >

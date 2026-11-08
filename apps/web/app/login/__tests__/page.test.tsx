@@ -168,14 +168,14 @@ describe('app/login/page — Login', () => {
     mockErrorParam = 'cancelled';
     render(<Login />, { wrapper: createWrapper() });
     expect(screen.getByRole('alert')).toHaveTextContent('login.cancelled');
-    expect(screen.getByRole('alert').className).toContain('bg-[#f8fafc]');
+    expect(screen.getByRole('alert').className).toContain('bg-surface');
   });
 
   it('shows generic error notice after OAuth failure', () => {
     mockErrorParam = 'auth';
     render(<Login />, { wrapper: createWrapper() });
     expect(screen.getByRole('alert')).toHaveTextContent('login.authError');
-    expect(screen.getByRole('alert').className).toContain('bg-[#fff0ef]');
+    expect(screen.getByRole('alert').className).toContain('bg-brand-soft');
   });
 
   it('shows no notice without error param', () => {

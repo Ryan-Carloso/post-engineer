@@ -47,13 +47,13 @@ export function CheckoutCancelDialog({ open, onClose }: CheckoutCancelDialogProp
       aria-modal="true"
       aria-labelledby="cancel-dialog-title"
       aria-describedby="cancel-dialog-desc"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/60 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/60 p-4"
     >
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-        <h2 id="cancel-dialog-title" className="text-lg font-semibold text-neutral-900">
+      <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-xl">
+        <h2 id="cancel-dialog-title" className="text-lg font-semibold text-ink">
           {t('pricing.cancelDialogTitle')}
         </h2>
-        <p id="cancel-dialog-desc" className="mt-1 text-sm leading-6 text-neutral-600">
+        <p id="cancel-dialog-desc" className="mt-1 text-sm leading-6 text-muted-text">
           {t('pricing.cancelDialogDesc')}
         </p>
 
@@ -65,8 +65,8 @@ export function CheckoutCancelDialog({ open, onClose }: CheckoutCancelDialogProp
                 key={option.value}
                 className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
                   reason === option.value
-                    ? 'border-[#ff514a] bg-[#fff5f4] text-[#101728]'
-                    : 'border-neutral-200 text-neutral-700 hover:bg-neutral-50'
+                    ? 'border-brand bg-brand-soft text-ink'
+                    : 'border-line text-ink-soft hover:bg-surface'
                 }`}
               >
                 <input
@@ -76,7 +76,7 @@ export function CheckoutCancelDialog({ open, onClose }: CheckoutCancelDialogProp
                   checked={reason === option.value}
                   onChange={() => setReason(option.value)}
                   data-testid={option.testid}
-                  className="size-4 accent-[#ff514a]"
+                  className="size-4 accent-brand"
                 />
                 {option.label}
               </label>
@@ -84,7 +84,7 @@ export function CheckoutCancelDialog({ open, onClose }: CheckoutCancelDialogProp
           </div>
         </fieldset>
 
-        <label htmlFor="cancel-details" className="mt-4 block text-xs font-semibold text-neutral-700">
+        <label htmlFor="cancel-details" className="mt-4 block text-xs font-semibold text-ink-soft">
           {t('pricing.cancelDetailsLabel')}
         </label>
         <textarea
@@ -95,7 +95,7 @@ export function CheckoutCancelDialog({ open, onClose }: CheckoutCancelDialogProp
           placeholder={t('pricing.cancelDetailsPlaceholder')}
           rows={3}
           maxLength={500}
-          className="mt-1.5 w-full resize-none rounded-xl border border-neutral-200 px-3.5 py-2.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-[#ff514a] focus:outline-none"
+          className="mt-1.5 w-full resize-none rounded-xl border border-line px-3.5 py-2.5 text-sm text-ink placeholder:text-faint focus:border-brand focus:outline-none"
         />
 
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -103,7 +103,7 @@ export function CheckoutCancelDialog({ open, onClose }: CheckoutCancelDialogProp
             type="button"
             onClick={onClose}
             data-testid="cancel-dialog-close"
-            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-neutral-200 px-5 py-2.5 text-sm font-semibold text-neutral-700 transition-colors hover:bg-neutral-50"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-line px-5 py-2.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-surface"
           >
             {t('pricing.cancelClose')}
           </button>

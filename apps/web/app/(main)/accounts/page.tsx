@@ -54,8 +54,8 @@ function AccountsHeader(): React.ReactElement {
         <AccountsIcon />
       </span>
       <div>
-        <h1 className="text-2xl font-bold tracking-[-0.035em] text-[#101728]">{t('accounts.title')}</h1>
-        <p className="mt-0.5 text-sm text-[#718096] lg:text-base">{t('accounts.subtitle')}</p>
+        <h1 className="text-2xl font-bold tracking-[-0.035em] text-ink">{t('accounts.title')}</h1>
+        <p className="mt-0.5 text-sm text-muted-text lg:text-base">{t('accounts.subtitle')}</p>
       </div>
     </header>
   );
@@ -76,7 +76,7 @@ function YoutubeAccountsSection(): ReactNode {
   useAccountListErrorTelemetry('youtube', query.error?.message ?? null);
   return (
     <SocialAccountsSection
-      icon={<BrandIcon className="bg-red-50 text-red-600"><GoogleIcon /></BrandIcon>}
+      icon={<BrandIcon className="bg-destructive-soft text-destructive"><GoogleIcon /></BrandIcon>}
       label={t('accounts.youtubeLabel')}
       description={t('accounts.youtubeDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
@@ -111,7 +111,7 @@ function InstagramAccountsSection(): ReactNode {
   useAccountListErrorTelemetry('instagram', query.error?.message ?? null);
   return (
     <SocialAccountsSection
-      icon={<BrandIcon className="bg-pink-50 text-pink-600"><InstagramIcon /></BrandIcon>}
+      icon={<BrandIcon className="bg-brand-soft text-brand"><InstagramIcon /></BrandIcon>}
       label={t('accounts.instagramLabel')}
       description={t('accounts.instagramDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
@@ -178,7 +178,7 @@ function BlueskyAccountsSection(): ReactNode {
 
   return (
     <SocialAccountsSection
-      icon={<BrandIcon className="bg-sky-50 text-sky-600"><BlueskyIcon /></BrandIcon>}
+      icon={<BrandIcon className="bg-info-soft text-info"><BlueskyIcon /></BrandIcon>}
       label={t('accounts.blueskyLabel')}
       description={t('accounts.blueskyDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
@@ -216,7 +216,7 @@ function LinkedinAccountsSection(): ReactNode {
   useAccountListErrorTelemetry('linkedin', query.error?.message ?? null);
   return (
     <SocialAccountsSection
-      icon={<BrandIcon className="bg-blue-50 text-blue-700"><LinkedinIcon /></BrandIcon>}
+      icon={<BrandIcon className="bg-info-soft text-info"><LinkedinIcon /></BrandIcon>}
       label={t('accounts.linkedinLabel')}
       description={t('accounts.linkedinDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
@@ -363,7 +363,7 @@ function ThreadsAccountsSection(): ReactNode {
 
 function LinkedinAccountCard({ name, thumbnail, storedDisplayName, labelOrigin, isOrganization, showDisconnect, onDisconnect }: { name: string; thumbnail?: string; storedDisplayName?: string; labelOrigin?: 'stored' | 'provider_id'; isOrganization: boolean; showDisconnect?: boolean; onDisconnect?: () => void }): ReactNode {
   const { t } = useI18n();
-  return <div className="relative"><AccountCard type="linkedin" name={name} thumbnail={thumbnail} storedDisplayName={storedDisplayName} labelOrigin={labelOrigin} showDisconnect={showDisconnect} onDisconnect={onDisconnect} /><span className="absolute top-2 right-2 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">{t(isOrganization ? 'accounts.pageBadge' : 'accounts.memberBadge')}</span></div>;
+  return <div className="relative"><AccountCard type="linkedin" name={name} thumbnail={thumbnail} storedDisplayName={storedDisplayName} labelOrigin={labelOrigin} showDisconnect={showDisconnect} onDisconnect={onDisconnect} /><span className="absolute top-2 right-2 rounded border border-info/30 bg-info-soft px-1.5 py-0.5 text-[10px] font-semibold text-info">{t(isOrganization ? 'accounts.pageBadge' : 'accounts.memberBadge')}</span></div>;
 }
 
 function BlueskyIcon(): ReactNode {

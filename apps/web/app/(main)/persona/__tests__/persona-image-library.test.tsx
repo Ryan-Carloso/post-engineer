@@ -105,6 +105,22 @@ describe('PersonaImageLibrarySection', () => {
     window.confirm = vi.fn(() => true);
   });
 
+  it('marks the primary image with a badge and shows the description of a described one', () => {
+    apiMocks.images = [
+      { ...makeImage('a'), is_primary: true, description: 'Front-facing portrait' },
+      makeImage('b'),
+    ];
+    renderSection();
+
+    const badges = screen.getAllByText('persona.libraryPrimary');
+    expect(badges).toHaveLength(1);
+    expect(badges[0].className).toContain('bg-ink');
+    expect(badges[0].className).toContain('text-on-ink');
+    expect(screen.getByText('Front-facing portrait')).toHaveClass('text-muted-text');
+    // The undescribed, non-primary card gets the placeholder dash and no badge.
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(1);
+  });
+
   it('surfaces an error when the upload rejects, keeping pending items', async () => {
     apiMocks.uploadMutateAsync.mockRejectedValue(new Error('network down'));
     const { container } = renderSection();

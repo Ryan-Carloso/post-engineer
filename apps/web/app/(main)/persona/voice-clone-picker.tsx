@@ -43,7 +43,7 @@ const VoiceTabButton = ({
     aria-selected={active}
     onClick={onSelect}
     className={`inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-      active ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-800'
+      active ? 'bg-card text-ink shadow-sm' : 'text-muted-text hover:text-ink'
     }`}
   >
     {label}
@@ -269,12 +269,12 @@ export const PersonaVoiceClonePanel = () => {
 
   return (
     <div className="space-y-4" data-testid="voice-clone-panel">
-      <p className="text-sm leading-relaxed text-neutral-600">{t('persona.voiceCloneHint')}</p>
-      <p className="rounded-lg bg-neutral-50 p-3 text-sm leading-relaxed text-neutral-800">
+      <p className="text-sm leading-relaxed text-muted-text">{t('persona.voiceCloneHint')}</p>
+      <p className="rounded-lg bg-surface p-3 text-sm leading-relaxed text-ink">
         {t('persona.voiceCloneScript')}
       </p>
 
-      <label className="flex items-start gap-2 text-sm text-neutral-800">
+      <label className="flex items-start gap-2 text-sm text-ink">
         <input
           type="checkbox"
           checked={consent}
@@ -291,7 +291,7 @@ export const PersonaVoiceClonePanel = () => {
             type="button"
             onClick={() => void startRecording()}
             disabled={isSubmitting}
-            className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium hover:border-neutral-400"
+            className="rounded-lg border border-line bg-card px-4 py-2 text-sm font-medium hover:border-muted-text"
           >
             {t('persona.voiceCloneRecord')}
           </button>
@@ -299,12 +299,12 @@ export const PersonaVoiceClonePanel = () => {
           <button
             type="button"
             onClick={stopRecording}
-            className="rounded-lg border border-accent bg-red-50 px-4 py-2 text-sm font-medium text-accent"
+            className="rounded-lg border border-accent bg-destructive-soft px-4 py-2 text-sm font-medium text-accent"
           >
             {t('persona.voiceCloneStop')} ({formatTimer(recordSeconds)} / {formatTimer(MAX_CLONE_REFERENCE_SECONDS)})
           </button>
         )}
-        <label className="cursor-pointer rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium hover:border-neutral-400">
+        <label className="cursor-pointer rounded-lg border border-line bg-card px-4 py-2 text-sm font-medium hover:border-muted-text">
           {t('persona.voiceCloneUpload')}
           <input
             type="file"
@@ -316,7 +316,7 @@ export const PersonaVoiceClonePanel = () => {
         </label>
       </div>
 
-      <p className="text-xs text-neutral-500">
+      <p className="text-xs text-muted-text">
         {t('persona.voiceCloneDurationGuide', {
           min: MIN_CLONE_REFERENCE_SECONDS,
           max: MAX_CLONE_REFERENCE_SECONDS,
@@ -325,9 +325,9 @@ export const PersonaVoiceClonePanel = () => {
       </p>
 
       {previewBlobUrl ? (
-        <div className="rounded-lg border border-neutral-200 p-3">
-          <p className="mb-2 text-sm font-medium text-neutral-800">{t('persona.voiceCloneLocalPreview')}</p>
-          <label className="mb-2 flex items-start gap-2 text-sm text-neutral-800">
+        <div className="rounded-lg border border-line p-3">
+          <p className="mb-2 text-sm font-medium text-ink">{t('persona.voiceCloneLocalPreview')}</p>
+          <label className="mb-2 flex items-start gap-2 text-sm text-ink">
             <input
               type="checkbox"
               checked={denoise}
@@ -337,21 +337,21 @@ export const PersonaVoiceClonePanel = () => {
             />
             <span>
               {t('persona.voiceCloneCleanToggle')}
-              <span className="block text-xs text-neutral-500">{t('persona.voiceCloneCleanHint')}</span>
+              <span className="block text-xs text-muted-text">{t('persona.voiceCloneCleanHint')}</span>
             </span>
           </label>
-          <p className="text-xs font-medium text-neutral-600">{t('persona.voiceCloneOriginal')}</p>
+          <p className="text-xs font-medium text-muted-text">{t('persona.voiceCloneOriginal')}</p>
           <audio controls src={previewBlobUrl} className="w-full" />
           {denoise ? (
             <div className="mt-2" data-testid="voice-clone-cleaned">
-              <p className="text-xs font-medium text-neutral-600">{t('persona.voiceCloneCleaned')}</p>
+              <p className="text-xs font-medium text-muted-text">{t('persona.voiceCloneCleaned')}</p>
               {cleaning ? (
-                <p className="flex items-center gap-2 text-sm text-neutral-600" role="status">
+                <p className="flex items-center gap-2 text-sm text-muted-text" role="status">
                   <SpinnerIcon /> {t('persona.voiceCloneCleaning')}
                 </p>
               ) : null}
               {cleanedUrl !== null && !cleaning ? <audio controls src={cleanedUrl} className="w-full" /> : null}
-              {cleanFailed ? <p className="text-sm text-amber-700">{t('persona.voiceCloneCleanFailed')}</p> : null}
+              {cleanFailed ? <p className="text-sm text-warning">{t('persona.voiceCloneCleanFailed')}</p> : null}
             </div>
           ) : null}
           <div className="mt-2 flex flex-wrap gap-2">
@@ -364,7 +364,7 @@ export const PersonaVoiceClonePanel = () => {
                 setPreviewBlobUrl(null);
                 setPendingBlob(null);
               }}
-              className="text-sm text-neutral-600 hover:underline"
+              className="text-sm text-muted-text hover:underline"
               disabled={isSubmitting}
             >
               {t('persona.voiceCloneRerecord')}
@@ -373,7 +373,7 @@ export const PersonaVoiceClonePanel = () => {
               type="button"
               onClick={submitPending}
               disabled={isSubmitting}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-on-ink"
             >
               {isSubmitting ? (
                 <span className="inline-flex items-center gap-2">
@@ -388,24 +388,24 @@ export const PersonaVoiceClonePanel = () => {
       ) : null}
 
       {tracking && tracking.status === 'pending' ? (
-        <p className="flex items-center gap-2 text-sm text-neutral-700" role="status">
+        <p className="flex items-center gap-2 text-sm text-ink-soft" role="status">
           <SpinnerIcon /> {t('persona.voiceClonePending')}
         </p>
       ) : null}
       {tracking && tracking.status === 'failed' ? (
-        <p className="text-sm text-red-600" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           {t('persona.voiceCloneFailed')}
         </p>
       ) : null}
 
       {error ? (
-        <p className="text-sm text-red-600" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           {error}
         </p>
       ) : null}
 
       {listQuery.isError ? (
-        <p className="text-sm text-red-600">{t('persona.voiceCloneListError')}</p>
+        <p className="text-sm text-destructive">{t('persona.voiceCloneListError')}</p>
       ) : null}
 
       <ul className="space-y-2">
@@ -422,13 +422,13 @@ export const PersonaVoiceClonePanel = () => {
             <li
               key={clone.id}
               className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 ${
-                isActive ? 'border-accent bg-red-50/40' : 'border-neutral-200'
+                isActive ? 'border-accent bg-destructive-soft/40' : 'border-line'
               }`}
             >
               <MicIcon />
               <span className="min-w-0 flex-1 text-sm">
                 <span className="font-medium">{clone.language ?? '—'}</span>
-                <span className="ml-2 text-neutral-500">{statusLabel}</span>
+                <span className="ml-2 text-muted-text">{statusLabel}</span>
               </span>
               {clone.status === 'ready' ? (
                 <>
@@ -441,7 +441,7 @@ export const PersonaVoiceClonePanel = () => {
                   </button>
                   <button
                     type="button"
-                    className="text-sm font-medium text-neutral-900 hover:underline"
+                    className="text-sm font-medium text-ink hover:underline"
                     onClick={() => selectCloneForPersona(clone)}
                   >
                     {t('persona.voiceCloneUseOnPersona')}
@@ -454,7 +454,7 @@ export const PersonaVoiceClonePanel = () => {
                 aria-label={t('persona.voiceCloneDelete')}
                 onClick={() => deleteMutation.mutate(clone.id)}
                 disabled={deleteMutation.isPending}
-                className="text-neutral-500 hover:text-red-600"
+                className="text-muted-text hover:text-destructive"
               >
                 <TrashIcon />
               </button>

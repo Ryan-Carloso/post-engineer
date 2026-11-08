@@ -135,7 +135,7 @@ const PersonaPageContent = () => {
       <div className="space-y-8">
         <PersonaHeader editing={Boolean(editId)} />
         <div className="space-y-5">
-          <section className="space-y-6 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="space-y-6 rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
             <PersonaNameField />
             <PersonaAvatarSection />
             {/* Library needs a persisted, loaded persona (no fetch flash). */}
@@ -145,14 +145,14 @@ const PersonaPageContent = () => {
             {/* Face quality + estimated cost per video. */}
             <PersonaTokensSection />
           </section>
-          <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
             <PersonaVoiceSection
               voiceHydrated={isPersonaVoiceHydrated(editingPersonaId, editingPersona)}
               isEditing={Boolean(editingPersonaId)}
               hasVoiceAudio={Boolean(editingPersona?.voiceAudioUrl)}
             />
           </section>
-          <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
             <PersonaPreferencesSection />
           </section>
           {/* Default publishing accounts need a PERSISTED persona (the API
@@ -185,22 +185,22 @@ const PersonaPageError = ({ onRetry, isRetrying }: PersonaPageErrorProps) => {
     <main className="flex min-h-[calc(100vh-10rem)] items-center justify-center py-8">
       <section
         aria-live="polite"
-        className="w-full max-w-xl rounded-2xl border border-red-200 bg-white px-6 py-10 text-center shadow-[0_12px_36px_rgba(13,43,69,0.08)] sm:px-10"
+        className="w-full max-w-xl rounded-2xl border border-destructive/30 bg-card px-6 py-10 text-center shadow-[0_12px_36px_rgba(13,43,69,0.08)] sm:px-10"
       >
-        <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+        <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-destructive-soft text-destructive">
           <AlertIcon />
         </span>
-        <h1 className="mt-5 text-2xl font-semibold tracking-tight text-neutral-900">
+        <h1 className="mt-5 text-2xl font-semibold tracking-tight text-ink">
           {t('persona.loadError')}
         </h1>
-        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-neutral-500">
+        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-muted-text">
           {t('persona.loadErrorHint')}
         </p>
         <button
           type="button"
           disabled={isRetrying}
           onClick={() => void onRetry()}
-          className="mt-7 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-7 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-on-ink transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isRetrying && <SpinnerIcon />}
           {t('persona.tryAgain')}
@@ -218,14 +218,14 @@ const PersonaHeader = ({ editing }: { editing: boolean }) => {
   const { t } = useI18n();
   return (
     <div className="flex items-center gap-3">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-white">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-on-ink">
         <SparklesIcon />
       </span>
       <div>
-        <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight text-neutral-900">
+        <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight text-ink">
           {t(editing ? 'personas.editTitle' : 'persona.title')}
         </h1>
-        <p className="text-sm text-neutral-500">{t(editing ? 'personas.editSubtitle' : 'persona.subtitle')}</p>
+        <p className="text-sm text-muted-text">{t(editing ? 'personas.editSubtitle' : 'persona.subtitle')}</p>
       </div>
     </div>
   );
@@ -258,7 +258,7 @@ const PersonaAvatarSection = () => {
   return (
     <section data-error-field="avatar">
       <SectionDivider label={t('persona.photoLabel')} />
-      <div className="mt-4 inline-flex gap-1 rounded-lg border border-neutral-300 bg-neutral-100 p-1">
+      <div className="mt-4 inline-flex gap-1 rounded-lg border border-line bg-sunken p-1">
         <SourceTab
           active={source === 'characters'}
           label={t('persona.characterTab')}
@@ -305,7 +305,7 @@ const SourceTab = ({
     aria-selected={active}
     onClick={onSelect}
     className={`inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-      active ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-800'
+      active ? 'bg-card text-ink shadow-sm' : 'text-muted-text hover:text-ink'
     }`}
   >
     {icon}
@@ -339,8 +339,8 @@ const PersonaCharacterPicker = () => {
 
   return (
     <div className="mt-4">
-      <p className="text-sm font-medium text-neutral-700">{t('persona.characterLabel')}</p>
-      <p className="mt-3 text-sm leading-5 text-neutral-600">{t('persona.characterHint')}</p>
+      <p className="text-sm font-medium text-ink-soft">{t('persona.characterLabel')}</p>
+      <p className="mt-3 text-sm leading-5 text-muted-text">{t('persona.characterHint')}</p>
       <Carousel
         aria-label={t('persona.characterLabel')}
         className="mt-3 px-10"
@@ -373,7 +373,7 @@ const PersonaCharacterPicker = () => {
                     className="aspect-9/16 w-full object-cover"
                   />
                   {isSelected ? (
-                    <span className="absolute top-3 right-3 flex size-9 items-center justify-center rounded-full bg-accent text-white shadow-md ring-2 ring-white">
+                    <span className="absolute top-3 right-3 flex size-9 items-center justify-center rounded-full bg-accent text-on-ink shadow-md ring-2 ring-white">
                       <CheckIcon />
                     </span>
                   ) : null}
@@ -399,7 +399,7 @@ const PersonaNameField = () => {
 
   return (
     <div>
-      <label htmlFor="persona-name" className="text-md block font-medium text-neutral-900">
+      <label htmlFor="persona-name" className="text-md block font-medium text-ink">
         {t('persona.name')}
       </label>
       <input
@@ -411,7 +411,7 @@ const PersonaNameField = () => {
         {...register('name')}
       />
       {errors.name ? (
-        <p role="alert" className="mt-1 text-sm text-red-600">{t('persona.errName')}</p>
+        <p role="alert" className="mt-1 text-sm text-destructive">{t('persona.errName')}</p>
       ) : null}
       {result && !result.success && result.error === t('persona.errName') ? (
         <InlineFieldError message={result.error} />
@@ -512,7 +512,7 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
         type="button"
         onClick={validateForm(() => void handleSubmit())}
         disabled={isPending || updateMutation.isPending}
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-on-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isPending ? (
           <>
@@ -523,7 +523,7 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
           t(isEditing ? 'personas.save' : 'persona.submit')
         )}
       </button>
-      <p className="mt-3 text-center text-sm leading-5 text-neutral-600">
+      <p className="mt-3 text-center text-sm leading-5 text-muted-text">
         {t(isEditing ? 'personas.saveHint' : 'persona.submitHint')}
       </p>
     </div>
@@ -556,16 +556,16 @@ const PersonaFeedback = () => {
     return (
       <section>
         <SectionDivider label={t('persona.result')} />
-        <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-5">
+        <div className="mt-4 rounded-xl border border-success/30 bg-success-soft p-5">
           <div className="flex items-start gap-3.5">
             <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-green-600 text-white">
               <CheckIcon />
             </span>
             <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-semibold text-green-900">{t('persona.created')}</h3>
-              <p className="mt-1 text-sm leading-relaxed text-green-800">{t('persona.createdHint')}</p>
+              <h3 className="text-sm font-semibold text-success">{t('persona.created')}</h3>
+              <p className="mt-1 text-sm leading-relaxed text-success">{t('persona.createdHint')}</p>
               {result.warnings && result.warnings.length > 0 ? (
-                <p className="mt-2 text-sm leading-relaxed text-amber-700">
+                <p className="mt-2 text-sm leading-relaxed text-warning">
                   {mapPersonaImageWarnings(result.warnings, t)}
                 </p>
               ) : null}
@@ -573,7 +573,7 @@ const PersonaFeedback = () => {
                 <button
                   type="button"
                   onClick={handleCreateAnother}
-                  className="text-xs font-medium text-green-800/80 hover:text-green-900"
+                  className="text-xs font-medium text-success/80 hover:text-success"
                 >
                   {t('persona.createAnother')}
                 </button>
@@ -611,25 +611,25 @@ const PersonaErrorDialog = () => {
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="persona-error-dialog-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/60 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/60 p-4"
     >
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+      <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-xl">
         <div className="flex items-start gap-3.5">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-red-600 text-white">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
             <AlertIcon />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 id="persona-error-dialog-title" className="text-lg font-semibold text-neutral-900">
+            <h2 id="persona-error-dialog-title" className="text-lg font-semibold text-ink">
               {t('persona.failed')}
             </h2>
-            <p className="mt-1 text-sm leading-6 text-neutral-600">{result.error}</p>
+            <p className="mt-1 text-sm leading-6 text-muted-text">{result.error}</p>
           </div>
         </div>
         <div className="mt-6 flex justify-end">
           <button
             type="button"
             onClick={() => usePersonaStore.getState().setResult(null)}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-on-ink transition-colors hover:bg-accent-hover"
           >
             {t('persona.tryAgain')}
           </button>
@@ -661,16 +661,16 @@ const PersonaPageSkeleton = () => (
         <div className="skeleton-shimmer h-3.5 w-64 rounded" />
       </div>
     </div>
-    <section className="space-y-6 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
+    <section className="space-y-6 rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
       <div className="flex gap-2"><div className="skeleton-shimmer h-9 w-28 rounded-lg" /><div className="skeleton-shimmer h-9 w-24 rounded-lg" /></div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><div className="skeleton-shimmer aspect-square rounded-xl" /><div className="skeleton-shimmer aspect-square rounded-xl" /><div className="skeleton-shimmer aspect-square rounded-xl" /><div className="skeleton-shimmer aspect-square rounded-xl" /></div>
       <div className="space-y-2"><div className="skeleton-shimmer h-4 w-28 rounded" /><div className="skeleton-shimmer h-12 w-full rounded-xl" /></div>
     </section>
-    <section className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
+    <section className="space-y-4 rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
       <div className="skeleton-shimmer h-4 w-32 rounded" />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3"><div className="skeleton-shimmer h-16 rounded-xl" /><div className="skeleton-shimmer h-16 rounded-xl" /><div className="skeleton-shimmer h-16 rounded-xl" /></div>
     </section>
-    <section className="space-y-6 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
+    <section className="space-y-6 rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
       <div className="skeleton-shimmer h-4 w-36 rounded" />
       <div className="skeleton-shimmer h-12 w-full rounded-xl" />
       <div className="skeleton-shimmer h-24 w-full rounded-xl" />

@@ -1191,8 +1191,8 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     const uploadTab = screen.getByRole('tab', { name: 'persona.uploadTab' });
     expect(uploadTab).toHaveAttribute('aria-selected', 'true');
     expect(characterTab).toHaveAttribute('aria-selected', 'false');
-    expect(uploadTab.className).toContain('bg-white');
-    expect(characterTab.className).toContain('text-neutral-500');
+    expect(uploadTab.className).toContain('bg-card');
+    expect(characterTab.className).toContain('text-muted-text');
     const firstCharacter = screen.getByRole('button', { name: 'persona.characterLabel 1', hidden: true });
     expect(firstCharacter).not.toBeVisible();
     expect(screen.getByText('persona.photoUpload')).toBeVisible();
@@ -1201,8 +1201,8 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
 
     expect(characterTab).toHaveAttribute('aria-selected', 'true');
     expect(uploadTab).toHaveAttribute('aria-selected', 'false');
-    expect(characterTab.className).toContain('bg-white');
-    expect(uploadTab.className).toContain('text-neutral-500');
+    expect(characterTab.className).toContain('bg-card');
+    expect(uploadTab.className).toContain('text-muted-text');
     expect(firstCharacter).toBeVisible();
     expect(screen.getByText('persona.photoUpload')).not.toBeVisible();
 
@@ -1813,12 +1813,12 @@ describe('app/(main)/persona/page — preferências e limites', () => {
     render(<PersonaPage />, { wrapper: createWrapper() });
 
     expect(screen.getByRole('button', { name: '9:16' }).className).toContain('border-accent');
-    expect(screen.getByRole('button', { name: '16:9' }).className).toContain('border-neutral-200');
+    expect(screen.getByRole('button', { name: '16:9' }).className).toContain('border-line');
 
     await user.click(screen.getByRole('button', { name: '16:9' }));
 
     expect(screen.getByRole('button', { name: '16:9' }).className).toContain('border-accent');
-    expect(screen.getByRole('button', { name: '9:16' }).className).toContain('border-neutral-200');
+    expect(screen.getByRole('button', { name: '9:16' }).className).toContain('border-line');
   });
 
   it('nicho com 301 caracteres mostra erro ao sair do campo', async () => {
