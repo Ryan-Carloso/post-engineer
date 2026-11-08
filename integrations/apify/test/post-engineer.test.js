@@ -397,6 +397,14 @@ describe('Actor definition files', () => {
     assert.deepEqual(schema.properties.facelessMaterial.enum, FACELESS_MATERIALS);
   });
 
+  // The Actor posts facelessMaterial to generate-and-schedule, which accepts
+  // exactly the web's FACELESS_MATERIALS.
+  it('accepts the same faceless materials as the web route', () => {
+    const web = readFileSync(new URL('../../../apps/web/lib/generation/faceless-materials.ts', import.meta.url), 'utf8');
+    const list = FACELESS_MATERIALS.map((material) => `'${material}'`).join(', ');
+    assert.ok(web.includes(`export const FACELESS_MATERIALS = [${list}] as const;`));
+  });
+
   it('documents every provider and mode the code accepts', () => {
     for (const provider of PROVIDERS) assert.ok(schema.properties.providers.description.includes(provider));
     assert.deepEqual(schema.properties.mode.enum, ['asap', 'scheduled']);
@@ -420,5 +428,82 @@ describe('Actor definition files', () => {
     // main.js saves the result under this key.
     assert.ok(templates.includes('{{links.apiDefaultKeyValueStoreUrl}}/records/OUTPUT'));
     assert.ok(readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').includes("Actor.setValue('OUTPUT'"));
+  });
+});
+
+describe('images material', () => {
+  const imagesInput = (images, body = 'Short videos keep attention.\n\nThey show a face early.') => ({
+    ...baseInput(),
+    body,
+    facelessMaterial: 'images',
+    images,
+  });
+  const urls = (count) => Array.from({ length: count }, (_, index) => `https://e.com/${index}.jpg`);
+
+  it('splits the body into paragraphs and puts one image on each segment, in order', () => {
+    const body = buildGenerateBody(parseInput(imagesInput(urls(4))));
+    assert.equal(body.options.facelessMaterial, 'images');
+    assert.deepEqual(body.options.segments, [
+      { kind: 'hook', text: 'Stop scrolling.', media: { url: 'https://e.com/0.jpg' } },
+      { kind: 'body', text: 'Short videos keep attention.', media: { url: 'https://e.com/1.jpg' } },
+      { kind: 'body', text: 'They show a face early.', media: { url: 'https://e.com/2.jpg' } },
+      { kind: 'cta', text: 'Follow for more.', media: { url: 'https://e.com/3.jpg' } },
+    ]);
+  });
+
+  it('keeps the body as one segment without images', () => {
+    const body = buildGenerateBody(parseInput({ ...baseInput(), body: 'One.\n\nTwo.' }));
+    assert.deepEqual(body.options.segments.map((s) => s.kind), ['hook', 'body', 'cta']);
+    assert.equal(body.options.segments.some((s) => 'media' in s), false);
+  });
+
+  const rejects = [
+    ['images without the images material', { ...baseInput(), images: urls(3) }, /only be used with facelessMaterial "images"/],
+    ['the images material without images', { ...baseInput(), facelessMaterial: 'images' }, /needs images/],
+    ['an empty image list', imagesInput([]), /needs images/],
+    ['too few images for the segments', imagesInput(urls(3)), /exactly 4 URLs: one for the hook, one per body paragraph \(2\)/],
+    ['too many images for the segments', imagesInput(urls(5)), /exactly 4 URLs/],
+    ['an http image', imagesInput(['http://e.com/0.jpg', ...urls(3).slice(1)]), /images\[0\] must be an https URL/],
+    ['a non-URL image', imagesInput(['https://e.com/0.jpg', 'not a url', ...urls(2)]), /images\[1\] must be an absolute https URL/],
+    ['a non-string image', imagesInput([42, ...urls(3)]), /images\[0\] must be an absolute https URL/],
+    ['more paragraphs than segments allow', imagesInput(urls(13), Array(11).fill('Para.').join('\n\n')), /at most 10 paragraphs/],
+  ];
+  for (const [name, input, pattern] of rejects) {
+    it(`rejects ${name}`, () => assert.throws(() => parseInput(input), (error) => error instanceof ActorInputError && pattern.test(error.message)));
+  }
+
+  it('allows twelve images: hook, ten paragraphs, CTA', () => {
+    const input = parseInput(imagesInput(urls(12), Array(10).fill('Para.').join('\n\n')));
+    assert.equal(buildGenerateBody(input).options.segments.length, 12);
+  });
+
+  it('sends the material to validate-script so a missing image costs nothing', async () => {
+    const { promise, calls } = runWith(
+      {
+        'POST /api/videos/validate-script': jsonResponse(400, { success: false, error: 'the images material needs media on every segment' }),
+      },
+      imagesInput(urls(4)),
+    );
+    await assert.rejects(promise);
+    assert.equal(calls.length, 1);
+    const sent = JSON.parse(calls[0].init.body);
+    assert.equal(sent.facelessMaterial, 'images');
+    assert.equal(sent.segments.length, 4);
+  });
+
+  it('does not add a material to validate-script when none is chosen', async () => {
+    const { promise, calls } = runWith(
+      { 'POST /api/videos/validate-script': jsonResponse(400, { success: false, error: 'Script too short.' }) },
+      baseInput(),
+    );
+    await assert.rejects(promise);
+    assert.equal('facelessMaterial' in JSON.parse(calls[0].init.body), false);
+  });
+
+  it('documents the images input in the input schema', () => {
+    const schema = JSON.parse(readFileSync(new URL('../.actor/input_schema.json', import.meta.url), 'utf8'));
+    assert.equal(schema.properties.images.type, 'array');
+    assert.equal(schema.properties.images.editor, 'stringList');
+    assert.equal(schema.required.includes('images'), false);
   });
 });
