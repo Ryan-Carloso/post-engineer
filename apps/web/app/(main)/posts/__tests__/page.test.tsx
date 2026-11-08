@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
@@ -21,6 +21,11 @@ vi.mock('@/lib/api', () => ({
   useVideoGenerationsQuery: vi.fn(),
 }));
 
+vi.mock('@/lib/schedule-range', () => ({
+  RANGE_MAX_SLOTS: 1000,
+  useScheduleRangeQuery: vi.fn(),
+}));
+
 vi.mock('@/lib/ui', () => ({
   SpinnerIcon: () => <span data-testid="icon-spinner" />,
 }));
@@ -35,6 +40,7 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 import PostsPage, { POSTS_LIMIT } from '../page';
+import { useScheduleRangeQuery } from '@/lib/schedule-range';
 import {
   useScheduleStatusQuery,
   useSchedulesQuery,
@@ -93,6 +99,8 @@ const FAILED_SLOT = {
 };
 
 function mockQueries(overrides: {
+  range?: unknown[];
+  rangeTruncated?: boolean;
   upcoming?: unknown[];
   recent?: unknown[];
   schedules?: unknown[];
@@ -105,6 +113,12 @@ function mockQueries(overrides: {
     },
     isLoading: false,
     isFetching: false,
+    isError: false,
+    refetch: vi.fn(),
+  } as never);
+  vi.mocked(useScheduleRangeQuery).mockReturnValue({
+    data: { slots: (overrides.range ?? []) as never, truncated: overrides.rangeTruncated ?? false },
+    isLoading: false,
     isError: false,
     refetch: vi.fn(),
   } as never);
@@ -152,10 +166,9 @@ describe('PostsPage', () => {
     expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
     expect(screen.getByText('Viva Leve')).toBeInTheDocument();
     expect(screen.getByText('posts.statusPending')).toBeInTheDocument();
-    // Account names appear only in the account filter now — the card
-    // footer shows compact initial avatars instead of full-name chips.
-    expect(screen.getAllByText('Europa Na Estrada').length).toBe(1);
-    expect(screen.getAllByText('@vivalave').length).toBe(1);
+    // Account names appear in the account filter option and as a chip on the card.
+    expect(screen.getAllByText('Europa Na Estrada').length).toBe(2);
+    expect(screen.getAllByText('@vivalave').length).toBe(2);
     // History items are hidden on the upcoming tab
     expect(screen.queryByText('Past topic')).not.toBeInTheDocument();
   });
@@ -171,14 +184,20 @@ describe('PostsPage', () => {
     expect(screen.queryByText('posts.personaFallback')).not.toBeInTheDocument();
   });
 
-  it('renders the network icon at the card top and initial avatars in the footer', () => {
+  it('renders the status badge first, then date, and network + account chips', () => {
     render(<PostsPage />);
 
-    // Network icon (role img) labelled by the provider name.
-    expect(screen.getAllByRole('img', { name: 'youtube' }).length).toBeGreaterThanOrEqual(1);
-    // Avatar fallbacks use the accounts' initials.
-    expect(screen.getByText('EN')).toBeInTheDocument();
-    expect(screen.getByText('V')).toBeInTheDocument();
+    const card = screen.getByText('Upcoming topic').closest('a');
+    expect(card).not.toBeNull();
+    const text = card?.textContent ?? '';
+    // Status label precedes the date + time, which precede the persona and title.
+    expect(text.indexOf('posts.statusPending')).toBeLessThan(text.indexOf('·'));
+    expect(text.indexOf('·')).toBeLessThan(text.indexOf('Viva Leve'));
+    // Chips: network glyph (role img) + account label.
+    const chips = within(card as HTMLElement);
+    expect(chips.getByRole('img', { name: 'youtube' })).toBeInTheDocument();
+    expect(chips.getByText('Europa Na Estrada')).toBeInTheDocument();
+    expect(chips.getByText('@vivalave')).toBeInTheDocument();
   });
 
   it('switches to the history tab showing published and failed posts', async () => {
@@ -191,8 +210,21 @@ describe('PostsPage', () => {
     expect(screen.getByText('posts.statusPublished')).toBeInTheDocument();
     expect(screen.getByText('Failed topic')).toBeInTheDocument();
     expect(screen.getByText('posts.statusFailed')).toBeInTheDocument();
-    expect(screen.getByText('Upload failed')).toBeInTheDocument();
+    // The failure is localized inline; the raw engine/upstream text is never rendered.
+    expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
+    expect(screen.queryByText('Upload failed')).not.toBeInTheDocument();
     expect(screen.queryByText('Upcoming topic')).not.toBeInTheDocument();
+  });
+
+  it('tells a retryable failed card apart from a permanent one', async () => {
+    mockQueries({ recent: [{ ...FAILED_SLOT, retryable: true }] });
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
+
+    expect(screen.getByText('posts.cardFailedRetryable')).toBeInTheDocument();
+    expect(screen.queryByText('posts.cardFailedPermanent')).not.toBeInTheDocument();
   });
 
   it('filters slots by provider', async () => {
@@ -726,7 +758,7 @@ describe('PostsPage fallbacks', () => {
     expect(screen.getByText('posts.personaFallback')).toBeInTheDocument();
   });
 
-  it('renders at most four account avatars per card', () => {
+  it('renders at most three account chips per card and collapses the rest into +N', () => {
     mockQueries();
     const accounts = ['Alpha One', 'Beta Two', 'Gamma Three', 'Delta Four', 'Epsilon Five'].map(
       (name, i) => ({ channelId: `ch${i}`, channelName: name }),
@@ -742,12 +774,12 @@ describe('PostsPage fallbacks', () => {
     } as never);
     render(<PostsPage />);
 
-    // Initials of the first four accounts render; the fifth is sliced off.
-    expect(screen.getByText('AO')).toBeInTheDocument();
-    expect(screen.getByText('BT')).toBeInTheDocument();
-    expect(screen.getByText('GT')).toBeInTheDocument();
-    expect(screen.getByText('DF')).toBeInTheDocument();
-    expect(screen.queryByText('EF')).not.toBeInTheDocument();
+    const card = within(screen.getByText('Upcoming topic').closest('a') as HTMLElement);
+    expect(card.getByText('Alpha One')).toBeInTheDocument();
+    expect(card.getByText('Beta Two')).toBeInTheDocument();
+    expect(card.getByText('Gamma Three')).toBeInTheDocument();
+    expect(card.queryByText('Delta Four')).not.toBeInTheDocument();
+    expect(card.getByText('+3')).toBeInTheDocument(); // 5 YouTube + the Instagram account = 6 chips, 3 shown
   });
 
   it('labels every provider filter option with its own network name', () => {
@@ -771,5 +803,96 @@ describe('PostsPage fallbacks', () => {
     render(<PostsPage />);
 
     expect(screen.getByRole('button', { name: 'posts.refresh' })).toBeDisabled();
+  });
+});
+
+//---------------
+// Calendar view: list/calendar toggle, per-day markers, day selection and
+// the filters applied to the range read.
+//---------------
+describe('PostsPage calendar view', () => {
+  const rangeSlots = [
+    { ...UPCOMING_SLOT, id: 'c1', slotAt: '2030-06-05T12:00:00.000Z', title: 'Calendar upcoming' },
+    { ...PUBLISHED_SLOT, id: 'c2', slotAt: '2030-06-05T15:00:00.000Z', title: 'Calendar published' },
+    { ...FAILED_SLOT, id: 'c3', slotAt: '2030-06-07T12:00:00.000Z', title: 'Calendar failed' },
+  ];
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2030-06-15T12:00:00.000Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('only reads the range while the calendar is shown', async () => {
+    mockQueries({ range: rangeSlots });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PostsPage />);
+
+    expect(vi.mocked(useScheduleRangeQuery).mock.calls.at(-1)?.[3]).toBe(false);
+    await user.click(screen.getByRole('button', { name: 'posts.viewCalendar' }));
+
+    const [monthKey, from, to, enabled] = vi.mocked(useScheduleRangeQuery).mock.calls.at(-1) ?? [];
+    expect(enabled).toBe(true);
+    expect(monthKey).toBe('2030-06');
+    // The 6-week grid covers the month plus leading/trailing days.
+    expect(new Date(from as string).getTime()).toBeLessThanOrEqual(new Date(2030, 5, 1).getTime());
+    expect(new Date(to as string).getTime()).toBeGreaterThanOrEqual(new Date(2030, 6, 1).getTime());
+    expect(screen.getByRole('grid')).toBeInTheDocument();
+    // The tabs belong to the list view only.
+    expect(screen.queryByRole('button', { name: /posts\.tabUpcoming/ })).not.toBeInTheDocument();
+  });
+
+  it('lists the selected day posts below the calendar, past and future together', async () => {
+    mockQueries({ range: rangeSlots });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PostsPage />);
+    await user.click(screen.getByRole('button', { name: 'posts.viewCalendar' }));
+
+    expect(screen.getByText('posts.calendarNoDay')).toBeInTheDocument();
+    // Cells with posts carry the summary label (t() echoes keys here); the
+    // only one starting with "5" is June 5 — July 5 in the grid is empty.
+    const day5 = within(screen.getByRole('grid'))
+      .getAllByRole('button', { name: 'posts.calendarDayLabel' })
+      .find((button) => button.textContent?.startsWith('5'));
+    expect(day5).toBeDefined();
+    await user.click(day5 as HTMLElement);
+
+    expect(screen.getByText('Calendar upcoming')).toBeInTheDocument();
+    expect(screen.getByText('Calendar published')).toBeInTheDocument();
+    expect(screen.queryByText('Calendar failed')).not.toBeInTheDocument();
+  });
+
+  it('applies the provider filter to calendar slots', async () => {
+    mockQueries({ range: rangeSlots });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PostsPage />);
+    await user.click(screen.getByRole('button', { name: 'posts.viewCalendar' }));
+
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'linkedin');
+
+    const cells = screen.getAllByRole('gridcell');
+    expect(cells.some((cell) => cell.querySelector('[data-group]') !== null)).toBe(false);
+  });
+
+  it('warns when the range read was truncated', async () => {
+    mockQueries({ range: rangeSlots, rangeTruncated: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PostsPage />);
+    await user.click(screen.getByRole('button', { name: 'posts.viewCalendar' }));
+
+    expect(screen.getByText('posts.calendarTruncated')).toBeInTheDocument();
+  });
+
+  it('shows the load error state when the range read fails', async () => {
+    mockQueries();
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch: vi.fn() } as never);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PostsPage />);
+    await user.click(screen.getByRole('button', { name: 'posts.viewCalendar' }));
+
+    expect(screen.getByText('posts.loadError')).toBeInTheDocument();
   });
 });
