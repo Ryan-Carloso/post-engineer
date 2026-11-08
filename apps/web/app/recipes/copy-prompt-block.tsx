@@ -26,9 +26,9 @@ export default function CopyPromptBlock({ prompt }: { prompt: string }) {
         <AgentLogos agents={['cursor', 'claude', 'opencode']} size="sm" />
         <p className="leading-relaxed text-ink-soft">{t('recipes.copyExplanation')}</p>
       </div>
-      <div className="mt-6 overflow-hidden rounded-xl bg-ink shadow-[0_8px_24px_rgba(16,23,40,0.25)]">
+      <div className="mt-6 overflow-hidden rounded-xl bg-code shadow-[0_8px_24px_rgba(16,23,40,0.25)]">
         <div className="flex items-center justify-between gap-4 border-b border-white/10 px-4 py-3">
-          <span className="text-xs font-semibold text-faint">
+          <span className="text-xs font-semibold text-code-text">
             {t('recipes.copyFullPrompt')}
           </span>
           <Button
@@ -41,7 +41,7 @@ export default function CopyPromptBlock({ prompt }: { prompt: string }) {
         </div>
         <pre
           data-testid="full-prompt"
-          className="max-h-[32rem] overflow-auto p-4 font-mono text-xs leading-5 whitespace-pre-wrap text-faint select-text"
+          className="max-h-[32rem] overflow-auto p-4 font-mono text-xs leading-5 whitespace-pre-wrap text-code-text select-text"
         >
           {prompt}
         </pre>

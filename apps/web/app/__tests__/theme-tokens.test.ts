@@ -108,6 +108,18 @@ describe('inverting fills use text-on-ink', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('keeps dark code panels on the always-dark bg-code token', () => {
+    // border-white/10 is the divider of a permanently dark panel; such a
+    // panel must use bg-code, which stays dark in both themes (bg-ink inverts).
+    const offenders = files
+      .filter((file) => {
+        const source = readFileSync(file, 'utf8');
+        return source.includes('border-white/10') && !source.includes('bg-code');
+      })
+      .map((file) => file.replace(webRoot, ''));
+    expect(offenders).toEqual([]);
+  });
+
   it('keeps no fixed hex hover on the destructive buttons', () => {
     const detail = readFileSync(join(webRoot, 'app', '(main)', 'posts', '[id]', 'page.tsx'), 'utf8');
     expect(detail.includes('hover:bg-[#')).toBe(false);
