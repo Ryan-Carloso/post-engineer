@@ -77,6 +77,7 @@ METHOD PATH                                                   OPERATION
 POST   /api/videos/validate-script                            validate script
 POST   /api/videos/score-draft                                score draft
 POST   /api/videos/generate-and-schedule                      generate persona video
+POST   /api/videos/batch-discount                             apply batch discount
 GET    /api/persona/video-status/{taskId}                     get video status
 DELETE /api/persona/video-task/{taskId}                       cancel video task
 GET    /api/persona/video-generations                         list video generations

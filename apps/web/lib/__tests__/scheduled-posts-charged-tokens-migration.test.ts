@@ -10,7 +10,7 @@ import { FACELESS_PRICE, FACE_QUALITY_PRICES, FULL_LIPSYNC_PRICES } from '@/lib/
 // SQL repeats the price literals: this test pins each one to lib/tokens.ts.
 //---------------
 const root = findRepoRoot(import.meta.url);
-const migration = readFileSync(join(root, 'supabase/migrations/044_scheduled-posts-charged-tokens.sql'), 'utf8');
+const migration = readFileSync(join(root, 'supabase/migrations/044_scheduled-posts-batch-billing.sql'), 'utf8');
 
 describe('scheduled_posts.charged_tokens migration', () => {
   it('adds a NOT NULL, non-negative integer column', () => {
@@ -35,5 +35,14 @@ describe('scheduled_posts.charged_tokens migration', () => {
     expect(orphan).toContain(`when sp.full_lipsync is true then ${FULL_LIPSYNC_PRICES.ok}`);
     expect(orphan).toContain(`else ${FACE_QUALITY_PRICES.ok}`);
     expect(orphan).not.toContain('very_good');
+  });
+});
+
+describe('scheduled_posts batch discount columns (issue #487)', () => {
+  it('adds a nullable batch_id, indexed, and a non-negative discount_tokens defaulting to 0', () => {
+    expect(migration).toContain('add column if not exists batch_id uuid;');
+    expect(migration).toContain('add column if not exists discount_tokens integer not null default 0;');
+    expect(migration).toContain('check (discount_tokens >= 0)');
+    expect(migration).toContain('on public.scheduled_posts (batch_id)');
   });
 });

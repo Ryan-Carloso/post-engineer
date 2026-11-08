@@ -7,6 +7,7 @@ import { isPersonaAllowed } from '@/lib/api-keys';
 import { apiErrorResponse } from '@/lib/api-error';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { logger } from '@/lib/logger';
+import { refundsAfterClawback } from './batch-clawback';
 
 //---------------
 // /api/schedule — read and cancel the automatic fill-schedule timetables.
@@ -19,7 +20,9 @@ import { logger } from '@/lib/logger';
 // row, so deleting only the schedule would leave a post that still goes out.
 // Prepaid tokens for the removed slots are refunded: each slot gives back
 // its stored `charged_tokens` (migration 044), never a recomputed price, and
-// a slot charged 0 has nothing to refund. A soft refund failure
+// a slot charged 0 has nothing to refund. A cancelled video of a batch
+// gives back the batch discount it no longer earns (batch-clawback.ts):
+// that amount is withheld from its refund. A soft refund failure
 // is logged and reported on the response; the slot stays deleted. A slot
 // already `publishing`, `published`, or `failed` is left alone.
 //
@@ -122,6 +125,7 @@ interface ScheduleCancelSlot {
   id: string;
   status: string;
   chargedTokens: number;
+  batchId: string | null;
   taskId: string | null;
 }
 
@@ -141,10 +145,13 @@ function narrowCancelSlot(value: unknown): ScheduleCancelSlot | null {
   // NOT NULL integer >= 0 in the schema: anything else is an unreadable row.
   const chargedTokens = row.charged_tokens;
   if (typeof chargedTokens !== 'number' || !Number.isInteger(chargedTokens) || chargedTokens < 0) return null;
+  const batchId = row.batch_id;
+  if (batchId !== null && batchId !== undefined && typeof batchId !== 'string') return null;
   return {
     id: row.id,
     status: row.status,
     chargedTokens,
+    batchId: typeof batchId === 'string' ? batchId : null,
     taskId: typeof taskId === 'string' && taskId.length > 0 ? taskId : null,
   };
 }
@@ -176,7 +183,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   // migration chain) are priced and removed like any other.
   const { data: slotData, error: slotsError } = await supabase
     .from('scheduled_posts')
-    .select('id, status, charged_tokens, task_id')
+    .select('id, status, charged_tokens, batch_id, task_id')
     .eq('schedule_id', scheduleId)
     .eq('user_id', user.id);
   if (slotsError) {
@@ -223,7 +230,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
 
   const { data: remainingData, error: remainingError } = await supabase
     .from('scheduled_posts')
-    .select('id, status, charged_tokens, task_id')
+    .select('id, status, charged_tokens, batch_id, task_id')
     .eq('schedule_id', scheduleId)
     .eq('user_id', user.id);
   if (remainingError) {
@@ -252,12 +259,31 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   // remainingIds and must keep its charge — the post may still go out.
   const removed = cancellable.filter((slot) => !remainingIds.has(slot.id));
 
+  const clawback = await refundsAfterClawback(supabase, user.id, removed);
+  if (!clawback.ok) {
+    // The slots are gone but the batch could not be re-checked: refunding
+    // blind could leave a free batch video behind, so no refund is issued
+    // and the schedule row stays (same contract as the re-read failure).
+    logger.error('[api/schedule] cancel could not re-check the batch discount; refunds skipped', clawback.error, {
+      scheduleId,
+      userId: user.id,
+    });
+    return errorResponse(
+      500,
+      'Unpublished slots were removed but could not be confirmed, so prepaid tokens were not refunded.',
+      'DELETE /api/schedule',
+      undefined,
+      { cause: clawback.error },
+    );
+  }
+
   const refunds: CancelRefund[] = [];
   const batchGenerationId = `batch:${scheduleId}`;
   for (const slot of removed) {
-    // Charged 0 (a free video): nothing was paid, so there is nothing to
-    // refund, and the RPC rejects a non-positive amount.
-    if (slot.chargedTokens === 0) continue;
+    const amount = clawback.refundBySlot.get(slot.id) ?? slot.chargedTokens;
+    // Nothing to give back: a free video (charged 0), or a refund the batch
+    // clawback fully withheld. The RPC rejects a non-positive amount.
+    if (amount === 0) continue;
     // The engine task is already running (GPU spent). The user gets no
     // post, so the prepaid charge is refunded — charging for a cancelled
     // post is the worse error. The key matches the dispatch-failure refund
@@ -266,7 +292,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
       p_user_id: user.id,
       p_batch_generation_id: batchGenerationId,
       p_refund_key: `${batchGenerationId}:slot:${slot.id}`,
-      p_amount: slot.chargedTokens,
+      p_amount: amount,
       p_reason: 'Schedule cancelled before publish; video refunded',
       p_engine_task_id: slot.taskId,
     });
@@ -305,6 +331,10 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     success: true,
     cancelledSlotIds: removed.map((slot) => slot.id),
     refunds,
+    batchDiscountWithheld: removed.reduce(
+      (sum, slot) => sum + slot.chargedTokens - (clawback.refundBySlot.get(slot.id) ?? slot.chargedTokens),
+      0,
+    ),
   });
 }
 

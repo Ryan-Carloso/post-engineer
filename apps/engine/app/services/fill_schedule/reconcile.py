@@ -49,6 +49,12 @@ class BatchReconciler:
                 slot_user = slot_user_id(slot)
                 if slot_user is not None:
                     properties["user_id"] = slot_user
+                # Batch discount (issue #487): the batch id lets PostHog check
+                # that a batch's videos share a warm Modal container
+                # (videos_per_container > 1 across one batch_id).
+                batch_id = slot.get("batch_id")
+                if isinstance(batch_id, str) and batch_id:
+                    properties["batch_id"] = batch_id
                 # GPU cost (USD) is calculated by the Modal app and persisted
                 # flat on the task row by the task pipeline. Include it for
                 # unit-economics tracking (or the reason it is missing).

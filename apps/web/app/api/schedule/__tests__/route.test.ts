@@ -340,7 +340,7 @@ describe('/api/schedule', () => {
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { success: boolean; cancelledSlotIds: string[]; refunds: unknown[] };
-    expect(body).toEqual({ success: true, cancelledSlotIds: [], refunds: [] });
+    expect(body).toEqual({ success: true, cancelledSlotIds: [], refunds: [], batchDiscountWithheld: 0 });
     expect(db.deleteCalls.map((call) => call.table)).toEqual(['scheduled_posts', 'schedules']);
   });
 

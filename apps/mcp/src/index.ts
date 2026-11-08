@@ -81,6 +81,7 @@ import {
 } from './video-task-tools.js';
 import { GeneratePersonaVideoShape, ValidateScriptShape, ValidateScriptDescription, ScoreDraftShape, ScoreDraftDescription, handleGeneratePersonaVideo, handleValidateScript, handleScoreDraft } from './tools-single-video.js';
 import { CheckMediaDescription, CheckMediaShape, UploadMediaDescription, UploadMediaShape, handleCheckMedia, handleUploadMedia } from './tools-user-media.js';
+import { GeneratePersonaVideoBatchDescription, GeneratePersonaVideoBatchShape, handleGeneratePersonaVideoBatch } from './tools-batch.js';
 import { AddExperimentPairShape, CreateExperimentShape, GetExperimentResultsShape, ListExperimentsShape, handleAddExperimentPair, handleCreateExperiment, handleGetExperimentResults, handleListExperiments } from './tools-experiments.js';
 import { withTracking } from './analytics.js';
 import { parseHttpTransportOptions, serveHttpTransport } from './http-transport.js';
@@ -356,6 +357,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
     GeneratePersonaVideoShape,
     withTracking('generate_persona_video', withScriptOutcome(recipeSession, 'generate_persona_video', async (args) => handleGeneratePersonaVideo(apiClient, args))),
   );
+  server.tool('generate_persona_video_batch', GeneratePersonaVideoBatchDescription, GeneratePersonaVideoBatchShape, withTracking('generate_persona_video_batch', async (args) => handleGeneratePersonaVideoBatch(apiClient, args)));
   server.tool('validate_script', ValidateScriptDescription, ValidateScriptShape, withTracking('validate_script', withScriptOutcome(recipeSession, 'validate_script', async (args) => handleValidateScript(apiClient, args))));
   server.tool('score_draft', ScoreDraftDescription, ScoreDraftShape, withTracking('score_draft', async (args) => handleScoreDraft(apiClient, args)));
   server.tool('upload_media', UploadMediaDescription, UploadMediaShape, withTracking('upload_media', async (args) => handleUploadMedia(apiClient, args)));

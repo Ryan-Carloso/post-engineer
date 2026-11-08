@@ -762,6 +762,31 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(props["slotId"], "slot-1")
         self.assertEqual(props["cost_usd"], 0.1)
 
+    def test_reconcile_generated_event_carries_the_batch_id(self):
+        from app.services.fill_schedule import reconcile as rec_module
+
+        for batch_id, expected in (("batch-1", "batch-1"), (None, None), ("", None)):
+            with self.subTest(batch_id=batch_id):
+                slot = {
+                    "id": "slot-1",
+                    "task_id": "t-1",
+                    "user_id": "user-1",
+                    "schedule_id": "sched-1",
+                    "charged_tokens": 2,
+                    "batch_id": batch_id,
+                }
+                store = _FakeStore()
+                store.generating_slots = lambda slot=slot: [slot]
+                state = MagicMock()
+                state.get_task.return_value = {"state": 1}
+                scheduler = fs.FillScheduleScheduler(
+                    store=store, task_state=state, publish_video=MagicMock()
+                )
+                with patch.object(rec_module, "track_event") as track:
+                    scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+                (_, props), = [c[0] for c in track.call_args_list if c[0][0] == "video_generated"]
+                self.assertEqual(props.get("batch_id"), expected)
+
     def test_reconcile_generated_event_omits_cost_usd_when_absent(self):
         from app.services.fill_schedule import reconcile as rec_module
 

@@ -512,6 +512,8 @@ export interface Database {
         variant_id: string | null;
         experiment_pair: number | null;
         charged_tokens: number;
+        batch_id: string | null;
+        discount_tokens: number;
         };
         Insert: {
         id?: string;
@@ -535,6 +537,8 @@ export interface Database {
         variant_id?: string | null;
         experiment_pair?: number | null;
         charged_tokens: number;
+        batch_id?: string | null;
+        discount_tokens?: number;
         };
         Update: {
         id?: string;
@@ -558,6 +562,8 @@ export interface Database {
         variant_id?: string | null;
         experiment_pair?: number | null;
         charged_tokens?: number;
+        batch_id?: string | null;
+        discount_tokens?: number;
         };
         Relationships: [];
       };

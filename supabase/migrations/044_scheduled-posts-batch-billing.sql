@@ -64,3 +64,37 @@ begin
       check (charged_tokens >= 0);
   end if;
 end $$;
+
+-- ----------------------------------------------------------------------------
+-- Batch discount (issue #487): videos created together through the MCP
+-- batch tool share a batch_id, and every 6th face video of a batch (the
+-- cheapest) is free. POST /api/videos/batch-discount credits the free
+-- video's charge back and records it here: charged_tokens drops to 0 and
+-- discount_tokens holds the credited amount. A cancel that leaves the batch
+-- below the threshold claws the discount back from its own refund (moves
+-- discount_tokens back into charged_tokens), so cancelling the paid videos
+-- never leaves a free one behind.
+-- ----------------------------------------------------------------------------
+
+alter table public.scheduled_posts
+  add column if not exists batch_id uuid;
+
+alter table public.scheduled_posts
+  add column if not exists discount_tokens integer not null default 0;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'scheduled_posts_discount_tokens_check'
+      and conrelid = 'public.scheduled_posts'::regclass
+  ) then
+    alter table public.scheduled_posts
+      add constraint scheduled_posts_discount_tokens_check
+      check (discount_tokens >= 0);
+  end if;
+end $$;
+
+create index if not exists scheduled_posts_batch_id_idx
+  on public.scheduled_posts (batch_id)
+  where batch_id is not null;
