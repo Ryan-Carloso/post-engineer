@@ -101,6 +101,9 @@ const PersonaPageContent = () => {
     store.setVideoAspect(persona.videoAspect ?? '9:16');
     // Nullable layout (migration 018): older personas rendered standard.
     store.setVideoLayout(persona.videoLayout ?? 'standard');
+    // Load the stored quality so the picker shows what the persona really
+    // renders at — without this it always opened on the 'ok' default.
+    store.setFaceQuality(persona.faceQuality === 'very_good' ? 'very_good' : 'ok');
     store.setScriptPrompt(persona.scriptPrompt ?? '');
     store.setCtaText(persona.ctaText ?? '');
     store.setNiche(persona.niche ?? '');
@@ -467,18 +470,7 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
     try {
       const personaId = editingPersonaId;
       if (personaId) {
-        const formData = new FormData();
-        formData.append('name', state.name.trim());
-        if (state.avatarUrl) formData.append('avatarUrl', state.avatarUrl);
-        if (state.voiceId) formData.append('voiceId', state.voiceId);
-        if (state.videoAspect) formData.append('videoAspect', state.videoAspect);
-        if (state.videoLayout) formData.append('videoLayout', state.videoLayout);
-        if (state.scriptPrompt.trim()) formData.append('scriptPrompt', state.scriptPrompt.trim());
-        // Always sent on edit: a blank value clears the persona's CTA
-        // (the PATCH parser maps present-but-blank to ''), omitting the
-        // field would leave the old CTA in place forever.
-        formData.append('ctaText', state.ctaText.trim());
-        if (state.niche.trim()) formData.append('niche', state.niche.trim());
+        const formData = state.buildPersonaEditFormData();
         const result = await updateMutation.mutateAsync({ personaId, formData });
         usePersonaStore.getState().setResult(result);
         if (result.success) {

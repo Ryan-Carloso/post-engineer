@@ -150,6 +150,21 @@ describe('MCP Tool Handlers', () => {
     expect(textOf(response)).toContain('updated successfully');
   });
 
+  it('handleUpdatePersona forwards faceQuality to the client', async () => {
+    vi.mocked(mockClient.updatePersona).mockResolvedValue({ success: true });
+
+    const response = await handleUpdatePersona(mockClient, {
+      personaId: 'persona-123',
+      faceQuality: 'ok',
+    });
+
+    expect(mockClient.updatePersona).toHaveBeenCalledWith({
+      personaId: 'persona-123',
+      faceQuality: 'ok',
+    });
+    expect(textOf(response)).toContain('updated successfully');
+  });
+
   it('handleUpdatePersona rejects an unknown voice with the exact message and never calls the client', async () => {
     vi.mocked(mockClient.updatePersona).mockClear();
     vi.mocked(mockClient.listVoices).mockResolvedValue({ voices: [] });
@@ -388,6 +403,15 @@ describe('schema bounds', () => {
       paragraphNumber: 10,
     });
     expect(result.success).toBe(true);
+  });
+
+  it('UpdatePersonaSchema accepts faceQuality ok and very_good', () => {
+    expect(UpdatePersonaSchema.safeParse({ personaId: 'p1', faceQuality: 'ok' }).success).toBe(true);
+    expect(UpdatePersonaSchema.safeParse({ personaId: 'p1', faceQuality: 'very_good' }).success).toBe(true);
+  });
+
+  it('UpdatePersonaSchema rejects an unknown faceQuality', () => {
+    expect(UpdatePersonaSchema.safeParse({ personaId: 'p1', faceQuality: 'ultra' }).success).toBe(false);
   });
 
   it('UpdatePersonaSchema rejects avatarUrl: null (clearing is not supported)', () => {
