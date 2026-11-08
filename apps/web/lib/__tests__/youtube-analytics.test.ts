@@ -76,9 +76,14 @@ describe('youtube-analytics queryVideoStats', () => {
   });
 
   it('throws AnalyticsAuthError on any other 403 and logs it at error', async () => {
-    mockQuery.mockRejectedValueOnce(gaxiosError(403, 'forbidden'));
+    const error = gaxiosError(403, 'forbidden');
+    mockQuery.mockRejectedValueOnce(error);
     await expect(queryVideoStats(client, range)).rejects.toBeInstanceOf(AnalyticsAuthError);
-    expect(mockLoggerError).toHaveBeenCalledWith('[youtube-analytics] video stats rejected', { status: 403 });
+    // The original error is the cause (its message carries the YouTube
+    // reason); the status rides as metadata. Logging only { status } as the
+    // cause made the logger synthesize "Non-error value reported" and hid
+    // the reason from PostHog.
+    expect(mockLoggerError).toHaveBeenCalledWith('[youtube-analytics] video stats rejected', error, { status: 403 });
   });
 
   it('throws AnalyticsAuthError on 401', async () => {
