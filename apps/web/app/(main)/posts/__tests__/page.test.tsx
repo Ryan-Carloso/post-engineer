@@ -116,6 +116,7 @@ function mockQueries(overrides: {
     // The calendar reads the range; `upcoming` fixtures feed it too.
     data: { slots: (overrides.range ?? overrides.upcoming ?? [UPCOMING_SLOT]) as never, truncated: overrides.rangeTruncated ?? false },
     isLoading: false,
+    isFetching: false,
     isError: false,
     refetch: vi.fn(),
   } as never);
@@ -257,7 +258,7 @@ describe('PostsPage', () => {
   });
 
   it('shows a loading skeleton while the calendar range is loading', () => {
-    vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() } as never);
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: true, isFetching: false, isError: false, refetch: vi.fn() } as never);
 
     render(<PostsPage />);
     // A skeleton keeps the calendar layout in place; no lone spinner on
@@ -625,7 +626,7 @@ describe('PostsPage calendar view', () => {
 
   it('shows the load error state when the range read fails', () => {
     mockQueries();
-    vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch: vi.fn() } as never);
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isFetching: false, isError: true, refetch: vi.fn() } as never);
     render(<PostsPage />);
 
     // The error names the calendar posts, not the supporting data.
@@ -702,5 +703,20 @@ describe('PostsPage calendar view', () => {
 
     const card = screen.getByText('Calendar failed').closest('a');
     expect(card?.querySelector('[data-thumb="empty"]')).not.toBeNull();
+  });
+
+  it('disables the refresh button while a refetch is in flight', () => {
+    // The header refresh stays clickable while idle but must not fire a
+    // second refetch while one is already running.
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({
+      data: { slots: [UPCOMING_SLOT], truncated: false },
+      isLoading: false,
+      isFetching: true,
+      isError: false,
+      refetch: vi.fn(),
+    } as never);
+    render(<PostsPage />);
+
+    expect(screen.getByRole('button', { name: 'posts.refresh' })).toBeDisabled();
   });
 });

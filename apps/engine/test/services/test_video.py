@@ -23,6 +23,7 @@ from app.controllers.manager.memory_manager import InMemoryTaskManager
 from app.controllers.v1 import video as video_controller
 from app.models import const
 from app.models.schema import MaterialInfo
+from app.services import music_mood as mm
 from app.services import state as sm
 from app.services import video as vd
 from app.utils import utils
@@ -94,7 +95,7 @@ class TestSecurityControls(unittest.TestCase):
             )
 
             self.assertEqual(
-                vd.get_available_music_moods(str(catalog)),
+                mm.get_available_music_moods(str(catalog)),
                 ("calm", "energetic", "romantic"),
             )
 
@@ -218,6 +219,58 @@ class TestSecurityControls(unittest.TestCase):
 
         with self.assertRaises(TaskQueueFullError):
             manager.add_task(lambda: None)
+
+
+class TestGetBgmFile(unittest.TestCase):
+    def test_none_mood_logs_info_through_selection_helper_without_consulting_catalog(self):
+        """'none' is an explicit no-music choice: it logs INFO via
+        log_bgm_selection (the helper that reports every selection
+        outcome) and never reads the catalog."""
+        records = []
+        handler_id = logger.add(
+            lambda message: records.append(message.record), level="INFO"
+        )
+        try:
+            with patch.object(
+                vd,
+                "select_bgm_file",
+                side_effect=AssertionError("catalog must not be consulted for 'none'"),
+            ):
+                self.assertEqual(vd.get_bgm_file("none"), "")
+        finally:
+            logger.remove(handler_id)
+        self.assertTrue(
+            any(
+                r["level"].name == "INFO" and "mood='none'" in r["message"]
+                for r in records
+            ),
+            "the 'none' choice must be logged at INFO from the production path",
+        )
+
+    def test_unreadable_catalog_logs_warning_without_the_absolute_path(self):
+        # A missing catalog warns locally: the absolute path must not reach
+        # the log line (the OSError text carries the path too).
+        records = []
+        handler_id = logger.add(
+            lambda message: records.append(message.record), level="WARNING"
+        )
+        try:
+            self.assertEqual(
+                vd.select_bgm_file(
+                    "calm",
+                    "/app/resource/songs/missing.toml",
+                    "/app/resource/songs",
+                ),
+                "",
+            )
+        finally:
+            logger.remove(handler_id)
+        messages = [r["message"] for r in records]
+        self.assertTrue(any("missing.toml" in m for m in messages))
+        self.assertFalse(
+            any("/app/resource/songs/missing.toml" in m for m in messages),
+            "absolute catalog path leaked into the WARNING log",
+        )
 
 
 class TestStorageFallback(unittest.TestCase):

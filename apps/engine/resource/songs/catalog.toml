@@ -1,0 +1,66 @@
+# Background-music catalog (issue #489).
+#
+# Every track here is CC0 1.0 (public domain dedication): free for
+# commercial use, no attribution required, redistribution allowed. Each
+# entry records its license and source so the claim is checkable —
+# never add a track without verifying both first. See README.md.
+#
+# The loader only reads `file` and `moods`; `license`, `source`,
+# `title` and `creator` are provenance metadata. A mood lists every
+# track that fits it; the mixer picks one at random per video.
+
+[[tracks]]
+file = "upbeat/upbeat-loop.mp3"
+moods = ["upbeat"]
+title = "Upbeat loop"
+creator = "mistermender"
+license = "CC0-1.0"
+source = "https://freesound.org/people/mistermender/sounds/512340"
+
+[[tracks]]
+file = "upbeat/free-uplifting-music.mp3"
+moods = ["upbeat"]
+title = "Free Uplifting Music"
+creator = "Seth_Makes_Sounds"
+license = "CC0-1.0"
+source = "https://freesound.org/people/Seth_Makes_Sounds/sounds/670819"
+
+[[tracks]]
+file = "calm/soft-piano.mp3"
+moods = ["calm"]
+title = "Soft piano"
+creator = "Johnnie_Holiday"
+license = "CC0-1.0"
+source = "https://freesound.org/people/Johnnie_Holiday/sounds/554602"
+
+[[tracks]]
+file = "calm/mellow-chill-song.mp3"
+moods = ["calm"]
+title = "mellow_chill_song23"
+creator = "bainmack"
+license = "CC0-1.0"
+source = "https://freesound.org/people/bainmack/sounds/632681"
+
+[[tracks]]
+file = "inspiring/april-showers.mp3"
+moods = ["inspiring"]
+title = "April Showers"
+creator = "kjartan_abel"
+license = "CC0-1.0"
+source = "https://freesound.org/people/kjartan_abel/sounds/608392"
+
+[[tracks]]
+file = "energetic/wave-length.mp3"
+moods = ["energetic"]
+title = "NovaTrax - Wave Length"
+creator = "NovaTrax"
+license = "CC0-1.0"
+source = "https://freesound.org/people/NovaTrax/sounds/655472"
+
+[[tracks]]
+file = "energetic/upbeat-acoustic-guitar.mp3"
+moods = ["energetic"]
+title = "Upbeat Acoustic Guitar With Orchestra"
+creator = "guitarman213"
+license = "CC0-1.0"
+source = "https://freesound.org/people/guitarman213/sounds/709034"

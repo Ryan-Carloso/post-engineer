@@ -19,6 +19,7 @@ export interface OptionsInput {
   faceless?: boolean;
   facelessMaterial?: FacelessMaterial;
   fullLipsync?: boolean;
+  musicMood?: string;
   audioUrl?: string;
   imageId?: string;
   webhookUrl?: string;
@@ -39,6 +40,8 @@ export interface ValidatedOptions {
   facelessMaterial: FacelessMaterial;
   /** Opt-in full lip-sync (whole video talking head, no b-roll). */
   fullLipsync?: boolean;
+  /** BGM mood (issue #489): a catalogued mood, or "none" for no music; omitted = engine default. */
+  musicMood?: string;
   audioUrl?: string;
   imageId?: string;
   webhookUrl?: string;
@@ -57,6 +60,7 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
     faceless = false,
     facelessMaterial,
     fullLipsync,
+    musicMood,
     audioUrl,
     imageId,
     webhookUrl,
@@ -112,6 +116,7 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
       faceless,
       facelessMaterial: facelessMaterial ?? 'broll',
       fullLipsync,
+      musicMood,
       audioUrl,
       imageId: imageId?.trim(),
       webhookUrl,

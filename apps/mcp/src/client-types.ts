@@ -85,6 +85,8 @@ export interface GeneratePersonaVideoInput {
     facelessMaterial?: 'broll' | 'svg' | 'images';
     /** Render the whole video as the persona talking, with no b-roll: every narration window is lip-synced to the persona face. Requires a persona with a photo and lip-sync enabled; cannot be combined with faceless. */
     fullLipsync?: boolean;
+    /** Background-music mood: a mood from the engine BGM catalog, or "none" for explicit no music. Omitted lets the engine pick the first catalogued mood. */
+    musicMood?: string;
     audioUrl?: string;
     imageId?: string;
     voiceId?: string;

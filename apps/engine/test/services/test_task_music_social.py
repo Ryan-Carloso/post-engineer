@@ -2,8 +2,9 @@
 
 ``tm.start()`` used to ask the LLM which BGM mood fits the script and
 used to ask it for YouTube cross-post copy. Both are now mechanical:
-the mood is always "none" (no BGM — the LLM function's own failure
-fallback) and the YouTube metadata is the subject-only mechanical
+the mood comes with the request (``VideoParams.music_mood``; omitted
+means the first catalogued mood, ``"none"`` is an explicit no-music
+choice) and the YouTube metadata is the subject-only mechanical
 fallback. The tests below drive ``start()`` to the cross-post stage
 with every other stage mocked. Phase 5 PR 6 deleted the LLM core, so
 there is no LLM function left to call; the structural pin at the end
@@ -21,21 +22,28 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.models.schema import MaterialInfo, VideoParams
+from app.services import music_mood as mm
 from app.services import task as tm
 from app.services.intro_cost import IntroCostReport
 
 
-def _params(subject="Lisbon trams"):
+def _params(subject="Lisbon trams", music_mood=None):
     return VideoParams(
         video_subject=subject,
         voice_name="chatterbox:kokoro_af_heart",
         video_materials=[MaterialInfo(provider="local", url="/tmp/a.mp4", duration=0)],
+        music_mood=music_mood,
     )
 
 
 class StartMusicSocialTests(unittest.TestCase):
-    def _run_start(self, platforms, subject="Lisbon trams"):
-        """Run start() to the cross-post stage; return (result, mocks)."""
+    def _run_start(self, platforms, subject="Lisbon trams", music_mood=None, moods=("calm", "upbeat")):
+        """Run start() to the cross-post stage; return (result, mocks).
+
+        ``moods`` is the catalog the mood resolver sees; pass
+        ``AssertionError`` (as the ``moods`` value) to fail the test if
+        the catalog is consulted at all.
+        """
         service = tm.upload_post.upload_post_service
         with ExitStack() as stack:
             stack.enter_context(patch.object(tm, "_update_task"))
@@ -109,20 +117,51 @@ class StartMusicSocialTests(unittest.TestCase):
                     return_value={"success": True},
                 )
             )
-            moods_catalog = stack.enter_context(
-                patch.object(
-                    tm.video,
-                    "get_available_music_moods",
-                    side_effect=AssertionError("BGM catalog must not be consulted"),
+            if isinstance(moods, AssertionError):
+                moods_catalog = stack.enter_context(
+                    patch.object(
+                        mm,
+                        "get_available_music_moods",
+                        side_effect=moods,
+                    )
                 )
-            )
+            else:
+                moods_catalog = stack.enter_context(
+                    patch.object(
+                        mm,
+                        "get_available_music_moods",
+                        return_value=moods,
+                    )
+                )
             complete = tm._complete_task
-            result = tm.start(task_id="task-music-social", params=_params(subject))
+            result = tm.start(
+                task_id="task-music-social",
+                params=_params(subject, music_mood=music_mood),
+            )
             return result, complete, cross_post, moods_catalog
 
-    def test_music_mood_is_none_without_any_llm_call(self):
+    def test_music_mood_defaults_to_first_catalogued_mood_without_any_llm_call(self):
         assert not hasattr(tm, "llm")
         result, complete, _, moods_catalog = self._run_start(["youtube"])
+        self.assertEqual(result["music_mood"], "calm")
+        moods_catalog.assert_called_once()
+        complete_kwargs = complete.call_args.kwargs
+        self.assertEqual(complete_kwargs["music_mood"], "calm")
+
+    def test_explicit_music_mood_passes_through_without_any_llm_call(self):
+        assert not hasattr(tm, "llm")
+        result, complete, _, _ = self._run_start(["youtube"], music_mood="upbeat")
+        self.assertEqual(result["music_mood"], "upbeat")
+        complete_kwargs = complete.call_args.kwargs
+        self.assertEqual(complete_kwargs["music_mood"], "upbeat")
+
+    def test_explicit_none_music_mood_skips_catalog_without_any_llm_call(self):
+        assert not hasattr(tm, "llm")
+        result, complete, _, moods_catalog = self._run_start(
+            ["youtube"],
+            music_mood="none",
+            moods=AssertionError("BGM catalog must not be consulted for 'none'"),
+        )
         self.assertEqual(result["music_mood"], "none")
         moods_catalog.assert_not_called()
         complete_kwargs = complete.call_args.kwargs

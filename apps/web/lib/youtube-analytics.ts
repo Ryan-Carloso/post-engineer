@@ -174,7 +174,11 @@ function classify(error: unknown, label: string): { kind: 'scope_missing' } {
   if (isInsufficientScopeError(error)) return { kind: 'scope_missing' };
   const status = httpStatusOf(error);
   if (status === 401 || status === 403) {
-    logger.error(`[youtube-analytics] ${label} rejected`, { status });
+    // Log the original error as the cause: its message carries the YouTube
+    // rejection reason. Logging only { status } made the logger synthesize
+    // "Non-error value reported: {\"status\":403}" as the PostHog exception
+    // and hid the reason. The status rides as metadata, as elsewhere.
+    logger.error(`[youtube-analytics] ${label} rejected`, error, { status });
     throw new AnalyticsAuthError(status);
   }
   throw error;

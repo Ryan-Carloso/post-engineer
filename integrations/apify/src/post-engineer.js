@@ -6,7 +6,11 @@
 export const DEFAULT_API_URL = 'https://post-engineer.com';
 export const PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads'];
 export const MODES = ['asap', 'scheduled'];
-export const FACELESS_MATERIALS = ['broll', 'svg'];
+export const FACELESS_MATERIALS = ['broll', 'svg', 'images'];
+// The "images" material renders only the given images, one per segment;
+// the segments cap (MAX_SEGMENTS in the shared validator) bounds them.
+export const IMAGES_MATERIAL = 'images';
+export const MAX_IMAGES = 12;
 export const API_KEY_PREFIX = 'pe_live_';
 export const REQUEST_TIMEOUT_MS = 60_000;
 export const POLL_INTERVAL_MS = 15_000;
@@ -154,6 +158,46 @@ function parseLook(raw, personaId) {
   return { faceless, voiceId, fullLipsync, facelessMaterial };
 }
 
+// Body paragraphs (split on blank lines). With images each paragraph is its
+// own segment, so a long body can carry one image per paragraph.
+function bodyParagraphs(body) {
+  return body.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter((paragraph) => paragraph !== '');
+}
+
+// images: public https URLs, one per segment (hook, each body paragraph,
+// CTA), only with the "images" material, which in turn needs them. The
+// web fetches them with its own SSRF guard; here only the shape is checked.
+function parseImages(raw, facelessMaterial, body) {
+  const value = raw.images;
+  const given = value !== undefined && value !== null;
+  if (facelessMaterial !== IMAGES_MATERIAL) {
+    if (given) throw new ActorInputError('images can only be used with facelessMaterial "images".');
+    return undefined;
+  }
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new ActorInputError('facelessMaterial "images" needs images: one public image URL per segment.');
+  }
+  for (const [index, url] of value.entries()) {
+    let parsed;
+    try {
+      parsed = new URL(isNonEmptyString(url) ? url.trim() : '');
+    } catch {
+      throw new ActorInputError(`images[${index}] must be an absolute https URL.`);
+    }
+    if (parsed.protocol !== 'https:') throw new ActorInputError(`images[${index}] must be an https URL.`);
+  }
+  const segmentCount = bodyParagraphs(body).length + 2;
+  if (segmentCount > MAX_IMAGES) {
+    throw new ActorInputError(`With images the body may have at most ${MAX_IMAGES - 2} paragraphs (one segment each).`);
+  }
+  if (value.length !== segmentCount) {
+    throw new ActorInputError(
+      `images must have exactly ${segmentCount} URLs: one for the hook, one per body paragraph (${segmentCount - 2}), one for the CTA.`,
+    );
+  }
+  return value.map((url) => url.trim());
+}
+
 /** Validates and normalizes the Actor input; throws ActorInputError. */
 export function parseInput(raw) {
   if (!isRecord(raw)) throw new ActorInputError('Actor input must be a JSON object.');
@@ -168,12 +212,14 @@ export function parseInput(raw) {
   const providers = parseProviders(raw);
   const personaId = optionalString(raw, 'personaId');
   const look = parseLook(raw, personaId);
+  const body = requireString(raw, 'body');
   return {
     apiKey,
     apiUrl: parseApiUrl(raw),
     title: requireString(raw, 'title'),
     hook: requireString(raw, 'hook'),
-    body: requireString(raw, 'body'),
+    body,
+    images: parseImages(raw, look.facelessMaterial, body),
     cta: requireString(raw, 'cta'),
     personaId,
     ...look,
@@ -186,13 +232,22 @@ export function parseInput(raw) {
   };
 }
 
-/** Hook first, body, CTA last: the segments contract of generate-and-schedule. */
+/** Hook first, body, CTA last: the segments contract of generate-and-schedule.
+ *  With images, each body paragraph is a segment and segment i shows images[i]. */
 export function buildSegments(input) {
-  return [
+  if (input.images === undefined) {
+    return [
+      { kind: 'hook', text: input.hook },
+      { kind: 'body', text: input.body },
+      { kind: 'cta', text: input.cta },
+    ];
+  }
+  const texts = [
     { kind: 'hook', text: input.hook },
-    { kind: 'body', text: input.body },
+    ...bodyParagraphs(input.body).map((text) => ({ kind: 'body', text })),
     { kind: 'cta', text: input.cta },
   ];
+  return texts.map((segment, index) => ({ ...segment, media: { url: input.images[index] } }));
 }
 
 /** Request body for POST /api/videos/generate-and-schedule. */
@@ -329,7 +384,10 @@ export async function runActor({ input: rawInput, fetchImpl, sleep, now, idempot
   }
   const ctx = { input, fetchImpl, sleep, now, log };
 
-  const validation = await callApi(ctx, 'POST', '/api/videos/validate-script', { segments: buildSegments(input) });
+  const validation = await callApi(ctx, 'POST', '/api/videos/validate-script', {
+    segments: buildSegments(input),
+    ...(input.facelessMaterial !== undefined ? { facelessMaterial: input.facelessMaterial } : {}),
+  });
   if (!validation.ok) {
     const detail = errorMessageOf(validation.json, validation.status);
     // Only a 400 is about the script; anything else is the key or the service.

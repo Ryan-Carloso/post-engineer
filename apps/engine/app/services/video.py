@@ -46,6 +46,7 @@ from app.services.lipsync_layout import (
 )
 from app.services.subtitle_text import wrap_text
 from app.services.analytics import scrub_error_text
+from app.services.music_mood import log_bgm_selection
 from app.services.ffmpeg_failure import FfmpegReencodeError, ffmpeg_stderr_tail, raise_reencode_failure
 
 DEFAULT_SUBTITLE_FONT = "BeVietnamPro-Medium.ttf"
@@ -884,7 +885,13 @@ def select_bgm_file(
     try:
         catalog = toml.load(catalog_file)
     except (OSError, toml.TomlDecodeError) as exc:
-        logger.warning(f"failed to load bgm catalog: {catalog_file}, error: {str(exc)}")
+        # Scrubbed: the catalog path is absolute, and the OSError text
+        # carries it too — no machine layout in the logs.
+        logger.warning(
+            scrub_error_text(
+                f"failed to load bgm catalog: {catalog_file}, error: {str(exc)}"
+            )
+        )
         return ""
 
     tracks = catalog.get("tracks", [])
@@ -915,44 +922,9 @@ def select_bgm_file(
     return random.choice(available or candidates) if candidates else ""
 
 
-def get_available_music_moods(catalog_file: str | None = None) -> tuple[str, ...]:
-    """Return the unique music moods declared by the BGM catalog."""
-    configured_catalog = catalog_file or config.bgm.get(
-        "catalog_file", os.path.join(utils.root_dir(), "resource", "songs", "catalog.toml")
-    )
-    resolved_catalog = str(configured_catalog)
-    if not os.path.isabs(resolved_catalog):
-        resolved_catalog = os.path.join(utils.root_dir(), resolved_catalog)
-
-    try:
-        catalog = toml.load(resolved_catalog)
-    except (OSError, toml.TomlDecodeError) as exc:
-        logger.warning(f"failed to load BGM moods: {resolved_catalog}, error: {str(exc)}")
-        return ()
-
-    tracks = catalog.get("tracks", [])
-    if not isinstance(tracks, list):
-        return ()
-
-    moods: set[str] = set()
-    for raw_track in tracks:
-        if not isinstance(raw_track, dict):
-            continue
-        track = cast(dict[str, object], raw_track)
-        raw_moods = track.get("moods")
-        if not isinstance(raw_moods, list):
-            continue
-        moods.update(
-            mood
-            for mood in raw_moods
-            if isinstance(mood, str) and mood and mood not in {"auto", "none"}
-        )
-    return tuple(sorted(moods))
-
-
 def get_bgm_file(music_mood: str, recent_files: Sequence[str] = ()) -> str:
-    """Select a catalogued BGM for the mood chosen by the LLM."""
-    if not music_mood or music_mood == "none":
+    """Select a catalogued BGM for the mood chosen by the caller."""
+    if not music_mood:
         logger.info(f"BGM disabled by selected music mood: {music_mood!r}")
         return ""
 
@@ -962,13 +934,15 @@ def get_bgm_file(music_mood: str, recent_files: Sequence[str] = ()) -> str:
     resolved_catalog = str(catalog_file)
     if not os.path.isabs(resolved_catalog):
         resolved_catalog = os.path.join(utils.root_dir(), resolved_catalog)
+    if music_mood == "none":
+        # Explicit no-music choice: log at INFO through the same helper
+        # that reports every other selection outcome (never an ERROR).
+        log_bgm_selection(music_mood, resolved_catalog, "")
+        return ""
     selected_file = select_bgm_file(
         str(music_mood), resolved_catalog, utils.song_dir(), recent_files=recent_files
     )
-    logger.info(
-        f"BGM selection: mood={music_mood!r}, catalog={resolved_catalog!r}, "
-        f"selected={selected_file or 'none'!r}"
-    )
+    log_bgm_selection(music_mood, resolved_catalog, selected_file)
     return selected_file
 
 

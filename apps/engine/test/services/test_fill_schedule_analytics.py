@@ -156,3 +156,23 @@ def test_reconcile_prefers_cost_usd_over_reason_for_batch():
     props = _run_reconciler(slot, task_row)
     assert props["cost_usd"] == 0.05
     assert "cost_missing_reason" not in props
+
+
+def test_reconcile_attaches_music_mood_for_batch():
+    """Batch video_generated carries the task row's resolved music_mood."""
+    from app.models import const
+
+    slot = {"id": "slot-1", "task_id": "task-1", "schedules": {}}
+    task_row = {"state": const.TASK_STATE_COMPLETE, "music_mood": "calm"}
+    props = _run_reconciler(slot, task_row)
+    assert props["music_mood"] == "calm"
+
+
+def test_reconcile_music_mood_unknown_when_row_has_none():
+    """A batch task without a stored mood reports music_mood unknown, never absent."""
+    from app.models import const
+
+    slot = {"id": "slot-1", "task_id": "task-1", "schedules": {}}
+    task_row = {"state": const.TASK_STATE_COMPLETE}
+    props = _run_reconciler(slot, task_row)
+    assert props["music_mood"] == "unknown"

@@ -19,6 +19,7 @@ describe('buildSlotRows', () => {
       faceless: true,
       facelessMaterial: 'svg',
       fullLipsync: true,
+      musicMood: 'calm',
       chargedTokens: 1,
       segments: [
         { kind: 'hook', text: 'Porto wins you over slowly.' },
@@ -36,6 +37,7 @@ describe('buildSlotRows', () => {
       faceless: true,
       faceless_material: 'svg',
       full_lipsync: true,
+      music_mood: 'calm',
       charged_tokens: 1,
       segments: [
         { kind: 'hook', text: 'Porto wins you over slowly.' },
@@ -62,6 +64,7 @@ describe('buildSlotRows', () => {
     expect(rows[0]?.segments).toBeNull();
     expect(rows[0]?.faceless_material).toBeUndefined();
     expect(rows[0]?.full_lipsync).toBe(false);
+    expect(rows[0]?.music_mood).toBeNull();
   });
 
   it('writes the experiment link columns when the video joins an experiment', () => {
