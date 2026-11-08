@@ -918,7 +918,7 @@ def select_bgm_file(
 
 def get_bgm_file(music_mood: str, recent_files: Sequence[str] = ()) -> str:
     """Select a catalogued BGM for the mood chosen by the caller."""
-    if not music_mood or music_mood == "none":
+    if not music_mood:
         logger.info(f"BGM disabled by selected music mood: {music_mood!r}")
         return ""
 
@@ -928,6 +928,11 @@ def get_bgm_file(music_mood: str, recent_files: Sequence[str] = ()) -> str:
     resolved_catalog = str(catalog_file)
     if not os.path.isabs(resolved_catalog):
         resolved_catalog = os.path.join(utils.root_dir(), resolved_catalog)
+    if music_mood == "none":
+        # Explicit no-music choice: log at INFO through the same helper
+        # that reports every other selection outcome (never an ERROR).
+        log_bgm_selection(music_mood, resolved_catalog, "")
+        return ""
     selected_file = select_bgm_file(
         str(music_mood), resolved_catalog, utils.song_dir(), recent_files=recent_files
     )

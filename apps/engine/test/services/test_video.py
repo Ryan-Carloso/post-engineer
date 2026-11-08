@@ -221,6 +221,33 @@ class TestSecurityControls(unittest.TestCase):
             manager.add_task(lambda: None)
 
 
+class TestGetBgmFile(unittest.TestCase):
+    def test_none_mood_logs_info_through_selection_helper_without_consulting_catalog(self):
+        """'none' is an explicit no-music choice: it logs INFO via
+        log_bgm_selection (the helper that reports every selection
+        outcome) and never reads the catalog."""
+        records = []
+        handler_id = logger.add(
+            lambda message: records.append(message.record), level="INFO"
+        )
+        try:
+            with patch.object(
+                vd,
+                "select_bgm_file",
+                side_effect=AssertionError("catalog must not be consulted for 'none'"),
+            ):
+                self.assertEqual(vd.get_bgm_file("none"), "")
+        finally:
+            logger.remove(handler_id)
+        self.assertTrue(
+            any(
+                r["level"].name == "INFO" and "mood='none'" in r["message"]
+                for r in records
+            ),
+            "the 'none' choice must be logged at INFO from the production path",
+        )
+
+
 class TestStorageFallback(unittest.TestCase):
     """/stream/ and /download/ serve the ARCHIVE, always.
 
