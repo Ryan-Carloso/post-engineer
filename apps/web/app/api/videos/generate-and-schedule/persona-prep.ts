@@ -97,8 +97,8 @@ export function resolvePostWithoutPersona(opts: {
     // persona name, so it is identified by its own shape.
     personaName: 'Post',
     faceless: true,
-    // No persona to price: a faceless post ignores face quality, and this is
-    // the same value the engine's token_cost reads off the snapshot.
+    // No persona to price: a faceless post ignores face quality, so the
+    // snapshot stores the default.
     faceQuality: 'ok',
     voiceAudioUrl: opts.audioUrl,
     voiceIdValue: opts.voiceId,

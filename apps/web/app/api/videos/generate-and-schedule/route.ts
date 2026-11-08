@@ -482,7 +482,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   // 6. Cost for the single video, computed BEFORE the charge.
   const perVideoCost = computeVideoTokens(prep.faceless, prep.faceQuality, validatedOptions.fullLipsync === true);
-  const totalCost = perVideoCost;
   trackApiEvent('video_creation_validated', {
     userId,
     personaId,
@@ -495,7 +494,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     personaId,
     numberOfVideos: 1,
     perVideoCost,
-    tokenCost: totalCost,
+    tokenCost: perVideoCost,
   });
 
   // 7. Idempotency: the schedule id is deterministic in (user, key), so a
@@ -583,7 +582,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     }
     const { data: spendData, error: spendError } = await supabase.rpc('spend_tokens', {
       p_user_id: userId,
-      p_amount: totalCost,
+      p_amount: perVideoCost,
       p_generation_id: idem.generationId,
       p_reason: 'Unified generate+schedule (1 video)',
     });
@@ -608,11 +607,11 @@ async function postHandler(request: Request): Promise<NextResponse> {
         userId,
         personaId,
         errorCode: ERROR_CODES.INSUFFICIENT_TOKENS,
-        tokenCost: totalCost,
+        tokenCost: perVideoCost,
       });
-      return coded(402, ERROR_CODES.INSUFFICIENT_TOKENS, formatErrorMessage(ERROR_CODES.INSUFFICIENT_TOKENS, { need: totalCost, have }), undefined, {
+      return coded(402, ERROR_CODES.INSUFFICIENT_TOKENS, formatErrorMessage(ERROR_CODES.INSUFFICIENT_TOKENS, { need: perVideoCost, have }), undefined, {
         have,
-        need: totalCost,
+        need: perVideoCost,
       });
     }
   }
@@ -620,7 +619,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     userId,
     personaId,
     numberOfVideos: 1,
-    tokenCost: totalCost,
+    tokenCost: perVideoCost,
     generationId: idem.generationId,
   });
 
@@ -696,7 +695,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         await refundRollbackSpend(supabase, {
           userId,
           generationId: idem.generationId,
-          amount: totalCost,
+          amount: perVideoCost,
           reason: 'Persona already scheduled; refunded redundant spend',
           failureLog: '[generate-and-schedule] persona-already-scheduled refund failed',
         });
@@ -722,7 +721,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         const refunded = await refundRollbackSpend(supabase, {
           userId,
           generationId: idem.generationId,
-          amount: totalCost,
+          amount: perVideoCost,
           reason: 'PK race; refunded redundant spend',
           failureLog: '[generate-and-schedule] PK race refund failed; replaying winner anyway',
         });
@@ -761,7 +760,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     await refundRollbackSpend(supabase, {
       userId,
       generationId: idem.generationId,
-      amount: totalCost,
+      amount: perVideoCost,
       reason: 'Unified generate+schedule: schedule insert failed; tokens refunded',
       failureLog: '[generate-and-schedule] refund after schedule insert failure failed',
     });
@@ -789,6 +788,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         faceless: prep.faceless,
         facelessMaterial: validatedOptions.facelessMaterial,
         fullLipsync: validatedOptions.fullLipsync,
+        chargedTokens: perVideoCost,
         segments: options?.segments,
         experiment,
       }),
@@ -806,7 +806,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     await refundRollbackSpend(supabase, {
       userId,
       generationId: idem.generationId,
-      amount: totalCost,
+      amount: perVideoCost,
       reason: 'Unified generate+schedule: slot insert failed; tokens refunded',
     });
     trackApiEvent('video_creation_failed', { userId, scheduleId: idem.scheduleId, errorCode: ERROR_CODES.INTERNAL_ERROR, failureStage: 'slot_insert' });
@@ -823,7 +823,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       await refundRollbackSpend(supabase, {
         userId,
         generationId: idem.generationId,
-        amount: totalCost,
+        amount: perVideoCost,
         reason: 'Unified generate+schedule: experiment pair mismatch; tokens refunded',
       });
       trackApiEvent('video_creation_failed', { userId, scheduleId: idem.scheduleId, errorCode: ERROR_CODES.VALIDATION_FAILED, failureStage: 'experiment_pair' });
@@ -1063,7 +1063,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     numberOfVideos: 1,
     tasksAccepted: accepted,
     tasksFailed: failed,
-    tokenCost: totalCost,
+    tokenCost: perVideoCost,
     durationMs,
   });
 

@@ -106,19 +106,16 @@ class StoreRequestsTests(unittest.TestCase):
         self.assertEqual(kwargs["params"]["status"], f"eq.{fs.SLOT_GENERATING}")
         self.assertEqual(kwargs["params"]["task_id"], "not.is.null")
 
-    def test_generating_slots_embeds_the_full_schedule_identity(self):
-        # The reconciler refunds batch slots under `batch:{scheduleId}` and
-        # prices each refund from the identity — so this select needs the
-        # whole embed, not just `id`. It used to fetch `schedules(id)` alone,
-        # which made `persona_for` raise on EVERY row and silently skipped
-        # the refund of every failed batch slot (burned prepaid tokens).
+    def test_generating_slots_reads_the_slot_row_alone(self):
+        # The reconciler refunds from the slot's own schedule_id and stored
+        # charged_tokens (migration 045), so the select is the whole slot row
+        # and no schedules embed: a refund never depends on a joinable
+        # persona or snapshot.
         self.store.generating_slots()
         _, _, kwargs = self._last_call()
-        select = kwargs["params"]["select"]
-        self.assertIn("schedules!left", select)
-        self.assertIn("id", select)
-        self.assertIn("personas(", select)
-        self.assertIn("face_quality", select)
+        self.assertEqual(kwargs["params"]["select"], "*")
+        self.assertEqual(kwargs["params"]["status"], f"eq.{fs.SLOT_GENERATING}")
+        self.assertEqual(kwargs["params"]["task_id"], "not.is.null")
 
     def test_ready_due_slots_filters_due_time(self):
         self.store.ready_due_slots(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))

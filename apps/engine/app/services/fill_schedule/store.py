@@ -53,10 +53,9 @@ class ScheduleStore:
     # columns), and an inner join would silently drop those slots from every
     # tick. The snapshot columns ride along so `post_identity` never needs a
     # second round trip.
-    # The schedules columns a tick reads to build/price a job: publish plan
-    # plus the identity (persona embed and its snapshot). Shared by the
-    # generate/publish selects and the reconciler's refund select — the
-    # reconciler needs the same identity the generator priced with.
+    # The schedules columns a tick reads to build a job: publish plan plus
+    # the identity (persona embed and its snapshot). Shared by the
+    # generate/publish selects.
     SLOT_IDENTITY_SELECT = (
         "id,user_id,persona_id,providers,youtube_account_ids,"
         "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,threads_account_ids,"
@@ -150,22 +149,17 @@ class ScheduleStore:
         return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
 
     def generating_slots(self) -> list[dict[str, Any]]:
-        # The reconciler refunds under `batch:{scheduleId}`.
-        #
-        # The embed carries the persona AND the post_* snapshot columns: a
-        # refund prices the slot from face_quality, and this select used to
-        # fetch `schedules(id)` alone — so `persona_for` found no embed on
-        # EVERY row and the refund was skipped for every failed batch slot
-        # (the "burned prepaid tokens" note in reconcile.py). Faceless,
-        # which is the common case, prices from the slot alone but still
-        # needs the identity to decide that it is faceless-without-persona.
+        # The reconciler refunds under `batch:{scheduleId}` using the slot's
+        # own schedule_id and stored charged_tokens (migration 045), so it
+        # needs no schedules embed: a refund never depends on a joinable
+        # persona or snapshot.
         rows = self._request(
             "GET",
             "scheduled_posts",
             params={
                 "status": f"eq.{SLOT_GENERATING}",
                 "task_id": "not.is.null",
-                "select": self.SLOT_SELECT,
+                "select": "*",
             },
         )
         return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []

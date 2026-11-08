@@ -83,6 +83,7 @@ table['POST /api/billing/checkout'] = 'checkout_started';
 table['POST /api/billing/webhook'] = 'billing_webhook_received';
 table['POST /api/bluesky-connect'] = 'bluesky_connected';
 table['POST /api/experiments'] = 'experiment_created';
+table['POST /api/videos/batch-discount'] = 'batch_discount_requested';
 table['POST /api/logout'] = 'user_logged_out';
 table['POST /api/media/check'] = 'segment_media_checked';
 table['POST /api/media/upload'] = 'segment_media_uploaded';

@@ -34,11 +34,8 @@ from app.services.fill_schedule.publish_results import (
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
     notify_safe,
-    post_identity,
-    slot_faceless,
-    slot_full_lipsync,
+    slot_refund_amount,
     slot_user_id,
-    token_cost,
     track_refund_issued,
 )
 from app.services.state import persist_state_update
@@ -401,21 +398,10 @@ class BatchPublisher:
         user_id = slot_user_id(slot)
         schedule_id = schedule.get("id")
         if user_id and isinstance(schedule_id, str) and schedule_id:
-            try:
-                identity = post_identity(schedule)
-            except RuntimeError:
-                logger.warning(
-                    "fill_schedule: skipping refund for publish-failed slot "
-                    "without a resolvable identity",
-                    slot_id=slot.get("id"),
-                    schedule_id=schedule_id,
-                )
-            else:
-                cost = token_cost(
-                    slot_faceless(slot),
-                    str(identity.get("face_quality") or "ok"),
-                    slot_full_lipsync(slot),
-                )
+            # The stored charge needs no persona or snapshot. A free slot
+            # (charged 0) has nothing to refund.
+            cost = slot_refund_amount(slot)
+            if cost is not None:
                 batch_generation_id = f"batch:{schedule_id}"
                 engine_task_id = (
                     str(slot["task_id"]) if slot.get("task_id") else None

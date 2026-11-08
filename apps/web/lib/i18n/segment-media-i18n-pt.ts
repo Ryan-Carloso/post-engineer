@@ -3,6 +3,7 @@
 // which is over the file-size cap and may not grow.
 export const segmentMediaToolDescPt = {
   toolDescGeneratePersonaVideo: 'Gerar e agendar um vídeo de persona a partir de um roteiro',
+  toolDescGeneratePersonaVideoBatch: 'Gerar um lote de vídeos: a cada 6 vídeos com rosto, 1 sai grátis',
   toolDescValidateScript: 'Validar um roteiro mecanicamente, sem gastar tokens',
   toolDescScoreDraft: 'Pontuar um rascunho mecanicamente contra seus próprios posts medidos',
   toolDescUploadMedia: 'Enviar uma imagem de segmento (JPG, PNG, WebP, máx. 8MB)',
