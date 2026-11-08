@@ -60,8 +60,14 @@ class BgmCatalogSyncTests(unittest.TestCase):
             )
 
     def test_catalog_offers_exactly_the_shipped_moods(self):
+        # Pass the located catalog explicitly: the default path resolves
+        # from the module tree, and under mutmut the copied tree has no
+        # resource/ files — the bare call reads () there and fails every
+        # shard's baseline (run 42478886862). The located file is the same
+        # shipped catalog either way.
+        songs_dir = _songs_dir()
         self.assertEqual(
-            mm.get_available_music_moods(),
+            mm.get_available_music_moods(str(songs_dir / "catalog.toml")),
             ("calm", "energetic", "inspiring", "upbeat"),
         )
 
