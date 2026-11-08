@@ -78,6 +78,10 @@ def publish_slot_accounts(
     the same per-account budget and never fails accounts already live.
     """
     outcomes = load_outcomes(slot)
+    # A slot that never recorded per-account outcomes is still on the
+    # legacy slot-level counter: its accounts keep counting from it.
+    # Once any outcome exists, a brand-new account starts at zero.
+    legacy_slot = not outcomes
     indexed = _index(outcomes)
     already_user = {
         key
@@ -111,7 +115,7 @@ def publish_slot_accounts(
                     exhaust_outcome(prior)
                     _upsert(outcomes, prior)
                     continue
-                attempt = _prior_attempts(prior, slot) + 1
+                attempt = _prior_attempts(prior, slot, legacy_slot=legacy_slot) + 1
                 outcome = _blank(provider_name, account_id, video_name, attempt)
                 _upsert(outcomes, outcome)
                 indexed[(provider_name, account_id, video_name)] = outcome
@@ -142,7 +146,9 @@ def publish_slot_accounts(
             except RuntimeError as exc:
                 for outcome in started:
                     _fail_outcome(outcome, str(exc), "publish_rejected", 400, now)
-                result.provider_exceptions.append((provider_name, exc))
+                # A metadata error is local: no provider was called, so it
+                # is not a provider exception and must not fire
+                # publish_provider_failed for that provider.
                 if not result.first_error:
                     result.first_error = str(exc)
                 persist_outcomes(outcomes, {"publish_attempts": max_attempts})
@@ -224,8 +230,9 @@ def publish_slot_accounts(
                 entries = entries_for_result(provider_name, video_name, body if isinstance(body, dict) else {})
             result.publish_results.extend(entries)
             if record_results is not None and entries:
-                if record_results(list(result.publish_results)) is False:
-                    result.state_write_failed = True
+                # Only the latest write counts: an early failed write
+                # followed by a successful one leaves nothing unwritten.
+                result.state_write_failed = record_results(list(result.publish_results)) is False
             persist_outcomes(outcomes, {
                 "publish_attempts": max(int(item.get("attempts") or 0) for item in outcomes),
             })
@@ -261,4 +268,11 @@ def publish_slot_accounts(
         names = ", ".join(failed) or "unknown"
         detail = f": {result.first_error}" if result.first_error else ""
         result.failure_reason = f"all providers failed: {names}{detail}"
+    elif result.any_retrying:
+        # Some accounts published, so the reason above stays empty and the
+        # retry event would fall back to a bare "Error": name the accounts
+        # still waiting instead.
+        names = ", ".join(failed) or "unknown"
+        detail = f": {result.first_error}" if result.first_error else ""
+        result.failure_reason = f"some accounts still retrying: {names}{detail}"
     return result

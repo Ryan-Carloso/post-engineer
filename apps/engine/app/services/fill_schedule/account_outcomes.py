@@ -148,10 +148,26 @@ def _is_terminal(outcome: dict[str, Any] | None) -> bool:
     return int(outcome.get("attempts") or 0) >= MAX_PUBLISH_ATTEMPTS
 
 
-def _prior_attempts(outcome: dict[str, Any] | None, slot: dict[str, Any]) -> int:
-    if outcome is not None and isinstance(outcome.get("attempts"), int):
-        return int(outcome["attempts"])
-    return int(slot.get("publish_attempts") or 0)
+def _prior_attempts(
+    outcome: dict[str, Any] | None, slot: dict[str, Any], *, legacy_slot: bool
+) -> int:
+    """Attempts already spent by this account.
+
+    A recorded outcome carries its own count. A legacy outcome without
+    one falls back to the slot counter. A brand-new account starts at
+    zero: the slot counter mixes every account's failures, so inheriting
+    it would start the account at the cap with no tries of its own.
+    The exception is a slot that never recorded per-account outcomes
+    at all (``legacy_slot``): its counter is the legacy retry state
+    for the accounts on it, so counting continues from it.
+    """
+    if outcome is not None:
+        if isinstance(outcome.get("attempts"), int):
+            return int(outcome["attempts"])
+        return int(slot.get("publish_attempts") or 0)
+    if legacy_slot:
+        return int(slot.get("publish_attempts") or 0)
+    return 0
 
 
 def _due(outcome: dict[str, Any] | None, now: datetime) -> bool:
