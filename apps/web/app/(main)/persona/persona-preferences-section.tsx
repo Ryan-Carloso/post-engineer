@@ -15,8 +15,8 @@ import { InlineFieldError, SectionDivider } from './persona-section-parts';
 //---------------
 // PersonaLayoutFieldset — how the persona meets the video material in the
 // opening. 'standard' fills the frame with the avatar; 'react' splits it,
-// avatar on top and the material chosen per post (real clips or drawings)
-// below. The list comes from VIDEO_LAYOUTS, the same constant
+// avatar on top and the material chosen per post (real clips, drawings, or
+// the post's own images) below. The list comes from VIDEO_LAYOUTS, the same constant
 // the API validates against, so a new layout can never appear in the UI
 // without the server accepting it.
 //---------------

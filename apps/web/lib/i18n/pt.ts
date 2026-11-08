@@ -523,7 +523,7 @@ export const ptDictionary = {
     businessDesc: 'Para criadores e equipes que querem escalar.',
     faqTitle: 'Perguntas frequentes',
     faq1Q: 'Preciso aparecer nos vídeos?',
-    faq1A: 'Não. Suas personas têm avatares gerados por IA e, na hora de criar o post, você escolhe se o vídeo mostra o rosto da persona ou não, e se o resto do vídeo usa vídeos reais ou desenhos, com narração sintética.',
+    faq1A: 'Não. Suas personas têm avatares gerados por IA e, na hora de criar o post, você escolhe se o vídeo mostra o rosto da persona ou não, e se o resto do vídeo usa vídeos reais, desenhos ou as suas imagens, com narração sintética.',
     faq2Q: 'O Post Engineer já foi lançado?',
     faq2A: 'Ainda estamos em beta: ainda não há preços fixos, e os tokens são configurados por contato, pelo WhatsApp ou por e-mail.',
     faq4Q: 'Quais plataformas são suportadas?',

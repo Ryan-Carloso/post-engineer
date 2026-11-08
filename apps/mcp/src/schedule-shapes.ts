@@ -7,7 +7,7 @@
 import { z } from 'zod';
 
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
-import { VIDEO_LAYOUTS } from './limits.js';
+import { FACELESS_MATERIALS, VIDEO_LAYOUTS } from './limits.js';
 import { personaVoiceField } from './voice-filters.js';
 
 export const ListSchedulesShape = {};
@@ -93,9 +93,9 @@ function httpsUrlField(fieldName: string) {
 export const GeneratePersonaVideoOptionsShape = {
   faceless: z.boolean().optional().describe('Generate faceless (no face). With a persona this drops only the face — the persona voice and niche still apply. Without a persona it is REQUIRED.'),
   facelessMaterial: z
-    .enum(['broll', 'svg'])
+    .enum(FACELESS_MATERIALS)
     .optional()
-    .describe('What fills the video, with or without a face: "broll" = real stock footage only, "svg" = drawn illustrations only. The two never mix. Defaults to "broll".'),
+    .describe('What fills the video, with or without a face: "broll" = real stock footage only, "svg" = drawn illustrations only, "images" = only the images you send on the segments (no stock, no drawings): every segment needs media (upload_media or a public image url), up to 12, each shown full frame with a slow zoom while its segment is spoken. Use images you have the rights to. The materials never mix. Defaults to "broll".'),
   fullLipsync: z
     .boolean()
     .optional()
@@ -108,7 +108,7 @@ export const GeneratePersonaVideoOptionsShape = {
   videoLayout: z
     .enum(VIDEO_LAYOUTS)
     .optional()
-    .describe('How the persona hook is composed with the video material (facelessMaterial: real clips or drawings). Overrides the persona when one is given; a post without a persona defaults to "standard". Same render cost either way.'),
+    .describe('How the persona hook is composed with the video material (facelessMaterial: real clips, drawings or your images). Overrides the persona when one is given; a post without a persona defaults to "standard". Same render cost either way.'),
   paragraphNumber: z.number().int().min(1).max(10).optional().describe('Paragraph count (1-10). Overrides the persona when one is given.'),
   language: z
     .string()

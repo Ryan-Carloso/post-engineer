@@ -518,7 +518,7 @@ export const enDictionary: Dictionary = {
     businessDesc: 'For creators and teams that want to scale.',
     faqTitle: 'Frequently asked questions',
     faq1Q: 'Do I need to appear in the videos?',
-    faq1A: 'No. Your personas get AI-generated avatars, and when you create a post you choose whether the video shows the persona\'s face or not, and whether the rest of the video uses real clips or drawings, with synthetic narration.',
+    faq1A: 'No. Your personas get AI-generated avatars, and when you create a post you choose whether the video shows the persona\'s face or not, and whether the rest of the video uses real clips, drawings, or your own images, with synthetic narration.',
     faq2Q: 'Is Post Engineer launched yet?',
     faq2A: 'We are still in beta: there are no fixed prices yet, and tokens are set up by contacting us on WhatsApp or by email.',
     faq4Q: 'Which platforms are supported?',

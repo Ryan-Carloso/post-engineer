@@ -117,4 +117,38 @@ describe('POST /api/videos/validate-script', () => {
     expect(source).not.toContain('generation/video-generation');
     expect(source).not.toContain('from \'@/lib/engine');
   });
+
+  describe('facelessMaterial', () => {
+    const withMedia = segments.map((segment, index) => ({ ...segment, media: { url: `https://e.com/${index}.jpg` } }));
+
+    it('accepts the images material when every segment carries media', async () => {
+      const response = await POST(authRequest({ segments: withMedia, facelessMaterial: 'images' }));
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as { mediaCount: number }).mediaCount).toBe(3);
+    });
+
+    it('rejects the images material when a segment has no media, naming that segment', async () => {
+      const missing = withMedia.map((segment, index) => (index === 1 ? { kind: segment.kind, text: segment.text } : segment));
+      const response = await POST(authRequest({ segments: missing, facelessMaterial: 'images' }));
+      expect(response.status).toBe(400);
+      const payload = (await response.json()) as { field?: string; error?: string };
+      expect(payload.field).toBe('segments.1.media');
+      expect(payload.error).toContain('the images material needs media on every segment');
+    });
+
+    it('keeps media optional for the other materials', async () => {
+      for (const facelessMaterial of ['broll', 'svg']) {
+        const response = await POST(authRequest({ segments, facelessMaterial }));
+        expect(response.status).toBe(200);
+      }
+    });
+
+    it('rejects an unknown material instead of reading it as broll', async () => {
+      const response = await POST(authRequest({ segments, facelessMaterial: 'stock' }));
+      expect(response.status).toBe(400);
+      const payload = (await response.json()) as { field?: string; error?: string };
+      expect(payload.field).toBe('facelessMaterial');
+      expect(payload.error).toBe('facelessMaterial must be one of: broll, svg, images.');
+    });
+  });
 });

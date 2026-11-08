@@ -1,5 +1,5 @@
 -- ============================================================================
--- Migration 043 — refund_batch_tokens: cap refunds at TOTAL charges
+-- Migration 044 — refund_batch_tokens: cap refunds at TOTAL charges
 -- ----------------------------------------------------------------------------
 -- Applied automatically: the deploy workflow runs `supabase db push` (pending
 -- only) on every merge to main. Never apply by hand in the dashboard.

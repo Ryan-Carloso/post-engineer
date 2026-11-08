@@ -74,7 +74,7 @@ export function checkSemantics(input: SemanticInput): Checked<CheckedRequest> {
   const issues: ValidationIssue[] = [];
   const title = resolveTitle(input.title);
   if (!title.ok) issues.push(...title.issues);
-  const segments = validateSegmentsRequest(input.segments);
+  const segments = validateSegmentsRequest(input.segments, input.options.facelessMaterial);
   if (!segments.ok) issues.push(...segments.issues);
   const providers = validateProviders(input.providers);
   if (!providers.ok) issues.push(...providers.issues);

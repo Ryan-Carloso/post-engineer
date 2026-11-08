@@ -71,7 +71,7 @@ export async function handleValidateScript(
 ): Promise<McpToolResponse> {
   // Mechanical pre-check first: a rejected script never reaches the web
   // route and never debits tokens.
-  const result = validateSegments(args.segments);
+  const result = validateSegments(args.segments, args.facelessMaterial);
   if (!result.ok) {
     return errorResponse(
       `Script validation failed: ${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`,
@@ -79,7 +79,7 @@ export async function handleValidateScript(
   }
   let payload: ValidatedScriptPayload | string | null;
   try {
-    payload = narrowValidateScriptPayload(await client.validateScript(args.segments));
+    payload = narrowValidateScriptPayload(await client.validateScript(args.segments, args.facelessMaterial));
   } catch (error) {
     return errorResponse(`Error validating the script: ${sanitizeEngineError(getErrorMessage(error))}`);
   }
@@ -125,7 +125,8 @@ export async function generatePersonaVideoOutcome(
     }
     // Mechanical validation before the client call: a rejected script
     // never debits tokens and never reaches Modal.
-    const result = validateSegments(args.segments);
+    const material = args.options?.facelessMaterial;
+    const result = validateSegments(args.segments, material);
     if (!result.ok) {
       throw new Error(`${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`);
     }
@@ -139,7 +140,7 @@ export async function generatePersonaVideoOutcome(
     if (args.options?.fullLipsync === true && args.personaId === undefined) {
       throw new Error('options.fullLipsync requires a persona with a photo and lip-sync enabled.');
     }
-    const script = joinSegments(args.segments);
+    const script = joinSegments(args.segments, material);
     // Voice resolution is an explicit pre-step after mechanical validation
     // and before the generating call: an unknown voice fails without
     // debiting tokens. A bare name/label resolves here (issue #353); with

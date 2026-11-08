@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
 //---------------
-// supabase/migrations/043_refund-batch-tokens-net-cap.sql — the refund cap
+// supabase/migrations/044_refund-batch-tokens-net-cap.sql — the refund cap
 // counts TOTAL charges, not the oldest spend row.
 //
 // 017/018 capped total refunds at the oldest video_generation row: the batch
@@ -23,14 +23,14 @@ const migrationPath = join(
   repoRoot,
   'supabase',
   'migrations',
-  '043_refund-batch-tokens-net-cap.sql',
+  '044_refund-batch-tokens-net-cap.sql',
 );
 
 function readSql(): string {
   return readFileSync(migrationPath, 'utf8');
 }
 
-describe('supabase/migrations/043_refund-batch-tokens-net-cap.sql', () => {
+describe('supabase/migrations/044_refund-batch-tokens-net-cap.sql', () => {
   it('exists and declares the function idempotently', () => {
     expect(existsSync(migrationPath)).toBe(true);
     const sql = readSql();
