@@ -220,21 +220,21 @@ export const PersonaHouseVoicePicker = () => {
 
   return (
     <div className="mt-4">
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 bg-white p-4">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-600">
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-card p-4">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-sunken text-muted-text">
           <MicIcon />
         </span>
         <div className="min-w-0 flex-1 basis-0 space-y-1" data-testid="selected-voice">
           {selected === null ? (
-            <p className="text-sm text-neutral-500">{t('persona.voicePickerNone')}</p>
+            <p className="text-sm text-muted-text">{t('persona.voicePickerNone')}</p>
           ) : (
             <>
               <span className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold text-neutral-900">{selectedLabel(selected)}</span>
+                <span className="text-sm font-semibold text-ink">{selectedLabel(selected)}</span>
                 <VoiceTags voice={selected} />
               </span>
               {selected.description !== null && (
-                <p className="line-clamp-2 text-xs leading-relaxed text-neutral-500">{selected.description}</p>
+                <p className="line-clamp-2 text-xs leading-relaxed text-muted-text">{selected.description}</p>
               )}
             </>
           )}
@@ -247,8 +247,8 @@ export const PersonaHouseVoicePicker = () => {
               aria-label={t('persona.voicePlaySample', { name: selectedLabel(selected) })}
               className={`flex size-10 shrink-0 items-center justify-center rounded-full border transition-colors ${
                 playingVoiceId === selected.id
-                  ? 'border-neutral-900 bg-neutral-900 text-white'
-                  : 'border-neutral-200 text-neutral-700 hover:border-neutral-400'
+                  ? 'border-ink bg-ink text-on-ink'
+                  : 'border-line text-ink-soft hover:border-muted-text'
               }`}
             >
               <PlayIcon />
@@ -258,17 +258,17 @@ export const PersonaHouseVoicePicker = () => {
             type="button"
             onClick={() => setDialogOpen(true)}
             disabled={voicesQuery.data === undefined}
-            className="flex-1 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-800 disabled:opacity-50 sm:flex-none"
+            className="flex-1 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-ink-soft disabled:opacity-50 sm:flex-none"
           >
             {selected === null ? t('persona.voicePickerChoose') : t('persona.voicePickerChange')}
           </button>
         </div>
       </div>
       {selected !== null && voiceSampleName(selected) !== null && (
-        <div className="mt-3 rounded-xl border border-neutral-200 bg-white p-4">
+        <div className="mt-3 rounded-xl border border-line bg-card p-4">
           <label
             htmlFor="house-voice-preview-text"
-            className="text-sm font-semibold text-neutral-900"
+            className="text-sm font-semibold text-ink"
           >
             {t('persona.voicePreviewTextLabel')}
           </label>
@@ -291,7 +291,7 @@ export const PersonaHouseVoicePicker = () => {
               type="button"
               onClick={playCustomPreview}
               disabled={previewLoading || previewText.trim() === ''}
-              className="shrink-0 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-800 disabled:opacity-50"
+              className="shrink-0 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-ink-soft disabled:opacity-50"
             >
               {previewLoading ? t('persona.voicePreviewListening') : t('persona.voicePreviewListen')}
             </button>
@@ -308,7 +308,7 @@ export const PersonaHouseVoicePicker = () => {
               className={`shrink-0 text-xs ${
                 previewText.length > HOUSE_PREVIEW_TEXT_MAX_CHARS
                   ? 'font-semibold text-red-600'
-                  : 'text-neutral-400'
+                  : 'text-faint'
               }`}
             >
               {previewText.length}/{HOUSE_PREVIEW_TEXT_MAX_CHARS}

@@ -9,7 +9,7 @@ export function SectionDivider({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-3">
       <span className={SECTION_LABEL_CLASS}>{label}</span>
-      <span className="h-px flex-1 bg-neutral-200" />
+      <span className="h-px flex-1 bg-sunken" />
     </div>
   );
 }

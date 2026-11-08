@@ -16,7 +16,7 @@ export default function Login() {
   return (
     <div className="flex min-h-screen">
       <LoginHero />
-      <section className="relative flex flex-1 flex-col bg-[#f7f8fa]">
+      <section className="relative flex flex-1 flex-col bg-surface">
         <LoginTopBar />
         <div className="flex flex-1 items-center justify-center px-5 py-12">
           <LoginCard>
@@ -156,7 +156,7 @@ const GithubLogin = () => {
       {debugRedirectTo !== null ? (
         <p
           data-testid="oauth-redirect-debug"
-          className="mt-4 font-mono text-[11px] leading-relaxed break-all text-[#8a94a8]"
+          className="mt-4 font-mono text-[11px] leading-relaxed break-all text-faint"
         >
           {t('login.oauthRedirectDebug')}: {debugRedirectTo}
         </p>
@@ -182,7 +182,7 @@ const LoginHero = () => {
   return (
     <aside className="relative hidden w-[52%] flex-col justify-between overflow-hidden bg-[#0d1220] p-12 lg:flex xl:p-16">
       <div
-        className="opacity-0.16 pointer-events-none absolute -top-40 right-0 size-[480px] rounded-full bg-[#ff544c] blur-3xl"
+        className="opacity-0.16 pointer-events-none absolute -top-40 right-0 size-[480px] rounded-full bg-brand blur-3xl"
         aria-hidden="true"
       />
       <div
@@ -196,7 +196,7 @@ const LoginHero = () => {
       </div>
 
       <div className="relative max-w-lg">
-        <span className="inline-flex rounded-full bg-white/[0.07] px-4 py-1.5 text-xs font-semibold text-[#ff8a85] ring-1 ring-white/10">
+        <span className="inline-flex rounded-full bg-card/[0.07] px-4 py-1.5 text-xs font-semibold text-[#ff8a85] ring-1 ring-white/10">
           {t('login.heroBadge')}
         </span>
         <h1 className="leading-1.1 mt-6 text-[42px] font-extrabold tracking-tight text-white xl:text-5xl">
@@ -212,7 +212,7 @@ const LoginHero = () => {
         <ul className="mt-10 space-y-6">
           {features.map((feature) => (
             <li key={feature.titleKey} className="flex items-center gap-4">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#ff544c]/15 ring-1 ring-[#ff544c]/25 [&>svg]:size-5">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand/15 ring-1 ring-brand/25 [&>svg]:size-5">
                 {feature.icon}
               </span>
               <div>
@@ -238,7 +238,7 @@ const LoginTopBar = () => {
   const { t, locale, setLocale } = useI18n();
   return (
     <div className="flex items-center justify-end gap-4 px-8 pt-7">
-      <div className="flex items-center gap-0.5 rounded-lg bg-white p-0.5 ring-1 ring-[#edf0f4]">
+      <div className="flex items-center gap-0.5 rounded-lg bg-card p-0.5 ring-1 ring-hairline">
         {LOCALES.map((option) => (
           <button
             key={option.value}
@@ -247,19 +247,19 @@ const LoginTopBar = () => {
             aria-pressed={option.value === locale}
             className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
               option.value === locale
-                ? 'bg-[#101728] text-white'
-                : 'text-[#718096] hover:text-[#101728]'
+                ? 'bg-ink text-on-ink'
+                : 'text-muted-text hover:text-ink'
             }`}
           >
             {option.label}
           </button>
         ))}
       </div>
-      <p className="text-sm text-[#718096]">
+      <p className="text-sm text-muted-text">
         {t('login.noAccount')}{' '}
         <Link
           href="/login"
-          className="inline-flex items-center gap-1 font-semibold text-[#ff544c] hover:underline"
+          className="inline-flex items-center gap-1 font-semibold text-brand hover:underline"
         >
           {t('login.createAccount')}
           <ArrowRight className="size-3.5" />
@@ -273,7 +273,7 @@ const LoginTopBar = () => {
 // LoginCard — centered white card with the login buttons
 //---------------
 const LoginCard = ({ children }: { children: React.ReactNode }) => (
-  <div className="w-full max-w-md rounded-3xl border border-[#edf0f4] bg-white p-8 shadow-[0_20px_60px_rgba(20,32,51,0.08)] sm:p-10">
+  <div className="w-full max-w-md rounded-3xl border border-hairline bg-card p-8 shadow-[0_20px_60px_rgba(20,32,51,0.08)] sm:p-10">
     {children}
   </div>
 );
@@ -287,12 +287,12 @@ const LoginCardHeader = () => {
     <div className="mb-8 text-center">
       <div className="flex items-center justify-center gap-2.5">
         <AppLogo size={40} className="rounded-xl shadow-[0_8px_20px_rgba(255,84,76,0.35)]" />
-        <span className="text-xl font-bold tracking-[-0.02em] text-[#101728]">Post Engineer</span>
+        <span className="text-xl font-bold tracking-[-0.02em] text-ink">Post Engineer</span>
       </div>
-      <h2 className="mt-6 text-3xl font-bold tracking-tight text-[#101728]">
+      <h2 className="mt-6 text-3xl font-bold tracking-tight text-ink">
         {t('login.title')}
       </h2>
-      <p className="mx-auto mt-2.5 max-w-xs text-sm leading-relaxed text-[#657184]">
+      <p className="mx-auto mt-2.5 max-w-xs text-sm leading-relaxed text-muted-text">
         {t('login.subtitle')}
       </p>
     </div>
@@ -315,8 +315,8 @@ const LoginAuthNotice = () => {
       role="alert"
       className={`mb-5 rounded-xl px-4 py-3 text-center text-sm font-medium ${
         cancelled
-          ? 'bg-[#f8fafc] text-[#657184] ring-1 ring-[#edf0f4]'
-          : 'bg-[#fff0ef] text-[#cf342e] ring-1 ring-[#ffd9d6]'
+          ? 'bg-surface text-muted-text ring-1 ring-hairline'
+          : 'bg-brand-soft text-destructive ring-1 ring-[#ffd9d6]'
       }`}
     >
       {t(cancelled ? 'login.cancelled' : 'login.authError')}
@@ -343,7 +343,7 @@ const LoginButton = ({
       type="button"
       disabled={disabled}
       onClick={() => onLogin(provider)}
-      className="mt-3 flex w-full items-center justify-center gap-3 rounded-2xl border border-[#edf0f4] bg-white px-4 py-3.5 text-sm font-semibold text-[#101728] shadow-[0_1px_3px_rgba(20,32,51,0.05)] transition-all first-of-type:mt-0 hover:-translate-y-px hover:border-[#dfe4ec] hover:shadow-[0_6px_16px_rgba(20,32,51,0.08)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 sm:text-base"
+      className="mt-3 flex w-full items-center justify-center gap-3 rounded-2xl border border-hairline bg-card px-4 py-3.5 text-sm font-semibold text-ink shadow-[0_1px_3px_rgba(20,32,51,0.05)] transition-all first-of-type:mt-0 hover:-translate-y-px hover:border-line hover:shadow-[0_6px_16px_rgba(20,32,51,0.08)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 sm:text-base"
     >
       <GithubMark /> 
       <span>
@@ -357,7 +357,7 @@ const LoginButton = ({
 // GithubMark — GitHub icon
 //---------------
 const GithubMark = () => (
-  <svg className="size-5 text-[#101728]" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+  <svg className="size-5 text-ink" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
     <path
       fillRule="evenodd"
       d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
@@ -372,13 +372,13 @@ const GithubMark = () => (
 const LoginAgreeNote = () => {
   const { t } = useI18n();
   return (
-    <p className="mt-7 border-t border-[#f1f4f7] pt-6 text-center text-xs leading-relaxed text-[#8a94a8]">
+    <p className="mt-7 border-t border-sunken pt-6 text-center text-xs leading-relaxed text-faint">
       {t('login.agreePrefix')}{' '}
-      <Link href="/terms" className="font-medium text-[#ff544c] hover:underline">
+      <Link href="/terms" className="font-medium text-brand hover:underline">
         {t('footer.terms')}
       </Link>{' '}
       {t('login.agreeAnd')}{' '}
-      <Link href="/privacy" className="font-medium text-[#ff544c] hover:underline">
+      <Link href="/privacy" className="font-medium text-brand hover:underline">
         {t('footer.privacy')}
       </Link>
       .
@@ -392,12 +392,12 @@ const LoginAgreeNote = () => {
 const LoginBottomBar = () => {
   const { t } = useI18n();
   return (
-    <div className="flex flex-col items-center gap-3 px-8 pb-7 text-xs text-[#8a94a8] sm:flex-row sm:justify-between">
+    <div className="flex flex-col items-center gap-3 px-8 pb-7 text-xs text-faint sm:flex-row sm:justify-between">
       <p>{t('footer.rights', { year: new Date().getFullYear() })}</p>
       <div className="flex items-center gap-5">
-        <Link href="/privacy" className="hover:text-[#101728]">{t('footer.privacy')}</Link>
-        <Link href="/terms" className="hover:text-[#101728]">{t('footer.terms')}</Link>
-        <a href="mailto:madebyryandev@gmail.com" className="hover:text-[#101728]">
+        <Link href="/privacy" className="hover:text-ink">{t('footer.privacy')}</Link>
+        <Link href="/terms" className="hover:text-ink">{t('footer.terms')}</Link>
+        <a href="mailto:madebyryandev@gmail.com" className="hover:text-ink">
           {t('footer.support')}
         </a>
       </div>

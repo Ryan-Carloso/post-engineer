@@ -128,7 +128,7 @@ describe('AccountCard', () => {
       const onSelect = vi.fn();
       const { rerender } = render(<AccountCard {...baseProps} compact onSelect={onSelect} />);
       expect(screen.queryByTestId('account-card-select')).toBeNull();
-      expect(screen.getByTestId('account-card').className).toContain('border-neutral-200');
+      expect(screen.getByTestId('account-card').className).toContain('border-line');
       expect(screen.getByRole('img', { name: 'Meu Canal' }).className).toContain('grayscale');
 
       rerender(<AccountCard {...baseProps} compact onSelect={onSelect} selected />);
@@ -149,13 +149,13 @@ describe('AccountCard', () => {
     it('a selected card has a highlighted border', () => {
       const { container } = render(<AccountCard {...baseProps} onSelect={() => {}} selected />);
       const label = container.querySelector('label');
-      expect(label?.className).toContain('border-neutral-900');
+      expect(label?.className).toContain('border-ink');
     });
 
     it('an unselected card has a neutral border', () => {
       const { container } = render(<AccountCard {...baseProps} onSelect={() => {}} />);
       const label = container.querySelector('label');
-      expect(label?.className).toContain('border-neutral-200');
+      expect(label?.className).toContain('border-line');
     });
   });
 

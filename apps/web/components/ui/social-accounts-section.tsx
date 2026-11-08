@@ -40,18 +40,18 @@ export default function SocialAccountsSection({
   dialog,
 }: SocialAccountsSectionProps): ReactNode {
   return (
-    <section className="overflow-hidden rounded-2xl border border-[#dfe5ec] bg-white shadow-[0_1px_2px_rgba(16,23,40,0.02)]">
+    <section className="overflow-hidden rounded-2xl border border-line bg-card shadow-[0_1px_2px_rgba(16,23,40,0.02)]">
       <div className="flex items-center justify-between gap-4 p-4 lg:p-6">
         <div className="flex min-w-0 items-center gap-3.5">
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-[#edf0f4] bg-white shadow-[0_4px_12px_rgba(16,23,40,0.06)]">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-hairline bg-card shadow-[0_4px_12px_rgba(16,23,40,0.06)]">
             {icon}
           </span>
           <div className="min-w-0">
             <div className="flex items-baseline gap-2">
-              <h2 className="text-lg font-bold tracking-tight text-[#101728]">{label}</h2>
-              <span className="text-sm font-medium text-[#8a94a8]">({count})</span>
+              <h2 className="text-lg font-bold tracking-tight text-ink">{label}</h2>
+              <span className="text-sm font-medium text-faint">({count})</span>
             </div>
-            <p className="text-sm leading-5 text-[#718096]">{description}</p>
+            <p className="text-sm leading-5 text-muted-text">{description}</p>
           </div>
         </div>
         <span className="hidden shrink-0 items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 sm:flex">
@@ -74,7 +74,7 @@ export default function SocialAccountsSection({
                 onClick={onConnect}
                 disabled={connectDisabled}
                 aria-label={connectLabel}
-                className="size-full min-h-20 border-dashed text-[#52627a] hover:border-[#9aa9bb] hover:bg-[#fbfcfd]"
+                className="size-full min-h-20 border-dashed text-muted-text hover:border-muted-text hover:bg-surface"
               >
                 {connectDisabled ? <SpinnerIcon /> : null}
                 {connectLabel}
@@ -130,35 +130,35 @@ export function BlueskyConnectDialog({
   onClose,
 }: BlueskyConnectDialogProps): ReactNode {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#101728]/45 p-4" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/45 p-4" onMouseDown={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="bluesky-dialog-title"
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl outline-none"
+        className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl outline-none"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 id="bluesky-dialog-title" className="text-lg font-bold text-[#101728]">{title}</h2>
-            <p className="mt-2 text-sm leading-5 text-[#718096]">{hint}</p>
+            <h2 id="bluesky-dialog-title" className="text-lg font-bold text-ink">{title}</h2>
+            <p className="mt-2 text-sm leading-5 text-muted-text">{hint}</p>
           </div>
-          <button type="button" aria-label={closeLabel} onClick={onClose} className="rounded-md px-2 py-1 text-xl text-neutral-400 hover:bg-neutral-100 hover:text-neutral-800">×</button>
+          <button type="button" aria-label={closeLabel} onClick={onClose} className="rounded-md px-2 py-1 text-xl text-faint hover:bg-sunken hover:text-ink">×</button>
         </div>
         <div className="mt-5 grid gap-4">
-          <label className="text-sm font-medium text-neutral-700">
+          <label className="text-sm font-medium text-ink-soft">
             {handleLabel}
-            <input data-testid="bluesky-handle-input" type="text" value={handle} onChange={(event) => onHandleChange(event.target.value)} autoComplete="off" className="mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-3.5 py-2.5 text-sm text-neutral-900 outline-none focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10" />
+            <input data-testid="bluesky-handle-input" type="text" value={handle} onChange={(event) => onHandleChange(event.target.value)} autoComplete="off" className="mt-1.5 w-full rounded-lg border border-line bg-card px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink focus:ring-2 focus:ring-ink/10" />
           </label>
-          <label className="text-sm font-medium text-neutral-700">
+          <label className="text-sm font-medium text-ink-soft">
             {passwordLabel}
-            <input data-testid="bluesky-password-input" type="password" value={appPassword} onChange={(event) => onPasswordChange(event.target.value)} autoComplete="off" className="mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-3.5 py-2.5 text-sm text-neutral-900 outline-none focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10" />
+            <input data-testid="bluesky-password-input" type="password" value={appPassword} onChange={(event) => onPasswordChange(event.target.value)} autoComplete="off" className="mt-1.5 w-full rounded-lg border border-line bg-card px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink focus:ring-2 focus:ring-ink/10" />
           </label>
           <Button type="button" data-testid="bluesky-connect-button" onClick={onSubmit} disabled={!handle.trim() || !appPassword.trim() || pending} className="w-full">
             {submitLabel}
           </Button>
           {error ? <p data-testid="bluesky-connect-error" className="text-sm text-red-600">{error}</p> : null}
-          <p className="text-xs leading-4 text-neutral-400">{securityHint}</p>
+          <p className="text-xs leading-4 text-faint">{securityHint}</p>
         </div>
       </div>
     </div>
@@ -168,7 +168,7 @@ export function BlueskyConnectDialog({
 function SocialAccountsSkeleton(): ReactNode {
   return (
     <div aria-busy="true" aria-live="polite" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-      {[0, 1, 2, 3].map((item) => <div key={item} className="rounded-xl border border-neutral-200 bg-white p-4"><div className="skeleton-shimmer h-12 rounded-full" /></div>)}
+      {[0, 1, 2, 3].map((item) => <div key={item} className="rounded-xl border border-line bg-card p-4"><div className="skeleton-shimmer h-12 rounded-full" /></div>)}
     </div>
   );
 }
@@ -177,7 +177,7 @@ function SocialAccountsLoadError({ message, retryLabel, onRetry }: { message: st
   return (
     <div className="rounded-xl border border-red-200 bg-red-50/50 p-5 text-center">
       <p className="text-sm font-medium text-red-700">{message}</p>
-      <button type="button" onClick={onRetry} className="mt-3 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700">{retryLabel}</button>
+      <button type="button" onClick={onRetry} className="mt-3 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-soft">{retryLabel}</button>
     </div>
   );
 }

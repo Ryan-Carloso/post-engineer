@@ -33,18 +33,18 @@ export function MetricsRow({ row, metric, metricLabel, title, subtitle, formatMe
   return (
     <li className="flex flex-col gap-2 py-3">
       <div className="flex items-center gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#f7f8fa]">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface">
           <ProviderIcon provider={row.provider} />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-[#101728]">{title}</p>
-          <p className="truncate text-xs text-[#718096]">{subtitle}</p>
+          <p className="truncate text-sm font-semibold text-ink">{title}</p>
+          <p className="truncate text-xs text-muted-text">{subtitle}</p>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-base font-bold text-[#101728] tabular-nums">
+          <p className="text-base font-bold text-ink tabular-nums">
             {value === null ? t('metrics.notReported') : formatMetric(value, metric)}
           </p>
-          <p className="text-[11px] font-medium tracking-wide text-[#718096] uppercase">{metricLabel}</p>
+          <p className="text-[11px] font-medium tracking-wide text-muted-text uppercase">{metricLabel}</p>
         </div>
       </div>
       {row.provider === 'youtube' && row.analyticsStatus !== null && <RetentionLine row={row} formatMetric={formatMetric} />}
@@ -58,24 +58,24 @@ function RetentionLine({ row, formatMetric }: Pick<MetricsRowProps, 'row' | 'for
   if (row.analyticsStatus === 'scope_missing') {
     // "—", never a zero: the numbers are unknown until the user reconnects.
     return (
-      <p className="pl-13 text-xs text-[#718096]">
+      <p className="pl-13 text-xs text-muted-text">
         — <span className={AMBER_CHIP}>{t('metrics.reconnectNeeded')}</span>
       </p>
     );
   }
   if (row.analyticsStatus !== 'ok') {
-    return <p className="pl-13 text-xs text-[#718096]">{t('metrics.retentionUnavailable')}</p>;
+    return <p className="pl-13 text-xs text-muted-text">{t('metrics.retentionUnavailable')}</p>;
   }
   const isLongForm = row.contentType === 'VIDEO_ON_DEMAND';
   return (
     <div className="flex flex-col gap-2 pl-13">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#4a5568]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-soft">
         {row.engagedViews !== null && (
           <span className="tabular-nums">{t('metrics.engagedViewsValue', { count: formatMetric(row.engagedViews, 'engagedViews') })}</span>
         )}
         <span className="tabular-nums">
           {t('metrics.stayedToWatchDerived')}:{' '}
-          <strong className="font-semibold text-[#101728]">
+          <strong className="font-semibold text-ink">
             {row.stayedToWatchPct === null ? t('metrics.notReported') : formatMetric(row.stayedToWatchPct, 'stayedToWatchPct')}
           </strong>
         </span>
@@ -85,13 +85,13 @@ function RetentionLine({ row, formatMetric }: Pick<MetricsRowProps, 'row' | 'for
             type="button"
             aria-expanded={open}
             onClick={() => setOpen((current) => !current)}
-            className="font-semibold text-[#101728] underline-offset-4 hover:underline"
+            className="font-semibold text-ink underline-offset-4 hover:underline"
           >
             {t(open ? 'metrics.curveHide' : 'metrics.curveShow')}
           </button>
         )}
       </div>
-      {row.contentType === 'SHORTS' && <p className="text-[11px] text-[#718096]">{t('metrics.curveShortsNote')}</p>}
+      {row.contentType === 'SHORTS' && <p className="text-[11px] text-muted-text">{t('metrics.curveShortsNote')}</p>}
       {isLongForm && open && <RetentionCurvePanel accountId={row.accountId} videoId={row.externalId} />}
     </div>
   );
@@ -103,7 +103,7 @@ function RetentionCurvePanel({ accountId, videoId }: { accountId: string; videoI
   const result = curve.data;
   let body: React.ReactNode;
   if (curve.isLoading) {
-    body = <p className="flex items-center gap-2 text-xs text-[#718096]"><SpinnerIcon />{t('metrics.curveLoading')}</p>;
+    body = <p className="flex items-center gap-2 text-xs text-muted-text"><SpinnerIcon />{t('metrics.curveLoading')}</p>;
   } else if (curve.isError || result === undefined) {
     const reconnect = curve.isError && curve.error.reconnect;
     body = (
@@ -112,7 +112,7 @@ function RetentionCurvePanel({ accountId, videoId }: { accountId: string; videoI
       </p>
     );
   } else if (result.points.length === 0) {
-    body = <p className="text-xs text-[#718096]">{t('metrics.curveEmpty')}</p>;
+    body = <p className="text-xs text-muted-text">{t('metrics.curveEmpty')}</p>;
   } else {
     body = (
       <RetentionCurveChart
@@ -123,5 +123,5 @@ function RetentionCurvePanel({ accountId, videoId }: { accountId: string; videoI
       />
     );
   }
-  return <div className="rounded-xl border border-[#edf0f4] bg-[#fafbfc] p-3">{body}</div>;
+  return <div className="rounded-xl border border-hairline bg-surface p-3">{body}</div>;
 }

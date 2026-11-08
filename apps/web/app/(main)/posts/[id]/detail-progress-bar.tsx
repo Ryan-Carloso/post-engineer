@@ -11,7 +11,7 @@ export function DetailProgressBar({ progress, stage }: { progress: number; stage
   const { t } = useI18n();
   return (
     <div className="mt-4 rounded-2xl bg-secondary p-6">
-      <div className="flex items-center justify-between text-sm font-semibold text-[#0d2b45]">
+      <div className="flex items-center justify-between text-sm font-semibold text-primary">
         <span>{t('posts.videoGenerating')}</span>
         <span>{progress}%</span>
       </div>
@@ -20,9 +20,9 @@ export function DetailProgressBar({ progress, stage }: { progress: number; stage
         aria-valuenow={progress}
         aria-valuemin={0}
         aria-valuemax={100}
-        className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[#dce6ee]"
+        className="mt-3 h-2 w-full overflow-hidden rounded-full bg-sunken"
       >
-        <div className="h-full rounded-full bg-[#0d2b45] transition-all" style={{ width: `${progress}%` }} />
+        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
       </div>
       {stage && <p className="mt-2 text-xs text-muted-foreground">{stage}</p>}
     </div>

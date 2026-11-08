@@ -40,7 +40,7 @@ export function VoiceTags({ voice }: { voice: VoiceOption }) {
   return (
     <span className="flex flex-wrap gap-1">
       {tags.map((tag) => (
-        <span key={tag} className="rounded-md bg-neutral-100 px-1.5 py-0.5 text-[11px] font-medium text-neutral-600">
+        <span key={tag} className="rounded-md bg-sunken px-1.5 py-0.5 text-[11px] font-medium text-muted-text">
           {tag}
         </span>
       ))}
@@ -69,7 +69,7 @@ function SegmentedControl<T extends string>({
       role="group"
       aria-label={label}
       className={cn(
-        'grid w-full rounded-lg bg-neutral-100 p-1 sm:inline-flex sm:w-auto',
+        'grid w-full rounded-lg bg-sunken p-1 sm:inline-flex sm:w-auto',
         options.length === 4 ? 'grid-cols-2 min-[400px]:grid-cols-4' : 'grid-cols-3',
       )}
     >
@@ -81,7 +81,7 @@ function SegmentedControl<T extends string>({
           onClick={() => onChange(option.value)}
           className={cn(
             'truncate rounded-md p-1.5 text-xs font-medium transition-colors sm:px-3',
-            option.value === value ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-800',
+            option.value === value ? 'bg-card text-ink shadow-sm' : 'text-muted-text hover:text-ink',
           )}
         >
           {option.label}
@@ -138,10 +138,10 @@ export function VoicePickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex max-h-[85vh] w-[calc(100%-1.5rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-xl bg-white p-0">
-        <DialogHeader className="space-y-1 border-b border-neutral-200 px-5 pt-5 pb-4 text-left">
+      <DialogContent className="flex max-h-[85vh] w-[calc(100%-1.5rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-xl bg-card p-0">
+        <DialogHeader className="space-y-1 border-b border-line px-5 pt-5 pb-4 text-left">
           <DialogTitle>{t('persona.voicePickerTitle')}</DialogTitle>
-          <DialogDescription className="text-neutral-500">{t('persona.voicePickerHint')}</DialogDescription>
+          <DialogDescription className="text-muted-text">{t('persona.voicePickerHint')}</DialogDescription>
           <input
             type="search"
             value={query}
@@ -173,17 +173,17 @@ export function VoicePickerDialog({
               ]}
             />
           </div>
-          <p className="pt-2 text-xs text-neutral-500" aria-live="polite">
+          <p className="pt-2 text-xs text-muted-text" aria-live="polite">
             {t('persona.voicePickerCount', { count: visible.length })}
           </p>
         </DialogHeader>
-        <ul className="min-h-0 flex-1 divide-y divide-neutral-100 overflow-y-auto">
-          {visible.length === 0 && <li className="px-5 py-8 text-center text-sm text-neutral-500">{t('persona.voiceFilterEmpty')}</li>}
+        <ul className="min-h-0 flex-1 divide-y divide-hairline overflow-y-auto">
+          {visible.length === 0 && <li className="px-5 py-8 text-center text-sm text-muted-text">{t('persona.voiceFilterEmpty')}</li>}
           {visible.map((voice) => {
             const isSelected = voice.id === selectedVoiceId;
             const hasSample = voiceSampleName(voice) !== null;
             return (
-              <li key={voice.id} className={cn('flex items-start gap-3 px-5 py-3', isSelected && 'bg-neutral-50')}>
+              <li key={voice.id} className={cn('flex items-start gap-3 px-5 py-3', isSelected && 'bg-surface')}>
                 <button
                   type="button"
                   onClick={() => onPlay(voice)}
@@ -192,8 +192,8 @@ export function VoicePickerDialog({
                   className={cn(
                     'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full border transition-colors disabled:opacity-40',
                     playingVoiceId === voice.id
-                      ? 'border-neutral-900 bg-neutral-900 text-white'
-                      : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400',
+                      ? 'border-ink bg-ink text-on-ink'
+                      : 'border-line bg-card text-ink-soft hover:border-muted-text',
                   )}
                 >
                   <PlayIcon />
@@ -207,18 +207,18 @@ export function VoicePickerDialog({
                 >
                   <span className="min-w-0 flex-1 space-y-1">
                     <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-neutral-900">{labelFor(voice)}</span>
+                      <span className="text-sm font-semibold text-ink">{labelFor(voice)}</span>
                       <VoiceTags voice={voice} />
                     </span>
                     {modelFor(voice) !== '' && (
-                      <span className="block truncate text-xs text-neutral-500">{modelFor(voice)}</span>
+                      <span className="block truncate text-xs text-muted-text">{modelFor(voice)}</span>
                     )}
                     {voice.description !== null && (
-                      <span className="line-clamp-2 text-xs leading-relaxed text-neutral-500">{voice.description}</span>
+                      <span className="line-clamp-2 text-xs leading-relaxed text-muted-text">{voice.description}</span>
                     )}
                   </span>
                   {isSelected && (
-                    <span className="mt-1 text-neutral-900">
+                    <span className="mt-1 text-ink">
                       <CheckIcon />
                     </span>
                   )}

@@ -39,17 +39,17 @@ export default function DisconnectAccountDialog({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-neutral-950/60" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-scrim/60" />
         <DialogPrimitive.Content
           data-testid="disconnect-dialog"
           aria-label={title}
-          className="fixed top-1/2 left-1/2 z-50 w-full max-w-sm -translate-1/2 rounded-2xl bg-white p-6 shadow-xl"
+          className="fixed top-1/2 left-1/2 z-50 w-full max-w-sm -translate-1/2 rounded-2xl bg-card p-6 shadow-xl"
         >
-          <DialogPrimitive.Title className="text-lg font-bold tracking-tight text-[#101728]">{title}</DialogPrimitive.Title>
-          <DialogPrimitive.Description className="mt-2 text-sm leading-5 text-[#718096]">{body}</DialogPrimitive.Description>
+          <DialogPrimitive.Title className="text-lg font-bold tracking-tight text-ink">{title}</DialogPrimitive.Title>
+          <DialogPrimitive.Description className="mt-2 text-sm leading-5 text-muted-text">{body}</DialogPrimitive.Description>
           <p
             data-testid="disconnect-dialog-account"
-            className="mt-4 flex items-center gap-2 truncate rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm font-semibold text-[#101728]"
+            className="mt-4 flex items-center gap-2 truncate rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink"
           >
             <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-emerald-500" />
             <span className="truncate">{accountName}</span>
@@ -60,7 +60,7 @@ export default function DisconnectAccountDialog({
               type="button"
               data-testid="disconnect-cancel-button"
               autoFocus
-              className="rounded-lg border border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:border-neutral-400 hover:text-neutral-900"
+              className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-muted-text transition-colors hover:border-muted-text hover:text-ink"
               onClick={onClose}
             >
               {cancelLabel}

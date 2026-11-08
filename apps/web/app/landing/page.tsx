@@ -55,7 +55,7 @@ const LinkedInIcon = () => (
 
 export default function LandingPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-[#f7f8fa]">
+    <div className="flex min-h-screen flex-col bg-surface">
       <LandingHeader />
       <main className="flex-1">
         <LandingHero />
@@ -90,7 +90,7 @@ const LandingHeader = () => {
     { href: '#faq', label: t('landing.navFaq') },
   ];
   return (
-    <header className="sticky top-0 z-30 border-b border-[#edf0f4] bg-white/90 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-hairline bg-card/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:px-5 md:h-20">
         <Link
           href="/landing"
@@ -98,7 +98,7 @@ const LandingHeader = () => {
           className="flex min-w-0 items-center gap-2"
         >
           <AppLogo size={36} className="rounded-xl" />
-          <span className="truncate text-[17px] font-bold tracking-[-0.02em] text-[#101728]">
+          <span className="truncate text-[17px] font-bold tracking-[-0.02em] text-ink">
             PostEngineer
           </span>
         </Link>
@@ -107,7 +107,7 @@ const LandingHeader = () => {
             <a
               key={link.href}
               href={link.href}
-              className="text-sm font-medium text-[#414d63] transition-colors hover:text-[#101728]"
+              className="text-sm font-medium text-ink-soft transition-colors hover:text-ink"
             >
               {link.label}
             </a>
@@ -117,13 +117,13 @@ const LandingHeader = () => {
           <HeaderLocaleSwitcher />
           <Link
             href="/login"
-            className="rounded-xl bg-white px-4 py-2 text-sm font-semibold whitespace-nowrap text-[#101728] shadow-[0_1px_3px_rgba(20,32,51,0.08)] ring-1 ring-[#edf0f4] transition-colors hover:bg-[#f8fafc]"
+            className="rounded-xl bg-card px-4 py-2 text-sm font-semibold whitespace-nowrap text-ink shadow-[0_1px_3px_rgba(20,32,51,0.08)] ring-1 ring-hairline transition-colors hover:bg-surface"
           >
             {t('landing.signIn')}
           </Link>
           <Link
             href="/login"
-            className="rounded-xl bg-[#ff544c] px-4 py-2 text-sm font-semibold whitespace-nowrap text-white shadow-[0_6px_16px_rgba(255,84,76,0.25)] transition-colors hover:bg-[#e04540]"
+            className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold whitespace-nowrap text-white shadow-[0_6px_16px_rgba(255,84,76,0.25)] transition-colors hover:bg-brand-hover"
           >
             {t('landing.cta')}
           </Link>
@@ -131,7 +131,7 @@ const LandingHeader = () => {
         <div className="flex shrink-0 items-center gap-2 md:hidden">
           <Link
             href="/login"
-            className="rounded-xl bg-[#ff544c] px-3.5 py-2 text-[13px] font-semibold whitespace-nowrap text-white shadow-[0_6px_16px_rgba(255,84,76,0.25)] transition-colors hover:bg-[#e04540]"
+            className="rounded-xl bg-brand px-3.5 py-2 text-[13px] font-semibold whitespace-nowrap text-white shadow-[0_6px_16px_rgba(255,84,76,0.25)] transition-colors hover:bg-brand-hover"
           >
             {t('landing.cta')}
           </Link>
@@ -141,21 +141,21 @@ const LandingHeader = () => {
             aria-expanded={menuOpen}
             aria-label={menuOpen ? t('landing.menuClose') : t('landing.menuOpen')}
             onClick={() => setMenuOpen((open) => !open)}
-            className="flex size-9 items-center justify-center rounded-xl text-[#101728] ring-1 ring-[#edf0f4] transition-colors hover:bg-[#f8fafc]"
+            className="flex size-9 items-center justify-center rounded-xl text-ink ring-1 ring-hairline transition-colors hover:bg-surface"
           >
             {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
         </div>
       </div>
       {menuOpen && (
-        <div data-testid="landing-mobile-menu" className="border-t border-[#edf0f4] bg-white md:hidden">
+        <div data-testid="landing-mobile-menu" className="border-t border-hairline bg-card md:hidden">
           <nav className="mx-auto flex max-w-6xl flex-col px-4 sm:px-5">
             {links.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
                 onClick={() => setMenuOpen(false)}
-                className="border-b border-[#f1f4f7] py-3 text-sm font-medium text-[#414d63] last:border-0"
+                className="border-b border-sunken py-3 text-sm font-medium text-ink-soft last:border-0"
               >
                 {link.label}
               </a>
@@ -166,7 +166,7 @@ const LandingHeader = () => {
             <Link
               href="/login"
               onClick={() => setMenuOpen(false)}
-              className="rounded-xl bg-white px-4 py-2 text-sm font-semibold whitespace-nowrap text-[#101728] shadow-[0_1px_3px_rgba(20,32,51,0.08)] ring-1 ring-[#edf0f4]"
+              className="rounded-xl bg-card px-4 py-2 text-sm font-semibold whitespace-nowrap text-ink shadow-[0_1px_3px_rgba(20,32,51,0.08)] ring-1 ring-hairline"
             >
               {t('landing.signIn')}
             </Link>
@@ -183,7 +183,7 @@ const LandingHeader = () => {
 const HeaderLocaleSwitcher = () => {
   const { locale, setLocale } = useI18n();
   return (
-    <div className="flex items-center gap-0.5 rounded-lg bg-[#f1f4f7] p-0.5">
+    <div className="flex items-center gap-0.5 rounded-lg bg-sunken p-0.5">
       {LOCALES.map((option) => (
         <button
           key={option.value}
@@ -192,8 +192,8 @@ const HeaderLocaleSwitcher = () => {
           aria-pressed={option.value === locale}
           className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
             option.value === locale
-              ? 'bg-white text-[#101728] shadow-sm'
-              : 'text-[#718096] hover:text-[#101728]'
+              ? 'bg-card text-ink shadow-sm'
+              : 'text-muted-text hover:text-ink'
           }`}
         >
           {option.label}
@@ -210,21 +210,21 @@ const LandingHero = () => {
   const { t } = useI18n();
   const checks: Array<'check1' | 'check2' | 'check3'> = ['check1', 'check2', 'check3'];
   return (
-    <section className="relative overflow-hidden bg-linear-to-b from-white to-[#f7f8fa]">
+    <section className="relative overflow-hidden bg-linear-to-b from-white to-surface">
       <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 py-16 lg:grid-cols-2 lg:py-24">
         <div>
-          <span className="inline-flex rounded-full bg-[#fff0ef] px-4 py-1.5 text-xs font-semibold text-[#cf342e]">
+          <span className="inline-flex rounded-full bg-brand-soft px-4 py-1.5 text-xs font-semibold text-destructive">
             {t('landing.badge')}
           </span>
-          <h1 className="leading-1.1 mt-5 text-4xl font-extrabold tracking-tight text-[#101728] sm:text-5xl">
+          <h1 className="leading-1.1 mt-5 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
             {t('landing.title')}
           </h1>
-          <p className="mt-5 max-w-lg text-lg leading-relaxed text-[#657184]">
+          <p className="mt-5 max-w-lg text-lg leading-relaxed text-muted-text">
             {t('landing.subtitle')}
           </p>
           <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2">
             {checks.map((check) => (
-              <li key={check} className="flex items-center gap-1.5 text-sm font-medium text-[#414d63]">
+              <li key={check} className="flex items-center gap-1.5 text-sm font-medium text-ink-soft">
                 <span className="flex size-4 items-center justify-center rounded-full bg-[#10b981]">
                   <Check className="size-3 text-white" strokeWidth={3} />
                 </span>
@@ -235,13 +235,13 @@ const LandingHero = () => {
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
               href="/login"
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#ff544c] px-7 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(255,84,76,0.3)] transition-colors hover:bg-[#e04540]"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-brand px-7 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(255,84,76,0.3)] transition-colors hover:bg-brand-hover"
             >
               {t('landing.cta')}
               <ArrowRight className="size-4" />
             </Link>
           </div>
-          <p className="mt-4 text-xs text-[#8a94a8]">{t('landing.noCard')}</p>
+          <p className="mt-4 text-xs text-faint">{t('landing.noCard')}</p>
           <div className="mt-8 flex items-center gap-3">
             <HeroAvatars />
             <div>
@@ -269,7 +269,7 @@ const HeroAvatars = () => {
     { initial: 'A', bg: 'bg-[#f59e0b]' },
     { initial: 'M', bg: 'bg-[#10b981]' },
     { initial: 'C', bg: 'bg-[#6366f1]' },
-    { initial: 'R', bg: 'bg-[#ff544c]' },
+    { initial: 'R', bg: 'bg-brand' },
   ];
   return (
     <div className="flex -space-x-2.5">
@@ -302,64 +302,64 @@ const HeroMockup = () => {
   return (
     <div className="relative mx-auto hidden w-full max-w-lg lg:block">
       {/* Badge de crescimento */}
-      <div className="absolute top-16 -left-6 z-10 rounded-2xl bg-white px-4 py-3 shadow-[0_12px_32px_rgba(20,32,51,0.12)] ring-1 ring-[#edf0f4]">
+      <div className="absolute top-16 -left-6 z-10 rounded-2xl bg-card px-4 py-3 shadow-[0_12px_32px_rgba(20,32,51,0.12)] ring-1 ring-hairline">
         <div className="flex items-center gap-2.5">
           <ChartBar className="size-5 text-[#6366f1]" />
           <div>
-            <p className="text-sm font-bold text-[#101728]">+68%</p>
-            <p className="text-[11px] text-[#8a94a8]">{t('landing.statsGrowth').replace('+68% ', '')}</p>
+            <p className="text-sm font-bold text-ink">+68%</p>
+            <p className="text-[11px] text-faint">{t('landing.statsGrowth').replace('+68% ', '')}</p>
           </div>
         </div>
       </div>
 
       {/* Dashboard */}
-      <div className="rounded-3xl bg-white p-5 shadow-[0_24px_64px_rgba(20,32,51,0.12)] ring-1 ring-[#edf0f4]">
+      <div className="rounded-3xl bg-card p-5 shadow-[0_24px_64px_rgba(20,32,51,0.12)] ring-1 ring-hairline">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AppLogo size={28} className="rounded-lg" />
-            <span className="text-sm font-bold text-[#101728]">PostEngineer</span>
+            <span className="text-sm font-bold text-ink">PostEngineer</span>
           </div>
-          <div className="flex gap-1.5 text-[11px] font-medium text-[#657184]">
-            <span className="rounded-full bg-[#ff544c] px-2.5 py-1 text-white">7 dias</span>
-            <span className="rounded-full bg-[#f1f4f7] px-2.5 py-1">30 dias</span>
-            <span className="rounded-full bg-[#f1f4f7] px-2.5 py-1">90 dias</span>
+          <div className="flex gap-1.5 text-[11px] font-medium text-muted-text">
+            <span className="rounded-full bg-brand px-2.5 py-1 text-white">7 dias</span>
+            <span className="rounded-full bg-sunken px-2.5 py-1">30 dias</span>
+            <span className="rounded-full bg-sunken px-2.5 py-1">90 dias</span>
           </div>
         </div>
-        <p className="mt-1 text-[11px] text-[#8a94a8]">Autopilot</p>
+        <p className="mt-1 text-[11px] text-faint">Autopilot</p>
 
         <div className="mt-4 grid grid-cols-3 gap-2.5">
           {stats.map((stat) => (
-            <div key={stat.label} className="rounded-2xl bg-[#f8fafc] p-3 ring-1 ring-[#edf0f4]">
-              <p className="text-[10px] font-medium text-[#8a94a8]">{stat.label}</p>
-              <p className="mt-0.5 text-lg font-extrabold text-[#101728]">{stat.value}</p>
+            <div key={stat.label} className="rounded-2xl bg-surface p-3 ring-1 ring-hairline">
+              <p className="text-[10px] font-medium text-faint">{stat.label}</p>
+              <p className="mt-0.5 text-lg font-extrabold text-ink">{stat.value}</p>
               <p className="text-[10px] font-semibold text-[#10b981]">↑ {stat.delta}</p>
             </div>
           ))}
         </div>
 
-        <p className="mt-4 text-xs font-semibold text-[#101728]">{t('landing.statsChannels')}</p>
+        <p className="mt-4 text-xs font-semibold text-ink">{t('landing.statsChannels')}</p>
         <div className="mt-2 space-y-2">
-          <div className="flex items-center justify-between rounded-xl bg-[#f8fafc] px-3 py-2.5 ring-1 ring-[#edf0f4]">
+          <div className="flex items-center justify-between rounded-xl bg-surface px-3 py-2.5 ring-1 ring-hairline">
             <div className="flex items-center gap-2">
-              <span className="flex size-6 items-center justify-center rounded-md bg-white">
+              <span className="flex size-6 items-center justify-center rounded-md bg-card">
                 <YouTubeIcon />
               </span>
               <div>
-                <p className="text-xs font-semibold text-[#101728]">YouTube</p>
-                <p className="text-[10px] text-[#8a94a8]">@meucanal</p>
+                <p className="text-xs font-semibold text-ink">YouTube</p>
+                <p className="text-[10px] text-faint">@meucanal</p>
               </div>
               <span className="ml-1 rounded-full bg-[#ecfdf5] px-2 py-0.5 text-[9px] font-semibold text-[#10b981]">Ativo</span>
             </div>
             <span className="h-4 w-7 rounded-full bg-[#10b981]" />
           </div>
-          <div className="flex items-center justify-between rounded-xl bg-[#f8fafc] px-3 py-2.5 ring-1 ring-[#edf0f4]">
+          <div className="flex items-center justify-between rounded-xl bg-surface px-3 py-2.5 ring-1 ring-hairline">
             <div className="flex items-center gap-2">
-              <span className="flex size-6 items-center justify-center rounded-md bg-white">
+              <span className="flex size-6 items-center justify-center rounded-md bg-card">
                 <InstagramIcon />
               </span>
               <div>
-                <p className="text-xs font-semibold text-[#101728]">Instagram</p>
-                <p className="text-[10px] text-[#8a94a8]">@meuperfil</p>
+                <p className="text-xs font-semibold text-ink">Instagram</p>
+                <p className="text-[10px] text-faint">@meuperfil</p>
               </div>
               <span className="ml-1 rounded-full bg-[#ecfdf5] px-2 py-0.5 text-[9px] font-semibold text-[#10b981]">Ativo</span>
             </div>
@@ -367,16 +367,16 @@ const HeroMockup = () => {
           </div>
         </div>
 
-        <p className="mt-4 text-xs font-semibold text-[#101728]">{t('landing.statsUpcoming')}</p>
+        <p className="mt-4 text-xs font-semibold text-ink">{t('landing.statsUpcoming')}</p>
         <div className="mt-2 space-y-2">
           {posts.map((post) => (
-            <div key={post.title} className="flex items-center gap-2.5 rounded-xl bg-[#f8fafc] px-3 py-2.5 ring-1 ring-[#edf0f4]">
-              <span className="size-8 shrink-0 rounded-lg bg-linear-to-br from-[#101728] to-[#3b4a66]" />
+            <div key={post.title} className="flex items-center gap-2.5 rounded-xl bg-surface px-3 py-2.5 ring-1 ring-hairline">
+              <span className="size-8 shrink-0 rounded-lg bg-linear-to-br from-ink to-[#3b4a66]" />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium text-[#101728]">{post.title}</p>
-                <p className="text-[10px] text-[#8a94a8]">{post.time}</p>
+                <p className="truncate text-xs font-medium text-ink">{post.title}</p>
+                <p className="text-[10px] text-faint">{post.time}</p>
               </div>
-              <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${post.network === 'YouTube' ? 'bg-[#fee2e2] text-[#cf342e]' : 'bg-[#fce7f3] text-[#be185d]'}`}>
+              <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${post.network === 'YouTube' ? 'bg-destructive-soft text-destructive' : 'bg-[#fce7f3] text-[#be185d]'}`}>
                 {post.network}
               </span>
             </div>
@@ -385,13 +385,13 @@ const HeroMockup = () => {
       </div>
 
       {/* Card "Agendado" */}
-      <div className="absolute -right-2 -bottom-5 z-10 flex items-center gap-2.5 rounded-2xl bg-white px-4 py-3 shadow-[0_12px_32px_rgba(20,32,51,0.14)] ring-1 ring-[#edf0f4]">
+      <div className="absolute -right-2 -bottom-5 z-10 flex items-center gap-2.5 rounded-2xl bg-card px-4 py-3 shadow-[0_12px_32px_rgba(20,32,51,0.14)] ring-1 ring-hairline">
         <span className="flex size-9 items-center justify-center rounded-full bg-[#ecfdf5]">
           <CalendarDays className="size-4 text-[#10b981]" />
         </span>
         <div>
-          <p className="text-xs font-bold text-[#101728]">{t('landing.statsScheduled')}</p>
-          <p className="text-[11px] text-[#8a94a8]">{t('landing.statsToday')}</p>
+          <p className="text-xs font-bold text-ink">{t('landing.statsScheduled')}</p>
+          <p className="text-[11px] text-faint">{t('landing.statsToday')}</p>
         </div>
       </div>
     </div>
@@ -406,24 +406,24 @@ const LandingPlatforms = () => {
   const platforms = [
     { icon: <YouTubeIcon />, label: 'YouTube' },
     { icon: <InstagramIcon />, label: 'Instagram' },
-    { icon: <Music2 className="size-5 text-[#101728]" />, label: 'TikTok' },
+    { icon: <Music2 className="size-5 text-ink" />, label: 'TikTok' },
     { icon: <FacebookIcon />, label: 'Facebook' },
     { icon: <XIcon />, label: 'X (Twitter)' },
     { icon: <LinkedInIcon />, label: 'LinkedIn' },
   ];
   return (
-    <section className="border-y border-[#edf0f4] bg-white py-10">
-      <p className="text-center text-xs font-semibold tracking-[0.2em] text-[#8a94a8] uppercase">
+    <section className="border-y border-hairline bg-card py-10">
+      <p className="text-center text-xs font-semibold tracking-[0.2em] text-faint uppercase">
         {t('landing.platformsTitle')}
       </p>
       <div className="mx-auto mt-6 flex max-w-4xl flex-wrap items-center justify-center gap-x-10 gap-y-5 px-5">
         {platforms.map((platform) => (
-          <span key={platform.label} className="flex items-center gap-2 font-semibold text-[#414d63]">
+          <span key={platform.label} className="flex items-center gap-2 font-semibold text-ink-soft">
             {platform.icon}
             {platform.label}
           </span>
         ))}
-        <span className="rounded-full bg-[#f1f4f7] px-3 py-1 text-xs font-medium text-[#718096]">
+        <span className="rounded-full bg-sunken px-3 py-1 text-xs font-medium text-muted-text">
           {t('landing.platformsSoon')}
         </span>
       </div>
@@ -437,35 +437,35 @@ const LandingPlatforms = () => {
 const LandingHowItWorks = () => {
   const { t } = useI18n();
   const steps = [
-    { number: '1', titleKey: 'how1Title' as const, hintKey: 'how1Hint' as const, icon: <User className="size-5 text-[#657184]" /> },
-    { number: '2', titleKey: 'how2Title' as const, hintKey: 'how2Hint' as const, icon: <Calendar className="size-5 text-[#657184]" /> },
-    { number: '3', titleKey: 'how3Title' as const, hintKey: 'how3Hint' as const, icon: <Send className="size-5 text-[#657184]" /> },
+    { number: '1', titleKey: 'how1Title' as const, hintKey: 'how1Hint' as const, icon: <User className="size-5 text-muted-text" /> },
+    { number: '2', titleKey: 'how2Title' as const, hintKey: 'how2Hint' as const, icon: <Calendar className="size-5 text-muted-text" /> },
+    { number: '3', titleKey: 'how3Title' as const, hintKey: 'how3Hint' as const, icon: <Send className="size-5 text-muted-text" /> },
   ];
   return (
-    <section id="how" className="scroll-mt-24 bg-linear-to-b from-[#f1f4f7] to-[#f7f8fa] py-20">
+    <section id="how" className="scroll-mt-24 bg-linear-to-b from-sunken to-surface py-20">
       <div className="mx-auto max-w-6xl px-5">
         <div className="text-center">
-          <span className="inline-flex rounded-full bg-[#fff0ef] px-4 py-1.5 text-xs font-semibold tracking-wide text-[#cf342e] uppercase">
+          <span className="inline-flex rounded-full bg-brand-soft px-4 py-1.5 text-xs font-semibold tracking-wide text-destructive uppercase">
             {t('landing.howBadge')}
           </span>
-          <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-[#101728] sm:text-4xl">
+          <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
             {t('landing.howTitle')}
           </h2>
-          <p className="mx-auto mt-3 max-w-xl text-[#657184]">{t('landing.howSubtitle')}</p>
+          <p className="mx-auto mt-3 max-w-xl text-muted-text">{t('landing.howSubtitle')}</p>
         </div>
         <div className="mt-12 grid gap-6 sm:grid-cols-3">
           {steps.map((step) => (
-            <div key={step.number} className="rounded-3xl bg-white p-7 shadow-[0_4px_20px_rgba(20,32,51,0.05)] ring-1 ring-[#edf0f4]">
+            <div key={step.number} className="rounded-3xl bg-card p-7 shadow-[0_4px_20px_rgba(20,32,51,0.05)] ring-1 ring-hairline">
               <div className="flex items-start justify-between">
-                <span className="flex size-10 items-center justify-center rounded-full bg-[#fee2e2] text-lg font-bold text-[#cf342e]">
+                <span className="flex size-10 items-center justify-center rounded-full bg-destructive-soft text-lg font-bold text-destructive">
                   {step.number}
                 </span>
-                <span className="flex size-10 items-center justify-center rounded-xl bg-[#f1f4f7]">
+                <span className="flex size-10 items-center justify-center rounded-xl bg-sunken">
                   {step.icon}
                 </span>
               </div>
-              <h3 className="mt-5 text-lg font-bold text-[#101728]">{t(`landing.${step.titleKey}`)}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-[#657184]">{t(`landing.${step.hintKey}`)}</p>
+              <h3 className="mt-5 text-lg font-bold text-ink">{t(`landing.${step.titleKey}`)}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-text">{t(`landing.${step.hintKey}`)}</p>
             </div>
           ))}
         </div>
@@ -485,7 +485,7 @@ const LandingFeatures = () => {
     { titleKey: 'featureGrow' as const, hintKey: 'featureGrowHint' as const, icon: <ChartBar className="size-5 text-[#6366f1]" />, bg: 'bg-[#eef2ff]' },
   ];
   return (
-    <section id="features" className="scroll-mt-24 bg-white py-16">
+    <section id="features" className="scroll-mt-24 bg-card py-16">
       <div className="mx-auto grid max-w-6xl gap-10 px-5 sm:grid-cols-3">
         {features.map((feature) => (
           <div key={feature.titleKey} className="flex gap-4">
@@ -493,8 +493,8 @@ const LandingFeatures = () => {
               {feature.icon}
             </span>
             <div>
-              <h3 className="font-bold text-[#101728]">{t(`landing.${feature.titleKey}`)}</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-[#657184]">
+              <h3 className="font-bold text-ink">{t(`landing.${feature.titleKey}`)}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-text">
                 {t(`landing.${feature.hintKey}`)}
               </p>
             </div>
@@ -512,16 +512,16 @@ const LandingFeatures = () => {
 const LandingPricing = () => {
   const { t } = useI18n();
   return (
-    <section id="pricing" className="scroll-mt-24 bg-linear-to-b from-[#f1f4f7] to-[#f7f8fa] py-20">
+    <section id="pricing" className="scroll-mt-24 bg-linear-to-b from-sunken to-surface py-20">
       <div className="mx-auto max-w-6xl px-5">
         <div className="text-center">
-          <span className="inline-flex rounded-full bg-[#fff0ef] px-4 py-1.5 text-xs font-semibold tracking-wide text-[#cf342e] uppercase">
+          <span className="inline-flex rounded-full bg-brand-soft px-4 py-1.5 text-xs font-semibold tracking-wide text-destructive uppercase">
             {t('landing.pricingBadge')}
           </span>
-          <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-[#101728] sm:text-4xl">
+          <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
             {t('landing.pricingTitle')}
           </h2>
-          <p className="mx-auto mt-3 max-w-xl text-[#657184]">{t('landing.pricingSubtitle')}</p>
+          <p className="mx-auto mt-3 max-w-xl text-muted-text">{t('landing.pricingSubtitle')}</p>
         </div>
         <div className="mx-auto mt-12 max-w-6xl">
           <PricingContactCard />
@@ -544,22 +544,22 @@ const LandingFaq = () => {
     { q: 'faq4Q', a: 'faq4A' },
   ];
   return (
-    <section id="faq" className="scroll-mt-24 bg-white py-20">
+    <section id="faq" className="scroll-mt-24 bg-card py-20">
       <div className="mx-auto max-w-3xl px-5">
-        <h2 className="text-center text-3xl font-extrabold tracking-tight text-[#101728]">
+        <h2 className="text-center text-3xl font-extrabold tracking-tight text-ink">
           {t('landing.faqTitle')}
         </h2>
         <div className="mt-10 space-y-3">
           {faqs.map((faq) => (
             <details
               key={faq.q}
-              className="group rounded-2xl border border-[#edf0f4] bg-[#f8fafc] px-5 py-4 [&_summary::-webkit-details-marker]:hidden"
+              className="group rounded-2xl border border-hairline bg-surface px-5 py-4 [&_summary::-webkit-details-marker]:hidden"
             >
-              <summary className="flex cursor-pointer items-center justify-between gap-4 text-sm font-semibold text-[#101728]">
+              <summary className="flex cursor-pointer items-center justify-between gap-4 text-sm font-semibold text-ink">
                 {t(`landing.${faq.q}`)}
-                <ChevronDown className="size-4 shrink-0 text-[#8a94a8] transition-transform group-open:rotate-180" />
+                <ChevronDown className="size-4 shrink-0 text-faint transition-transform group-open:rotate-180" />
               </summary>
-              <p className="mt-3 text-sm leading-relaxed text-[#657184]">{t(`landing.${faq.a}`)}</p>
+              <p className="mt-3 text-sm leading-relaxed text-muted-text">{t(`landing.${faq.a}`)}</p>
             </details>
           ))}
         </div>
@@ -575,23 +575,23 @@ const LandingFinalCta = () => {
   const { t } = useI18n();
   return (
     <section className="px-5 pb-20">
-      <div className="mx-auto max-w-5xl rounded-[32px] bg-linear-to-b from-[#fff5f4] to-[#ffeceb] px-6 py-14 text-center">
-        <p className="text-xs font-semibold tracking-[0.2em] text-[#cf342e] uppercase">
+      <div className="mx-auto max-w-5xl rounded-[32px] bg-linear-to-b from-brand-soft to-[#ffeceb] px-6 py-14 text-center">
+        <p className="text-xs font-semibold tracking-[0.2em] text-destructive uppercase">
           {t('landing.cta')}
         </p>
-        <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-[#101728] sm:text-4xl">
+        <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
           {t('landing.ctaFinalTitle')}
         </h2>
-        <p className="mx-auto mt-3 max-w-xl text-[#657184]">{t('landing.ctaFinalSubtitle')}</p>
+        <p className="mx-auto mt-3 max-w-xl text-muted-text">{t('landing.ctaFinalSubtitle')}</p>
         <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
             href="/login"
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#ff544c] px-7 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(255,84,76,0.3)] transition-colors hover:bg-[#e04540]"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-brand px-7 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(255,84,76,0.3)] transition-colors hover:bg-brand-hover"
           >
             {t('landing.cta')}
             <ArrowRight className="size-4" />
           </Link>
-          <p className="text-xs text-[#8a94a8]">{t('landing.ctaFinalNote')}</p>
+          <p className="text-xs text-faint">{t('landing.ctaFinalNote')}</p>
         </div>
       </div>
     </section>

@@ -28,20 +28,20 @@ export function InsufficientTokensDialog() {
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="upgrade-dialog-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/60 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/60 p-4"
     >
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-        <h2 id="upgrade-dialog-title" className="text-lg font-semibold text-neutral-900">
+      <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-xl">
+        <h2 id="upgrade-dialog-title" className="text-lg font-semibold text-ink">
           {isFree ? t('tokens.freeExhaustedTitle') : t('persona.errInsufficientTokens')}
         </h2>
-        <p className="mt-2 text-sm leading-6 text-neutral-600">
+        <p className="mt-2 text-sm leading-6 text-muted-text">
           {isFree ? t('tokens.freeExhaustedHint') : t('persona.upgradeHint')}
         </p>
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={close}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-neutral-200 px-5 py-2.5 text-sm font-semibold text-neutral-700 transition-colors hover:bg-neutral-50"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-line px-5 py-2.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-surface"
           >
             {t('persona.dialogClose')}
           </button>

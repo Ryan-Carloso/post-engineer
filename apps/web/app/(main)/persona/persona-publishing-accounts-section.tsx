@@ -255,12 +255,12 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
   return (
     <section>
       <SectionDivider label={t('persona.publishingAccountsLabel')} />
-      <div className="mt-4 space-y-5 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
-        <p className="text-sm text-neutral-600">{t('persona.publishingAccountsHint')}</p>
+      <div className="mt-4 space-y-5 rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
+        <p className="text-sm text-muted-text">{t('persona.publishingAccountsHint')}</p>
         {loading ? (
           <div data-testid="publishing-accounts-loading" className="space-y-3" aria-busy="true">
             {[0, 1, 2].map((index) => (
-              <div key={index} className="h-16 animate-pulse rounded-xl bg-neutral-100" />
+              <div key={index} className="h-16 animate-pulse rounded-xl bg-sunken" />
             ))}
           </div>
         ) : loadError !== null ? (
@@ -285,13 +285,13 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
                   <div key={provider}>
                     <div className="flex items-center gap-2">
                       <ProviderIcon provider={provider} />
-                      <p className="text-sm font-semibold text-neutral-900">{label}</p>
+                      <p className="text-sm font-semibold text-ink">{label}</p>
                       <Badge variant="secondary" className="text-[11px]">
                         {cards.length}
                       </Badge>
                     </div>
                     {cards.length === 0 ? (
-                      <p className="mt-2 text-sm text-neutral-500">
+                      <p className="mt-2 text-sm text-muted-text">
                         {t('persona.publishingAccountsNoAccounts', { provider: label })}{' '}
                         <Link href="/accounts" className="font-medium text-accent underline">
                           {t('persona.connectAccounts')}

@@ -137,11 +137,11 @@ describe('Main Layout — Sidebar', () => {
 
     cy.contains('a', 'Contas')
       .should('have.attr', 'class')
-      .and('contain', 'bg-[#fff3f2]');
+      .and('contain', 'bg-brand-soft');
 
     cy.contains('a', 'Posts')
       .should('have.attr', 'class')
-      .and('not.contain', 'bg-[#fff3f2]');
+      .and('not.contain', 'bg-brand-soft');
   });
 
   it('exibe o avatar do utilizador no rodapé da sidebar', () => {

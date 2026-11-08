@@ -70,15 +70,15 @@ const BillingHero = () => {
     <section className="grid gap-10 pt-6 pb-12 lg:grid-cols-[1fr_1.03fr] lg:items-center lg:gap-14 lg:pt-12 lg:pb-16">
       <div className="max-w-[650px]">
         <p className="mb-4 text-sm font-bold tracking-[0.04em] text-[#ff4e48]">{t('pricing.heroEyebrow')}</p>
-        <h1 className="leading-0.98 text-[clamp(2.6rem,5vw,4.25rem)] font-extrabold tracking-[-0.065em] text-[#101728]">
+        <h1 className="leading-0.98 text-[clamp(2.6rem,5vw,4.25rem)] font-extrabold tracking-[-0.065em] text-ink">
           {t('pricing.heroTitle')}
         </h1>
-        <p className="mt-6 max-w-[590px] text-lg leading-relaxed text-[#657184] lg:text-[21px]">{t('pricing.heroDescription')}</p>
-        <div className="mt-7 inline-flex items-center gap-3 rounded-2xl border border-[#e4e9ef] bg-white px-4 py-3 shadow-[0_8px_24px_rgba(20,32,51,0.05)]">
-          <span className="flex size-10 items-center justify-center rounded-xl bg-[#fff0ef] text-[#ff514a]"><TokenIcon /></span>
+        <p className="mt-6 max-w-[590px] text-lg leading-relaxed text-muted-text lg:text-[21px]">{t('pricing.heroDescription')}</p>
+        <div className="mt-7 inline-flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3 shadow-[0_8px_24px_rgba(20,32,51,0.05)]">
+          <span className="flex size-10 items-center justify-center rounded-xl bg-brand-soft text-brand"><TokenIcon /></span>
           <span>
-            <span className="block text-xs font-medium text-[#718096]">{t('pricing.currentPlan')}</span>
-            <strong className="text-xl text-[#101728]">{billingQuery.data?.balance ?? 0} {t('pricing.tokens')}</strong>
+            <span className="block text-xs font-medium text-muted-text">{t('pricing.currentPlan')}</span>
+            <strong className="text-xl text-ink">{billingQuery.data?.balance ?? 0} {t('pricing.tokens')}</strong>
           </span>
         </div>
       </div>
@@ -94,10 +94,10 @@ const BillingIllustration = () => {
   const { t } = useI18n();
   return (
     <div className="relative min-h-[250px] overflow-hidden rounded-[28px] bg-linear-to-br from-[#fff0ed] via-[#fff7f4] to-[#f5e9f4] p-6 sm:min-h-75 sm:p-10">
-      <div className="absolute -top-16 -right-12 size-56 rounded-full bg-white/45 blur-2xl" />
+      <div className="absolute -top-16 -right-12 size-56 rounded-full bg-card/45 blur-2xl" />
       <div className="relative flex h-full min-h-[205px] items-center justify-center gap-4 sm:gap-8">
         <div className="absolute top-4 left-2 max-w-[150px] -rotate-6 font-serif text-xl leading-tight font-bold text-[#191b23] sm:top-8 sm:left-7 sm:text-2xl">{t('pricing.illustrationCaption')}</div>
-        <div className="relative z-10 w-[57%] max-w-80 rotate-[-8deg] rounded-2xl bg-white p-3 shadow-[0_16px_28px_rgba(65,48,53,0.14)] sm:p-4">
+        <div className="relative z-10 w-[57%] max-w-80 rotate-[-8deg] rounded-2xl bg-card p-3 shadow-[0_16px_28px_rgba(65,48,53,0.14)] sm:p-4">
           <div
             className="relative flex aspect-[1.55] items-center justify-center overflow-hidden rounded-xl bg-cover bg-center"
             style={{ backgroundImage: "url('https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=85')" }}
@@ -105,12 +105,12 @@ const BillingIllustration = () => {
             <div className="absolute inset-0 bg-linear-to-tr from-[#173346]/45 via-transparent to-[#f4b28d]/10" />
             <span className="relative flex size-14 items-center justify-center rounded-full bg-[#101d28]/75 text-white shadow-lg ring-1 ring-white/30"><PlayIcon /></span>
           </div>
-          <div className="mt-2 h-2 w-2/3 rounded-full bg-[#dfe3e7]" />
+          <div className="mt-2 h-2 w-2/3 rounded-full bg-sunken" />
         </div>
         <div className="relative z-20 w-[35%] max-w-45 space-y-3">
-          <div className="flex items-center gap-2 rounded-xl border border-[#e9e0e2] bg-white/90 p-3 text-xs font-semibold text-[#293243] shadow-sm sm:gap-3 sm:px-4 sm:text-sm"><span className="text-[#ff514a]"><SparkIcon /></span>{t('pricing.illustrationGenerate')}</div>
-          <div className="flex items-center gap-2 rounded-xl border border-[#e9e0e2] bg-white/90 p-3 text-xs font-semibold text-[#293243] shadow-sm sm:gap-3 sm:px-4 sm:text-sm"><span className="text-[#ff514a]"><CalendarIcon /></span>{t('pricing.illustrationSchedule')}</div>
-          <div className="flex items-center gap-2 rounded-xl border border-[#e9e0e2] bg-white/90 p-3 text-xs font-semibold text-[#293243] shadow-sm sm:gap-3 sm:px-4 sm:text-sm"><span className="text-[#ff514a]"><SendIcon /></span>{t('pricing.illustrationPublish')}</div>
+          <div className="flex items-center gap-2 rounded-xl border border-line bg-card/90 p-3 text-xs font-semibold text-ink-soft shadow-sm sm:gap-3 sm:px-4 sm:text-sm"><span className="text-brand"><SparkIcon /></span>{t('pricing.illustrationGenerate')}</div>
+          <div className="flex items-center gap-2 rounded-xl border border-line bg-card/90 p-3 text-xs font-semibold text-ink-soft shadow-sm sm:gap-3 sm:px-4 sm:text-sm"><span className="text-brand"><CalendarIcon /></span>{t('pricing.illustrationSchedule')}</div>
+          <div className="flex items-center gap-2 rounded-xl border border-line bg-card/90 p-3 text-xs font-semibold text-ink-soft shadow-sm sm:gap-3 sm:px-4 sm:text-sm"><span className="text-brand"><SendIcon /></span>{t('pricing.illustrationPublish')}</div>
         </div>
       </div>
     </div>
@@ -127,7 +127,7 @@ const BillingBenefits = () => {
     { title: t('pricing.benefitPublishTitle'), text: t('pricing.benefitPublishText'), icon: <CalendarIcon /> },
     { title: t('pricing.benefitNoSubscriptionTitle'), text: t('pricing.benefitNoSubscriptionText'), icon: <StarIcon /> },
   ];
-  return <section className="my-2 grid grid-cols-1 gap-x-5 gap-y-8 border-y border-[#e9edf1] py-9 sm:grid-cols-2 lg:my-4 lg:grid-cols-3 lg:gap-8 lg:py-10">{benefits.map((benefit) => <div key={benefit.title} className="flex items-start gap-3"><span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[#fff0ef] text-[#ff514a]">{benefit.icon}</span><span><strong className="block text-sm font-bold text-[#101728] sm:text-base">{benefit.title}</strong><span className="mt-1 block text-xs leading-relaxed text-[#718096] sm:text-sm">{benefit.text}</span></span></div>)}</section>;
+  return <section className="my-2 grid grid-cols-1 gap-x-5 gap-y-8 border-y border-line py-9 sm:grid-cols-2 lg:my-4 lg:grid-cols-3 lg:gap-8 lg:py-10">{benefits.map((benefit) => <div key={benefit.title} className="flex items-start gap-3"><span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand">{benefit.icon}</span><span><strong className="block text-sm font-bold text-ink sm:text-base">{benefit.title}</strong><span className="mt-1 block text-xs leading-relaxed text-muted-text sm:text-sm">{benefit.text}</span></span></div>)}</section>;
 };
 
 //---------------
@@ -136,7 +136,7 @@ const BillingBenefits = () => {
 const BillingNotices = () => {
   const { t } = useI18n();
   const checkoutState = useSearchParams().get('checkout');
-  return <>{checkoutState === 'success' && <div role="status" className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">{t('pricing.successDesc')}</div>}{checkoutState === 'canceled' && <div role="status" className="mb-6 rounded-2xl border border-neutral-200 bg-neutral-50 px-5 py-4 text-sm text-neutral-700">{t('pricing.cancelDesc')}</div>}</>;
+  return <>{checkoutState === 'success' && <div role="status" className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">{t('pricing.successDesc')}</div>}{checkoutState === 'canceled' && <div role="status" className="mb-6 rounded-2xl border border-line bg-surface px-5 py-4 text-sm text-ink-soft">{t('pricing.cancelDesc')}</div>}</>;
 };
 
 //---------------
@@ -161,7 +161,7 @@ const BillingPacks = () => {
   };
   return (
     <section className="pt-12 lg:pt-14">
-      <div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="text-2xl font-extrabold tracking-[-0.04em] text-[#101728] sm:text-3xl">{t('pricing.packHeading')}</h2><p className="mt-2 text-sm text-[#657184] sm:text-base">{t('pricing.packDescription')}</p></div><span className="rounded-xl border border-[#e2e7ed] bg-white px-3 py-2 text-xs font-medium text-[#4c596b] shadow-sm">ⓘ {t('pricing.packHint')}</span></div>
+      <div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="text-2xl font-extrabold tracking-[-0.04em] text-ink sm:text-3xl">{t('pricing.packHeading')}</h2><p className="mt-2 text-sm text-muted-text sm:text-base">{t('pricing.packDescription')}</p></div><span className="rounded-xl border border-line bg-card px-3 py-2 text-xs font-medium text-muted-text shadow-sm">ⓘ {t('pricing.packHint')}</span></div>
       {error !== null && <div role="alert" className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{error}</div>}
       <TokenPackCards
         renderAction={(pack, { popular }) => (
@@ -185,4 +185,4 @@ const PlayIcon = () => <svg viewBox="0 0 24 24" fill="currentColor" className="s
 //---------------
 // BillingSkeleton — placeholder shown while the wallet query loads.
 //---------------
-const BillingSkeleton = () => <div className="space-y-8" aria-hidden="true"><div className="grid gap-8 lg:grid-cols-2"><div className="h-72 animate-pulse rounded-3xl bg-neutral-200" /><div className="h-72 animate-pulse rounded-3xl bg-neutral-200" /></div><div className="h-24 animate-pulse rounded-3xl bg-neutral-200" /><div className="grid grid-cols-1 gap-6 md:grid-cols-3"><div className="h-80 animate-pulse rounded-3xl bg-neutral-200" /><div className="h-80 animate-pulse rounded-3xl bg-neutral-200" /><div className="h-80 animate-pulse rounded-3xl bg-neutral-200" /></div></div>;
+const BillingSkeleton = () => <div className="space-y-8" aria-hidden="true"><div className="grid gap-8 lg:grid-cols-2"><div className="h-72 animate-pulse rounded-3xl bg-sunken" /><div className="h-72 animate-pulse rounded-3xl bg-sunken" /></div><div className="h-24 animate-pulse rounded-3xl bg-sunken" /><div className="grid grid-cols-1 gap-6 md:grid-cols-3"><div className="h-80 animate-pulse rounded-3xl bg-sunken" /><div className="h-80 animate-pulse rounded-3xl bg-sunken" /><div className="h-80 animate-pulse rounded-3xl bg-sunken" /></div></div>;

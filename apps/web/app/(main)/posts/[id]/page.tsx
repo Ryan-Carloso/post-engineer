@@ -29,6 +29,7 @@ import { PROVIDER_LABELS, scheduleAccountIds } from '@/lib/account-options';
 import { useI18n } from '@/lib/i18n/provider';
 import { useCopyText } from '@/lib/use-copy-text';
 import type { TranslationKey } from '@/lib/i18n';
+import { STATUS_KEY, STATUS_STYLE } from '../status';
 
 //---------------
 // PostDetailPage (/posts/[id]) — the full-page post detail: big video
@@ -45,28 +46,6 @@ interface AccountCardData {
   thumbnail?: string;
   handle?: string;
 }
-
-const STATUS_STYLE: Record<string, string> = {
-  pending: 'bg-[#e8edf1] text-[#60758a]',
-  generating: 'bg-[#e3f0ff] text-[#1d5bbf]',
-  running: 'bg-[#e3f0ff] text-[#1d5bbf]',
-  ready: 'bg-[#fff4d6] text-[#9a6b00]',
-  publishing: 'bg-[#e3f0ff] text-[#1d5bbf]',
-  published: 'bg-[#cff5df] text-[#167246]',
-  completed: 'bg-[#cff5df] text-[#167246]',
-  failed: 'bg-[#ffe1de] text-[#c2301e]',
-};
-
-const STATUS_KEY: Record<string, TranslationKey> = {
-  pending: 'posts.statusPending',
-  generating: 'posts.statusGenerating',
-  running: 'posts.statusRunning',
-  ready: 'posts.statusReady',
-  publishing: 'posts.statusPublishing',
-  published: 'posts.statusPublished',
-  failed: 'posts.statusFailed',
-  completed: 'posts.statusCompleted',
-};
 
 const GENERATION_ERROR_KEY: Record<string, TranslationKey> = {
   custom_audio_invalid: 'posts.errorCustomAudio',
@@ -230,7 +209,7 @@ export default function PostDetailPage() {
             </p>
           )}
           {generation.tokensRefunded && (
-            <Badge variant="outline" className="mt-4 border-transparent bg-[#cff5df] text-[#167246]">
+            <Badge variant="outline" className="mt-4 border-transparent bg-success-soft text-success">
               {t('posts.refundedBadge')}
             </Badge>
           )}
@@ -285,11 +264,11 @@ const DetailHeader = ({
         <Link
           href="/posts"
           aria-label={t('posts.back')}
-          className="inline-flex size-9 items-center justify-center rounded-full border border-input bg-white text-[#0d2b45] hover:bg-[#f4f8fb]"
+          className="inline-flex size-9 items-center justify-center rounded-full border border-input bg-card text-primary hover:bg-background"
         >
           <ArrowLeft className="size-4" />
         </Link>
-        <h1 className="text-xl font-bold tracking-[-0.02em] text-[#0d2b45]">{title}</h1>
+        <h1 className="text-xl font-bold tracking-[-0.02em] text-primary">{title}</h1>
       </div>
       <Badge variant="outline" className={`border-transparent ${statusStyle}`}>
         {statusLabel}
@@ -311,14 +290,14 @@ export const PostIdSection = ({ postId }: { postId: string }) => {
     <section aria-label={t('posts.postIdLabel')} className="mt-6">
       <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t('posts.postIdLabel')}</p>
       <div className="mt-2 flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-xl border border-input bg-secondary px-3 py-2 font-mono text-sm text-[#0d2b45]">
+        <code className="min-w-0 flex-1 truncate rounded-xl border border-input bg-secondary px-3 py-2 font-mono text-sm text-primary">
           {postId}
         </code>
         <button
           type="button"
           onClick={() => copy(postId)}
           aria-label={t('posts.copyPostId')}
-          className="shrink-0 rounded-xl border border-input bg-white px-3 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
+          className="shrink-0 rounded-xl border border-input bg-card px-3 py-2 text-sm font-semibold text-primary hover:bg-background"
         >
           {copied ? t('posts.copied') : t('posts.copy')}
         </button>
@@ -353,7 +332,7 @@ export const ScheduleSection = ({
         <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           {t('posts.asapLabel')}
         </p>
-        <p className="mt-1 text-sm leading-6 text-[#0d2b45]">{t('posts.asapHint')}</p>
+        <p className="mt-1 text-sm leading-6 text-primary">{t('posts.asapHint')}</p>
       </section>
     );
   }
@@ -362,7 +341,7 @@ export const ScheduleSection = ({
       <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
         {publishedAt ? t('posts.publishedOnLabel') : t('posts.scheduledForLabel')}
       </p>
-      <p className="mt-1 text-sm font-semibold text-[#0d2b45]">
+      <p className="mt-1 text-sm font-semibold text-primary">
         {formatDateTime(shownAt, locale, timezone)}{' '}
         <span className="font-normal text-muted-foreground">({timezone})</span>
       </p>
@@ -398,7 +377,7 @@ export const GenerationFactsSection = ({
             <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
               {row.label}
             </p>
-            <p className="mt-1 text-sm font-semibold text-[#0d2b45]">{row.value}</p>
+            <p className="mt-1 text-sm font-semibold text-primary">{row.value}</p>
           </div>
         ))}
       </div>
@@ -495,7 +474,7 @@ const PublishLinks = ({ links }: { links: PublishLink[] }) => {
 
   return (
     <section aria-label={t('posts.publishedLinksTitle')} className="mt-6">
-      <h2 className="text-sm font-semibold text-[#0d2b45]">{t('posts.publishedLinksTitle')}</h2>
+      <h2 className="text-sm font-semibold text-primary">{t('posts.publishedLinksTitle')}</h2>
       <ul className="mt-3 flex flex-wrap gap-2">
         {links.map((link) => (
           <li key={`${link.provider}:${link.url}`}>
@@ -503,7 +482,7 @@ const PublishLinks = ({ links }: { links: PublishLink[] }) => {
               href={link.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-xl border border-input bg-white px-3 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
+              className="inline-flex items-center gap-2 rounded-xl border border-input bg-card px-3 py-2 text-sm font-semibold text-primary hover:bg-background"
             >
               {PROVIDER_LABELS[link.provider]}
               <ExternalLinkIcon />
@@ -595,14 +574,14 @@ export const SlotDetail = ({
               value={titleDraft}
               onChange={(event) => setTitleDraft(event.target.value)}
               rows={3}
-              className="w-full rounded-xl border border-input px-3 py-2 text-sm text-[#0d2b45] focus:border-[#0d2b45] focus:outline-none"
+              className="w-full rounded-xl border border-input px-3 py-2 text-sm text-primary focus:border-primary focus:outline-none"
             />
             <div className="mt-2 flex gap-2">
               <button
                 type="button"
                 onClick={handleSave}
                 disabled={updateTitle.isPending || titleDraft.trim() === ''}
-                className="rounded-xl bg-[#0d2b45] px-4 py-2 text-sm font-semibold text-white hover:bg-[#123a5e] disabled:opacity-50"
+                className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-ink hover:bg-accent-hover disabled:opacity-50"
               >
                 {t('posts.save')}
               </button>
@@ -613,14 +592,14 @@ export const SlotDetail = ({
                   setTitleDraft(slot.title ?? '');
                 }}
                 disabled={updateTitle.isPending}
-                className="rounded-xl border border-input px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
+                className="rounded-xl border border-input px-4 py-2 text-sm font-semibold text-primary hover:bg-background"
               >
                 {t('posts.cancel')}
               </button>
             </div>
           </div>
         ) : (
-          <p className="mt-2 rounded-xl border border-input bg-secondary px-3 py-2 text-sm text-[#0d2b45]">
+          <p className="mt-2 rounded-xl border border-input bg-secondary px-3 py-2 text-sm text-primary">
             {slot.title ?? t('posts.unknownCaption')}
           </p>
         )}
@@ -663,19 +642,19 @@ export const SlotDetail = ({
       <ProgressHistory history={slot.progressHistory ?? []} />
 
       {mutationError && (
-        <p className="mt-6 rounded-xl bg-[#ffe1de] p-3 text-sm text-destructive" role="alert">
+        <p className="mt-6 rounded-xl bg-destructive-soft p-3 text-sm text-destructive" role="alert">
           {mutationError}
         </p>
       )}
 
       {(canEdit || canDelete) && (
-        <div className="mt-8 flex flex-wrap items-center gap-2 border-t border-[#edf2f5] pt-6">
+        <div className="mt-8 flex flex-wrap items-center gap-2 border-t border-line pt-6">
           {canEdit && !editing && (
             <button
               type="button"
               onClick={() => setEditing(true)}
               disabled={deleteSlot.isPending}
-              className="rounded-xl border border-input px-4 py-2 text-sm font-semibold text-[#0d2b45] hover:bg-[#f4f8fb]"
+              className="rounded-xl border border-input px-4 py-2 text-sm font-semibold text-primary hover:bg-background"
             >
               {t('posts.editCaption')}
             </button>
@@ -686,7 +665,7 @@ export const SlotDetail = ({
               onClick={handleDelete}
               disabled={deleteSlot.isPending || updateTitle.isPending}
               className={`rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
-                armed ? 'bg-[#a1250f] hover:bg-[#8c1f0d]' : 'bg-destructive hover:bg-[#a1250f]'
+                armed ? 'bg-destructive hover:bg-[#8c1f0d]' : 'bg-destructive hover:bg-destructive'
               }`}
             >
               {armed ? t('posts.deleteConfirm') : t('posts.delete')}
@@ -726,11 +705,11 @@ export const ProgressHistory = ({ history }: { history: ProgressHistoryEntry[] }
               data-testid="progress-history-row"
               data-regressed={regressed ? 'true' : undefined}
               className={`flex items-baseline justify-between gap-3 rounded-xl border px-3 py-2 text-sm ${
-                regressed ? 'border-[#f0d48a] bg-[#fff8e6]' : 'border-input bg-white'
+                regressed ? 'border-[#f0d48a] bg-[#fff8e6]' : 'border-input bg-card'
               }`}
             >
               <span className="flex min-w-0 items-baseline gap-2">
-                <span className={`font-semibold ${regressed ? 'text-[#9a6b00]' : 'text-[#0d2b45]'}`}>
+                <span className={`font-semibold ${regressed ? 'text-warning' : 'text-primary'}`}>
                   {entry.progress}%
                 </span>
                 {entry.stage && (
@@ -757,8 +736,8 @@ const DetailNotFound = ({ message }: { message?: string }) => {
   const { t } = useI18n();
   return (
     <div className="mx-auto max-w-3xl py-16 text-center">
-      <p className="text-sm font-semibold text-[#0d2b45]">{message ?? t('posts.notFound')}</p>
-      <Link href="/posts" className="mt-4 inline-block rounded-xl bg-[#0d2b45] px-4 py-2 text-sm font-semibold text-white hover:bg-[#123a5e]">
+      <p className="text-sm font-semibold text-primary">{message ?? t('posts.notFound')}</p>
+      <Link href="/posts" className="mt-4 inline-block rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-ink hover:bg-accent-hover">
         {t('posts.back')}
       </Link>
     </div>
@@ -771,11 +750,11 @@ const DetailNotFound = ({ message }: { message?: string }) => {
 const DetailSkeleton = () => (
   <div className="mx-auto max-w-3xl animate-pulse" data-testid="detail-skeleton">
     <div className="flex items-center gap-3">
-      <div className="size-9 rounded-full bg-[#e8edf1]" />
-      <div className="h-6 w-48 rounded-lg bg-[#e8edf1]" />
+      <div className="size-9 rounded-full bg-sunken" />
+      <div className="h-6 w-48 rounded-lg bg-sunken" />
     </div>
-    <div className="mt-6 aspect-video w-full rounded-2xl bg-[#e8edf1]" />
-    <div className="mt-6 h-4 w-3/4 rounded bg-[#e8edf1]" />
-    <div className="mt-3 h-4 w-1/2 rounded bg-[#e8edf1]" />
+    <div className="mt-6 aspect-video w-full rounded-2xl bg-sunken" />
+    <div className="mt-6 h-4 w-3/4 rounded bg-sunken" />
+    <div className="mt-3 h-4 w-1/2 rounded bg-sunken" />
   </div>
 );

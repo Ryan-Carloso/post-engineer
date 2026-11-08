@@ -54,8 +54,8 @@ function AccountsHeader(): React.ReactElement {
         <AccountsIcon />
       </span>
       <div>
-        <h1 className="text-2xl font-bold tracking-[-0.035em] text-[#101728]">{t('accounts.title')}</h1>
-        <p className="mt-0.5 text-sm text-[#718096] lg:text-base">{t('accounts.subtitle')}</p>
+        <h1 className="text-2xl font-bold tracking-[-0.035em] text-ink">{t('accounts.title')}</h1>
+        <p className="mt-0.5 text-sm text-muted-text lg:text-base">{t('accounts.subtitle')}</p>
       </div>
     </header>
   );

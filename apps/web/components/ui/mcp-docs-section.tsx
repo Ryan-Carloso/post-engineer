@@ -101,42 +101,42 @@ export default function McpDocsSection({ apiKey }: { apiKey: string | null }): R
   const helpHref = whatsappUrl(t('apiKeys.docsHelpMessage'));
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[#dfe5ec] bg-white shadow-[0_1px_2px_rgba(16,23,40,0.02)]">
+    <section className="overflow-hidden rounded-2xl border border-line bg-card shadow-[0_1px_2px_rgba(16,23,40,0.02)]">
       <div className="p-4 lg:p-6">
-        <div className="overflow-hidden rounded-xl bg-[#101728] shadow-[0_8px_24px_rgba(16,23,40,0.25)]">
+        <div className="overflow-hidden rounded-xl bg-ink shadow-[0_8px_24px_rgba(16,23,40,0.25)]">
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
-            <span className="text-xs font-semibold text-slate-300">{t('apiKeys.installPromptTitle')}</span>
+            <span className="text-xs font-semibold text-faint">{t('apiKeys.installPromptTitle')}</span>
             <Button
               type="button"
               data-testid="copy-mcp-prompt-btn"
               onClick={() => copy(prompt)}
-              className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/20"
+              className="rounded-lg bg-card/10 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-card/20"
             >
               {copied ? t('apiKeys.docsCopied') : t('apiKeys.copy')}
             </Button>
           </div>
           <pre
             data-testid="mcp-install-prompt"
-            className="max-h-80 overflow-auto p-4 font-mono text-xs leading-5 whitespace-pre-wrap text-slate-300 select-text"
+            className="max-h-80 overflow-auto p-4 font-mono text-xs leading-5 whitespace-pre-wrap text-faint select-text"
           >
             {prompt}
           </pre>
         </div>
 
         <details data-testid="mcp-tools" className="group mt-6">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl focus-visible:ring-2 focus-visible:ring-[#ff544c] focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none [&::-webkit-details-marker]:hidden">
             <div className="flex min-w-0 items-center gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-[#edf0f4] bg-white text-[#101728] [&>svg]:size-5">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-hairline bg-card text-ink [&>svg]:size-5">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="size-5" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
                 </svg>
               </span>
               <div className="min-w-0">
-                <h3 className="text-sm font-bold text-[#101728]">{t('apiKeys.toolsTitle')}</h3>
-                <p className="text-sm text-[#718096]">{t('apiKeys.toolsSubtitle')}</p>
+                <h3 className="text-sm font-bold text-ink">{t('apiKeys.toolsTitle')}</h3>
+                <p className="text-sm text-muted-text">{t('apiKeys.toolsSubtitle')}</p>
               </div>
             </div>
-            <span aria-hidden="true" className="shrink-0 text-[#718096] transition-transform group-open:rotate-180">
+            <span aria-hidden="true" className="shrink-0 text-muted-text transition-transform group-open:rotate-180">
               ▾
             </span>
           </summary>
@@ -145,14 +145,14 @@ export default function McpDocsSection({ apiKey }: { apiKey: string | null }): R
             {MCP_TOOL_CARDS.map((tool) => (
               <div
                 key={tool.id}
-                className="flex items-start gap-2.5 rounded-xl border border-[#e8edf3] bg-slate-50/60 px-3 py-2.5"
+                className="flex items-start gap-2.5 rounded-xl border border-line bg-surface/60 px-3 py-2.5"
               >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-[#4a5a75] shadow-[0_1px_2px_rgba(16,23,40,0.08)] [&>svg]:size-4">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-card text-muted-text shadow-[0_1px_2px_rgba(16,23,40,0.08)] [&>svg]:size-4">
                   <tool.Icon />
                 </span>
                 <div className="min-w-0">
-                  <p className="truncate font-mono text-xs font-bold text-[#101728]">{tool.id}</p>
-                  <p className="mt-0.5 truncate text-xs text-[#718096]">{t(tool.descKey)}</p>
+                  <p className="truncate font-mono text-xs font-bold text-ink">{tool.id}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted-text">{t(tool.descKey)}</p>
                 </div>
               </div>
             ))}
@@ -169,7 +169,7 @@ export default function McpDocsSection({ apiKey }: { apiKey: string | null }): R
             target="_blank"
             rel="noopener noreferrer"
             data-testid="mcp-docs-help-cta"
-            className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#dfe5ec] bg-white px-4 py-2.5 text-sm font-semibold text-[#101728] transition-colors hover:bg-slate-50"
+            className="mt-4 inline-flex items-center gap-2 rounded-xl border border-line bg-card px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-surface"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="size-4" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
