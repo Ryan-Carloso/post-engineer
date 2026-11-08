@@ -130,6 +130,18 @@ describe('TokenHistory', () => {
     expect(screen.getByText('Showing 3 of 3')).toBeInTheDocument();
   });
 
+  it('colors a zero-amount movement as neutral, not as credit or debit', async () => {
+    mockFetch.mockResolvedValue(pageResponse([tx({ id: 'tx-zero', amount: 0, type: 'adjustment', description: 'No-op adjustment' })], 1, 0));
+    render(<TokenHistory />, { wrapper: Wrapper });
+
+    await waitFor(() => expect(screen.getByText('No-op adjustment')).toBeInTheDocument());
+
+    const zero = screen.getByText('0');
+    expect(zero.className).toContain('text-muted-text');
+    expect(zero.className).not.toContain('text-success');
+    expect(zero.className).not.toContain('text-destructive');
+  });
+
   it('shows an empty state when there are no transactions', async () => {
     mockFetch.mockResolvedValue(pageResponse([], 0, 0));
     render(<TokenHistory />, { wrapper: Wrapper });

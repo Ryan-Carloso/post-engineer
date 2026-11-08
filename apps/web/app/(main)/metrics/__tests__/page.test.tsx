@@ -380,4 +380,40 @@ describe('MetricsPage', () => {
     await waitFor(() => expect(curveFetch).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('metrics.reconnectTitle'));
   });
+
+  it('shows a plain (non-reconnect) error in the destructive color when the curve read fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.startsWith('/api/metrics/retention-curve')
+      ? new Response(JSON.stringify({ success: false }), { status: 500 })
+      : new Response(JSON.stringify({ success: true, rows: [row({ analyticsStatus: 'ok', contentType: 'VIDEO_ON_DEMAND' })], truncated: false })))));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'metrics.curveShow' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('metrics.curveError');
+    expect(alert.className).toContain('text-destructive');
+    expect(alert.className).not.toContain('text-warning');
+  });
+
+  it('colors the reconnect curve message as a warning', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.startsWith('/api/metrics/retention-curve')
+      ? new Response(JSON.stringify({ success: false, code: 'YOUTUBE_ANALYTICS_SCOPE_MISSING' }), { status: 403 })
+      : new Response(JSON.stringify({ success: true, rows: [row({ analyticsStatus: 'ok', contentType: 'VIDEO_ON_DEMAND' })], truncated: false })))));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'metrics.curveShow' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.className).toContain('text-warning');
+  });
+
+  it('says so when a long-form video has no retention points', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(
+      url.startsWith('/api/metrics/retention-curve')
+        ? { success: true, points: [], provisional: false }
+        : { success: true, rows: [row({ analyticsStatus: 'ok', contentType: 'VIDEO_ON_DEMAND' })], truncated: false },
+    ))));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'metrics.curveShow' }));
+
+    expect(await screen.findByText('metrics.curveEmpty')).toBeInTheDocument();
+  });
 });
