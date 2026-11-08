@@ -105,11 +105,4 @@ describe('CalendarView', () => {
     expect(props.onMonthChange).toHaveBeenLastCalledWith(2030, 5);
     expect(props.onSelect).toHaveBeenLastCalledWith('2030-06-15');
   });
-
-  it('disables navigation while loading', () => {
-    const props = setup({ disabled: true });
-    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
-    expect(props.onMonthChange).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Today' })).toBeDisabled();
-  });
 });

@@ -19,8 +19,9 @@ import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-j
 
 export default function PostsPage() {
   const { t, locale } = useI18n();
-  // "Today" is the viewer's local day (see calendar-days.ts).
-  const [todayKey] = useState(() => dayKey(new Date()));
+  // "Today" is the viewer's local day (see calendar-days.ts), computed on
+  // every render so a page left open past midnight marks the new day.
+  const todayKey = dayKey(new Date());
   const [cursor, setCursor] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };

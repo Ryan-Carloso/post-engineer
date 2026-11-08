@@ -25,7 +25,6 @@ interface CalendarViewProps {
   slotsByDay: Map<string, Pick<ScheduledSlot, 'status'>[]>;
   selectedKey: string | null;
   todayKey: string;
-  disabled?: boolean;
   onSelect: (key: string) => void;
   onMonthChange: (year: number, month: number) => void;
 }
@@ -72,7 +71,6 @@ export function CalendarView({
   slotsByDay,
   selectedKey,
   todayKey,
-  disabled = false,
   onSelect,
   onMonthChange,
 }: CalendarViewProps) {
@@ -105,7 +103,7 @@ export function CalendarView({
   );
 
   return (
-    <div className="rounded-xl border border-line bg-card p-2 sm:p-4" aria-busy={disabled}>
+    <div className="rounded-xl border border-line bg-card p-2 sm:p-4">
       <SlotsContext.Provider value={slotsByDay}>
         <Calendar
           mode="single"
@@ -118,7 +116,6 @@ export function CalendarView({
           today={dateFromKey(todayKey)}
           selected={selectedKey === null ? undefined : dateFromKey(selectedKey)}
           onSelect={(date) => onSelect(dayKey(date))}
-          disableNavigation={disabled}
           labels={labels}
           className="w-full bg-transparent p-0 [--cell-size:--spacing(10)]"
           classNames={{
@@ -149,7 +146,6 @@ export function CalendarView({
           type="button"
           variant="outline"
           size="sm"
-          disabled={disabled}
           onClick={() => {
             const now = dateFromKey(todayKey);
             onMonthChange(now.getFullYear(), now.getMonth());

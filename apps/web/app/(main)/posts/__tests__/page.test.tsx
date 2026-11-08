@@ -300,6 +300,22 @@ describe('PostsPage', () => {
     expect(youtubeRefetch).toHaveBeenCalledTimes(1);
   });
 
+  it('moves "today" past midnight without a reload', async () => {
+    // todayKey is computed on every render, not once at mount — a page left
+    // open overnight must mark the new day and jump to it.
+    const user = userEvent.setup();
+    const { rerender } = render(<PostsPage />);
+    const grid = screen.getByRole('grid');
+    expect(grid.querySelector('[data-today]')?.textContent).toBe('1');
+
+    vi.setSystemTime(new Date('2030-06-02T00:01:00.000Z'));
+    rerender(<PostsPage />);
+
+    expect(screen.getByRole('grid').querySelector('[data-today]')?.textContent).toBe('2');
+    await user.click(screen.getByRole('button', { name: 'posts.calendarToday' }));
+    expect(screen.getByRole('grid').querySelector('[data-selected="true"]')?.textContent).toBe('2');
+  });
+
   it('retry refetches the personas query as well', async () => {
     const personasRefetch = vi.fn();
     vi.mocked(usePersonaListQuery).mockReturnValue({
