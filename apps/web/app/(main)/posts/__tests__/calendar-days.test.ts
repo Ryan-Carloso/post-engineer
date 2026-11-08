@@ -7,6 +7,7 @@ import {
   dayKey,
   dayPhoto,
   gridRange,
+  sameDayInMonth,
 } from '../calendar-days';
 import { calendarGroupOf, statusGroupOf } from '../status';
 
@@ -230,5 +231,18 @@ describe('dayPhoto — the persona photo and ring a calendar day shows', () => {
       ring: 'published',
       mixed: false,
     });
+  });
+});
+
+describe('sameDayInMonth', () => {
+  it('keeps the same day-of-month in the new month', () => {
+    expect(sameDayInMonth('2030-06-15', 2030, 6)).toBe('2030-07-15');
+    expect(sameDayInMonth('2030-12-31', 2031, 0)).toBe('2031-01-31');
+  });
+
+  it('clamps to the new month last day when the day does not exist there', () => {
+    // 2030 is not a leap year: February has 28 days.
+    expect(sameDayInMonth('2030-01-31', 2030, 1)).toBe('2030-02-28');
+    expect(sameDayInMonth('2030-03-31', 2030, 3)).toBe('2030-04-30');
   });
 });

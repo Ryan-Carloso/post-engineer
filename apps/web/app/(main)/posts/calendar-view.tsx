@@ -17,11 +17,13 @@ import { CALENDAR_GROUP_ICON, CALENDAR_GROUP_KEY, CALENDAR_GROUP_ORDER, CALENDAR
 // grid semantics, keyboard navigation, focus). Each day shows the most
 // relevant post's persona photo (dayPhoto in calendar-days.ts): a green
 // ring means published, a red ring failed, a split ring a mixed day
-// (published + failed), no ring a day still to publish. Days with posts but
-// no resolvable persona show a neutral count instead of a photo. Today is a
-// thick border, never a fill, so it still reads as today when another day
-// is selected. Day buckets use the viewer's browser timezone
-// (calendar-days.ts). Data and the selected day's posts live in the page.
+// (published + failed), no ring a day still to publish. A day with more
+// than one post carries a count badge on the photo, so it never looks like
+// a single-post day. Days with posts but no resolvable persona show a
+// neutral count instead of a photo. Today is a thick border, never a fill,
+// so it still reads as today when another day is selected. Day buckets use
+// the viewer's browser timezone (calendar-days.ts). Data and the selected
+// day's posts live in the page.
 
 interface CalendarViewProps {
   year: number;
@@ -34,6 +36,12 @@ interface CalendarViewProps {
   todayKey: string;
   onSelect: (key: string) => void;
   onMonthChange: (year: number, month: number) => void;
+  // Explicit month-button navigation (prev/next): the page moves the
+  // selected day into the new month, so the month and the detail below it
+  // never diverge. onMonthChange alone cannot do this — react-day-picker
+  // also fires it when arrow-key focus crosses a month edge, where moving
+  // the selection would fight the keyboard.
+  onMonthNavigate: (year: number, month: number) => void;
 }
 
 const DAY_PICKER_LOCALE: Record<Locale, typeof enUS> = { pt: ptBR, en: enUS };
@@ -83,10 +91,13 @@ function PostsDayButton({ children, ...props }: ComponentProps<typeof DayButton>
   const slots = slotsByDay.get(dayKey(props.day.date)) ?? [];
   const photo = photoByDay.get(dayKey(props.day.date)) ?? null;
   // Today is a thick border, never a fill: it must still read as today when
-  // another day is selected, and when today itself is selected the border
-  // switches to the card color so it stays visible against the selected
-  // fill (a primary border on a primary fill would disappear). A border,
-  // not a box-shadow ring — see DayPhotoBadge for why.
+  // another day is selected. When today itself is selected the border
+  // cannot be the card color — the border sits on the card behind the
+  // button, so a card-colored frame vanishes against it — nor the primary
+  // color, which matches the selected fill. The ring token contrasts with
+  // both the selected fill and the card in both themes, so today stays
+  // readable while selected. A border, not a box-shadow ring — see
+  // DayPhotoBadge for why.
   const isToday = props.modifiers.today;
   const isSelected = props.modifiers.selected;
   return (
@@ -94,7 +105,7 @@ function PostsDayButton({ children, ...props }: ComponentProps<typeof DayButton>
       {...props}
       className={cn(
         'aspect-auto h-auto min-h-12 justify-start gap-1 py-1.5 sm:min-h-16 [&>span]:opacity-100',
-        isToday && (isSelected ? 'border-2 border-card' : 'border-2 border-primary'),
+        isToday && (isSelected ? 'border-2 border-ring' : 'border-2 border-primary'),
       )}
     >
       <span className="text-sm font-semibold tabular-nums">{children}</span>
@@ -102,13 +113,28 @@ function PostsDayButton({ children, ...props }: ComponentProps<typeof DayButton>
         (photo === null ? (
           <span
             data-photo="none"
+            data-count={slots.length}
             aria-hidden
             className="inline-flex size-8 items-center justify-center rounded-full bg-sunken text-xs font-bold text-muted-text"
           >
             {slots.length}
           </span>
         ) : (
-          <DayPhotoBadge photo={photo} />
+          // A multi-post day shows its count on the photo: one photo alone
+          // reads as one post. The accessible name already carries the
+          // per-group counts, so the badge is aria-hidden.
+          <span className="relative inline-flex">
+            <DayPhotoBadge photo={photo} />
+            {slots.length > 1 && (
+              <span
+                data-count={slots.length}
+                aria-hidden
+                className="absolute -right-1.5 -bottom-1.5 flex size-5 items-center justify-center rounded-full border border-line bg-card text-[10px] font-bold text-primary"
+              >
+                {slots.length}
+              </span>
+            )}
+          </span>
         ))}
     </CalendarDayButton>
   );
@@ -125,6 +151,7 @@ export function CalendarView({
   todayKey,
   onSelect,
   onMonthChange,
+  onMonthNavigate,
 }: CalendarViewProps) {
   const { t, locale } = useI18n();
   const dateFormat = useMemo(() => new Intl.DateTimeFormat(INTL_TAG[locale], { dateStyle: 'full' }), [locale]);
@@ -174,6 +201,8 @@ export function CalendarView({
           fixedWeeks
           month={new Date(year, month, 1)}
           onMonthChange={(date) => onMonthChange(date.getFullYear(), date.getMonth())}
+          onNextClick={(date) => onMonthNavigate(date.getFullYear(), date.getMonth())}
+          onPrevClick={(date) => onMonthNavigate(date.getFullYear(), date.getMonth())}
           today={dateFromKey(todayKey)}
           selected={selectedKey === null ? undefined : dateFromKey(selectedKey)}
           onSelect={(date) => onSelect(dayKey(date))}

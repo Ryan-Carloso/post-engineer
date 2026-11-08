@@ -256,11 +256,15 @@ describe('PostsPage', () => {
     expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
   });
 
-  it('shows a loading spinner while the calendar range is loading', () => {
+  it('shows a loading skeleton while the calendar range is loading', () => {
     vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() } as never);
 
     render(<PostsPage />);
-    expect(screen.getByTestId('icon-spinner')).toBeInTheDocument();
+    // A skeleton keeps the calendar layout in place; no lone spinner on
+    // an empty page.
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(screen.getByText('posts.loadingPosts')).toBeInTheDocument();
+    expect(screen.queryByTestId('icon-spinner')).not.toBeInTheDocument();
   });
 
   it('shows the error state when the personas query fails', () => {
@@ -274,7 +278,8 @@ describe('PostsPage', () => {
     } as never);
 
     render(<PostsPage />);
-    expect(screen.getByText('posts.loadError')).toBeInTheDocument();
+    // The error names the supporting data, not the calendar posts.
+    expect(screen.getByText('posts.loadErrorSupporting')).toBeInTheDocument();
   });
 
   it('shows the error state when an account query fails', () => {
@@ -288,7 +293,7 @@ describe('PostsPage', () => {
     } as never);
 
     render(<PostsPage />);
-    expect(screen.getByText('posts.loadError')).toBeInTheDocument();
+    expect(screen.getByText('posts.loadErrorSupporting')).toBeInTheDocument();
   });
 
   it('retry refetches the account queries as well', async () => {
@@ -304,7 +309,7 @@ describe('PostsPage', () => {
 
     // Without this, a failed account fetch could never clear without a
     // full page reload.
-    const errorPanel = screen.getByText('posts.loadError').closest('div');
+    const errorPanel = screen.getByText('posts.loadErrorSupporting').closest('div');
     if (!errorPanel) throw new Error('error panel not rendered');
     await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));
     expect(youtubeRefetch).toHaveBeenCalledTimes(1);
@@ -339,7 +344,7 @@ describe('PostsPage', () => {
 
     // Without this, a failed personas fetch could never clear without a
     // full page reload.
-    const errorPanel = screen.getByText('posts.loadError').closest('div');
+    const errorPanel = screen.getByText('posts.loadErrorSupporting').closest('div');
     if (!errorPanel) throw new Error('error panel not rendered');
     await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));
     expect(personasRefetch).toHaveBeenCalledTimes(1);
@@ -623,6 +628,79 @@ describe('PostsPage calendar view', () => {
     vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch: vi.fn() } as never);
     render(<PostsPage />);
 
-    expect(screen.getByText('posts.loadError')).toBeInTheDocument();
+    // The error names the calendar posts, not the supporting data.
+    expect(screen.getByText('posts.loadErrorCalendar')).toBeInTheDocument();
+  });
+
+  it('clicking an outside day selects it and moves the shown month to it', async () => {
+    mockQueries({ range: rangeSlots });
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    // The June grid's last week shows July 1-6 as outside days; picking
+    // one must not leave the calendar on June with a July detail below.
+    // Outside days without posts carry the empty-day label, so match by
+    // the cell, not by the label.
+    const july1 = within(screen.getByRole('grid'))
+      .getAllByRole('button')
+      .find((button) => button.textContent === '1' && button.closest('[data-outside]') !== null);
+    expect(july1).toBeDefined();
+    await user.click(july1 as HTMLElement);
+
+    expect(screen.getByText(/July 2030/)).toBeInTheDocument();
+    expect(vi.mocked(useScheduleRangeQuery).mock.calls.at(-1)?.[0]).toBe('2030-07');
+  });
+
+  it('month navigation moves the selection into the new month', async () => {
+    mockQueries({ range: rangeSlots });
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    // Today (June 15) is selected on open; next month must select July 15,
+    // not keep the detail on a June day below a July calendar.
+    await user.click(screen.getByRole('button', { name: 'posts.calendarNextMonth' }));
+    expect(screen.getByText(/July 2030/)).toBeInTheDocument();
+    const selected = screen.getByRole('grid').querySelector('[data-selected="true"]');
+    expect(selected?.textContent).toBe('15');
+    expect(vi.mocked(useScheduleRangeQuery).mock.calls.at(-1)?.[0]).toBe('2030-07');
+  });
+
+  it('shows the categorized failure reason on a failed card, never the raw engine text', async () => {
+    const restartSlot = {
+      ...FAILED_SLOT,
+      id: 'c4',
+      slotAt: '2030-06-07T14:00:00.000Z',
+      title: 'Calendar restart failure',
+      error: 'The engine restarted while generating your video.',
+      retryable: true,
+    };
+    mockQueries({ range: [restartSlot] });
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    const day7 = within(screen.getByRole('grid'))
+      .getAllByRole('button', { name: 'posts.calendarDayLabel' })
+      .find((button) => button.textContent?.startsWith('7'));
+    await user.click(day7 as HTMLElement);
+
+    expect(screen.getByText('Calendar restart failure')).toBeInTheDocument();
+    expect(screen.getByText('posts.errorEngineRestart')).toBeInTheDocument();
+    expect(screen.queryByText('The engine restarted while generating your video.')).not.toBeInTheDocument();
+  });
+
+  it('marks a card without video with the no-video placeholder, not a bare grey square', async () => {
+    mockQueries({ range: rangeSlots });
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    // June 7 holds the failed slot: no video, so its thumbnail is the
+    // placeholder.
+    const day7 = within(screen.getByRole('grid'))
+      .getAllByRole('button', { name: 'posts.calendarDayLabel' })
+      .find((button) => button.textContent?.startsWith('7'));
+    await user.click(day7 as HTMLElement);
+
+    const card = screen.getByText('Calendar failed').closest('a');
+    expect(card?.querySelector('[data-thumb="empty"]')).not.toBeNull();
   });
 });

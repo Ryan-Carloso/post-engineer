@@ -7,6 +7,10 @@ export const promptsStrings = {
   pt: {
     nav: {
       prompts: 'API Key e MCP',
+      // Short label for the mobile bottom tab: the full label wraps to two
+      // lines in a ~70px tab. The sidebar and the "More" sheet keep the
+      // full label.
+      promptsShort: 'API Key',
       promptsHint: 'API key, setup e prompts para o seu agente',
       history: 'Histórico',
       historyHint: 'Posts passados e gerações',
@@ -17,6 +21,7 @@ export const promptsStrings = {
   en: {
     nav: {
       prompts: 'API Key & MCP',
+      promptsShort: 'API Key',
       promptsHint: 'API key, setup, and prompts for your agent',
       history: 'History',
       historyHint: 'Past posts and generations',

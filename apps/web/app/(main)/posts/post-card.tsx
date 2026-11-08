@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Play } from 'lucide-react';
+import { Play, VideoOff } from 'lucide-react';
 import type { ScheduledSlot, ScheduleConfig, VideoGeneration } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +10,7 @@ import { ProviderIcon } from '@/components/provider-icon';
 import { useI18n } from '@/lib/i18n/provider';
 import type { Locale, TranslationKey } from '@/lib/i18n';
 import { scheduleAccountIds, type AccountOption } from '@/lib/account-options';
-import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
+import { categorizeGenerationError, GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 import { cn } from '@/lib/utils';
 import { GROUP_ICON, STATUS_KEY, STATUS_STYLE, statusGroupOf } from './status';
 
@@ -54,13 +54,26 @@ function videoUrlFor(taskId: string | null | undefined): string | null {
 }
 
 // 72×72 video thumbnail. The #t=0.1 fragment makes Chrome paint a frame;
-// preload="metadata" alone renders an empty box.
+// preload="metadata" alone renders an empty box. Without a video the
+// thumbnail is an explicit no-video placeholder — a bare grey square reads
+// as a broken image.
 const PostThumb = ({ src }: { src: string | null }) => {
+  const { t } = useI18n();
   const thumbSrc = src ? `${src}#t=0.1` : null;
   return (
     <div className="relative w-18 shrink-0">
       <AspectRatio ratio={1} className="w-18 rounded-[9px] bg-sunken">
-        {thumbSrc ? <video src={thumbSrc} preload="metadata" muted playsInline className="size-full object-cover" /> : null}
+        {thumbSrc ? (
+          <video src={thumbSrc} preload="metadata" muted playsInline className="size-full object-cover" />
+        ) : (
+          <span
+            data-thumb="empty"
+            className="flex size-full items-center justify-center rounded-[9px] border border-dashed border-line"
+          >
+            <VideoOff className="size-5 text-muted-text" aria-hidden />
+            <span className="sr-only">{t('posts.noVideo')}</span>
+          </span>
+        )}
       </AspectRatio>
       {thumbSrc && (
         <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -118,6 +131,14 @@ export const PostCard = ({
   // Progress is live data on the list card too: a freshly created post lands
   // here at 0% and the minute poll fills in the engine's number.
   const showProgress = statusGroupOf(slot.status) === 'inProgress';
+  // The failure reason is the categorized, translated message for the
+  // slot's engine error — never the raw engine text. An unrecognized error
+  // keeps the generic retryable/permanent copy.
+  const failureCode = slot.status === 'failed' ? categorizeGenerationError(slot.error) : 'unknown';
+  const failureMessage =
+    failureCode === 'unknown'
+      ? t(slot.retryable === true ? 'posts.cardFailedRetryable' : 'posts.cardFailedPermanent')
+      : t(GENERATION_ERROR_KEY[failureCode]);
   return (
     <Link href={`/posts/${slot.id}`} className="block h-full">
       <Card className={`flex h-full flex-col gap-0 rounded-xl p-4 transition-colors ${CARD_BORDER}`}>
@@ -150,13 +171,7 @@ export const PostCard = ({
             <span className="shrink-0 text-[11px] font-semibold text-primary tabular-nums">{slot.progress}%</span>
           </div>
         )}
-        {slot.status === 'failed' && (
-          // The raw slot.error is engine/upstream text and is never rendered
-          // here; the detail page owns the full failure view.
-          <p className="mt-3 line-clamp-2 text-xs text-destructive">
-            {t(slot.retryable === true ? 'posts.cardFailedRetryable' : 'posts.cardFailedPermanent')}
-          </p>
-        )}
+        {slot.status === 'failed' && <p className="mt-3 text-xs text-destructive">{failureMessage}</p>}
         {accounts.length > 0 && (
           <div className="mt-auto pt-4">
             <AccountChips accounts={accounts} />
@@ -193,7 +208,9 @@ export const GenerationCard = ({ generation, locale }: { generation: VideoGenera
               <span className="text-muted-foreground">{generation.videoSubject ?? t('posts.unknownTitle')}</span>
             </p>
             {generation.status === 'failed' && (
-              <p className="mt-2 line-clamp-2 text-xs text-destructive">
+              // The full message, never clamped: a cut-off failure reason
+              // hides exactly the part that says what went wrong.
+              <p className="mt-2 text-xs text-destructive">
                 {t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')}
               </p>
             )}

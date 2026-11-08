@@ -167,6 +167,68 @@ describe('PostHistoryPage', () => {
     expect(screen.getByText('posts.noHistory')).toBeInTheDocument();
   });
 
+  it('titles the past posts section', () => {
+    render(<PostHistoryPage />);
+
+    expect(screen.getByText('posts.historyPostsTitle')).toBeInTheDocument();
+    expect(screen.getByText('posts.generationsTitle')).toBeInTheDocument();
+  });
+
+  it('shows a loading skeleton while the history is loading', () => {
+    vi.mocked(useScheduleStatusQuery).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isFetching: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as never);
+    render(<PostHistoryPage />);
+
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(screen.getByText('posts.loadingPosts')).toBeInTheDocument();
+  });
+
+  it('names the generations when the generations query fails', () => {
+    vi.mocked(useVideoGenerationsQuery).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: vi.fn(),
+    } as never);
+    render(<PostHistoryPage />);
+
+    expect(screen.getByText('posts.loadErrorGenerations')).toBeInTheDocument();
+  });
+
+  it('shows the categorized failure reason on a failed card, never the raw engine text', () => {
+    mockQueries({
+      recent: [{ ...FAILED_SLOT, error: 'The engine restarted while generating your video.', retryable: true }],
+    });
+    render(<PostHistoryPage />);
+
+    expect(screen.getByText('posts.errorEngineRestart')).toBeInTheDocument();
+    expect(screen.queryByText('The engine restarted while generating your video.')).not.toBeInTheDocument();
+  });
+
+  it('shows the full failure message on generation cards, never cut off', () => {
+    mockQueries({ generations: [FAILED_GENERATION] });
+    render(<PostHistoryPage />);
+
+    const message = screen.getByText('posts.errorCustomAudio');
+    expect(message.className.split(/\s+/)).not.toContain('line-clamp-2');
+    // The slot card's failure line is unclamped too.
+    const slotMessage = screen.getByText('posts.cardFailedPermanent');
+    expect(slotMessage.className.split(/\s+/)).not.toContain('line-clamp-2');
+  });
+
+  it('marks a card without video with the no-video placeholder', () => {
+    render(<PostHistoryPage />);
+
+    // The failed slot has no video: its thumbnail is the placeholder.
+    const card = screen.getByText('Failed topic').closest('a');
+    expect(card?.querySelector('[data-thumb="empty"]')).not.toBeNull();
+  });
+
   it('shows the error state with a retry button', () => {
     const refetch = vi.fn();
     vi.mocked(useScheduleStatusQuery).mockReturnValue({
@@ -178,7 +240,7 @@ describe('PostHistoryPage', () => {
     } as never);
     render(<PostHistoryPage />);
 
-    expect(screen.getByText('posts.loadError')).toBeInTheDocument();
+    expect(screen.getByText('posts.loadErrorHistory')).toBeInTheDocument();
   });
 
   it('drops slots whose schedule was deleted', () => {
@@ -211,7 +273,7 @@ describe('PostHistoryPage', () => {
 
     // A failed schedules query must be retryable too — refetching only the
     // status query would leave the error state stuck.
-    const errorPanel = screen.getByText('posts.loadError').closest('div');
+    const errorPanel = screen.getByText('posts.loadErrorHistory').closest('div');
     if (!errorPanel) throw new Error('error panel not rendered');
     await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));
     expect(statusRefetch).toHaveBeenCalledTimes(1);
@@ -323,7 +385,7 @@ describe('PostHistoryPage', () => {
 
     // The generations query feeds the history list — dropping its
     // refetch would leave a failed generations fetch stuck forever.
-    const errorPanel = screen.getByText('posts.loadError').closest('div');
+    const errorPanel = screen.getByText('posts.loadErrorHistory').closest('div');
     if (!errorPanel) throw new Error('error panel not rendered');
     await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));
     expect(generationsRefetch).toHaveBeenCalledTimes(1);

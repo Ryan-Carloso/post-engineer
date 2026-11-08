@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom/vitest';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ScheduledSlot } from '@/lib/api';
 const EN: Record<string, string> = {
   'posts.calendarPrevMonth': 'Previous month',
@@ -60,6 +62,7 @@ function setup(overrides: Partial<React.ComponentProps<typeof CalendarView>> = {
     todayKey: '2030-06-15',
     onSelect: vi.fn(),
     onMonthChange: vi.fn(),
+    onMonthNavigate: vi.fn(),
     ...overrides,
   };
   render(<CalendarView {...(props as React.ComponentProps<typeof CalendarView>)} />);
@@ -104,14 +107,20 @@ describe('CalendarView', () => {
     // The selected day (not today) carries no today border.
     expect(dayButton(/June 20, 2030/).className).not.toContain('border-primary');
     expect(dayButton(/June 20, 2030/).className).not.toContain('border-card');
+    expect(dayButton(/June 20, 2030/).className.split(/\s+/)).not.toContain('border-ring');
   });
 
-  it('keeps today readable when today itself is selected: the border switches to the card color against the selected fill', () => {
+  it('keeps today readable when today itself is selected: the border switches to the ring color against the selected fill', () => {
     setup({ selectedKey: '2030-06-15' });
     const today = dayButton(/June 15, 2030/);
     expect(today.className).toContain('border-2');
-    expect(today.className).toContain('border-card');
-    expect(today.className).not.toContain('border-primary');
+    // A card-colored border sits on the card behind the button, so the
+    // frame vanishes against it; a primary border would vanish against
+    // the selected fill. The ring token contrasts with both the selected
+    // fill and the card, in both themes.
+    expect(today.className.split(/\s+/)).toContain('border-ring');
+    expect(today.className.split(/\s+/)).not.toContain('border-primary');
+    expect(today.className.split(/\s+/)).not.toContain('border-card');
   });
 
   it('describes per-group counts in the accessible name: published, failed, scheduled — never in progress', () => {
@@ -178,6 +187,41 @@ describe('CalendarView', () => {
     expect(cell.querySelector('[data-ring]')).toBeNull();
   });
 
+  it('shows how many posts a day holds on the photo: a multi-post day never looks like a single post', () => {
+    const slotsByDay = new Map<string, DaySlot[]>([
+      [
+        '2030-06-05',
+        [
+          { status: 'published', scheduleId: 's2', slotAt: '2030-06-05T10:00:00.000Z' },
+          { status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' },
+          { status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T14:00:00.000Z' },
+        ],
+      ],
+      ['2030-06-06', [{ status: 'published', scheduleId: 's2', slotAt: '2030-06-06T10:00:00.000Z' }]],
+    ]);
+    setup({ slotsByDay });
+    const busy = dayButton(/June 5, 2030/);
+    expect(busy.querySelector('[data-count="3"]')).toHaveTextContent('3');
+    // One post, one photo, no badge.
+    expect(dayButton(/June 6, 2030/).querySelector('[data-count]')).toBeNull();
+  });
+
+  it('counts a multi-post day with no resolvable persona on the neutral placeholder', () => {
+    const slotsByDay = new Map<string, DaySlot[]>([
+      [
+        '2030-06-09',
+        [
+          { status: 'awaiting', scheduleId: 's-gone', slotAt: '2030-06-09T10:00:00.000Z' },
+          { status: 'awaiting', scheduleId: 's-gone', slotAt: '2030-06-09T12:00:00.000Z' },
+        ],
+      ],
+    ]);
+    setup({ slotsByDay });
+    const cell = dayButton(/June 9, 2030/);
+    expect(cell.querySelector('[data-photo="none"]')).toHaveAttribute('data-count', '2');
+    expect(cell.querySelector('[data-photo="none"]')).toHaveTextContent('2');
+  });
+
   it('names empty days explicitly and draws no photo or placeholder', () => {
     setup();
     const cell = dayButton(/June 9, 2030/);
@@ -204,8 +248,10 @@ describe('CalendarView', () => {
     const props = setup();
     fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
     expect(props.onMonthChange).toHaveBeenLastCalledWith(2030, 6);
+    expect(props.onMonthNavigate).toHaveBeenLastCalledWith(2030, 6);
     fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
     expect(props.onMonthChange).toHaveBeenLastCalledWith(2030, 4);
+    expect(props.onMonthNavigate).toHaveBeenLastCalledWith(2030, 4);
   });
 
   it('jumps to today and selects it', () => {
@@ -213,5 +259,61 @@ describe('CalendarView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Today' }));
     expect(props.onMonthChange).toHaveBeenLastCalledWith(2030, 5);
     expect(props.onSelect).toHaveBeenLastCalledWith('2030-06-15');
+  });
+
+  it('moves keyboard focus with the arrow keys and selects with Enter', async () => {
+    const props = setup({ selectedKey: '2030-06-20' });
+    const user = userEvent.setup();
+    // Focus lands on the selected day first; arrows move it, Enter selects.
+    await user.click(dayButton(/June 20, 2030/));
+    expect(props.onSelect).toHaveBeenLastCalledWith('2030-06-20');
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(dayButton(/June 21, 2030/));
+    await user.keyboard('{Enter}');
+    expect(props.onSelect).toHaveBeenLastCalledWith('2030-06-21');
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(dayButton(/June 28, 2030/));
+  });
+
+  it('arrowing past the month edge changes the shown month without moving the selection', async () => {
+    // A static controlled month would pin the grid to June, so RDP snaps
+    // focus back to the selected day: the harness must move the month like
+    // the real page does, or the test measures the harness, not the app.
+    const onSelect = vi.fn();
+    const onMonthChange = vi.fn();
+    const onMonthNavigate = vi.fn();
+    function StatefulCalendar() {
+      const [cursor, setCursor] = useState({ year: 2030, month: 5 });
+      return (
+        <CalendarView
+          year={cursor.year}
+          month={cursor.month}
+          firstWeekday={0}
+          slotsByDay={new Map()}
+          scheduleById={SCHEDULES}
+          personaPhotoById={PHOTOS}
+          selectedKey="2030-06-20"
+          todayKey="2030-06-15"
+          onSelect={onSelect}
+          onMonthChange={(year, month) => {
+            onMonthChange(year, month);
+            setCursor({ year, month });
+          }}
+          onMonthNavigate={onMonthNavigate}
+        />
+      );
+    }
+    render(<StatefulCalendar />);
+    const user = userEvent.setup();
+    await user.click(dayButton(/June 1, 2030/));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    // June 1 is the first in-month day of the grid's first week: one step
+    // left focuses May 31 and shows May, but selects nothing.
+    await user.keyboard('{ArrowLeft}');
+    expect(document.activeElement).toBe(dayButton(/May 31, 2030/));
+    expect(screen.getByText(/May 2030/)).toBeInTheDocument();
+    expect(onMonthChange).toHaveBeenLastCalledWith(2030, 4);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onMonthNavigate).not.toHaveBeenCalled();
   });
 });

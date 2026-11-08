@@ -45,6 +45,16 @@ export function dateFromKey(key: string): Date {
   return new Date(year, month - 1, day);
 }
 
+// The same day-of-month in another month, clamped to that month's last
+// day (Jan 31 -> Feb 28). Month navigation keeps the selected day in the
+// month being shown instead of leaving the detail below on a day from the
+// month just left.
+export function sameDayInMonth(selectedKey: string, year: number, month: number): string {
+  const day = dateFromKey(selectedKey).getDate();
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  return `${year}-${pad(month + 1)}-${pad(Math.min(day, lastDay))}`;
+}
+
 export function addDays(date: Date, days: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
