@@ -44,14 +44,19 @@ function arg(name) {
 //---------------
 // isTestishPath — the same exclusions the changed-files steps apply
 // (single source now: the parser drops them so the diff and the file
-// list can never disagree).
+// list can never disagree). Generated `*.gen.ts` files are dropped like
+// `.d.ts`: they are pinned by drift tests against their generator, and a
+// type-only one has no mutants and no related tests, so a PR whose only
+// web change is a regenerated contract made Stryker exit "No tests were
+// executed".
 //---------------
 export function isTestishPath(repoPath) {
   return (
     repoPath.includes('/__tests__/') ||
     repoPath.includes('/cypress/') ||
     /\.(test|cy)\.tsx?$/.test(repoPath) ||
-    repoPath.endsWith('.d.ts')
+    repoPath.endsWith('.d.ts') ||
+    /\.gen\.tsx?$/.test(repoPath)
   );
 }
 
