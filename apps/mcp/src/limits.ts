@@ -95,3 +95,15 @@ export const METRICS_WINDOWS = ['24h', '7d', '28d'] as const;
  */
 export const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{1,64}$/;
 export const METRICS_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads'] as const;
+
+/**
+ * Paired A/B experiment limits (issue #476), mirrored from
+ * `apps/web/lib/experiments/limits.ts` (pinned by
+ * `experiments-limits-sync.test.ts`).
+ */
+export const EXPERIMENT_TARGET_PAIRS_MIN = 3;
+export const EXPERIMENT_TARGET_PAIRS_MAX = 20;
+export const EXPERIMENT_NAME_MAX_LENGTH = 120;
+export const EXPERIMENT_VARIANT_NAME_MAX_LENGTH = 80;
+export const EXPERIMENT_VARIANT_DESCRIPTION_MAX_LENGTH = 500;
+export const EXPERIMENT_VARIANT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;

@@ -96,12 +96,13 @@ describe('experiments limits match the database checks', () => {
 });
 
 describe('experiments ownership and links', () => {
-  it('an experiment owns exactly one schedule and dies with it', () => {
+  it('an experiment records its persona and owns no schedule (migration 042)', () => {
+    // generate-and-schedule creates one schedule per video, so an
+    // experiment spans many schedules; it pins the persona instead.
     const constraints = table('experiments').constraints;
-    expect(constraints['experiments_schedule_id_key']).toBe('UNIQUE (schedule_id)');
-    expect(constraints['experiments_schedule_id_fkey']).toBe(
-      'FOREIGN KEY (schedule_id) REFERENCES schedules(id) ON DELETE CASCADE',
-    );
+    expect(column('experiments', 'schedule_id')).toBeUndefined();
+    expect(Object.keys(constraints).filter((name) => name.includes('schedule'))).toEqual([]);
+    expect(column('experiments', 'persona_id')).toMatchObject({ type: 'uuid', notNull: false });
     expect(table('experiment_variants').constraints['experiment_variants_experiment_id_fkey']).toBe(
       'FOREIGN KEY (experiment_id) REFERENCES experiments(id) ON DELETE CASCADE',
     );
