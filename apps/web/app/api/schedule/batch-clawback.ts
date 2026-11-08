@@ -6,7 +6,7 @@
 // That credit uses up the schedule's refund cap. Without this step, a user
 // could create 6, cancel the 5 paid ones and keep the free one.
 //
-// settle_batch_clawback (migration 045) does the money in one transaction:
+// settle_batch_clawback (migration 046) does the money in one transaction:
 // it refunds the cancelled slots in full, then pulls the discount back out
 // of the free slot's discount refund row and moves that amount onto
 // charged_tokens. The net is the old withhold, and the cap has room again

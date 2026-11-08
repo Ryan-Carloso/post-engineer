@@ -150,7 +150,7 @@ class ScheduleStore:
 
     def generating_slots(self) -> list[dict[str, Any]]:
         # The reconciler refunds under `batch:{scheduleId}` using the slot's
-        # own schedule_id and stored charged_tokens (migration 044), so it
+        # own schedule_id and stored charged_tokens (migration 045), so it
         # needs no schedules embed: a refund never depends on a joinable
         # persona or snapshot.
         rows = self._request(

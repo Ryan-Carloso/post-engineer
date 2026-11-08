@@ -20,7 +20,7 @@ import { CANCEL_REFUND_REASON, refundsAfterClawback } from './batch-clawback';
 // dispatches those slots immediately, and the publisher posts from the slot
 // row, so deleting only the schedule would leave a post that still goes out.
 // Prepaid tokens for the removed slots are refunded: each slot gives back
-// its stored `charged_tokens` (migration 044), never a recomputed price, and
+// its stored `charged_tokens` (migration 045), never a recomputed price, and
 // a slot charged 0 has nothing to refund. A cancelled video of a batch
 // gives back the batch discount it no longer earns (batch-clawback.ts):
 // the cancelled slots are refunded in full and the same amount is pulled

@@ -42,6 +42,24 @@ export function toFiniteNumber(value: unknown, fallback = 0): number {
 }
 
 //---------------
+// netLedgerSpent — net tokens still spent for one generation_id, from the
+// ledger rows under it. A refund inserts a generation_refund credit row and
+// never deletes the video_generation spend row (see refund_batch_tokens in
+// migration 017, which mirrors refund_generation_tokens), so a generation
+// counts as already spent only while its spends exceed its refunds. Spend
+// rows carry a negative amount, refunds a positive one. Rows of any other
+// type are ignored; a non-numeric amount counts as 0.
+//---------------
+export function netLedgerSpent(rows: Array<{ type: unknown; amount: unknown }>): number {
+  let net = 0;
+  for (const row of rows) {
+    if (row.type === 'video_generation') net += Math.abs(toFiniteNumber(row.amount, 0));
+    if (row.type === 'generation_refund') net -= toFiniteNumber(row.amount, 0);
+  }
+  return net;
+}
+
+//---------------
 // computeTokenPercentage — % of tokens remaining, always 0–100, never NaN.
 // maxTokens <= 0 (e.g. free plan with 0 tokens/month) → 0 instead of 0/0 = NaN.
 //---------------
@@ -57,7 +75,7 @@ export function computeTokenPercentage(balance: unknown, maxTokens: unknown): nu
 // asked for no face, otherwise the persona's face quality, or the full
 // lip-sync price when the post asked for full lip-sync. This is the only
 // copy of the formula: generate-and-schedule charges with it and stores the
-// result on the slot (scheduled_posts.charged_tokens, migration 044), and
+// result on the slot (scheduled_posts.charged_tokens, migration 045), and
 // every refund, engine included, reads that stored amount.
 // A full lip-sync request is never faceless (the route rejects the
 // combination before charging), so faceless still wins here and the full

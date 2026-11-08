@@ -14,19 +14,19 @@ export type AgentId = 'claude' | 'openai' | 'opencode' | 'cursor';
 const AGENTS: Record<AgentId, { Icon: () => React.JSX.Element; tile: string }> = {
   claude: {
     Icon: () => <SiClaudecode className="size-[62%]" />,
-    tile: 'border-[#e7e2dc] bg-[#f7f5f2] text-[#D97757]',
+    tile: 'border-line bg-[#f7f5f2] text-[#D97757]',
   },
   openai: {
     Icon: () => <PiOpenAiLogo className="size-[62%]" />,
-    tile: 'border-[#e7e2dc] bg-[#f7f5f2] text-[#D97757]',
+    tile: 'border-line bg-[#f7f5f2] text-[#D97757]',
   },
   opencode: {
     Icon: () => <SiOpencode className="size-[62%]" />,
-    tile: 'border-[#dfe5ec] bg-white text-[#101728]',
+    tile: 'border-line bg-card text-ink',
   },
   cursor: {
     Icon: () => <SiCursor className="size-[62%]" />,
-    tile: 'border-[#dfe5ec] bg-white text-[#101728]',
+    tile: 'border-line bg-card text-ink',
   },
 };
 

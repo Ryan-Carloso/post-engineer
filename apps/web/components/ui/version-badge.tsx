@@ -35,7 +35,7 @@ export default function VersionBadge() {
   return (
     <span
       data-testid="version-badge"
-      className="ml-1 inline-block rounded-full bg-[#ff544c]/10 px-2 py-0.5 align-middle text-[11px] font-bold tracking-normal text-[#ff544c]"
+      className="ml-1 inline-block rounded-full bg-brand/10 px-2 py-0.5 align-middle text-[11px] font-bold tracking-normal text-brand"
     >
       {label}
     </span>

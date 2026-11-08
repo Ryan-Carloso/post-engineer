@@ -59,11 +59,11 @@ const GROUP_LABEL_KEYS: Record<GroupKey, TranslationKey> = {
   angle: 'metrics.groupAngle',
 };
 
-const CARD_CLASS = 'rounded-2xl border border-[#edf0f4] bg-white shadow-[0_8px_24px_rgba(20,32,51,0.04)]';
+const CARD_CLASS = 'rounded-2xl border border-hairline bg-card shadow-[0_8px_24px_rgba(20,32,51,0.04)]';
 // appearance-none + inline chevron: the native arrow renders differently on
 // every browser and squeezes the label.
 const SELECT_CLASS =
-  "w-full appearance-none rounded-xl border border-[#e3e8ee] bg-white bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23718096'%3E%3Cpath d='M5.5 7.5 10 12l4.5-4.5'/%3E%3C/svg%3E\")] bg-[length:16px] bg-[right_10px_center] bg-no-repeat py-2.5 pr-9 pl-3 text-sm font-medium text-[#101728] transition-colors hover:border-[#c9d2dc] focus:border-[#101728] focus:ring-2 focus:ring-[#101728]/10 focus:outline-none";
+  "w-full appearance-none rounded-xl border border-line bg-card bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23718096'%3E%3Cpath d='M5.5 7.5 10 12l4.5-4.5'/%3E%3C/svg%3E\")] bg-[length:16px] bg-[right_10px_center] bg-no-repeat py-2.5 pr-9 pl-3 text-sm font-medium text-ink transition-colors hover:border-line focus:border-ink focus:ring-2 focus:ring-ink/10 focus:outline-none";
 const ALL = 'all';
 const EMPTY_QUERY: Omit<MetricsQuery, 'window'> = { personaId: null, accountId: null, provider: null, angle: null };
 
@@ -134,8 +134,8 @@ export default function MetricsPage(): React.ReactElement {
           <ChartIcon />
         </span>
         <div>
-          <h1 className="text-2xl font-bold tracking-[-0.035em] text-[#101728]">{t('metrics.title')}</h1>
-          <p className="mt-0.5 text-sm text-[#718096] lg:text-base">{t('metrics.subtitle')}</p>
+          <h1 className="text-2xl font-bold tracking-[-0.035em] text-ink">{t('metrics.title')}</h1>
+          <p className="mt-0.5 text-sm text-muted-text lg:text-base">{t('metrics.subtitle')}</p>
         </div>
       </header>
 
@@ -150,7 +150,7 @@ export default function MetricsPage(): React.ReactElement {
             <button
               type="button"
               onClick={() => update(EMPTY_QUERY)}
-              className="text-sm font-semibold text-[#718096] underline-offset-4 hover:text-[#101728] hover:underline"
+              className="text-sm font-semibold text-muted-text underline-offset-4 hover:text-ink hover:underline"
             >
               {t('metrics.clearFilters')}
             </button>
@@ -185,12 +185,12 @@ export default function MetricsPage(): React.ReactElement {
       </section>
 
       {needsReconnect && (
-        <section role="status" className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <section role="status" className="flex flex-col gap-3 rounded-2xl border border-warning/30 bg-warning-soft p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold text-amber-900">{t('metrics.reconnectTitle')}</p>
-            <p className="mt-0.5 text-xs text-amber-800">{t('metrics.reconnectBody')}</p>
+            <p className="text-sm font-semibold text-warning">{t('metrics.reconnectTitle')}</p>
+            <p className="mt-0.5 text-xs text-warning">{t('metrics.reconnectBody')}</p>
           </div>
-          <Link href="/accounts" className="shrink-0 rounded-xl bg-white px-4 py-2 text-center text-sm font-semibold text-amber-900 shadow-sm hover:bg-amber-100">
+          <Link href="/accounts" className="shrink-0 rounded-xl bg-card px-4 py-2 text-center text-sm font-semibold text-warning shadow-sm hover:bg-warning-soft">
             {t('metrics.reconnectAction')}
           </Link>
         </section>
@@ -213,7 +213,7 @@ export default function MetricsPage(): React.ReactElement {
 
       <section className={cn(CARD_CLASS, 'p-4 lg:p-6')}>
         <div className="mb-5 flex flex-col gap-4">
-          <h2 className="text-lg font-semibold tracking-[-0.02em] text-[#101728]">
+          <h2 className="text-lg font-semibold tracking-[-0.02em] text-ink">
             {t('metrics.chartTitle', { metric: metricLabel.toLowerCase(), group: groupLabel.toLowerCase() })}
           </h2>
           <div className="flex min-w-0 flex-wrap items-end gap-3">
@@ -231,11 +231,11 @@ export default function MetricsPage(): React.ReactElement {
           </div>
         </div>
         {metricsQuery.isLoading ? (
-          <div className="flex items-center justify-center py-20 text-[#718096]"><SpinnerIcon /></div>
+          <div className="flex items-center justify-center py-20 text-muted-text"><SpinnerIcon /></div>
         ) : failed ? (
           <StatePanel tone="error" message={t('metrics.loadError')}
             action={<button type="button" onClick={() => void metricsQuery.refetch()} disabled={metricsQuery.isFetching}
-              className="rounded-xl border border-[#e3e8ee] bg-white px-4 py-2 text-sm font-semibold text-[#101728] hover:bg-[#f7f8fa] disabled:opacity-50">
+              className="rounded-xl border border-line bg-card px-4 py-2 text-sm font-semibold text-ink hover:bg-surface disabled:opacity-50">
               {t('metrics.retry')}
             </button>} />
         ) : rows.length === 0 ? (
@@ -244,14 +244,14 @@ export default function MetricsPage(): React.ReactElement {
           <MetricsBarChart data={chartData} metricLabel={metricLabel} formatValue={formatSelected} />
         )}
         {result !== undefined && result.success && result.truncated && (
-          <p className="mt-3 text-xs text-[#718096]">{t('metrics.truncated', { limit: METRICS_ROW_LIMIT })}</p>
+          <p className="mt-3 text-xs text-muted-text">{t('metrics.truncated', { limit: METRICS_ROW_LIMIT })}</p>
         )}
       </section>
 
       {rows.length > 0 && (
         <section className={cn(CARD_CLASS, 'p-4 lg:p-6')}>
-          <h2 className="mb-2 text-lg font-semibold tracking-[-0.02em] text-[#101728]">{t('metrics.tableTitle')}</h2>
-          <ul className="divide-y divide-[#edf0f4]">
+          <h2 className="mb-2 text-lg font-semibold tracking-[-0.02em] text-ink">{t('metrics.tableTitle')}</h2>
+          <ul className="divide-y divide-hairline">
             {rows.map((row) => (
               <MetricsRow
                 key={`${row.postId}:${row.provider}:${row.externalId}`}
@@ -278,7 +278,7 @@ interface SegmentedProps<T extends string> {
 
 function Segmented<T extends string>({ options, value, onChange }: SegmentedProps<T>): React.ReactElement {
   return (
-    <div className="inline-flex max-w-full overflow-x-auto rounded-xl bg-[#eef1f4] p-1">
+    <div className="inline-flex max-w-full overflow-x-auto rounded-xl bg-sunken p-1">
       {options.map((option) => (
         <button
           key={option.value}
@@ -287,7 +287,7 @@ function Segmented<T extends string>({ options, value, onChange }: SegmentedProp
           aria-pressed={value === option.value}
           className={cn(
             'shrink-0 rounded-lg px-4 py-2 text-sm font-semibold whitespace-nowrap transition-colors',
-            value === option.value ? 'bg-white text-[#101728] shadow-sm' : 'text-[#718096] hover:text-[#101728]',
+            value === option.value ? 'bg-card text-ink shadow-sm' : 'text-muted-text hover:text-ink',
           )}
         >
           {option.label}
@@ -306,7 +306,7 @@ interface FilterSelectProps {
 
 function FilterSelect({ label, value, onChange, children }: FilterSelectProps): React.ReactElement {
   return (
-    <label className="flex min-w-0 flex-col gap-1.5 text-xs font-semibold text-[#718096]">
+    <label className="flex min-w-0 flex-col gap-1.5 text-xs font-semibold text-muted-text">
       {label}
       <select value={value} onChange={(event) => onChange(event.target.value)} className={SELECT_CLASS}>
         {children}
@@ -318,9 +318,9 @@ function FilterSelect({ label, value, onChange, children }: FilterSelectProps): 
 function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }): React.ReactElement {
   return (
     <div className={cn(CARD_CLASS, 'p-4')}>
-      <p className="text-xs font-semibold text-[#718096]">{label}</p>
-      <p className="mt-1 truncate text-2xl font-bold tracking-[-0.03em] text-[#101728]">{value}</p>
-      {hint !== undefined && <p className="text-xs tabular-nums text-[#718096]">{hint}</p>}
+      <p className="text-xs font-semibold text-muted-text">{label}</p>
+      <p className="mt-1 truncate text-2xl font-bold tracking-[-0.03em] text-ink">{value}</p>
+      {hint !== undefined && <p className="text-xs tabular-nums text-muted-text">{hint}</p>}
     </div>
   );
 }
@@ -335,15 +335,15 @@ function StatePanel({ tone, message, action }: StatePanelProps): React.ReactElem
   return (
     <div
       role={tone === 'error' ? 'alert' : undefined}
-      className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-[#e3e8ee] bg-[#fafbfc] px-6 py-14 text-center"
+      className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-line bg-surface px-6 py-14 text-center"
     >
       <span className={cn(
         'flex size-11 items-center justify-center rounded-full [&>svg]:size-5',
-        tone === 'error' ? 'bg-red-50 text-red-600' : 'bg-white text-[#718096] shadow-sm',
+        tone === 'error' ? 'bg-destructive-soft text-destructive' : 'bg-card text-muted-text shadow-sm',
       )}>
         {tone === 'error' ? <AlertIcon /> : <ChartIcon />}
       </span>
-      <p className="max-w-md text-sm text-[#4a5568]">{message}</p>
+      <p className="max-w-md text-sm text-ink-soft">{message}</p>
       {action}
     </div>
   );

@@ -69,16 +69,16 @@ interface TypeBadgeStyle {
 }
 
 const TYPE_BADGE_STYLES: Record<string, TypeBadgeStyle> = {
-  purchase: { className: 'border-blue-200 bg-blue-50 text-blue-700', labelKey: 'pricing.historyTypePurchase' },
-  video_generation: { className: 'border-red-200 bg-red-50 text-red-700', labelKey: 'pricing.historyTypeVideoGeneration' },
-  generation_refund: { className: 'border-emerald-200 bg-emerald-50 text-emerald-700', labelKey: 'pricing.historyTypeRefund' },
-  refund: { className: 'border-emerald-200 bg-emerald-50 text-emerald-700', labelKey: 'pricing.historyTypeRefund' },
-  plan_grant: { className: 'border-violet-200 bg-violet-50 text-violet-700', labelKey: 'pricing.historyTypePlanGrant' },
-  manual_adjustment: { className: 'border-neutral-200 bg-neutral-100 text-neutral-700', labelKey: 'pricing.historyTypeAdjustment' },
+  purchase: { className: 'border-info/30 bg-info-soft text-info', labelKey: 'pricing.historyTypePurchase' },
+  video_generation: { className: 'border-destructive/30 bg-destructive-soft text-destructive', labelKey: 'pricing.historyTypeVideoGeneration' },
+  generation_refund: { className: 'border-success/30 bg-success-soft text-success', labelKey: 'pricing.historyTypeRefund' },
+  refund: { className: 'border-success/30 bg-success-soft text-success', labelKey: 'pricing.historyTypeRefund' },
+  plan_grant: { className: 'border-line bg-sunken text-ink-soft', labelKey: 'pricing.historyTypePlanGrant' },
+  manual_adjustment: { className: 'border-line bg-sunken text-ink-soft', labelKey: 'pricing.historyTypeAdjustment' },
 };
 
 const UNKNOWN_TYPE_STYLE: TypeBadgeStyle = {
-  className: 'border-neutral-200 bg-neutral-50 text-neutral-600',
+  className: 'border-line bg-surface text-muted-text',
   labelKey: 'pricing.historyTypeUnknown',
 };
 
@@ -87,9 +87,9 @@ function formatAmount(amount: number): string {
 }
 
 function amountClassName(amount: number): string {
-  if (amount > 0) return 'text-emerald-600';
-  if (amount < 0) return 'text-red-600';
-  return 'text-neutral-500';
+  if (amount > 0) return 'text-success';
+  if (amount < 0) return 'text-destructive';
+  return 'text-muted-text';
 }
 
 //---------------
@@ -100,16 +100,16 @@ const TransactionRow = ({ tx }: { tx: TokenTransaction }) => {
   const { t } = useI18n();
   const style = TYPE_BADGE_STYLES[tx.type] ?? UNKNOWN_TYPE_STYLE;
   return (
-    <li className="flex items-center justify-between gap-4 rounded-2xl border border-[#e4e9ef] bg-white px-4 py-3">
+    <li className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-card px-4 py-3">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${style.className}`}>
             {t(style.labelKey)}
           </span>
-          <span className="text-xs text-[#718096]">{new Date(tx.createdAt).toLocaleString()}</span>
+          <span className="text-xs text-muted-text">{new Date(tx.createdAt).toLocaleString()}</span>
         </div>
         {tx.description !== null && tx.description !== '' && (
-          <p className="mt-1 truncate text-sm font-medium text-[#101728]">{tx.description}</p>
+          <p className="mt-1 truncate text-sm font-medium text-ink">{tx.description}</p>
         )}
       </div>
       <span className={`shrink-0 text-base font-bold ${amountClassName(tx.amount)}`}>{formatAmount(tx.amount)}</span>
@@ -146,28 +146,28 @@ export const TokenHistory = () => {
   return (
     <section aria-label={t('pricing.historyHeading')} className="pt-12 lg:pt-14">
       <div>
-        <h2 className="text-2xl font-extrabold tracking-[-0.04em] text-[#101728] sm:text-3xl">
+        <h2 className="text-2xl font-extrabold tracking-[-0.04em] text-ink sm:text-3xl">
           {t('pricing.historyHeading')}
         </h2>
-        <p className="mt-2 text-sm text-[#657184] sm:text-base">{t('pricing.historyDescription')}</p>
+        <p className="mt-2 text-sm text-muted-text sm:text-base">{t('pricing.historyDescription')}</p>
       </div>
 
       {historyQuery.isPending && (
         <div className="mt-6 space-y-3" role="status">
-          <p className="text-sm text-[#657184]">{t('pricing.historyLoading')}</p>
-          <div className="h-16 animate-pulse rounded-2xl bg-neutral-200" />
-          <div className="h-16 animate-pulse rounded-2xl bg-neutral-200" />
-          <div className="h-16 animate-pulse rounded-2xl bg-neutral-200" />
+          <p className="text-sm text-muted-text">{t('pricing.historyLoading')}</p>
+          <div className="h-16 animate-pulse rounded-2xl bg-sunken" />
+          <div className="h-16 animate-pulse rounded-2xl bg-sunken" />
+          <div className="h-16 animate-pulse rounded-2xl bg-sunken" />
         </div>
       )}
 
       {historyQuery.isError && (
-        <div role="alert" className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
-          <p className="text-sm text-red-700">{t('pricing.historyError')}</p>
+        <div role="alert" className="mt-6 rounded-2xl border border-destructive/30 bg-destructive-soft px-5 py-4">
+          <p className="text-sm text-destructive">{t('pricing.historyError')}</p>
           <button
             type="button"
             onClick={() => void historyQuery.refetch()}
-            className="mt-3 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+            className="mt-3 rounded-xl bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground hover:bg-destructive-hover"
           >
             {t('pricing.historyRetry')}
           </button>
@@ -175,7 +175,7 @@ export const TokenHistory = () => {
       )}
 
       {!historyQuery.isPending && !historyQuery.isError && transactions.length === 0 && (
-        <p className="mt-6 rounded-2xl border border-dashed border-[#dfe3e7] bg-white px-5 py-8 text-center text-sm text-[#657184]">
+        <p className="mt-6 rounded-2xl border border-dashed border-line bg-card px-5 py-8 text-center text-sm text-muted-text">
           {t('pricing.historyEmpty')}
         </p>
       )}
@@ -187,7 +187,7 @@ export const TokenHistory = () => {
               <TransactionRow key={tx.id} tx={tx} />
             ))}
           </ul>
-          <p className="mt-4 text-center text-xs text-[#718096]">
+          <p className="mt-4 text-center text-xs text-muted-text">
             {t('pricing.historyShowing', { shown: transactions.length, total })}
           </p>
           {historyQuery.hasNextPage && (
@@ -196,7 +196,7 @@ export const TokenHistory = () => {
                 type="button"
                 onClick={() => void historyQuery.fetchNextPage()}
                 disabled={historyQuery.isFetchingNextPage}
-                className="rounded-xl border border-[#e2e7ed] bg-white px-6 py-2.5 text-sm font-semibold text-[#293243] shadow-sm hover:bg-neutral-50 disabled:opacity-60"
+                className="rounded-xl border border-line bg-card px-6 py-2.5 text-sm font-semibold text-ink-soft shadow-sm hover:bg-surface disabled:opacity-60"
               >
                 {historyQuery.isFetchingNextPage ? t('pricing.historyLoadingMore') : t('pricing.historyLoadMore')}
               </button>

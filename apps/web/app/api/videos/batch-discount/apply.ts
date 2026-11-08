@@ -98,7 +98,7 @@ interface RefundPayload {
  * True when the discount tokens are on the ledger for this slot.
  * `refunded` is a fresh credit. `already_refunded` is the same key, which
  * also matches a clawed-back row whose amount was shrunk to 0: that case
- * tops the row back up (migration 046) and only counts once the row holds
+ * tops the row back up (migration 047) and only counts once the row holds
  * the full charge again. Anything else is not a credit.
  */
 async function creditHeld(

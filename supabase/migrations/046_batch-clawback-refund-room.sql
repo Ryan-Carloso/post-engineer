@@ -1,5 +1,5 @@
 -- ============================================================================
--- Migration 045 — batch clawback restores refund room
+-- Migration 046 — batch clawback restores refund room
 -- ----------------------------------------------------------------------------
 -- Applied automatically: the deploy workflow runs `supabase db push` (pending
 -- only) on every merge to main. Never apply by hand in the dashboard.
@@ -13,6 +13,10 @@
 -- A later refund of the re-charged video (generation failure, or cancelling
 -- that video itself) answers nothing_to_refund, and the user loses the
 -- tokens the clawback just treated as paid.
+--
+-- The cap refund_batch_tokens enforces is migration 044: the sum of every
+-- spend row under the generation id. Shrinking this discount row lowers
+-- that sum, which is what reopens the room.
 --
 -- settle_batch_clawback does the money movement in one transaction:
 --   1. Lock the balance row.

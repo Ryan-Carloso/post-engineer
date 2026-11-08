@@ -151,6 +151,18 @@ describe('usePersonaStore', () => {
     expect(formData.get('faceQuality')).toBe('very_good');
   });
 
+  it('buildPersonaEditFormData sends the stored faceQuality on edit', () => {
+    const s = usePersonaStore.getState();
+    s.setName('Zé Persona');
+    s.setFaceQuality('ok');
+    s.setAvatarUrl('data:image/png;base64,IA');
+    s.setVoiceId('calm');
+
+    const formData = usePersonaStore.getState().buildPersonaEditFormData();
+    expect(formData.get('faceQuality')).toBe('ok');
+    expect(formData.get('name')).toBe('Zé Persona');
+  });
+
   it('resetForm volta à qualidade ok', () => {
     const s = usePersonaStore.getState();
     s.setFaceQuality('very_good');

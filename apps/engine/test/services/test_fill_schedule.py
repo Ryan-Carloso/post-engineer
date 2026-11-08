@@ -2019,7 +2019,7 @@ class CoverageGapTests(unittest.TestCase):
         self.assertFalse(fs.slot_faceless({"faceless": 1}))
         self.assertFalse(fs.slot_faceless({"faceless": "true"}))
 
-    # -- slot_refund_amount reads the stored charge (migration 044) ----------
+    # -- slot_refund_amount reads the stored charge (migration 045) ----------
     def test_slot_refund_amount_returns_the_stored_charge(self):
         self.assertEqual(fs.slot_refund_amount({"id": "s", "charged_tokens": 15}), 15)
         self.assertEqual(fs.slot_refund_amount({"id": "s", "charged_tokens": 1}), 1)

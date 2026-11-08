@@ -130,6 +130,24 @@ describe('PostEngineerClient', () => {
     expect(formData.get('videoLayout')).toBe('react');
   });
 
+  it('updatePersona sends faceQuality when provided and omits it otherwise', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await client.updatePersona({ personaId: 'p-1', faceQuality: 'ok' });
+    const sent = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(sent.get('faceQuality')).toBe('ok');
+
+    await client.updatePersona({ personaId: 'p-1', name: 'Renamed' });
+    const omitted = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
+    // An update must never rewrite an untouched field with a default the
+    // caller did not choose — that would silently revert a saved quality.
+    expect(omitted.has('faceQuality')).toBe(false);
+  });
+
   it.each([undefined, null, ''])(
     'createPersona rejects %p avatarUrl with no avatarPath before any fetch',
     async (avatarUrl) => {

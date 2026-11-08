@@ -13,7 +13,7 @@ from app.services.fill_schedule.store import ScheduleStore
 def slot_refund_amount(slot: dict[str, Any]) -> int | None:
     """Tokens to give back for a failed or cancelled slot, or None.
 
-    The web writes ``scheduled_posts.charged_tokens`` (migration 044) at slot
+    The web writes ``scheduled_posts.charged_tokens`` (migration 045) at slot
     creation: what this slot was actually charged. Every refund reads it and
     never recomputes a list price, so a discounted or free slot is refunded
     exactly what it cost, and a slot with an unresolvable persona is still

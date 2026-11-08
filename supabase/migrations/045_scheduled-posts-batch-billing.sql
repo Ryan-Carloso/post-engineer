@@ -1,5 +1,5 @@
 -- ============================================================================
--- 044 — scheduled_posts.charged_tokens: what each slot was charged.
+-- 045 — scheduled_posts.charged_tokens: what each slot was charged.
 --
 -- Every refund path (engine generate/reconcile/publish, web schedule cancel)
 -- used to recompute a slot's price from its faceless/full-lip-sync flags and

@@ -5,7 +5,7 @@ import { findRepoRoot } from '@/test/repo-root';
 import { planBatchClawback, type BatchSlot } from '../batch-discount';
 
 //---------------
-// Migration 045 — settle_batch_clawback must reopen the migration 018 cap.
+// Migration 046 — settle_batch_clawback must reopen the migration 044 cap.
 //
 // The discount credit refunds the free video's whole schedule charge, so
 // refunded_total equals charge_amount and a later refund of that schedule
@@ -17,19 +17,19 @@ import { planBatchClawback, type BatchSlot } from '../batch-discount';
 // discount generation_refund by the same amount and pulls those tokens
 // off the balance. The net matches the old withhold, and the cap has
 // room for the re-charged amount. These tests pin that SQL and walk the
-// 018 formula (first video_generation row, sum of generation_refund
+// 044 formula (sum of every video_generation row, sum of generation_refund
 // amounts) with and without the shrink. They do not talk to Postgres.
 //---------------
 
 const repoRoot = findRepoRoot(import.meta.url);
-const migrationPath = join(repoRoot, 'supabase', 'migrations', '045_batch-clawback-refund-room.sql');
-const restorePath = join(repoRoot, 'supabase', 'migrations', '046_restore-batch-discount-credit.sql');
+const migrationPath = join(repoRoot, 'supabase', 'migrations', '046_batch-clawback-refund-room.sql');
+const restorePath = join(repoRoot, 'supabase', 'migrations', '047_restore-batch-discount-credit.sql');
 
 function readSql(): string {
   return readFileSync(migrationPath, 'utf8');
 }
 
-describe('supabase/migrations/045_batch-clawback-refund-room.sql', () => {
+describe('supabase/migrations/046_batch-clawback-refund-room.sql', () => {
   it('exists and declares the settlement function', () => {
     expect(existsSync(migrationPath)).toBe(true);
     const sql = readSql();
@@ -72,8 +72,8 @@ describe('supabase/migrations/045_batch-clawback-refund-room.sql', () => {
   });
 });
 
-describe('supabase/migrations/046_restore-batch-discount-credit.sql', () => {
-  it('tops up the same discount row inside the charge cap', () => {
+describe('supabase/migrations/047_restore-batch-discount-credit.sql', () => {
+  it('tops up the same discount row inside the total-charge cap', () => {
     expect(existsSync(restorePath)).toBe(true);
     const sql = readFileSync(restorePath, 'utf8');
     const lock = sql.indexOf('for update');
@@ -84,16 +84,21 @@ describe('supabase/migrations/046_restore-batch-discount-credit.sql', () => {
     expect(topUp).toBeGreaterThan(lock);
     expect(sql).toContain('if row_amount >= p_amount then');
     expect(sql).toContain('if refunded_total + need > charge_amount then');
+    expect(sql).toContain('sum(abs(amount))');
+    expect(sql).toContain('sum(coalesce(free_amount, 0))');
     expect(sql).toContain("type = 'video_generation'");
+    expect(sql).not.toContain('order by created_at asc');
+    expect(sql).not.toContain('limit 1');
     expect(sql).not.toMatch(/insert into public\.token_transactions/);
   });
 });
 
 //---------------
-// In-memory copy of refund_batch_tokens (migration 018) plus the shrink
+// In-memory copy of refund_batch_tokens (migration 044) plus the shrink
 // settle_batch_clawback applies to the discount row. Numbers are the
-// review's 6-video batch: each face video costs 2, the cheapest is credited
-// in full, then one paid sibling is cancelled.
+// 6-video batch: each face video costs 2, the cheapest is credited
+// in full, then one paid sibling is cancelled. The cap is the sum of every
+// spend row under the generation id, not only the oldest one.
 //---------------
 
 const PRICE = 2;
@@ -138,7 +143,7 @@ function spend(ledger: Ledger, scheduleId: string, amount: number): void {
   });
 }
 
-/** Migration 018, including the cap on the sum of generation_refund amounts. */
+/** Migration 044: cap refunds at the sum of every spend under the generation id. */
 function refundBatchTokens(
   ledger: Ledger,
   generationId: string,
@@ -150,12 +155,12 @@ function refundBatchTokens(
   );
   if (existing) return { refunded: false, already_refunded: true };
 
-  const charges = ledger.rows
-    .filter((row) => row.type === 'video_generation' && row.generationId === generationId)
-    .sort((a, b) => a.createdAt - b.createdAt);
-  const charge = charges[0];
-  if (!charge) return { refunded: false, missing_charge: true };
-  const chargeAmount = Math.abs(charge.amount);
+  const charges = ledger.rows.filter(
+    (row) => row.type === 'video_generation' && row.generationId === generationId,
+  );
+  if (charges.length === 0) return { refunded: false, missing_charge: true };
+  const chargeAmount = charges.reduce((sum, row) => sum + Math.abs(row.amount), 0);
+  const chargeFree = charges.reduce((sum, row) => sum + row.freeAmount, 0);
 
   const refunds = ledger.rows.filter(
     (row) => row.type === 'generation_refund' && row.generationId === generationId,
@@ -165,7 +170,7 @@ function refundBatchTokens(
   const credit = Math.min(amount, chargeAmount - refundedTotal);
 
   const freeRestored = refunds.reduce((sum, row) => sum + row.freeAmount, 0);
-  const freePart = Math.min(credit, Math.max(charge.freeAmount - freeRestored, 0));
+  const freePart = Math.min(credit, Math.max(chargeFree - freeRestored, 0));
   const paidPart = credit - freePart;
   ledger.paid += paidPart;
   ledger.free += freePart;
@@ -215,8 +220,8 @@ function balance(ledger: Ledger): number {
 }
 
 /**
- * Migration 046: put `amount` back on the discount row when a clawback
- * shrunk it, and return the same tokens, without exceeding the 018 cap.
+ * Migration 047: put `amount` back on the discount row when a clawback
+ * shrunk it, and return the same tokens, without exceeding the 044 cap.
  * A row that already holds `amount` is not increased.
  */
 function restoreDiscountCredit(
@@ -230,19 +235,21 @@ function restoreDiscountCredit(
   );
   if (!row) return { held: false };
   if (row.amount >= amount) return { held: true };
-  const charge = ledger.rows
-    .filter((candidate) => candidate.type === 'video_generation' && candidate.generationId === generationId)
-    .sort((a, b) => a.createdAt - b.createdAt)[0];
-  if (!charge) return { held: false };
+  const charges = ledger.rows.filter(
+    (candidate) => candidate.type === 'video_generation' && candidate.generationId === generationId,
+  );
+  const chargeAmount = charges.reduce((sum, candidate) => sum + Math.abs(candidate.amount), 0);
+  const chargeFree = charges.reduce((sum, candidate) => sum + candidate.freeAmount, 0);
+  if (chargeAmount === 0) return { held: false };
   const refundedTotal = ledger.rows
     .filter((candidate) => candidate.type === 'generation_refund' && candidate.generationId === generationId)
     .reduce((sum, candidate) => sum + candidate.amount, 0);
   const need = amount - row.amount;
-  if (refundedTotal + need > Math.abs(charge.amount)) return { held: false };
+  if (refundedTotal + need > chargeAmount) return { held: false };
   const freeRestored = ledger.rows
     .filter((candidate) => candidate.type === 'generation_refund' && candidate.generationId === generationId)
     .reduce((sum, candidate) => sum + candidate.freeAmount, 0);
-  const freePart = Math.min(need, Math.max(charge.freeAmount - freeRestored, 0));
+  const freePart = Math.min(need, Math.max(chargeFree - freeRestored, 0));
   ledger.paid += need - freePart;
   ledger.free += freePart;
   row.amount += need;
@@ -250,7 +257,7 @@ function restoreDiscountCredit(
   return { held: true };
 }
 
-describe('the 018 cap after a clawback of the free video', () => {
+describe('the 044 cap after a clawback of the free video', () => {
   it('pays nothing back for the re-charged video when the discount row stays whole', () => {
     const { ledger, discountKey } = sixVideoLedger();
     expect(balance(ledger)).toBe(90);
@@ -327,6 +334,21 @@ describe('the 018 cap after a clawback of the free video', () => {
     expect(restoreDiscountCredit(ledger, chargeId('F'), discountKey, PRICE)).toEqual({ held: true });
     expect(ledger.rows.find((row) => row.referenceId === discountKey)?.amount).toBe(PRICE);
     // Six videos, one free: 100 - 10.
+    expect(balance(ledger)).toBe(90);
+    expect(restoreDiscountCredit(ledger, chargeId('F'), discountKey, PRICE)).toEqual({ held: true });
+    expect(balance(ledger)).toBe(90);
+  });
+
+  it('restores the discount after the same generation is charged again', () => {
+    const { ledger, discountKey } = sixVideoLedger();
+    shrinkDiscountRefund(ledger, discountKey, PRICE);
+    const failure = refundBatchTokens(ledger, chargeId('F'), `${chargeId('F')}:slot:F`, PRICE);
+    expect(failure).toEqual({ refunded: true, amount: PRICE });
+    // The failed attempt is created again under the same generation id.
+    spend(ledger, 'F', PRICE);
+    expect(balance(ledger)).toBe(88);
+    expect(restoreDiscountCredit(ledger, chargeId('F'), discountKey, PRICE)).toEqual({ held: true });
+    expect(ledger.rows.find((row) => row.referenceId === discountKey)?.amount).toBe(PRICE);
     expect(balance(ledger)).toBe(90);
     expect(restoreDiscountCredit(ledger, chargeId('F'), discountKey, PRICE)).toEqual({ held: true });
     expect(balance(ledger)).toBe(90);

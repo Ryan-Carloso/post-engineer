@@ -74,6 +74,13 @@ describe('BillingPage', () => {
     checkoutParam.value = null;
   });
 
+  it('falls back to a zero balance when the wallet response carries none', async () => {
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true }) });
+    render(<BillingPage />, { wrapper: Wrapper });
+    const balance = await screen.findByText('0 tokens');
+    expect(balance.className).toContain('text-ink');
+  });
+
   it('shows the authoritative wallet balance and token packs', async () => {
     mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, balance: 42 }) });
     render(<BillingPage />, { wrapper: Wrapper });

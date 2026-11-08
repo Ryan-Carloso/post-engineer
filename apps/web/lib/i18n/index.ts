@@ -12,6 +12,7 @@ import { voiceFallbackStrings } from './voice-fallback-i18n';
 import { facelessMaterialStrings } from './faceless-material-i18n';
 import { pricingContactStrings } from './pricing-contact-i18n';
 import { fullLipsyncPriceStrings } from './full-lipsync-price-i18n';
+import { themeStrings } from './theme-i18n';
 import type { Locale } from './types';
 
 //---------------
@@ -37,6 +38,7 @@ export const ptDictionary = {
   posts: { ...basePtDictionary.posts, ...facelessMaterialStrings.pt.posts },
   personas: { ...basePtDictionary.personas, ...facelessMaterialStrings.pt.personas },
   landing: { ...basePtDictionary.landing, ...pricingContactStrings.pt.landing },
+  theme: themeStrings.pt.theme,
 };
 
 export const enDictionary = {
@@ -51,6 +53,7 @@ export const enDictionary = {
   posts: { ...baseEnDictionary.posts, ...facelessMaterialStrings.en.posts },
   personas: { ...baseEnDictionary.personas, ...facelessMaterialStrings.en.personas },
   landing: { ...baseEnDictionary.landing, ...pricingContactStrings.en.landing },
+  theme: themeStrings.en.theme,
 };
 
 type PublishingAccountsKeys = typeof publishingAccountsStrings.en;
@@ -61,6 +64,7 @@ type VoiceFallbackKeys = typeof voiceFallbackStrings.en;
 type FacelessMaterialKeys = typeof facelessMaterialStrings.en;
 type PricingContactKeys = typeof pricingContactStrings.en;
 type FullLipsyncPriceKeys = typeof fullLipsyncPriceStrings.en;
+type ThemeKeys = typeof themeStrings.en;
 export type Dictionary = BaseDictionary & {
   [Section in keyof ThreadsKeys]: {
     [Key in keyof ThreadsKeys[Section]]: string;
@@ -92,6 +96,10 @@ export type Dictionary = BaseDictionary & {
 } & {
   [Section in keyof FullLipsyncPriceKeys]: {
     [Key in keyof FullLipsyncPriceKeys[Section]]: string;
+  };
+} & {
+  [Section in keyof ThemeKeys]: {
+    [Key in keyof ThemeKeys[Section]]: string;
   };
 };
 

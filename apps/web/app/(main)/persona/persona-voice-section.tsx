@@ -74,11 +74,11 @@ export const PersonaVoiceSection = ({
     <section data-error-field="voice">
       <SectionDivider label={t('persona.voiceLabel')} />
       {unavailable ? (
-        <p role="status" className="mb-3 rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800" data-testid="persona-voice-fallback-warning">
+        <p role="status" className="mb-3 rounded-xl bg-warning-soft px-4 py-3 text-sm font-semibold text-warning" data-testid="persona-voice-fallback-warning">
           {t('persona.voiceUnavailableWarning')}
         </p>
       ) : showFallback && fallback !== null ? (
-        <p role="status" className="mb-3 rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800" data-testid="persona-voice-fallback-warning">
+        <p role="status" className="mb-3 rounded-xl bg-warning-soft px-4 py-3 text-sm font-semibold text-warning" data-testid="persona-voice-fallback-warning">
           {fallback.fromVoice.length === 0
             ? t(fallbackKey, { toVoice: fallback.toVoice })
             : t(fallbackKey, { fromVoice: fallback.fromVoice, toVoice: fallback.toVoice })}
@@ -87,7 +87,7 @@ export const PersonaVoiceSection = ({
       <div
         role="tablist"
         aria-label={t('persona.voiceLabel')}
-        className="inline-flex gap-1 rounded-lg bg-neutral-100 p-1"
+        className="inline-flex gap-1 rounded-lg bg-sunken p-1"
       >
         <VoiceTabButton
           active={voiceTab === 'house'}

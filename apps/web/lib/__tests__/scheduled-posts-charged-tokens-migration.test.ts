@@ -5,12 +5,12 @@ import { findRepoRoot } from '@/test/repo-root';
 import { FACELESS_PRICE, FACE_QUALITY_PRICES, FULL_LIPSYNC_PRICES } from '@/lib/tokens';
 
 //---------------
-// scheduled_posts.charged_tokens (migration 044) — what each slot was
+// scheduled_posts.charged_tokens (migration 045) — what each slot was
 // charged. The migration backfills existing rows with the list price, so its
 // SQL repeats the price literals: this test pins each one to lib/tokens.ts.
 //---------------
 const root = findRepoRoot(import.meta.url);
-const migration = readFileSync(join(root, 'supabase/migrations/044_scheduled-posts-batch-billing.sql'), 'utf8');
+const migration = readFileSync(join(root, 'supabase/migrations/045_scheduled-posts-batch-billing.sql'), 'utf8');
 
 describe('scheduled_posts.charged_tokens migration', () => {
   it('adds a NOT NULL, non-negative integer column', () => {

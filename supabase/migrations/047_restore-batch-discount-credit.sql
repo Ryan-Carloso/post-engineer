@@ -1,12 +1,12 @@
 -- ============================================================================
--- Migration 046 — restore a clawed-back batch discount credit
+-- Migration 047 — restore a clawed-back batch discount credit
 -- ----------------------------------------------------------------------------
 -- Applied automatically: the deploy workflow runs `supabase db push` (pending
 -- only) on every merge to main. Never apply by hand in the dashboard.
 -- Safe to re-run (idempotent): CREATE OR REPLACE, no DDL on tables.
 --
 -- WHY: the discount credit is one generation_refund row under a permanent
--- key (batch:<scheduleId>:slot:<slotId>:discount). Migration 045 shrinks
+-- key (batch:<scheduleId>:slot:<slotId>:discount). Migration 046 shrinks
 -- that row to amount 0 and re-charges the slot, and keeps the row so a
 -- retry cannot insert a second credit. refund_batch_tokens then answers
 -- already_refunded for that key even though the amount is 0. Treating that
@@ -15,9 +15,10 @@
 --
 -- When the batch earns the free video again, restore_batch_discount_credit
 -- tops that same row back up to the slot charge and returns the tokens,
--- inside the migration 018 cap. A row that already holds the full amount
--- is left untouched, so the crash-retry of a credit that did land does not
--- pay twice. A top-up the cap cannot cover in full changes nothing.
+-- inside the migration 044 cap (total charges, not the oldest spend row).
+-- A row that already holds the full amount is left untouched, so the
+-- crash-retry of a credit that did land does not pay twice. A top-up the
+-- cap cannot cover in full changes nothing.
 -- ============================================================================
 
 create or replace function public.restore_batch_discount_credit(
@@ -74,15 +75,16 @@ begin
     return jsonb_build_object('held', true, 'restored', false);
   end if;
 
-  select abs(amount), coalesce(free_amount, 0)
+  -- Same cap as refund_batch_tokens (migration 044): every spend row
+  -- under the generation id counts. A retried charge leaves two rows,
+  -- and the oldest row alone would refuse a top-up the cap can cover.
+  select coalesce(sum(abs(amount)), 0), coalesce(sum(coalesce(free_amount, 0)), 0)
   into charge_amount, charge_free
   from public.token_transactions
   where user_id = p_user_id
     and generation_id = p_batch_generation_id
-    and type = 'video_generation'
-  order by created_at asc
-  limit 1;
-  if charge_amount is null then
+    and type = 'video_generation';
+  if charge_amount = 0 then
     return jsonb_build_object('held', false, 'missing_charge', true);
   end if;
 

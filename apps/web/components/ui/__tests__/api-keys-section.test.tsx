@@ -99,6 +99,29 @@ describe('ApiKeysSection', () => {
     });
   });
 
+  it('styles an active key green and a revoked key red, in the table and the mobile cards', () => {
+    vi.mocked(useApiKeysQuery).mockReturnValue({
+      data: [makeKey(1), { ...makeKey(2), revokedAt: '2026-09-19T10:00:00.000Z' }],
+      isLoading: false,
+      isError: false,
+    } as never);
+    renderSection();
+
+    // Each key renders once in the table and once in the compact card twin.
+    const active = screen.getAllByText('Active');
+    const revoked = screen.getAllByText('Revoked');
+    expect(active).toHaveLength(2);
+    expect(revoked).toHaveLength(2);
+    for (const badge of active) {
+      expect(badge.className).toContain('bg-success-soft');
+      expect(badge.className).not.toContain('bg-destructive-soft');
+    }
+    for (const badge of revoked) {
+      expect(badge.className).toContain('bg-destructive-soft');
+      expect(badge.className).not.toContain('bg-success-soft');
+    }
+  });
+
   it('renders the empty state when no keys exist', () => {
     vi.mocked(useApiKeysQuery).mockReturnValue({
       data: [],

@@ -108,7 +108,7 @@ class StoreRequestsTests(unittest.TestCase):
 
     def test_generating_slots_reads_the_slot_row_alone(self):
         # The reconciler refunds from the slot's own schedule_id and stored
-        # charged_tokens (migration 044), so the select is the whole slot row
+        # charged_tokens (migration 045), so the select is the whole slot row
         # and no schedules embed: a refund never depends on a joinable
         # persona or snapshot.
         self.store.generating_slots()
