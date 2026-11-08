@@ -150,10 +150,9 @@ interface DbConfig {
   slotCount?: number | null;
   ledgerIds?: string[];
   /** Typed ledger rows for the generation_id: when set, replaces ledgerIds
-   *  (which defaults every row to a video_generation spend). Lets a test
-   *  pin the type filter — e.g. a ledger holding only a generation_refund
-   *  row must NOT count as already spent. */
-  ledgerRows?: Array<{ id: string; type: string }>;
+   *  (which defaults every row to a 2-token video_generation spend).
+   *  Amounts mirror production: spends negative, refunds positive. */
+  ledgerRows?: Array<{ id: string; type: string; amount: number }>;
   ledgerError?: boolean;
   spend?: { spent: boolean; balance: number };
   spendErrorCode?: string;
@@ -219,18 +218,12 @@ function lisbonTimePlus(hoursAhead: number): string {
 function makeClient(cfg: DbConfig): unknown {
   const table = (name: string): unknown => {
     let isCountQuery = false;
-    // Equality filters applied to this query, so the mock can honour them
-    // the way PostgREST does (the ledger lookup filters by type).
-    const eqFilters: Record<string, unknown> = {};
     const builder: Record<string, unknown> = {
       select: (_cols?: string, opts?: { count?: string; head?: boolean }) => {
         isCountQuery = opts?.count === 'exact' && opts?.head === true;
         return builder;
       },
-      eq: (col?: string, val?: unknown) => {
-        if (typeof col === 'string') eqFilters[col] = val;
-        return builder;
-      },
+      eq: () => builder,
       in: () => builder,
       limit: () => builder,
       order: () => builder,
@@ -344,9 +337,8 @@ function makeClient(cfg: DbConfig): unknown {
           if (cfg.ledgerError) {
             return Promise.resolve({ data: null, error: { code: 'XX000', message: 'db down' } }).then(resolve, reject);
           }
-          const rows = (
-            cfg.ledgerRows ?? (cfg.ledgerIds ?? []).map((id) => ({ id, type: 'video_generation' }))
-          ).filter((row) => eqFilters.type === undefined || row.type === eqFilters.type);
+          const rows =
+            cfg.ledgerRows ?? (cfg.ledgerIds ?? []).map((id) => ({ id, type: 'video_generation', amount: -2 }));
           return Promise.resolve({ data: rows, error: null }).then(resolve, reject);
         }
         if (name === 'scheduled_posts') {
@@ -1055,28 +1047,32 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(inserts['schedules']).toBeUndefined();
     });
 
-    it('re-charges when the ledger holds only a refund row for the generation_id', async () => {
-      // A prior attempt spent, then failed at the slot insert (or the
-      // experiment-pair recheck) and refunded under the same generation_id.
-      // The refund row is not a spend: a same-key retry must charge again,
-      // or the corrected video renders for free.
+    it('re-charges when the prior spend was fully refunded', async () => {
+      // Attempt 1 charged, then the slot-insert rollback (or the
+      // experiment-pair recheck) refunded under the same generation_id.
+      // The refund inserts a credit row and never deletes the spend row,
+      // so the ledger holds both — only the net counts: fully refunded
+      // means the retry must charge again, or the video renders for free.
       setup({
         ...DEFAULT_CFG,
-        ledgerRows: [{ id: 'tx-refund', type: 'generation_refund' }],
+        ledgerRows: [
+          { id: 'tx-spend', type: 'video_generation', amount: -2 },
+          { id: 'tx-refund', type: 'generation_refund', amount: 2 },
+        ],
       });
-      const res = await post(baseBody({ idempotencyKey: 'refund-only-key' }));
+      const res = await post(baseBody({ idempotencyKey: 'spent-and-refunded-key' }));
       const json = await res.json();
       expect(res.status).toBe(200);
       expect(json.success).toBe(true);
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
     });
 
-    it('does not charge when the ledger holds a spend row for the generation_id', async () => {
-      // Same fixture shape as the refund-only case, but with a real spend
-      // row: the retry resumes without charging.
+    it('does not charge when the ledger holds an unrefunded spend row', async () => {
+      // Same fixture shape as the refunded case, but with no refund row:
+      // the retry resumes without charging.
       setup({
         ...DEFAULT_CFG,
-        ledgerRows: [{ id: 'tx-spend', type: 'video_generation' }],
+        ledgerRows: [{ id: 'tx-spend', type: 'video_generation', amount: -2 }],
       });
       const res = await post(baseBody({ idempotencyKey: 'spend-row-key' }));
       const json = await res.json();
@@ -1085,18 +1081,17 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
-    it('does not charge when the ledger holds both a spend and a refund row', async () => {
-      // Attempt 1 spent and refunded; attempt 2 spent again. A third
-      // same-key retry must see the spend among the rows, not stop at the
-      // refund.
+    it('does not charge when the ledger holds a spend with only a partial refund', async () => {
+      // A partial refund leaves a net spend standing: the retry resumes
+      // without charging.
       setup({
         ...DEFAULT_CFG,
         ledgerRows: [
-          { id: 'tx-refund', type: 'generation_refund' },
-          { id: 'tx-spend', type: 'video_generation' },
+          { id: 'tx-spend', type: 'video_generation', amount: -2 },
+          { id: 'tx-refund', type: 'generation_refund', amount: 1 },
         ],
       });
-      const res = await post(baseBody({ idempotencyKey: 'spend-plus-refund-key' }));
+      const res = await post(baseBody({ idempotencyKey: 'spend-partial-refund-key' }));
       const json = await res.json();
       expect(res.status).toBe(200);
       expect(json.success).toBe(true);

@@ -14,6 +14,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import {
   computeVideoTokens,
+  netLedgerSpent,
   useTokenStore,
   FACELESS_PRICE,
   FACE_QUALITY_PRICES,
@@ -117,5 +118,47 @@ describe('useTokenStore', () => {
     useTokenStore.getState().spendTokens(3);
     useTokenStore.getState().resetTokens();
     expect(useTokenStore.getState().balance).toBe(DEFAULT_TOKEN_BALANCE);
+  });
+});
+
+describe('netLedgerSpent', () => {
+  it('returns 0 for an empty ledger', () => {
+    expect(netLedgerSpent([])).toBe(0);
+  });
+
+  it('returns the spend magnitude when nothing was refunded', () => {
+    expect(netLedgerSpent([{ type: 'video_generation', amount: -2 }])).toBe(2);
+  });
+
+  it('returns 0 when the spend was fully refunded', () => {
+    expect(
+      netLedgerSpent([
+        { type: 'video_generation', amount: -2 },
+        { type: 'generation_refund', amount: 2 },
+      ]),
+    ).toBe(0);
+  });
+
+  it('returns the remainder when the refund was partial', () => {
+    expect(
+      netLedgerSpent([
+        { type: 'video_generation', amount: -2 },
+        { type: 'generation_refund', amount: 1 },
+      ]),
+    ).toBe(1);
+  });
+
+  it('coerces string amounts from PostgREST and ignores other row types', () => {
+    expect(
+      netLedgerSpent([
+        { type: 'video_generation', amount: '-2' },
+        { type: 'generation_refund', amount: '2' },
+        { type: 'purchase', amount: 100 },
+      ]),
+    ).toBe(0);
+  });
+
+  it('counts a non-numeric amount as 0', () => {
+    expect(netLedgerSpent([{ type: 'video_generation', amount: 'n/a' }])).toBe(0);
   });
 });

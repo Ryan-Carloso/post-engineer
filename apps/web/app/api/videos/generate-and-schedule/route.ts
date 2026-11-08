@@ -29,7 +29,7 @@ import {
 } from '@/lib/schedule/slot-distribution';
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone } from '@/lib/timezone';
-import { computeVideoTokens, toFiniteNumber } from '@/lib/tokens';
+import { computeVideoTokens, netLedgerSpent, toFiniteNumber } from '@/lib/tokens';
 import { buildSlotRows } from './slot-rows';
 import { fetchReplay } from './replay';
 import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, verifyExperimentPairAfterInsert } from './experiment-link';
@@ -550,14 +550,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
       if (replayed) return replayed;
     }
   }
-  // Read-your-ledger: only a prior SPEND counts — a refund row under the same
-  // generation_id must not skip the charge (no unique constraint is assumed).
+  // Read-your-ledger, net-based: a refund leaves the spend row in place, so
+  // only an unrefunded spend counts (see netLedgerSpent in lib/tokens).
   const { data: ledgerRows, error: ledgerError } = await supabase
     .from('token_transactions')
-    .select('id')
-    .eq('generation_id', idem.generationId)
-    .eq('type', 'video_generation')
-    .limit(1);
+    .select('type, amount')
+    .eq('generation_id', idem.generationId);
   // Fail closed: charging blind after a failed ledger read risks a double spend.
   if (ledgerError) {
     logger.error('[generate-and-schedule] spend ledger lookup failed', ledgerError, {
@@ -566,7 +564,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     });
     return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
   }
-  const alreadySpent = (ledgerRows?.length ?? 0) > 0;
+  const alreadySpent = netLedgerSpent(ledgerRows ?? []) > 0;
   if (alreadySpent) {
     logger.warn('[generate-and-schedule] spend ledger already has this generation_id; resuming without charging', {
       generationId: idem.generationId,
