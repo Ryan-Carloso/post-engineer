@@ -81,6 +81,15 @@ describe('buildJobPayload — request allowlist', () => {
     expect(payload.full_lipsync).toBe(true);
   });
 
+  it('forwards music_mood so a requested BGM mood is not lost to the engine default', () => {
+    const payload = buildJobPayload(persona(), {
+      video_subject: 'myth busting',
+      lipsync: true,
+      music_mood: 'calm',
+    });
+    expect(payload.music_mood).toBe('calm');
+  });
+
   it('forwards faceless_material so an svg choice is not dropped into broll', () => {
     const payload = buildJobPayload(persona(), {
       video_subject: 'myth busting',

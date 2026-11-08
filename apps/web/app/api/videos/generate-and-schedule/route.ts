@@ -93,16 +93,15 @@ const OptionsSchema = z
   .object({
     faceless: z.boolean().optional(),
     facelessMaterial: z.enum(FACELESS_MATERIALS).optional(),
-    // Opt-in full lip-sync: the whole video is the persona talking, with
-    // no b-roll. False (the default) keeps the intro-only lip-sync over
-    // stock material. Rejected with faceless below: no face to render.
+    // Opt-in full lip-sync: the whole video is the persona talking, no
+    // b-roll. False (default) keeps intro-only lip-sync over stock; rejected with faceless (no face to render).
     fullLipsync: z.boolean().optional(),
+    // BGM mood (issue #489): a catalogued mood, or "none" for no music; omitted = engine default.
+    musicMood: z.string().min(1).max(64).optional(),
     audioUrl: z.string().optional(),
     imageId: z.string().optional(),
-    // Segments contract (MCP first, Phase 1): one call = one video. The
-    // joined script becomes the video script; no LLM expands it. The
-    // engine's existing persona script budget and duration trim still
-    // apply to persona videos downstream.
+    // Segments contract (MCP first, Phase 1): one call = one video; the
+    // joined script becomes the video script, no LLM expands it. The engine's persona script budget and duration trim still apply downstream.
     segments: segmentsRequestSchema.optional(),
     webhookUrl: z.string().optional(),
     voiceId: z.string().optional(),
@@ -928,6 +927,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         // Opt-in full lip-sync rides the same way; omitted when unset so
         // every existing post keeps the intro-only behaviour exactly.
         full_lipsync: validatedOptions.fullLipsync,
+        music_mood: validatedOptions.musicMood,
         segments: options?.segments, // Segment media rides to the engine here, next to the joined script.
       });
       if (!hasNonEmptyString(payload.video_subject)) {
