@@ -106,10 +106,11 @@ describe('Main Layout — Sidebar', () => {
 
     cy.contains('a', 'Início').should('not.exist');
     cy.contains('a', 'Posts').should('be.visible');
+    cy.contains('a', 'Histórico').should('be.visible');
     cy.contains('a', 'Contas').should('be.visible');
     cy.contains('a', 'Personas').should('be.visible');
     cy.contains('a', 'Métricas').should('be.visible');
-    cy.contains('a', 'Pegue seus prompts').should('be.visible');
+    cy.contains('a', 'API Key e MCP').should('be.visible');
     // Billing is no longer a nav tab — it lives in the profile area
     // (sidebar footer), reachable from every page, like API Keys.
     cy.contains('a', 'Tokens').should('not.exist');

@@ -73,16 +73,6 @@ export function gridRange(grid: CalendarDay[][]): { from: string; to: string } {
   return { from: first.toISOString(), to: addDays(last, 1).toISOString() };
 }
 
-export function weekdayLabels(locale: Locale, firstWeekday: 0 | 1): { short: string; long: string }[] {
-  const short = new Intl.DateTimeFormat(INTL_TAG[locale], { weekday: 'short' });
-  const long = new Intl.DateTimeFormat(INTL_TAG[locale], { weekday: 'long' });
-  // 2023-01-01 was a Sunday.
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(2023, 0, 1 + ((firstWeekday + index) % 7));
-    return { short: short.format(date), long: long.format(date) };
-  });
-}
-
 export function bucketByDay<T extends Pick<ScheduledSlot, 'slotAt'>>(slots: T[], timeZone?: string): Map<string, T[]> {
   const buckets = new Map<string, T[]>();
   for (const slot of slots) {
@@ -111,29 +101,4 @@ export function cellMarkers(
   const counts = groupCounts(slots);
   const all = STATUS_GROUP_ORDER.flatMap((group) => Array<StatusGroup>(counts[group]).fill(group));
   return { markers: all.slice(0, max), overflow: Math.max(0, all.length - max) };
-}
-
-// Keyboard navigation: where focus lands for a key, or null when the key is
-// not a navigation key. Home/End jump within the week row.
-export function moveFocus(key: string, current: Date, firstWeekday: 0 | 1): Date | null {
-  switch (key) {
-    case 'ArrowLeft':
-      return addDays(current, -1);
-    case 'ArrowRight':
-      return addDays(current, 1);
-    case 'ArrowUp':
-      return addDays(current, -7);
-    case 'ArrowDown':
-      return addDays(current, 7);
-    case 'Home':
-      return addDays(current, -((current.getDay() - firstWeekday + 7) % 7));
-    case 'End':
-      return addDays(current, 6 - ((current.getDay() - firstWeekday + 7) % 7));
-    case 'PageUp':
-      return new Date(current.getFullYear(), current.getMonth() - 1, Math.min(current.getDate(), 28));
-    case 'PageDown':
-      return new Date(current.getFullYear(), current.getMonth() + 1, Math.min(current.getDate(), 28));
-    default:
-      return null;
-  }
 }

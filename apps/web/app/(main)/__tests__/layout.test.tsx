@@ -36,6 +36,7 @@ vi.mock('@/lib/ui', () => ({
   ProfileIcon: () => <span data-testid="icon-profile" />,
   HistoryIcon: () => <span data-testid="icon-history" />,
   ChartIcon: () => <span data-testid="icon-chart" />,
+  CalendarIcon: () => <span data-testid="icon-calendar" />,
   SparklesIcon: () => <span data-testid="icon-sparkles" />,
   MicIcon: () => <span data-testid="icon-mic" />,
   SECTION_LABEL_CLASS: '',
@@ -166,14 +167,14 @@ describe('app/(main)/layout — MainLayout', () => {
     }
   });
 
-  it('renders the sidebar tabs in order: Posts, Accounts, Personas, Metrics, Prompts', () => {
+  it('renders the sidebar tabs in order: Posts, History, Accounts, Personas, Metrics, API Key & MCP', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const sidebar = screen.getByTestId('nav-brand').closest('aside');
     const nav = within(sidebar as HTMLElement).getByRole('navigation');
     const titles = within(nav)
       .getAllByRole('link')
       .map((link) => link.getAttribute('title'));
-    expect(titles).toEqual(['nav.posts', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.prompts']);
+    expect(titles).toEqual(['nav.posts', 'nav.history', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.prompts']);
   });
 
   it('lists Posts as the first navigation tab, linking to /posts', () => {
@@ -371,7 +372,7 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(postsLink?.getAttribute('href')).toBe('/posts');
     });
 
-    it('renders tabs in order: Posts, Personas, Accounts, Prompts', () => {
+    it('renders tab links in order: Posts, Personas, Accounts, API Key & MCP', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       const labels = within(getMobileNav())
         .getAllByRole('link')
@@ -414,11 +415,14 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(postsLink).toHaveAttribute('aria-current', 'page');
     });
 
-    it('marks the Posts tab as current on /posts subpaths', () => {
+    it('on /posts/history highlights History in the sidebar and More in the bottom bar, not Posts', () => {
       vi.mocked(usePathname).mockReturnValue('/posts/history');
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-      const postsLink = within(getMobileNav()).getByText('nav.posts').closest('a');
-      expect(postsLink).toHaveAttribute('aria-current', 'page');
+      expect(within(getMobileNav()).getByText('nav.posts').closest('a')).not.toHaveAttribute('aria-current');
+      expect(within(getMobileNav()).getByRole('button', { name: 'nav.more' }).className).toContain('font-semibold');
+      const sidebar = within(screen.getByTestId('nav-brand').closest('aside') as HTMLElement);
+      expect(sidebar.getByTitle('nav.history').className).toContain('bg-brand-soft');
+      expect(sidebar.getByTitle('nav.posts').className).not.toContain('bg-brand-soft');
     });
 
     it.each([
@@ -485,35 +489,24 @@ describe('mobile header profile area', () => {
     expect(within(header).getByTestId('version-badge')).toHaveTextContent('BETA');
   });
 
-  it('shows a profile link to /account in the mobile header', () => {
+  it('shows a profile avatar link to /account, falling back to the initial', () => {
+    mockSessionUser({ id: 'user-1', user_metadata: { name: 'Header User' } });
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const link = within(getMobileHeader()).getByTestId('mobile-profile-link');
     expect(link).toHaveAttribute('href', '/account');
     expect(link).toHaveAttribute('aria-label', 'nav.profile');
-  });
-
-  it('profile link shows the avatar image when the session has one', () => {
-    mockSessionUser({
-      id: 'user-1',
-      user_metadata: { avatar_url: 'https://example.com/avatar.png', name: 'Header User' },
-    });
-    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const link = within(getMobileHeader()).getByTestId('mobile-profile-link');
-    expect(within(link).getByAltText('Header User')).toHaveAttribute(
-      'src',
-      'https://example.com/avatar.png',
-    );
-  });
-
-  it('profile link falls back to the initial-letter circle without an avatar', () => {
-    mockSessionUser({
-      id: 'user-1',
-      user_metadata: { name: 'Header User' },
-    });
-    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const link = within(getMobileHeader()).getByTestId('mobile-profile-link');
     expect(within(link).queryByRole('img')).toBeNull();
     expect(within(link).getByText('H')).toBeInTheDocument();
+  });
+
+  it('More opens a sheet linking History, Metrics and Tokens (not the profile)', async () => {
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByRole('button', { name: 'nav.more' }));
+    const sheet = await screen.findByRole('dialog', { name: 'nav.moreTitle' });
+    expect(within(sheet).getByText('nav.history').closest('a')).toHaveAttribute('href', '/posts/history');
+    expect(within(sheet).getByText('nav.metrics').closest('a')).toHaveAttribute('href', '/metrics');
+    expect(within(sheet).queryByText('nav.profile')).toBeNull();
+    expect(within(sheet).getByText('nav.billing').closest('a')).toHaveAttribute('href', '/billing');
   });
 
   it('sidebar user block links to /account', () => {
@@ -525,11 +518,12 @@ describe('mobile header profile area', () => {
     expect(screen.getByTestId('profile-user-link')).toHaveAttribute('href', '/account');
   });
 
-  it('mobile bottom navigation has exactly four tabs (no profile tab, no api-keys tab)', () => {
+  it('mobile bottom navigation has four tab links plus the More button', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const nav = screen.getByRole('navigation', { name: 'nav.primaryNavigation' });
     const links = within(nav).getAllByRole('link');
     expect(links).toHaveLength(4);
     expect(links[0]).toHaveTextContent('nav.posts');
+    expect(within(nav).getByRole('button', { name: 'nav.more' })).toBeInTheDocument();
   });
 });

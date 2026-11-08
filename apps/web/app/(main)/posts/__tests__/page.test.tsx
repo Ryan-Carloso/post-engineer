@@ -5,12 +5,13 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
 //---------------
-// Tests for the Posts page (history + upcoming posts across all accounts).
-// Network (lib/api) mocked; everything else real.
+// Tests for the Posts page (the posts calendar across all accounts).
+// Network (lib/api) mocked; everything else real. "Today" is pinned to
+// 2030-06-01 (UPCOMING_SLOT's day), so the calendar opens on a day that
+// lists it below the grid.
 //---------------
 
 vi.mock('@/lib/api', () => ({
-  useScheduleStatusQuery: vi.fn(),
   useSchedulesQuery: vi.fn(),
   usePersonaListQuery: vi.fn(),
   useYouTubeAccountsQuery: vi.fn(),
@@ -18,7 +19,6 @@ vi.mock('@/lib/api', () => ({
   useLinkedinAccountsQuery: vi.fn(),
   useThreadsAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
   useBlueskyAccountsQuery: vi.fn(),
-  useVideoGenerationsQuery: vi.fn(),
 }));
 
 vi.mock('@/lib/schedule-range', () => ({
@@ -39,17 +39,15 @@ vi.mock('@/lib/i18n/provider', () => {
   return { useI18n, I18nProvider };
 });
 
-import PostsPage, { POSTS_LIMIT } from '../page';
+import PostsPage from '../page';
 import { useScheduleRangeQuery } from '@/lib/schedule-range';
 import {
-  useScheduleStatusQuery,
   useSchedulesQuery,
   usePersonaListQuery,
   useYouTubeAccountsQuery,
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
   useBlueskyAccountsQuery,
-  useVideoGenerationsQuery,
 } from '@/lib/api';
 
 const SCHEDULE = {
@@ -102,22 +100,11 @@ function mockQueries(overrides: {
   range?: unknown[];
   rangeTruncated?: boolean;
   upcoming?: unknown[];
-  recent?: unknown[];
   schedules?: unknown[];
-  generations?: unknown[];
 } = {}) {
-  vi.mocked(useScheduleStatusQuery).mockReturnValue({
-    data: {
-      upcoming: (overrides.upcoming ?? [UPCOMING_SLOT]) as never,
-      recent: (overrides.recent ?? [PUBLISHED_SLOT, FAILED_SLOT]) as never,
-    },
-    isLoading: false,
-    isFetching: false,
-    isError: false,
-    refetch: vi.fn(),
-  } as never);
   vi.mocked(useScheduleRangeQuery).mockReturnValue({
-    data: { slots: (overrides.range ?? []) as never, truncated: overrides.rangeTruncated ?? false },
+    // The calendar reads the range; `upcoming` fixtures feed it too.
+    data: { slots: (overrides.range ?? overrides.upcoming ?? [UPCOMING_SLOT]) as never, truncated: overrides.rangeTruncated ?? false },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -146,21 +133,21 @@ function mockQueries(overrides: {
   vi.mocked(useBlueskyAccountsQuery).mockReturnValue({
     data: { authenticated: true, accounts: [] },
   } as never);
-  vi.mocked(useVideoGenerationsQuery).mockReturnValue({
-    data: (overrides.generations ?? []) as never,
-    isLoading: false,
-    isError: false,
-    refetch: vi.fn(),
-  } as never);
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2030-06-01T12:00:00.000Z'));
   mockQueries();
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('PostsPage', () => {
-  it('shows upcoming posts by default with persona, title, status and account avatars', () => {
+  it("opens on the calendar with today's posts below it: persona, title, status and account avatars", () => {
     render(<PostsPage />);
 
     expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
@@ -169,7 +156,7 @@ describe('PostsPage', () => {
     // Account names appear in the account filter option and as a chip on the card.
     expect(screen.getAllByText('Europa Na Estrada').length).toBe(2);
     expect(screen.getAllByText('@vivalave').length).toBe(2);
-    // History items are hidden on the upcoming tab
+    // History items are hidden on the calendar tab
     expect(screen.queryByText('Past topic')).not.toBeInTheDocument();
   });
 
@@ -198,33 +185,6 @@ describe('PostsPage', () => {
     expect(chips.getByRole('img', { name: 'youtube' })).toBeInTheDocument();
     expect(chips.getByText('Europa Na Estrada')).toBeInTheDocument();
     expect(chips.getByText('@vivalave')).toBeInTheDocument();
-  });
-
-  it('switches to the history tab showing published and failed posts', async () => {
-    const user = userEvent.setup();
-    render(<PostsPage />);
-
-    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-
-    expect(screen.getByText('Past topic')).toBeInTheDocument();
-    expect(screen.getByText('posts.statusPublished')).toBeInTheDocument();
-    expect(screen.getByText('Failed topic')).toBeInTheDocument();
-    expect(screen.getByText('posts.statusFailed')).toBeInTheDocument();
-    // The failure is localized inline; the raw engine/upstream text is never rendered.
-    expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
-    expect(screen.queryByText('Upload failed')).not.toBeInTheDocument();
-    expect(screen.queryByText('Upcoming topic')).not.toBeInTheDocument();
-  });
-
-  it('tells a retryable failed card apart from a permanent one', async () => {
-    mockQueries({ recent: [{ ...FAILED_SLOT, retryable: true }] });
-    const user = userEvent.setup();
-    render(<PostsPage />);
-
-    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-
-    expect(screen.getByText('posts.cardFailedRetryable')).toBeInTheDocument();
-    expect(screen.queryByText('posts.cardFailedPermanent')).not.toBeInTheDocument();
   });
 
   it('filters slots by provider', async () => {
@@ -271,60 +231,14 @@ describe('PostsPage', () => {
     render(<PostsPage />);
 
     expect(screen.queryByText('Upcoming topic')).not.toBeInTheDocument();
-    expect(screen.getByText('posts.noUpcoming')).toBeInTheDocument();
+    expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
   });
 
-  it('shows the history empty state when there are no past posts', async () => {
-    const user = userEvent.setup();
-    mockQueries({ recent: [] });
-    render(<PostsPage />);
-
-    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-    expect(screen.getByText('posts.noHistory')).toBeInTheDocument();
-  });
-
-  it('shows a loading spinner while queries are loading', () => {
-    vi.mocked(useScheduleStatusQuery).mockReturnValue({
-      data: undefined,
-      isLoading: true,
-      isFetching: false,
-      isError: false,
-      refetch: vi.fn(),
-    } as never);
+  it('shows a loading spinner while the calendar range is loading', () => {
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() } as never);
 
     render(<PostsPage />);
     expect(screen.getByTestId('icon-spinner')).toBeInTheDocument();
-  });
-
-  it('shows the error state with a retry button', () => {
-    const refetch = vi.fn();
-    vi.mocked(useScheduleStatusQuery).mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isFetching: false,
-      isError: true,
-      refetch,
-    } as never);
-
-    render(<PostsPage />);
-    expect(screen.getByText('posts.loadError')).toBeInTheDocument();
-  });
-
-  it('renders the tab counts from the query data', () => {
-    render(<PostsPage />);
-    expect(screen.getByRole('button', { name: /posts\.tabUpcoming.*1/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /posts\.tabHistory.*2/ })).toBeInTheDocument();
-  });
-
-  it('excludes slots with a deleted schedule from the tab counts', () => {
-    const orphanSlot = { ...UPCOMING_SLOT, id: 'u-orphan', scheduleId: 'deleted-schedule', topic: 'Orphan topic' };
-    mockQueries({ upcoming: [UPCOMING_SLOT, orphanSlot] });
-    render(<PostsPage />);
-
-    // The tab count must agree with the rendered list: the orphan slot is
-    // dropped from both.
-    expect(screen.getByRole('button', { name: /posts\.tabUpcoming.*1/ })).toBeInTheDocument();
-    expect(screen.queryByText('Orphan topic')).not.toBeInTheDocument();
   });
 
   it('shows the error state when the personas query fails', () => {
@@ -339,34 +253,6 @@ describe('PostsPage', () => {
 
     render(<PostsPage />);
     expect(screen.getByText('posts.loadError')).toBeInTheDocument();
-  });
-
-  it('retry refetches the status and the schedules queries', async () => {
-    const statusRefetch = vi.fn();
-    const schedulesRefetch = vi.fn();
-    vi.mocked(useScheduleStatusQuery).mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isFetching: false,
-      isError: true,
-      refetch: statusRefetch,
-    } as never);
-    vi.mocked(useSchedulesQuery).mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isError: true,
-      refetch: schedulesRefetch,
-    } as never);
-    const user = userEvent.setup();
-    render(<PostsPage />);
-
-    // A failed schedules query must be retryable too — refetching only the
-    // status query would leave the error state stuck.
-    const errorPanel = screen.getByText('posts.loadError').closest('div');
-    if (!errorPanel) throw new Error('error panel not rendered');
-    await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));
-    expect(statusRefetch).toHaveBeenCalledTimes(1);
-    expect(schedulesRefetch).toHaveBeenCalledTimes(1);
   });
 
   it('retry refetches the personas query as well', async () => {
@@ -386,38 +272,6 @@ describe('PostsPage', () => {
     if (!errorPanel) throw new Error('error panel not rendered');
     await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));
     expect(personasRefetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows a capped-list hint when the tab hits the fetch limit', async () => {
-    // The fetch silently truncates at POSTS_LIMIT rows, so the page must
-    // say so instead of implying the list is complete.
-    const recent = Array.from({ length: POSTS_LIMIT }, (_, i) => ({ ...PUBLISHED_SLOT, id: `r${i}` }));
-    mockQueries({ recent });
-    const user = userEvent.setup();
-    render(<PostsPage />);
-
-    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-    expect(screen.getByText('posts.listCapped')).toBeInTheDocument();
-  });
-
-  it('hides the capped-list hint below the fetch limit', () => {
-    render(<PostsPage />);
-    expect(screen.queryByText('posts.listCapped')).not.toBeInTheDocument();
-  });
-
-  it('keeps the capped-list hint when a filter shrinks the visible rows', async () => {
-    // The dataset is still truncated at POSTS_LIMIT even when a network
-    // filter narrows the visible rows below it — the hint must not
-    // disappear.
-    const recent = Array.from({ length: POSTS_LIMIT }, (_, i) => ({ ...PUBLISHED_SLOT, id: `r${i}` }));
-    mockQueries({ recent });
-    const user = userEvent.setup();
-    render(<PostsPage />);
-
-    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-    await user.selectOptions(screen.getByLabelText('posts.filterProvider'), 'linkedin');
-    expect(screen.getByText('posts.noResultsForFilter')).toBeInTheDocument();
-    expect(screen.getByText('posts.listCapped')).toBeInTheDocument();
   });
 
   it('resets the account filter when switching to a network the account does not belong to', async () => {
@@ -446,129 +300,13 @@ describe('PostsPage', () => {
   });
 });
 
-const FAILED_GENERATION = {
-  id: 'g1',
-  generationId: 'gen-1',
-  engineTaskId: 'task-1',
-  personaName: 'Viva Leve',
-  videoSubject: 'Myth busting',
-  status: 'failed',
-  errorCode: 'custom_audio_invalid',
-  tokensRefunded: true,
-  createdAt: '2026-09-23T10:00:00.000Z',
-  completedAt: '2026-09-23T10:01:00.000Z',
-};
-
-const RUNNING_GENERATION = {
-  id: 'g2',
-  generationId: 'gen-2',
-  engineTaskId: 'task-2',
-  personaName: 'Viva Leve',
-  videoSubject: 'Morning routine',
-  status: 'running',
-  errorCode: null,
-  tokensRefunded: false,
-  createdAt: '2026-09-23T11:00:00.000Z',
-  completedAt: null,
-};
-
-const COMPLETED_GENERATION = {
-  id: 'g3',
-  generationId: 'gen-3',
-  engineTaskId: 'task-3',
-  personaName: 'Viva Leve',
-  videoSubject: 'Launch recap',
-  status: 'completed',
-  errorCode: null,
-  tokensRefunded: false,
-  createdAt: '2026-09-23T12:00:00.000Z',
-  completedAt: '2026-09-23T12:02:00.000Z',
-};
-
-describe('PostsPage generation history', () => {
-  it('shows the generations section in the history tab with friendly errors and refund badges', async () => {
-    const user = userEvent.setup();
-    mockQueries({ generations: [FAILED_GENERATION, RUNNING_GENERATION] });
-    render(<PostsPage />);
-
-    await user.click(screen.getByRole('button', { name: /posts.tabHistory/ }));
-
-    expect(screen.getByText('posts.generationsTitle')).toBeInTheDocument();
-    // Friendly, translated error — never the raw engine text.
-    expect(screen.getByText('posts.errorCustomAudio')).toBeInTheDocument();
-    expect(screen.queryByText('custom audio file is invalid: boom')).not.toBeInTheDocument();
-    expect(screen.getByText('posts.refundedBadge')).toBeInTheDocument();
-    expect(screen.getByText('posts.statusRunning')).toBeInTheDocument();
-    // The history tab count includes generations.
-    expect(screen.getByRole('button', { name: /posts.tabHistory \(4\)/ })).toBeInTheDocument();
-  });
-
-  it('shows the generations empty state when there are no generations', async () => {
-    const user = userEvent.setup();
-    mockQueries({ generations: [] });
-    render(<PostsPage />);
-
-    await user.click(screen.getByRole('button', { name: /posts.tabHistory/ }));
-
-    expect(screen.getByText('posts.generationsTitle')).toBeInTheDocument();
-    expect(screen.getByText('posts.generationsEmpty')).toBeInTheDocument();
-  });
-
-  it('does not show the generations section in the upcoming tab', () => {
-    mockQueries({ generations: [FAILED_GENERATION] });
-    render(<PostsPage />);
-
-    expect(screen.queryByText('posts.generationsTitle')).not.toBeInTheDocument();
-  });
-});
-
-//---------------
-// Detail navigation — cards are links to the full-page detail view
-// (/posts/[id]); the route param carries the id only.
-//---------------
-
 describe('PostsPage card links', () => {
-  it('links upcoming cards to their detail page', () => {
+  it("links today's calendar cards to their detail page", () => {
     render(<PostsPage />);
 
     expect(screen.getByRole('link', { name: /Upcoming topic/ })).toHaveAttribute('href', '/posts/u1');
   });
 
-  it('links history cards and generation cards to their detail pages', async () => {
-    mockQueries({ generations: [COMPLETED_GENERATION] });
-    const user = userEvent.setup();
-    render(<PostsPage />);
-    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-
-    expect(screen.getByRole('link', { name: /Past topic/ })).toHaveAttribute('href', '/posts/r1');
-    expect(screen.getByRole('link', { name: /Failed topic/ })).toHaveAttribute('href', '/posts/r2');
-    // Generation cards link by generationId (the business id the detail
-    // endpoint resolves via .eq('generation_id', ...)), NOT the DB row PK.
-    expect(screen.getByRole('link', { name: /Launch recap/ })).toHaveAttribute('href', '/posts/gen-3');
-  });
-
-  it('links generation cards to the id the detail lookup resolves by', async () => {
-    // Fixture has DISTINCT id/generationId: the href must be the value the
-    // detail endpoint filters on, otherwise the card 404s on click.
-    const generation = { ...COMPLETED_GENERATION, id: 'row-uuid-9', generationId: 'gen-9' };
-    mockQueries({ generations: [generation] });
-    const user = userEvent.setup();
-    render(<PostsPage />);
-    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-
-    expect(screen.getByRole('link', { name: /Launch recap/ })).toHaveAttribute('href', '/posts/gen-9');
-  });
-
-  it('keeps showing the video thumbnail with the #t=0.1 frame in the card', async () => {
-    const user = userEvent.setup();
-    render(<PostsPage />);
-    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-
-    const cardVideo = document.querySelector('button video, a video');
-    expect(cardVideo).not.toBeNull();
-    expect(cardVideo?.getAttribute('src')).toBe('/api/persona/video-download/task-9/final-1.mp4#t=0.1');
-    expect(cardVideo?.getAttribute('controls')).toBeNull();
-  });
 });
 
 describe('PostsPage card progress', () => {
@@ -588,7 +326,7 @@ describe('PostsPage card progress', () => {
   const AWAITING_SLOT = {
     id: 'a1',
     scheduleId: 's1',
-    slotAt: '2030-06-02T10:00:00.000Z',
+    slotAt: '2030-06-01T11:00:00.000Z',
     status: 'awaiting',
     title: 'Awaiting topic',
     error: null,
@@ -620,13 +358,6 @@ describe('PostsPage card progress', () => {
     );
   });
 
-  it('shows no progress bar on terminal cards', async () => {
-    const user = userEvent.setup();
-    render(<PostsPage />);
-    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-  });
 });
 
 //---------------
@@ -636,85 +367,6 @@ describe('PostsPage card progress', () => {
 //---------------
 
 describe('PostsPage fallbacks', () => {
-  it('retry refetches the generations query as well', async () => {
-    const generationsRefetch = vi.fn();
-    vi.mocked(useScheduleStatusQuery).mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isFetching: false,
-      isError: true,
-      refetch: vi.fn(),
-    } as never);
-    vi.mocked(useVideoGenerationsQuery).mockReturnValue({
-      data: [],
-      isLoading: false,
-      isError: true,
-      refetch: generationsRefetch,
-    } as never);
-    const user = userEvent.setup();
-    render(<PostsPage />);
-
-    // The generations query feeds the history tab count — dropping its
-    // refetch would leave a failed generations fetch stuck forever.
-    const errorPanel = screen.getByText('posts.loadError').closest('div');
-    if (!errorPanel) throw new Error('error panel not rendered');
-    await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));
-    expect(generationsRefetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('falls back to the generic error copy for an unmapped generation error code', async () => {
-    const user = userEvent.setup();
-    mockQueries({ generations: [{ ...FAILED_GENERATION, errorCode: 'future_code_123' }] });
-    render(<PostsPage />);
-
-    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-    expect(screen.getByText('posts.errorUnknown')).toBeInTheDocument();
-  });
-
-  it('falls back to placeholders when a generation has no persona or subject', async () => {
-    const user = userEvent.setup();
-    mockQueries({
-      generations: [{ ...FAILED_GENERATION, personaName: null, videoSubject: null }],
-    });
-    render(<PostsPage />);
-
-    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-    expect(screen.getByText('posts.personaFallback')).toBeInTheDocument();
-    expect(screen.getAllByText('posts.unknownTitle').length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('prefers publishedAt for history slots but falls back to slotAt', async () => {
-    const user = userEvent.setup();
-    const withPublishedAt = {
-      ...PUBLISHED_SLOT,
-      id: 'r3',
-      slotAt: '2020-03-10T10:00:00.000Z',
-      publishedAt: '2020-05-20T10:00:00.000Z',
-      title: 'Dated topic',
-    };
-    const withoutPublishedAt = {
-      ...PUBLISHED_SLOT,
-      id: 'r4',
-      slotAt: '2020-03-10T10:00:00.000Z',
-      publishedAt: null,
-      title: 'Undated topic',
-    };
-    mockQueries({ upcoming: [], recent: [withPublishedAt, withoutPublishedAt] });
-    render(<PostsPage />);
-    await user.click(screen.getByRole('button', { name: /posts\.tabHistory/ }));
-
-    const may20 = new Date('2020-05-20T10:00:00.000Z').toLocaleDateString('en-US', {
-      dateStyle: 'medium',
-    });
-    const mar10 = new Date('2020-03-10T10:00:00.000Z').toLocaleDateString('en-US', {
-      dateStyle: 'medium',
-    });
-    const datedCard = screen.getByText('Dated topic').closest('a');
-    const undatedCard = screen.getByText('Undated topic').closest('a');
-    expect(datedCard?.textContent).toContain(may20);
-    expect(undatedCard?.textContent).toContain(mar10);
-  });
-
   it('renders the pending badge style for an unknown slot status', () => {
     mockQueries({
       upcoming: [{ ...UPCOMING_SLOT, id: 'u9', status: 'weird_status', topic: 'Weird topic' }],
@@ -792,23 +444,11 @@ describe('PostsPage fallbacks', () => {
     expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'LinkedIn', 'Bluesky', 'Threads']);
   });
 
-  it('disables the refresh button while a refetch is in flight', () => {
-    vi.mocked(useScheduleStatusQuery).mockReturnValue({
-      data: { upcoming: [UPCOMING_SLOT], recent: [] },
-      isLoading: false,
-      isFetching: true,
-      isError: false,
-      refetch: vi.fn(),
-    } as never);
-    render(<PostsPage />);
-
-    expect(screen.getByRole('button', { name: 'posts.refresh' })).toBeDisabled();
-  });
 });
 
 //---------------
-// Calendar view: list/calendar toggle, per-day markers, day selection and
-// the filters applied to the range read.
+// Calendar tab: per-day markers, day selection and the filters applied to
+// the range read.
 //---------------
 describe('PostsPage calendar view', () => {
   const rangeSlots = [
@@ -826,13 +466,9 @@ describe('PostsPage calendar view', () => {
     vi.useRealTimers();
   });
 
-  it('only reads the range while the calendar is shown', async () => {
+  it('reads the visible 6-week grid as one range', () => {
     mockQueries({ range: rangeSlots });
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PostsPage />);
-
-    expect(vi.mocked(useScheduleRangeQuery).mock.calls.at(-1)?.[3]).toBe(false);
-    await user.click(screen.getByRole('button', { name: 'posts.viewCalendar' }));
 
     const [monthKey, from, to, enabled] = vi.mocked(useScheduleRangeQuery).mock.calls.at(-1) ?? [];
     expect(enabled).toBe(true);
@@ -841,17 +477,15 @@ describe('PostsPage calendar view', () => {
     expect(new Date(from as string).getTime()).toBeLessThanOrEqual(new Date(2030, 5, 1).getTime());
     expect(new Date(to as string).getTime()).toBeGreaterThanOrEqual(new Date(2030, 6, 1).getTime());
     expect(screen.getByRole('grid')).toBeInTheDocument();
-    // The tabs belong to the list view only.
-    expect(screen.queryByRole('button', { name: /posts\.tabUpcoming/ })).not.toBeInTheDocument();
   });
 
   it('lists the selected day posts below the calendar, past and future together', async () => {
     mockQueries({ range: rangeSlots });
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const user = userEvent.setup();
     render(<PostsPage />);
-    await user.click(screen.getByRole('button', { name: 'posts.viewCalendar' }));
 
-    expect(screen.getByText('posts.calendarNoDay')).toBeInTheDocument();
+    // Today (June 15) is selected on open and has no posts.
+    expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
     // Cells with posts carry the summary label (t() echoes keys here); the
     // only one starting with "5" is June 5 — July 5 in the grid is empty.
     const day5 = within(screen.getByRole('grid'))
@@ -867,9 +501,8 @@ describe('PostsPage calendar view', () => {
 
   it('applies the provider filter to calendar slots', async () => {
     mockQueries({ range: rangeSlots });
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const user = userEvent.setup();
     render(<PostsPage />);
-    await user.click(screen.getByRole('button', { name: 'posts.viewCalendar' }));
 
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'linkedin');
 
@@ -877,21 +510,17 @@ describe('PostsPage calendar view', () => {
     expect(cells.some((cell) => cell.querySelector('[data-group]') !== null)).toBe(false);
   });
 
-  it('warns when the range read was truncated', async () => {
+  it('warns when the range read was truncated', () => {
     mockQueries({ range: rangeSlots, rangeTruncated: true });
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PostsPage />);
-    await user.click(screen.getByRole('button', { name: 'posts.viewCalendar' }));
 
     expect(screen.getByText('posts.calendarTruncated')).toBeInTheDocument();
   });
 
-  it('shows the load error state when the range read fails', async () => {
+  it('shows the load error state when the range read fails', () => {
     mockQueries();
     vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch: vi.fn() } as never);
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PostsPage />);
-    await user.click(screen.getByRole('button', { name: 'posts.viewCalendar' }));
 
     expect(screen.getByText('posts.loadError')).toBeInTheDocument();
   });
