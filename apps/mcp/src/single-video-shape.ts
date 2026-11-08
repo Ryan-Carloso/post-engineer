@@ -4,6 +4,7 @@
 // calls using the handlers in tools-single-video.ts.
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
+import { FACELESS_MATERIALS } from './limits.js';
 import { GeneratePersonaVideoOptionsShape } from './schedule-shapes.js';
 import { RECIPE_SLUG_PATTERN } from './recipe-session.js';
 import {
@@ -27,7 +28,7 @@ export const ScriptSegmentShape = {
     .object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), overlay: SegmentOverlayShape.optional() })
     .strict()
     .optional()
-    .describe('Phase 2: media reference, exactly one of mediaId (from upload_media) or url (a public image URL). The photo is shown over the video while its segment is spoken: full frame on faceless videos and over b-roll, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional overlay: an info card (title, subtitle, badge) on the photo, e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
+    .describe('Phase 2: media reference, exactly one of mediaId (from upload_media) or url (a public image URL). Required on every segment with facelessMaterial "images". The photo is shown over the video while its segment is spoken: full frame on faceless videos and over b-roll, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional overlay: an info card (title, subtitle, badge) on the photo, e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
   terms: z.array(z.string().min(1)).max(10).optional().describe('Stock terms for this segment, chosen by the agent. At most 10.'),
 };
 
@@ -96,6 +97,10 @@ export const ValidateScriptShape = {
     .min(1, 'Provide at least one segment')
     .max(12, 'At most 12 segments per video')
     .describe('The complete script as segments to validate mechanically, without spending tokens.'),
+  facelessMaterial: z
+    .enum(FACELESS_MATERIALS)
+    .optional()
+    .describe('The material the video will use (as in generate_persona_video options). "images" also checks that every segment carries media, up to 12.'),
 };
 
 export const ValidateScriptSchema = z.object(ValidateScriptShape);
