@@ -143,8 +143,65 @@ class TestLogBgmSelection(unittest.TestCase):
             logger.remove(handler_id)
         self.assertFalse(records, "'none' is an explicit choice, not an error")
 
+    def test_error_log_scrubs_absolute_catalog_path(self):
+        # The ERROR is forwarded to PostHog as $exception: the server's
+        # absolute filesystem layout must never reach analytics.
+        records, handler_id = self._capture("ERROR")
+        try:
+            mm.log_bgm_selection("upbeat", "/app/resource/songs/catalog.toml", "")
+        finally:
+            logger.remove(handler_id)
+        messages = [r["message"] for r in records]
+        self.assertTrue(any("upbeat" in m for m in messages))
+        self.assertFalse(
+            any("/app/resource/songs/catalog.toml" in m for m in messages),
+            "absolute catalog path leaked into the ERROR log",
+        )
+        self.assertTrue(any("catalog.toml" in m for m in messages))
+
+    def test_info_log_scrubs_absolute_paths(self):
+        records, handler_id = self._capture("INFO")
+        try:
+            mm.log_bgm_selection(
+                "upbeat",
+                "/app/resource/songs/catalog.toml",
+                "/app/resource/songs/upbeat/upbeat-loop.mp3",
+            )
+        finally:
+            logger.remove(handler_id)
+        messages = [r["message"] for r in records]
+        self.assertTrue(any("upbeat" in m for m in messages))
+        self.assertFalse(
+            any("/app/resource/songs/catalog.toml" in m for m in messages),
+            "absolute catalog path leaked into the INFO log",
+        )
+        self.assertFalse(
+            any("/app/resource/songs/upbeat/upbeat-loop.mp3" in m for m in messages),
+            "absolute track path leaked into the INFO log",
+        )
+
 
 class TestGetAvailableMusicMoods(unittest.TestCase):
+    def test_unreadable_catalog_logs_warning_without_the_absolute_path(self):
+        # A missing catalog warns locally: the absolute path must not reach
+        # the log line (the OSError text carries the path too).
+        records = []
+        handler_id = logger.add(
+            lambda message: records.append(message.record), level="WARNING"
+        )
+        try:
+            self.assertEqual(
+                mm.get_available_music_moods("/app/resource/songs/missing.toml"), ()
+            )
+        finally:
+            logger.remove(handler_id)
+        messages = [r["message"] for r in records]
+        self.assertTrue(any("missing.toml" in m for m in messages))
+        self.assertFalse(
+            any("/app/resource/songs/missing.toml" in m for m in messages),
+            "absolute catalog path leaked into the WARNING log",
+        )
+
     def test_reads_moods_from_catalog_file(self):
         import tempfile
 

@@ -8,6 +8,7 @@ an omitted mood always pass — the pipeline resolves the default.
 
 import sys
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -22,7 +23,8 @@ from app.services import state as sm
 
 
 class CreateTaskMusicMoodGateTests(unittest.TestCase):
-    def _call_create_task(self, body):
+    @contextmanager
+    def _patched_create_task(self):
         auth = SimpleNamespace(user_id="user-1")
         with (
             patch.object(
@@ -36,6 +38,10 @@ class CreateTaskMusicMoodGateTests(unittest.TestCase):
             ),
             patch.object(video_controller.task_manager, "add_task") as add_task,
         ):
+            yield add_task
+
+    def _call_create_task(self, body):
+        with self._patched_create_task() as add_task:
             response = video_controller.create_task(
                 MagicMock(), body, stop_at="video"
             )
@@ -47,21 +53,7 @@ class CreateTaskMusicMoodGateTests(unittest.TestCase):
             video_script="script",
             music_mood="finance",
         )
-        auth = SimpleNamespace(user_id="user-1")
-        with (
-            patch.object(
-                video_controller.base, "get_task_id", return_value="req-1"
-            ),
-            patch.object(
-                video_controller.base, "get_auth_context", return_value=auth
-            ),
-            patch.object(
-                mm, "get_available_music_moods", return_value=("calm", "upbeat")
-            ),
-            patch.object(
-                video_controller.task_manager, "add_task"
-            ) as add_task,
-        ):
+        with self._patched_create_task() as add_task:
             with self.assertRaises(HttpException) as ctx:
                 video_controller.create_task(MagicMock(), body, stop_at="video")
         self.assertEqual(ctx.exception.status_code, 400)

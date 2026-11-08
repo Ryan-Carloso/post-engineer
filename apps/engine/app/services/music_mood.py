@@ -22,6 +22,7 @@ from loguru import logger
 
 from app.config import config
 from app.models.schema import VideoParams
+from app.services.analytics import scrub_error_text
 from app.utils import utils
 
 # Explicit no-music choice. The API contract spells it as the literal
@@ -41,7 +42,13 @@ def get_available_music_moods(catalog_file: str | None = None) -> tuple[str, ...
     try:
         catalog = toml.load(resolved_catalog)
     except (OSError, toml.TomlDecodeError) as exc:
-        logger.warning(f"failed to load BGM moods: {resolved_catalog}, error: {str(exc)}")
+        # Scrubbed: the resolved path is absolute, and the OSError text
+        # carries it too — no machine layout in the logs.
+        logger.warning(
+            scrub_error_text(
+                f"failed to load BGM moods: {resolved_catalog}, error: {str(exc)}"
+            )
+        )
         return ()
 
     tracks = catalog.get("tracks", [])
@@ -122,11 +129,17 @@ def log_bgm_selection(music_mood: str, catalog: str, selected_file: str) -> None
         logger.info("BGM selection: mood='none' (explicit no-music choice)")
         return
     if not selected_file:
+        # Scrubbed: the ERROR is forwarded to PostHog as $exception, and
+        # the catalog path is absolute — no machine layout in analytics.
         logger.error(
-            f"BGM selection failed: mood={music_mood!r} has no track in catalog "
-            f"{catalog!r}; rendering without music"
+            scrub_error_text(
+                f"BGM selection failed: mood={music_mood!r} has no track in catalog "
+                f"{catalog!r}; rendering without music"
+            )
         )
         return
     logger.info(
-        f"BGM selection: mood={music_mood!r}, catalog={catalog!r}, selected={selected_file!r}"
+        scrub_error_text(
+            f"BGM selection: mood={music_mood!r}, catalog={catalog!r}, selected={selected_file!r}"
+        )
     )
