@@ -123,7 +123,8 @@ jobs:
 
       # Changed source files for this app, relative to the app dir
       # (Stryker resolves --mutate against its working directory).
-      # Excludes tests and deleted files. Empty when the PR touches no
+      # Excludes tests, generated *.gen.ts files (drift-tested, often
+      # type-only: no mutants) and deleted files. Empty when the PR touches no
       # source files in this app — or on manual dispatch (full config
       # scope, or the `scope` input when set; see the run step below).
       - name: Compute changed files
@@ -136,7 +137,7 @@ jobs:
               "origin/${{ github.base_ref }}...HEAD" \
               -- 'apps/${{ matrix.app }}/**/*.ts' 'apps/${{ matrix.app }}/**/*.tsx' \
               | grep -v '/__tests__/' | grep -v '/cypress/' \
-              | grep -vE '\.(test|cy)\.tsx?$' || true)"
+              | grep -vE '\.(test|cy)\.tsx?$' | grep -vE '\.gen\.tsx?$' || true)"
             # Strip the app prefix for Stryker's working directory.
             files="$(echo "$files" | sed "s|^apps/${{ matrix.app }}/||" | paste -sd ',' -)"
           fi

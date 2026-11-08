@@ -33,8 +33,7 @@ from app.services import (
     upload_post,
 )
 from app.services import state as sm
-from app.services import task_webhook
-from app.services import user_media
+from app.services import image_coverage, task_webhook, user_media
 from app.services.lipsync_active import persona_lipsync_active  # noqa: F401 - re-exported for existing callers
 from app.services import full_lipsync
 from app.services.pipeline_stage import PhaseTracker
@@ -801,9 +800,11 @@ def get_video_materials(task_id, params, video_terms, audio_duration, photos=())
             logger.error("no valid materials found, please check the materials and try again.")
             return None
         return [material_info.url for material_info in materials]
+    elif params.faceless_material == faceless_material.IMAGES:
+        # Only a neutral canvas: the segment photos cover it (image_coverage), never stock.
+        return faceless_material.images_canvas(utils.task_dir(task_id), audio_duration, params.video_aspect) or None
     else:
-        # Svg mode queries the catalog only: no stock provider runs, so an
-        # illustration-only video can never gain a stock clip.
+        # Svg mode queries the catalog only: no stock provider runs.
         if params.faceless_material == "svg":
             source_order = faceless_material.svg_source_order()
             video_terms = svg_terms.fit_to_audio(video_terms, audio_duration)
@@ -848,10 +849,7 @@ def get_video_materials(task_id, params, video_terms, audio_duration, photos=())
             downloaded_videos = [neutral] if neutral else []
         if not downloaded_videos:
             _fail_task(task_id, "failed to download videos", params, stage="download")
-            logger.error(
-                "failed to download videos, maybe the network is not available."
-                " if you are in China, please use a VPN."
-            )
+            logger.error("failed to download videos, maybe the network is not available.")
             return None
         return downloaded_videos
 
@@ -1093,8 +1091,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             return {"script": video_script}
 
         # 2. Generate terms
-        video_terms = ""
-        if not params.video_materials:
+        video_terms = ""  # images material: the agent's photos, no stock search terms
+        if not params.video_materials and params.faceless_material != faceless_material.IMAGES:
             phases.begin("terms")
             video_terms = generate_terms(task_id, params, video_script)
             phases.complete("terms")
@@ -1167,11 +1165,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             if trimmed_seconds is not None:
                 audio_duration = math.ceil(trimmed_seconds)
 
-        # 4b. Persona hook guard: the lip-sync intro needs the hook to end
-        # between 3 and 6 seconds. Validate now — before the expensive
-        # material/download/combine stages — and regenerate an overshooting
-        # hook instead of failing the whole task. A ValueError here keeps
-        # the previous behavior: the task fails with the hook error.
+        # 4b. Persona hook guard: measures the hook before the expensive
+        # material stages; an off-window hook is reported, never regenerated.
         script_before_hook_guard = video_script
         (
             video_script,
@@ -1206,7 +1201,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             else None
         )
         photos = []
-        if params.match_materials_to_script:
+        if params.match_materials_to_script and params.faceless_material != faceless_material.IMAGES:
             photos = place_photos.prepare_photos(
                 task_id, params, video_script, subtitle_path, audio_duration, window=photo_window
             )
@@ -1220,7 +1215,12 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             return
 
         # Segment photos become panels over the final video; skips are task warnings.
-        media_warnings = user_media.prepare_segment_panels(task_id, params, subtitle_path, audio_duration)
+        try:
+            media_warnings = user_media.prepare_segment_panels(task_id, params, subtitle_path, audio_duration)
+        except image_coverage.ImagesDoNotCoverAudio as exc:  # images material, no photo survived
+            _fail_task(task_id, str(exc), params, stage="materials", exc=exc)
+            cleanup_task_intermediates(task_id, ())
+            return
         if media_warnings or getattr(params, "segments", None):
             _update_task(task_id, media_warnings=media_warnings)
 

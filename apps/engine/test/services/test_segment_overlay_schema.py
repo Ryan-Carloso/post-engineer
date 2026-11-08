@@ -46,3 +46,47 @@ def test_overlay_text_is_measured_after_trimming_like_the_validators():
     assert overlay.badge == "EUR 35"
     with pytest.raises(ValidationError):
         SegmentOverlay(title=" " * 3)
+
+
+def _request_segments(with_media):
+    hook = "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."
+    body = (
+        "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed "
+        "since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."
+    )
+    cta = "Save this video before your next trip to Porto."
+    segments = [{"kind": "hook", "text": hook}, {"kind": "body", "text": body}, {"kind": "cta", "text": cta}]
+    if with_media:
+        segments = [{**segment, "media": {"url": f"https://example.com/{i}.jpg"}} for i, segment in enumerate(segments)]
+    return segments
+
+
+def test_images_request_with_media_on_every_segment_joins_into_the_script():
+    from app.models.schema import TaskVideoRequest
+
+    request = TaskVideoRequest(video_subject="Porto", faceless_material="images", segments=_request_segments(True))
+    assert request.video_script.startswith("Stop wasting your trip")
+
+
+def test_images_request_with_a_segment_missing_media_is_rejected():
+    import pydantic
+
+    from app.models.schema import TaskVideoRequest
+
+    with pytest.raises(pydantic.ValidationError, match="The images material needs media on every segment"):
+        TaskVideoRequest(video_subject="Porto", faceless_material="images", segments=_request_segments(False))
+
+
+def test_images_request_without_segments_is_rejected():
+    import pydantic
+
+    from app.models.schema import TaskVideoRequest
+
+    with pytest.raises(pydantic.ValidationError, match="faceless_material images needs segments"):
+        TaskVideoRequest(video_subject="Porto", faceless_material="images", video_script="Some script.")
+
+
+def test_broll_request_without_segments_is_still_accepted():
+    from app.models.schema import TaskVideoRequest
+
+    assert TaskVideoRequest(video_subject="Porto", video_script="Some script.").segments is None

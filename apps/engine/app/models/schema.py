@@ -149,9 +149,10 @@ class VideoParams(BaseModel):
     match_materials_to_script: bool = True
     # Material choice, per request only (like video_layout, never
     # config.toml), for posts with or without a face: "broll" is stock
-    # only, "svg" is only the R2 SVG catalog; the two never mix. The web
-    # sends it on every post; a caller omitting it gets "broll".
-    faceless_material: Literal["broll", "svg"] = "broll"
+    # only, "svg" is only the R2 SVG catalog, "images" is only the agent's
+    # own segment images; they never mix. The web sends it on every post;
+    # a caller omitting it gets "broll".
+    faceless_material: Literal["broll", "svg", "images"] = "broll"
     video_materials: Optional[List[MaterialInfo]] = (
         None  # Materials used to generate the video
     )
@@ -337,11 +338,14 @@ class TaskVideoRequest(VideoParams, BaseModel):
     @model_validator(mode="after")
     def _validate_segments_into_script(self) -> "TaskVideoRequest":
         if self.segments is None:
+            if self.faceless_material == "images":
+                raise ValueError("faceless_material images needs segments, each with media")
             return self
         from app.services import script_segments
 
         joined = script_segments.segments_to_script(
-            [segment.model_dump(exclude_none=True) for segment in self.segments]
+            [segment.model_dump(exclude_none=True) for segment in self.segments],
+            self.faceless_material,
         )
         # Pydantic v2 does not re-validate on assignment: enforce the
         # video_script cap from the field metadata, not a hardcoded value.

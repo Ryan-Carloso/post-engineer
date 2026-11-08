@@ -38,7 +38,9 @@ from loguru import logger
 from PIL import Image
 
 from app.models.schema import VideoAspect
-from app.services import face_detect, media_overlay, persona_hook, place_photos, segment_panels, subtitle, video
+from app.services import (
+    face_detect, faceless_material, image_coverage, media_overlay, persona_hook, place_photos, segment_panels, subtitle, video,
+)
 from app.services.lipsync_active import persona_lipsync_active
 from app.services.segment_panels import Panel
 from app.utils import file_security, utils
@@ -354,6 +356,8 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
     """Materials-stage step for tm.start: draw the panels, persist them, report warnings.
 
     They are overlaid when the final video is assembled (segment_panels.overlay_onto).
+    With the images material, raises image_coverage.ImagesDoNotCoverAudio when no
+    full-frame photo survived.
     """
     segments = getattr(params, "segments", None)
     if not segments:
@@ -362,10 +366,19 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
         aspect = VideoAspect(params.video_aspect)
     except (ValueError, TypeError, AttributeError):
         aspect = VideoAspect.portrait
+    face = _face_mode(params)
+    video_script = getattr(params, "video_script", "") or ""
     panels, warnings = prepare_segment_media(
         task_id, segments, subtitle_path, audio_duration, utils.task_dir(task_id), aspect,
-        face=_face_mode(params), video_script=getattr(params, "video_script", "") or "",
+        face=face, video_script=video_script,
         font_for=_overlay_font(params, segments),
     )
+    if getattr(params, "faceless_material", None) == faceless_material.IMAGES:
+        # The photos are the whole picture: neighbours cover gaps; none left fails the task.
+        hook_end = _hook_end(video_script, subtitle_path, audio_duration) if face == segment_panels.FACE_HOOK else 0.0
+        panels, gap_warnings = image_coverage.extend_over_gaps(
+            panels, image_coverage.coverage_start(face, hook_end), audio_duration
+        )
+        warnings = [*warnings, *gap_warnings]
     segment_panels.write_manifest(task_id, panels, warnings)
     return warnings
