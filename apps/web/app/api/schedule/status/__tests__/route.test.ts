@@ -1176,3 +1176,112 @@ describe('GET failure handling', () => {
     expect(client.from).not.toHaveBeenCalledWith('scheduled_posts');
   });
 });
+
+//---------------
+// Range mode (?from=&to=) — the calendar view reads every slot of a month,
+// any status, instead of the capped upcoming/recent split.
+//---------------
+describe('GET range mode', () => {
+  const FROM = '2026-11-01T00:00:00.000Z';
+  const TO = '2026-12-01T00:00:00.000Z';
+  const url = `https://example.com/api/schedule/status?from=${FROM}&to=${TO}`;
+
+  function mockRangeClient(rows: unknown[], error: unknown = null) {
+    const chain = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      lt: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn(async () => ({ data: rows, error })),
+    };
+    return { from: vi.fn(() => chain), chain };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuthSession({ userId: USER_ID, accessToken: 't' }, null);
+  });
+
+  it('returns every status in [from, to) as slots, owner-scoped', async () => {
+    const rows = [
+      { id: 'a', slot_at: '2026-11-02T10:00:00Z', status: 'pending', title: 'A', schedule_id: 's1' },
+      { id: 'b', slot_at: '2026-11-03T10:00:00Z', status: 'published', title: 'B', schedule_id: 's1' },
+    ];
+    const client = mockRangeClient(rows);
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+
+    const response = await GET(new Request(url));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.truncated).toBe(false);
+    expect(body.slots.map((s: { id: string; status: string }) => [s.id, s.status])).toEqual([
+      ['a', 'awaiting'],
+      ['b', 'published'],
+    ]);
+    expect(body.upcoming).toBeUndefined();
+    expect(client.chain.eq).toHaveBeenCalledWith('user_id', USER_ID);
+    expect(client.chain.gte).toHaveBeenCalledWith('slot_at', FROM);
+    expect(client.chain.lt).toHaveBeenCalledWith('slot_at', TO);
+    expect(client.chain.in).toHaveBeenCalledWith('status', [
+      'pending', 'generating', 'ready', 'publishing', 'published', 'failed',
+    ]);
+  });
+
+  it('flags truncation instead of silently cutting past the cap', async () => {
+    const rows = Array.from({ length: 1001 }, (_, i) => ({
+      id: `p${i}`, slot_at: '2026-11-02T10:00:00Z', status: 'published', title: null, schedule_id: 's1',
+    }));
+    const client = mockRangeClient(rows);
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+
+    const body = await (await GET(new Request(url))).json();
+
+    expect(client.chain.limit).toHaveBeenCalledWith(1001);
+    expect(body.slots).toHaveLength(1000);
+    expect(body.truncated).toBe(true);
+  });
+
+  it('answers 400 on a malformed range before touching auth or the database', async () => {
+    const response = await GET(new Request('https://example.com/api/schedule/status?from=nope&to=nope'));
+    expect(response.status).toBe(400);
+    expect(requireSupabaseSession).not.toHaveBeenCalled();
+    expect(createSupabaseServerClient).not.toHaveBeenCalled();
+  });
+
+  it('answers 400 when the range is combined with limit', async () => {
+    const response = await GET(new Request(`${url}&limit=5`));
+    expect(response.status).toBe(400);
+  });
+
+  it('logs and answers 500 when the range query fails', async () => {
+    const client = mockRangeClient([], { message: 'boom' });
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    const response = await GET(new Request(url));
+    expect(response.status).toBe(500);
+    expect(logger.error).toHaveBeenCalled();
+  });
+
+  it('restricts a persona-scoped key to its schedules in range mode', async () => {
+    const client = mockScopedPostsClient([{ id: 's1', persona_id: 'p1' }, { id: 's2', persona_id: 'p2' }], [], []);
+    (client.postsChain as Record<string, unknown>).lt = vi.fn().mockReturnThis();
+    (client.postsChain as Record<string, unknown>).limit = vi.fn(async () => ({ data: [], error: null }));
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_k', isApiKey: true, personaIds: ['p1'] }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request(url));
+
+    expect(response.status).toBe(200);
+    expect(client.postsChain.in).toHaveBeenCalledWith('schedule_id', ['s1']);
+  });
+
+  it('returns empty slots for a scoped key with no allowed schedules', async () => {
+    const client = mockScopedPostsClient([{ id: 's2', persona_id: 'p2' }], [], []);
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_k', isApiKey: true, personaIds: ['p1'] }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const body = await (await GET(new Request(url))).json();
+    expect(body).toEqual({ success: true, slots: [], truncated: false });
+  });
+});

@@ -442,10 +442,14 @@ export const operationSchemas = {
   'GET /api/prompts/[slug]': { response: success({ prompt: object(fields(str, ['slug', 'title', 'description', 'prompt'])) }) },
   // apps/web/app/api/schedule/status/route.ts
   'GET /api/schedule/status': {
-    query: [{ name: 'limit', required: false }],
+    // ?from=&to= (ISO-8601, together, not with limit) switches to range mode:
+    // `slots` + `truncated` instead of `upcoming` + `recent`.
+    query: [{ name: 'limit', required: false }, { name: 'from', required: false }, { name: 'to', required: false }],
     response: success({
       upcoming: { type: 'array', items: anyObject },
       recent: { type: 'array', items: anyObject },
+      slots: { type: 'array', items: anyObject, description: 'Range mode only: every slot with slot_at in [from, to).' },
+      truncated: { type: 'boolean', description: 'Range mode only: true when the slot cap was hit.' },
     }),
   },
   // apps/web/app/api/persona/delete-preview/route.ts

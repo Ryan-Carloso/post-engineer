@@ -148,7 +148,7 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `set_persona_publishing_accounts`: replace a persona's default publishing accounts per provider (account IDs from `list_social_accounts`; providers mapped to `[]` keep no defaults).
 - `connect_account`: connect a social account. For youtube/instagram/linkedin/threads: returns an authorization URL — the user must open it in a browser where they are signed in to Post Engineer with the same account, and authorize; the account then connects automatically (verify with `list_social_accounts`). A browser that is not signed in, or signed in as another user, is rejected. For bluesky: connects directly with handle + app password.
 - `list_schedules`: list automation schedules.
-- `list_posts`: list upcoming (scheduled) and past (published/failed) posts across all connected accounts.
+- `list_posts`: list upcoming (scheduled) and past (published/failed) posts across all connected accounts. With `from` + `to` (ISO-8601 with UTC offset, at most 62 days) it returns every post of any status in that window as one `slots` list, plus `truncated`.
 - `cancel_schedule`: cancel a schedule by its ID.
 - `get_slot`: get one scheduled post's full detail by slot ID (status, title, scheduled time, progress, schedule, persona).
 - `update_slot_title`: edit the title of a scheduled post that has not started generating yet.

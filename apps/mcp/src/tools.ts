@@ -418,13 +418,6 @@ export async function handleListSchedules(
   return handleLibraryCall(() => client.listSchedules(), 'listing schedules');
 }
 
-export async function handleListPosts(
-  client: PostEngineerClient,
-  args: z.infer<typeof ListPostsSchema>
-): Promise<McpToolResponse> {
-  return handleLibraryCall(() => client.listPosts(args.limit), 'listing posts');
-}
-
 export async function handleCancelSchedule(
   client: PostEngineerClient,
   args: z.infer<typeof CancelScheduleSchema>

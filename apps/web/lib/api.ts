@@ -727,7 +727,7 @@ export interface ScheduledSlot {
   retryable: boolean | null;
 }
 
-interface SlotRow {
+export interface SlotRow {
   id: string;
   schedule_id: string;
   slot_at: string;
@@ -756,7 +756,7 @@ interface ScheduleStatusPayload {
   recent?: SlotRow[];
 }
 
-function mapSlot(row: SlotRow): ScheduledSlot {
+export function mapSlot(row: SlotRow): ScheduledSlot {
   return {
     id: row.id,
     scheduleId: row.schedule_id,
