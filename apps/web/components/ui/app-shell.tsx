@@ -2,16 +2,22 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { Ellipsis } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/provider';
 import { AccountPanel, MobileProfileLink } from '@/components/ui/account-panel';
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { InsufficientTokensDialog } from '@/components/ui/insufficient-tokens-dialog';
+import { SUPPORT_EMAIL } from '@/components/ui/pricing-contact';
 import VersionBadge from '@/components/ui/version-badge';
 import AppLogo from '@/components/ui/app-logo';
 import {
   AccountsIcon,
+  CalendarIcon,
   ChartIcon,
-  ComposeIcon,
+  CoinsIcon,
   HistoryIcon,
+  KeyIcon,
   SparklesIcon,
 } from '@/lib/ui';
 
@@ -20,10 +26,30 @@ import {
 //---------------
 interface NavItem {
   href: string;
-  labelKey: 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.metrics' | 'nav.prompts' | 'nav.debug';
-  hintKey: 'nav.accountsHint' | 'nav.personaHint' | 'nav.postsHint' | 'nav.metricsHint' | 'nav.promptsHint' | 'nav.debugHint';
+  labelKey: 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.history' | 'nav.metrics' | 'nav.prompts' | 'nav.billing';
+  hintKey: 'nav.accountsHint' | 'nav.personaHint' | 'nav.postsHint' | 'nav.historyHint' | 'nav.metricsHint' | 'nav.promptsHint';
   icon: () => React.JSX.Element;
 }
+
+const HISTORY_HREF = '/posts/history';
+
+// onRoute — the path is the route or one of its subroutes, matched by whole
+// segments (/account never matches /accounts).
+function onRoute(route: string, pathname: string): boolean {
+  return pathname === route || pathname.startsWith(`${route}/`);
+}
+
+// isNavActive — a tab is current on its route and subroutes. /posts/history
+// is its own entry, so it never also lights up the Posts (calendar) tab.
+// The Personas tab (/personas) also covers the /persona editor routes.
+function isNavActive(href: string, pathname: string): boolean {
+  if (href === '/posts' && onRoute(HISTORY_HREF, pathname)) return false;
+  if (href === '/personas') return onRoute(href, pathname) || onRoute('/persona', pathname);
+  return onRoute(href, pathname);
+}
+
+// Routes reached through the mobile "More" sheet instead of a bottom tab.
+const MORE_ROUTES = [HISTORY_HREF, '/metrics', '/billing'];
 
 //---------------
 // AppShell — authenticated shell with Arc-browser-style fixed sidebar.
@@ -55,11 +81,12 @@ const MainSidebar = () => {
   const { t } = useI18n();
 
   const navItems: Array<NavItem> = [
-    { href: '/posts', labelKey: 'nav.posts', hintKey: 'nav.postsHint', icon: HistoryIcon },
+    { href: '/posts', labelKey: 'nav.posts', hintKey: 'nav.postsHint', icon: CalendarIcon },
+    { href: HISTORY_HREF, labelKey: 'nav.history', hintKey: 'nav.historyHint', icon: HistoryIcon },
     { href: '/accounts', labelKey: 'nav.accounts', hintKey: 'nav.accountsHint', icon: AccountsIcon },
     { href: '/personas', labelKey: 'nav.persona', hintKey: 'nav.personaHint', icon: SparklesIcon },
     { href: '/metrics', labelKey: 'nav.metrics', hintKey: 'nav.metricsHint', icon: ChartIcon },
-    { href: '/recipes', labelKey: 'nav.prompts', hintKey: 'nav.promptsHint', icon: ComposeIcon },
+    { href: '/recipes', labelKey: 'nav.prompts', hintKey: 'nav.promptsHint', icon: KeyIcon },
   ];
 
   return (
@@ -83,7 +110,7 @@ const MainSidebar = () => {
 
       <nav className="flex-1 space-y-1.5 px-3.5 py-6 lg:space-y-2 lg:px-7 lg:py-8">
         {navItems.map((item) => (
-          <SidebarTab key={item.href} item={item} isActive={pathname.startsWith(item.href)} />
+          <SidebarTab key={item.href} item={item} isActive={isNavActive(item.href, pathname)} />
         ))}
       </nav>
 
@@ -138,40 +165,79 @@ const MobileHeader = () => {
 };
 
 //---------------
-// MobileNavigation — fixed bottom navigation with uniform tabs.
+// MobileNavigation — fixed bottom navigation: four uniform tabs plus "More",
+// a bottom sheet linking History, Metrics and Tokens (/billing). The profile
+// (/account) is the avatar in the mobile header.
 //---------------
+const MOBILE_TAB_CLASS = 'flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 text-center text-xs leading-tight';
+
 const MobileNavigation = () => {
   const { t } = useI18n();
   const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
+  // Any navigation (a link inside the sheet included) closes the sheet.
+  useEffect(() => setMoreOpen(false), [pathname]);
 
-  const tabs: Array<{
-    href: string;
-    labelKey: NavItem['labelKey'];
-    icon: () => React.JSX.Element;
-    isActive: boolean;
-  }> = [
-    { href: '/posts', labelKey: 'nav.posts', icon: HistoryIcon, isActive: pathname.startsWith('/posts') },
-    { href: '/personas', labelKey: 'nav.persona', icon: SparklesIcon, isActive: pathname.startsWith('/persona') },
-    { href: '/accounts', labelKey: 'nav.accounts', icon: AccountsIcon, isActive: pathname.startsWith('/accounts') },
-    { href: '/recipes', labelKey: 'nav.prompts', icon: ComposeIcon, isActive: pathname.startsWith('/recipes') },
+  const tabs: Array<{ href: string; labelKey: NavItem['labelKey']; icon: () => React.JSX.Element }> = [
+    { href: '/posts', labelKey: 'nav.posts', icon: CalendarIcon },
+    { href: '/personas', labelKey: 'nav.persona', icon: SparklesIcon },
+    { href: '/accounts', labelKey: 'nav.accounts', icon: AccountsIcon },
+    { href: '/recipes', labelKey: 'nav.prompts', icon: KeyIcon },
   ];
+  const moreLinks: Array<{ href: string; labelKey: NavItem['labelKey']; icon: () => React.JSX.Element }> = [
+    { href: HISTORY_HREF, labelKey: 'nav.history', icon: HistoryIcon },
+    { href: '/metrics', labelKey: 'nav.metrics', icon: ChartIcon },
+    { href: '/billing', labelKey: 'nav.billing', icon: CoinsIcon },
+  ];
+  const moreActive = MORE_ROUTES.some((route) => onRoute(route, pathname));
 
   return (
-    <nav aria-label={t('nav.primaryNavigation')} className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-line bg-card/95 px-2 pt-2 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+    <nav aria-label={t('nav.primaryNavigation')} className="fixed inset-x-0 bottom-0 z-30 flex items-start justify-around border-t border-line bg-card/95 px-1 pt-2 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
       {tabs.map((tab) => {
         const Icon = tab.icon;
+        const isActive = isNavActive(tab.href, pathname) && !moreActive;
         return (
           <Link
             key={tab.href}
             href={tab.href}
-            aria-current={tab.isActive ? 'page' : undefined}
-            className={`flex flex-col items-center gap-0.5 px-3 text-xs ${tab.isActive ? 'font-semibold text-primary' : 'text-muted-text'}`}
+            aria-current={isActive ? 'page' : undefined}
+            className={`${MOBILE_TAB_CLASS} ${isActive ? 'font-semibold text-primary' : 'text-muted-text'}`}
           >
             <span className="[&>svg]:size-5"><Icon /></span>
             <span>{t(tab.labelKey)}</span>
           </Link>
         );
       })}
+      <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+        <SheetTrigger className={`${MOBILE_TAB_CLASS} ${moreActive ? 'font-semibold text-primary' : 'text-muted-text'}`}>
+          <Ellipsis className="size-5" aria-hidden />
+          <span>{t('nav.more')}</span>
+        </SheetTrigger>
+        <SheetContent side="bottom" aria-describedby={undefined} className="rounded-t-3xl bg-card pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
+          <SheetTitle className="text-base text-primary">{t('nav.moreTitle')}</SheetTitle>
+          <ul className="mt-4 grid grid-cols-3 gap-2">
+            {moreLinks.map((link) => {
+              const Icon = link.icon;
+              const isActive = onRoute(link.href, pathname);
+              return (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium ${isActive ? 'bg-brand-soft text-ink' : 'bg-surface text-muted-text'}`}
+                  >
+                    <span className="[&>svg]:size-5"><Icon /></span>
+                    {t(link.labelKey)}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mt-4">
+            <SidebarLegalLinks />
+          </div>
+        </SheetContent>
+      </Sheet>
     </nav>
   );
 };
@@ -185,7 +251,7 @@ const SidebarLegalLinks = () => {
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-faint">
       <Link href="/privacy" className="hover:text-ink">{t('footer.privacy')}</Link>
       <Link href="/terms" className="hover:text-ink">{t('footer.terms')}</Link>
-      <a href="mailto:madebyryandev@gmail.com" className="hover:text-ink">{t('footer.support')}</a>
+      <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-ink">{t('footer.support')}</a>
     </div>
   );
 };

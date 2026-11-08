@@ -71,30 +71,33 @@ describe('Posts list progress', () => {
         },
       ],
     }).as('schedules');
+    // Today, so the calendar (which opens on today) lists the card; the
+    // same intercept answers the calendar's range read (`slots`).
+    const generatingSlot = {
+      id: 'slot-e2e-gen',
+      schedule_id: NEW_POST_SCHEDULE_ID,
+      slot_at: new Date().toISOString(),
+      status: 'generating',
+      title: 'E2E generating topic',
+      task_id: 'task-e2e-1',
+      progress: 42,
+      stage: 'lipsync',
+      queuePosition: 1,
+      queueTotal: 1,
+      retryable: null,
+    };
     cy.intercept('GET', '/api/schedule/status*', {
       success: true,
-      upcoming: [
-        {
-          id: 'slot-e2e-gen',
-          schedule_id: NEW_POST_SCHEDULE_ID,
-          slot_at: '2030-06-01T09:00:00.000Z',
-          status: 'generating',
-          title: 'E2E generating topic',
-          task_id: 'task-e2e-1',
-          progress: 42,
-          stage: 'lipsync',
-          queuePosition: 1,
-          queueTotal: 1,
-          retryable: null,
-        },
-      ],
+      upcoming: [generatingSlot],
       recent: [],
+      slots: [generatingSlot],
     }).as('status');
   });
 
-  it('shows the live progress percent on the list card', () => {
+  it('shows the live progress percent on the calendar day card', () => {
     cy.visit('/posts');
-    cy.contains('E2E generating topic').should('be.visible');
+    // Today's posts render below the calendar, inside the scrolling <main>.
+    cy.contains('E2E generating topic').scrollIntoView().should('be.visible');
     cy.contains('42%').should('be.visible');
     cy.get('[role="progressbar"]').should('have.attr', 'aria-valuenow', '42');
   });

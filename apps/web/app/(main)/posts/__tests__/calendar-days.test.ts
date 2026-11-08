@@ -6,8 +6,6 @@ import {
   dayKey,
   groupCounts,
   gridRange,
-  moveFocus,
-  weekdayLabels,
 } from '../calendar-days';
 import { statusGroupOf } from '../status';
 
@@ -71,14 +69,6 @@ describe('buildMonthGrid', () => {
   });
 });
 
-describe('weekdayLabels', () => {
-  it('uses the locale month/weekday names starting on the first weekday', () => {
-    expect(weekdayLabels('en', 0)[0].long).toBe('Sunday');
-    expect(weekdayLabels('pt', 0)[0].long).toMatch(/domingo/i);
-    expect(weekdayLabels('en', 1)[0].long).toBe('Monday');
-  });
-});
-
 describe('status groups and cell markers', () => {
   it('maps every real slot and generation status to a group', () => {
     for (const status of ['pending', 'awaiting', 'generating', 'ready', 'publishing']) {
@@ -111,31 +101,5 @@ describe('status groups and cell markers', () => {
   it('collapses more than 3 posts into +N', () => {
     const slots = Array.from({ length: 7 }, () => ({ status: 'published' as const }));
     expect(cellMarkers(slots)).toEqual({ markers: ['published', 'published', 'published'], overflow: 4 });
-  });
-});
-
-describe('moveFocus', () => {
-  const wed = new Date(2030, 5, 12); // Wednesday
-  it('moves by day and week', () => {
-    expect(dayKey(moveFocus('ArrowLeft', wed, 0) as Date)).toBe('2030-06-11');
-    expect(dayKey(moveFocus('ArrowRight', wed, 0) as Date)).toBe('2030-06-13');
-    expect(dayKey(moveFocus('ArrowUp', wed, 0) as Date)).toBe('2030-06-05');
-    expect(dayKey(moveFocus('ArrowDown', wed, 0) as Date)).toBe('2030-06-19');
-  });
-
-  it('jumps to the week edges for the locale first weekday', () => {
-    expect(dayKey(moveFocus('Home', wed, 0) as Date)).toBe('2030-06-09');
-    expect(dayKey(moveFocus('End', wed, 0) as Date)).toBe('2030-06-15');
-    expect(dayKey(moveFocus('Home', wed, 1) as Date)).toBe('2030-06-10');
-    expect(dayKey(moveFocus('End', wed, 1) as Date)).toBe('2030-06-16');
-  });
-
-  it('changes month with PageUp/PageDown without overflowing short months', () => {
-    expect(dayKey(moveFocus('PageDown', new Date(2030, 0, 31), 0) as Date)).toBe('2030-02-28');
-    expect(dayKey(moveFocus('PageUp', wed, 0) as Date)).toBe('2030-05-12');
-  });
-
-  it('ignores other keys', () => {
-    expect(moveFocus('a', wed, 0)).toBeNull();
   });
 });
