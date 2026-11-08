@@ -235,9 +235,14 @@ export async function checkExperimentLink(
   // A retry with the same idempotency key addresses the same schedule:
   // the route replays it, so it is not a duplicate.
   if (same !== undefined) {
-    return same.schedule_id === input.replayScheduleId
-      ? { ok: true }
-      : failure(409, 'This pair already has a video for this variant.', 'experiment.variantId');
+    if (same.schedule_id === input.replayScheduleId) return { ok: true };
+    return failure(
+      409,
+      same.status === 'failed'
+        ? 'The earlier video of this pair for this variant failed and its failed slot still holds the pair. Delete that slot with delete_slot if its schedule has other slots; a single-video schedule cannot be deleted that way, so use the next free pair number instead.'
+        : 'This pair already has a video for this variant.',
+      'experiment.variantId',
+    );
   }
   const partner = slots.find((slot) => slot.variant_id !== link.variantId);
   if (partner === undefined) return { ok: true };
@@ -253,7 +258,7 @@ interface PartnerSlot {
   faceless_material: string | null;
 }
 
-const PAIR_SLOT_COLUMNS = 'schedule_id, variant_id, segments, faceless, full_lipsync, title, faceless_material';
+const PAIR_SLOT_COLUMNS = 'schedule_id, variant_id, status, segments, faceless, full_lipsync, title, faceless_material';
 
 async function comparePartner(
   supabase: SupabaseClient,

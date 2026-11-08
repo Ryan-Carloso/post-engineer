@@ -194,6 +194,41 @@ describe('checkExperimentLink', () => {
     await expect(run({ experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: replay }).promise).resolves.toEqual({ ok: true });
   });
 
+  it('409 on a failed same-variant slot of another schedule says the video failed and how to clear it; any other status keeps the plain message', async () => {
+    const failedSlot = { data: [{ ...PARTNER_SLOT, variant_id: 'hook-aggressive', status: 'failed' }], error: null };
+    const failed = await run({ experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: failedSlot }).promise;
+    expect(failed).toMatchObject({ ok: false, status: 409, field: 'experiment.variantId', message: expect.stringContaining('failed') });
+    expect(failed).toMatchObject({ message: expect.stringContaining('delete_slot') });
+    const generating = { data: [{ ...PARTNER_SLOT, variant_id: 'hook-aggressive', status: 'generating' }], error: null };
+    await expect(run({ experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: generating }).promise).resolves.toMatchObject({
+      ok: false, status: 409, message: 'This pair already has a video for this variant.',
+    });
+  });
+
+  it('a failed slot on the same schedule is still a replay', async () => {
+    const replay = { data: [{ ...PARTNER_SLOT, variant_id: 'hook-aggressive', schedule_id: SCHEDULE_ID, status: 'failed' }], error: null };
+    await expect(run({ experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: replay }).promise).resolves.toEqual({ ok: true });
+  });
+
+  it('treats null query data as empty and a null experiment persona as no persona', async () => {
+    const nullData = { data: null, error: null };
+    await expect(run({ experiment: OK_EXPERIMENT, variants: nullData }).promise).resolves.toMatchObject({ ok: false, status: 400, field: 'experiment.variantId' });
+    await expect(run({ experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: nullData }).promise).resolves.toEqual({ ok: true });
+    const faceless = { data: { id: EXPERIMENT_ID, persona_id: null, target_pairs: 3 }, error: null };
+    await expect(run({ experiment: faceless, variants: OK_VARIANTS, slots: nullData }, { personaId: null }).promise).resolves.toEqual({ ok: true });
+  });
+
+  it('500 when the partner schedule lookup returns an error alongside data', async () => {
+    const tables = { experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: { data: [PARTNER_SLOT], error: null }, schedule: { data: PARTNER_SCHEDULE.data, error: { message: 'boom' } } };
+    await expect(run(tables).promise).resolves.toMatchObject({ ok: false, status: 500, field: 'experiment.pair' });
+  });
+
+  it('accepts a two-provider pair whose second provider has no account list on either side', async () => {
+    const schedule = { data: { ...PARTNER_SCHEDULE.data, providers: ['youtube', 'bluesky'] }, error: null };
+    const tables = { experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: { data: [PARTNER_SLOT], error: null }, schedule };
+    await expect(run(tables, { facts: facts({ providers: ['youtube', 'bluesky'], accountIds: { youtube: ['chan-1'] } }) }).promise).resolves.toEqual({ ok: true });
+  });
+
   it('400 when the second video breaks pair fairness', async () => {
     const tables = { experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: { data: [PARTNER_SLOT], error: null }, schedule: PARTNER_SCHEDULE };
     await expect(run(tables, { facts: facts({ segments: SEGMENTS }) }).promise).resolves.toMatchObject({
@@ -299,6 +334,10 @@ describe('verifyExperimentPairAfterInsert', () => {
     await expect(promise).resolves.toMatchObject({ ok: false, status: 400, field: 'options.niche' });
   });
 
+  it('treats null pair data as no partner', async () => {
+    await expect(verify({ slots: { data: null, error: null } }).promise).resolves.toEqual({ ok: true });
+  });
+
   it('fails closed (500) when the pair or partner schedule cannot be read', async () => {
     await expect(verify({ slots: { data: null, error: { message: 'boom' } } }).promise).resolves.toMatchObject({ ok: false, status: 500 });
     await expect(
@@ -308,6 +347,13 @@ describe('verifyExperimentPairAfterInsert', () => {
 });
 
 describe('buildPairFacts', () => {
+  it('defaults a missing voice id, full lip-sync flag, material and audio URL to null/false', () => {
+    const prep = { faceless: false, faceQuality: null, voiceIdValue: undefined, niche: null, ctaText: null, language: null, videoAspect: null, videoLayout: null, paragraphNumber: null } as unknown as PersonaPrep;
+    expect(buildPairFacts({ providers: [], accountIds: {}, prep, title: 'T', segments: [], fullLipsync: undefined, facelessMaterial: 'svg', audioUrl: 'https://x/v.mp3' })).toMatchObject({
+      voiceId: null, fullLipsync: false, facelessMaterial: 'svg', voiceAudioUrl: 'https://x/v.mp3',
+    });
+  });
+
   it('maps the resolved request values exactly as the route stores them', () => {
     const prep = {
       faceless: true, faceQuality: 'ok', voiceIdValue: 'v1', niche: 'fitness', ctaText: 'Go.', language: 'en-US',

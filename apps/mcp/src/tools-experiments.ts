@@ -11,7 +11,7 @@ import {
   METRICS_WINDOWS,
 } from './limits.js';
 import { GeneratePersonaVideoShape, ScriptSegmentShape } from './single-video-shape.js';
-import { handleGeneratePersonaVideo } from './tools-single-video.js';
+import { generatePersonaVideoOutcome } from './tools-single-video.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
 //---------------
@@ -168,7 +168,7 @@ export async function handleAddExperimentPair(
       index === 1 && delivery.mode !== 'asap' && delivery.startAt !== undefined
         ? shiftStartAt(delivery.startAt, spacingHours)
         : delivery.startAt;
-    const response = await handleGeneratePersonaVideo(client, {
+    const { response, failedSlotIds } = await generatePersonaVideoOutcome(client, {
       ...delivery,
       startAt,
       title,
@@ -181,6 +181,24 @@ export async function handleAddExperimentPair(
     if (response.isError === true) {
       const done = index === 1 ? ` The ${ordered[0].variantId} video of pair ${pair} was created; call add_experiment_pair again with the same arguments after fixing the error — it replays that video and only creates the missing one.` : '';
       return { content: [{ type: 'text', text: `Pair ${pair}, variant ${hook.variantId}: ${textOf(response)}${done}` }], isError: true };
+    }
+    if (failedSlotIds.length > 0) {
+      // A 2xx can carry a failed slot: a dispatch failure (502) leaves the
+      // failed slot behind and a retry on the same key replays it. The slot
+      // is its schedule's only slot, so delete_slot answers 409 (last slot)
+      // and cancel_schedule leaves a failed row alone, which keeps the
+      // (experiment, pair, variant) unique key taken: this pair number
+      // cannot be redone, so the recovery is a new pair number.
+      const done = index === 1 ? ` The ${ordered[0].variantId} video of pair ${pair} was created and stays; it is left without a partner and does not count toward the result.` : '';
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Pair ${pair}, variant ${hook.variantId}: the video failed (slot ${failedSlotIds.join(', ')}, its tokens are refunded), so this pair was NOT created. The failed slot cannot be removed (delete_slot refuses a schedule's last slot and cancel_schedule leaves failed slots in place) and it keeps pair ${pair} taken, so calling add_experiment_pair again with pair ${pair} only replays the failed video. Call add_experiment_pair with the next free pair number instead (up to the experiment's targetPairs).${done}`,
+          },
+        ],
+        isError: true,
+      };
     }
     parts.push(`Variant ${hook.variantId}:\n${textOf(response)}`);
   }

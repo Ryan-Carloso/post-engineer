@@ -22,6 +22,11 @@ function scheduled(id: string) {
   return { success: true, schedule: { id, mode: 'scheduled' }, slots: [{ slotId: `slot-${id}`, slotAt: '2026-11-10T18:00:00Z', title: 'Gym', taskId: `task-${id}`, status: 'generating' }], replayed: false };
 }
 
+function failedSlot(id: string, replayed: boolean) {
+  const base = scheduled(id);
+  return { ...base, slots: [{ ...base.slots[0], status: 'failed' }], replayed };
+}
+
 function mockClient(overrides: Partial<Record<'request' | 'generatePersonaVideo', ReturnType<typeof vi.fn>>> = {}) {
   const client = {
     request: overrides.request ?? vi.fn(async () => ({ success: true })),
@@ -113,6 +118,40 @@ describe('add_experiment_pair', () => {
     const failedSecond = await handleAddExperimentPair(second, pairArgs());
     expect(failedSecond.isError).toBe(true);
     expect(failedSecond.content[0]).toMatchObject({ text: expect.stringContaining('call add_experiment_pair again with the same arguments') });
+  });
+
+  it('treats a failed slot on the first video as a failure and stops before the second', async () => {
+    const client = mockClient({ generatePersonaVideo: vi.fn(async () => failedSlot('hook-calm', true)) });
+    const response = await handleAddExperimentPair(client, pairArgs());
+    expect(response.isError).toBe(true);
+    expect(client.generatePersonaVideo).toHaveBeenCalledTimes(1);
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    expect(text).toContain('slot slot-hook-calm');
+    expect(text).toContain('NOT created');
+    expect(text).toContain('next free pair number');
+    expect(text).not.toContain('created (2 videos)');
+    expect(text).not.toContain('was created and stays');
+  });
+
+  it('treats a failed slot on the second video as a failure and says the first one stays', async () => {
+    const client = mockClient({
+      generatePersonaVideo: vi.fn().mockResolvedValueOnce(scheduled('hook-calm')).mockResolvedValueOnce(failedSlot('hook-aggressive', false)),
+    });
+    const response = await handleAddExperimentPair(client, pairArgs());
+    expect(response.isError).toBe(true);
+    expect(client.generatePersonaVideo).toHaveBeenCalledTimes(2);
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    expect(text).toContain('slot slot-hook-aggressive');
+    expect(text).toContain('The hook-calm video of pair 1 was created and stays');
+  });
+
+  it('a replayed failed second video (retry on the same keys) is still a failure, never "created"', async () => {
+    const client = mockClient({
+      generatePersonaVideo: vi.fn().mockResolvedValueOnce({ ...scheduled('hook-calm'), replayed: true }).mockResolvedValueOnce(failedSlot('hook-aggressive', true)),
+    });
+    const response = await handleAddExperimentPair(client, pairArgs());
+    expect(response.isError).toBe(true);
+    expect(response.content[0]).toMatchObject({ text: expect.not.stringContaining('created (2 videos)') });
   });
 
   it('rejects a hook inside segments, identical hooks and one variant twice before any call', () => {
