@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ThemeProvider } from 'next-themes';
 import { I18nProvider } from '@/lib/i18n/provider';
 import { shouldRetryQuery } from '@/lib/query-retry';
 import { handleSessionExpiredError } from '@/lib/session-expiry';
@@ -33,8 +34,13 @@ export default function Providers({ children }: ProvidersProps) {
   );
 
   return (
-    <I18nProvider>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    </I18nProvider>
+    // next-themes toggles the `dark` class on <html> (matches the `.dark`
+    // token set in globals.css), follows the OS on first visit and injects the
+    // inline script that applies the class before first paint (no flash).
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="theme" disableTransitionOnChange>
+      <I18nProvider>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </I18nProvider>
+    </ThemeProvider>
   );
 }

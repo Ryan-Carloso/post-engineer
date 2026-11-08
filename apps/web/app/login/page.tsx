@@ -1,5 +1,6 @@
 'use client';
 
+import ThemeSwitcher from '@/components/theme-switcher';
 import { Suspense, useMemo, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -238,6 +239,7 @@ const LoginTopBar = () => {
   const { t, locale, setLocale } = useI18n();
   return (
     <div className="flex items-center justify-end gap-4 px-8 pt-7">
+      <ThemeSwitcher className="p-0.5" />
       <div className="flex items-center gap-0.5 rounded-lg bg-card p-0.5 ring-1 ring-hairline">
         {LOCALES.map((option) => (
           <button

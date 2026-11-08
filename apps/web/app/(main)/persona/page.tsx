@@ -373,7 +373,7 @@ const PersonaCharacterPicker = () => {
                     className="aspect-9/16 w-full object-cover"
                   />
                   {isSelected ? (
-                    <span className="absolute top-3 right-3 flex size-9 items-center justify-center rounded-full bg-accent text-on-ink shadow-md ring-2 ring-white">
+                    <span className="absolute top-3 right-3 flex size-9 items-center justify-center rounded-full bg-accent text-on-ink shadow-md ring-2 ring-card">
                       <CheckIcon />
                     </span>
                   ) : null}
