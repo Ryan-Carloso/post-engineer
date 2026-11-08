@@ -48,7 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 ------------------ */
 
 //---------------
-// MainSidebar — dark sidebar with vertical tabs, Arc-inspired
+// MainSidebar — card-surface sidebar (theme token, light/dark) with vertical tabs, Arc-inspired
 //---------------
 const MainSidebar = () => {
   const pathname = usePathname();
