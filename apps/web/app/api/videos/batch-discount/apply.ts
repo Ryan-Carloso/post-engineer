@@ -89,13 +89,50 @@ export interface DiscountOutcome {
   warnings: BatchDiscountWarningCode[];
 }
 
+interface RefundPayload {
+  refunded?: unknown;
+  already_refunded?: unknown;
+}
+
+/**
+ * True when the discount tokens are on the ledger for this slot.
+ * `refunded` is a fresh credit. `already_refunded` is the same key, which
+ * also matches a clawed-back row whose amount was shrunk to 0: that case
+ * tops the row back up (migration 046) and only counts once the row holds
+ * the full charge again. Anything else is not a credit.
+ */
+async function creditHeld(
+  supabase: SupabaseClient,
+  userId: string,
+  slot: BatchSlot,
+  payload: RefundPayload,
+): Promise<boolean> {
+  if (payload.refunded === true) return true;
+  if (payload.already_refunded !== true) return false;
+  const { data, error } = await supabase.rpc('restore_batch_discount_credit', {
+    p_user_id: userId,
+    p_batch_generation_id: batchChargeId(slot.scheduleId),
+    p_refund_key: batchDiscountRefundKey(slot.scheduleId, slot.id),
+    p_amount: slot.chargedTokens,
+  });
+  const restored = (data ?? {}) as { held?: unknown };
+  if (error || restored.held !== true) {
+    logger.error('[batch-discount] clawed-back discount was not restored', error ?? data, {
+      userId,
+      slotId: slot.id,
+    });
+    return false;
+  }
+  return true;
+}
+
 /**
  * Credit every slot planBatchDiscount picks. The credit goes through
  * refund_batch_tokens under the slot's own schedule charge with a
  * `:discount` key, so it is idempotent and capped at what that schedule
  * was charged (a slot whose failure was already refunded cannot be paid
- * back twice). The slot is marked free only after the credit landed; the
- * update re-checks discount_tokens = 0 in its predicate.
+ * back twice). The slot is marked free only after the credit is on the
+ * ledger; the update re-checks discount_tokens = 0 in its predicate.
  */
 export async function applyDiscount(
   supabase: SupabaseClient,
@@ -114,11 +151,14 @@ export async function applyDiscount(
       p_reason: BATCH_DISCOUNT_REASON,
       p_engine_task_id: slot.taskId,
     });
-    const payload = (data ?? {}) as { refunded?: unknown; already_refunded?: unknown };
-    if (error || (payload.refunded !== true && payload.already_refunded !== true)) {
+    const payload = (data ?? {}) as RefundPayload;
+    if (error || !(await creditHeld(supabase, userId, slot, payload))) {
       // The RPC answering false is a real failure (billing rule): the user
       // did not get the discount. Loud log, stable warning, keep going.
-      logger.error('[batch-discount] discount credit failed', error ?? payload, { userId, slotId: slot.id });
+      // creditHeld logs the clawed-back case itself.
+      if (error || payload.already_refunded !== true) {
+        logger.error('[batch-discount] discount credit failed', error ?? payload, { userId, slotId: slot.id });
+      }
       warnings.push(BATCH_DISCOUNT_WARNING_CODES.CREDIT_FAILED);
       continue;
     }

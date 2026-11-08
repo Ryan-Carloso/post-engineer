@@ -50,9 +50,11 @@ export function batchFreeCount(slots: readonly BatchSlot[]): number {
 }
 
 /**
- * The slots to make free now. Monotonic: a slot that is already free stays
- * free and counts toward the target, so calling this again (a retry that
- * adds the rest of the batch) only ever adds free videos. Candidates are the
+ * The slots to make free now. Monotonic while a discount is still held: a
+ * slot that is already free stays free and counts toward the target, so
+ * calling this again (a retry that adds the rest of the batch) only ever
+ * adds free videos. A clawed-back slot (discount back to 0, charge restored)
+ * is a candidate again once the batch earns the free video. Candidates are the
  * cheapest paid face videos (oldest first on a tie, then id, so the choice
  * is deterministic). A failed slot is never a candidate: its charge may
  * already be refunded, and crediting it again would pay it back twice.

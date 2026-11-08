@@ -23,6 +23,7 @@ import { planBatchClawback, type BatchSlot } from '../batch-discount';
 
 const repoRoot = findRepoRoot(import.meta.url);
 const migrationPath = join(repoRoot, 'supabase', 'migrations', '045_batch-clawback-refund-room.sql');
+const restorePath = join(repoRoot, 'supabase', 'migrations', '046_restore-batch-discount-credit.sql');
 
 function readSql(): string {
   return readFileSync(migrationPath, 'utf8');
@@ -68,6 +69,23 @@ describe('supabase/migrations/045_batch-clawback-refund-room.sql', () => {
     const sql = readSql();
     expect(sql).not.toContain("'video_generation'");
     expect(sql).toContain('batch clawback discount refund missing');
+  });
+});
+
+describe('supabase/migrations/046_restore-batch-discount-credit.sql', () => {
+  it('tops up the same discount row inside the charge cap', () => {
+    expect(existsSync(restorePath)).toBe(true);
+    const sql = readFileSync(restorePath, 'utf8');
+    const lock = sql.indexOf('for update');
+    const topUp = sql.indexOf('set amount = row_amount + credit');
+    expect(sql).toContain('create or replace function public.restore_batch_discount_credit');
+    expect(sql).toContain('security definer');
+    expect(lock).toBeGreaterThan(-1);
+    expect(topUp).toBeGreaterThan(lock);
+    expect(sql).toContain('if row_amount >= p_amount then');
+    expect(sql).toContain('if refunded_total + need > charge_amount then');
+    expect(sql).toContain("type = 'video_generation'");
+    expect(sql).not.toMatch(/insert into public\.token_transactions/);
   });
 });
 
@@ -196,6 +214,42 @@ function balance(ledger: Ledger): number {
   return ledger.paid + ledger.free;
 }
 
+/**
+ * Migration 046: put `amount` back on the discount row when a clawback
+ * shrunk it, and return the same tokens, without exceeding the 018 cap.
+ * A row that already holds `amount` is not increased.
+ */
+function restoreDiscountCredit(
+  ledger: Ledger,
+  generationId: string,
+  discountKey: string,
+  amount: number,
+): { held: boolean } {
+  const row = ledger.rows.find(
+    (candidate) => candidate.type === 'generation_refund' && candidate.referenceId === discountKey,
+  );
+  if (!row) return { held: false };
+  if (row.amount >= amount) return { held: true };
+  const charge = ledger.rows
+    .filter((candidate) => candidate.type === 'video_generation' && candidate.generationId === generationId)
+    .sort((a, b) => a.createdAt - b.createdAt)[0];
+  if (!charge) return { held: false };
+  const refundedTotal = ledger.rows
+    .filter((candidate) => candidate.type === 'generation_refund' && candidate.generationId === generationId)
+    .reduce((sum, candidate) => sum + candidate.amount, 0);
+  const need = amount - row.amount;
+  if (refundedTotal + need > Math.abs(charge.amount)) return { held: false };
+  const freeRestored = ledger.rows
+    .filter((candidate) => candidate.type === 'generation_refund' && candidate.generationId === generationId)
+    .reduce((sum, candidate) => sum + candidate.freeAmount, 0);
+  const freePart = Math.min(need, Math.max(charge.freeAmount - freeRestored, 0));
+  ledger.paid += need - freePart;
+  ledger.free += freePart;
+  row.amount += need;
+  row.freeAmount += freePart;
+  return { held: true };
+}
+
 describe('the 018 cap after a clawback of the free video', () => {
   it('pays nothing back for the re-charged video when the discount row stays whole', () => {
     const { ledger, discountKey } = sixVideoLedger();
@@ -256,5 +310,25 @@ describe('the 018 cap after a clawback of the free video', () => {
     expect(second).toEqual({ refunded: false, nothing_to_refund: true });
     // Failed video refunded via the discount, cancelled sibling refunded in full.
     expect(balance(ledger)).toBe(92);
+  });
+
+  it('pays the free video again when the batch re-earns it after the clawback', () => {
+    const { ledger, discountKey } = sixVideoLedger();
+    const sibling = refundBatchTokens(ledger, chargeId('S'), `${chargeId('S')}:slot:S`, PRICE);
+    expect(sibling).toEqual({ refunded: true, amount: PRICE });
+    shrinkDiscountRefund(ledger, discountKey, PRICE);
+    // The cancelled video is created again and charged.
+    spend(ledger, 'S2', PRICE);
+    expect(balance(ledger)).toBe(88);
+    const replay = refundBatchTokens(ledger, chargeId('F'), discountKey, PRICE);
+    expect(replay).toEqual({ refunded: false, already_refunded: true });
+    // The key still exists at amount 0, so the replay itself moves nothing.
+    expect(balance(ledger)).toBe(88);
+    expect(restoreDiscountCredit(ledger, chargeId('F'), discountKey, PRICE)).toEqual({ held: true });
+    expect(ledger.rows.find((row) => row.referenceId === discountKey)?.amount).toBe(PRICE);
+    // Six videos, one free: 100 - 10.
+    expect(balance(ledger)).toBe(90);
+    expect(restoreDiscountCredit(ledger, chargeId('F'), discountKey, PRICE)).toEqual({ held: true });
+    expect(balance(ledger)).toBe(90);
   });
 });

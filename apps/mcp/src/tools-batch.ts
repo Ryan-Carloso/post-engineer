@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
 import { applyBatchDiscount } from './client-batch.js';
-import { getErrorMessage } from './errors.js';
+import { ApiError, getErrorMessage } from './errors.js';
 import { BATCH_FREE_EVERY, BATCH_KEY_MAX_LENGTH, BATCH_WINDOW_MINUTES, BATCH_KEY_PATTERN, MAX_BATCH_VIDEOS } from './limits.js';
 import { GeneratePersonaVideoShape } from './single-video-shape.js';
 import { sanitizeEngineError } from './tools.js';
@@ -52,11 +52,21 @@ export const GeneratePersonaVideoBatchSchema = z.object(GeneratePersonaVideoBatc
 export const GeneratePersonaVideoBatchDescription =
   `Generate and schedule a BATCH of persona videos in one call (2-${MAX_BATCH_VIDEOS}), cheaper than one by one: for every ${BATCH_FREE_EVERY} videos with the persona face in the batch, the cheapest one is free (its tokens are credited back right after creation). Faceless videos can be in the batch but pay full price, do not count toward the ${BATCH_FREE_EVERY} and are never free. Each video takes the same fields as generate_persona_video and is created and dispatched right away, one after the other, so the batch renders together. All videos must be created within ${BATCH_WINDOW_MINUTES} minutes of the first. Cancelling a video of a discounted batch (cancel_schedule) gives back the discount the batch no longer earns: it is withheld from that video's refund. If a video fails validation or creation, the videos before it stay created and discounted; fix the error and call again with the same batchKey and the same videos in the same order — created videos replay without a new charge.`;
 
+function discountFailureText(error: unknown): string {
+  const message = sanitizeEngineError(getErrorMessage(error));
+  const code = error instanceof ApiError ? error.code : null;
+  const next = PERMANENT_DISCOUNT_CODES.has(code ?? '')
+    ? ' This batch cannot earn the discount; use a new batchKey for future videos.'
+    : ' Call generate_persona_video_batch again with the same arguments to retry the discount (created videos replay without a new charge).';
+  return `The batch discount could not be applied: ${message}. The videos are created and charged at full price.${next}`;
+}
+
 function textOf(response: McpToolResponse): string {
   return response.content.map((part) => (part.type === 'text' ? part.text : '')).join('\n');
 }
 
 interface DiscountSummary {
+  videos: number;
   faceVideos: number;
   earnedFreeVideos: number;
   freeVideos: number;
@@ -64,6 +74,9 @@ interface DiscountSummary {
   chargedTokens: number;
   warnings: string[];
 }
+
+/** Codes a retry of the same videos can never clear. */
+const PERMANENT_DISCOUNT_CODES = new Set(['BATCH_WINDOW_EXCEEDED', 'BATCH_CONFLICT', 'BATCH_TOO_LARGE']);
 
 function narrowDiscount(result: unknown): DiscountSummary | null {
   if (typeof result !== 'object' || result === null) return null;
@@ -77,7 +90,9 @@ function narrowDiscount(result: unknown): DiscountSummary | null {
   const warnings = Array.isArray(record.warnings)
     ? record.warnings.filter((warning): warning is string => typeof warning === 'string')
     : [];
+  const videos = typeof record.videos === 'number' ? record.videos : (record.faceVideos as number);
   return {
+    videos,
     faceVideos: record.faceVideos as number,
     earnedFreeVideos: record.earnedFreeVideos as number,
     freeVideos: record.freeVideos.length,
@@ -92,7 +107,8 @@ function describeDiscount(summary: DiscountSummary): string {
     `Batch: ${summary.faceVideos} face video(s); ${summary.freeVideos} free (${summary.discountTokens} token(s) credited back); ${summary.chargedTokens} token(s) charged in total.`,
   ];
   const missing = BATCH_FREE_EVERY - (summary.faceVideos % BATCH_FREE_EVERY);
-  if (summary.faceVideos + missing <= MAX_BATCH_VIDEOS) {
+  // The cap is on every video in the batch, faceless included.
+  if (summary.videos + missing <= MAX_BATCH_VIDEOS) {
     lines.push(`${missing} more face video(s) in this batch would make one more video free.`);
   }
   if (summary.warnings.length > 0) {
@@ -138,7 +154,7 @@ export async function handleGeneratePersonaVideoBatch(
       }
     } catch (error) {
       discountFailed = true;
-      discountText = `The batch discount could not be applied: ${sanitizeEngineError(getErrorMessage(error))}. The videos are created and charged at full price; call generate_persona_video_batch again with the same arguments to retry the discount (created videos replay without a new charge).`;
+      discountText = discountFailureText(error);
     }
   }
 

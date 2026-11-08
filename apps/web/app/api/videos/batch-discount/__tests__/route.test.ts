@@ -238,11 +238,39 @@ describe('POST /api/videos/batch-discount', () => {
 
   it('treats an already-applied credit as success (retry after a crash)', async () => {
     const slots = sixFaces();
-    const fake = setup(slots, { rpc: () => ({ data: { refunded: false, already_refunded: true }, error: null }) });
+    const fake = setup(slots, {
+      rpc: (call) =>
+        call.name === 'restore_batch_discount_credit'
+          ? { data: { held: true, restored: false }, error: null }
+          : { data: { refunded: false, already_refunded: true }, error: null },
+    });
     const json = (await (await post(bodyFor(slots))).json()) as { freeVideos: unknown[]; warnings: string[] };
     expect(json.freeVideos).toHaveLength(1);
     expect(json.warnings).toEqual([]);
+    expect(fake.rpcCalls.map((call) => call.name)).toEqual([
+      'refund_batch_tokens',
+      'restore_batch_discount_credit',
+    ]);
     expect(fake.tables.scheduled_posts?.filter((row) => row.charged_tokens === 0)).toHaveLength(1);
+  });
+
+  it('does not mark a clawed-back video free when the credit cannot be restored', async () => {
+    const slots = sixFaces();
+    const fake = setup(slots, {
+      rpc: (call) =>
+        call.name === 'restore_batch_discount_credit'
+          ? { data: { held: false, nothing_to_refund: true }, error: null }
+          : { data: { refunded: false, already_refunded: true }, error: null },
+    });
+    const json = (await (await post(bodyFor(slots))).json()) as { freeVideos: unknown[]; warnings: string[] };
+    expect(json.freeVideos).toEqual([]);
+    expect(json.warnings).toEqual(['BATCH_DISCOUNT_CREDIT_FAILED']);
+    expect(fake.tables.scheduled_posts?.every((row) => row.charged_tokens === 2)).toBe(true);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[batch-discount] clawed-back discount was not restored',
+      { held: false, nothing_to_refund: true },
+      expect.objectContaining({ userId: USER_ID }),
+    );
   });
 
   it('answers 500 without crediting when the slots cannot be read', async () => {

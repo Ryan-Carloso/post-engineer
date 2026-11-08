@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PostEngineerClient } from '../client.js';
+import { ApiError } from '../errors.js';
 import { GeneratePersonaVideoBatchSchema, handleGeneratePersonaVideoBatch } from '../tools-batch.js';
 
 //---------------
@@ -101,9 +102,17 @@ describe('generate_persona_video_batch', () => {
   });
 
   it('tells how many more face videos earn the next free one', async () => {
-    const client = mockClient({ request: vi.fn(async () => ({ ...DISCOUNT, faceVideos: 4, earnedFreeVideos: 0, freeVideos: [], discountTokens: 0 })) });
+    const client = mockClient({ request: vi.fn(async () => ({ ...DISCOUNT, videos: 4, faceVideos: 4, earnedFreeVideos: 0, freeVideos: [], discountTokens: 0 })) });
     const response = await handleGeneratePersonaVideoBatch(client, batchArgs(4));
     expect(text(response)).toContain('2 more face video(s) in this batch would make one more video free.');
+  });
+
+  it('does not promise another free video when faceless videos already fill the batch', async () => {
+    const client = mockClient({
+      request: vi.fn(async () => ({ ...DISCOUNT, videos: 12, faceVideos: 6, earnedFreeVideos: 1 })),
+    });
+    const response = await handleGeneratePersonaVideoBatch(client, batchArgs(12));
+    expect(text(response)).not.toContain('more face video');
   });
 
   it('stops at the first video that fails, keeps the discount for the created ones, and reports an error', async () => {
@@ -141,12 +150,25 @@ describe('generate_persona_video_batch', () => {
   });
 
   it('reports a failed discount call as an error with the retry instruction', async () => {
-    const client = mockClient({ request: vi.fn(async () => { throw new Error('POST /api/videos/batch-discount failed (409): A video is already part of another batch.'); }) });
+    const client = mockClient({ request: vi.fn(async () => { throw new Error('socket hang up'); }) });
     const response = await handleGeneratePersonaVideoBatch(client, batchArgs(6));
     expect(response.isError).toBe(true);
     expect(text(response)).toContain('The batch discount could not be applied');
-    expect(text(response)).toContain('already part of another batch');
+    expect(text(response)).toContain('socket hang up');
     expect(text(response)).toContain('created videos replay without a new charge');
+  });
+
+  it('does not tell the agent to retry a discount this batch can never earn', async () => {
+    const client = mockClient({
+      request: vi.fn(async () => {
+        throw new ApiError('Failed to apply batch discount: 409 A video is already part of another batch.', 'BATCH_CONFLICT', null);
+      }),
+    });
+    const response = await handleGeneratePersonaVideoBatch(client, batchArgs(6));
+    expect(response.isError).toBe(true);
+    expect(text(response)).toContain('already part of another batch');
+    expect(text(response)).toContain('cannot earn the discount');
+    expect(text(response)).not.toContain('call generate_persona_video_batch again');
   });
 
   it('reports server warnings (credit not applied) as an error', async () => {
