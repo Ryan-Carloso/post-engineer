@@ -55,9 +55,10 @@ export function computeTokenPercentage(balance: unknown, maxTokens: unknown): nu
 //---------------
 // computeVideoTokens — cost of ONE video: the faceless price when the post
 // asked for no face, otherwise the persona's face quality, or the full
-// lip-sync price when the post asked for full lip-sync. The server calls
-// the same formula (apps/engine .../fill_schedule/support.py token_cost), so
-// an estimate that disagrees with the charge is a bug in one of the two.
+// lip-sync price when the post asked for full lip-sync. This is the only
+// copy of the formula: generate-and-schedule charges with it and stores the
+// result on the slot (scheduled_posts.charged_tokens, migration 044), and
+// every refund, engine included, reads that stored amount.
 // A full lip-sync request is never faceless (the route rejects the
 // combination before charging), so faceless still wins here and the full
 // price never applies to a faceless post.

@@ -15,11 +15,8 @@ from app.services.analytics import scrub_secret_values, track_event
 from app.services.intro_cost import cost_event_props
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
-    post_identity,
-    slot_faceless,
-    slot_full_lipsync,
+    slot_refund_amount,
     slot_user_id,
-    token_cost,
     track_refund_issued,
 )
 
@@ -37,7 +34,6 @@ class BatchReconciler:
 
         updated = 0
         for slot in self.store.generating_slots():
-            schedule = slot.get("schedules") or {}
             task = self.task_state.get_task(str(slot["task_id"]))
             if task is None:
                 continue
@@ -65,31 +61,14 @@ class BatchReconciler:
                 # just this video's cost; the batch id keeps the other
                 # videos' charges intact.
                 if user_id is not None:
-                    try:
-                        identity = post_identity(schedule)
-                    except RuntimeError:
-                        # Neither a persona nor a snapshot to compute the
-                        # refund cost from. Mark the slot failed and move on —
-                        # throwing here would kill the whole reconcile stage
-                        # every tick.
-                        # NOTE: the prepaid tokens for this slot are
-                        # permanently burned (the cost is unrecoverable
-                        # without an identity). Follow-up: persist the
-                        # per-slot cost on the slot row at schedule creation
-                        # so refunds never depend on a joinable persona.
-                        logger.warning(
-                            "fill_schedule: skipping refund for failed slot "
-                            "without a resolvable identity",
-                            slot_id=slot.get("id"),
-                            schedule_id=schedule.get("id"),
-                        )
-                    else:
-                        cost = token_cost(
-                            slot_faceless(slot),
-                            str(identity.get("face_quality") or "ok"),
-                            slot_full_lipsync(slot),
-                        )
-                        batch_generation_id = f"batch:{schedule['id']}"
+                    # The stored charge needs no persona or snapshot, so a
+                    # slot whose identity is gone is still refunded. A free
+                    # slot (charged 0) has nothing to refund.
+                    # The batch id comes from the slot's own schedule_id: the
+                    # schedules embed can be missing (left join).
+                    cost = slot_refund_amount(slot)
+                    if cost is not None:
+                        batch_generation_id = f"batch:{slot['schedule_id']}"
                         engine_task_id = (
                             str(slot["task_id"]) if slot.get("task_id") else None
                         )

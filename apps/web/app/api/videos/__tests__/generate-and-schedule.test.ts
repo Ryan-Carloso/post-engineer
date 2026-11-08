@@ -498,6 +498,8 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(slotRows).toHaveLength(1);
       expect(slotRows.map((r) => r.title)).toEqual(['Porto trip']);
       expect(slotRows.every((r) => r.status === 'pending')).toBe(true);
+      // The slot stores exactly what was charged: every refund path reads it.
+      expect(slotRows.map((r) => r.charged_tokens)).toEqual([spends[0].args.p_amount]);
 
       // The slot was flipped to generating with its task_id.
       const binds = updates.filter((u) => u.table === 'scheduled_posts' && u.fields.status === 'generating');
@@ -571,6 +573,8 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(200);
       const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
       expect(spends[0].args.p_amount).toBe(1);
+      const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
+      expect(slotRows.map((r) => r.charged_tokens)).toEqual([1]);
       expect(vi.mocked(resolveVideoImage)).not.toHaveBeenCalled();
     });
 
@@ -829,6 +833,8 @@ describe('POST /api/videos/generate-and-schedule', () => {
         const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
         expect(spends).toHaveLength(1);
         expect(spends[0].args.p_amount).toBe(8);
+        const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
+        expect(slotRows.map((r) => r.charged_tokens)).toEqual([8]);
       } finally {
         vi.unstubAllGlobals();
         vi.unstubAllEnvs();

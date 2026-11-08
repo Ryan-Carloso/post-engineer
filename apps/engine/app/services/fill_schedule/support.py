@@ -10,28 +10,28 @@ from app.services.analytics import track_event
 from app.services.fill_schedule.store import ScheduleStore
 
 
-FACELESS_PRICE = 1
-FACE_QUALITY_PRICES = {"ok": 2, "very_good": 3}
-FULL_LIPSYNC_PRICES = {"ok": 8, "very_good": 15}
+def slot_refund_amount(slot: dict[str, Any]) -> int | None:
+    """Tokens to give back for a failed or cancelled slot, or None.
 
-
-def token_cost(faceless: bool, face_quality: str, full_lipsync: bool = False) -> int:
-    """Per-video token cost.
-
-    Mirrors the web's ``computeVideoTokens`` (apps/web/lib/tokens.ts) — the two
-    MUST agree: the web pre-pays this amount and this function decides how
-    much to refund, so a drift between them silently over- or under-refunds a
-    failed slot. Personas are always faced (the face mix column is gone), so
-    the inputs are the per-post "no face" choice, the persona's face quality,
-    and the per-post full lip-sync flag. A full lip-sync slot is never
-    faceless (the web route rejects the combination before charging), so
-    faceless still wins here and the full price never applies to a faceless
-    slot.
+    The web writes ``scheduled_posts.charged_tokens`` (migration 044) at slot
+    creation: what this slot was actually charged. Every refund reads it and
+    never recomputes a list price, so a discounted or free slot is refunded
+    exactly what it cost, and a slot with an unresolvable persona is still
+    refunded. Returns None when there is nothing to refund: a free slot
+    (charged 0, and the refund RPC rejects a non-positive amount) or a value
+    that is not a non-negative integer, which is logged loudly because the
+    column is NOT NULL with a ``>= 0`` check.
     """
-    if faceless:
-        return FACELESS_PRICE
-    prices = FULL_LIPSYNC_PRICES if full_lipsync else FACE_QUALITY_PRICES
-    return prices["very_good" if face_quality == "very_good" else "ok"]
+    charged = slot.get("charged_tokens")
+    if isinstance(charged, bool) or not isinstance(charged, int) or charged < 0:
+        logger.error(
+            "fill_schedule: slot has no readable charged_tokens; refund skipped",
+            slot_id=slot.get("id"),
+        )
+        return None
+    if charged == 0:
+        return None
+    return charged
 
 
 def persona_for(schedule: dict[str, Any]) -> dict[str, Any]:

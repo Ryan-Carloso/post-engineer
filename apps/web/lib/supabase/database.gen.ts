@@ -511,6 +511,7 @@ export interface Database {
         experiment_id: string | null;
         variant_id: string | null;
         experiment_pair: number | null;
+        charged_tokens: number;
         };
         Insert: {
         id?: string;
@@ -533,6 +534,7 @@ export interface Database {
         experiment_id?: string | null;
         variant_id?: string | null;
         experiment_pair?: number | null;
+        charged_tokens: number;
         };
         Update: {
         id?: string;
@@ -555,6 +557,7 @@ export interface Database {
         experiment_id?: string | null;
         variant_id?: string | null;
         experiment_pair?: number | null;
+        charged_tokens?: number;
         };
         Relationships: [];
       };

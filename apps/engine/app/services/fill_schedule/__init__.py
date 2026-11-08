@@ -13,7 +13,7 @@ Components:
 - publish: BatchPublisher — publishes ready slots whose time has come.
 - scheduler: FillScheduleScheduler — orchestrates the three stages, one tick
   at a time; start_fill_schedule_thread runs the tick loop.
-- support: shared helpers (token_cost, persona_for, post_identity,
+- support: shared helpers (slot_refund_amount, persona_for, post_identity,
   slot_user_id, slot_faceless, notify_safe, build_persona_params).
 - metadata: provider metadata mapping + publish-plan validation.
 - constants: shared constants.
@@ -46,7 +46,7 @@ from app.services.fill_schedule.support import (
     post_identity,
     slot_faceless,
     slot_user_id,
-    token_cost,
+    slot_refund_amount,
     voice_for,
 )
 
@@ -75,7 +75,7 @@ __all__ = [
     "slot_faceless",
     "slot_user_id",
     "start_fill_schedule_thread",
-    "token_cost",
+    "slot_refund_amount",
     "validate_publish_plan",
     "voice_for",
 ]

@@ -8,8 +8,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 //  - Full lip-sync, face ok               = 8 tokens
 //  - Full lip-sync, face very good        = 15 tokens
 // No face MIX anymore: personas are always faced, so the price is a lookup on
-// (faceless, face quality, fullLipsync). The engine mirrors this formula in
-// apps/engine .../fill_schedule/support.py token_cost.
+// (faceless, face quality, fullLipsync). It is the only copy: the engine
+// refunds the charged amount stored on the slot, never a recomputed price.
 //---------------
 
 import {

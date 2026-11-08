@@ -88,7 +88,7 @@
 - Stuck jobs auto-refund after N days (default 3), emitting `refund_issued`. A published slot = delivered (`completed`, never `failed`).
 - Whoever charges owns the refund. A refund returning False/`error` is a real failure — log loudly. Write `tokens_refunded=true` only when the refund landed; never write a flag false over an unknown value.
 - Replays never charge; idempotency pre-checks that gate a charge fail closed (500 on DB error).
-- Faceless is a per-slot flag (`scheduled_posts.faceless`); only literal `true` counts. Pricing is mirrored in web `computeVideoTokens` and engine `token_cost` — keep them in lockstep (faceless→1, ok→2, very_good→3, full lip-sync ok→8, full lip-sync very_good→15, unknown quality→2, or 8 in full lip-sync).
+- Faceless is a per-slot flag (`scheduled_posts.faceless`); only literal `true` counts. Pricing lives only in web `computeVideoTokens` (faceless→1, ok→2, very_good→3, full lip-sync ok→8, full lip-sync very_good→15). The charged amount is stored per slot in `scheduled_posts.charged_tokens` (migration 044), and every refund path (engine generate/reconcile/publish, web cancel) refunds that stored amount — never recompute a price at refund time. A slot charged 0 makes no refund call (`refund_batch_tokens` rejects amounts ≤ 0).
 
 ## Engine
 

@@ -22,7 +22,6 @@ from app.services.fill_schedule.generate import BatchGenerator
 from app.services.fill_schedule.publish import BatchPublisher
 from app.services.fill_schedule.reconcile import BatchReconciler
 from app.services.fill_schedule.store import CONNECT_RETRIES, ScheduleStore
-from app.services.fill_schedule.support import token_cost
 
 # A sustained outage fails every stage on every tick (~3 ERRORs a minute).
 # It is reported as one incident instead: ERROR when it starts, ERROR again
@@ -147,11 +146,6 @@ class FillScheduleScheduler:
         if self._outage_since is None:
             return 0
         return int((now - self._outage_since).total_seconds())
-
-    @staticmethod
-    def _token_cost(faceless: bool, face_quality: str, full_lipsync: bool = False) -> int:
-        """Per-video token cost (also used by the batch billing flow)."""
-        return token_cost(faceless, face_quality, full_lipsync)
 
 
 def start_fill_schedule_thread(scheduler: FillScheduleScheduler) -> threading.Thread:
