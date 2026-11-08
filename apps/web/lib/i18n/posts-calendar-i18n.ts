@@ -1,22 +1,18 @@
-// posts-calendar-i18n — copy for the /posts list/calendar toggle, the month
+// posts-calendar-i18n — copy for the /posts calendar, the /posts/history page, the month
 // calendar and the refreshed post cards. Merged into `posts` in ./index.ts
 // (en.ts/pt.ts are over the file-size cap and may not grow).
 export const postsCalendarStrings = {
   pt: {
     posts: {
-      viewToggleLabel: 'Modo de visualização',
-      viewList: 'Lista',
-      viewCalendar: 'Calendário',
-      calendarGridLabel: 'Calendário de posts de {month}',
+      historyTitle: 'Histórico',
+      historySubtitle: 'Posts passados e gerações de vídeo de todas as contas.',
       calendarPrevMonth: 'Mês anterior',
       calendarNextMonth: 'Próximo mês',
       calendarToday: 'Hoje',
       calendarMore: '+{count}',
       calendarDayLabel: '{date}: {summary}',
       calendarDayEmpty: '{date}: sem posts',
-      calendarLoadError: 'Não foi possível carregar o calendário.',
       calendarTruncated: 'Este mês tem mais posts do que o limite de {count}; alguns não aparecem.',
-      calendarNoDay: 'Selecione um dia para ver os posts.',
       calendarDayHeading: 'Posts de {date}',
       calendarDayNone: 'Nenhum post neste dia.',
       groupInProgress: 'Em andamento',
@@ -28,19 +24,15 @@ export const postsCalendarStrings = {
   },
   en: {
     posts: {
-      viewToggleLabel: 'View mode',
-      viewList: 'List',
-      viewCalendar: 'Calendar',
-      calendarGridLabel: 'Posts calendar for {month}',
+      historyTitle: 'History',
+      historySubtitle: 'Past posts and video generations from all accounts.',
       calendarPrevMonth: 'Previous month',
       calendarNextMonth: 'Next month',
       calendarToday: 'Today',
       calendarMore: '+{count}',
       calendarDayLabel: '{date}: {summary}',
       calendarDayEmpty: '{date}: no posts',
-      calendarLoadError: 'Could not load the calendar.',
       calendarTruncated: 'This month has more posts than the {count} limit; some are not shown.',
-      calendarNoDay: 'Select a day to see its posts.',
       calendarDayHeading: 'Posts on {date}',
       calendarDayNone: 'No posts on this day.',
       groupInProgress: 'In progress',

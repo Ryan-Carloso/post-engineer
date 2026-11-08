@@ -134,10 +134,8 @@ describe('Posts video detail', () => {
   });
 
   it('opens a history post detail and loads its video without 404s', () => {
-    cy.visit('/posts');
-
-    // History tab holds published posts and manual generations.
-    cy.contains('button', /Histórico|History/).click();
+    // The history page holds published posts and manual generations.
+    cy.visit('/posts/history');
 
     // Open the post card by exact href — a bare `a[href^="/posts/"]`
     // would also match the list page itself.

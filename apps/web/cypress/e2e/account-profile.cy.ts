@@ -118,7 +118,19 @@ describe('Account area — mobile header (390px)', () => {
     cy.contains('h1', 'Perfil').should('be.visible');
   });
 
-  it('has four bottom tabs starting at /posts and has no API Keys tab', () => {
+  it('opens History from the More sheet', () => {
+    cy.visit('/');
+
+    cy.get('nav.fixed.bottom-0').contains('button', 'Mais').click();
+    cy.get('[role=dialog]').within(() => {
+      cy.contains('a', 'Perfil').should('not.exist');
+      cy.contains('a', 'Histórico').click();
+    });
+    cy.url().should('include', '/posts/history');
+    cy.contains('h1', 'Histórico').should('be.visible');
+  });
+
+  it('has four bottom tab links starting at /posts plus More', () => {
     cy.visit('/');
 
     // The bottom nav is the fixed nav; the translated aria-label depends on
@@ -206,16 +218,16 @@ describe('Account area — desktop sidebar footer', () => {
     interceptShellData();
   });
 
-  it('sidebar has five tabs starting at /posts and has no API Keys tab', () => {
+  it('sidebar has six tabs starting at /posts and has no API Keys tab', () => {
     cy.visit('/');
 
-    // Sidebar nav: Posts first, API Keys moved to the profile area.
-    // Five tabs since Metrics joined the sidebar (the mobile bottom
-    // bar stays at four tabs, without Metrics).
+    // Sidebar nav: Posts first, then History, ..., API Key & MCP last.
+    // Six tabs; the mobile bottom bar has four tabs plus a More sheet
+    // that holds History and Metrics.
     cy.get('aside nav')
       .first()
       .find('a')
-      .should('have.length', 5)
+      .should('have.length', 6)
       .first()
       .should('have.attr', 'href', '/posts');
     cy.get('aside nav').first().find('a[href="/metrics"]').should('have.length', 1);

@@ -55,8 +55,8 @@ describe('i18n dictionaries', () => {
   });
 
   it('carries the prompts tab copy in both locales', () => {
-    expect(ptDictionary.nav.prompts).toBe('Pegue seus prompts');
-    expect(enDictionary.nav.prompts).toBe('Get your prompts');
+    expect(ptDictionary.nav.prompts).toBe('API Key e MCP');
+    expect(enDictionary.nav.prompts).toBe('API Key & MCP');
     expect(ptDictionary.nav.promptsHint).toBeTruthy();
     expect(enDictionary.nav.promptsHint).toBeTruthy();
   });
