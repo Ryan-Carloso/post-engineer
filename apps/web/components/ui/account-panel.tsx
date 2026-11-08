@@ -1,5 +1,6 @@
 'use client';
 
+import ThemeSwitcher from '@/components/theme-switcher';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -56,7 +57,7 @@ function AvatarCircle({
 }) {
   if (avatarUrl) {
     return (
-      <div className={`relative shrink-0 overflow-hidden rounded-full bg-sunken ring-2 ring-white ${className}`}>
+      <div className={`relative shrink-0 overflow-hidden rounded-full bg-sunken ring-2 ring-card ${className}`}>
         <Image
           src={avatarUrl}
           alt={userName || 'User'}
@@ -69,7 +70,7 @@ function AvatarCircle({
   }
   return (
     <div
-      className={`flex shrink-0 items-center justify-center rounded-full bg-sunken font-semibold text-muted-text ring-2 ring-white ${className}`}
+      className={`flex shrink-0 items-center justify-center rounded-full bg-sunken font-semibold text-muted-text ring-2 ring-card ${className}`}
     >
       {userName?.charAt(0).toUpperCase() || 'U'}
     </div>
@@ -304,7 +305,7 @@ export function MobileProfileLink() {
       href="/account"
       data-testid="mobile-profile-link"
       aria-label={t('nav.profile')}
-      className="ml-auto flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sunken text-muted-text ring-2 ring-white"
+      className="ml-auto flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sunken text-muted-text ring-2 ring-card"
     >
       {avatarUrl ? (
         <Image
@@ -336,7 +337,10 @@ export function AccountPanel({ showVersionBadge = false }: { showVersionBadge?: 
 
   return (
     <div className="space-y-3">
-      <LocaleSwitcher />
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1"><LocaleSwitcher /></div>
+        <ThemeSwitcher className="shrink-0" />
+      </div>
       <TokenBalance />
       {showVersionBadge && (
         <div className="flex items-center justify-between rounded-[28px] border border-hairline bg-surface px-5 py-3">

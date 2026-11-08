@@ -129,7 +129,7 @@ export default function AccountCard({
           alt={handle || name}
           width={48}
           height={48}
-          className="size-12 shrink-0 rounded-full object-cover ring-2 ring-white"
+          className="size-12 shrink-0 rounded-full object-cover ring-2 ring-card"
           onError={() => setThumbnailFailed(true)}
         />
       ) : (

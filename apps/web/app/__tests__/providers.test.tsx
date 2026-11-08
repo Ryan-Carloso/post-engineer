@@ -44,12 +44,23 @@ describe('app/providers — Providers', () => {
   });
 
   it('wraps children in QueryClientProvider', () => {
+    render(
+      <Providers>
+        <div data-testid="child">test</div>
+      </Providers>,
+    );
+    expect(screen.getByTestId('child')).toHaveTextContent('test');
+  });
+
+  it('mounts the theme provider with the no-flash script (class strategy, system default)', () => {
     const { container } = render(
       <Providers>
         <div>test</div>
       </Providers>,
     );
-    expect(container.textContent).toBe('test');
+    const script = container.querySelector('script');
+    expect(script).not.toBeNull();
+    expect(script?.textContent).toContain('"class","theme","system"');
   });
 
   it('uses the no-4xx-retry policy as the default query retry (issue #385)', () => {

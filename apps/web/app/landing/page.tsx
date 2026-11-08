@@ -1,11 +1,12 @@
 'use client';
 
+import ThemeSwitcher from '@/components/theme-switcher';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
 import { FacebookIcon, InstagramIcon } from '@/lib/ui';
 import AppLogo from '@/components/ui/app-logo';
-import { LOCALES } from '@/lib/i18n';
+import HeaderLocaleSwitcher from './header-locale-switcher';
 import { PricingContactCard } from '@/components/ui/pricing-contact';
 import {
   ArrowRight,
@@ -115,6 +116,7 @@ const LandingHeader = () => {
         </nav>
         <div data-testid="landing-desktop-actions" className="hidden items-center gap-2.5 md:flex">
           <HeaderLocaleSwitcher />
+          <ThemeSwitcher className="p-0.5" />
           <Link
             href="/login"
             className="rounded-xl bg-card px-4 py-2 text-sm font-semibold whitespace-nowrap text-ink shadow-[0_1px_3px_rgba(20,32,51,0.08)] ring-1 ring-hairline transition-colors hover:bg-surface"
@@ -162,7 +164,10 @@ const LandingHeader = () => {
             ))}
           </nav>
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 pt-1 pb-5 sm:px-5">
-            <HeaderLocaleSwitcher />
+            <div className="flex items-center gap-2">
+              <HeaderLocaleSwitcher />
+              <ThemeSwitcher className="p-0.5" />
+            </div>
             <Link
               href="/login"
               onClick={() => setMenuOpen(false)}
@@ -178,39 +183,13 @@ const LandingHeader = () => {
 };
 
 //---------------
-// HeaderLocaleSwitcher — seletor PT/EN do header
-//---------------
-const HeaderLocaleSwitcher = () => {
-  const { locale, setLocale } = useI18n();
-  return (
-    <div className="flex items-center gap-0.5 rounded-lg bg-sunken p-0.5">
-      {LOCALES.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => setLocale(option.value)}
-          aria-pressed={option.value === locale}
-          className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
-            option.value === locale
-              ? 'bg-card text-ink shadow-sm'
-              : 'text-muted-text hover:text-ink'
-          }`}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-};
-
-//---------------
 // LandingHero — headline, benefícios, CTAs e mockup do produto
 //---------------
 const LandingHero = () => {
   const { t } = useI18n();
   const checks: Array<'check1' | 'check2' | 'check3'> = ['check1', 'check2', 'check3'];
   return (
-    <section className="relative overflow-hidden bg-linear-to-b from-white to-surface">
+    <section className="relative overflow-hidden bg-linear-to-b from-card to-surface">
       <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 py-16 lg:grid-cols-2 lg:py-24">
         <div>
           <span className="inline-flex rounded-full bg-brand-soft px-4 py-1.5 text-xs font-semibold text-destructive">
@@ -276,7 +255,7 @@ const HeroAvatars = () => {
       {people.map((person) => (
         <span
           key={person.initial}
-          className={`flex size-9 items-center justify-center rounded-full text-xs font-bold text-white ring-2 ring-white ${person.bg}`}
+          className={`flex size-9 items-center justify-center rounded-full text-xs font-bold text-white ring-2 ring-card ${person.bg}`}
         >
           {person.initial}
         </span>

@@ -15,3 +15,21 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   }
   globalThis.ResizeObserver = ResizeObserverStub;
 }
+
+//---------------
+// jsdom ships no matchMedia; next-themes (mounted in app/providers.tsx) reads
+// the OS color-scheme preference through it. Default to "no match" (light);
+// theme tests stub their own.
+//---------------
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  window.matchMedia = (query: string): MediaQueryList => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    dispatchEvent: () => false,
+  });
+}
