@@ -37,6 +37,68 @@ function matches(row: Row, filters: Filter[]): boolean {
   });
 }
 
+function isRow(value: unknown): value is Row {
+  return typeof value === 'object' && value !== null;
+}
+
+function asRows(value: unknown): Row[] {
+  return Array.isArray(value) ? value.filter(isRow) : [];
+}
+
+/**
+ * In-memory stand-in for settle_batch_clawback: refunds are recorded as
+ * credited, and each recharge updates the slot only when the check-then-act
+ * predicate still matches. The real cap lives in the SQL function; this
+ * only has to move the slot the way that function does.
+ */
+export function simulateSettleBatchClawback(
+  tables: Record<string, Row[]>,
+  params: Record<string, unknown>,
+): { data: unknown; error: unknown } {
+  const userId = params.p_user_id;
+  let credited = 0;
+  const refunds: Row[] = [];
+  for (const refund of asRows(params.p_refunds)) {
+    const amount = refund.amount;
+    if (typeof amount !== 'number' || !Number.isInteger(amount) || amount <= 0) {
+      return { data: null, error: { message: 'clawback refund amount must be positive' } };
+    }
+    credited += amount;
+    refunds.push({
+      slot_id: refund.slot_id,
+      refunded: true,
+      already_refunded: false,
+      amount,
+    });
+  }
+  const recharges: Row[] = [];
+  const rows = tables.scheduled_posts ?? [];
+  for (const recharge of asRows(params.p_recharges)) {
+    const requested = recharge.take;
+    if (typeof requested !== 'number' || !Number.isInteger(requested) || requested < 0) {
+      return { data: null, error: { message: 'batch clawback take must be a whole number of tokens' } };
+    }
+    const take = Math.min(requested, credited);
+    if (take <= 0) continue;
+    const row = rows.find(
+      (candidate) =>
+        candidate.id === recharge.slot_id &&
+        candidate.user_id === userId &&
+        candidate.status !== 'failed' &&
+        candidate.charged_tokens === recharge.expected_charged &&
+        candidate.discount_tokens === recharge.expected_discount &&
+        typeof candidate.discount_tokens === 'number' &&
+        candidate.discount_tokens >= take,
+    );
+    if (!row) continue;
+    row.charged_tokens = (row.charged_tokens as number) + take;
+    row.discount_tokens = (row.discount_tokens as number) - take;
+    credited -= take;
+    recharges.push({ slot_id: recharge.slot_id, take });
+  }
+  return { data: { ok: true, refunds, recharges }, error: null };
+}
+
 export function createFakeSupabase(options: FakeOptions) {
   const rpcCalls: RpcCall[] = [];
   const updates: { table: string; patch: Row; filters: Filter[] }[] = [];
@@ -122,7 +184,9 @@ export function createFakeSupabase(options: FakeOptions) {
     rpc: async (name: string, params: Record<string, unknown>) => {
       const call = { name, params };
       rpcCalls.push(call);
-      return options.rpc ? options.rpc(call) : { data: { refunded: true }, error: null };
+      if (options.rpc) return options.rpc(call);
+      if (name === 'settle_batch_clawback') return simulateSettleBatchClawback(options.tables, params);
+      return { data: { refunded: true }, error: null };
     },
   };
   return { client, rpcCalls, updates, tables: options.tables };

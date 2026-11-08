@@ -50,9 +50,10 @@ describe('DELETE /api/schedule on a discounted batch', () => {
     const json = (await res.json()) as { refunds: unknown[]; batchDiscountWithheld: number; cancelledSlotIds: string[] };
     expect(json.cancelledSlotIds).toEqual(['1']);
     expect(json.batchDiscountWithheld).toBe(2);
-    // The whole 2-token charge was withheld, so no refund call was made.
+    // The whole charge was pulled back inside the settlement, so the route
+    // does not send a second refund.
     expect(json.refunds).toEqual([]);
-    expect(fake.rpcCalls).toEqual([]);
+    expect(fake.rpcCalls.map((call) => call.name)).toEqual(['settle_batch_clawback']);
     expect(fake.tables.scheduled_posts?.find((row) => row.id === '6')).toMatchObject({
       charged_tokens: 2,
       discount_tokens: 0,
@@ -65,7 +66,8 @@ describe('DELETE /api/schedule on a discounted batch', () => {
     const res = await cancel(paid[1]?.schedule_id);
     const json = (await res.json()) as { batchDiscountWithheld: number };
     expect(json.batchDiscountWithheld).toBe(0);
-    expect(fake.rpcCalls.map((call) => call.params.p_amount)).toEqual([2]);
+    expect(fake.rpcCalls.map((call) => call.name)).toEqual(['settle_batch_clawback', 'refund_batch_tokens']);
+    expect(fake.rpcCalls[1]?.params.p_amount).toBe(2);
   });
 
   it('cancelling the free video makes no refund call and keeps the paid ones paid', async () => {

@@ -73,17 +73,45 @@ export function planBatchDiscount(slots: readonly BatchSlot[]): BatchSlot[] {
     .slice(0, missing);
 }
 
+/** Ledger id of one schedule's prepaid charge (`batch:<scheduleId>`). */
+export function batchChargeId(scheduleId: string): string {
+  return `batch:${scheduleId}`;
+}
+
+/** Refund key for a cancelled or failed slot. Shared with the engine. */
+export function batchSlotRefundKey(scheduleId: string, slotId: string): string {
+  return `${batchChargeId(scheduleId)}:slot:${slotId}`;
+}
+
+/**
+ * Refund key for the discount credit. Distinct from the slot refund key, so
+ * the credit does not count as the slot already having been refunded.
+ */
+export function batchDiscountRefundKey(scheduleId: string, slotId: string): string {
+  return `${batchSlotRefundKey(scheduleId, slotId)}:discount`;
+}
+
 /**
  * The free slots whose discount no longer holds, given the slots that
  * remain in the batch after a cancel. Smallest discount first: the user
  * loses as little of the remaining discount as possible.
+ *
+ * A failed slot is never clawed. Its discount is the refund for a video
+ * we did not deliver, and a terminal `failed` row has no later refund
+ * path that could return a re-charge. Failed discounts occupy the earned
+ * free slots first, so a video the user still has is clawed before one
+ * that already failed.
  */
 export function planBatchClawback(remaining: readonly BatchSlot[]): BatchSlot[] {
   const free = faceSlots(remaining)
     .filter((slot) => slot.discountTokens > 0)
     .sort((a, b) => a.discountTokens - b.discountTokens || a.id.localeCompare(b.id));
-  const excess = free.length - batchFreeCount(remaining);
-  return excess > 0 ? free.slice(0, excess) : [];
+  const earned = batchFreeCount(remaining);
+  const failedFree = free.filter((slot) => slot.status === 'failed').length;
+  const liveAllowed = Math.max(0, earned - Math.min(failedFree, earned));
+  const live = free.filter((slot) => slot.status !== 'failed');
+  const excess = live.length - liveAllowed;
+  return excess > 0 ? live.slice(0, excess) : [];
 }
 
 /** True when every slot was created within BATCH_WINDOW_MS of the first. */

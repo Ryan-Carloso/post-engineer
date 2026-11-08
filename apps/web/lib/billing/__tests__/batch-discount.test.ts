@@ -4,7 +4,10 @@ import {
   BATCH_FREE_EVERY,
   BATCH_WINDOW_MS,
   MAX_BATCH_VIDEOS,
+  batchChargeId,
+  batchDiscountRefundKey,
   batchFreeCount,
+  batchSlotRefundKey,
   narrowBatchSlot,
   planBatchClawback,
   planBatchDiscount,
@@ -39,6 +42,12 @@ function faces(count: number, chargedTokens = 2): BatchSlot[] {
 }
 
 describe('batch discount constants', () => {
+  it('builds the ledger ids the discount credit and the slot refund share', () => {
+    expect(batchChargeId('sched-1')).toBe('batch:sched-1');
+    expect(batchSlotRefundKey('sched-1', 'slot-1')).toBe('batch:sched-1:slot:slot-1');
+    expect(batchDiscountRefundKey('sched-1', 'slot-1')).toBe('batch:sched-1:slot:slot-1:discount');
+  });
+
   it('is one free video per 6, at most 12 videos, within 10 minutes', () => {
     expect(BATCH_FREE_EVERY).toBe(6);
     expect(MAX_BATCH_VIDEOS).toBe(12);
@@ -138,6 +147,20 @@ describe('planBatchClawback', () => {
       slot('free-small', 0, { discountTokens: 2 }),
     ];
     expect(planBatchClawback(remaining).map((s) => s.id)).toEqual(['free-small']);
+  });
+
+  it('does not claw back a failed free video', () => {
+    const remaining = [...faces(4), slot('free', 0, { discountTokens: 2, status: 'failed' })];
+    expect(planBatchClawback(remaining)).toEqual([]);
+  });
+
+  it('claws the live free video when a failed discount already occupies the earned slot', () => {
+    const remaining = [
+      ...faces(4),
+      slot('failed-free', 0, { discountTokens: 2, status: 'failed' }),
+      slot('live-free', 0, { discountTokens: 3, status: 'ready' }),
+    ];
+    expect(planBatchClawback(remaining).map((s) => s.id)).toEqual(['live-free']);
   });
 
   it('ignores faceless videos when counting what remains', () => {

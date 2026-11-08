@@ -11,6 +11,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import {
   BATCH_SLOT_COLUMNS,
+  batchChargeId,
+  batchDiscountRefundKey,
   narrowBatchSlot,
   planBatchDiscount,
   type BatchSlot,
@@ -103,11 +105,11 @@ export async function applyDiscount(
   const newlyFree: BatchSlot[] = [];
   const warnings: BatchDiscountWarningCode[] = [];
   for (const slot of planBatchDiscount(slots)) {
-    const batchGenerationId = `batch:${slot.scheduleId}`;
+    const batchGenerationId = batchChargeId(slot.scheduleId);
     const { data, error } = await supabase.rpc('refund_batch_tokens', {
       p_user_id: userId,
       p_batch_generation_id: batchGenerationId,
-      p_refund_key: `${batchGenerationId}:slot:${slot.id}:discount`,
+      p_refund_key: batchDiscountRefundKey(slot.scheduleId, slot.id),
       p_amount: slot.chargedTokens,
       p_reason: BATCH_DISCOUNT_REASON,
       p_engine_task_id: slot.taskId,
