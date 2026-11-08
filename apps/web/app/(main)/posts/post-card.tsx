@@ -13,6 +13,7 @@ import { scheduleAccountIds, type AccountOption } from '@/lib/account-options';
 import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 import { cn } from '@/lib/utils';
 import { GROUP_ICON, STATUS_KEY, STATUS_STYLE, statusGroupOf } from './status';
+import { PublishAccountNotices } from './publish-user-notice';
 
 //---------------
 // Cards of the posts list: scheduled posts (PostCard) and standalone video
@@ -150,6 +151,7 @@ export const PostCard = ({
             <span className="shrink-0 text-[11px] font-semibold text-primary tabular-nums">{slot.progress}%</span>
           </div>
         )}
+        <PublishAccountNotices status={slot.status} userNotices={slot.userNotices} compact />
         {slot.status === 'failed' && (
           // The raw slot.error is engine/upstream text and is never rendered
           // here; the detail page owns the full failure view.

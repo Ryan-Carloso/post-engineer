@@ -24,6 +24,8 @@ export const postsCalendarStrings = {
       groupFailed: 'Falhou',
       cardFailedRetryable: 'A geração falhou por um problema temporário. Abra o post para tentar de novo.',
       cardFailedPermanent: 'O post falhou. Abra o post para ver os detalhes.',
+      userNoticeEmail: '{provider} não publicou porque o e-mail desta conta não está verificado. Isto é um problema da sua conta. Só você pode resolver: verifique o e-mail.',
+      userNoticeReconnect: '{provider} não publicou porque esta conta precisa de ser reconectada. Isto é um problema da sua conta. Só você pode resolver.',
     },
   },
   en: {
@@ -48,6 +50,8 @@ export const postsCalendarStrings = {
       groupFailed: 'Failed',
       cardFailedRetryable: 'Generation failed because of a temporary problem. Open the post to try again.',
       cardFailedPermanent: 'The post failed. Open the post for details.',
+      userNoticeEmail: '{provider} did not publish because the email on this account is not verified. This is a problem with your account. Only you can fix it: verify the email.',
+      userNoticeReconnect: '{provider} did not publish because this account needs to be reconnected. This is a problem with your account. Only you can fix it.',
     },
   },
 } as const;

@@ -290,6 +290,46 @@ class ScheduleStore:
         )
         return bool(rows)
 
+    def resumable_publishing_slots(self, now_utc: datetime) -> list[dict[str, Any]]:
+        """Publishing slots whose backoff (or crash lease) has elapsed.
+
+        `publish_not_before` null covers a crash that never parked a lease.
+        A normal 30s/2min wait stays hidden until that timestamp.
+        """
+        rows = self._request(
+            "GET",
+            "scheduled_posts",
+            params={
+                "status": f"eq.{SLOT_PUBLISHING}",
+                "or": (
+                    "(publish_not_before.is.null,"
+                    f"publish_not_before.lte.{now_utc.isoformat()})"
+                ),
+                "select": self.SLOT_SELECT,
+                "order": "slot_at.asc",
+            },
+        )
+        return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+
+    def claim_resumable_slot(self, slot_id: str, now_iso: str, lease_iso: str) -> bool:
+        """One worker resumes a publishing slot and holds it until ``lease_iso``.
+
+        The PATCH matches only while the backoff is still due, then moves
+        `publish_not_before` forward. A second worker sees no row.
+        """
+        rows = self._request(
+            "PATCH",
+            "scheduled_posts",
+            json={"publish_not_before": lease_iso},
+            params={
+                "id": f"eq.{slot_id}",
+                "status": f"eq.{SLOT_PUBLISHING}",
+                "or": f"(publish_not_before.is.null,publish_not_before.lte.{now_iso})",
+            },
+            headers={**self._headers, "Prefer": "return=representation"},
+        )
+        return bool(rows)
+
     def publishing_slots(self) -> list[dict[str, Any]]:
         rows = self._request(
             "GET",

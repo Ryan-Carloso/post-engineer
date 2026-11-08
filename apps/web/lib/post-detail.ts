@@ -9,6 +9,7 @@ import {
   type EngineTaskProgress,
 } from './engine-tasks';
 import { resolvePublishLinks, type PublishLink } from './publish-links';
+import { noticesFromOutcomes, type PublishProviderFailure, type PublishUserNotice } from './publish-user-notice';
 import { buildGenerationFacts } from './generation-facts';
 import { isPersonaAllowed, isScopedApiKey, type PersonaScopeContext } from './api-keys';
 import { logger } from './logger';
@@ -57,6 +58,8 @@ export interface SlotPostDetail {
     scriptAngle: string | null;
     publishLinks: PublishLink[];
     progressHistory: Array<{ progress: number; stage: string | null; recordedAt: string }>;
+    userNotices: PublishUserNotice[];
+    providerFailures: PublishProviderFailure[];
     queuePosition: null;
     queueTotal: null;
   };
@@ -179,7 +182,7 @@ export async function getSlotPost(
 ): Promise<SlotPostDetail | null> {
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, faceless_material')
+    .select('id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, faceless_material, publish_outcomes')
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();
@@ -198,6 +201,7 @@ export async function getSlotPost(
     task_id: string | null;
     faceless: boolean | null;
     faceless_material: string | null;
+    publish_outcomes: unknown;
   };
 
   const { data: schedule, error: scheduleError } = await supabase
@@ -324,9 +328,7 @@ export async function getSlotPost(
     }),
   );
 
-  // One const per leaf (not an inline object literal): v8 coverage does not
-  // report object-literal property lines, so this keeps every leaf visible
-  // to the coverage gate.
+  // One const per leaf: v8 coverage skips object-literal property lines.
   const slotIdOut = row.id;
   const scheduleIdOut = row.schedule_id;
   const slotAtOut = row.slot_at;
@@ -348,6 +350,9 @@ export async function getSlotPost(
   const threadsAccountIdsOut = scheduleRow.threads_account_ids ?? [];
   const timezoneOut = scheduleRow.timezone;
   const publishModeOut = scheduleRow.publish_mode === 'asap' ? 'asap' : 'scheduled';
+  const publishNotices = noticesFromOutcomes(row.publish_outcomes);
+  const userNoticesOut = publishNotices.userNotices;
+  const providerFailuresOut = publishNotices.providerFailures;
 
   return {
     slot: {
@@ -369,6 +374,8 @@ export async function getSlotPost(
       // pending slots); the detail view doesn't render it.
       queuePosition: null,
       queueTotal: null,
+      userNotices: userNoticesOut,
+      providerFailures: providerFailuresOut,
     },
     schedule: {
       id: scheduleId2,

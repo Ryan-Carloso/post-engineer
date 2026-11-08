@@ -42,6 +42,10 @@ import { createEngineProbe, type EngineProbe } from '@/lib/engine-reachability';
 import { recordProgressHistory, type ProgressSample } from '@/lib/schedule-progress-history';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { parseRange, RANGE_MAX_SLOTS, RANGE_STATUSES } from './range';
+import { presentPublishRows, publishingWithUserNotice } from '@/lib/publish-user-notice';
+
+const RESULT_SELECT =
+  'id, slot_at, status, title, error, published_at, schedule_id, task_id, publish_outcomes';
 
 //---------------
 // buildQueuePositions — 1-based position of every awaiting+generating
@@ -168,7 +172,7 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     // user_id is re-checked explicitly: the service client bypasses RLS.
     let rangeQuery = supabase
       .from('scheduled_posts')
-      .select('id, slot_at, status, title, error, published_at, schedule_id, task_id')
+      .select(RESULT_SELECT)
       .eq('user_id', userId)
       .in('status', [...RANGE_STATUSES])
       .gte('slot_at', range.from)
@@ -189,7 +193,7 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     // Queue positions are not computed for range reads: they only matter for
     // the list view's progress line and would need the un-limited queue query.
     const slots = await withSlotPresentation(
-      rows.slice(0, RANGE_MAX_SLOTS),
+      presentPublishRows(rows.slice(0, RANGE_MAX_SLOTS)),
       userId,
       new Map(),
       createEngineProbe(),
@@ -216,13 +220,22 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     .order('slot_at', { ascending: true });
   let recentQuery = supabase
     .from('scheduled_posts')
-    .select('id, slot_at, status, title, error, published_at, schedule_id, task_id')
+    .select(RESULT_SELECT)
     .eq('user_id', userId)
     .in('status', ['published', 'failed'])
     .order('slot_at', { ascending: false });
+  // A publishing slot is in neither list. Surface it in upcoming once an
+  // account has a user notice, so MCP and the posts page can relay it
+  // during the 30s/2min gap. No order(): the slot_at sort counts stay put.
+  let publishingQuery = supabase
+    .from('scheduled_posts')
+    .select(RESULT_SELECT)
+    .eq('user_id', userId)
+    .in('status', ['publishing']);
   if (scheduleIds) {
     upcomingQuery = upcomingQuery.in('schedule_id', scheduleIds);
     recentQuery = recentQuery.in('schedule_id', scheduleIds);
+    publishingQuery = publishingQuery.in('schedule_id', scheduleIds);
   }
 
   // Queue positions come from a dedicated un-limited query: the paginated
@@ -238,16 +251,18 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     queueQuery = queueQuery.in('schedule_id', scheduleIds);
   }
 
-  const [upcoming, recent, queueResult] = await Promise.all([
+  const [upcoming, recent, publishing, queueResult] = await Promise.all([
     upcomingQuery.limit(limit),
     recentQuery.limit(limit),
+    publishingQuery.limit(limit),
     queueQuery,
   ]);
 
-  if (upcoming.error || recent.error) {
+  if (upcoming.error || recent.error || publishing.error) {
     logger.error('[api/schedule/status] query failed', undefined, {
       upcoming: upcoming.error,
       recent: recent.error,
+      publishing: publishing.error,
     });
     return NextResponse.json(
       { success: false, error: 'Failed to load schedule status.' },
@@ -264,8 +279,13 @@ async function getHandler(request?: Request): Promise<NextResponse> {
   // One probe for the whole request: an engine found unreachable while
   // presenting upcoming slots is not re-probed for the recent ones.
   const engineProbe = createEngineProbe();
-  const upcomingEnriched = await withSlotPresentation(upcoming.data ?? [], userId, queuePositions, engineProbe);
-  const recentEnriched = await withSlotPresentation(recent.data ?? [], userId, queuePositions, engineProbe);
+  const upcomingEnriched = await withSlotPresentation(
+    [...presentPublishRows(upcoming.data), ...publishingWithUserNotice(publishing.data)],
+    userId,
+    queuePositions,
+    engineProbe,
+  );
+  const recentEnriched = await withSlotPresentation(presentPublishRows(recent.data), userId, queuePositions, engineProbe);
 
   // Best-effort progress history: every observation of a live (generating)
   // or dead (failed) slot records a (progress, stage) row when it changed

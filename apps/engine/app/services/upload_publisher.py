@@ -397,6 +397,7 @@ def publish_video(
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     sleep: Callable[[float], None] = time.sleep,
+    surface_application_failure: bool = False,
 ) -> dict[str, Any]:
     """Publish one finished video through the internal upload API.
 
@@ -462,7 +463,9 @@ def publish_video(
             # Not retried — the request completed; the post did not.
             if isinstance(result, dict):
                 failure = _application_failure_reason(result)
-                if failure is not None:
+                # Fill-schedule passes surface_application_failure so it can
+                # classify each account. Other callers still get the raise.
+                if failure is not None and not surface_application_failure:
                     raise PublishError(
                         failure,
                         status_code=response.status_code,

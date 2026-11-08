@@ -986,6 +986,12 @@
                     "type": "text",
                     "default": null,
                     "notNull": false
+                },
+                {
+                    "name": "publish_outcomes",
+                    "type": "jsonb",
+                    "default": "'[]'::jsonb",
+                    "notNull": true
                 }
             ],
             "policies": {

@@ -1249,7 +1249,7 @@ class PublishDueTests(unittest.TestCase):
         # video_path would break the provider upload.
         self.assertEqual(kwargs["video_path"], os.path.basename(self.video_path))
         self.assertEqual(kwargs["content_type"], "video/mp4")
-        self.assertEqual(store.updates[0][1]["status"], "published")
+        self.assertEqual(store.updates[-1][1]["status"], "published")
 
     def test_scheduled_publish_reads_from_the_verified_archive_path(self):
         # The R2 object path recorded at archive time is the only source:
@@ -1321,8 +1321,8 @@ class PublishDueTests(unittest.TestCase):
         self.assertEqual(metadata.account_ids, ("urn:li:person:1", "urn:li:organization:2"))
 
     def test_publish_error_returns_slot_to_ready(self):
-        # C2: publish failed -> slot goes back to 'ready' (retry with atomic
-        # claim on the next pass), never 'failed' directly nor 'ready' without claim.
+        # A transient failure stays `publishing`. publish_not_before is the
+        # wait; the slot is not marked failed and is not returned to ready.
         from app.services.upload_publisher import PublishError
 
         store = _FakeStore()
@@ -1341,7 +1341,7 @@ class PublishDueTests(unittest.TestCase):
         scheduler.publisher.api_secret = "secret"
         published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         self.assertEqual(published, 0)
-        self.assertEqual(store.updates[0][1]["status"], "ready")
+        self.assertEqual(store.updates[-1][1]["status"], "publishing")
 
     def test_publish_failure_scrubs_full_message_before_truncation(self):
         # The video_publish_failed reason pins scrub-then-truncate like the
@@ -1464,8 +1464,8 @@ class PublishRetryLimitTests(unittest.TestCase):
     def test_failure_below_limit_returns_slot_to_ready_with_attempts_incremented(self):
         store, published = self._run_publish(self._slot(publish_attempts=1))
         self.assertEqual(published, 0)
-        self.assertEqual(store.updates[0][1]["status"], "ready")
-        self.assertEqual(store.updates[0][1]["publish_attempts"], 2)
+        self.assertEqual(store.updates[-1][1]["status"], "publishing")
+        self.assertEqual(store.updates[-1][1]["publish_attempts"], 2)
         self.assertEqual(store.refund_batch_calls, [])
 
     def test_retry_backoff_schedules_the_next_attempt_by_the_failed_attempt_number(self):
@@ -1475,17 +1475,17 @@ class PublishRetryLimitTests(unittest.TestCase):
         # hammered every tick inside its recovery window.
         store, _ = self._run_publish(self._slot(publish_attempts=0))
         self.assertEqual(
-            store.updates[0][1]["publish_not_before"],
+            store.updates[-1][1]["publish_not_before"],
             "2026-09-07T12:00:30+00:00",
         )
         store, _ = self._run_publish(self._slot(publish_attempts=1))
         self.assertEqual(
-            store.updates[0][1]["publish_not_before"],
+            store.updates[-1][1]["publish_not_before"],
             "2026-09-07T12:02:00+00:00",
         )
         # The terminal (third) attempt keys no backoff: the slot is failed.
         store, _ = self._run_publish(self._slot(publish_attempts=2))
-        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertEqual(store.updates[-1][1]["status"], "failed")
 
     def test_retry_delays_match_the_documented_schedule(self):
         from app.services.fill_schedule.constants import PUBLISH_RETRY_DELAY_SECONDS
@@ -1498,15 +1498,15 @@ class PublishRetryLimitTests(unittest.TestCase):
         slot = self._slot()
         del slot["publish_attempts"]
         store, _ = self._run_publish(slot)
-        self.assertEqual(store.updates[0][1]["status"], "ready")
-        self.assertEqual(store.updates[0][1]["publish_attempts"], 1)
+        self.assertEqual(store.updates[-1][1]["status"], "publishing")
+        self.assertEqual(store.updates[-1][1]["publish_attempts"], 1)
         self.assertEqual(store.refund_batch_calls, [])
 
     def test_final_failure_marks_slot_failed_and_refunds_token(self):
         store, published = self._run_publish(self._slot(publish_attempts=2))
         self.assertEqual(published, 0)
-        self.assertEqual(store.updates[0][1]["status"], "failed")
-        self.assertEqual(store.updates[0][1]["publish_attempts"], 3)
+        self.assertEqual(store.updates[-1][1]["status"], "failed")
+        self.assertEqual(store.updates[-1][1]["publish_attempts"], 3)
         self.assertEqual(len(store.refund_batch_calls), 1)
         user_id, generation_id, refund_key, amount, reason, _task_id = store.refund_batch_calls[0]
         self.assertEqual(user_id, "user-1")
@@ -1521,7 +1521,7 @@ class PublishRetryLimitTests(unittest.TestCase):
         slot["charged_tokens"] = 0
         store, published = self._run_publish(slot)
         self.assertEqual(published, 0)
-        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertEqual(store.updates[-1][1]["status"], "failed")
         self.assertEqual(store.refund_batch_calls, [])
 
     def test_final_failure_refunds_the_stored_charge_without_an_identity(self):
@@ -1674,7 +1674,7 @@ class PublishRetryLimitTests(unittest.TestCase):
         scheduler.publisher.api_secret = "secret"
         # Must not raise: one slot's refund failure never kills the tick.
         scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
-        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertEqual(store.updates[-1][1]["status"], "failed")
 
     def test_refund_soft_failure_is_logged_loudly(self):
         # refund_batch_tokens returns a bool: False means the RPC answered
@@ -1709,7 +1709,7 @@ class PublishRetryLimitTests(unittest.TestCase):
                 datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
             )
         self.assertEqual(published, 0)
-        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertEqual(store.updates[-1][1]["status"], "failed")
         error_messages = [
             str(call.args[0]) for call in mock_logger.error.call_args_list
         ]
@@ -1882,6 +1882,8 @@ class NotifyIntegrationTests(unittest.TestCase):
             "id": "slot-1",
             "title": "Tokyo coffee",
             "task_id": "t-1",
+            "publish_attempts": 2,
+            "charged_tokens": 1,
             "schedules": {
                                 "user_id": "user-1",
                 "providers": ["youtube"],
@@ -2284,9 +2286,8 @@ class CoverageGapTests(unittest.TestCase):
         self.assertEqual(store.updates, [])
 
     def test_publish_failure_after_claim_returns_slot_to_ready(self):
-        # Publish failed after the claim: slot goes back to 'ready' (not 'failed') -
-        # it may be a transient error; the claim on the next pass avoids
-        # duplication because publishing->ready is the only way back.
+        # A transient failure after the claim stays publishing. Discord waits
+        # until the account has spent its three tries.
         from app.services.upload_publisher import PublishError
 
         store = _FakeStore()
@@ -2308,8 +2309,9 @@ class CoverageGapTests(unittest.TestCase):
         published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         self.assertEqual(published, 0)
         statuses = [fields.get("status") for _, fields in store.updates]
-        self.assertIn("ready", statuses)
-        notify.assert_called_once()  # failure notified
+        self.assertIn("publishing", statuses)
+        self.assertNotIn("ready", statuses)
+        notify.assert_not_called()
 
     def test_publish_due_recovers_stale_publishing_first(self):
         # Recovery of stuck 'publishing' slots runs at the start of the stage.

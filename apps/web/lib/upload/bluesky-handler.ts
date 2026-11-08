@@ -1,5 +1,6 @@
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
+import { accountFailure } from '@/lib/upload/account-error';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import {
   BlueskyError,
@@ -29,6 +30,7 @@ interface BlueskyAccountResult {
   success: boolean;
   postId?: string;
   error?: string;
+  errorCode?: string;
 }
 
 export interface BlueskyUploadResponse {
@@ -60,13 +62,13 @@ export async function handleBlueskyUpload(
   const rawFile = formData.get('video');
 
   if (dids.length === 0) {
-    return { success: false, results: [{ accountId: '', success: false, error: 'At least one Bluesky did is required' }] };
+    return { success: false, results: [accountFailure('', 'At least one Bluesky did is required')] };
   }
   if (typeof captionRaw !== 'string' || captionRaw.trim() === '') {
-    return { success: false, results: [{ accountId: '', success: false, error: 'Caption is required' }] };
+    return { success: false, results: [accountFailure('', 'Caption is required')] };
   }
   if (!(rawFile instanceof File)) {
-    return { success: false, results: [{ accountId: '', success: false, error: 'Video file is required' }] };
+    return { success: false, results: [accountFailure('', 'Video file is required')] };
   }
 
   const buffer = Buffer.from(await rawFile.arrayBuffer());
@@ -78,7 +80,7 @@ export async function handleBlueskyUpload(
     mimeType: rawFile.type || 'video/mp4',
   });
   if (!validation.ok) {
-    return { success: false, results: [{ accountId: '', success: false, error: validation.reason }] };
+    return { success: false, results: [accountFailure('', validation.reason)] };
   }
 
   const caption = truncateBlueskyCaption(captionRaw.trim());
@@ -93,7 +95,7 @@ export async function handleBlueskyUpload(
       const appPassword = tokens.access_token;
       const handle = typeof tokens.handle === 'string' ? tokens.handle : did;
       if (typeof appPassword !== 'string' || appPassword === '') {
-        results.push({ accountId: did, success: false, error: 'Bluesky credential not found' });
+        results.push(accountFailure(did, 'Bluesky credential not found'));
         continue;
       }
 
@@ -109,8 +111,7 @@ export async function handleBlueskyUpload(
       await touchSocialAccount(supabase, ownerUserId, 'bluesky', did);
       results.push({ accountId: did, success: true, postId });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      results.push({ accountId: did, success: false, error: message });
+      results.push(accountFailure(did, error));
     }
   }
 

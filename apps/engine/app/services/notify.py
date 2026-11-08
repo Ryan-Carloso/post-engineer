@@ -248,6 +248,14 @@ def slot_failed_msg(persona: str, title: str, reason: str) -> str:
     )
 
 
+def user_action_msg(notice: str) -> str:
+    """Discord copy for an account only the user can fix.
+
+    ``notice`` is the mapped sentence. Callers must not pass the upstream body.
+    """
+    return _clip(f"⚠️ {notice}", DISCORD_MAX_CONTENT)
+
+
 def partial_publish_msg(slot_id: str, failed_providers: list[str]) -> str:
     """Discord alert when some providers published and others did not.
 
