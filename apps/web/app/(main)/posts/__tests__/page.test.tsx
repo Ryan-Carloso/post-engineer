@@ -17,7 +17,7 @@ vi.mock('@/lib/api', () => ({
   useYouTubeAccountsQuery: vi.fn(),
   useInstagramAccountsQuery: vi.fn(),
   useLinkedinAccountsQuery: vi.fn(),
-  useThreadsAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
+  useThreadsAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() })),
   useBlueskyAccountsQuery: vi.fn(),
 }));
 
@@ -123,15 +123,27 @@ function mockQueries(overrides: {
   } as never);
   vi.mocked(useYouTubeAccountsQuery).mockReturnValue({
     data: { authenticated: true, accounts: [{ provider: 'youtube', channelId: 'ch1', channelName: 'Europa Na Estrada' }] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
   } as never);
   vi.mocked(useInstagramAccountsQuery).mockReturnValue({
     data: { authenticated: true, accounts: [{ provider: 'instagram', igUserId: 'ig1', username: 'vivalave' }] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
   } as never);
   vi.mocked(useLinkedinAccountsQuery).mockReturnValue({
     data: { authenticated: true, accounts: [] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
   } as never);
   vi.mocked(useBlueskyAccountsQuery).mockReturnValue({
     data: { authenticated: true, accounts: [] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
   } as never);
 }
 
@@ -253,6 +265,39 @@ describe('PostsPage', () => {
 
     render(<PostsPage />);
     expect(screen.getByText('posts.loadError')).toBeInTheDocument();
+  });
+
+  it('shows the error state when an account query fails', () => {
+    // A failed account fetch must not silently render empty filter
+    // dropdowns — the error state covers it, same as the other queries.
+    vi.mocked(useYouTubeAccountsQuery).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: vi.fn(),
+    } as never);
+
+    render(<PostsPage />);
+    expect(screen.getByText('posts.loadError')).toBeInTheDocument();
+  });
+
+  it('retry refetches the account queries as well', async () => {
+    const youtubeRefetch = vi.fn();
+    vi.mocked(useYouTubeAccountsQuery).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: youtubeRefetch,
+    } as never);
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    // Without this, a failed account fetch could never clear without a
+    // full page reload.
+    const errorPanel = screen.getByText('posts.loadError').closest('div');
+    if (!errorPanel) throw new Error('error panel not rendered');
+    await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));
+    expect(youtubeRefetch).toHaveBeenCalledTimes(1);
   });
 
   it('retry refetches the personas query as well', async () => {

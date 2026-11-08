@@ -121,6 +121,7 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 import MainLayout from '../layout';
+import { SUPPORT_EMAIL } from '@/components/ui/pricing-contact';
 import { useSessionQuery } from '@/lib/api';
 import { usePathname } from 'next/navigation';
 
@@ -175,6 +176,16 @@ describe('app/(main)/layout — MainLayout', () => {
       .getAllByRole('link')
       .map((link) => link.getAttribute('title'));
     expect(titles).toEqual(['nav.posts', 'nav.history', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.prompts']);
+  });
+
+  it('support link uses the shared support email, not a hardcoded copy', () => {
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const sidebar = screen.getByTestId('nav-brand').closest('aside');
+    const supportLinks = within(sidebar as HTMLElement).getAllByText('footer.support');
+    expect(supportLinks.length).toBeGreaterThan(0);
+    for (const link of supportLinks) {
+      expect(link.closest('a')).toHaveAttribute('href', `mailto:${SUPPORT_EMAIL}`);
+    }
   });
 
   it('lists Posts as the first navigation tab, linking to /posts', () => {

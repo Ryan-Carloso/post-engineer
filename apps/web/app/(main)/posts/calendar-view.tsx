@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useMemo, type ComponentProps } from 'react';
+import { createContext, useCallback, useContext, useMemo, type ComponentProps } from 'react';
 import type { DayButton } from 'react-day-picker';
 import { enUS, ptBR } from 'react-day-picker/locale';
 import type { ScheduledSlot } from '@/lib/api';
@@ -79,16 +79,30 @@ export function CalendarView({
   const { t, locale } = useI18n();
   const dateFormat = useMemo(() => new Intl.DateTimeFormat(INTL_TAG[locale], { dateStyle: 'full' }), [locale]);
 
-  const labelDayButton = (date: Date): string => {
-    const slots = slotsByDay.get(dayKey(date)) ?? [];
-    const fullDate = dateFormat.format(date);
-    if (slots.length === 0) return t('posts.calendarDayEmpty', { date: fullDate });
-    const counts = groupCounts(slots);
-    const summary = STATUS_GROUP_ORDER.filter((group) => counts[group] > 0)
-      .map((group) => `${t(GROUP_KEY[group])}: ${counts[group]}`)
-      .join(', ');
-    return t('posts.calendarDayLabel', { date: fullDate, summary });
-  };
+  // Memoized so a data refresh that leaves slotsByDay untouched hands
+  // react-day-picker the same label function (and labels object) instead of
+  // a new one on every render, which would re-render the day buttons.
+  const labelDayButton = useCallback(
+    (date: Date): string => {
+      const slots = slotsByDay.get(dayKey(date)) ?? [];
+      const fullDate = dateFormat.format(date);
+      if (slots.length === 0) return t('posts.calendarDayEmpty', { date: fullDate });
+      const counts = groupCounts(slots);
+      const summary = STATUS_GROUP_ORDER.filter((group) => counts[group] > 0)
+        .map((group) => `${t(GROUP_KEY[group])}: ${counts[group]}`)
+        .join(', ');
+      return t('posts.calendarDayLabel', { date: fullDate, summary });
+    },
+    [slotsByDay, dateFormat, t],
+  );
+  const labels = useMemo(
+    () => ({
+      labelDayButton,
+      labelPrevious: () => t('posts.calendarPrevMonth'),
+      labelNext: () => t('posts.calendarNextMonth'),
+    }),
+    [labelDayButton, t],
+  );
 
   return (
     <div className="rounded-xl border border-line bg-card p-2 sm:p-4" aria-busy={disabled}>
@@ -105,11 +119,7 @@ export function CalendarView({
           selected={selectedKey === null ? undefined : dateFromKey(selectedKey)}
           onSelect={(date) => onSelect(dayKey(date))}
           disableNavigation={disabled}
-          labels={{
-            labelDayButton,
-            labelPrevious: () => t('posts.calendarPrevMonth'),
-            labelNext: () => t('posts.calendarNextMonth'),
-          }}
+          labels={labels}
           className="w-full bg-transparent p-0 [--cell-size:--spacing(10)]"
           classNames={{
             root: 'w-full',

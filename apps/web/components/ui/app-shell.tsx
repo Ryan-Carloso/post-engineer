@@ -8,6 +8,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import { AccountPanel, MobileProfileLink } from '@/components/ui/account-panel';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { InsufficientTokensDialog } from '@/components/ui/insufficient-tokens-dialog';
+import { SUPPORT_EMAIL } from '@/components/ui/pricing-contact';
 import VersionBadge from '@/components/ui/version-badge';
 import AppLogo from '@/components/ui/app-logo';
 import {
@@ -250,7 +251,7 @@ const SidebarLegalLinks = () => {
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-faint">
       <Link href="/privacy" className="hover:text-ink">{t('footer.privacy')}</Link>
       <Link href="/terms" className="hover:text-ink">{t('footer.terms')}</Link>
-      <a href="mailto:madebyryandev@gmail.com" className="hover:text-ink">{t('footer.support')}</a>
+      <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-ink">{t('footer.support')}</a>
     </div>
   );
 };

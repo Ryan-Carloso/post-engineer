@@ -77,10 +77,20 @@ export function usePostJoins(): PostJoins {
   );
   const { refetch: refetchSchedules } = schedulesQuery;
   const { refetch: refetchPersonas } = personasQuery;
+  const { refetch: refetchYoutube } = youtubeQuery;
+  const { refetch: refetchInstagram } = instagramQuery;
+  const { refetch: refetchLinkedin } = linkedinQuery;
+  const { refetch: refetchBluesky } = blueskyQuery;
+  const { refetch: refetchThreads } = threadsQuery;
   const refetch = useCallback(() => {
     void refetchSchedules();
     void refetchPersonas();
-  }, [refetchSchedules, refetchPersonas]);
+    void refetchYoutube();
+    void refetchInstagram();
+    void refetchLinkedin();
+    void refetchBluesky();
+    void refetchThreads();
+  }, [refetchSchedules, refetchPersonas, refetchYoutube, refetchInstagram, refetchLinkedin, refetchBluesky, refetchThreads]);
 
   return {
     scheduleById,
@@ -88,8 +98,26 @@ export function usePostJoins(): PostJoins {
     accountOptions,
     // A failed personas fetch must not silently render "Removed persona"
     // labels — callers show the error state for it like any other query.
-    isLoading: schedulesQuery.isLoading || personasQuery.isLoading,
-    isError: schedulesQuery.isError || personasQuery.isError,
+    // The account queries feed the filter dropdowns, so their loading and
+    // errors count the same way: a failed one must surface the error state
+    // (and the retry button must re-fetch it) instead of silently
+    // rendering empty filters.
+    isLoading:
+      schedulesQuery.isLoading ||
+      personasQuery.isLoading ||
+      youtubeQuery.isLoading ||
+      instagramQuery.isLoading ||
+      linkedinQuery.isLoading ||
+      blueskyQuery.isLoading ||
+      threadsQuery.isLoading,
+    isError:
+      schedulesQuery.isError ||
+      personasQuery.isError ||
+      youtubeQuery.isError ||
+      instagramQuery.isError ||
+      linkedinQuery.isError ||
+      blueskyQuery.isError ||
+      threadsQuery.isError,
     refetch,
   };
 }
