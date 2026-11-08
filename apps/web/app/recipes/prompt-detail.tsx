@@ -24,26 +24,26 @@ export default function PromptDetail({ prompt }: { prompt: PromptEntry }) {
 
   return (
     <div>
-      <Link href="/recipes" className="text-sm text-[#718096] hover:text-[#101728]">
+      <Link href="/recipes" className="text-sm text-muted-text hover:text-ink">
         ← {t('recipes.backToPrompts')}
       </Link>
-      <p className="mt-10 text-xs font-bold tracking-[0.2em] text-[#ff544c] uppercase">
+      <p className="mt-10 text-xs font-bold tracking-[0.2em] text-brand uppercase">
         {t(prompt.kindKey)}
       </p>
-      <h1 className="mt-3 text-4xl font-black tracking-tight text-[#101728] sm:text-5xl">
+      <h1 className="mt-3 text-4xl font-black tracking-tight text-ink sm:text-5xl">
         {t(prompt.titleKey)}
       </h1>
-      <p className="mt-3 max-w-2xl text-base leading-relaxed text-[#414d63]">
+      <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-soft">
         {t(prompt.objectiveKey)}
       </p>
 
       <section className="mt-12">
-        <h2 className="text-2xl font-bold tracking-tight text-[#101728]">
+        <h2 className="text-2xl font-bold tracking-tight text-ink">
           {t('recipes.stepsTitle')}
         </h2>
         <ol className="mt-4 list-decimal space-y-3 pl-5">
           {prompt.stepKeys.map((stepKey) => (
-            <li key={stepKey} className="leading-relaxed text-[#414d63]">
+            <li key={stepKey} className="leading-relaxed text-ink-soft">
               {t(stepKey)}
             </li>
           ))}
@@ -51,12 +51,12 @@ export default function PromptDetail({ prompt }: { prompt: PromptEntry }) {
       </section>
 
       <section className="mt-12">
-        <h2 className="text-2xl font-bold tracking-tight text-[#101728]">
+        <h2 className="text-2xl font-bold tracking-tight text-ink">
           {t('recipes.deliversTitle')}
         </h2>
         <ul className="mt-4 list-disc space-y-3 pl-5">
           {prompt.deliverKeys.map((deliverKey) => (
-            <li key={deliverKey} className="leading-relaxed text-[#414d63]">
+            <li key={deliverKey} className="leading-relaxed text-ink-soft">
               {t(deliverKey)}
             </li>
           ))}
@@ -64,23 +64,23 @@ export default function PromptDetail({ prompt }: { prompt: PromptEntry }) {
       </section>
 
       <section className="mt-12">
-        <h2 className="text-2xl font-bold tracking-tight text-[#101728]">
+        <h2 className="text-2xl font-bold tracking-tight text-ink">
           {t('recipes.examplesTitle')}
         </h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-[#e3e8ef] bg-white p-4">
-            <p className="text-xs font-bold tracking-[0.2em] text-[#718096] uppercase">
+          <div className="rounded-xl border border-line bg-card p-4">
+            <p className="text-xs font-bold tracking-[0.2em] text-muted-text uppercase">
               {t('recipes.exampleInputLabel')}
             </p>
-            <p className="mt-2 leading-relaxed text-[#414d63]">
+            <p className="mt-2 leading-relaxed text-ink-soft">
               {t(prompt.exampleInputKey)}
             </p>
           </div>
-          <div className="rounded-xl border border-[#e3e8ef] bg-white p-4">
-            <p className="text-xs font-bold tracking-[0.2em] text-[#718096] uppercase">
+          <div className="rounded-xl border border-line bg-card p-4">
+            <p className="text-xs font-bold tracking-[0.2em] text-muted-text uppercase">
               {t('recipes.exampleOutputLabel')}
             </p>
-            <p className="mt-2 leading-relaxed text-[#414d63]">
+            <p className="mt-2 leading-relaxed text-ink-soft">
               {t(prompt.exampleOutputKey)}
             </p>
           </div>
@@ -89,12 +89,12 @@ export default function PromptDetail({ prompt }: { prompt: PromptEntry }) {
 
       <CopyPromptBlock prompt={prompt.prompt} />
 
-      <div className="mt-12 border-t border-[#e3e8ef] pt-6">
+      <div className="mt-12 border-t border-line pt-6">
         <a
           href={prompt.docHref}
           target="_blank"
           rel="noreferrer"
-          className="text-sm text-[#718096] hover:text-[#101728] hover:underline"
+          className="text-sm text-muted-text hover:text-ink hover:underline"
         >
           {t('recipes.viewOnGithub')}
         </a>

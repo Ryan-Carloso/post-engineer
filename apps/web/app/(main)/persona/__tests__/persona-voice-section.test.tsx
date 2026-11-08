@@ -151,7 +151,7 @@ describe('PersonaVoiceSection', () => {
     render(<PersonaVoiceSection />);
     const warning = screen.getByTestId('persona-voice-fallback-warning');
     // Amber, never red: a swap with a visible path forward, not an error.
-    expect(warning.className).toContain('amber');
+    expect(warning.className).toContain('warning');
     expect(warning).toHaveTextContent('persona.voiceFallbackWarning');
   });
 

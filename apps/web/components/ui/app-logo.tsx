@@ -31,7 +31,7 @@ export default function AppLogo({
         data-testid="app-logo-fallback"
         style={{ width: size, height: size }}
         className={twMerge(
-          'flex shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-[#ff544c] to-[#ff8a85] text-xs font-bold text-white',
+          'flex shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-brand to-brand-hover text-xs font-bold text-white',
           className,
         )}
       >

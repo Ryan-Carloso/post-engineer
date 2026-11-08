@@ -691,7 +691,7 @@ describe('PostsPage fallbacks', () => {
 
     // Unknown statuses degrade to the pending look, never an unstyled badge.
     const badge = screen.getByText('posts.statusPending');
-    expect(badge.className).toContain('bg-[#e8edf1]');
+    expect(badge.className).toContain('bg-sunken');
   });
 
   it('shows progress bars on ready and publishing cards', () => {

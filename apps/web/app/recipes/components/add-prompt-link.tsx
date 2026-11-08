@@ -22,11 +22,11 @@ export default function AddPromptLink() {
         href={ADD_PROMPT_URL}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center self-start text-sm text-[#ff544c] underline decoration-dotted transition-colors hover:decoration-solid"
+        className="inline-flex items-center self-start text-sm text-brand underline decoration-dotted transition-colors hover:decoration-solid"
       >
         {t('recipes.addYourPrompt')}
       </a>
-      <span className="text-xs text-[#101728]/60">
+      <span className="text-xs text-ink/60">
         {t('recipes.addYourPromptHint')}
       </span>
     </div>

@@ -50,12 +50,12 @@ const PersonasHeader = () => {
   const { t } = useI18n();
   return (
     <div className="flex items-center gap-3">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-white">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-on-ink">
         <SparklesIcon />
       </span>
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-neutral-900">{t('personas.title')}</h1>
-        <p className="text-sm text-neutral-500">{t('personas.subtitle')}</p>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">{t('personas.title')}</h1>
+        <p className="text-sm text-muted-text">{t('personas.subtitle')}</p>
       </div>
     </div>
   );
@@ -67,18 +67,18 @@ const PersonasHeader = () => {
 const PersonasEmptyState = () => {
   const { t } = useI18n();
   return (
-    <div className="rounded-2xl border border-dashed border-neutral-300 bg-linear-to-b from-white to-neutral-50 px-6 py-14 text-center shadow-sm">
+    <div className="rounded-2xl border border-dashed border-line bg-linear-to-b from-card to-surface px-6 py-14 text-center shadow-sm">
       <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-accent/10 text-accent">
         <SparklesIcon />
       </span>
-      <h2 className="mt-5 text-base font-semibold text-neutral-900">{t('personas.emptyTitle')}</h2>
-      <p className="mx-auto mt-3 max-w-sm text-sm leading-5 text-neutral-600">
+      <h2 className="mt-5 text-base font-semibold text-ink">{t('personas.emptyTitle')}</h2>
+      <p className="mx-auto mt-3 max-w-sm text-sm leading-5 text-muted-text">
         {t('personas.emptyHint')}
       </p>
       <div className="mt-7">
         <Link
           href="/persona"
-          className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-accent-hover hover:shadow-md [&_svg]:size-4"
+          className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-on-ink shadow-sm transition-all hover:bg-accent-hover hover:shadow-md [&_svg]:size-4"
         >
           <PlusIcon />
           {t('personas.createFirst')}
@@ -96,14 +96,14 @@ const PersonasPageError = () => {
   const personasQuery = usePersonaListQuery();
 
   return (
-    <section className="rounded-2xl border border-red-200 bg-white p-6 text-center sm:p-8">
-      <h1 className="text-xl font-semibold text-neutral-900">{t('personas.loadError')}</h1>
-      <p className="mt-2 text-sm text-neutral-500">{t('personas.loadErrorHint')}</p>
+    <section className="rounded-2xl border border-destructive/30 bg-card p-6 text-center sm:p-8">
+      <h1 className="text-xl font-semibold text-ink">{t('personas.loadError')}</h1>
+      <p className="mt-2 text-sm text-muted-text">{t('personas.loadErrorHint')}</p>
       <button
         type="button"
         disabled={personasQuery.isFetching}
         onClick={() => void personasQuery.refetch()}
-        className="mt-5 inline-flex items-center justify-center rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+        className="mt-5 inline-flex items-center justify-center rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-on-ink disabled:opacity-60"
       >
         {t('personas.tryAgain')}
       </button>
@@ -120,16 +120,16 @@ const PersonasList = ({ personas }: { personas: PersonaRecord[] }) => {
   const [deletingPersona, setDeletingPersona] = useState<PersonaRecord | null>(null);
 
   return (
-    <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
+    <section className="rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {personas.map((persona) => (
           <PersonaCard key={persona.id} persona={persona} onDeleteRequest={setDeletingPersona} />
         ))}
         <Link
           href="/persona"
-          className="group flex min-h-30 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-300 bg-white/60 px-4 py-6 text-sm font-medium text-neutral-500 transition-all hover:border-accent/50 hover:bg-accent/5 hover:text-accent"
+          className="group flex min-h-30 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-line bg-card/60 px-4 py-6 text-sm font-medium text-muted-text transition-all hover:border-accent/50 hover:bg-accent/5 hover:text-accent"
         >
-          <span className="flex size-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-400 transition-colors group-hover:bg-accent/10 group-hover:text-accent [&_svg]:size-5">
+          <span className="flex size-10 items-center justify-center rounded-full bg-sunken text-faint transition-colors group-hover:bg-accent/10 group-hover:text-accent [&_svg]:size-5">
             <PlusIcon />
           </span>
           {t('personas.createNew')}
@@ -161,7 +161,7 @@ const PersonaCard = ({
   const { t } = useI18n();
 
   return (
-    <div className="group relative flex min-h-30 items-center gap-4 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-neutral-300 hover:shadow-md">
+    <div className="group relative flex min-h-30 items-center gap-4 rounded-2xl border border-line bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-line hover:shadow-md">
       <Link
         href={`/persona?edit=${encodeURIComponent(persona.id)}`}
         aria-label={t('personas.details')}
@@ -177,21 +177,21 @@ const PersonaCard = ({
           size={56}
         />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold text-neutral-900">{persona.name}</div>
-          <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-600 [&_svg]:size-3.5">
+          <div className="truncate text-sm font-semibold text-ink">{persona.name}</div>
+          <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-sunken px-2.5 py-1 text-xs font-medium text-muted-text [&_svg]:size-3.5">
             <MicIcon />
             {persona.voiceAudioUrl ? t('personas.voiceOwn') : t('personas.voiceHouse')}
           </span>
           {(persona.language || persona.videoAspect) && (
             <div className="mt-1.5 flex items-center gap-1.5">
               {persona.language && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 [&_svg]:size-3">
+                <span className="inline-flex items-center gap-1 rounded-full bg-info-soft px-2.5 py-1 text-xs font-medium text-info [&_svg]:size-3">
                   <GlobeIcon />
                   {persona.language}
                 </span>
               )}
               {persona.videoAspect && (
-                <span className="inline-flex items-center rounded-full bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">
+                <span className="inline-flex items-center rounded-full bg-sunken px-2.5 py-1 text-xs font-medium text-ink-soft">
                   {persona.videoAspect}
                 </span>
               )}
@@ -204,7 +204,7 @@ const PersonaCard = ({
         aria-label={t('personas.delete')}
         title={t('personas.delete')}
         onClick={() => onDeleteRequest(persona)}
-        className="absolute top-2.5 right-2.5 flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-300 transition-colors group-hover:text-neutral-400 hover:bg-red-50 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:opacity-50 [&_svg]:size-4"
+        className="absolute top-2.5 right-2.5 flex size-8 shrink-0 items-center justify-center rounded-lg text-faint transition-colors group-hover:text-faint hover:bg-destructive-soft hover:text-destructive focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:opacity-50 [&_svg]:size-4"
       >
         <TrashIcon />
       </button>
@@ -226,7 +226,7 @@ const PersonasPageSkeleton = () => (
     </div>
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {[0, 1, 2].map((item) => (
-        <div key={item} className="flex min-h-30 items-center gap-4 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+        <div key={item} className="flex min-h-30 items-center gap-4 rounded-2xl border border-line bg-card p-4 shadow-sm">
           <div className="skeleton-shimmer size-14 shrink-0 rounded-full" />
           <div className="min-w-0 flex-1 space-y-3">
             <div className="skeleton-shimmer h-4 w-32 rounded" />
@@ -235,7 +235,7 @@ const PersonasPageSkeleton = () => (
           </div>
         </div>
       ))}
-      <div className="flex min-h-30 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-neutral-300 bg-white/60">
+      <div className="flex min-h-30 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-line bg-card/60">
         <div className="skeleton-shimmer size-10 rounded-full" />
         <div className="skeleton-shimmer h-4 w-32 rounded" />
       </div>

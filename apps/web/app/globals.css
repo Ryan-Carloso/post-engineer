@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Theme tokens. Every token below is defined for both themes; `.dark` overrides the
+   whole set, so components use token classes (bg-card, text-ink, bg-success-soft ...)
+   instead of per-theme classes. Fixed hex / palette colors are only allowed for brand
+   marks and decorative accents; app/__tests__/theme-tokens.test.ts pins the rest. */
 :root {
   --background: #f4f8fb;
   --foreground: #0d2b45;
@@ -7,33 +11,147 @@
   --harbor-blue: #234f70;
   --signal-coral: #ff5a4e;
   --live-mint: #cff5df;
+  --accent-hover: #234f70;
+  --card: #ffffff;
+  --card-foreground: #0d2b45;
+  --primary: #0d2b45;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f6fa;
+  --secondary-foreground: #0d2b45;
+  --muted: #eef3f7;
+  --muted-foreground: #60758a;
+  --destructive: #c2301e;
+  --destructive-foreground: #ffffff;
+  --destructive-soft: #ffe1de;
+  --destructive-hover: #a1250f;
+  --code: #101728;
+  --code-text: #8a94a8;
+  --border: #d8e0e7;
+  --input: #d7e2ea;
+  --ring: #2e6bff;
+  --ink: #101728;
+  --on-ink: #ffffff;
+  --ink-soft: #414d63;
+  --muted-text: #657184;
+  --faint: #8a94a8;
+  --hairline: #edf0f4;
+  --line: #dfe5ec;
+  --surface: #f8fafc;
+  --sunken: #f1f4f7;
+  --scrim: #0a0f1a;
+  --brand: #ff544c;
+  --brand-hover: #e04540;
+  --brand-soft: #fff0ef;
+  --success: #167246;
+  --success-soft: #cff5df;
+  --info: #1d5bbf;
+  --info-soft: #e3f0ff;
+  --warning: #9a6b00;
+  --warning-soft: #fff4d6;
+  --shimmer-base: #e4edf3;
+  --shimmer-highlight: #f7fafc;
 }
+
+.dark {
+  --background: #0b1220;
+  --foreground: #e6edf5;
+  --ink-navy: #e6edf5;
+  --accent-hover: #c5d4e3;
+  --card: #131c2e;
+  --card-foreground: #e6edf5;
+  --primary: #e6edf5;
+  --primary-foreground: #0b1220;
+  --secondary: #172236;
+  --secondary-foreground: #e6edf5;
+  --muted: #1b2840;
+  --muted-foreground: #9fb0c3;
+  --destructive: #ff8f80;
+  --destructive-foreground: #1a0a07;
+  --destructive-soft: #3b1a17;
+  --destructive-hover: #ffb3a8;
+  --code: #070b14;
+  --code-text: #9aa9bd;
+  --border: #2a3850;
+  --input: #2a3850;
+  --ring: #6e9bff;
+  --ink: #f1f5f9;
+  --on-ink: #0b1220;
+  --ink-soft: #cbd5e1;
+  --muted-text: #9aa9bd;
+  --faint: #7f8da3;
+  --hairline: #1f2b40;
+  --line: #2a3850;
+  --surface: #172236;
+  --sunken: #1b2840;
+  --scrim: #000000;
+  --brand: #ff6a62;
+  --brand-hover: #ff8a84;
+  --brand-soft: #3a1c1f;
+  --success: #6fdc9b;
+  --success-soft: #12301f;
+  --info: #8bb8ff;
+  --info-soft: #14284a;
+  --warning: #f2c04d;
+  --warning-soft: #3a2d0a;
+  --shimmer-base: #1b2840;
+  --shimmer-highlight: #25344f;
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-accent: var(--ink-navy);
-  --color-accent-hover: #234f70;
+  --color-accent-hover: var(--accent-hover);
   /* shadcn/ui token set, mapped to the app palette. */
-  --color-card: #ffffff;
-  --color-card-foreground: var(--foreground);
-  --color-primary: var(--ink-navy);
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #f1f6fa;
-  --color-secondary-foreground: var(--foreground);
-  --color-muted: #eef3f7;
-  --color-muted-foreground: #60758a;
-  --color-destructive: #c2301e;
-  --color-destructive-foreground: #ffffff;
-  --color-border: #d8e0e7;
-  --color-input: #d7e2ea;
-  --color-ring: #2e6bff;
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-code: var(--code);
+  --color-code-text: var(--code-text);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  /* App semantic tokens (replace fixed hex / bg-white / neutral-* utilities). */
+  --color-ink: var(--ink);
+  --color-on-ink: var(--on-ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted-text: var(--muted-text);
+  --color-faint: var(--faint);
+  --color-hairline: var(--hairline);
+  --color-line: var(--line);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-scrim: var(--scrim);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 html {
   color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
 }
 
 body {
@@ -51,14 +169,14 @@ body {
 }
 
 * {
-  border-color: #d8e0e7;
+  border-color: var(--border);
 }
 
 button,
 a,
 select,
 input {
-  outline-color: #2e6bff;
+  outline-color: var(--ring);
   outline-offset: 3px;
 }
 
@@ -78,7 +196,7 @@ input {
 }
 
 .skeleton-shimmer {
-  background: linear-gradient(105deg, #e4edf3 20%, #f7fafc 42%, #e4edf3 64%);
+  background: linear-gradient(105deg, var(--shimmer-base) 20%, var(--shimmer-highlight) 42%, var(--shimmer-base) 64%);
   background-size: 300% 100%;
   animation: skeleton-shimmer 1.8s ease-in-out infinite;
 }

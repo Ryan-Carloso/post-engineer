@@ -279,19 +279,19 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
   return (
     <section aria-label={t('persona.libraryLabel')}>
       <div className="flex items-center gap-3">
-        <span className="text-sm font-semibold text-neutral-900">{t('persona.libraryLabel')}</span>
-        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
+        <span className="text-sm font-semibold text-ink">{t('persona.libraryLabel')}</span>
+        <span className="rounded-full bg-sunken px-2 py-0.5 text-xs text-muted-text">
           {t('persona.libraryCount', { count: images.length, max: MAX_LIBRARY_IMAGES })}
         </span>
-        <span className="h-px flex-1 bg-neutral-200" />
+        <span className="h-px flex-1 bg-sunken" />
       </div>
-      <p className="mt-2 text-sm text-neutral-500">{t('persona.libraryHint', { max: MAX_LIBRARY_IMAGES, sizeMb: MAX_IMAGE_BYTES / (1024 * 1024) })}</p>
+      <p className="mt-2 text-sm text-muted-text">{t('persona.libraryHint', { max: MAX_LIBRARY_IMAGES, sizeMb: MAX_IMAGE_BYTES / (1024 * 1024) })}</p>
 
       {imagesQuery.isError ? (
-        <p className="mt-3 text-sm text-red-600">{t('persona.libraryLoadError')}</p>
+        <p className="mt-3 text-sm text-destructive">{t('persona.libraryLoadError')}</p>
       ) : null}
-      {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-      {warning ? <p className="mt-3 text-sm text-amber-700">{warning}</p> : null}
+      {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+      {warning ? <p className="mt-3 text-sm text-warning">{warning}</p> : null}
 
       {images.length > 0 ? (
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -300,14 +300,14 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
           ))}
         </div>
       ) : showEmptyState ? (
-        <p className="mt-3 text-sm text-neutral-500">{t('persona.libraryEmpty', { max: MAX_LIBRARY_IMAGES })}</p>
+        <p className="mt-3 text-sm text-muted-text">{t('persona.libraryEmpty', { max: MAX_LIBRARY_IMAGES })}</p>
       ) : null}
 
       {/* The pending queue renders outside the full/partial conditional: a
           refetch that fills the library must not silently hide queued items
           (with their upload button) while their previews stay alive. */}
       {full ? (
-        <p className="mt-3 text-sm text-amber-700">{t('persona.libraryLimitReached', { max: MAX_LIBRARY_IMAGES })}</p>
+        <p className="mt-3 text-sm text-warning">{t('persona.libraryLimitReached', { max: MAX_LIBRARY_IMAGES })}</p>
       ) : (
         <div className="mt-4">
           <input
@@ -322,7 +322,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-50"
+            className="rounded-lg border border-line bg-card px-3 py-2 text-sm font-medium text-ink hover:bg-surface disabled:opacity-50"
           >
             {t('persona.libraryAdd')}
           </button>
@@ -331,7 +331,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
       {pending.length > 0 ? (
         <div className="mt-3 space-y-3">
           {pending.map((item) => (
-            <div key={item.id} className="mt-3 flex gap-3 rounded-lg border border-neutral-200 p-3">
+            <div key={item.id} className="mt-3 flex gap-3 rounded-lg border border-line p-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={item.preview}
@@ -346,7 +346,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
                   aria-label={t('persona.libraryTag')}
                   maxLength={100}
                   disabled={uploading}
-                  className="w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm disabled:opacity-50"
+                  className="w-full rounded-md border border-line px-2 py-1.5 text-sm disabled:opacity-50"
                 />
                 <input
                   value={item.description}
@@ -355,7 +355,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
                   aria-label={t('persona.libraryDescription')}
                   maxLength={500}
                   disabled={uploading}
-                  className="w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm disabled:opacity-50"
+                  className="w-full rounded-md border border-line px-2 py-1.5 text-sm disabled:opacity-50"
                 />
               </div>
               {/* Disabled while uploading: removePending would revoke the
@@ -366,7 +366,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
                 type="button"
                 onClick={() => removePending(item.id)}
                 disabled={uploading}
-                className="self-start text-sm text-neutral-500 hover:text-red-600 disabled:opacity-50"
+                className="self-start text-sm text-muted-text hover:text-destructive disabled:opacity-50"
               >
                 {t('persona.libraryRemove')}
               </button>
@@ -376,7 +376,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
             type="button"
             onClick={uploadPending}
             disabled={uploading}
-            className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink disabled:opacity-50"
           >
             {uploading ? t('persona.libraryUploading') : t('persona.libraryUpload')}
           </button>
@@ -482,7 +482,7 @@ function LibraryImageCard({
   };
 
   return (
-    <div className="relative overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50">
+    <div className="relative overflow-hidden rounded-lg border border-line bg-surface">
       {image.image_url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={image.image_url} alt={image.tag ?? ''} className="aspect-square w-full object-cover" />
@@ -490,18 +490,18 @@ function LibraryImageCard({
         // A null URL with image_url_error means signing failed transiently;
         // a refetch re-signs, so tell the user it is retryable instead of
         // rendering a silently broken thumbnail.
-        <div className="flex aspect-square w-full items-center justify-center bg-neutral-200 p-2 text-center text-xs text-neutral-500">
+        <div className="flex aspect-square w-full items-center justify-center bg-sunken p-2 text-center text-xs text-muted-text">
           {image.image_url_error ? t('persona.libraryImageUrlError') : null}
         </div>
       )}
       {image.is_primary ? (
-        <span className="absolute top-2 left-2 rounded-full bg-neutral-900 px-2 py-0.5 text-xs font-medium text-white">
+        <span className="absolute top-2 left-2 rounded-full bg-ink px-2 py-0.5 text-xs font-medium text-on-ink">
           {t('persona.libraryPrimary')}
         </span>
       ) : null}
       <div className="space-y-1 p-2">
-        {cardError ? <p className="text-xs text-red-600">{cardError}</p> : null}
-        {cardWarning ? <p className="text-xs text-amber-600">{cardWarning}</p> : null}
+        {cardError ? <p className="text-xs text-destructive">{cardError}</p> : null}
+        {cardWarning ? <p className="text-xs text-warning">{cardWarning}</p> : null}
         {editing ? (
           <>
             <input
@@ -510,7 +510,7 @@ function LibraryImageCard({
               placeholder={t('persona.libraryTagPlaceholder')}
               maxLength={100}
               disabled={updateMutation.isPending}
-              className="w-full rounded border border-neutral-300 px-1.5 py-1 text-xs disabled:opacity-50"
+              className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:opacity-50"
             />
             <input
               value={description}
@@ -518,14 +518,14 @@ function LibraryImageCard({
               placeholder={t('persona.libraryDescriptionPlaceholder')}
               maxLength={500}
               disabled={updateMutation.isPending}
-              className="w-full rounded border border-neutral-300 px-1.5 py-1 text-xs disabled:opacity-50"
+              className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:opacity-50"
             />
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={save}
                 disabled={updateMutation.isPending}
-                className="text-xs font-medium text-neutral-900 underline disabled:opacity-50"
+                className="text-xs font-medium text-ink underline disabled:opacity-50"
               >
                 {t('persona.librarySave')}
               </button>
@@ -537,7 +537,7 @@ function LibraryImageCard({
                   setDescription(image.description ?? '');
                 }}
                 disabled={updateMutation.isPending}
-                className="text-xs text-neutral-500 underline disabled:opacity-50"
+                className="text-xs text-muted-text underline disabled:opacity-50"
               >
                 {t('persona.libraryCancel')}
               </button>
@@ -545,10 +545,10 @@ function LibraryImageCard({
           </>
         ) : (
           <>
-            <p className="truncate text-xs font-medium text-neutral-800">
+            <p className="truncate text-xs font-medium text-ink">
               {image.tag || '—'}
             </p>
-            <p className="line-clamp-2 text-xs text-neutral-500">{image.description || '—'}</p>
+            <p className="line-clamp-2 text-xs text-muted-text">{image.description || '—'}</p>
           </>
         )}
         <div className="flex items-center gap-2 pt-1">
@@ -557,7 +557,7 @@ function LibraryImageCard({
               type="button"
               onClick={setPrimary}
               disabled={updateMutation.isPending}
-              className="text-xs text-neutral-600 underline disabled:opacity-50"
+              className="text-xs text-muted-text underline disabled:opacity-50"
             >
               {t('persona.librarySetPrimary')}
             </button>
@@ -566,7 +566,7 @@ function LibraryImageCard({
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="text-xs text-neutral-600 underline"
+              className="text-xs text-muted-text underline"
               aria-label={t('persona.libraryEdit')}
             >
               {t('persona.libraryEdit')}
@@ -576,7 +576,7 @@ function LibraryImageCard({
             type="button"
             onClick={remove}
             disabled={deleteMutation.isPending}
-            className="text-xs text-neutral-500 underline hover:text-red-600 disabled:opacity-50"
+            className="text-xs text-muted-text underline hover:text-destructive disabled:opacity-50"
           >
             {t('persona.libraryRemove')}
           </button>
