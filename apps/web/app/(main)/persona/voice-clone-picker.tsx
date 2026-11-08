@@ -299,7 +299,7 @@ export const PersonaVoiceClonePanel = () => {
           <button
             type="button"
             onClick={stopRecording}
-            className="rounded-lg border border-accent bg-red-50 px-4 py-2 text-sm font-medium text-accent"
+            className="rounded-lg border border-accent bg-destructive-soft px-4 py-2 text-sm font-medium text-accent"
           >
             {t('persona.voiceCloneStop')} ({formatTimer(recordSeconds)} / {formatTimer(MAX_CLONE_REFERENCE_SECONDS)})
           </button>
@@ -351,7 +351,7 @@ export const PersonaVoiceClonePanel = () => {
                 </p>
               ) : null}
               {cleanedUrl !== null && !cleaning ? <audio controls src={cleanedUrl} className="w-full" /> : null}
-              {cleanFailed ? <p className="text-sm text-amber-700">{t('persona.voiceCloneCleanFailed')}</p> : null}
+              {cleanFailed ? <p className="text-sm text-warning">{t('persona.voiceCloneCleanFailed')}</p> : null}
             </div>
           ) : null}
           <div className="mt-2 flex flex-wrap gap-2">
@@ -393,19 +393,19 @@ export const PersonaVoiceClonePanel = () => {
         </p>
       ) : null}
       {tracking && tracking.status === 'failed' ? (
-        <p className="text-sm text-red-600" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           {t('persona.voiceCloneFailed')}
         </p>
       ) : null}
 
       {error ? (
-        <p className="text-sm text-red-600" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           {error}
         </p>
       ) : null}
 
       {listQuery.isError ? (
-        <p className="text-sm text-red-600">{t('persona.voiceCloneListError')}</p>
+        <p className="text-sm text-destructive">{t('persona.voiceCloneListError')}</p>
       ) : null}
 
       <ul className="space-y-2">
@@ -422,7 +422,7 @@ export const PersonaVoiceClonePanel = () => {
             <li
               key={clone.id}
               className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 ${
-                isActive ? 'border-accent bg-red-50/40' : 'border-line'
+                isActive ? 'border-accent bg-destructive-soft/40' : 'border-line'
               }`}
             >
               <MicIcon />
@@ -454,7 +454,7 @@ export const PersonaVoiceClonePanel = () => {
                 aria-label={t('persona.voiceCloneDelete')}
                 onClick={() => deleteMutation.mutate(clone.id)}
                 disabled={deleteMutation.isPending}
-                className="text-muted-text hover:text-red-600"
+                className="text-muted-text hover:text-destructive"
               >
                 <TrashIcon />
               </button>

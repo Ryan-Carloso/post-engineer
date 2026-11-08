@@ -117,15 +117,15 @@ describe('TokenHistory', () => {
 
     const credit = screen.getByText('+10');
     expect(credit).toBeInTheDocument();
-    expect(credit.className).toMatch(/emerald|green/);
+    expect(credit.className).toContain('text-success');
 
     const debit = screen.getByText('-2');
     expect(debit).toBeInTheDocument();
-    expect(debit.className).toMatch(/red/);
+    expect(debit.className).toContain('text-destructive');
 
     const refund = screen.getByText('+2');
     expect(refund).toBeInTheDocument();
-    expect(refund.className).toMatch(/emerald|green/);
+    expect(refund.className).toContain('text-success');
 
     expect(screen.getByText('Showing 3 of 3')).toBeInTheDocument();
   });

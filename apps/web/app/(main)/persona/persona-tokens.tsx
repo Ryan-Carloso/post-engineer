@@ -88,7 +88,7 @@ function QualityOption({
       onClick={() => onSelect(quality)}
       className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
         active
-          ? 'border-accent bg-red-50/50 text-ink'
+          ? 'border-accent bg-destructive-soft/50 text-ink'
           : 'border-line bg-card text-muted-text hover:border-muted-text'
       }`}
     >

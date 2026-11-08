@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
-/* Theme tokens. Every colour used by the UI is a variable here; `.dark` overrides
-   the whole set so no component needs per-theme classes. The light values are the
-   original palette (unchanged); the dark values are tuned for >= 4.5:1 text contrast. */
+/* Theme tokens. Every token below is defined for both themes; `.dark` overrides the
+   whole set, so components use token classes (bg-card, text-ink, bg-success-soft ...)
+   instead of per-theme classes. Fixed hex / palette colors are only allowed for brand
+   marks and decorative accents; app/__tests__/theme-tokens.test.ts pins the rest. */
 :root {
   --background: #f4f8fb;
   --foreground: #0d2b45;

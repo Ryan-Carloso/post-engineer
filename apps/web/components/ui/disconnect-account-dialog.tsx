@@ -68,7 +68,7 @@ export default function DisconnectAccountDialog({
             <button
               type="button"
               data-testid="disconnect-confirm-button"
-              className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex items-center gap-2 rounded-lg bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground transition-colors hover:bg-destructive-hover disabled:cursor-not-allowed disabled:opacity-60"
               disabled={pending}
               onClick={onConfirm}
             >

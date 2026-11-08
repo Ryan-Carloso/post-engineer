@@ -114,7 +114,7 @@ export const PersonaPhotoPicker = ({ personaId }: { personaId?: string }) => {
           {pickButton(t('persona.photoUpload'), uploading)}
           {input}
         </div>
-        {error ? <p role="alert" className="mt-2 text-sm text-red-600">{error}</p> : null}
+        {error ? <p role="alert" className="mt-2 text-sm text-destructive">{error}</p> : null}
       </div>
     );
   }
@@ -157,15 +157,15 @@ export const PersonaPhotoPicker = ({ personaId }: { personaId?: string }) => {
           type="button"
           disabled={uploading}
           onClick={() => inputRef.current?.click()}
-          className="group flex min-h-40 w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-line bg-card px-6 py-8 text-sm font-medium text-ink-soft transition-colors hover:border-accent/60 hover:bg-red-50/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
+          className="group flex min-h-40 w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-line bg-card px-6 py-8 text-sm font-medium text-ink-soft transition-colors hover:border-accent/60 hover:bg-destructive-soft/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
         >
-          <span className="flex size-12 items-center justify-center rounded-full bg-sunken text-muted-text transition-colors group-hover:bg-red-100 group-hover:text-accent">
+          <span className="flex size-12 items-center justify-center rounded-full bg-sunken text-muted-text transition-colors group-hover:bg-destructive-soft group-hover:text-accent">
             <ImageIcon />
           </span>
           <span>{t('persona.photoUpload')}</span>
         </button>
       )}
-      {error ? <p role="alert" className="mt-2 text-sm text-red-600">{error}</p> : null}
+      {error ? <p role="alert" className="mt-2 text-sm text-destructive">{error}</p> : null}
       <p className="mt-3 text-sm leading-5 text-muted-text">{t('persona.photoHint', { max: MAX_PERSONA_IMAGES })}</p>
     </div>
   );

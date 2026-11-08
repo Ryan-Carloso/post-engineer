@@ -125,3 +125,24 @@ describe('inverting fills use text-on-ink', () => {
     expect(detail.includes('hover:bg-[#')).toBe(false);
   });
 });
+
+// Pastel palette backgrounds and dark palette text are light-only: in dark mode
+// they leave a light patch (or unreadable text). Status UI uses the
+// success / info / warning / destructive tokens instead. Solid -500..-700
+// fills (status dots, brand buttons) are deliberately allowed.
+const LIGHT_ONLY_PALETTE =
+  /(?<![\w-])(?:bg-(?:red|emerald|green|amber|blue|sky|violet|purple|pink)-(?:50|100)|text-(?:red|emerald|green|amber|blue|sky|violet|purple|pink)-(?:600|700|800|900|950)|border-(?:red|emerald|green|amber|blue|sky|violet|purple|pink)-(?:200|300))(?![\w-])/;
+
+describe('status colors use tokens, not the light-only palette', () => {
+  const files = ['app', 'components', 'lib'].flatMap((dir) => allSourceFiles(join(webRoot, dir)));
+
+  it('has no pastel palette backgrounds, dark palette text or palette borders', () => {
+    const offenders = files.filter((file) => LIGHT_ONLY_PALETTE.test(readFileSync(file, 'utf8'))).map((f) => f.replace(webRoot, ''));
+    expect(offenders).toEqual([]);
+  });
+
+  it('keeps overlays on bg-scrim, never an inverting ink alpha', () => {
+    const offenders = files.filter((file) => /(?<![\w-])bg-ink\/\d+/.test(readFileSync(file, 'utf8'))).map((f) => f.replace(webRoot, ''));
+    expect(offenders).toEqual([]);
+  });
+});

@@ -159,7 +159,7 @@ export default function McpDocsSection({ apiKey }: { apiKey: string | null }): R
           </div>
         </details>
 
-        <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+        <p className="mt-5 rounded-xl border border-warning/30 bg-warning-soft p-3 text-xs leading-5 text-warning">
           {t('apiKeys.docsSecurityNote')}
         </p>
 

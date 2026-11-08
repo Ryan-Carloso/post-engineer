@@ -69,11 +69,11 @@ interface TypeBadgeStyle {
 }
 
 const TYPE_BADGE_STYLES: Record<string, TypeBadgeStyle> = {
-  purchase: { className: 'border-blue-200 bg-blue-50 text-blue-700', labelKey: 'pricing.historyTypePurchase' },
-  video_generation: { className: 'border-red-200 bg-red-50 text-red-700', labelKey: 'pricing.historyTypeVideoGeneration' },
-  generation_refund: { className: 'border-emerald-200 bg-emerald-50 text-emerald-700', labelKey: 'pricing.historyTypeRefund' },
-  refund: { className: 'border-emerald-200 bg-emerald-50 text-emerald-700', labelKey: 'pricing.historyTypeRefund' },
-  plan_grant: { className: 'border-violet-200 bg-violet-50 text-violet-700', labelKey: 'pricing.historyTypePlanGrant' },
+  purchase: { className: 'border-info/30 bg-info-soft text-info', labelKey: 'pricing.historyTypePurchase' },
+  video_generation: { className: 'border-destructive/30 bg-destructive-soft text-destructive', labelKey: 'pricing.historyTypeVideoGeneration' },
+  generation_refund: { className: 'border-success/30 bg-success-soft text-success', labelKey: 'pricing.historyTypeRefund' },
+  refund: { className: 'border-success/30 bg-success-soft text-success', labelKey: 'pricing.historyTypeRefund' },
+  plan_grant: { className: 'border-line bg-sunken text-ink-soft', labelKey: 'pricing.historyTypePlanGrant' },
   manual_adjustment: { className: 'border-line bg-sunken text-ink-soft', labelKey: 'pricing.historyTypeAdjustment' },
 };
 
@@ -87,8 +87,8 @@ function formatAmount(amount: number): string {
 }
 
 function amountClassName(amount: number): string {
-  if (amount > 0) return 'text-emerald-600';
-  if (amount < 0) return 'text-red-600';
+  if (amount > 0) return 'text-success';
+  if (amount < 0) return 'text-destructive';
   return 'text-muted-text';
 }
 
@@ -162,12 +162,12 @@ export const TokenHistory = () => {
       )}
 
       {historyQuery.isError && (
-        <div role="alert" className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
-          <p className="text-sm text-red-700">{t('pricing.historyError')}</p>
+        <div role="alert" className="mt-6 rounded-2xl border border-destructive/30 bg-destructive-soft px-5 py-4">
+          <p className="text-sm text-destructive">{t('pricing.historyError')}</p>
           <button
             type="button"
             onClick={() => void historyQuery.refetch()}
-            className="mt-3 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+            className="mt-3 rounded-xl bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground hover:bg-destructive-hover"
           >
             {t('pricing.historyRetry')}
           </button>

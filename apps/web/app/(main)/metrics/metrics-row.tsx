@@ -16,7 +16,7 @@ import { useRetentionCurveQuery, type MetricKey } from '@/lib/metrics/metrics-da
 // retention curve for long-form videos.
 //---------------
 
-const AMBER_CHIP = 'rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700';
+const AMBER_CHIP = 'rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning';
 
 interface MetricsRowProps {
   row: MetricsRowView;
@@ -107,7 +107,7 @@ function RetentionCurvePanel({ accountId, videoId }: { accountId: string; videoI
   } else if (curve.isError || result === undefined) {
     const reconnect = curve.isError && curve.error.reconnect;
     body = (
-      <p role="alert" className={cn('text-xs', reconnect ? 'text-amber-700' : 'text-red-600')}>
+      <p role="alert" className={cn('text-xs', reconnect ? 'text-warning' : 'text-destructive')}>
         {t(reconnect ? 'metrics.reconnectTitle' : 'metrics.curveError')}
       </p>
     );

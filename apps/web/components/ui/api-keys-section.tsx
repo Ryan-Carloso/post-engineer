@@ -108,20 +108,20 @@ export default function ApiKeysSection({
         {newKeyData ? (
           <div
             data-testid="api-key-created-banner"
-            className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950"
+            className="mb-6 rounded-xl border border-success/30 bg-success-soft p-4 text-success"
           >
             <div className="mb-2 flex items-center justify-between">
-              <span className="font-bold text-emerald-800">{t('apiKeys.createSuccess')}</span>
-              <span className="text-xs font-semibold text-emerald-600">({newKeyData.name})</span>
+              <span className="font-bold text-success">{t('apiKeys.createSuccess')}</span>
+              <span className="text-xs font-semibold text-success">({newKeyData.name})</span>
             </div>
-            <p className="mb-3 text-xs text-emerald-700">{t('apiKeys.warningCopyOnce')}</p>
+            <p className="mb-3 text-xs text-success">{t('apiKeys.warningCopyOnce')}</p>
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 readOnly
                 data-testid="raw-api-key-value"
                 value={newKeyData.key}
-                className="w-full rounded-lg border border-emerald-300 bg-card px-3 py-2 font-mono text-sm text-ink select-all"
+                className="w-full rounded-lg border border-success/30 bg-card px-3 py-2 font-mono text-sm text-ink select-all"
               />
               <Button
                 type="button"
@@ -181,7 +181,7 @@ export default function ApiKeysSection({
             <SpinnerIcon />
           </div>
         ) : query.isError ? (
-          <p className="py-4 text-sm text-red-500">{t('apiKeys.loadError')}</p>
+          <p className="py-4 text-sm text-destructive">{t('apiKeys.loadError')}</p>
         ) : keys.length === 0 ? (
           <div
             data-testid="api-keys-empty-state"
@@ -232,7 +232,7 @@ export default function ApiKeysSection({
                       <td className="px-4 py-3.5">
                         <span
                           className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                            isRevoked ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
+                            isRevoked ? 'bg-destructive-soft text-destructive' : 'bg-success-soft text-success'
                           }`}
                         >
                           <span className={`size-1.5 rounded-full ${isRevoked ? 'bg-red-500' : 'bg-emerald-500'}`} />
@@ -246,7 +246,7 @@ export default function ApiKeysSection({
                             data-testid={`revoke-key-btn-${key.id}`}
                             onClick={() => handleRevoke(key.id)}
                             disabled={revokeMutation.isPending}
-                            className="rounded-lg border border-red-200 bg-card px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                            className="rounded-lg border border-destructive/30 bg-card px-3 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive-soft"
                           >
                             {t('apiKeys.revoke')}
                           </Button>
@@ -270,7 +270,7 @@ export default function ApiKeysSection({
                         <span className="truncate font-semibold text-ink">{key.name}</span>
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase ${
-                            isRevoked ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
+                            isRevoked ? 'bg-destructive-soft text-destructive' : 'bg-success-soft text-success'
                           }`}
                         >
                           {isRevoked ? t('apiKeys.revoked') : t('apiKeys.active')}
@@ -291,7 +291,7 @@ export default function ApiKeysSection({
                         type="button"
                         onClick={() => handleRevoke(key.id)}
                         disabled={revokeMutation.isPending}
-                        className="shrink-0 rounded-lg border border-red-200 bg-card px-2.5 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50"
+                        className="shrink-0 rounded-lg border border-destructive/30 bg-card px-2.5 py-1 text-[11px] font-semibold text-destructive hover:bg-destructive-soft"
                       >
                         {t('apiKeys.revoke')}
                       </Button>

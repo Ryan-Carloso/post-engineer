@@ -298,7 +298,7 @@ export const PersonaHouseVoicePicker = () => {
           </div>
           <div className="mt-1 flex items-baseline justify-between gap-2">
             {previewErrorMessage !== null ? (
-              <p role="alert" className="text-xs text-red-600">
+              <p role="alert" className="text-xs text-destructive">
                 {previewErrorMessage}
               </p>
             ) : (
@@ -307,7 +307,7 @@ export const PersonaHouseVoicePicker = () => {
             <span
               className={`shrink-0 text-xs ${
                 previewText.length > HOUSE_PREVIEW_TEXT_MAX_CHARS
-                  ? 'font-semibold text-red-600'
+                  ? 'font-semibold text-destructive'
                   : 'text-faint'
               }`}
             >

@@ -19,6 +19,6 @@ export function SectionDivider({ label }: { label: string }) {
 //---------------
 export function InlineFieldError({ message }: { message: string }) {
   return (
-    <p role="alert" className="mt-2 text-sm font-medium text-red-700">{message}</p>
+    <p role="alert" className="mt-2 text-sm font-medium text-destructive">{message}</p>
   );
 }

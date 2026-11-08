@@ -136,7 +136,7 @@ const BillingBenefits = () => {
 const BillingNotices = () => {
   const { t } = useI18n();
   const checkoutState = useSearchParams().get('checkout');
-  return <>{checkoutState === 'success' && <div role="status" className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">{t('pricing.successDesc')}</div>}{checkoutState === 'canceled' && <div role="status" className="mb-6 rounded-2xl border border-line bg-surface px-5 py-4 text-sm text-ink-soft">{t('pricing.cancelDesc')}</div>}</>;
+  return <>{checkoutState === 'success' && <div role="status" className="mb-6 rounded-2xl border border-success/30 bg-success-soft px-5 py-4 text-sm text-success">{t('pricing.successDesc')}</div>}{checkoutState === 'canceled' && <div role="status" className="mb-6 rounded-2xl border border-line bg-surface px-5 py-4 text-sm text-ink-soft">{t('pricing.cancelDesc')}</div>}</>;
 };
 
 //---------------
@@ -162,7 +162,7 @@ const BillingPacks = () => {
   return (
     <section className="pt-12 lg:pt-14">
       <div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="text-2xl font-extrabold tracking-[-0.04em] text-ink sm:text-3xl">{t('pricing.packHeading')}</h2><p className="mt-2 text-sm text-muted-text sm:text-base">{t('pricing.packDescription')}</p></div><span className="rounded-xl border border-line bg-card px-3 py-2 text-xs font-medium text-muted-text shadow-sm">ⓘ {t('pricing.packHint')}</span></div>
-      {error !== null && <div role="alert" className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{error}</div>}
+      {error !== null && <div role="alert" className="mt-4 rounded-2xl border border-destructive/30 bg-destructive-soft px-5 py-4 text-sm text-destructive">{error}</div>}
       <TokenPackCards
         renderAction={(pack, { popular }) => (
           <button type="button" onClick={() => void handleCheckout(pack.id)} disabled={loading !== null} className={packActionClassName(popular)}>

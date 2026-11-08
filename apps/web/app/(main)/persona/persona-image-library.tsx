@@ -288,10 +288,10 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
       <p className="mt-2 text-sm text-muted-text">{t('persona.libraryHint', { max: MAX_LIBRARY_IMAGES, sizeMb: MAX_IMAGE_BYTES / (1024 * 1024) })}</p>
 
       {imagesQuery.isError ? (
-        <p className="mt-3 text-sm text-red-600">{t('persona.libraryLoadError')}</p>
+        <p className="mt-3 text-sm text-destructive">{t('persona.libraryLoadError')}</p>
       ) : null}
-      {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-      {warning ? <p className="mt-3 text-sm text-amber-700">{warning}</p> : null}
+      {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+      {warning ? <p className="mt-3 text-sm text-warning">{warning}</p> : null}
 
       {images.length > 0 ? (
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -307,7 +307,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
           refetch that fills the library must not silently hide queued items
           (with their upload button) while their previews stay alive. */}
       {full ? (
-        <p className="mt-3 text-sm text-amber-700">{t('persona.libraryLimitReached', { max: MAX_LIBRARY_IMAGES })}</p>
+        <p className="mt-3 text-sm text-warning">{t('persona.libraryLimitReached', { max: MAX_LIBRARY_IMAGES })}</p>
       ) : (
         <div className="mt-4">
           <input
@@ -366,7 +366,7 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
                 type="button"
                 onClick={() => removePending(item.id)}
                 disabled={uploading}
-                className="self-start text-sm text-muted-text hover:text-red-600 disabled:opacity-50"
+                className="self-start text-sm text-muted-text hover:text-destructive disabled:opacity-50"
               >
                 {t('persona.libraryRemove')}
               </button>
@@ -500,8 +500,8 @@ function LibraryImageCard({
         </span>
       ) : null}
       <div className="space-y-1 p-2">
-        {cardError ? <p className="text-xs text-red-600">{cardError}</p> : null}
-        {cardWarning ? <p className="text-xs text-amber-600">{cardWarning}</p> : null}
+        {cardError ? <p className="text-xs text-destructive">{cardError}</p> : null}
+        {cardWarning ? <p className="text-xs text-warning">{cardWarning}</p> : null}
         {editing ? (
           <>
             <input
@@ -576,7 +576,7 @@ function LibraryImageCard({
             type="button"
             onClick={remove}
             disabled={deleteMutation.isPending}
-            className="text-xs text-muted-text underline hover:text-red-600 disabled:opacity-50"
+            className="text-xs text-muted-text underline hover:text-destructive disabled:opacity-50"
           >
             {t('persona.libraryRemove')}
           </button>

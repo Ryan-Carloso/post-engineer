@@ -185,12 +185,12 @@ export default function MetricsPage(): React.ReactElement {
       </section>
 
       {needsReconnect && (
-        <section role="status" className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <section role="status" className="flex flex-col gap-3 rounded-2xl border border-warning/30 bg-warning-soft p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold text-amber-900">{t('metrics.reconnectTitle')}</p>
-            <p className="mt-0.5 text-xs text-amber-800">{t('metrics.reconnectBody')}</p>
+            <p className="text-sm font-semibold text-warning">{t('metrics.reconnectTitle')}</p>
+            <p className="mt-0.5 text-xs text-warning">{t('metrics.reconnectBody')}</p>
           </div>
-          <Link href="/accounts" className="shrink-0 rounded-xl bg-card px-4 py-2 text-center text-sm font-semibold text-amber-900 shadow-sm hover:bg-amber-100">
+          <Link href="/accounts" className="shrink-0 rounded-xl bg-card px-4 py-2 text-center text-sm font-semibold text-warning shadow-sm hover:bg-warning-soft">
             {t('metrics.reconnectAction')}
           </Link>
         </section>
@@ -339,7 +339,7 @@ function StatePanel({ tone, message, action }: StatePanelProps): React.ReactElem
     >
       <span className={cn(
         'flex size-11 items-center justify-center rounded-full [&>svg]:size-5',
-        tone === 'error' ? 'bg-red-50 text-red-600' : 'bg-card text-muted-text shadow-sm',
+        tone === 'error' ? 'bg-destructive-soft text-destructive' : 'bg-card text-muted-text shadow-sm',
       )}>
         {tone === 'error' ? <AlertIcon /> : <ChartIcon />}
       </span>

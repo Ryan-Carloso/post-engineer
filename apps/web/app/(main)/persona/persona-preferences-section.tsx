@@ -38,7 +38,7 @@ const PersonaLayoutFieldset = () => {
               onClick={() => usePersonaStore.getState().setVideoLayout(layout)}
               className={`flex min-h-14 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
                 isSelected
-                  ? 'border-accent bg-red-50 text-accent ring-2 ring-accent/10'
+                  ? 'border-accent bg-destructive-soft text-accent ring-2 ring-accent/10'
                   : 'border-line bg-surface text-ink-soft hover:border-muted-text hover:bg-card'
               }`}
             >
@@ -73,7 +73,7 @@ export function PersonaPreferencesSection() {
                   onClick={() => usePersonaStore.getState().setVideoAspect(aspect)}
                   className={`flex min-h-14 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
                     isSelected
-                      ? 'border-accent bg-red-50 text-accent ring-2 ring-accent/10'
+                      ? 'border-accent bg-destructive-soft text-accent ring-2 ring-accent/10'
                       : 'border-line bg-surface text-ink-soft hover:border-muted-text hover:bg-card'
                   }`}
                 >
@@ -94,14 +94,14 @@ export function PersonaPreferencesSection() {
             {...register('niche')}
           />
           {errors.niche ? (
-            <span role="alert" className="mt-1 block text-sm font-normal text-red-600">{t('personas.nicheMaxError')}</span>
+            <span role="alert" className="mt-1 block text-sm font-normal text-destructive">{t('personas.nicheMaxError')}</span>
           ) : null}
         </label>
         <label className="block text-sm font-semibold text-ink" data-error-field="script">
           {t('personas.scriptLabel')}
           <textarea className={`${INPUT_CLASS} min-h-28 resize-y`} placeholder={t('personas.scriptPlaceholder')} {...register('scriptPrompt')} />
           {errors.scriptPrompt ? (
-            <span role="alert" className="mt-1 block text-sm font-normal text-red-600">{t('personas.scriptMaxError')}</span>
+            <span role="alert" className="mt-1 block text-sm font-normal text-destructive">{t('personas.scriptMaxError')}</span>
           ) : null}
         </label>
         <label className="block text-sm font-semibold text-ink">
@@ -115,7 +115,7 @@ export function PersonaPreferencesSection() {
           />
           <span className="mt-1 block text-xs font-normal text-muted-foreground">{t('personas.ctaHint')}</span>
           {errors.ctaText ? (
-            <span role="alert" className="mt-1 block text-sm font-normal text-red-600">{t('personas.ctaMaxError', { max: PERSONA_CTA_MAX_LENGTH })}</span>
+            <span role="alert" className="mt-1 block text-sm font-normal text-destructive">{t('personas.ctaMaxError', { max: PERSONA_CTA_MAX_LENGTH })}</span>
           ) : null}
         </label>
         {result && !result.success && result.error === 'prompt_rejected' ? (

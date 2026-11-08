@@ -317,7 +317,7 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
                 {t(saving ? 'persona.publishingAccountsSaving' : 'persona.publishingAccountsSave')}
               </Button>
               {saved && (
-                <p role="status" className="text-sm font-medium text-emerald-700">
+                <p role="status" className="text-sm font-medium text-success">
                   {t('persona.publishingAccountsSaved')}
                 </p>
               )}

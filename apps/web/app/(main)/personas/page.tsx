@@ -96,7 +96,7 @@ const PersonasPageError = () => {
   const personasQuery = usePersonaListQuery();
 
   return (
-    <section className="rounded-2xl border border-red-200 bg-card p-6 text-center sm:p-8">
+    <section className="rounded-2xl border border-destructive/30 bg-card p-6 text-center sm:p-8">
       <h1 className="text-xl font-semibold text-ink">{t('personas.loadError')}</h1>
       <p className="mt-2 text-sm text-muted-text">{t('personas.loadErrorHint')}</p>
       <button
@@ -185,13 +185,13 @@ const PersonaCard = ({
           {(persona.language || persona.videoAspect) && (
             <div className="mt-1.5 flex items-center gap-1.5">
               {persona.language && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 [&_svg]:size-3">
+                <span className="inline-flex items-center gap-1 rounded-full bg-info-soft px-2.5 py-1 text-xs font-medium text-info [&_svg]:size-3">
                   <GlobeIcon />
                   {persona.language}
                 </span>
               )}
               {persona.videoAspect && (
-                <span className="inline-flex items-center rounded-full bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">
+                <span className="inline-flex items-center rounded-full bg-sunken px-2.5 py-1 text-xs font-medium text-ink-soft">
                   {persona.videoAspect}
                 </span>
               )}
@@ -204,7 +204,7 @@ const PersonaCard = ({
         aria-label={t('personas.delete')}
         title={t('personas.delete')}
         onClick={() => onDeleteRequest(persona)}
-        className="absolute top-2.5 right-2.5 flex size-8 shrink-0 items-center justify-center rounded-lg text-faint transition-colors group-hover:text-faint hover:bg-red-50 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:opacity-50 [&_svg]:size-4"
+        className="absolute top-2.5 right-2.5 flex size-8 shrink-0 items-center justify-center rounded-lg text-faint transition-colors group-hover:text-faint hover:bg-destructive-soft hover:text-destructive focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:opacity-50 [&_svg]:size-4"
       >
         <TrashIcon />
       </button>

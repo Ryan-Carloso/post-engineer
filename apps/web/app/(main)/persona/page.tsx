@@ -185,9 +185,9 @@ const PersonaPageError = ({ onRetry, isRetrying }: PersonaPageErrorProps) => {
     <main className="flex min-h-[calc(100vh-10rem)] items-center justify-center py-8">
       <section
         aria-live="polite"
-        className="w-full max-w-xl rounded-2xl border border-red-200 bg-card px-6 py-10 text-center shadow-[0_12px_36px_rgba(13,43,69,0.08)] sm:px-10"
+        className="w-full max-w-xl rounded-2xl border border-destructive/30 bg-card px-6 py-10 text-center shadow-[0_12px_36px_rgba(13,43,69,0.08)] sm:px-10"
       >
-        <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+        <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-destructive-soft text-destructive">
           <AlertIcon />
         </span>
         <h1 className="mt-5 text-2xl font-semibold tracking-tight text-ink">
@@ -411,7 +411,7 @@ const PersonaNameField = () => {
         {...register('name')}
       />
       {errors.name ? (
-        <p role="alert" className="mt-1 text-sm text-red-600">{t('persona.errName')}</p>
+        <p role="alert" className="mt-1 text-sm text-destructive">{t('persona.errName')}</p>
       ) : null}
       {result && !result.success && result.error === t('persona.errName') ? (
         <InlineFieldError message={result.error} />
@@ -556,16 +556,16 @@ const PersonaFeedback = () => {
     return (
       <section>
         <SectionDivider label={t('persona.result')} />
-        <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-5">
+        <div className="mt-4 rounded-xl border border-success/30 bg-success-soft p-5">
           <div className="flex items-start gap-3.5">
             <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-green-600 text-white">
               <CheckIcon />
             </span>
             <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-semibold text-green-900">{t('persona.created')}</h3>
-              <p className="mt-1 text-sm leading-relaxed text-green-800">{t('persona.createdHint')}</p>
+              <h3 className="text-sm font-semibold text-success">{t('persona.created')}</h3>
+              <p className="mt-1 text-sm leading-relaxed text-success">{t('persona.createdHint')}</p>
               {result.warnings && result.warnings.length > 0 ? (
-                <p className="mt-2 text-sm leading-relaxed text-amber-700">
+                <p className="mt-2 text-sm leading-relaxed text-warning">
                   {mapPersonaImageWarnings(result.warnings, t)}
                 </p>
               ) : null}
@@ -573,7 +573,7 @@ const PersonaFeedback = () => {
                 <button
                   type="button"
                   onClick={handleCreateAnother}
-                  className="text-xs font-medium text-green-800/80 hover:text-green-900"
+                  className="text-xs font-medium text-success/80 hover:text-success"
                 >
                   {t('persona.createAnother')}
                 </button>
@@ -615,7 +615,7 @@ const PersonaErrorDialog = () => {
     >
       <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-xl">
         <div className="flex items-start gap-3.5">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-red-600 text-white">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
             <AlertIcon />
           </span>
           <div className="min-w-0 flex-1">

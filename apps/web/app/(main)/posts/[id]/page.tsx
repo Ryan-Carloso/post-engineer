@@ -705,7 +705,7 @@ export const ProgressHistory = ({ history }: { history: ProgressHistoryEntry[] }
               data-testid="progress-history-row"
               data-regressed={regressed ? 'true' : undefined}
               className={`flex items-baseline justify-between gap-3 rounded-xl border px-3 py-2 text-sm ${
-                regressed ? 'border-[#f0d48a] bg-[#fff8e6]' : 'border-input bg-card'
+                regressed ? 'border-warning/40 bg-warning-soft' : 'border-input bg-card'
               }`}
             >
               <span className="flex min-w-0 items-baseline gap-2">

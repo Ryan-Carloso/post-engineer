@@ -174,7 +174,7 @@ export default function AccountCard({
           data-testid={`${type}-disconnect-button`}
           aria-label={t('accounts.disconnect')}
           title={t('accounts.disconnect')}
-          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-faint transition-colors hover:bg-red-50 hover:text-red-600"
+          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-faint transition-colors hover:bg-destructive-soft hover:text-destructive"
           onClick={onDisconnect}
         >
           <span className="[&>svg]:size-4"><TrashIcon /></span>
@@ -223,7 +223,7 @@ const AccountAvatar = ({
       role="img"
       aria-label={name}
       className={cn(
-        'flex size-full items-center justify-center bg-pink-50 text-base font-bold text-pink-600',
+        'flex size-full items-center justify-center bg-brand-soft text-base font-bold text-brand',
         !selected && 'grayscale',
       )}
     >

@@ -165,7 +165,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
 
         {phase === 'loadError' && (
           <div className="mt-4">
-            <p className="text-sm text-red-600">{t('personas.deleteDialogLoadError')}</p>
+            <p className="text-sm text-destructive">{t('personas.deleteDialogLoadError')}</p>
             <button
               type="button"
               onClick={() => setAttempt((n) => n + 1)}
@@ -220,7 +220,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
               </li>
             </ul>
 
-            <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm leading-6 text-amber-900">
+            <div className="mt-4 rounded-lg bg-warning-soft p-3 text-sm leading-6 text-warning">
               {t('personas.deleteDialogNoRefund')}
             </div>
 
@@ -238,7 +238,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
                   </p>
                 )}
                 {preview?.linksIncomplete === true && (
-                  <p className="mt-1 text-xs text-amber-700">
+                  <p className="mt-1 text-xs text-warning">
                     {t('personas.deleteDialogLinksIncomplete')}{' '}
                     <button
                       type="button"
@@ -263,7 +263,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
                         <a
                           href={video.downloadUrl}
                           download
-                          className="shrink-0 font-medium text-blue-700 hover:underline"
+                          className="shrink-0 font-medium text-info hover:underline"
                         >
                           {t('personas.deleteDialogDownload')}
                         </a>
@@ -279,7 +279,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
             )}
 
             {phase === 'deleteError' && (
-              <p className="mt-4 text-sm text-red-600">{t('personas.deleteDialogDeleteError')}</p>
+              <p className="mt-4 text-sm text-destructive">{t('personas.deleteDialogDeleteError')}</p>
             )}
 
             <label
@@ -298,7 +298,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
               autoComplete="off"
               disabled={phase === 'deleting'}
               aria-describedby={typedName !== '' && !nameMatches ? 'delete-persona-name-hint' : undefined}
-              className="mt-1.5 w-full rounded-lg border border-line px-3 py-2.5 text-sm text-ink placeholder:text-faint focus:border-red-500 focus:outline-none"
+              className="mt-1.5 w-full rounded-lg border border-line px-3 py-2.5 text-sm text-ink placeholder:text-faint focus:border-destructive focus:outline-none"
             />
             {typedName !== '' && !nameMatches && (
               <p id="delete-persona-name-hint" className="mt-1.5 text-xs text-muted-text">
@@ -322,7 +322,7 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
               type="button"
               onClick={handleDelete}
               disabled={!nameMatches || phase === 'deleting'}
-              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-40"
+              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-destructive px-5 py-2.5 text-sm font-semibold text-destructive-foreground transition-colors hover:bg-destructive-hover disabled:opacity-40"
             >
               {t('personas.deleteConfirm')}
             </button>

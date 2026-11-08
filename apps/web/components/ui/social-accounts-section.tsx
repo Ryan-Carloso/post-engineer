@@ -54,7 +54,7 @@ export default function SocialAccountsSection({
             <p className="text-sm leading-5 text-muted-text">{description}</p>
           </div>
         </div>
-        <span className="hidden shrink-0 items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 sm:flex">
+        <span className="hidden shrink-0 items-center gap-2 rounded-full bg-success-soft px-3 py-1.5 text-xs font-semibold text-success sm:flex">
           <span aria-hidden="true" className="size-2 rounded-full bg-emerald-500" />
           {connectedLabel}
         </span>
@@ -79,13 +79,13 @@ export default function SocialAccountsSection({
                 {connectDisabled ? <SpinnerIcon /> : null}
                 {connectLabel}
               </Button>
-              {connectError ? <p className="text-sm text-red-600">{connectError}</p> : null}
+              {connectError ? <p className="text-sm text-destructive">{connectError}</p> : null}
             </div>
           </div>
         )}
       </div>
       {disconnectError ? (
-        <p data-testid="disconnect-error" className="px-4 pb-4 text-sm text-red-600 lg:px-6 lg:pb-6">
+        <p data-testid="disconnect-error" className="px-4 pb-4 text-sm text-destructive lg:px-6 lg:pb-6">
           {disconnectError}
         </p>
       ) : null}
@@ -130,7 +130,7 @@ export function BlueskyConnectDialog({
   onClose,
 }: BlueskyConnectDialogProps): ReactNode {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/45 p-4" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/60 p-4" onMouseDown={onClose}>
       <div
         role="dialog"
         aria-modal="true"
@@ -157,7 +157,7 @@ export function BlueskyConnectDialog({
           <Button type="button" data-testid="bluesky-connect-button" onClick={onSubmit} disabled={!handle.trim() || !appPassword.trim() || pending} className="w-full">
             {submitLabel}
           </Button>
-          {error ? <p data-testid="bluesky-connect-error" className="text-sm text-red-600">{error}</p> : null}
+          {error ? <p data-testid="bluesky-connect-error" className="text-sm text-destructive">{error}</p> : null}
           <p className="text-xs leading-4 text-faint">{securityHint}</p>
         </div>
       </div>
@@ -175,8 +175,8 @@ function SocialAccountsSkeleton(): ReactNode {
 
 function SocialAccountsLoadError({ message, retryLabel, onRetry }: { message: string; retryLabel: string; onRetry: () => void }): ReactNode {
   return (
-    <div className="rounded-xl border border-red-200 bg-red-50/50 p-5 text-center">
-      <p className="text-sm font-medium text-red-700">{message}</p>
+    <div className="rounded-xl border border-destructive/30 bg-destructive-soft/50 p-5 text-center">
+      <p className="text-sm font-medium text-destructive">{message}</p>
       <button type="button" onClick={onRetry} className="mt-3 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-soft">{retryLabel}</button>
     </div>
   );
