@@ -20,6 +20,18 @@ name: release-mcp
 #        packages[0].version), then push.
 #     2. git tag -a mcp-v1.3.0 -m "post-engineer-mcp v1.3.0"
 #     3. git push origin mcp-v1.3.0
+#   REGISTRY-ONLY RE-PUBLISH (manual): if the npm publish succeeded but the
+#   MCP Registry step failed — e.g. the npm-propagation 404 that failed
+#   every release from 1.39.0 to 1.42.0 while the Registry stayed on 1.32.0 —
+#   re-run ONLY the registry publish without touching npm: Actions ->
+#   release-mcp -> Run workflow -> tag mcp-vX.Y.Z
+#   (or: gh workflow run release-mcp.yml --ref main -f tag=mcp-vX.Y.Z).
+#   The tag must already exist and the version must already be on npm; the
+#   npm publish step is skipped on workflow_dispatch.
+# The registry publish waits for npm to serve the new version (up to 10
+# minutes) and retries the publish up to 3 times: the Registry verifies the
+# version against npm and 404s until it propagates, and the publish step
+# runs seconds after `npm publish` otherwise.
 #
 # The tag version MUST match apps/mcp/package.json, and server.json must
 # match package.json (name and both versions), or the job fails before
@@ -31,6 +43,12 @@ on:
   push:
     tags:
       - 'mcp-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to re-publish to the MCP Registry only, e.g. mcp-v1.42.0. Skips npm publish; the version must already be on npm.'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -39,24 +57,41 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
         working-directory: apps/mcp
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+        with:
+          # Tag pushes check out the tag; a manual registry-only re-publish
+          # checks out the tag given as input instead.
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Verify tag matches package version
+        env:
+          # Passed via env, never interpolated into the script: a dispatch
+          # input is free text and must not reach the shell unquoted.
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          TAG_VERSION="${GITHUB_REF_NAME#mcp-v}"
+          if [ -n "$INPUT_TAG" ]; then
+            if ! printf '%s' "$INPUT_TAG" | grep -qE '^mcp-v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::inputs.tag must look like mcp-v1.2.3, got '${INPUT_TAG}'."
+              exit 1
+            fi
+            TAG_VERSION="${INPUT_TAG#mcp-v}"
+          else
+            TAG_VERSION="${GITHUB_REF_NAME#mcp-v}"
+          fi
           PKG_VERSION="$(node -p "require('./package.json').version")"
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match apps/mcp/package.json version ${PKG_VERSION}. Bump the version first, then tag."
+            echo "::error::Tag mcp-v${TAG_VERSION} does not match apps/mcp/package.json version ${PKG_VERSION}. Bump the version first, then tag."
             exit 1
           fi
           echo "Releasing post-engineer-mcp v${PKG_VERSION}"
+          echo "PKG_VERSION=${PKG_VERSION}" >> "$GITHUB_ENV"
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
@@ -99,6 +134,9 @@ jobs:
           "
 
       - name: Publish to npm (trusted publishing)
+        # A manual registry-only re-publish must never re-run npm publish:
+        # the version is already on npm and publish would fail as duplicate.
+        if: github.event_name == 'push'
         run: |
           set -euo pipefail
           # npm CLI bundled with Node 22 predates OIDC trusted publishing; upgrade first.
@@ -119,8 +157,46 @@ jobs:
           echo "00b21004149a4ce66f0782508ae4a2bce67d1bea395a8da0bd8028159fb59579  $RUNNER_TEMP/mcp-publisher.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/mcp-publisher.tar.gz" mcp-publisher
 
+      # npm can take minutes to serve a just-published version, and the MCP
+      # Registry verifies the version against npm before it accepts the
+      # publish (every release from 1.39.0 to 1.42.0 failed here with a 404
+      # while the version was still propagating). Poll until npm serves it.
+      # Attempts/sleep are env-overridable for the committed test script.
+      - name: Wait for npm propagation
+        run: |
+          set -euo pipefail
+          MAX_ATTEMPTS="${REGISTRY_WAIT_ATTEMPTS:-40}"
+          SLEEP_SECS="${REGISTRY_WAIT_SLEEP:-15}"
+          attempt=1
+          while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
+            if curl -fsSL "https://registry.npmjs.org/post-engineer-mcp/${PKG_VERSION}" -o /dev/null; then
+              echo "npm serves post-engineer-mcp@${PKG_VERSION} (attempt ${attempt}/${MAX_ATTEMPTS})."
+              exit 0
+            fi
+            echo "npm does not serve ${PKG_VERSION} yet (attempt ${attempt}/${MAX_ATTEMPTS}) — waiting ${SLEEP_SECS}s..."
+            sleep "$SLEEP_SECS"
+            attempt=$((attempt + 1))
+          done
+          echo "::error::npm still does not serve post-engineer-mcp@${PKG_VERSION} after ${MAX_ATTEMPTS} attempts."
+          exit 1
+
       - name: Publish to the MCP Registry
         run: |
           set -euo pipefail
-          ./mcp-publisher login github-oidc
-          ./mcp-publisher publish
+          # The Registry re-validates the npm version on every attempt, so a
+          # transient propagation 404 is retried here as well as waited for
+          # above. Log in again per attempt: the OIDC token is short-lived.
+          attempt=1
+          while true; do
+            if ./mcp-publisher login github-oidc && ./mcp-publisher publish; then
+              echo "Published io.github.Ryan-Carloso/post-engineer@${PKG_VERSION} to the MCP Registry."
+              break
+            fi
+            if [ "$attempt" -ge 3 ]; then
+              echo "::error::MCP Registry publish failed after 3 attempts."
+              exit 1
+            fi
+            echo "Registry publish attempt ${attempt}/3 failed — retrying in 60s..."
+            attempt=$((attempt + 1))
+            sleep 60
+          done
