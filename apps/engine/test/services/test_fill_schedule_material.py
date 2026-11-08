@@ -74,9 +74,12 @@ class _Store:
 class SlotMaterialTests(unittest.TestCase):
     def test_only_literal_svg_selects_illustrations(self):
         self.assertEqual(slot_material({"faceless_material": "svg"}), "svg")
-        for value in ("broll", None, "SVG", True, ""):
+        for value in ("broll", None, "SVG", "IMAGES", "image", True, ""):
             self.assertEqual(slot_material({"faceless_material": value}), "broll")
         self.assertEqual(slot_material({}), "broll")
+
+    def test_only_literal_images_selects_the_agent_images(self):
+        self.assertEqual(slot_material({"faceless_material": "images"}), "images")
 
 
 class BatchDispatchMaterialTests(unittest.TestCase):
@@ -99,6 +102,18 @@ class BatchDispatchMaterialTests(unittest.TestCase):
     def test_faceless_svg_slot_dispatches_svg(self):
         request = self._dispatched_request(_slot(faceless=True, faceless_material="svg"))
         self.assertEqual(request.faceless_material, "svg")
+
+    def test_images_slot_with_media_on_every_segment_dispatches_images(self):
+        slot = _slot(faceless=True, faceless_material="images")
+        slot["segments"] = [
+            {**segment, "media": {"url": f"https://example.com/{index}.jpg"}}
+            for index, segment in enumerate(slot["segments"])
+        ]
+        request = self._dispatched_request(slot)
+        self.assertEqual(request.faceless_material, "images")
+        self.assertEqual([segment.media.url for segment in request.segments], [
+            "https://example.com/0.jpg", "https://example.com/1.jpg", "https://example.com/2.jpg",
+        ])
 
     def test_legacy_slot_without_the_column_dispatches_broll(self):
         request = self._dispatched_request(_slot())

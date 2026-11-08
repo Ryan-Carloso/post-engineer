@@ -20,6 +20,7 @@ never spends a TTS call. The hook window constants come from
 import re
 from typing import Any, Callable, Sequence
 
+from app.services.faceless_material import IMAGES
 from app.services.persona_hook import (
     PERSONA_HOOK_MAX_SECONDS,
     PERSONA_HOOK_MIN_SECONDS,
@@ -27,6 +28,8 @@ from app.services.persona_hook import (
 
 MAX_SEGMENTS = 12
 MAX_MEDIAS = 6
+# Images material: the photos are the whole picture, one per segment.
+MAX_IMAGES_MODE_MEDIAS = MAX_SEGMENTS
 MIN_TOTAL_WORDS = 60
 MAX_TOTAL_WORDS = 200
 MIN_BODY_WORDS = 30
@@ -208,7 +211,7 @@ def _check_overlay(overlay: Any, field: str) -> None:
             )
 
 
-def validate_segments(segments: Any) -> dict[str, Any]:
+def validate_segments(segments: Any, material: str = "broll") -> dict[str, Any]:
     """Validate segments in rule order and return the normalized result.
 
     Rule order is deliberate: shape, then forbidden content, then hook
@@ -216,6 +219,10 @@ def validate_segments(segments: Any) -> dict[str, Any]:
     total, then the segment cap, then media shape, then the media cap.
     A caller that fixes the first reported error and resubmits converges
     without guessing.
+
+    With the "images" material every segment must carry media (the photos
+    are the whole picture, nothing tops them up) and the media cap rises
+    to one per segment.
     """
     if not isinstance(segments, list) or not segments:
         raise SegmentValidationError(
@@ -350,15 +357,23 @@ def validate_segments(segments: Any) -> dict[str, Any]:
             f"At most {MAX_SEGMENTS} segments are allowed.",
             "Merge segments until there are at most 12.",
         )
+    images_mode = material == IMAGES
+    media_cap = MAX_IMAGES_MODE_MEDIAS if images_mode else MAX_MEDIAS
     media_count = 0
     for index, segment in enumerate(segments):
         if "media" in segment and segment["media"] is not None:
             media_count += _check_media(segment["media"], f"segments.{index}.media")
-    if media_count > MAX_MEDIAS:
+        elif images_mode:
+            raise SegmentValidationError(
+                f"segments.{index}.media",
+                "The images material needs media on every segment.",
+                "Send an image for this segment as { mediaId } or { url }, or use another material.",
+            )
+    if media_count > media_cap:
         raise SegmentValidationError(
             "segments",
-            f"At most {MAX_MEDIAS} medias are allowed.",
-            "Remove medias until there are at most 6.",
+            f"At most {media_cap} medias are allowed.",
+            f"Remove medias until there are at most {media_cap}.",
         )
     body_texts = [texts[i] for i in body_indices]
     return {
@@ -374,7 +389,7 @@ def validate_segments(segments: Any) -> dict[str, Any]:
     }
 
 
-def segments_to_script(segments: Sequence[dict[str, Any]]) -> str:
+def segments_to_script(segments: Sequence[dict[str, Any]], material: str = "broll") -> str:
     """Validate and join segment texts into the single spoken script.
 
     This function runs the full mechanical validation itself and raises
@@ -382,7 +397,7 @@ def segments_to_script(segments: Sequence[dict[str, Any]]) -> str:
     body paragraphs, and CTA with blank lines, which is the paragraph
     layout the existing TTS and subtitle pipeline reads.
     """
-    validated = validate_segments(list(segments))
+    validated = validate_segments(list(segments), material)
     parts = [validated["hook_text"], *validated["body_texts"], validated["cta_text"]]
     return "\n\n".join(parts)
 

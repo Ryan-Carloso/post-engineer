@@ -944,7 +944,7 @@ export interface components {
              * @default broll
              * @enum {string}
              */
-            faceless_material?: "broll" | "svg";
+            faceless_material?: "broll" | "svg" | "images";
             /**
              * Font Name
              * @default BeVietnamPro-Medium.ttf

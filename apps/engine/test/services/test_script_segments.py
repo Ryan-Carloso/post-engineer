@@ -506,3 +506,74 @@ def test_supplied_segments_script_calls_no_llm():
     joined = script_segments.segments_to_script(_valid_segments())
     params = VideoParams(video_script=joined, video_subject="Porto", video_language="en-US")
     assert task_service.generate_script("test-task", params) == joined
+
+
+# ---- images material: every segment carries media, up to one per segment
+
+
+def _images_segments(count_body=1, media=True):
+    segments = [{"kind": "hook", "text": _hook(), "media": {"url": "https://example.com/h.jpg"}}]
+    for i in range(count_body):
+        segments.append({"kind": "body", "text": _body(), "media": {"url": f"https://example.com/{i}.jpg"}})
+    segments.append({"kind": "cta", "text": _cta(), "media": {"mediaId": "a" * 32 + ".jpg"}})
+    if not media:
+        del segments[1]["media"]
+    return segments
+
+
+def test_images_material_accepts_media_on_every_segment():
+    result = script_segments.validate_segments(_images_segments(), "images")
+    assert result["media_count"] == 3
+
+
+def test_images_material_rejects_a_segment_without_media_on_that_segment():
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(_images_segments(media=False), "images")
+    assert exc_info.value.field == "segments.1.media"
+    assert exc_info.value.rule == "The images material needs media on every segment."
+
+
+def test_images_material_rejects_a_null_media_like_a_missing_one():
+    segments = _images_segments()
+    segments[2]["media"] = None
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments, "images")
+    assert exc_info.value.field == "segments.2.media"
+
+
+def test_other_materials_still_allow_segments_without_media():
+    for material in ("broll", "svg"):
+        assert script_segments.validate_segments(_images_segments(media=False), material)["media_count"] == 2
+
+
+def _many_media_segments(count):
+    # 20 + count*14 + 5 words: inside the total and the segment cap for count <= 10.
+    segments = [{"kind": "hook", "text": " ".join(["word"] * 20) + ".", "media": {"url": "https://example.com/h.jpg"}}]
+    for i in range(count):
+        segments.append(
+            {"kind": "body", "text": " ".join(["body"] * 12) + f" number {i}.", "media": {"url": f"https://example.com/{i}.jpg"}}
+        )
+    segments.append({"kind": "cta", "text": "Save this video now please.", "media": {"url": "https://example.com/c.jpg"}})
+    return segments
+
+
+def test_images_material_allows_one_media_per_segment_up_to_the_segment_cap():
+    assert script_segments.MAX_IMAGES_MODE_MEDIAS == script_segments.MAX_SEGMENTS == 12
+    segments = _many_media_segments(10)
+    assert len(segments) == 12
+    assert script_segments.validate_segments(segments, "images")["media_count"] == 12
+
+
+def test_the_six_media_cap_still_holds_outside_the_images_material():
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(_many_media_segments(5), "broll")
+    assert exc_info.value.rule == "At most 6 medias are allowed."
+    assert exc_info.value.fix == "Remove medias until there are at most 6."
+
+
+def test_segments_to_script_forwards_the_material_to_validation():
+    with pytest.raises(SegmentValidationError):
+        script_segments.segments_to_script(_images_segments(media=False), "images")
+    assert script_segments.segments_to_script(_images_segments(media=False)) == script_segments.segments_to_script(
+        _images_segments()
+    )

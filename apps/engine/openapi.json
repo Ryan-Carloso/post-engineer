@@ -999,7 +999,8 @@
             "default": "broll",
             "enum": [
               "broll",
-              "svg"
+              "svg",
+              "images"
             ],
             "title": "Faceless Material",
             "type": "string"
