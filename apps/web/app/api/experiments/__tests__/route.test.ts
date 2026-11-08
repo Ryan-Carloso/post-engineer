@@ -253,3 +253,259 @@ describe('GET /api/experiments/[id]', () => {
     expect(logger.error).toHaveBeenCalled();
   });
 });
+
+describe('exact response contracts', () => {
+  const limitedResponse = () => new Response('limited', { status: 429 });
+
+  it('POST returns the full success body, with the variants echoed back', async () => {
+    mockDb({ personas: { data: { id: PERSONA }, error: null } });
+    const response = await post(createBody());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      experiment: { id: EXPERIMENT_ID, name: 'Hook test', variable: 'hook', personaId: PERSONA, targetPairs: 6, variants: VARIANTS },
+    });
+  });
+
+  it('POST queries the persona by id and owner with the id column only', async () => {
+    const db = mockDb({ personas: { data: { id: PERSONA }, error: null } });
+    await post(createBody());
+    expect(db.from).toHaveBeenCalledWith('personas');
+    expect(db.calls).toContainEqual(['personas', 'select', 'id']);
+    expect(db.calls).toContainEqual(['personas', 'eq', 'id', PERSONA]);
+    expect(db.calls).toContainEqual(['personas', 'eq', 'user_id', USER]);
+  });
+
+  it('POST returns an auth error as-is and does nothing else', async () => {
+    const authError = new Response('nope', { status: 401 });
+    vi.mocked(requireSupabaseSession).mockResolvedValue({ auth: null, error: authError } as never);
+    const db = mockDb({});
+    expect(await post(createBody())).toBe(authError);
+    expect(applyRateLimit).not.toHaveBeenCalled();
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  it('POST returns the rate-limit response as-is before parsing the body', async () => {
+    const limited = limitedResponse();
+    vi.mocked(applyRateLimit).mockResolvedValueOnce(limited as never);
+    const db = mockDb({});
+    expect(await post(createBody())).toBe(limited);
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  it('POST 400 for invalid JSON has the exact message and code', async () => {
+    mockDb({});
+    const response = await POST(new Request('http://localhost/api/experiments', { method: 'POST', body: 'nope' }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ success: false, error: 'Invalid JSON payload.', code: 'VALIDATION_FAILED' });
+  });
+
+  it('POST 400 names the failing field and message', async () => {
+    mockDb({});
+    const response = await post(createBody({ targetPairs: 2 }));
+    expect(response.status).toBe(400);
+    const json = await response.json();
+    expect(json.code).toBe('VALIDATION_FAILED');
+    expect(json.field).toBe('targetPairs');
+    expect(json.error.startsWith('Invalid request: targetPairs: ')).toBe(true);
+    expect(json.error.length).toBeLessThanOrEqual(500);
+  });
+
+  it('POST 400 for a root-level issue has no field prefix and an empty field', async () => {
+    mockDb({});
+    const response = await post([]);
+    expect(response.status).toBe(400);
+    const json = await response.json();
+    expect(json.field).toBe('');
+    expect(json.error.startsWith('Invalid request: ')).toBe(true);
+    expect(json.error.startsWith('Invalid request: : ')).toBe(false);
+  });
+
+  it('POST 400 joins a nested path with dots', async () => {
+    mockDb({});
+    const response = await post(createBody({ variants: [VARIANTS[0], { ...VARIANTS[1], variantId: 'A' }] }));
+    const json = await response.json();
+    expect(json.field).toBe('variants.1.variantId');
+    expect(json.error.startsWith('Invalid request: variants.1.variantId: ')).toBe(true);
+  });
+
+  it('POST 400 truncates an over-long message to 500 characters and the field to 200', async () => {
+    mockDb({});
+    const longKey = 'k'.repeat(600);
+    const response = await post(createBody({ [longKey]: true }));
+    const json = await response.json();
+    expect(response.status).toBe(400);
+    expect(json.error.length).toBeLessThanOrEqual(500);
+    expect(json.field.length).toBeLessThanOrEqual(200);
+  });
+
+  it('POST 403 and 404 persona errors have exact messages and codes', async () => {
+    auth({ isApiKey: true, personaIds: ['other'] });
+    mockDb({});
+    const denied = await post(createBody());
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({ success: false, error: 'This API key cannot access the selected persona.', code: 'PERSONA_SCOPE_DENIED' });
+    auth();
+    mockDb({ personas: { data: null, error: null } });
+    const missing = await post(createBody());
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({ success: false, error: 'Persona not found.', code: 'PERSONA_NOT_FOUND' });
+  });
+
+  it('POST allows a persona inside the API key scope', async () => {
+    auth({ isApiKey: true, personaIds: [PERSONA] });
+    const db = mockDb({ personas: { data: { id: PERSONA }, error: null } });
+    expect((await post(createBody())).status).toBe(200);
+    expect(db.rpc).toHaveBeenCalled();
+  });
+
+  it('POST 500s carry the generic message, log the cause with exact arguments', async () => {
+    const personaError = { message: 'down' };
+    mockDb({ personas: { data: null, error: personaError } });
+    const first = await post(createBody());
+    expect(first.status).toBe(500);
+    expect(await first.json()).toMatchObject({ success: false, error: 'Failed to create the experiment.' });
+    expect(logger.error).toHaveBeenCalledWith('[api/experiments] persona lookup failed', personaError, { personaId: PERSONA });
+    vi.mocked(logger.error).mockClear();
+    const rpcError = { message: 'check violation' };
+    mockDb({ personas: { data: { id: PERSONA }, error: null } }, { data: null, error: rpcError });
+    const second = await post(createBody());
+    expect(second.status).toBe(500);
+    expect(await second.json()).toMatchObject({ success: false, error: 'Failed to create the experiment.' });
+    expect(logger.error).toHaveBeenCalledWith('[api/experiments] create_experiment failed', rpcError, { userId: USER });
+  });
+
+  it('POST 500 when the RPC answers without an id string, even with no error', async () => {
+    mockDb({ personas: { data: { id: PERSONA }, error: null } }, { data: 42, error: null });
+    const response = await post(createBody());
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ error: 'Failed to create the experiment.' });
+    mockDb({ personas: { data: { id: PERSONA }, error: null } }, { data: EXPERIMENT_ID, error: { message: 'late' } });
+    expect((await post(createBody())).status).toBe(500);
+  });
+
+  it('GET list returns the exact body and checks the rate limit with the read bucket', async () => {
+    mockDb({ experiments: { data: [EXPERIMENT_ROW], error: null }, experiment_variants: { data: VARIANT_ROWS, error: null } });
+    const response = await LIST(new Request('http://localhost/api/experiments'));
+    expect(applyRateLimit).toHaveBeenCalledWith(expect.any(Request), RATE_LIMITS.experimentRead, USER);
+    expect(await response.json()).toEqual({
+      success: true,
+      truncated: false,
+      experiments: [
+        {
+          id: EXPERIMENT_ID,
+          name: 'Hook test',
+          variable: 'hook',
+          personaId: PERSONA,
+          targetPairs: 3,
+          createdAt: '2026-11-07T00:00:00Z',
+          variants: [
+            { variantId: 'hook-calm', name: 'Calm', description: 'calm' },
+            { variantId: 'hook-aggressive', name: 'Aggressive', description: 'direct' },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('GET list returns auth and rate-limit responses as-is', async () => {
+    const authError = new Response('nope', { status: 401 });
+    vi.mocked(requireSupabaseSession).mockResolvedValue({ auth: null, error: authError } as never);
+    mockDb({});
+    expect(await LIST(new Request('http://localhost/api/experiments'))).toBe(authError);
+    expect(applyRateLimit).not.toHaveBeenCalled();
+    auth();
+    const limited = limitedResponse();
+    vi.mocked(applyRateLimit).mockResolvedValueOnce(limited as never);
+    const db = mockDb({});
+    expect(await LIST(new Request('http://localhost/api/experiments?x=1'))).toBe(limited);
+    expect(db.from).not.toHaveBeenCalled();
+  });
+
+  it('GET list 400 and 500 have exact bodies; the 500 logs the cause', async () => {
+    const db = mockDb({});
+    const bad = await LIST(new Request('http://localhost/api/experiments?x=1'));
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toEqual({ success: false, error: 'Unknown query parameter.', code: 'VALIDATION_FAILED' });
+    expect(db.from).not.toHaveBeenCalled();
+    const readError = { message: 'down' };
+    mockDb({ experiments: { data: null, error: readError } });
+    const failed = await LIST(new Request('http://localhost/api/experiments'));
+    expect(failed.status).toBe(500);
+    expect(await failed.json()).toMatchObject({ success: false, error: 'Failed to load experiments.' });
+    expect(logger.error).toHaveBeenCalledWith('[api/experiments] list failed', readError);
+  });
+
+  it('detail returns auth and rate-limit responses as-is', async () => {
+    const authError = new Response('nope', { status: 401 });
+    vi.mocked(requireSupabaseSession).mockResolvedValue({ auth: null, error: authError } as never);
+    mockDb({});
+    expect(await detail(EXPERIMENT_ID)).toBe(authError);
+    expect(applyRateLimit).not.toHaveBeenCalled();
+    auth();
+    const limited = limitedResponse();
+    vi.mocked(applyRateLimit).mockResolvedValueOnce(limited as never);
+    const db = mockDb({});
+    expect(await detail(EXPERIMENT_ID)).toBe(limited);
+    expect(db.from).not.toHaveBeenCalled();
+    expect(applyRateLimit).toHaveBeenLastCalledWith(expect.any(Request), RATE_LIMITS.experimentRead, USER);
+  });
+
+  it('detail 400 for a bad window or query parameter has the exact message', async () => {
+    const db = mockDb({});
+    const window = await detail(EXPERIMENT_ID, '?window=1y');
+    expect(window.status).toBe(400);
+    expect(await window.json()).toEqual({ success: false, error: 'window must be one of 24h, 7d, 28d.', code: 'VALIDATION_FAILED' });
+    const unknown = await detail(EXPERIMENT_ID, '?x=1');
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toEqual({ success: false, error: 'Unknown query parameter.', code: 'VALIDATION_FAILED' });
+    expect(db.from).not.toHaveBeenCalled();
+  });
+
+  it('detail 404s have the exact message: bad uuid, undecodable id, unknown experiment', async () => {
+    const db = mockDb({ experiments: { data: null, error: null } });
+    for (const id of ['not-a-uuid', '%E0%A4%A', EXPERIMENT_ID]) {
+      const response = await detail(id);
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ success: false, error: 'Experiment not found.' });
+    }
+    expect(db.from).toHaveBeenCalledTimes(1);
+  });
+
+  it('detail decodes a percent-encoded uuid before matching', async () => {
+    mockDb({
+      experiments: { data: EXPERIMENT_ROW, error: null },
+      experiment_variants: { data: VARIANT_ROWS, error: null },
+      scheduled_posts: { data: [], error: null },
+      post_metrics: { data: [], error: null },
+    });
+    const encoded = EXPERIMENT_ID.replace('7b0e', '%37b0e');
+    expect((await detail(encoded)).status).toBe(200);
+  });
+
+  it('detail 500 has the generic message and logs the cause with the experiment id', async () => {
+    const readError = { message: 'down' };
+    mockDb({
+      experiments: { data: EXPERIMENT_ROW, error: null },
+      experiment_variants: { data: VARIANT_ROWS, error: null },
+      scheduled_posts: { data: null, error: readError },
+    });
+    const response = await detail(EXPERIMENT_ID);
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ success: false, error: 'Failed to load the experiment.' });
+    expect(logger.error).toHaveBeenCalledWith('[api/experiments] results read failed', readError, { experimentId: EXPERIMENT_ID });
+  });
+
+  it('detail success body keeps success true and the experiment', async () => {
+    mockDb({
+      experiments: { data: EXPERIMENT_ROW, error: null },
+      experiment_variants: { data: VARIANT_ROWS, error: null },
+      scheduled_posts: { data: [], error: null },
+      post_metrics: { data: [], error: null },
+    });
+    const json = await (await detail(EXPERIMENT_ID, '?window=24h')).json();
+    expect(json.success).toBe(true);
+    expect(json.window).toBe('24h');
+    expect(json.experiment.id).toBe(EXPERIMENT_ID);
+  });
+});

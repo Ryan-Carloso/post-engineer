@@ -136,7 +136,8 @@ function providerResult(
   const decided = wins[first] + wins[second];
   const pValue = decided === 0 ? null : signTestPValue(wins[first], wins[second]);
   const leader = wins[first] === wins[second] ? null : wins[first] > wins[second] ? first : second;
-  const complete = comparisons.length >= targetPairs;
+  // Tied pairs are not decided, so they never count toward completeness.
+  const complete = decided >= targetPairs;
   const label: ExperimentResultLabel =
     pValue === null ? 'pending' : complete && pValue < CLEAR_P_VALUE ? 'clear' : 'indicative';
   return { provider, comparisons, wins, ties, pValue, leader, label };

@@ -30,8 +30,9 @@ export const CreateExperimentShape = {
   personaId: z
     .string()
     .uuid()
+    .nullable()
     .optional()
-    .describe('Persona every video of the experiment uses. Omit for a faceless experiment with no persona.'),
+    .describe('Persona every video of the experiment uses. Null or omitted = faceless experiment with no persona.'),
   targetPairs: z
     .number()
     .int()
@@ -54,6 +55,9 @@ export const CreateExperimentShape = {
         .strict(),
     )
     .length(2)
+    .refine((variants) => new Set(variants.map((variant) => variant.variantId)).size === variants.length, {
+      message: 'variantId values must differ',
+    })
     .describe('Exactly two variants of the hook.'),
 };
 export const CreateExperimentSchema = z.object(CreateExperimentShape);

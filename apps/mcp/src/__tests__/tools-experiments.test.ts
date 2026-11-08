@@ -41,6 +41,21 @@ describe('create / list / results tools', () => {
     expect(() => CreateExperimentSchema.parse({ ...args, variants: [{ variantId: 'A', name: 'a', description: 'a' }, args.variants[1]] })).toThrow();
   });
 
+  it('accepts a null persona (faceless) and rejects duplicate variant ids', async () => {
+    const client = mockClient();
+    const variants = [
+      { variantId: 'hook-calm', name: 'Calm', description: 'calm' },
+      { variantId: 'hook-aggressive', name: 'Aggressive', description: 'direct' },
+    ];
+    const args = CreateExperimentSchema.parse({ name: 'Hook test', personaId: null, variants });
+    expect(args.personaId).toBeNull();
+    await handleCreateExperiment(client, args);
+    expect(JSON.parse(client.request.mock.calls[0][1].body).personaId).toBeNull();
+    const duplicate = CreateExperimentSchema.safeParse({ name: 'Hook test', variants: [variants[0], { ...variants[1], variantId: 'hook-calm' }] });
+    expect(duplicate.success).toBe(false);
+    expect(JSON.stringify(duplicate.error?.issues)).toContain('variantId values must differ');
+  });
+
   it('list_experiments and get_experiment_results call their routes', async () => {
     const client = mockClient();
     await handleListExperiments(client);

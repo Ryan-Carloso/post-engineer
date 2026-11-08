@@ -32,4 +32,13 @@ describe('experiment tool limits sync with apps/web/lib/experiments/limits.ts', 
   it('uses the same variant slug pattern', () => {
     expect(webLimits).toContain(`export const EXPERIMENT_VARIANT_ID_PATTERN = ${EXPERIMENT_VARIANT_ID_PATTERN.toString()};`);
   });
+
+  it('pins the persona and duplicate-variant rules of the web request schema', () => {
+    const webRequests = readFileSync(join(here, '..', '..', '..', 'web', 'lib', 'experiments', 'requests.ts'), 'utf8');
+    const mcpTools = readFileSync(join(here, '..', 'tools-experiments.ts'), 'utf8');
+    expect(webRequests).toContain('personaId: z.string().uuid().nullable().optional()');
+    expect(webRequests).toContain('variantId values must differ');
+    expect(mcpTools).toContain("message: 'variantId values must differ'");
+    expect(mcpTools).toMatch(/\.uuid\(\)\s*\.nullable\(\)\s*\.optional\(\)/);
+  });
 });

@@ -84,6 +84,18 @@ describe('computeExperimentResults', () => {
     expect(youtube.label).toBe('indicative');
   });
 
+  it('a tied pair is not decided: 19 wins + 1 tie of 20 target pairs stays indicative', () => {
+    const metrics = youtubeMetrics(20, 19);
+    metrics[38] = metric('hook-calm-20', 'youtube', 150);
+    metrics[39] = metric('hook-aggressive-20', 'youtube', 150);
+    const youtube = computeExperimentResults({ variantIds: VARIANTS, targetPairs: 20, slots: pairSlots(20), metrics }).providers[0];
+    expect(youtube.comparisons).toHaveLength(20);
+    expect(youtube.ties).toBe(1);
+    expect(youtube.wins['hook-aggressive']).toBe(19);
+    expect(youtube.pValue).toBeLessThan(CLEAR_P_VALUE);
+    expect(youtube.label).toBe('indicative');
+  });
+
   it('compares per provider and never mixes networks', () => {
     const metrics = [
       ...youtubeMetrics(3, 3),
