@@ -1385,7 +1385,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // fails, the per-slot refund must still be attempted for the fresh
       // charge — a refund cap counting only the first charge would answer
       // nothing_to_refund and the user would pay for a failed video
-      // (migration 043 makes the cap net-aware; this pins the route half).
+      // (migration 044 makes the cap net-aware; this pins the route half).
       setup({
         ...DEFAULT_CFG,
         ledgerRows: [
