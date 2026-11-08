@@ -173,7 +173,7 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     }).as('getAccounts');
 
     // /posts list dependencies: the schedule must exist or the status
-    // query's slots are dropped (joinedUpcoming filters by schedule id).
+    // query's slots are dropped (the posts pages filter by schedule id).
     cy.intercept('GET', '/api/schedule', {
       statusCode: 200,
       body: { success: true, schedules: [scheduleRow()] },
