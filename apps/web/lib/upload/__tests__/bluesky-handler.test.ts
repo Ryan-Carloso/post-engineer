@@ -5,6 +5,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
+vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
+
 vi.mock('@/lib/social-accounts', () => ({
   getSocialAccountTokens: vi.fn(),
   touchSocialAccount: vi.fn(),
@@ -31,6 +33,8 @@ vi.mock('@/lib/bluesky', async (importOriginal) => {
   };
 });
 
+import { trackApiEvent } from '@/lib/analytics';
+import { BlueskyError } from '@/lib/bluesky';
 import { handleBlueskyUpload } from '@/lib/upload/bluesky-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 
@@ -257,6 +261,26 @@ describe('handleBlueskyUpload', () => {
     const res = await handleBlueskyUpload(formData(), USER_ID);
     expect(res.results[0]?.success).toBe(false);
     expect(savedCalls.some((call) => call.url.includes('getServiceAuth'))).toBe(false);
+  });
+
+  it('emits publish_account_unauthorized when the stored app password is rejected', async () => {
+    mockBlueskyLogin.mockRejectedValueOnce(
+      new BlueskyError('invalid_credentials', 'Invalid Bluesky handle or app password.'),
+    );
+    const res = await handleBlueskyUpload(formData(), USER_ID);
+    expect(res.results[0]?.success).toBe(false);
+    expect(trackApiEvent).toHaveBeenCalledWith('publish_account_unauthorized', {
+      provider: 'bluesky',
+      account_id: DID,
+      user_id: USER_ID,
+      status: 401,
+    });
+  });
+
+  it('does not emit publish_account_unauthorized when the Bluesky failure is not a credential failure', async () => {
+    mockBlueskyLogin.mockRejectedValueOnce(new BlueskyError('unknown', 'Bluesky login failed: socket hang up'));
+    await handleBlueskyUpload(formData(), USER_ID);
+    expect(trackApiEvent).not.toHaveBeenCalled();
   });
 
   it('missing credential in the database becomes a per-account failure, not a 500', async () => {

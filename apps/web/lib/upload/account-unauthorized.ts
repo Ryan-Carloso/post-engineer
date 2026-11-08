@@ -35,7 +35,22 @@ export function httpStatusOf(error: unknown): number | undefined {
 
 export function isUnauthorizedError(error: unknown): boolean {
   if (httpStatusOf(error) === 401) return true;
+  if (isBlueskyInvalidCredentials(error)) return true;
   return error instanceof Error && /^unauthorized$/i.test(error.message.trim());
+}
+
+//---------------
+// isBlueskyInvalidCredentials — Bluesky never carries a numeric 401: a dead
+// app password surfaces as BlueskyError code 'invalid_credentials' (the
+// AT Protocol login rejects it, loginToBlueskySession rethrows it as-is).
+// A stored credential that no longer authenticates is exactly the account
+// that needs reconnecting, so it counts as unauthorized here. Duck-typed
+// (name + code) so this leaf stays free of the Bluesky client import.
+//---------------
+function isBlueskyInvalidCredentials(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const record = error as Record<string, unknown>;
+  return record.name === 'BlueskyError' && record.code === 'invalid_credentials';
 }
 
 export function reportAccountUnauthorized(

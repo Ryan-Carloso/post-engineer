@@ -5,11 +5,14 @@ vi.mock('@/lib/social-accounts', () => ({ getSocialAccountTokens: vi.fn(), touch
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({ __mock: 'service-client' })) }));
 vi.mock('@/lib/upload/handlers', () => ({ uploadToStorage: vi.fn(async () => 'https://s.example/signed.mp4'), cleanupOldUploads: vi.fn() }));
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
+vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('@/lib/facebook', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/facebook')>()),
   publishFacebookVideo: vi.fn(),
 }));
 
+import { trackApiEvent } from '@/lib/analytics';
+import { FacebookError } from '@/lib/errors';
 import { handleFacebookUpload } from '@/lib/upload/facebook-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { cleanupOldUploads, uploadToStorage } from '@/lib/upload/handlers';
@@ -105,6 +108,26 @@ describe('handleFacebookUpload', () => {
     const result = await handleFacebookUpload(formData(), 'user-1');
     expect(result).toEqual({ success: false, results: [{ accountId: '111', success: false, error: 'Facebook Page token not found' }] });
     expect(publishFacebookVideo).not.toHaveBeenCalled();
+  });
+
+  it('emits publish_account_unauthorized when Facebook rejects the Page token with 401', async () => {
+    vi.mocked(publishFacebookVideo).mockRejectedValueOnce(
+      new FacebookError('FACEBOOK_PUBLISH_FAILED: Invalid OAuth access token', 401),
+    );
+    const result = await handleFacebookUpload(formData(), 'user-1');
+    expect(result.results[0]).toEqual({ accountId: '111', success: false, error: 'FACEBOOK_PUBLISH_FAILED: Invalid OAuth access token' });
+    expect(trackApiEvent).toHaveBeenCalledWith('publish_account_unauthorized', {
+      provider: 'facebook',
+      account_id: '111',
+      user_id: 'user-1',
+      status: 401,
+    });
+  });
+
+  it('does not emit publish_account_unauthorized when the Facebook failure is not a 401', async () => {
+    vi.mocked(publishFacebookVideo).mockRejectedValueOnce(new FacebookError('FACEBOOK_PUBLISH_FAILED: boom', 500));
+    await handleFacebookUpload(formData(), 'user-1');
+    expect(trackApiEvent).not.toHaveBeenCalled();
   });
 
   it('keeps going after one Page fails and is a success if any landed', async () => {
