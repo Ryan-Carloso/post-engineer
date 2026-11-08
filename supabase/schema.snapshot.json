@@ -980,6 +980,12 @@
                     "type": "integer",
                     "default": "0",
                     "notNull": true
+                },
+                {
+                    "name": "music_mood",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
                 }
             ],
             "policies": {

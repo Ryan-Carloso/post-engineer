@@ -160,6 +160,53 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertEqual(update["title"], "Batch title one")
         self.assertEqual(update["task_id"], task_id)
 
+    def test_generate_batch_slot_forwards_the_stored_music_mood(self):
+        # A slot's requested BGM mood rides the slot row (migration 045):
+        # a tick-dispatched or requeued slot must render with the requested
+        # mood, not the engine's default first catalogued mood.
+        slot = self._batch_slot()
+        slot["music_mood"] = "calm"
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(
+            scheduler.generator, "_dispatch_generation"
+        ) as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(enqueued, 1)
+        _task_id, request, _user_id = dispatch_generation.call_args.args
+        self.assertEqual(request.music_mood, "calm")
+
+    def test_generate_batch_slot_without_a_stored_mood_uses_the_engine_default(self):
+        # Rows created before migration 048 have no music_mood, and a blank
+        # stored value is the same as absent: the request carries None and
+        # the pipeline picks the first catalogued mood.
+        for stored in (None, ""):
+            with self.subTest(stored=stored):
+                slot = self._batch_slot()
+                if stored is not None:
+                    slot["music_mood"] = stored
+                store = _FakeStore()
+                store.pending_slots = lambda now: [slot]
+                scheduler = self._scheduler(store)
+                scheduler.store.signed_url = MagicMock(
+                    return_value="https://signed/foto.png"
+                )
+
+                with patch.object(
+                    scheduler.generator, "_dispatch_generation"
+                ) as dispatch_generation:
+                    enqueued = scheduler.generate(
+                        datetime(2026, 9, 6, 12, 0, tzinfo=UTC)
+                    )
+
+                self.assertEqual(enqueued, 1)
+                _task_id, request, _user_id = dispatch_generation.call_args.args
+                self.assertIsNone(request.music_mood)
+
     def test_batch_dispatch_carries_the_video_language(self):
         # The embed's language ('en' in the fixture) must reach the job as
         # video_language: without it the script prompt carries no

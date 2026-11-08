@@ -64,6 +64,10 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<EngineVideoRequestField> = [
   // the opt-in whole-video talking-head switch); without it a full-mode
   // request would be dropped here and silently render intro-only b-roll.
   'full_lipsync',
+  // music_mood is a first-class engine field (VideoParams carries it as
+  // the per-post BGM mood); without it a requested mood would be dropped
+  // here and the engine would default every video to the first mood.
+  'music_mood',
   // segments is a first-class engine field (TaskVideoRequest carries it):
   // without it a segments request would render stock for every segment
   // and drop every user photo with no warning.

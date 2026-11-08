@@ -16,6 +16,8 @@ export interface SlotRowInput {
   faceless: boolean;
   facelessMaterial: FacelessMaterial | undefined;
   fullLipsync?: boolean;
+  /** Requested BGM mood (issue #489); null means the engine default. */
+  musicMood?: string;
   /** Tokens this slot was charged (migration 045); every refund reads it. */
   chargedTokens: number;
   segments: ScriptSegment[] | undefined;
@@ -33,6 +35,9 @@ export interface SlotRowInput {
 // `title` is the slot label (migration 031). `fullLipsync` rides the same
 // row (migration 035) so a tick-dispatched or requeued slot keeps full
 // lip-sync instead of silently falling back to intro-only b-roll.
+// `musicMood` rides the same row (migration 048) so a tick-dispatched or
+// requeued slot keeps the requested BGM mood instead of silently falling
+// back to the engine's default mood.
 export function buildSlotRows(input: SlotRowInput) {
   return input.slots.map((slot) => ({
     schedule_id: input.scheduleId,
@@ -43,6 +48,7 @@ export function buildSlotRows(input: SlotRowInput) {
     faceless: input.faceless,
     faceless_material: input.facelessMaterial,
     full_lipsync: input.fullLipsync ?? false,
+    music_mood: input.musicMood ?? null,
     charged_tokens: input.chargedTokens,
     segments: input.segments ?? null,
     experiment_id: input.experiment?.experimentId ?? null,

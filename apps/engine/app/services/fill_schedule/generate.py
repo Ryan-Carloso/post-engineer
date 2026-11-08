@@ -28,6 +28,7 @@ from app.services.fill_schedule.support import (
     slot_faceless,
     slot_full_lipsync,
     slot_material,
+    slot_music_mood,
     slot_refund_amount,
     slot_user_id,
     track_refund_issued,
@@ -130,6 +131,12 @@ class BatchGenerator:
                 # silently renders intro-only b-roll; a pre-migration row
                 # renders intro-only, as every earlier video did.
                 full_lipsync=slot_full_lipsync(slot),
+                # Per-post BGM mood (migration 045), like direct dispatch.
+                # Without it a tick-dispatched or requeued slot silently
+                # renders the engine's default mood instead of the
+                # requested one; a pre-migration row renders the default,
+                # as every earlier video did.
+                music_mood=slot_music_mood(slot),
                 # Segments (scheduled_posts, migration 030), forwarded exactly
                 # like the web's direct dispatch does. Without this, a
                 # requeued slot (engine restart mid-generation) or a

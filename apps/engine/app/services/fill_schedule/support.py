@@ -169,6 +169,20 @@ def slot_full_lipsync(slot: dict[str, Any]) -> bool:
     return slot.get("full_lipsync") is True
 
 
+def slot_music_mood(slot: dict[str, Any]) -> str | None:
+    """The slot's requested BGM mood, or None for the engine default.
+
+    ``scheduled_posts.music_mood`` (migration 048) is the per-post choice
+    written by the web at creation. A row without the field (created before
+    the migration) or a blank value renders the engine's default first
+    catalogued mood, the behaviour every earlier video had; dropping the
+    field would let a tick-dispatched or requeued slot silently render a
+    different mood than the requested one.
+    """
+    mood = slot.get("music_mood")
+    return mood if isinstance(mood, str) and mood else None
+
+
 def build_persona_params(
     persona: dict[str, Any],
     store: ScheduleStore,
