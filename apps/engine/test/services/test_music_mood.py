@@ -72,6 +72,27 @@ class TestResolveMusicMood(unittest.TestCase):
             logger.remove(handler_id)
         self.assertTrue(records, "empty catalog must log an ERROR")
 
+    def test_requested_mood_error_scrubs_a_path_like_mood(self):
+        # The ERROR is forwarded to PostHog as $exception: a path-like
+        # requested mood must be scrubbed like any other free text.
+        records = []
+        handler_id = logger.add(
+            lambda message: records.append(message.record), level="ERROR"
+        )
+        try:
+            with self._patch_moods(()):
+                self.assertEqual(
+                    mm.resolve_music_mood(_params("/home/ryan/secret-mood")), "none"
+                )
+        finally:
+            logger.remove(handler_id)
+        messages = [r["message"] for r in records]
+        self.assertTrue(any("secret-mood" in m for m in messages))
+        self.assertFalse(
+            any("/home/ryan" in m for m in messages),
+            "raw home path leaked into the ERROR log",
+        )
+
     def test_unknown_mood_raises_value_error(self):
         with self._patch_moods(("calm", "upbeat")):
             with self.assertRaises(ValueError) as ctx:

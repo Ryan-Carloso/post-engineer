@@ -247,6 +247,31 @@ class TestGetBgmFile(unittest.TestCase):
             "the 'none' choice must be logged at INFO from the production path",
         )
 
+    def test_unreadable_catalog_logs_warning_without_the_absolute_path(self):
+        # A missing catalog warns locally: the absolute path must not reach
+        # the log line (the OSError text carries the path too).
+        records = []
+        handler_id = logger.add(
+            lambda message: records.append(message.record), level="WARNING"
+        )
+        try:
+            self.assertEqual(
+                vd.select_bgm_file(
+                    "calm",
+                    "/app/resource/songs/missing.toml",
+                    "/app/resource/songs",
+                ),
+                "",
+            )
+        finally:
+            logger.remove(handler_id)
+        messages = [r["message"] for r in records]
+        self.assertTrue(any("missing.toml" in m for m in messages))
+        self.assertFalse(
+            any("/app/resource/songs/missing.toml" in m for m in messages),
+            "absolute catalog path leaked into the WARNING log",
+        )
+
 
 class TestStorageFallback(unittest.TestCase):
     """/stream/ and /download/ serve the ARCHIVE, always.

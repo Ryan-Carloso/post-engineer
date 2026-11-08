@@ -885,7 +885,13 @@ def select_bgm_file(
     try:
         catalog = toml.load(catalog_file)
     except (OSError, toml.TomlDecodeError) as exc:
-        logger.warning(f"failed to load bgm catalog: {catalog_file}, error: {str(exc)}")
+        # Scrubbed: the catalog path is absolute, and the OSError text
+        # carries it too — no machine layout in the logs.
+        logger.warning(
+            scrub_error_text(
+                f"failed to load bgm catalog: {catalog_file}, error: {str(exc)}"
+            )
+        )
         return ""
 
     tracks = catalog.get("tracks", [])

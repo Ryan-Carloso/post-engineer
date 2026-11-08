@@ -104,15 +104,20 @@ def resolve_music_mood(params: VideoParams) -> str:
         if requested in moods:
             return requested
         if not moods:
+            # Scrubbed: the requested mood is agent-supplied free text and
+            # this ERROR is forwarded to PostHog as $exception.
             logger.error(
-                f"BGM catalog is empty: cannot play requested mood {requested!r}; "
-                "rendering without music"
+                scrub_error_text(
+                    f"BGM catalog is empty: cannot play requested mood {requested!r}; "
+                    "rendering without music"
+                )
             )
             return MUSIC_MOOD_NONE
         raise ValueError(
             f"unknown music mood: {requested!r}; available moods: {', '.join(moods)}"
         )
     if not moods:
+        # Static message: no free text, no path — nothing to scrub.
         logger.error("BGM catalog is empty: no mood available; rendering without music")
         return MUSIC_MOOD_NONE
     return sorted(moods)[0]
