@@ -5,8 +5,8 @@ import { useI18n } from '@/lib/i18n/provider';
 import { SpinnerIcon } from '@/lib/ui';
 import { RANGE_MAX_SLOTS, useScheduleRangeQuery } from '@/lib/schedule-range';
 import { CalendarView } from './calendar-view';
-import { GROUP_KEY, GROUP_STYLE, STATUS_GROUP_ORDER } from './status';
-import { FIRST_WEEKDAY, INTL_TAG, bucketByDay, buildMonthGrid, dateFromKey, dayKey, groupCounts, gridRange, monthKey } from './calendar-days';
+import { CALENDAR_GROUP_KEY, CALENDAR_GROUP_ORDER, CALENDAR_GROUP_STYLE } from './status';
+import { FIRST_WEEKDAY, INTL_TAG, bucketByDay, buildMonthGrid, calendarCounts, dateFromKey, dayKey, gridRange, monthKey } from './calendar-days';
 import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-joins';
 
 //---------------
@@ -51,7 +51,7 @@ export default function PostsPage() {
     joins.refetch();
   };
   const dayFormat = new Intl.DateTimeFormat(INTL_TAG[locale], { dateStyle: 'full' });
-  const counts = groupCounts(selectedSlots);
+  const counts = calendarCounts(selectedSlots);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -98,6 +98,8 @@ export default function PostsPage() {
               month={cursor.month}
               firstWeekday={firstWeekday}
               slotsByDay={slotsByDay}
+              scheduleById={joins.scheduleById}
+              personaPhotoById={joins.personaPhotoById}
               selectedKey={selectedKey}
               todayKey={todayKey}
               onSelect={setSelectedKey}
@@ -108,9 +110,9 @@ export default function PostsPage() {
                 {t('posts.calendarDayHeading', { date: dayFormat.format(dateFromKey(selectedKey)) })}
               </h2>
               <ul className="mt-2 flex flex-wrap gap-2 text-xs">
-                {STATUS_GROUP_ORDER.map((group) => (
-                  <li key={group} className={`rounded-full px-2 py-0.5 font-semibold ${GROUP_STYLE[group]}`}>
-                    {t(GROUP_KEY[group])}: {counts[group]}
+                {CALENDAR_GROUP_ORDER.map((group) => (
+                  <li key={group} className={`rounded-full px-2 py-0.5 font-semibold ${CALENDAR_GROUP_STYLE[group]}`}>
+                    {t(CALENDAR_GROUP_KEY[group])}: {counts[group]}
                   </li>
                 ))}
               </ul>

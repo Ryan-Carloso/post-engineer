@@ -1,6 +1,6 @@
-import type { ScheduledSlot } from '@/lib/api';
+import type { ScheduledSlot, ScheduleConfig } from '@/lib/api';
 import type { Locale } from '@/lib/i18n';
-import { STATUS_GROUP_ORDER, statusGroupOf, type StatusGroup } from './status';
+import { calendarGroupOf, type CalendarGroup } from './status';
 
 //---------------
 // Pure date helpers for the posts calendar.
@@ -84,21 +84,63 @@ export function bucketByDay<T extends Pick<ScheduledSlot, 'slotAt'>>(slots: T[],
   return buckets;
 }
 
-export function groupCounts(slots: Pick<ScheduledSlot, 'status'>[]): Record<StatusGroup, number> {
-  const counts: Record<StatusGroup, number> = { inProgress: 0, published: 0, failed: 0 };
-  for (const slot of slots) counts[statusGroupOf(slot.status)] += 1;
+// Calendar counts: only outcomes (published / failed) plus scheduled —
+// anything not yet published counts as scheduled, with no status color.
+export function calendarCounts(slots: Pick<ScheduledSlot, 'status'>[]): Record<CalendarGroup, number> {
+  const counts: Record<CalendarGroup, number> = { published: 0, failed: 0, scheduled: 0 };
+  for (const slot of slots) counts[calendarGroupOf(slot.status)] += 1;
   return counts;
 }
 
-// At most `max` per-post markers (in-progress first, then published, then
-// failed), plus how many more posts the cell collapses into "+N".
-export const CELL_MARKER_LIMIT = 3;
+//---------------
+// The persona photo a day cell shows, resolved from the joins the page
+// already loads (schedule -> persona -> photo URLs). The avatar renders the
+// photo when it has one and the persona initials otherwise, so a persona
+// without a photo URL still resolves.
+//---------------
 
-export function cellMarkers(
-  slots: Pick<ScheduledSlot, 'status'>[],
-  max: number = CELL_MARKER_LIMIT,
-): { markers: StatusGroup[]; overflow: number } {
-  const counts = groupCounts(slots);
-  const all = STATUS_GROUP_ORDER.flatMap((group) => Array<StatusGroup>(counts[group]).fill(group));
-  return { markers: all.slice(0, max), overflow: Math.max(0, all.length - max) };
+export interface PersonaPhoto {
+  avatarUrl?: string;
+  photoUrl?: string;
+  libraryUrl?: string;
+  name: string;
+}
+
+export type DayRing = 'published' | 'failed' | 'scheduled';
+
+export interface DayPhoto {
+  persona: PersonaPhoto;
+  ring: DayRing;
+  mixed: boolean;
+}
+
+// The photo is the most relevant post's persona — a failed post first (it
+// needs attention), then a published one, then the earliest scheduled post —
+// while the ring reports the whole day: failed wins over published, and a
+// day holding both is mixed (split ring). The photo falls through to the
+// next post when a slot's schedule or persona is gone, but the ring still
+// counts that post: a failed post with no persona behind it is still a
+// failure.
+export function dayPhoto(
+  slots: Pick<ScheduledSlot, 'status' | 'scheduleId' | 'slotAt'>[],
+  scheduleById: Map<string, Pick<ScheduleConfig, 'personaId'>>,
+  personaPhotoById: Map<string, PersonaPhoto>,
+): DayPhoto | null {
+  if (slots.length === 0) return null;
+  const counts = calendarCounts(slots);
+  const ring: DayRing = counts.failed > 0 ? 'failed' : counts.published > 0 ? 'published' : 'scheduled';
+  const mixed = counts.published > 0 && counts.failed > 0;
+  const byTime = [...slots].sort((a, b) => a.slotAt.localeCompare(b.slotAt));
+  const resolve = (slot: Pick<ScheduledSlot, 'scheduleId'>): PersonaPhoto | undefined => {
+    const personaId = scheduleById.get(slot.scheduleId)?.personaId ?? null;
+    return personaId === null ? undefined : personaPhotoById.get(personaId);
+  };
+  for (const group of ['failed', 'published', 'scheduled'] as const) {
+    const slot = byTime.find((candidate) => calendarGroupOf(candidate.status) === group && resolve(candidate) !== undefined);
+    if (slot !== undefined) {
+      const persona = resolve(slot);
+      if (persona !== undefined) return { persona, ring, mixed };
+    }
+  }
+  return null;
 }

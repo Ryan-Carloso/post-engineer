@@ -26,8 +26,18 @@ vi.mock('@/lib/schedule-range', () => ({
   useScheduleRangeQuery: vi.fn(),
 }));
 
+vi.mock('next/image', () => ({
+  // eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element
+  default: (props: React.ComponentProps<'img'>) => <img {...props} />,
+}));
+
+vi.mock('@/lib/logger', () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
 vi.mock('@/lib/ui', () => ({
   SpinnerIcon: () => <span data-testid="icon-spinner" />,
+  ImageIcon: () => <span data-testid="icon-image" />,
 }));
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -116,7 +126,7 @@ function mockQueries(overrides: {
     refetch: vi.fn(),
   } as never);
   vi.mocked(usePersonaListQuery).mockReturnValue({
-    data: [{ id: 'p1', name: 'Viva Leve' }] as never,
+    data: [{ id: 'p1', name: 'Viva Leve', avatarUrl: 'https://example.test/viva.jpg' }] as never,
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -568,7 +578,37 @@ describe('PostsPage calendar view', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'linkedin');
 
     const cells = screen.getAllByRole('gridcell');
-    expect(cells.some((cell) => cell.querySelector('[data-group]') !== null)).toBe(false);
+    expect(cells.some((cell) => cell.querySelector('[data-ring]') !== null)).toBe(false);
+  });
+
+  it('shows the persona photo with the scheduled ring on a day whose post is still to publish', () => {
+    mockQueries();
+    render(<PostsPage />);
+
+    // June 1 holds the awaiting UPCOMING_SLOT: photo, no status color.
+    const day1 = within(screen.getByRole('grid'))
+      .getAllByRole('button', { name: 'posts.calendarDayLabel' })
+      .find((button) => button.textContent === '1');
+    expect(day1).toBeDefined();
+    expect((day1 as HTMLElement).querySelector('img[alt="Viva Leve"]')).not.toBeNull();
+    expect((day1 as HTMLElement).querySelector('[data-ring]')).toHaveAttribute('data-ring', 'scheduled');
+  });
+
+  it('counts the selected day as published, failed and scheduled — never in progress', async () => {
+    mockQueries({ range: rangeSlots });
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    // June 5 holds one awaiting and one published post.
+    const day5 = within(screen.getByRole('grid'))
+      .getAllByRole('button', { name: 'posts.calendarDayLabel' })
+      .find((button) => button.textContent?.startsWith('5'));
+    await user.click(day5 as HTMLElement);
+
+    expect(screen.getByText('posts.groupPublished: 1')).toBeInTheDocument();
+    expect(screen.getByText('posts.groupScheduled: 1')).toBeInTheDocument();
+    expect(screen.getByText('posts.groupFailed: 0')).toBeInTheDocument();
+    expect(screen.queryByText(/posts\.groupInProgress/)).not.toBeInTheDocument();
   });
 
   it('warns when the range read was truncated', () => {

@@ -6,12 +6,11 @@ const EN: Record<string, string> = {
   'posts.calendarPrevMonth': 'Previous month',
   'posts.calendarNextMonth': 'Next month',
   'posts.calendarToday': 'Today',
-  'posts.groupInProgress': 'In progress',
   'posts.groupPublished': 'Published',
   'posts.groupFailed': 'Failed',
+  'posts.groupScheduled': 'Scheduled',
   'posts.calendarDayLabel': '{date}: {summary}',
   'posts.calendarDayEmpty': '{date}: no posts',
-  'posts.calendarMore': '+{count}',
 };
 
 vi.mock('@/lib/i18n/provider', () => ({
@@ -22,14 +21,41 @@ vi.mock('@/lib/i18n/provider', () => ({
   }),
 }));
 
+vi.mock('next/image', () => ({
+  // eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element
+  default: (props: React.ComponentProps<'img'>) => <img {...props} />,
+}));
+
+vi.mock('@/lib/logger', () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock('@/lib/ui', () => ({
+  ImageIcon: () => <span data-testid="icon-image" />,
+}));
+
 import { CalendarView } from '../calendar-view';
+import type { PersonaPhoto } from '../calendar-days';
+
+const SCHEDULES = new Map([
+  ['s1', { personaId: 'p1' }],
+  ['s2', { personaId: 'p2' }],
+]);
+const PHOTOS = new Map<string, PersonaPhoto>([
+  ['p1', { name: 'Viva Leve', avatarUrl: 'https://example.test/viva.jpg' }],
+  ['p2', { name: 'Bicuda', photoUrl: 'https://example.test/bicuda.jpg' }],
+]);
+
+type DaySlot = Pick<ScheduledSlot, 'status' | 'scheduleId' | 'slotAt'>;
 
 function setup(overrides: Partial<React.ComponentProps<typeof CalendarView>> = {}) {
   const props = {
     year: 2030,
     month: 5,
     firstWeekday: 0 as const,
-    slotsByDay: new Map<string, Pick<ScheduledSlot, 'status'>[]>(),
+    slotsByDay: new Map<string, DaySlot[]>(),
+    scheduleById: SCHEDULES,
+    personaPhotoById: PHOTOS,
     selectedKey: null,
     todayKey: '2030-06-15',
     onSelect: vi.fn(),
@@ -65,24 +91,107 @@ describe('CalendarView', () => {
     expect(dayButton(/June 21, 2030/).closest('[data-selected="true"]')).toBeNull();
   });
 
-  it('describes per-group counts in the accessible name and draws one icon marker per post', () => {
-    const slotsByDay = new Map<string, Pick<ScheduledSlot, 'status'>[]>([
-      ['2030-06-05', [{ status: 'awaiting' }, { status: 'published' }, { status: 'published' }, { status: 'failed' }, { status: 'failed' }]],
+  it('draws today as a thick border, not a filled background, and keeps it readable when another day is selected', () => {
+    setup({ selectedKey: '2030-06-20' });
+    const today = dayButton(/June 15, 2030/);
+    // Thick primary border on the day button; no accent fill that could read
+    // as "selected" (a bare bg-accent token — hover: and data- variants in
+    // the shared button styles do not fill the cell).
+    expect(today.className).toContain('border-2');
+    expect(today.className).toContain('border-primary');
+    expect(today.className.split(/\s+/)).not.toContain('bg-accent');
+    expect(today.closest('[data-today]')?.className.split(/\s+/)).not.toContain('bg-accent');
+    // The selected day (not today) carries no today border.
+    expect(dayButton(/June 20, 2030/).className).not.toContain('border-primary');
+    expect(dayButton(/June 20, 2030/).className).not.toContain('border-card');
+  });
+
+  it('keeps today readable when today itself is selected: the border switches to the card color against the selected fill', () => {
+    setup({ selectedKey: '2030-06-15' });
+    const today = dayButton(/June 15, 2030/);
+    expect(today.className).toContain('border-2');
+    expect(today.className).toContain('border-card');
+    expect(today.className).not.toContain('border-primary');
+  });
+
+  it('describes per-group counts in the accessible name: published, failed, scheduled — never in progress', () => {
+    const slotsByDay = new Map<string, DaySlot[]>([
+      [
+        '2030-06-05',
+        [
+          { status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T08:00:00.000Z' },
+          { status: 'published', scheduleId: 's1', slotAt: '2030-06-05T10:00:00.000Z' },
+          { status: 'published', scheduleId: 's2', slotAt: '2030-06-05T12:00:00.000Z' },
+          { status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T14:00:00.000Z' },
+          { status: 'failed', scheduleId: 's2', slotAt: '2030-06-05T16:00:00.000Z' },
+        ],
+      ],
     ]);
     setup({ slotsByDay });
     const cell = dayButton(/June 5, 2030/);
-    expect(cell).toHaveAccessibleName('Wednesday, June 5, 2030: In progress: 1, Published: 2, Failed: 2');
-    // 5 posts: 3 markers with distinct icons plus "+2".
-    expect(cell.querySelectorAll('[data-group]')).toHaveLength(3);
-    expect(cell.querySelectorAll('[data-group] svg')).toHaveLength(3);
-    expect(cell).toHaveTextContent('+2');
+    expect(cell).toHaveAccessibleName('Wednesday, June 5, 2030: Published: 2, Failed: 2, Scheduled: 1');
   });
 
-  it('names empty days explicitly and draws no markers', () => {
+  it('shows the failed post persona photo with a failed ring on a mixed day', () => {
+    const slotsByDay = new Map<string, DaySlot[]>([
+      [
+        '2030-06-05',
+        [
+          { status: 'published', scheduleId: 's2', slotAt: '2030-06-05T10:00:00.000Z' },
+          { status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' },
+        ],
+      ],
+    ]);
+    setup({ slotsByDay });
+    const cell = dayButton(/June 5, 2030/);
+    // The photo is aria-hidden (the day label carries the counts), so the
+    // image is asserted by DOM, not by role.
+    expect(cell.querySelector('img[alt="Viva Leve"]')).not.toBeNull();
+    const ring = cell.querySelector('[data-ring]');
+    expect(ring).not.toBeNull();
+    expect(ring).toHaveAttribute('data-ring', 'failed');
+    expect(ring).toHaveAttribute('data-mixed', 'true');
+  });
+
+  it('shows the published ring on a published-only day and no ring on a scheduled-only day', () => {
+    const slotsByDay = new Map<string, DaySlot[]>([
+      ['2030-06-06', [{ status: 'published', scheduleId: 's2', slotAt: '2030-06-06T10:00:00.000Z' }]],
+      ['2030-06-07', [{ status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-07T10:00:00.000Z' }]],
+    ]);
+    setup({ slotsByDay });
+    const published = dayButton(/June 6, 2030/);
+    expect(published.querySelector('img[alt="Bicuda"]')).not.toBeNull();
+    expect(published.querySelector('[data-ring]')).toHaveAttribute('data-ring', 'published');
+    expect(published.querySelector('[data-ring]')).toHaveAttribute('data-mixed', 'false');
+    const scheduled = dayButton(/June 7, 2030/);
+    expect(scheduled.querySelector('img[alt="Viva Leve"]')).not.toBeNull();
+    expect(scheduled.querySelector('[data-ring]')).toHaveAttribute('data-ring', 'scheduled');
+  });
+
+  it('shows a neutral count placeholder when no post on the day resolves to a persona', () => {
+    const slotsByDay = new Map<string, DaySlot[]>([
+      ['2030-06-09', [{ status: 'awaiting', scheduleId: 's-gone', slotAt: '2030-06-09T10:00:00.000Z' }]],
+    ]);
+    setup({ slotsByDay });
+    const cell = dayButton(/June 9, 2030/);
+    expect(cell.querySelector('[data-photo="none"]')).toHaveTextContent('1');
+    expect(cell.querySelector('[data-ring]')).toBeNull();
+  });
+
+  it('names empty days explicitly and draws no photo or placeholder', () => {
     setup();
     const cell = dayButton(/June 9, 2030/);
     expect(cell).toHaveAccessibleName('Sunday, June 9, 2030: no posts');
-    expect(cell.querySelector('[data-group]')).toBeNull();
+    expect(cell.querySelector('[data-ring]')).toBeNull();
+    expect(cell.querySelector('[data-photo]')).toBeNull();
+  });
+
+  it('legends only published, failed and scheduled — no in-progress blue', () => {
+    setup();
+    expect(screen.getByText('Published')).toBeInTheDocument();
+    expect(screen.getByText('Failed')).toBeInTheDocument();
+    expect(screen.getByText('Scheduled')).toBeInTheDocument();
+    expect(screen.queryByText('In progress')).not.toBeInTheDocument();
   });
 
   it('selects a day on click', () => {

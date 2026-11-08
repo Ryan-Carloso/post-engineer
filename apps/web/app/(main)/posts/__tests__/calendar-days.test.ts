@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import type { ScheduledSlot } from '@/lib/api';
 import {
   bucketByDay,
   buildMonthGrid,
-  cellMarkers,
+  calendarCounts,
   dayKey,
-  groupCounts,
+  dayPhoto,
   gridRange,
 } from '../calendar-days';
-import { statusGroupOf } from '../status';
+import { calendarGroupOf, statusGroupOf } from '../status';
 
 describe('day bucketing timezone (viewer browser timezone)', () => {
   // 2026-11-02T02:30Z is 23:30 on Nov 1 in São Paulo (UTC-3) but already
@@ -69,7 +70,7 @@ describe('buildMonthGrid', () => {
   });
 });
 
-describe('status groups and cell markers', () => {
+describe('calendar groups and day counts', () => {
   it('maps every real slot and generation status to a group', () => {
     for (const status of ['pending', 'awaiting', 'generating', 'ready', 'publishing']) {
       expect(statusGroupOf(status)).toBe('inProgress');
@@ -83,23 +84,151 @@ describe('status groups and cell markers', () => {
     expect(statusGroupOf('something-new')).toBe('inProgress');
   });
 
-  it('counts per group', () => {
-    expect(groupCounts([{ status: 'awaiting' as const }, { status: 'ready' as const }, { status: 'published' as const }, { status: 'failed' as const }])).toEqual({
-      inProgress: 2,
-      published: 1,
-      failed: 1,
+  // The calendar shows only outcomes (published / failed): anything not
+  // yet published counts as scheduled, with no status color of its own.
+  it('maps unpublished statuses to scheduled on the calendar', () => {
+    for (const status of ['pending', 'awaiting', 'generating', 'ready', 'publishing', 'something-new']) {
+      expect(calendarGroupOf(status)).toBe('scheduled');
+    }
+    expect(calendarGroupOf('published')).toBe('published');
+    expect(calendarGroupOf('completed')).toBe('published');
+    expect(calendarGroupOf('failed')).toBe('failed');
+  });
+
+  it('counts published, failed and scheduled', () => {
+    expect(
+      calendarCounts([
+        { status: 'awaiting' as const },
+        { status: 'ready' as const },
+        { status: 'published' as const },
+        { status: 'failed' as const },
+      ]),
+    ).toEqual({ published: 1, failed: 1, scheduled: 2 });
+  });
+});
+
+describe('dayPhoto — the persona photo and ring a calendar day shows', () => {
+  const schedules = new Map([
+    ['s1', { personaId: 'p1' }],
+    ['s2', { personaId: 'p2' }],
+    ['s3', { personaId: 'p3' }],
+    ['s4', { personaId: null }],
+  ]);
+  const photos = new Map([
+    ['p1', { name: 'Viva Leve', avatarUrl: 'https://example.test/viva.jpg' }],
+    ['p2', { name: 'Bicuda', photoUrl: 'https://example.test/bicuda.jpg' }],
+    // p3 has a name but no photo URL: the avatar falls back to initials,
+    // so the day still resolves to that persona.
+    ['p3', { name: 'No Photo' }],
+  ]);
+  const slot = (status: ScheduledSlot['status'], scheduleId: string, slotAt: string) => ({ status, scheduleId, slotAt });
+
+  it('returns null with no slots', () => {
+    expect(dayPhoto([], schedules, photos)).toBeNull();
+  });
+
+  it('returns null when no slot resolves to a known persona', () => {
+    expect(dayPhoto([slot('published', 's-gone', '2030-06-05T10:00:00.000Z')], schedules, photos)).toBeNull();
+    expect(dayPhoto([slot('published', 's4', '2030-06-05T10:00:00.000Z')], schedules, photos)).toBeNull();
+  });
+
+  it('shows the published ring for a published-only day', () => {
+    expect(dayPhoto([slot('published', 's2', '2030-06-05T10:00:00.000Z')], schedules, photos)).toEqual({
+      persona: { name: 'Bicuda', photoUrl: 'https://example.test/bicuda.jpg' },
+      ring: 'published',
+      mixed: false,
     });
   });
 
-  it('shows every post up to 3 markers without overflow', () => {
-    expect(cellMarkers([{ status: 'failed' as const }, { status: 'published' as const }, { status: 'awaiting' as const }])).toEqual({
-      markers: ['inProgress', 'published', 'failed'],
-      overflow: 0,
+  it('shows the failed ring for a failed-only day', () => {
+    expect(dayPhoto([slot('failed', 's1', '2030-06-05T10:00:00.000Z')], schedules, photos)).toEqual({
+      persona: { name: 'Viva Leve', avatarUrl: 'https://example.test/viva.jpg' },
+      ring: 'failed',
+      mixed: false,
     });
   });
 
-  it('collapses more than 3 posts into +N', () => {
-    const slots = Array.from({ length: 7 }, () => ({ status: 'published' as const }));
-    expect(cellMarkers(slots)).toEqual({ markers: ['published', 'published', 'published'], overflow: 4 });
+  it('shows no status ring for a scheduled-only day', () => {
+    expect(dayPhoto([slot('awaiting', 's1', '2030-06-05T10:00:00.000Z')], schedules, photos)).toEqual({
+      persona: { name: 'Viva Leve', avatarUrl: 'https://example.test/viva.jpg' },
+      ring: 'scheduled',
+      mixed: false,
+    });
+  });
+
+  it('marks a published-plus-failed day as mixed, with the failed ring and the failed post persona', () => {
+    expect(
+      dayPhoto(
+        [
+          slot('published', 's2', '2030-06-05T10:00:00.000Z'),
+          slot('failed', 's1', '2030-06-05T12:00:00.000Z'),
+        ],
+        schedules,
+        photos,
+      ),
+    ).toEqual({
+      persona: { name: 'Viva Leve', avatarUrl: 'https://example.test/viva.jpg' },
+      ring: 'failed',
+      mixed: true,
+    });
+  });
+
+  it('prefers the published post persona over a merely scheduled one', () => {
+    expect(
+      dayPhoto(
+        [
+          slot('awaiting', 's1', '2030-06-05T09:00:00.000Z'),
+          slot('published', 's2', '2030-06-05T10:00:00.000Z'),
+        ],
+        schedules,
+        photos,
+      ),
+    ).toEqual({
+      persona: { name: 'Bicuda', photoUrl: 'https://example.test/bicuda.jpg' },
+      ring: 'published',
+      mixed: false,
+    });
+  });
+
+  it('picks the earliest post inside the winning tier, whatever the input order', () => {
+    expect(
+      dayPhoto(
+        [
+          slot('failed', 's1', '2030-06-05T12:00:00.000Z'),
+          slot('failed', 's2', '2030-06-05T09:00:00.000Z'),
+        ],
+        schedules,
+        photos,
+      ),
+    ).toEqual({
+      persona: { name: 'Bicuda', photoUrl: 'https://example.test/bicuda.jpg' },
+      ring: 'failed',
+      mixed: false,
+    });
+  });
+
+  it('keeps the failed ring from an unresolvable failed post while the photo falls through to the next post', () => {
+    expect(
+      dayPhoto(
+        [
+          slot('failed', 's-gone', '2030-06-05T09:00:00.000Z'),
+          slot('awaiting', 's1', '2030-06-05T10:00:00.000Z'),
+        ],
+        schedules,
+        photos,
+      ),
+    ).toEqual({
+      persona: { name: 'Viva Leve', avatarUrl: 'https://example.test/viva.jpg' },
+      ring: 'failed',
+      mixed: false,
+    });
+  });
+
+  it('resolves a persona with no photo URL — the avatar shows its initials', () => {
+    expect(dayPhoto([slot('published', 's3', '2030-06-05T10:00:00.000Z')], schedules, photos)).toEqual({
+      persona: { name: 'No Photo' },
+      ring: 'published',
+      mixed: false,
+    });
   });
 });
