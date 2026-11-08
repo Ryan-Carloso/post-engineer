@@ -550,13 +550,13 @@ async function postHandler(request: Request): Promise<NextResponse> {
       if (replayed) return replayed;
     }
   }
-  // Read-your-ledger: a previous attempt may have spent but died before the
-  // schedule insert (no unique constraint on generation_id is assumed).
-  // Residual race vs a concurrent duplicate is documented below at insert.
+  // Read-your-ledger: only a prior SPEND counts — a refund row under the same
+  // generation_id must not skip the charge (no unique constraint is assumed).
   const { data: ledgerRows, error: ledgerError } = await supabase
     .from('token_transactions')
     .select('id')
     .eq('generation_id', idem.generationId)
+    .eq('type', 'video_generation')
     .limit(1);
   // Fail closed: charging blind after a failed ledger read risks a double spend.
   if (ledgerError) {
