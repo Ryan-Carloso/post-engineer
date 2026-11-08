@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
-import { Play } from 'lucide-react';
 import {
   useScheduleStatusQuery,
   useSchedulesQuery,
@@ -14,29 +13,35 @@ import {
   useBlueskyAccountsQuery,
   useVideoGenerationsQuery,
   type ScheduledSlot,
-  type ScheduleConfig,
-  type VideoGeneration,
 } from '@/lib/api';
-import { Card, CardFooter } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { AspectRatio } from '@/components/ui/aspect-ratio';
-import { ProviderIcon } from '@/components/provider-icon';
 import { useI18n } from '@/lib/i18n/provider';
-import type { TranslationKey } from '@/lib/i18n';
 import { SpinnerIcon } from '@/lib/ui';
 import { PROVIDER_LABELS, accountOption, type AccountOption, scheduleAccountIds } from '@/lib/account-options';
-import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
-import { STATUS_KEY, STATUS_STYLE } from './status';
+import { RANGE_MAX_SLOTS, useScheduleRangeQuery } from '@/lib/schedule-range';
+import { PostCard, GenerationCard, resolveSlotAccounts } from './post-card';
+import { CalendarView } from './calendar-view';
+import { GROUP_KEY, GROUP_STYLE, STATUS_GROUP_ORDER } from './status';
+import {
+  FIRST_WEEKDAY,
+  INTL_TAG,
+  bucketByDay,
+  buildMonthGrid,
+  dateFromKey,
+  dayKey,
+  groupCounts,
+  gridRange,
+  monthKey,
+} from './calendar-days';
 
 //---------------
 // PostsPage — post history + upcoming posts on the same page, across all
 // connected accounts. Read-only: consumes GET /api/schedule/status with a
-// raised limit and joins each slot with its schedule, persona and the
-// publishing accounts. No MCP changes.
+// raised limit (list view) or a from/to range (calendar view) and joins each
+// slot with its schedule, persona and the publishing accounts.
 //---------------
 
 type Tab = 'upcoming' | 'history';
+type View = 'list' | 'calendar';
 type ProviderFilter = 'all' | 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads';
 
 //---------------
@@ -58,241 +63,22 @@ function resolveAccountFilter(
 
 const PROVIDER_FILTERS: ProviderFilter[] = ['all', 'youtube', 'instagram', 'linkedin', 'bluesky', 'threads'];
 
-//---------------
-// Generation history cards — standalone video generations (manual/debug),
-// not scheduled posts. A failed generation shows the friendly, translated
-// error for its error_code; the raw engine text stays in the database for
-// support and is never rendered (it may contain paths or upstream bodies).
-//---------------
-const GENERATION_STATUS_KEY: Record<string, TranslationKey> = {
-  pending: 'posts.statusPending',
-  running: 'posts.statusRunning',
-  completed: 'posts.statusCompleted',
-  failed: 'posts.statusFailed',
-};
-
-const GenerationCard = ({
-  generation,
-  locale,
-}: {
-  generation: VideoGeneration;
-  locale: 'pt' | 'en';
-}) => {
-  const { t } = useI18n();
-  const videoUrl = videoUrlFor(generation.engineTaskId);
-  const hasThumb = generation.status === 'completed' && videoUrl !== null;
-  return (
-    <Link href={`/posts/${generation.generationId}`} className="block h-full">
-      <Card className={`flex h-full flex-col gap-0 rounded-xl p-4 transition-colors ${CARD_BORDER}`}>
-        <div className="flex items-center justify-between gap-2">
-          <span role="img" aria-label="video" className="inline-flex text-muted-foreground">
-            <Play className="size-5" />
-          </span>
-          <p className="text-xs text-muted-foreground">
-            {formatDate(generation.createdAt, locale)} · {formatTime(generation.createdAt, locale)}
-          </p>
-        </div>
-        <div className="mt-3 flex gap-3">
-          <div className="flex-1">
-            <p className="line-clamp-3 text-sm leading-snug text-primary">
-              <span className="font-semibold">{generation.personaName ?? t('posts.personaFallback')}</span>
-              {' — '}
-              <span className="text-muted-foreground">{generation.videoSubject ?? t('posts.unknownTitle')}</span>
-            </p>
-            {generation.status === 'failed' && (
-              <p className="mt-2 line-clamp-2 text-xs text-destructive">
-                {t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')}
-              </p>
-            )}
-          </div>
-          <PostThumb src={hasThumb ? videoUrl : null} />
-        </div>
-        <CardFooter className="mt-auto items-center justify-between p-0 pt-4">
-          <span className="min-w-0 truncate text-xs text-muted-foreground">{generation.videoSubject ?? t('posts.unknownTitle')}</span>
-          <div className="flex shrink-0 items-center gap-2">
-            {generation.tokensRefunded && (
-              <Badge variant="outline" className="border-transparent bg-success-soft text-success">
-                {t('posts.refundedBadge')}
-              </Badge>
-            )}
-            <Badge variant="outline" className={`border-transparent ${STATUS_STYLE[generation.status] ?? STATUS_STYLE.pending}`}>
-              {t(GENERATION_STATUS_KEY[generation.status] ?? 'posts.statusPending')}
-            </Badge>
-          </div>
-        </CardFooter>
-      </Card>
-    </Link>
-  );
-};
-
 // Max rows fetched per tab; the API caps ?limit= at 500, the page asks for
 // fewer to keep the render cheap. Exported for tests.
 export const POSTS_LIMIT = 200;
 
-function formatDate(value: string, locale: 'pt' | 'en'): string {
-  return new Date(value).toLocaleDateString(locale === 'pt' ? 'pt-BR' : 'en-US', {
-    dateStyle: 'medium',
-  });
-}
-
-function formatTime(value: string, locale: 'pt' | 'en'): string {
-  return new Date(value).toLocaleTimeString(locale === 'pt' ? 'pt-BR' : 'en-US', {
-    timeStyle: 'short',
-  });
-}
-
-//---------------
-// resolveSlotAccounts — human-readable account labels for one slot, based
-// on the schedule's targeted account ids per provider.
-//---------------
-function resolveSlotAccounts(
-  schedule: ScheduleConfig | undefined,
-  accounts: AccountOption[],
-): AccountOption[] {
-  if (!schedule) return [];
-  const ids = new Set(scheduleAccountIds(schedule));
-  return accounts.filter((account) => ids.has(account.id));
-}
-
-const PostCard = ({
-  slot,
-  personaName,
-  accounts,
-  locale,
-}: {
-  slot: ScheduledSlot;
-  personaName: string;
-  accounts: AccountOption[];
-  locale: 'pt' | 'en';
-}) => {
-  const { t } = useI18n();
-  const isHistory = slot.status === 'published' || slot.status === 'failed';
-  const shownAt = isHistory && slot.publishedAt ? slot.publishedAt : slot.slotAt;
-  const videoUrl = videoUrlFor(slot.taskId);
-  const hasThumb = SLOT_VIDEO_STATUSES.has(slot.status) && videoUrl !== null;
-  const provider = accounts[0]?.provider;
-  // Progress is live data on the list card too: a freshly created post lands
-  // here at 0% and the minute poll fills in the engine's number.
-  const showProgress =
-    slot.status === 'awaiting' ||
-    slot.status === 'generating' ||
-    slot.status === 'ready' ||
-    slot.status === 'publishing';
-  return (
-    <Link href={`/posts/${slot.id}`} className="block h-full">
-      <Card className={`flex h-full flex-col gap-0 rounded-xl p-4 transition-colors ${CARD_BORDER}`}>
-        <div className="flex items-center justify-between gap-2">
-          {provider ? <ProviderIcon provider={provider} /> : <span />}
-          <p className="text-xs text-muted-foreground">
-            {formatDate(shownAt, locale)} · {formatTime(shownAt, locale)}
-          </p>
-        </div>
-        <div className="mt-3 flex gap-3">
-          <p className="line-clamp-3 flex-1 text-sm leading-snug text-primary">
-            <span className="font-semibold">{personaName}</span>
-            {' — '}
-            <span className="text-muted-foreground">{slot.title ?? t('posts.unknownTitle')}</span>
-          </p>
-          <PostThumb src={hasThumb ? videoUrl : null} />
-        </div>
-        {showProgress && (
-          <div className="mt-3 flex items-center gap-2">
-            <div
-              role="progressbar"
-              aria-label={t('posts.progressLabel')}
-              aria-valuenow={slot.progress}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken"
-            >
-              <div
-                className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${slot.progress}%` }}
-              />
-            </div>
-            <span className="shrink-0 text-[11px] font-semibold text-primary tabular-nums">
-              {slot.progress}%
-            </span>
-          </div>
-        )}
-        <CardFooter className="mt-auto items-center justify-between p-0 pt-4">
-          <AccountAvatarGroup accounts={accounts} />
-          <Badge variant="outline" className={`border-transparent ${STATUS_STYLE[slot.status] ?? STATUS_STYLE.pending}`}>
-            {t(STATUS_KEY[slot.status] ?? 'posts.statusPending')}
-          </Badge>
-        </CardFooter>
-      </Card>
-      {slot.status === 'failed' && slot.error && (
-        <p className="sr-only">{slot.error}</p>
-      )}
-    </Link>
-  );
-};
-
-//---------------
-// accountInitials — compact circular avatars use the account label's
-// initials (first letters of up to two tokens, unicode-aware so non-Latin
-// accounts get real initials too).
-//---------------
-function accountInitials(label: string): string {
-  const tokens = label.replace(/^@/, '').match(/[\p{L}\p{N}]+/gu) ?? [];
-  return tokens.slice(0, 2).map((token) => token[0]?.toUpperCase() ?? '').join('');
-}
-
-const AccountAvatarGroup = ({ accounts }: { accounts: AccountOption[] }) => (
-  <div className="flex -space-x-1.5">
-    {accounts.slice(0, 4).map((account) => (
-      <Avatar key={`${account.provider}:${account.id}`} className="size-6 ring-2 ring-white">
-        <AvatarFallback className="bg-secondary text-[9px] font-semibold text-primary">
-          {accountInitials(account.label)}
-        </AvatarFallback>
-      </Avatar>
-    ))}
-  </div>
-);
-
-//---------------
-// PostThumb — the 72×72 thumbnail on the card body's right: the video
-// itself (metadata-only preload, muted, control-less — playback happens
-// in the detail modal) under a small play glyph. The src carries a
-// #t=0.1 media fragment so the browser seeks and paints that frame as
-// the thumbnail — preload="metadata" alone renders an empty box in
-// Chrome even when the video exists.
-//---------------
-const PostThumb = ({ src }: { src: string | null }) => {
-  const thumbSrc = src ? `${src}#t=0.1` : null;
-  return (
-    <div className="relative w-18 shrink-0">
-      <AspectRatio ratio={1} className="w-18 rounded-[9px] bg-sunken">
-        {thumbSrc ? (
-          <video src={thumbSrc} preload="metadata" muted playsInline className="size-full object-cover" />
-        ) : null}
-      </AspectRatio>
-      {thumbSrc && (
-        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <Play className="size-4 fill-white text-white drop-shadow" />
-        </span>
-      )}
-    </div>
-  );
-};
-
-const CARD_BORDER = 'border-line shadow-[0_1px_2px_rgba(13,43,69,0.05)] hover:border-line';
-
-//---------------
-// videoUrlFor — the engine download proxy serves the final render for a
-// task; only slots whose video was actually produced have one.
-//---------------
-function videoUrlFor(taskId: string | null | undefined): string | null {
-  return taskId ? `/api/persona/video-download/${encodeURIComponent(taskId)}/final-1.mp4` : null;
-}
-
-const SLOT_VIDEO_STATUSES = new Set<ScheduledSlot['status']>(['ready', 'publishing', 'published']);
-
-//---------------
 export default function PostsPage() {
   const { t, locale } = useI18n();
   const [tab, setTab] = useState<Tab>('upcoming');
+  const [view, setView] = useState<View>('list');
+  // Calendar state. "Today" is the viewer's local day (see calendar-days.ts).
+  const [todayKey] = useState(() => dayKey(new Date()));
+  const [cursor, setCursor] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [focusKey, setFocusKey] = useState(todayKey);
   const [providerFilter, setProviderFilter] = useState<ProviderFilter>('all');
   const [accountFilter, setAccountFilter] = useState<string>('all');
   const statusQuery = useScheduleStatusQuery(POSTS_LIMIT);
@@ -348,9 +134,8 @@ export default function PostsPage() {
     [statusQuery.data, scheduleById],
   );
 
-  const filteredSlots = useMemo(() => {
-    const slots = tab === 'upcoming' ? joinedUpcoming : joinedRecent;
-    return slots.filter((slot) => {
+  const passesFilters = useCallback(
+    (slot: ScheduledSlot): boolean => {
       const schedule = scheduleById.get(slot.scheduleId);
       if (!schedule) return false;
       if (providerFilter !== 'all' && !schedule.providers.includes(providerFilter)) return false;
@@ -359,11 +144,38 @@ export default function PostsPage() {
         if (!ids.has(effectiveAccountFilter)) return false;
       }
       return true;
-    });
-  }, [tab, joinedUpcoming, joinedRecent, scheduleById, providerFilter, effectiveAccountFilter]);
+    },
+    [scheduleById, providerFilter, effectiveAccountFilter],
+  );
 
-  const isLoading = statusQuery.isLoading || schedulesQuery.isLoading || personasQuery.isLoading || generationsQuery.isLoading;
-  const isError = statusQuery.isError || schedulesQuery.isError || personasQuery.isError || generationsQuery.isError;
+  const filteredSlots = useMemo(
+    () => (tab === 'upcoming' ? joinedUpcoming : joinedRecent).filter(passesFilters),
+    [tab, joinedUpcoming, joinedRecent, passesFilters],
+  );
+
+  // Calendar: the visible 6-week grid is one range read (never the list
+  // view's POSTS_LIMIT), filtered like the list and bucketed by local day.
+  const firstWeekday = FIRST_WEEKDAY[locale];
+  const gridDays = useMemo(() => buildMonthGrid(cursor.year, cursor.month, firstWeekday), [cursor, firstWeekday]);
+  const range = useMemo(() => gridRange(gridDays), [gridDays]);
+  const rangeQuery = useScheduleRangeQuery(monthKey(cursor.year, cursor.month), range.from, range.to, view === 'calendar');
+  const calendarSlots = useMemo(
+    () => (rangeQuery.data?.slots ?? []).filter(passesFilters),
+    [rangeQuery.data, passesFilters],
+  );
+  const slotsByDay = useMemo(() => bucketByDay(calendarSlots), [calendarSlots]);
+  const selectedSlots = useMemo(
+    () => (selectedKey === null ? [] : [...(slotsByDay.get(selectedKey) ?? [])].sort((a, b) => a.slotAt.localeCompare(b.slotAt))),
+    [slotsByDay, selectedKey],
+  );
+
+  const isCalendar = view === 'calendar';
+  const isLoading = isCalendar
+    ? rangeQuery.isLoading || schedulesQuery.isLoading || personasQuery.isLoading
+    : statusQuery.isLoading || schedulesQuery.isLoading || personasQuery.isLoading || generationsQuery.isLoading;
+  const isError = isCalendar
+    ? rangeQuery.isError || schedulesQuery.isError || personasQuery.isError
+    : statusQuery.isError || schedulesQuery.isError || personasQuery.isError || generationsQuery.isError;
   const hasActiveFilter = providerFilter !== 'all' || effectiveAccountFilter !== 'all';
   const upcomingCount = joinedUpcoming.length;
   const generations = generationsQuery.data ?? [];
@@ -376,11 +188,32 @@ export default function PostsPage() {
     void schedulesQuery.refetch();
     void personasQuery.refetch();
     void generationsQuery.refetch();
-  }, [statusQuery, schedulesQuery, personasQuery, generationsQuery]);
+    if (view === 'calendar') void rangeQuery.refetch();
+  }, [statusQuery, schedulesQuery, personasQuery, generationsQuery, rangeQuery, view]);
   // The fetch truncates at POSTS_LIMIT rows; say so instead of implying the
   // list is complete.
   const activeSlots = tab === 'upcoming' ? joinedUpcoming : joinedRecent;
-  const isCapped = activeSlots.length >= POSTS_LIMIT;
+  const isCapped = !isCalendar && activeSlots.length >= POSTS_LIMIT;
+
+  const renderSlotCard = (slot: ScheduledSlot) => {
+    // A post created without a persona (migration 012) has none to look up —
+    // that is not a removed persona, and saying so would be a lie about a post
+    // that never had one.
+    const personaId = scheduleById.get(slot.scheduleId)?.personaId ?? null;
+    const personaName =
+      personaId === null ? t('posts.noPersona') : personaNameById.get(personaId) ?? t('posts.personaFallback');
+    return (
+      <PostCard
+        key={slot.id}
+        slot={slot}
+        personaName={personaName}
+        accounts={resolveSlotAccounts(scheduleById.get(slot.scheduleId), accountOptions)}
+        locale={locale}
+      />
+    );
+  };
+
+  const dayFormat = new Intl.DateTimeFormat(INTL_TAG[locale], { dateStyle: 'full' });
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -405,21 +238,39 @@ export default function PostsPage() {
         </div>
       </div>
 
-      <div className="mt-6 flex gap-1 rounded-xl bg-sunken p-1">
-        {(['upcoming', 'history'] as const).map((value) => (
+      <div role="group" aria-label={t('posts.viewToggleLabel')} className="mt-6 flex gap-1 rounded-xl bg-sunken p-1 sm:w-fit">
+        {(['list', 'calendar'] as const).map((value) => (
           <button
             key={value}
             type="button"
-            onClick={() => setTab(value)}
-            aria-pressed={tab === value}
+            onClick={() => setView(value)}
+            aria-pressed={view === value}
             className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === value ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground hover:text-primary'
+              view === value ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground hover:text-primary'
             }`}
           >
-            {t(value === 'upcoming' ? 'posts.tabUpcoming' : 'posts.tabHistory')} ({value === 'upcoming' ? upcomingCount : historyCount})
+            {t(value === 'list' ? 'posts.viewList' : 'posts.viewCalendar')}
           </button>
         ))}
       </div>
+
+      {!isCalendar && (
+        <div className="mt-3 flex gap-1 rounded-xl bg-sunken p-1">
+          {(['upcoming', 'history'] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setTab(value)}
+              aria-pressed={tab === value}
+              className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                tab === value ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground hover:text-primary'
+              }`}
+            >
+              {t(value === 'upcoming' ? 'posts.tabUpcoming' : 'posts.tabHistory')} ({value === 'upcoming' ? upcomingCount : historyCount})
+            </button>
+          ))}
+        </div>
+      )}
 
       {isCapped && !isLoading && !isError && (
         <p className="mt-3 text-xs text-muted-foreground">{t('posts.listCapped', { count: POSTS_LIMIT })}</p>
@@ -483,6 +334,47 @@ export default function PostsPage() {
               {t('posts.refresh')}
             </button>
           </div>
+        ) : isCalendar ? (
+          <>
+            {rangeQuery.data?.truncated === true && (
+              <p className="mb-3 text-xs text-muted-foreground">{t('posts.calendarTruncated', { count: RANGE_MAX_SLOTS })}</p>
+            )}
+            <CalendarView
+              year={cursor.year}
+              month={cursor.month}
+              firstWeekday={firstWeekday}
+              slotsByDay={slotsByDay}
+              selectedKey={selectedKey}
+              focusKey={focusKey}
+              todayKey={todayKey}
+              onSelect={setSelectedKey}
+              onFocusChange={setFocusKey}
+              onMonthChange={(year, month) => setCursor({ year, month })}
+            />
+            <section aria-live="polite" className="mt-6">
+              {selectedKey === null ? (
+                <p className="text-sm text-muted-foreground">{t('posts.calendarNoDay')}</p>
+              ) : (
+                <>
+                  <h2 className="text-base font-bold tracking-[-0.01em] text-primary">
+                    {t('posts.calendarDayHeading', { date: dayFormat.format(dateFromKey(selectedKey)) })}
+                  </h2>
+                  <ul className="mt-2 flex flex-wrap gap-2 text-xs">
+                    {STATUS_GROUP_ORDER.map((group) => (
+                      <li key={group} className={`rounded-full px-2 py-0.5 font-semibold ${GROUP_STYLE[group]}`}>
+                        {t(GROUP_KEY[group])}: {groupCounts(selectedSlots)[group]}
+                      </li>
+                    ))}
+                  </ul>
+                  {selectedSlots.length === 0 ? (
+                    <p className="mt-3 text-sm text-muted-foreground">{t('posts.calendarDayNone')}</p>
+                  ) : (
+                    <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{selectedSlots.map(renderSlotCard)}</div>
+                  )}
+                </>
+              )}
+            </section>
+          </>
         ) : (
           <>
             {tab === 'history' && (
@@ -513,25 +405,7 @@ export default function PostsPage() {
               </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {filteredSlots.map((slot) => {
-                  // A post created without a persona (migration 012) has
-                  // none to look up — that is not a removed persona, and
-                  // saying so would be a lie about a post that never had one.
-                  const personaId = scheduleById.get(slot.scheduleId)?.personaId ?? null;
-                  const personaName =
-                    personaId === null
-                      ? t('posts.noPersona')
-                      : personaNameById.get(personaId) ?? t('posts.personaFallback');
-                  return (
-                    <PostCard
-                      key={slot.id}
-                      slot={slot}
-                      personaName={personaName}
-                      accounts={resolveSlotAccounts(scheduleById.get(slot.scheduleId), accountOptions)}
-                      locale={locale}
-                    />
-                  );
-                })}
+                {filteredSlots.map(renderSlotCard)}
               </div>
             )}
           </>

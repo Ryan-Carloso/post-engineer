@@ -10,6 +10,9 @@ import { logger } from '@/lib/logger';
 // user's schedules (for the home schedule card and the MCP list_posts tool).
 // Optional ?limit= (default 10, max 500) — the posts page raises it
 // to render the full history.
+// Optional ?from=&to= (ISO-8601, both required, mutually exclusive with
+// ?limit=) — range mode for the calendar: every slot with slot_at in
+// [from, to), any status, as { slots, truncated } (see ./range).
 // Auth: cookie session (web) or API key / OAuth token (MCP clients)
 // via requireSupabaseSession. Persona-scoped API keys only see posts whose
 // schedule belongs to one of their allowed personas.
@@ -38,6 +41,7 @@ import {
 import { createEngineProbe, type EngineProbe } from '@/lib/engine-reachability';
 import { recordProgressHistory, type ProgressSample } from '@/lib/schedule-progress-history';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { parseRange, RANGE_MAX_SLOTS, RANGE_STATUSES } from './range';
 
 //---------------
 // buildQueuePositions — 1-based position of every awaiting+generating
@@ -113,6 +117,11 @@ async function withSlotPresentation<T extends { status?: unknown; task_id?: unkn
 }
 
 async function getHandler(request?: Request): Promise<NextResponse> {
+  // Cheap validation before any auth round-trip or read.
+  const range = request ? parseRange(new URL(request.url).searchParams) : { kind: 'none' as const };
+  if (range.kind === 'error') {
+    return NextResponse.json({ success: false, error: range.message }, { status: 400 });
+  }
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
   // API-key/OAuth callers have no cookie session, so the service client
@@ -149,8 +158,43 @@ async function getHandler(request?: Request): Promise<NextResponse> {
       )
       .map((row: { id: string }) => row.id);
     if (scheduleIds.length === 0) {
-      return NextResponse.json({ success: true, upcoming: [], recent: [] });
+      return range.kind === 'range'
+        ? NextResponse.json({ success: true, slots: [], truncated: false })
+        : NextResponse.json({ success: true, upcoming: [], recent: [] });
     }
+  }
+
+  if (range.kind === 'range') {
+    // user_id is re-checked explicitly: the service client bypasses RLS.
+    let rangeQuery = supabase
+      .from('scheduled_posts')
+      .select('id, slot_at, status, title, error, published_at, schedule_id, task_id')
+      .eq('user_id', userId)
+      .in('status', [...RANGE_STATUSES])
+      .gte('slot_at', range.from)
+      .lt('slot_at', range.to)
+      .order('slot_at', { ascending: true })
+      .order('id', { ascending: true });
+    if (scheduleIds) rangeQuery = rangeQuery.in('schedule_id', scheduleIds);
+    const { data, error } = await rangeQuery.limit(RANGE_MAX_SLOTS + 1);
+    if (error) {
+      logger.error('[api/schedule/status] range query failed', error);
+      return NextResponse.json(
+        { success: false, error: 'Failed to load schedule status.' },
+        { status: 500 },
+      );
+    }
+    const rows = data ?? [];
+    const truncated = rows.length > RANGE_MAX_SLOTS;
+    // Queue positions are not computed for range reads: they only matter for
+    // the list view's progress line and would need the un-limited queue query.
+    const slots = await withSlotPresentation(
+      rows.slice(0, RANGE_MAX_SLOTS),
+      userId,
+      new Map(),
+      createEngineProbe(),
+    );
+    return NextResponse.json({ success: true, slots, truncated });
   }
 
   const limit = parseLimit(

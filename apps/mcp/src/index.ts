@@ -40,7 +40,6 @@ import {
   handleListSocialAccounts,
   handleConnectAccount,
   handleListSchedules,
-  handleListPosts,
   handleCancelSchedule,
   handleGetSlot,
   handleUpdateSlotTitle,
@@ -72,6 +71,7 @@ import {
   GetPostMetricsShape,
   GetYouTubeRetentionCurveShape,
   handleGetPost,
+  handleListPosts,
   handleGetPostMetrics,
   handleGetYouTubeRetentionCurve,
 } from './tools-posts.js';
@@ -209,7 +209,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'list_posts',
-    'List upcoming (scheduled) and past (published/failed) posts across all connected accounts. Returns two lists: upcoming slots and recent results, each with id, slot_at, status (awaiting|generating|ready|publishing|published|failed), title, schedule_id, task_id, progress (0-100: 0 for awaiting, 100 for ready/publishing/published, live engine progress for generating, last known for failed), stage (engine pipeline stage like "lipsync" while generating, "done" when complete, null otherwise), queuePosition/queueTotal (1-based position among the schedule\'s awaiting+generating slots; awaiting slots only, null otherwise). Failed slots also carry error and retryable (boolean: true when the failure looks transient). Use when the user asks about their posts — what is coming next, what already went out, how far a video has generated, where it sits in the queue, or why a post failed. Combine with list_schedules or list_social_accounts when persona/account names are needed.',
+    'List upcoming (scheduled) and past (published/failed) posts across all connected accounts. With from + to (ISO-8601 timestamps with UTC offset, at most 62 days) it instead returns every post of any status (awaiting|generating|ready|publishing|published|failed) with slot_at in [from, to) as one slots list plus truncated (true when the cap was hit) — use it to read a day or month. Without from/to it returns two lists: upcoming slots and recent results, each with id, slot_at, status (awaiting|generating|ready|published|failed), title, schedule_id, task_id, progress (0-100: 0 for awaiting, 100 for ready/publishing/published, live engine progress for generating, last known for failed), stage (engine pipeline stage like "lipsync" while generating, "done" when complete, null otherwise), queuePosition/queueTotal (1-based position among the schedule\'s awaiting+generating slots; awaiting slots only, null otherwise). Failed slots also carry error and retryable (boolean: true when the failure looks transient). Use when the user asks about their posts — what is coming next, what already went out, how far a video has generated, where it sits in the queue, or why a post failed. Combine with list_schedules or list_social_accounts when persona/account names are needed.',
     ListPostsShape,
     withTracking('list_posts', async (args) => {
       return handleListPosts(apiClient, args);

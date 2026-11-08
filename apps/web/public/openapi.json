@@ -3673,6 +3673,18 @@
                         "type": "object",
                         "additionalProperties": true
                       }
+                    },
+                    "slots": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      },
+                      "description": "Range mode only: every slot with slot_at in [from, to)."
+                    },
+                    "truncated": {
+                      "type": "boolean",
+                      "description": "Range mode only: true when the slot cap was hit."
                     }
                   },
                   "required": [
@@ -3726,6 +3738,22 @@
         "parameters": [
           {
             "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
             "in": "query",
             "required": false,
             "schema": {

@@ -13,8 +13,8 @@ interface ThemeToggleProps {
   value: ThemeChoice;
   onChange: (value: ThemeChoice) => void;
   labels: ThemeToggleLabels;
-  // Disabled until the stored theme is known on the client, so the pressed
-  // state never flashes the wrong option during hydration.
+  // Set by the caller until the stored theme is known on the client; the
+  // caller also passes the server value meanwhile (see ThemeSwitcher).
   disabled?: boolean;
   className?: string;
 }

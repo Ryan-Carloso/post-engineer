@@ -13,6 +13,7 @@ import { facelessMaterialStrings } from './faceless-material-i18n';
 import { pricingContactStrings } from './pricing-contact-i18n';
 import { fullLipsyncPriceStrings } from './full-lipsync-price-i18n';
 import { themeStrings } from './theme-i18n';
+import { postsCalendarStrings } from './posts-calendar-i18n';
 import type { Locale } from './types';
 
 //---------------
@@ -35,7 +36,7 @@ export const ptDictionary = {
   nav: { ...basePtDictionary.nav, ...metricsStrings.pt.nav, ...promptsStrings.pt.nav },
   metrics: metricsStrings.pt.metrics,
   accounts: { ...basePtDictionary.accounts, ...threadsStrings.pt.accounts },
-  posts: { ...basePtDictionary.posts, ...facelessMaterialStrings.pt.posts },
+  posts: { ...basePtDictionary.posts, ...facelessMaterialStrings.pt.posts, ...postsCalendarStrings.pt.posts },
   personas: { ...basePtDictionary.personas, ...facelessMaterialStrings.pt.personas },
   landing: { ...basePtDictionary.landing, ...pricingContactStrings.pt.landing },
   theme: themeStrings.pt.theme,
@@ -50,7 +51,7 @@ export const enDictionary = {
   nav: { ...baseEnDictionary.nav, ...metricsStrings.en.nav, ...promptsStrings.en.nav },
   metrics: metricsStrings.en.metrics,
   accounts: { ...baseEnDictionary.accounts, ...threadsStrings.en.accounts },
-  posts: { ...baseEnDictionary.posts, ...facelessMaterialStrings.en.posts },
+  posts: { ...baseEnDictionary.posts, ...facelessMaterialStrings.en.posts, ...postsCalendarStrings.en.posts },
   personas: { ...baseEnDictionary.personas, ...facelessMaterialStrings.en.personas },
   landing: { ...baseEnDictionary.landing, ...pricingContactStrings.en.landing },
   theme: themeStrings.en.theme,
@@ -65,6 +66,7 @@ type FacelessMaterialKeys = typeof facelessMaterialStrings.en;
 type PricingContactKeys = typeof pricingContactStrings.en;
 type FullLipsyncPriceKeys = typeof fullLipsyncPriceStrings.en;
 type ThemeKeys = typeof themeStrings.en;
+type PostsCalendarKeys = typeof postsCalendarStrings.en;
 export type Dictionary = BaseDictionary & {
   [Section in keyof ThreadsKeys]: {
     [Key in keyof ThreadsKeys[Section]]: string;
@@ -96,6 +98,10 @@ export type Dictionary = BaseDictionary & {
 } & {
   [Section in keyof FullLipsyncPriceKeys]: {
     [Key in keyof FullLipsyncPriceKeys[Section]]: string;
+  };
+} & {
+  [Section in keyof PostsCalendarKeys]: {
+    [Key in keyof PostsCalendarKeys[Section]]: string;
   };
 } & {
   [Section in keyof ThemeKeys]: {

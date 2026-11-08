@@ -78,3 +78,18 @@ export async function scoreDraft(
     'score draft',
   );
 }
+
+// GET /api/schedule/status in range mode (?from=&to=): every post, any status,
+// with slot_at in [from, to). limit is never sent: the route rejects it
+// together with a range.
+export async function listPostsInRange(
+  client: PostEngineerClient,
+  range: { from: string; to: string },
+): Promise<unknown> {
+  const params = new URLSearchParams({ from: range.from, to: range.to });
+  return client.request(
+    `/api/schedule/status?${params.toString()}`,
+    { method: 'GET', headers: client.getHeaders() },
+    'list posts',
+  );
+}

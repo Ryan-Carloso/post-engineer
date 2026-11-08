@@ -19,7 +19,6 @@ import {
   handleUpdatePersona,
   handleListSocialAccounts,
   handleListSchedules,
-  handleListPosts,
   handleCancelSchedule,
   handleGetTokenBalance,
   handleConnectAccount,
@@ -32,6 +31,8 @@ import {
   UpdatePersonaImageShape,
   RemovePersonaImageSchema,
 } from '../tools.js';
+import { handleListPosts } from '../tools-posts.js';
+import { listPostsInRange } from '../client-posts.js';
 import {
   handleGetPersonaPublishingAccounts,
   handleSetPersonaPublishingAccounts,
@@ -55,6 +56,7 @@ describe('MCP Tool Handlers', () => {
     listSocialAccounts: vi.fn(),
     listSchedules: vi.fn(),
     listPosts: vi.fn(),
+
     cancelSchedule: vi.fn(),
     getTokenBalance: vi.fn(),
     getVideoStatus: vi.fn(),
@@ -281,6 +283,49 @@ describe('MCP Tool Handlers', () => {
 
     expect(response.isError).toBe(true);
     expect(textOf(response)).toContain('Error listing posts: boom');
+  });
+
+  it('ListPostsSchema requires from and to together and validates the timestamps', () => {
+    const FROM = '2026-11-01T00:00:00-03:00';
+    const TO = '2026-12-01T00:00:00-03:00';
+    expect(ListPostsSchema.parse({ from: FROM, to: TO })).toMatchObject({ from: FROM, to: TO });
+    expect(() => ListPostsSchema.parse({ from: FROM })).toThrow();
+    expect(() => ListPostsSchema.parse({ to: TO })).toThrow();
+    expect(() => ListPostsSchema.parse({ from: '2026-11-01', to: '2026-12-01' })).toThrow();
+  });
+
+  it('handleListPosts in range mode calls the range endpoint and never sends limit', async () => {
+    vi.mocked(mockClient.listPosts).mockClear();
+    vi.mocked(mockClient.request).mockClear();
+    vi.mocked(mockClient.request).mockResolvedValue({ success: true, slots: [{ id: 's-1' }], truncated: false });
+
+    const response = await handleListPosts(mockClient, {
+      limit: 20,
+      from: '2026-11-01T00:00:00-03:00',
+      to: '2026-12-01T00:00:00-03:00',
+    });
+
+    expect(mockClient.listPosts).not.toHaveBeenCalled();
+    const [path] = vi.mocked(mockClient.request).mock.calls[0];
+    expect(path).toBe('/api/schedule/status?from=2026-11-01T00%3A00%3A00-03%3A00&to=2026-12-01T00%3A00%3A00-03%3A00');
+    expect(path).not.toContain('limit');
+    expect(textOf(response)).toContain('s-1');
+  });
+
+  it('handleListPosts rejects a lone from without calling the API', async () => {
+    vi.mocked(mockClient.listPosts).mockClear();
+    vi.mocked(mockClient.request).mockClear();
+    const response = await handleListPosts(mockClient, { limit: 20, from: '2026-11-01T00:00:00Z' });
+
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('from and to must be provided together');
+    expect(mockClient.listPosts).not.toHaveBeenCalled();
+    expect(mockClient.request).not.toHaveBeenCalled();
+  });
+
+  it('listPostsInRange labels failures as list posts', async () => {
+    vi.mocked(mockClient.request).mockRejectedValue(new Error('Failed to list posts: 400 Bad Request'));
+    await expect(listPostsInRange(mockClient, { from: 'a', to: 'b' })).rejects.toThrow('Failed to list posts: 400');
   });
 
   it('handleCancelSchedule cancels by id', async () => {
