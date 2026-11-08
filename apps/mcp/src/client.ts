@@ -373,12 +373,12 @@ export class PostEngineerClient {
     if (input.voiceId !== undefined) formData.set('voiceId', input.voiceId);
     if (input.language !== undefined) formData.set('language', input.language);
     if (input.videoAspect !== undefined) formData.set('videoAspect', input.videoAspect);
-    // Sent only when provided: an update must not rewrite an untouched
-    // field with a default the caller never chose.
+    // Sent only when provided: never rewrite an untouched field with a default the caller never chose.
     if (input.videoLayout !== undefined) formData.set('videoLayout', input.videoLayout);
     if (input.scriptPrompt !== undefined) formData.set('scriptPrompt', input.scriptPrompt);
     if (input.paragraphNumber !== undefined) formData.set('paragraphNumber', String(input.paragraphNumber));
     if (input.niche !== undefined) formData.set('niche', input.niche);
+    if (input.faceQuality !== undefined) formData.set('faceQuality', input.faceQuality);
     return this.request(
       `/api/persona?personaId=${encodeURIComponent(input.personaId)}`,
       { method: 'PATCH', headers: this.getHeaders(false), body: formData },

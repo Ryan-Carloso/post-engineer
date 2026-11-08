@@ -23,6 +23,7 @@ import { validateLibraryInputs } from '@/lib/persona-library-validate';
 import { resolvePersonaAvatar, rollbackStoragePath } from '@/lib/persona-remote-face';
 import { logger } from '@/lib/logger';
 import { parsePatchBody } from './patch-body';
+import { applyPersonaPatchFields } from './patch-updates';
 import { parseJsonStringArray, parsePrimaryIndex } from './form-parsing';
 import { errorResponse } from './error-response';
 import { forwardLibraryImagesError, personaValidationError } from './validation-error';
@@ -375,13 +376,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     }
   }
 
-  if (patch.language !== null) updates.language = patch.language;
-  if (patch.videoAspect !== null) updates.video_aspect = patch.videoAspect;
-  if (patch.videoLayout !== null) updates.video_layout = patch.videoLayout;
-  if (patch.scriptPrompt !== null) updates.script_prompt = patch.scriptPrompt;
-  if (patch.ctaText !== null) updates.cta_text = patch.ctaText;
-  if (patch.paragraphNumber !== null) updates.paragraph_number = patch.paragraphNumber;
-  if (patch.niche !== null) updates.niche = patch.niche;
+  applyPersonaPatchFields(patch, updates);
 
   if (Object.keys(updates).length === 0) {
     return personaValidationError('Nothing to update.', 'PATCH /api/persona');
