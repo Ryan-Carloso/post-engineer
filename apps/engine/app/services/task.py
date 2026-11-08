@@ -36,6 +36,7 @@ from app.services import state as sm
 from app.services import image_coverage, task_webhook, user_media
 from app.services.lipsync_active import persona_lipsync_active  # noqa: F401 - re-exported for existing callers
 from app.services import full_lipsync
+from app.services.music_mood import resolve_music_mood
 from app.services.pipeline_stage import PhaseTracker
 from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cost_event_props, report_from_job_cost
 from app.services.longcat_cost import ModalJobCost
@@ -353,6 +354,7 @@ def _complete_task(
     if context.get("flow") == "direct":
         # Private unit-economics metric: PostHog event only, never the API.
         context.update(cost_event_props(kwargs))
+        context["music_mood"] = kwargs.get("music_mood") or "unknown"
         track_event("video_generated", context)
     task_webhook.notify_terminal_task(
         task_id,
@@ -1230,14 +1232,12 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=50)
 
-        # Phase 5: no LLM music-mood pick — BGM is always off. "none"
-        # is the LLM function's own failure fallback, kept as the
-        # mechanical value so the rest of the pipeline is unchanged.
+        # Phase 5: the BGM mood comes with the request (VideoParams.music_mood;
+        # default: first catalogued mood) — never a silent fallback to none.
         phases.begin("music_mood")
-        music_mood = "none"
+        music_mood = resolve_music_mood(params)
         sm.state.update_task(task_id, music_mood=music_mood)
         phases.complete("music_mood")
-        logger.info("music mood is none: BGM disabled without an LLM pick")
 
         # Only the full video pipeline needs the video concat mode handling;
         # this keeps /subtitle and /audio style requests from touching

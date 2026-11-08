@@ -31,10 +31,12 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # Application code and static assets (fonts are required by the render
-# path). config.toml is NOT copied: it may contain provider API keys, so it
-# is mounted at runtime instead (see docker-compose.yml).
+# path; songs are the CC0 BGM catalog from resource/songs/catalog.toml).
+# config.toml is NOT copied: it may contain provider API keys, so it is
+# mounted at runtime instead (see docker-compose.yml).
 COPY app ./app
 COPY resource/fonts ./resource/fonts
+COPY resource/songs ./resource/songs
 COPY main.py ./
 
 # builtAt: ISO UTC, written AFTER ARG COMMIT/BUILD so Docker does not

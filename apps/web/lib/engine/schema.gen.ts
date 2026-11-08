@@ -972,6 +972,8 @@ export interface components {
              * @default true
              */
             match_materials_to_script?: boolean;
+            /** Music Mood */
+            music_mood?: string | null;
             /**
              * N Threads
              * @default 2

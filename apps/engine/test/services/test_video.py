@@ -23,6 +23,7 @@ from app.controllers.manager.memory_manager import InMemoryTaskManager
 from app.controllers.v1 import video as video_controller
 from app.models import const
 from app.models.schema import MaterialInfo
+from app.services import music_mood as mm
 from app.services import state as sm
 from app.services import video as vd
 from app.utils import utils
@@ -94,7 +95,7 @@ class TestSecurityControls(unittest.TestCase):
             )
 
             self.assertEqual(
-                vd.get_available_music_moods(str(catalog)),
+                mm.get_available_music_moods(str(catalog)),
                 ("calm", "energetic", "romantic"),
             )
 

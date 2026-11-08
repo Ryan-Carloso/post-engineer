@@ -36,6 +36,7 @@ from app.models.schema import (
 from app.services import state as sm, task as tm
 from app.services import video_storage
 from app.services.language_gate import ensure_english_video_language
+from app.services.music_mood import validate_music_mood
 from app.services.upload_filenames import sanitize_upload_filename as _sanitize_upload_filename
 from app.utils import file_security, upload_limits, utils
 
@@ -356,11 +357,12 @@ def create_task(
             "params": body.model_dump(),
             "user_id": auth.user_id,
         }
+        # Unknown BGM mood is a 400, before the task row exists ("none"/omitted pass).
+        validate_music_mood(getattr(body, "music_mood", None))
         sm.state.update_task(
             task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at,
-            # New tasks start at explicit 0/PROCESSING: update_task() only
-            # overwrites state/progress when they are passed, so the initial
-            # values are set here rather than relying on defaults.
+            # New tasks start at explicit 0/PROCESSING (update_task only
+            # overwrites state/progress when passed, so no relying on defaults).
             state=const.TASK_STATE_PROCESSING,
             progress=0,
             # Identity for PostHog: the lifecycle events (started/progress/
@@ -370,9 +372,7 @@ def create_task(
             **_tracking_kwargs(body),
         )
         # Funnel entry: requested fires from on_accepted once the task is
-        # ACCEPTED into the queue — strictly before the worker thread
-        # starts on the immediate path, and never on a 429 queue-full
-        # rejection.
+        # ACCEPTED — strictly before the worker starts, never on a 429.
         task_manager.add_task(
             tm.start,
             task_id=task_id,

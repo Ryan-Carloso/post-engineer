@@ -1051,6 +1051,18 @@
             "title": "Match Materials To Script",
             "type": "boolean"
           },
+          "music_mood": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Music Mood"
+          },
           "n_threads": {
             "anyOf": [
               {
