@@ -18,7 +18,7 @@ const SCHEDULE_ID = 'sched-current';
 
 const SEGMENTS = [
   { kind: 'hook', text: 'Stop doing squats like this.' },
-  { kind: 'body', text: 'Your knees track over your toes and the load moves.', media: { url: 'https://x/a.png' } },
+  { kind: 'body', text: 'Your knees track over your toes and the load moves.', media: [{ url: 'https://x/a.png' }] },
   { kind: 'cta', text: 'Follow for more.' },
 ];
 
@@ -109,7 +109,7 @@ const PARTNER_SLOT = {
   faceless_material: 'broll',
   segments: [
     { text: SEGMENTS[0].text, kind: 'hook' },
-    { media: { url: 'https://x/a.png' }, text: SEGMENTS[1].text, kind: 'body' },
+    { media: [{ url: 'https://x/a.png' }], text: SEGMENTS[1].text, kind: 'body' },
     { text: SEGMENTS[2].text, kind: 'cta' },
   ],
 };

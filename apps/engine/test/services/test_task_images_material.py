@@ -21,8 +21,20 @@ SEGMENTS = [
 ]
 
 
+def _photos(count, prefix):
+    return [{"url": f"https://e.com/{prefix}{i}.jpg"} for i in range(count)]
+
+
 def _params(material):
-    segments = [{**segment, "media": {"url": f"https://e.com/{i}.jpg"}} for i, segment in enumerate(SEGMENTS)]
+    # Images mode needs about one photo per 3s (hook 19 words → 3, body 38 → 5, CTA 7 → 1).
+    # Other materials keep one photo each so they stay under the 6-photo cap.
+    counts = (3, 5, 1) if material == "images" else (1, 1, 0)
+    segments = []
+    for index, segment in enumerate(SEGMENTS):
+        copied = dict(segment)
+        if counts[index]:
+            copied["media"] = _photos(counts[index], f"{index}-")
+        segments.append(copied)
     return TaskVideoRequest(
         video_subject="Porto walks", segments=segments, faceless_material=material,
         voice_name="chatterbox:kokoro_af_heart",

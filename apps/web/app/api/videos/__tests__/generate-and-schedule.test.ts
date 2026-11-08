@@ -932,7 +932,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
     it('rejects an unknown media key at parse time instead of stripping it', async () => {
       const withAlt = [
         { kind: 'hook', text: segmentsHook },
-        { kind: 'body', text: segmentsBody, media: { mediaId: 'abc', alt: 'kitchen' } },
+        { kind: 'body', text: segmentsBody, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
         { kind: 'cta', text: segmentsCta },
       ];
       const res = await post(baseBody({ options: { segments: withAlt } }));

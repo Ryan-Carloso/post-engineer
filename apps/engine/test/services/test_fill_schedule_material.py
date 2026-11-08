@@ -105,15 +105,15 @@ class BatchDispatchMaterialTests(unittest.TestCase):
 
     def test_images_slot_with_media_on_every_segment_dispatches_images(self):
         slot = _slot(faceless=True, faceless_material="images")
+        counts = (3, 6, 2)
         slot["segments"] = [
-            {**segment, "media": {"url": f"https://example.com/{index}.jpg"}}
+            {**segment, "media": [{"url": f"https://example.com/{index}-{n}.jpg"} for n in range(counts[index])]}
             for index, segment in enumerate(slot["segments"])
         ]
         request = self._dispatched_request(slot)
         self.assertEqual(request.faceless_material, "images")
-        self.assertEqual([segment.media.url for segment in request.segments], [
-            "https://example.com/0.jpg", "https://example.com/1.jpg", "https://example.com/2.jpg",
-        ])
+        self.assertEqual([len(segment.media) for segment in request.segments], [3, 6, 2])
+        self.assertEqual(request.segments[0].media[0].url, "https://example.com/0-0.jpg")
 
     def test_legacy_slot_without_the_column_dispatches_broll(self):
         request = self._dispatched_request(_slot())

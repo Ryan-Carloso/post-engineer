@@ -72,7 +72,7 @@ mechanically, and only then generates.
 | CTA words | 5-20 |
 | Hook words | 15-40 before TTS; aim for 20-30 words, the target for the 8-12 second spoken hook window |
 | Hook ending | Terminal punctuation |
-| Medias per video | At most 6; a segment's `media` is a strict object with exactly one of `mediaId` (from `upload_media`) or `url` (a public image URL) |
+| Medias per video | At most 6; a segment's `media` is an array of objects, each with exactly one of `mediaId` (from `upload_media`) or `url` (a public image URL) |
 | Segment media image | JPG/JPEG, PNG, or WebP; at most 8MB (the engine photo limit) |
 | Overlay card | `title` (the place name) at most 60 characters, `subtitle` (address/district) at most 80, `badge` (price or era) at most 30 |
 | Uploaded media lifetime | Temporary engine asset, 1 hour TTL: upload shortly before generating |
@@ -123,7 +123,7 @@ results: "A Brasileira café Lisbon" beats "Lisbon").
   that photo; never attach a URL that failed the check; never send a fake
   User-Agent or Referer to bypass a hotlink block.
 - Local file: call `upload_media` with the local path and use the returned
-  `mediaId` in the segment's `media` field. Upload shortly before
+  `mediaId` in one item of the segment's `media` list. Upload shortly before
   generating: the asset lives 1 hour.
 - Attach at most 6 photos to at most 6 distinct segments. Fewer, chosen
   well (facade, the menu, the thing the script names), beats every photo
@@ -131,7 +131,7 @@ results: "A Brasileira café Lisbon" beats "Lisbon").
 - A segment without media is fine. A video with no usable photo is still a
   video; a video with a wrong-place photo is not.
 
-Give each photo its card in that segment's `media.overlay`: `title` is the
+Give each photo its card in that photo's `overlay`: `title` is the
 place's real name (at most 60 characters), `subtitle` the address or
 district (80), `badge` one detail such as a price or when it opened (30).
 Skip a field the facts do not support: an empty card is not worth inventing.
@@ -190,11 +190,11 @@ Segments (hook 21 words, body 53 words, CTA 17 words, total 91 words,
 {
   "segments": [
     { "kind": "hook", "text": "This café has been pouring coffee since 1913, and the olive oil cake on the counter follows the founders' handwritten note.",
-      "media": { "url": "https://example.photo/cafe/facade.jpg", "overlay": { "title": "Casa dos Mapas", "subtitle": "Rua do Rio 12, downtown", "badge": "Since 1913" } } },
+      "media": [{ "url": "https://example.photo/cafe/facade.jpg", "overlay": { "title": "Casa dos Mapas", "subtitle": "Rua do Rio 12, downtown", "badge": "Since 1913" } }] },
     { "kind": "body", "text": "The founders wrote the olive oil cake by hand, and the kitchen still bakes from that note: dense, citrus-heavy, and unlike anything a modern patisserie sells near you.",
-      "media": { "url": "https://example.photo/cafe/cake-counter.jpg", "overlay": { "title": "Casa dos Mapas", "subtitle": "Two blocks from the river", "badge": "Olive oil cake" } } },
+      "media": [{ "url": "https://example.photo/cafe/cake-counter.jpg", "overlay": { "title": "Casa dos Mapas", "subtitle": "Two blocks from the river", "badge": "Olive oil cake" } }] },
     { "kind": "body", "text": "It sits two blocks from the river, the ring at the door still decides who is in, and cash is the only language it speaks.",
-      "media": { "url": "https://example.photo/cafe/door-ring.jpg", "overlay": { "title": "Casa dos Mapas", "subtitle": "Cash only, closes at six", "badge": "Downtown" } } },
+      "media": [{ "url": "https://example.photo/cafe/door-ring.jpg", "overlay": { "title": "Casa dos Mapas", "subtitle": "Cash only, closes at six", "badge": "Downtown" } }] },
     { "kind": "cta", "text": "Save this café for your next downtown morning and tell me which door I should ring next." }
   ]
 }

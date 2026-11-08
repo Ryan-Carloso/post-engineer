@@ -7,10 +7,14 @@ export const DEFAULT_API_URL = 'https://post-engineer.com';
 export const PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads'];
 export const MODES = ['asap', 'scheduled'];
 export const FACELESS_MATERIALS = ['broll', 'svg', 'images'];
-// The "images" material renders only the given images, one per segment;
-// the segments cap (MAX_SEGMENTS in the shared validator) bounds them.
+// The "images" material renders only the given images. About one image per
+// 3 seconds of speech (8 words), each image on screen at least about 1
+// second (3 words), at most 30 images. Segments stay capped at 12.
 export const IMAGES_MATERIAL = 'images';
-export const MAX_IMAGES = 12;
+export const MAX_SEGMENTS = 12;
+export const MAX_IMAGES = 30;
+export const WORDS_PER_IMAGE = 8;
+export const MIN_WORDS_PER_IMAGE = 3;
 export const API_KEY_PREFIX = 'pe_live_';
 export const REQUEST_TIMEOUT_MS = 60_000;
 export const POLL_INTERVAL_MS = 15_000;
@@ -159,15 +163,58 @@ function parseLook(raw, personaId) {
 }
 
 // Body paragraphs (split on blank lines). With images each paragraph is its
-// own segment, so a long body can carry one image per paragraph.
+// own segment, and the image list is split across those segments by length.
 function bodyParagraphs(body) {
   return body.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter((paragraph) => paragraph !== '');
 }
 
-// images: public https URLs, one per segment (hook, each body paragraph,
-// CTA), only with the "images" material, which in turn needs them. The
-// web fetches them with its own SSRF guard; here only the shape is checked.
-function parseImages(raw, facelessMaterial, body) {
+function countWords(text) {
+  const trimmed = text.trim();
+  return trimmed === '' ? 0 : trimmed.split(/\s+/).length;
+}
+
+function minImagesFor(words) {
+  return words <= 0 ? 0 : Math.ceil(words / WORDS_PER_IMAGE);
+}
+
+function maxImagesFor(words) {
+  return Math.max(1, Math.floor(words / MIN_WORDS_PER_IMAGE));
+}
+
+// Hand the URLs out in order. Each segment gets at least one image per ~3s
+// and at most one image per ~1s, so a short segment does not flicker.
+export function assignImages(urls, texts) {
+  const lows = texts.map((text) => minImagesFor(countWords(text)));
+  const highs = texts.map((text) => maxImagesFor(countWords(text)));
+  const low = lows.reduce((sum, count) => sum + count, 0);
+  const high = Math.min(MAX_IMAGES, highs.reduce((sum, count) => sum + count, 0));
+  if (urls.length < low || urls.length > high) {
+    throw new ActorInputError(
+      `images need between ${low} and ${high} URLs for this script (about one image per 3 seconds, each image at least about 1 second); got ${urls.length}.`,
+    );
+  }
+  const counts = [...lows];
+  let left = urls.length - low;
+  while (left > 0) {
+    for (let index = 0; index < counts.length && left > 0; index += 1) {
+      if (counts[index] < highs[index]) {
+        counts[index] += 1;
+        left -= 1;
+      }
+    }
+  }
+  let cursor = 0;
+  return counts.map((count) => {
+    const slice = urls.slice(cursor, cursor + count);
+    cursor += count;
+    return slice;
+  });
+}
+
+// images: public https URLs, only with the "images" material. The web
+// fetches them with its own SSRF guard; here only the shape and the
+// ~3s rhythm are checked.
+function parseImages(raw, facelessMaterial, hook, body, cta) {
   const value = raw.images;
   const given = value !== undefined && value !== null;
   if (facelessMaterial !== IMAGES_MATERIAL) {
@@ -175,7 +222,7 @@ function parseImages(raw, facelessMaterial, body) {
     return undefined;
   }
   if (!Array.isArray(value) || value.length === 0) {
-    throw new ActorInputError('facelessMaterial "images" needs images: one public image URL per segment.');
+    throw new ActorInputError('facelessMaterial "images" needs images: about one public image URL per 3 seconds of speech.');
   }
   for (const [index, url] of value.entries()) {
     let parsed;
@@ -186,16 +233,13 @@ function parseImages(raw, facelessMaterial, body) {
     }
     if (parsed.protocol !== 'https:') throw new ActorInputError(`images[${index}] must be an https URL.`);
   }
-  const segmentCount = bodyParagraphs(body).length + 2;
-  if (segmentCount > MAX_IMAGES) {
-    throw new ActorInputError(`With images the body may have at most ${MAX_IMAGES - 2} paragraphs (one segment each).`);
+  const texts = [hook, ...bodyParagraphs(body), cta];
+  if (texts.length > MAX_SEGMENTS) {
+    throw new ActorInputError(`With images the body may have at most ${MAX_SEGMENTS - 2} paragraphs (one segment each).`);
   }
-  if (value.length !== segmentCount) {
-    throw new ActorInputError(
-      `images must have exactly ${segmentCount} URLs: one for the hook, one per body paragraph (${segmentCount - 2}), one for the CTA.`,
-    );
-  }
-  return value.map((url) => url.trim());
+  const urls = value.map((url) => url.trim());
+  assignImages(urls, texts);
+  return urls;
 }
 
 /** Validates and normalizes the Actor input; throws ActorInputError. */
@@ -212,15 +256,17 @@ export function parseInput(raw) {
   const providers = parseProviders(raw);
   const personaId = optionalString(raw, 'personaId');
   const look = parseLook(raw, personaId);
+  const hook = requireString(raw, 'hook');
   const body = requireString(raw, 'body');
+  const cta = requireString(raw, 'cta');
   return {
     apiKey,
     apiUrl: parseApiUrl(raw),
     title: requireString(raw, 'title'),
-    hook: requireString(raw, 'hook'),
+    hook,
     body,
-    images: parseImages(raw, look.facelessMaterial, body),
-    cta: requireString(raw, 'cta'),
+    images: parseImages(raw, look.facelessMaterial, hook, body, cta),
+    cta,
     personaId,
     ...look,
     providers,
@@ -233,7 +279,8 @@ export function parseInput(raw) {
 }
 
 /** Hook first, body, CTA last: the segments contract of generate-and-schedule.
- *  With images, each body paragraph is a segment and segment i shows images[i]. */
+ *  With images, each body paragraph is a segment and the URL list is split
+ *  across segments, about one image per 3 seconds, in the order given. */
 export function buildSegments(input) {
   if (input.images === undefined) {
     return [
@@ -247,7 +294,11 @@ export function buildSegments(input) {
     ...bodyParagraphs(input.body).map((text) => ({ kind: 'body', text })),
     { kind: 'cta', text: input.cta },
   ];
-  return texts.map((segment, index) => ({ ...segment, media: { url: input.images[index] } }));
+  const groups = assignImages(input.images, texts.map((segment) => segment.text));
+  return texts.map((segment, index) => ({
+    ...segment,
+    media: groups[index].map((url) => ({ url })),
+  }));
 }
 
 /** Request body for POST /api/videos/generate-and-schedule. */

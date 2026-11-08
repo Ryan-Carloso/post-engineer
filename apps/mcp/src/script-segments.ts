@@ -14,11 +14,13 @@
 
 export const MAX_SEGMENTS = 12;
 export const MAX_MEDIAS = 6;
-// The "images" material (faceless_material): the agent's segment photos are
-// the whole picture, so every segment needs media and the cap is one per
-// segment. Mirrors the engine's MAX_IMAGES_MODE_MEDIAS.
+// The "images" material: the agent's photos are the whole picture. One photo
+// per ~3s of speech (8 words), each photo on screen at least ~1s (3 words),
+// at most 30 photos per video. Same numbers as image_density.py.
 export const IMAGES_MATERIAL = 'images';
-export const MAX_IMAGES_MODE_MEDIAS = MAX_SEGMENTS;
+export const WORDS_PER_IMAGE = 8;
+export const MIN_WORDS_PER_IMAGE = 3;
+export const MAX_IMAGES_MODE_MEDIAS = 30;
 export const MIN_TOTAL_WORDS = 60;
 export const MAX_TOTAL_WORDS = 200;
 export const MIN_BODY_WORDS = 30;
@@ -59,7 +61,7 @@ export type SegmentMedia = {
 export type ScriptSegment = {
   kind: SegmentKind;
   text: string;
-  media?: SegmentMedia;
+  media?: SegmentMedia[];
   terms?: string[];
 };
 
@@ -87,6 +89,34 @@ export type SegmentsResult =
 
 function fail(field: string, rule: string, fix: string): SegmentsResult {
   return { ok: false, error: { field, rule, fix } };
+}
+
+// Half-up seconds, matching image_density.spoken_seconds.
+function spokenSeconds(words: number): number {
+  return Math.floor((words * 3 + Math.floor(WORDS_PER_IMAGE / 2)) / WORDS_PER_IMAGE);
+}
+
+function imageDensityError(words: number, count: number): { rule: string; fix: string } | null {
+  const low = Math.ceil(words / WORDS_PER_IMAGE);
+  const high = Math.max(1, Math.floor(words / MIN_WORDS_PER_IMAGE));
+  const seconds = spokenSeconds(words);
+  if (count < low) {
+    const missing = low - count;
+    const images = low === 1 ? 'image' : 'images';
+    const more = missing === 1 ? 'image' : 'images';
+    return {
+      rule: `segment has ${words} words (~${seconds}s) and needs at least ${low} ${images} (one per ~3s); it has ${count}.`,
+      fix: `Add ${missing} more ${more} to this segment's media array.`,
+    };
+  }
+  if (count > high) {
+    const images = high === 1 ? 'image' : 'images';
+    return {
+      rule: `segment has ${words} words (~${seconds}s) and allows at most ${high} ${images} (each image needs ~1s); it has ${count}.`,
+      fix: `Remove images until this segment has at most ${high}.`,
+    };
+  }
+  return null;
 }
 
 // Mirrors _check_overlay in the engine: an object with a non-empty title and
@@ -119,6 +149,37 @@ function checkOverlay(overlay: unknown, field: string): SegmentsResult | null {
         `Shorten the overlay ${key} to at most ${limit} characters.`,
       );
     }
+  }
+  return null;
+}
+
+function checkMediaItem(media: unknown, field: string): SegmentsResult | null {
+  if (typeof media !== 'object' || media === null || Array.isArray(media)) {
+    return fail(field, 'Media must be an object.', 'Send each image as { mediaId } or { url }.');
+  }
+  const record = media as Record<string, unknown>;
+  const unknownMedia = Object.keys(record)
+    .filter((key) => key !== 'mediaId' && key !== 'url' && key !== 'overlay')
+    .sort();
+  if (unknownMedia.length > 0) {
+    return fail(field, `media has unknown field ${unknownMedia[0]}`, 'Remove unknown fields from the media.');
+  }
+  const mediaIdPresent = record.mediaId !== undefined && record.mediaId !== null;
+  const urlPresent = record.url !== undefined && record.url !== null;
+  if (mediaIdPresent && urlPresent) {
+    return fail(field, 'Media has both mediaId and url.', 'Send only one of mediaId or url for a segment.');
+  }
+  if (!mediaIdPresent && !urlPresent) {
+    return fail(field, 'Media has neither mediaId nor url.', 'Send mediaId for an uploaded file or url for a direct image URL.');
+  }
+  if (mediaIdPresent && (typeof record.mediaId !== 'string' || record.mediaId.trim().length === 0)) {
+    return fail(field, 'mediaId must be a non-empty string.', 'Send a non-empty mediaId.');
+  }
+  if (urlPresent && (typeof record.url !== 'string' || record.url.trim().length === 0)) {
+    return fail(field, 'url must be a non-empty string.', 'Send a non-empty image URL.');
+  }
+  if (record.overlay !== undefined && record.overlay !== null) {
+    return checkOverlay(record.overlay, `${field}.overlay`);
   }
   return null;
 }
@@ -319,64 +380,32 @@ export function validateSegments(input: unknown, material?: string): SegmentsRes
   let mediaCount = 0;
   for (let i = 0; i < segments.length; i += 1) {
     const media = segments[i].media;
-    // Mirror the engine's _check_media: null media is skipped, not
-    // rejected, and presence is key-present and non-null — a blank
-    // string counts as present, so it fails the blank check instead
-    // of passing as absent. The images material is the exception:
-    // nothing tops up a segment without a photo, so it is rejected.
-    if (media === undefined || media === null) {
+    // Null, missing, and an empty array are absent. A blank string on an
+    // item still counts as present and fails the blank check. Images mode
+    // has nothing to top a segment up with, so absence is rejected.
+    const absent = media === undefined || media === null || (Array.isArray(media) && media.length === 0);
+    if (absent) {
       if (imagesMode) {
         return fail(
           `segments.${i}.media`,
           'the images material needs media on every segment',
-          'Send an image for this segment as { mediaId } or { url }, or use another material.',
+          'Send images for this segment as a list of { mediaId } or { url }, or use another material.',
         );
       }
       continue;
     }
-    if (typeof media !== 'object') {
-      return fail(`segments.${i}.media`, 'Media must be an object.', 'Send media as { mediaId } or { url }.');
+    if (!Array.isArray(media)) {
+      return fail(`segments.${i}.media`, 'Media must be an array.', 'Send media as a list of { mediaId } or { url }.');
     }
-    // Unknown media keys are rejected, not stripped: the generation
-    // route's strict media shape rejects them, so this validator must
-    // too, or validate-script accepts what generation rejects.
-    const unknownMedia = Object.keys(media)
-      .filter((key) => key !== 'mediaId' && key !== 'url' && key !== 'overlay')
-      .sort();
-    if (unknownMedia.length > 0) {
-      return fail(
-        `segments.${i}.media`,
-        `media has unknown field ${unknownMedia[0]}`,
-        'Remove unknown fields from the media.',
-      );
+    for (let j = 0; j < media.length; j += 1) {
+      const itemError = checkMediaItem(media[j], `segments.${i}.media.${j}`);
+      if (itemError !== null) return itemError;
     }
-    const mediaIdPresent = media.mediaId !== undefined && media.mediaId !== null;
-    const urlPresent = media.url !== undefined && media.url !== null;
-    if (mediaIdPresent && urlPresent) {
-      return fail(
-        `segments.${i}.media`,
-        'Media has both mediaId and url.',
-        'Send only one of mediaId or url for a segment.',
-      );
+    if (imagesMode) {
+      const density = imageDensityError(countWords(segments[i].text), media.length);
+      if (density !== null) return fail(`segments.${i}.media`, density.rule, density.fix);
     }
-    if (!mediaIdPresent && !urlPresent) {
-      return fail(
-        `segments.${i}.media`,
-        'Media has neither mediaId nor url.',
-        'Send mediaId for an uploaded file or url for a direct image URL.',
-      );
-    }
-    if (mediaIdPresent && (typeof media.mediaId !== 'string' || media.mediaId.trim().length === 0)) {
-      return fail(`segments.${i}.media`, 'mediaId must be a non-empty string.', 'Send a non-empty mediaId.');
-    }
-    if (urlPresent && (typeof media.url !== 'string' || media.url.trim().length === 0)) {
-      return fail(`segments.${i}.media`, 'url must be a non-empty string.', 'Send a non-empty image URL.');
-    }
-    if (media.overlay !== undefined && media.overlay !== null) {
-      const overlayError = checkOverlay(media.overlay, `segments.${i}.media.overlay`);
-      if (overlayError !== null) return overlayError;
-    }
-    mediaCount += 1;
+    mediaCount += media.length;
   }
   if (mediaCount > mediaCap) {
     return fail(
