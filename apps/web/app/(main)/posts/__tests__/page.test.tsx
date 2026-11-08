@@ -197,13 +197,13 @@ describe('PostsPage', () => {
   it('renders the status badge first, then date, and network + account chips', () => {
     render(<PostsPage />);
 
-    const card = screen.getByText('Upcoming topic').closest('a');
+    const card = screen.getByText('Upcoming topic').closest('a')?.parentElement;
     expect(card).not.toBeNull();
     const text = card?.textContent ?? '';
     // Status label precedes the date + time, which precede the persona and title.
     expect(text.indexOf('posts.statusPending')).toBeLessThan(text.indexOf('·'));
     expect(text.indexOf('·')).toBeLessThan(text.indexOf('Viva Leve'));
-    // Chips: network glyph (role img) + account label.
+    // Chips: network glyph (role img) + account label — they sit in the card root, next to the link.
     const chips = within(card as HTMLElement);
     expect(chips.getByRole('img', { name: 'youtube' })).toBeInTheDocument();
     expect(chips.getByText('Europa Na Estrada')).toBeInTheDocument();
@@ -503,7 +503,7 @@ describe('PostsPage fallbacks', () => {
     } as never);
     render(<PostsPage />);
 
-    const card = within(screen.getByText('Upcoming topic').closest('a') as HTMLElement);
+    const card = within(screen.getByText('Upcoming topic').closest('a')?.parentElement as HTMLElement);
     expect(card.getByText('Alpha One')).toBeInTheDocument();
     expect(card.getByText('Beta Two')).toBeInTheDocument();
     expect(card.getByText('Gamma Three')).toBeInTheDocument();

@@ -261,6 +261,25 @@ describe('CalendarView', () => {
     expect(props.onSelect).toHaveBeenLastCalledWith('2030-06-15');
   });
 
+  it('places the Today button inside the month navigation, between the previous and next buttons', () => {
+    setup();
+    const nav = screen.getByRole('navigation');
+    const buttons = within(nav).getAllByRole('button');
+    expect(buttons).toHaveLength(3);
+    expect(buttons[0]).toHaveAccessibleName('Previous month');
+    expect(buttons[1]).toHaveAccessibleName('Today');
+    expect(buttons[2]).toHaveAccessibleName('Next month');
+  });
+
+  it('keeps day cells compact so markers do not sit lost in tall empty cells', () => {
+    setup();
+    const day = dayButton(/June 15, 2030/);
+    expect(day.className).toContain('min-h-11');
+    expect(day.className).toContain('sm:min-h-14');
+    expect(day.className).not.toContain('min-h-12');
+    expect(day.className).not.toContain('sm:min-h-16');
+  });
+
   it('moves keyboard focus with the arrow keys and selects with Enter', async () => {
     const props = setup({ selectedKey: '2030-06-20' });
     const user = userEvent.setup();

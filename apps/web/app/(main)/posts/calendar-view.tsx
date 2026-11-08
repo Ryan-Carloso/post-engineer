@@ -1,7 +1,7 @@
 'use client';
 
-import { createContext, useCallback, useContext, useMemo, type ComponentProps } from 'react';
-import type { DayButton } from 'react-day-picker';
+import { createContext, useCallback, useContext, useMemo, type ComponentProps, type MouseEventHandler } from 'react';
+import { UI, useDayPicker, type DayButton, type NavProps } from 'react-day-picker';
 import { enUS, ptBR } from 'react-day-picker/locale';
 import type { ScheduleConfig, ScheduledSlot } from '@/lib/api';
 import type { Locale } from '@/lib/i18n';
@@ -56,6 +56,73 @@ interface DayContextValue {
 
 const SlotsContext = createContext<DayContextValue>({ slotsByDay: new Map(), photoByDay: new Map() });
 
+// The Today action lives inside the month navigation (prev / Today / next),
+// so the nav component needs it from context: passing a closure component
+// to react-day-picker would remount the nav on every render and drop
+// keyboard focus.
+const NavTodayContext = createContext<() => void>(() => {});
+
+// The month navigation: previous month, Today, next month. Mirrors
+// react-day-picker's default Nav (same buttons, labels and disabled
+// behaviour) with the Today action between the arrows, so Today sits next
+// to the month navigation instead of in the legend row below the calendar.
+function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, ...navProps }: NavProps) {
+  const { components, classNames, styles, labels } = useDayPicker();
+  const { t } = useI18n();
+  const goToday = useContext(NavTodayContext);
+  const handlePreviousClick: MouseEventHandler<HTMLButtonElement> = useCallback(
+    (event) => {
+      if (previousMonth) onPreviousClick?.(event);
+    },
+    [previousMonth, onPreviousClick],
+  );
+  const handleNextClick: MouseEventHandler<HTMLButtonElement> = useCallback(
+    (event) => {
+      if (nextMonth) onNextClick?.(event);
+    },
+    [nextMonth, onNextClick],
+  );
+  return (
+    <nav {...navProps}>
+      <components.PreviousMonthButton
+        type="button"
+        className={classNames[UI.PreviousMonthButton]}
+        style={styles?.[UI.PreviousMonthButton]}
+        tabIndex={previousMonth ? undefined : -1}
+        aria-disabled={previousMonth ? undefined : true}
+        aria-label={labels.labelPrevious(previousMonth)}
+        onClick={handlePreviousClick}
+      >
+        <components.Chevron
+          disabled={previousMonth ? undefined : true}
+          className={classNames[UI.Chevron]}
+          style={styles?.[UI.Chevron]}
+          orientation="left"
+        />
+      </components.PreviousMonthButton>
+      <Button type="button" variant="outline" size="sm" onClick={goToday}>
+        {t('posts.calendarToday')}
+      </Button>
+      <components.NextMonthButton
+        type="button"
+        className={classNames[UI.NextMonthButton]}
+        style={styles?.[UI.NextMonthButton]}
+        tabIndex={nextMonth ? undefined : -1}
+        aria-disabled={nextMonth ? undefined : true}
+        aria-label={labels.labelNext(nextMonth)}
+        onClick={handleNextClick}
+      >
+        <components.Chevron
+          disabled={nextMonth ? undefined : true}
+          className={classNames[UI.Chevron]}
+          style={styles?.[UI.Chevron]}
+          orientation="right"
+        />
+      </components.NextMonthButton>
+    </nav>
+  );
+}
+
 // The day's persona photo. The status ring is a BORDER, not a box-shadow
 // ring: Tailwind v4's ring width sets its shadow through
 // `var(--tw-ring-inset,)` — an empty var() fallback this repo's Cypress
@@ -104,7 +171,7 @@ function PostsDayButton({ children, ...props }: ComponentProps<typeof DayButton>
     <CalendarDayButton
       {...props}
       className={cn(
-        'aspect-auto h-auto min-h-12 justify-start gap-1 py-1.5 sm:min-h-16 [&>span]:opacity-100',
+        'aspect-auto h-auto min-h-11 justify-start gap-1 py-1 sm:min-h-14 [&>span]:opacity-100',
         isToday && (isSelected ? 'border-2 border-ring' : 'border-2 border-primary'),
       )}
     >
@@ -190,65 +257,69 @@ export function CalendarView({
     [labelDayButton, t],
   );
 
+  // The Today action in the month navigation: jump the shown month to today
+  // and select today.
+  const goToday = useCallback(() => {
+    const now = dateFromKey(todayKey);
+    onMonthChange(now.getFullYear(), now.getMonth());
+    onSelect(todayKey);
+  }, [todayKey, onMonthChange, onSelect]);
+
   return (
     <div className="rounded-xl border border-line bg-card p-2 sm:p-4">
       <SlotsContext.Provider value={{ slotsByDay, photoByDay }}>
-        <Calendar
-          mode="single"
-          required
-          locale={DAY_PICKER_LOCALE[locale]}
-          weekStartsOn={firstWeekday}
-          fixedWeeks
-          month={new Date(year, month, 1)}
-          onMonthChange={(date) => onMonthChange(date.getFullYear(), date.getMonth())}
-          onNextClick={(date) => onMonthNavigate(date.getFullYear(), date.getMonth())}
-          onPrevClick={(date) => onMonthNavigate(date.getFullYear(), date.getMonth())}
-          today={dateFromKey(todayKey)}
-          selected={selectedKey === null ? undefined : dateFromKey(selectedKey)}
-          onSelect={(date) => onSelect(dayKey(date))}
-          labels={labels}
-          className="w-full bg-transparent p-0 [--cell-size:--spacing(10)]"
-          classNames={{
-            root: 'w-full',
-            caption_label: 'text-base font-bold capitalize text-primary',
-            // Today is drawn by the day button itself (thick ring, see
-            // PostsDayButton): drop shadcn's accent fill so today never
-            // reads as selected.
-            today: 'rounded-md',
-            // Rectangular cells (shadcn's are square), so the 6-week month stays short.
-            day: 'group/day relative h-full w-full select-none p-0 text-center',
-          }}
-          components={{ DayButton: PostsDayButton }}
-        />
+        <NavTodayContext.Provider value={goToday}>
+          <Calendar
+            mode="single"
+            required
+            locale={DAY_PICKER_LOCALE[locale]}
+            weekStartsOn={firstWeekday}
+            fixedWeeks
+            month={new Date(year, month, 1)}
+            onMonthChange={(date) => onMonthChange(date.getFullYear(), date.getMonth())}
+            onNextClick={(date) => onMonthNavigate(date.getFullYear(), date.getMonth())}
+            onPrevClick={(date) => onMonthNavigate(date.getFullYear(), date.getMonth())}
+            today={dateFromKey(todayKey)}
+            selected={selectedKey === null ? undefined : dateFromKey(selectedKey)}
+            onSelect={(date) => onSelect(dayKey(date))}
+            labels={labels}
+            className="w-full bg-transparent p-0 [--cell-size:--spacing(10)]"
+            classNames={{
+              root: 'w-full',
+              caption_label: 'text-base font-bold capitalize text-primary',
+              // The nav clusters right (prev / Today / next) and the caption
+              // title left-aligns with room to its right, so the title
+              // never runs under the navigation.
+              nav: 'absolute right-0 top-0 flex items-center gap-1',
+              month_caption: 'flex min-h-(--cell-size) w-full items-center justify-start pr-44',
+              // Tighter week gap: empty cells already shrank (see
+              // PostsDayButton), the rows close up with them.
+              week: 'mt-1 flex w-full',
+              // Today is drawn by the day button itself (thick ring, see
+              // PostsDayButton): drop shadcn's accent fill so today never
+              // reads as selected.
+              today: 'rounded-md',
+              // Rectangular cells (shadcn's are square), so the 6-week month stays short.
+              day: 'group/day relative h-full w-full select-none p-0 text-center',
+            }}
+            components={{ DayButton: PostsDayButton, Nav: CalendarNav }}
+          />
+        </NavTodayContext.Provider>
       </SlotsContext.Provider>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-text">
-          {CALENDAR_GROUP_ORDER.map((group) => {
-            const Icon = CALENDAR_GROUP_ICON[group];
-            return (
-              <li key={group} className="flex items-center gap-1.5">
-                <span className={cn('inline-flex size-4 items-center justify-center rounded-full', CALENDAR_GROUP_STYLE[group])}>
-                  <Icon className="size-2.5" strokeWidth={3} aria-hidden />
-                </span>
-                {t(CALENDAR_GROUP_KEY[group])}
-              </li>
-            );
-          })}
-        </ul>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            const now = dateFromKey(todayKey);
-            onMonthChange(now.getFullYear(), now.getMonth());
-            onSelect(todayKey);
-          }}
-        >
-          {t('posts.calendarToday')}
-        </Button>
-      </div>
+      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-text">
+        {CALENDAR_GROUP_ORDER.map((group) => {
+          const Icon = CALENDAR_GROUP_ICON[group];
+          return (
+            <li key={group} className="flex items-center gap-1.5">
+              <span className={cn('inline-flex size-4 items-center justify-center rounded-full', CALENDAR_GROUP_STYLE[group])}>
+                <Icon className="size-2.5" strokeWidth={3} aria-hidden />
+              </span>
+              {t(CALENDAR_GROUP_KEY[group])}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

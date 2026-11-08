@@ -5,6 +5,7 @@ import { Play, VideoOff } from 'lucide-react';
 import type { ScheduledSlot, ScheduleConfig, VideoGeneration } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { buttonVariants } from '@/components/ui/button';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
 import { ProviderIcon } from '@/components/provider-icon';
 import { useI18n } from '@/lib/i18n/provider';
@@ -19,7 +20,9 @@ import { GROUP_ICON, STATUS_KEY, STATUS_STYLE, statusGroupOf } from './status';
 // generations (GenerationCard). Layout, top to bottom: status badge (icon +
 // label, so status never relies on color alone), date + time, persona and
 // title with the video thumbnail, inline failure message, then the network +
-// account chips. Extracted from page.tsx, which is over the file-size cap.
+// account chips. A failed slot that can be retried also shows a visible
+// Try again action below the failure message. Extracted from page.tsx,
+// which is over the file-size cap.
 //---------------
 
 const CARD_BORDER = 'border-line shadow-[0_1px_2px_rgba(13,43,69,0.05)] hover:border-line';
@@ -139,9 +142,15 @@ export const PostCard = ({
     failureCode === 'unknown'
       ? t(slot.retryable === true ? 'posts.cardFailedRetryable' : 'posts.cardFailedPermanent')
       : t(GENERATION_ERROR_KEY[failureCode]);
+  // The card is not a single link: a failed retryable slot carries a visible
+  // "Try again" action, and a link cannot nest another link. The main
+  // content links to the post detail; the retry action links there too —
+  // the detail page is where a failed post is retried (no regenerate
+  // endpoint exists), so the action opens the post to try again.
+  const showRetry = slot.status === 'failed' && slot.retryable === true;
   return (
-    <Link href={`/posts/${slot.id}`} className="block h-full">
-      <Card className={`flex h-full flex-col gap-0 rounded-xl p-4 transition-colors ${CARD_BORDER}`}>
+    <Card className={`flex h-full flex-col gap-0 rounded-xl p-4 transition-colors ${CARD_BORDER}`}>
+      <Link href={`/posts/${slot.id}`} className="block">
         <div className="flex items-center justify-between gap-2">
           <StatusBadge status={slot.status} label={t(STATUS_KEY[slot.status] ?? 'posts.statusPending')} />
           <p className="text-xs text-muted-foreground">
@@ -172,13 +181,21 @@ export const PostCard = ({
           </div>
         )}
         {slot.status === 'failed' && <p className="mt-3 text-xs text-destructive">{failureMessage}</p>}
-        {accounts.length > 0 && (
-          <div className="mt-auto pt-4">
-            <AccountChips accounts={accounts} />
-          </div>
-        )}
-      </Card>
-    </Link>
+      </Link>
+      {showRetry && (
+        <Link
+          href={`/posts/${slot.id}`}
+          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mt-3 self-start')}
+        >
+          {t('posts.cardRetry')}
+        </Link>
+      )}
+      {accounts.length > 0 && (
+        <div className="mt-auto pt-4">
+          <AccountChips accounts={accounts} />
+        </div>
+      )}
+    </Card>
   );
 };
 
