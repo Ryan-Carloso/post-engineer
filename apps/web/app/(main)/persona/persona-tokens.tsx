@@ -24,13 +24,13 @@ export function PersonaTokensSection() {
   return (
     <section>
       <div className="flex items-center gap-3">
-        <span className="text-sm font-semibold text-neutral-900">{t('tokens.qualityLabel')}</span>
-        <span className="h-px flex-1 bg-neutral-200" />
+        <span className="text-sm font-semibold text-ink">{t('tokens.qualityLabel')}</span>
+        <span className="h-px flex-1 bg-sunken" />
       </div>
 
       <div className="mt-4 space-y-4">
         <fieldset>
-          <legend className="text-sm font-medium text-neutral-900">
+          <legend className="text-sm font-medium text-ink">
             {t('tokens.qualityLabel')}
           </legend>
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -49,16 +49,16 @@ export function PersonaTokensSection() {
           </div>
         </fieldset>
 
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3">
-          <span className="text-sm text-neutral-700">{t('tokens.costLabel')}</span>
-          <span data-testid="token-cost-preview" className="shrink-0 text-sm font-semibold text-neutral-900">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3">
+          <span className="text-sm text-ink-soft">{t('tokens.costLabel')}</span>
+          <span data-testid="token-cost-preview" className="shrink-0 text-sm font-semibold text-ink">
             {t('tokens.costValue', { cost })}
           </span>
         </div>
 
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3">
-          <span className="text-sm text-neutral-700">{t('tokens.fullLipsyncCostLabel')}</span>
-          <span data-testid="token-full-lipsync-cost-preview" className="shrink-0 text-sm font-semibold text-neutral-900">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3">
+          <span className="text-sm text-ink-soft">{t('tokens.fullLipsyncCostLabel')}</span>
+          <span data-testid="token-full-lipsync-cost-preview" className="shrink-0 text-sm font-semibold text-ink">
             {t('tokens.costValue', { cost: fullLipsyncCost })}
           </span>
         </div>
@@ -88,8 +88,8 @@ function QualityOption({
       onClick={() => onSelect(quality)}
       className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
         active
-          ? 'border-accent bg-red-50/50 text-neutral-900'
-          : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400'
+          ? 'border-accent bg-destructive-soft/50 text-ink'
+          : 'border-line bg-card text-muted-text hover:border-muted-text'
       }`}
     >
       {label}

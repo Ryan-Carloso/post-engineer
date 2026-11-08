@@ -99,7 +99,7 @@ export const PersonaPhotoPicker = ({ personaId }: { personaId?: string }) => {
   if (staged.length === 0 && storedPhotoUrl) {
     return (
       <div className="mt-4">
-        <div className="flex items-center gap-3 rounded-lg border border-neutral-300 bg-white p-3">
+        <div className="flex items-center gap-3 rounded-lg border border-line bg-card p-3">
           <Image
             src={storedPhotoUrl}
             alt={t('persona.photoLabel')}
@@ -109,12 +109,12 @@ export const PersonaPhotoPicker = ({ personaId }: { personaId?: string }) => {
             className="aspect-9/16 h-24 w-14 rounded-lg object-cover"
           />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium text-neutral-900">{t('persona.photoCurrent')}</div>
+            <div className="truncate text-sm font-medium text-ink">{t('persona.photoCurrent')}</div>
           </div>
           {pickButton(t('persona.photoUpload'), uploading)}
           {input}
         </div>
-        {error ? <p role="alert" className="mt-2 text-sm text-red-600">{error}</p> : null}
+        {error ? <p role="alert" className="mt-2 text-sm text-destructive">{error}</p> : null}
       </div>
     );
   }
@@ -127,7 +127,7 @@ export const PersonaPhotoPicker = ({ personaId }: { personaId?: string }) => {
           {staged.map((file, index) => (
             <li
               key={`${file.name}-${file.size}-${index}`}
-              className="flex items-center gap-3 rounded-lg border border-neutral-300 bg-white p-3"
+              className="flex items-center gap-3 rounded-lg border border-line bg-card p-3"
             >
               <Image
                 src={previews[index]}
@@ -138,13 +138,13 @@ export const PersonaPhotoPicker = ({ personaId }: { personaId?: string }) => {
                 className="aspect-9/16 h-24 w-14 rounded-lg object-cover"
               />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-neutral-900">{file.name}</div>
-                <div className="mt-0.5 text-xs text-neutral-500">{formatFileSize(file.size)}</div>
+                <div className="truncate text-sm font-medium text-ink">{file.name}</div>
+                <div className="mt-0.5 text-xs text-muted-text">{formatFileSize(file.size)}</div>
               </div>
               <button
                 type="button"
                 onClick={() => usePersonaStore.getState().removePhoto(index)}
-                className="text-xs font-medium text-neutral-500 hover:text-neutral-800 hover:underline"
+                className="text-xs font-medium text-muted-text hover:text-ink hover:underline"
               >
                 {t('persona.libraryRemove')}
               </button>
@@ -157,16 +157,16 @@ export const PersonaPhotoPicker = ({ personaId }: { personaId?: string }) => {
           type="button"
           disabled={uploading}
           onClick={() => inputRef.current?.click()}
-          className="group flex min-h-40 w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-neutral-300 bg-white px-6 py-8 text-sm font-medium text-neutral-700 transition-colors hover:border-accent/60 hover:bg-red-50/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
+          className="group flex min-h-40 w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-line bg-card px-6 py-8 text-sm font-medium text-ink-soft transition-colors hover:border-accent/60 hover:bg-destructive-soft/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
         >
-          <span className="flex size-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 transition-colors group-hover:bg-red-100 group-hover:text-accent">
+          <span className="flex size-12 items-center justify-center rounded-full bg-sunken text-muted-text transition-colors group-hover:bg-destructive-soft group-hover:text-accent">
             <ImageIcon />
           </span>
           <span>{t('persona.photoUpload')}</span>
         </button>
       )}
-      {error ? <p role="alert" className="mt-2 text-sm text-red-600">{error}</p> : null}
-      <p className="mt-3 text-sm leading-5 text-neutral-600">{t('persona.photoHint', { max: MAX_PERSONA_IMAGES })}</p>
+      {error ? <p role="alert" className="mt-2 text-sm text-destructive">{error}</p> : null}
+      <p className="mt-3 text-sm leading-5 text-muted-text">{t('persona.photoHint', { max: MAX_PERSONA_IMAGES })}</p>
     </div>
   );
 };

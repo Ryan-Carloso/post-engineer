@@ -147,15 +147,17 @@ def slot_faceless(slot: dict[str, Any]) -> bool:
 
 
 def slot_material(slot: dict[str, Any]) -> str:
-    """The slot's video material: "svg" or "broll".
+    """The slot's video material: "svg", "images" or "broll".
 
     ``scheduled_posts.faceless_material`` (migration 029) is the per-post
     choice written by the web, with or without a face. Only the literal
-    "svg" selects illustrations; a row without the field (selected before
-    the migration) or any other value renders stock, the behaviour every
+    "svg" selects illustrations and only the literal "images" selects the
+    agent's segment images; a row without the field (selected before the
+    migration) or any other value renders stock, the behaviour every
     earlier video had.
     """
-    return "svg" if slot.get("faceless_material") == "svg" else "broll"
+    material = slot.get("faceless_material")
+    return material if material in ("svg", "images") else "broll"
 
 
 def slot_full_lipsync(slot: dict[str, Any]) -> bool:

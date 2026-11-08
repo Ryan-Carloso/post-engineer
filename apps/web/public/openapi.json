@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Post Engineer API",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "description": "Generate and schedule short videos for social accounts. Authenticate with an API key created in the dashboard: Authorization: Bearer <key>."
   },
   "servers": [
@@ -4837,8 +4837,10 @@
                         "type": "string",
                         "enum": [
                           "broll",
-                          "svg"
-                        ]
+                          "svg",
+                          "images"
+                        ],
+                        "description": "'images' renders only the segment images: media on every segment, up to 12."
                       },
                       "fullLipsync": {
                         "type": "boolean",
@@ -4892,6 +4894,31 @@
                     "required": [
                       "segments"
                     ]
+                  },
+                  "experiment": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "experimentId",
+                      "variantId",
+                      "pair"
+                    ],
+                    "description": "Join a paired A/B experiment: this video is one variant of one pair. Checked before the charge.",
+                    "properties": {
+                      "experimentId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "variantId": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,47}$"
+                      },
+                      "pair": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 20
+                      }
+                    }
                   },
                   "idempotencyKey": {
                     "type": "string"
@@ -5041,6 +5068,15 @@
                     "items": {
                       "$ref": "#/components/schemas/Segment"
                     }
+                  },
+                  "facelessMaterial": {
+                    "type": "string",
+                    "enum": [
+                      "broll",
+                      "svg",
+                      "images"
+                    ],
+                    "description": "Optional. 'images' needs media on every segment (up to 12)."
                   }
                 },
                 "required": [
@@ -5474,6 +5510,362 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/experiments": {
+      "post": {
+        "operationId": "post_create_experiment",
+        "summary": "create experiment",
+        "tags": [
+          "experiments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "experiment": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "variable": {
+                    "type": "string",
+                    "enum": [
+                      "hook"
+                    ]
+                  },
+                  "personaId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true,
+                    "description": "Omit or null for a faceless experiment."
+                  },
+                  "targetPairs": {
+                    "type": "integer",
+                    "minimum": 3,
+                    "maximum": 20
+                  },
+                  "variants": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "variantId": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,47}$"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "description": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        }
+                      },
+                      "required": [
+                        "variantId",
+                        "name",
+                        "description"
+                      ]
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "required": [
+                  "name",
+                  "variable",
+                  "targetPairs",
+                  "variants"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "get_list_experiments",
+        "summary": "list experiments",
+        "tags": [
+          "experiments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "experiments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experiments/{id}": {
+      "get": {
+        "operationId": "get_get_experiment_results",
+        "summary": "get experiment results",
+        "tags": [
+          "experiments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "experiment": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "window": {
+                      "type": "string"
+                    },
+                    "videos": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "results": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "24h",
+                "7d",
+                "28d"
+              ]
             }
           }
         ]

@@ -373,12 +373,12 @@ export class PostEngineerClient {
     if (input.voiceId !== undefined) formData.set('voiceId', input.voiceId);
     if (input.language !== undefined) formData.set('language', input.language);
     if (input.videoAspect !== undefined) formData.set('videoAspect', input.videoAspect);
-    // Sent only when provided: an update must not rewrite an untouched
-    // field with a default the caller never chose.
+    // Sent only when provided: never rewrite an untouched field with a default the caller never chose.
     if (input.videoLayout !== undefined) formData.set('videoLayout', input.videoLayout);
     if (input.scriptPrompt !== undefined) formData.set('scriptPrompt', input.scriptPrompt);
     if (input.paragraphNumber !== undefined) formData.set('paragraphNumber', String(input.paragraphNumber));
     if (input.niche !== undefined) formData.set('niche', input.niche);
+    if (input.faceQuality !== undefined) formData.set('faceQuality', input.faceQuality);
     return this.request(
       `/api/persona?personaId=${encodeURIComponent(input.personaId)}`,
       { method: 'PATCH', headers: this.getHeaders(false), body: formData },
@@ -571,7 +571,7 @@ export class PostEngineerClient {
     );
   }
 
-  async validateScript(segments: unknown): Promise<unknown> {
+  async validateScript(segments: unknown, facelessMaterial?: string): Promise<unknown> {
     // Mechanical validation only: the web route debits no tokens,
     // schedules nothing and calls no engine — it re-runs the same
     // mechanical validation the generate route runs.
@@ -580,7 +580,7 @@ export class PostEngineerClient {
       {
         method: 'POST',
         headers: this.getHeaders(),
-        body: JSON.stringify({ segments }),
+        body: JSON.stringify({ segments, facelessMaterial }),
       },
       'validate script'
     );
@@ -636,8 +636,8 @@ export class PostEngineerClient {
                 }),
           },
           options: input.options ?? undefined,
-          // A retry without a stable key would generate a second schedule:
-          // generate a fresh UUID per call when the caller did not supply one.
+          ...(input.experiment !== undefined ? { experiment: input.experiment } : {}),
+          // No caller key: a fresh UUID per call (a retry needs a stable key).
           idempotencyKey: input.idempotencyKey ?? randomUUID(),
         }),
       },

@@ -59,6 +59,8 @@ export interface GeneratePersonaVideoInput {
   personaId?: string;
   /** The slot label for the single video. */
   title: string;
+  /** Paired A/B experiment link (issue #476); checked server-side before the charge. */
+  experiment?: { experimentId: string; variantId: string; pair: number };
   providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads')[];
   youtubeAccountIds?: string[];
   instagramAccountIds?: string[];
@@ -79,8 +81,8 @@ export interface GeneratePersonaVideoInput {
   timezone?: string;
   options?: {
     faceless?: boolean;
-    /** Stock footage only ('broll') or drawn illustrations only ('svg'), with or without a face. */
-    facelessMaterial?: 'broll' | 'svg';
+    /** Stock footage only ('broll'), drawn illustrations only ('svg') or only the segment images ('images'), with or without a face. */
+    facelessMaterial?: 'broll' | 'svg' | 'images';
     /** Render the whole video as the persona talking, with no b-roll: every narration window is lip-synced to the persona face. Requires a persona with a photo and lip-sync enabled; cannot be combined with faceless. */
     fullLipsync?: boolean;
     audioUrl?: string;
@@ -116,6 +118,7 @@ export interface UpdatePersonaInput {
   scriptPrompt?: string;
   paragraphNumber?: number;
   niche?: string;
+  faceQuality?: 'ok' | 'very_good';
 }
 
 /** Input for publishing a user-provided video directly, without generation. */

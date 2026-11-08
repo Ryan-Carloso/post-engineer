@@ -71,7 +71,7 @@ export async function handleValidateScript(
 ): Promise<McpToolResponse> {
   // Mechanical pre-check first: a rejected script never reaches the web
   // route and never debits tokens.
-  const result = validateSegments(args.segments);
+  const result = validateSegments(args.segments, args.facelessMaterial);
   if (!result.ok) {
     return errorResponse(
       `Script validation failed: ${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`,
@@ -79,7 +79,7 @@ export async function handleValidateScript(
   }
   let payload: ValidatedScriptPayload | string | null;
   try {
-    payload = narrowValidateScriptPayload(await client.validateScript(args.segments));
+    payload = narrowValidateScriptPayload(await client.validateScript(args.segments, args.facelessMaterial));
   } catch (error) {
     return errorResponse(`Error validating the script: ${sanitizeEngineError(getErrorMessage(error))}`);
   }
@@ -107,6 +107,14 @@ export async function handleGeneratePersonaVideo(
   client: PostEngineerClient,
   args: GeneratePersonaVideoArgs,
 ): Promise<McpToolResponse> {
+  return (await generatePersonaVideoOutcome(client, args)).response;
+}
+
+/** The tool response plus the ids of slots the route reported as `failed` (a 2xx replay of a failed dispatch). */
+export async function generatePersonaVideoOutcome(
+  client: PostEngineerClient,
+  args: GeneratePersonaVideoArgs,
+): Promise<{ response: McpToolResponse; failedSlotIds: string[] }> {
   try {
     const mode = args.mode ?? 'scheduled';
     if (mode === 'asap' && (args.startAt !== undefined || args.times !== undefined)) {
@@ -117,7 +125,8 @@ export async function handleGeneratePersonaVideo(
     }
     // Mechanical validation before the client call: a rejected script
     // never debits tokens and never reaches Modal.
-    const result = validateSegments(args.segments);
+    const material = args.options?.facelessMaterial;
+    const result = validateSegments(args.segments, material);
     if (!result.ok) {
       throw new Error(`${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`);
     }
@@ -131,7 +140,7 @@ export async function handleGeneratePersonaVideo(
     if (args.options?.fullLipsync === true && args.personaId === undefined) {
       throw new Error('options.fullLipsync requires a persona with a photo and lip-sync enabled.');
     }
-    const script = joinSegments(args.segments);
+    const script = joinSegments(args.segments, material);
     // Voice resolution is an explicit pre-step after mechanical validation
     // and before the generating call: an unknown voice fails without
     // debiting tokens. A bare name/label resolves here (issue #353); with
@@ -166,6 +175,7 @@ export async function handleGeneratePersonaVideo(
           ...(language === undefined ? {} : { language }),
         },
         idempotencyKey: args.idempotencyKey,
+        experiment: args.experiment,
       }),
     );
     const scheduleId = narrowed.schedule.id ?? '(unknown id)';
@@ -178,15 +188,18 @@ export async function handleGeneratePersonaVideo(
         `${i + 1}. ${slot.title ?? '(untitled)'} → ${slot.slotAt ?? '(unscheduled)'} [${slot.status ?? 'unknown'}${slot.taskId ? `, task ${slot.taskId}` : ''}]`,
     );
     return {
-      content: [
-        {
-          type: 'text',
-          text: `${humanSummary}\nScript (${countWords(script)} words):\n${script}\n${slotLines.join('\n')}\n${JSON.stringify(narrowed, null, 2)}`,
-        },
-      ],
+      response: {
+        content: [
+          {
+            type: 'text',
+            text: `${humanSummary}\nScript (${countWords(script)} words):\n${script}\n${slotLines.join('\n')}\n${JSON.stringify(narrowed, null, 2)}`,
+          },
+        ],
+      },
+      failedSlotIds: narrowed.slots.filter((slot) => slot.status === 'failed').map((slot) => slot.slotId ?? '(unknown slot id)'),
     };
   } catch (error) {
-    return errorResponse(`Error generating the video: ${sanitizeEngineError(getErrorMessage(error))}`);
+    return { response: errorResponse(`Error generating the video: ${sanitizeEngineError(getErrorMessage(error))}`), failedSlotIds: [] };
   }
 }
 

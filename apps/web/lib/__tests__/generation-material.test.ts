@@ -4,7 +4,7 @@ import { narrowGeneration } from '@/lib/slot-detail';
 
 //---------------
 // The post's material (scheduled_posts.faceless_material, migration 029)
-// is part of its generation record. Only the literal 'svg' counts, on both
+// is part of its generation record. Only the literal 'svg' or 'images' counts, on both
 // the server read and the client narrow — the same rule as the engine's
 // slot_material, so a pre-029 row reads as the stock it rendered with.
 //---------------
@@ -23,8 +23,12 @@ describe('generation material', () => {
     expect(buildGenerationFacts({ faceless: false, faceless_material: 'svg' }, scheduleRow).material).toBe('svg');
   });
 
+  it('reads images from the slot row', () => {
+    expect(buildGenerationFacts({ faceless: true, faceless_material: 'images' }, scheduleRow).material).toBe('images');
+  });
+
   it('reads anything else, or a missing column, as broll', () => {
-    for (const value of ['broll', null, 'SVG', '']) {
+    for (const value of ['broll', null, 'SVG', 'IMAGES', 'image', '']) {
       expect(buildGenerationFacts({ faceless: true, faceless_material: value }, scheduleRow).material).toBe('broll');
     }
     expect(buildGenerationFacts({ faceless: true }, scheduleRow).material).toBe('broll');
@@ -32,6 +36,7 @@ describe('generation material', () => {
 
   it('narrows the payload material with the same literal rule', () => {
     expect(narrowGeneration({ material: 'svg' }).material).toBe('svg');
+    expect(narrowGeneration({ material: 'images' }).material).toBe('images');
     expect(narrowGeneration({ material: 'drawings' }).material).toBe('broll');
     expect(narrowGeneration(null).material).toBe('broll');
   });

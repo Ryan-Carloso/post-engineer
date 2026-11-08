@@ -14,6 +14,11 @@
 
 export const MAX_SEGMENTS = 12;
 export const MAX_MEDIAS = 6;
+// The "images" material (faceless_material): the agent's segment photos are
+// the whole picture, so every segment needs media and the cap is one per
+// segment. Mirrors the engine's MAX_IMAGES_MODE_MEDIAS.
+export const IMAGES_MATERIAL = 'images';
+export const MAX_IMAGES_MODE_MEDIAS = MAX_SEGMENTS;
 export const MIN_TOTAL_WORDS = 60;
 export const MAX_TOTAL_WORDS = 200;
 export const MIN_BODY_WORDS = 30;
@@ -161,7 +166,7 @@ function normalize(text: string): string {
   return text.toLowerCase().replace(/[^\p{L}\p{N}_\s]/gu, '').trim();
 }
 
-export function validateSegments(input: unknown): SegmentsResult {
+export function validateSegments(input: unknown, material?: string): SegmentsResult {
   if (!Array.isArray(input) || input.length === 0) {
     return fail(
       'segments',
@@ -309,14 +314,26 @@ export function validateSegments(input: unknown): SegmentsResult {
       'Merge body segments until the count fits.',
     );
   }
+  const imagesMode = material === IMAGES_MATERIAL;
+  const mediaCap = imagesMode ? MAX_IMAGES_MODE_MEDIAS : MAX_MEDIAS;
   let mediaCount = 0;
   for (let i = 0; i < segments.length; i += 1) {
     const media = segments[i].media;
     // Mirror the engine's _check_media: null media is skipped, not
     // rejected, and presence is key-present and non-null — a blank
     // string counts as present, so it fails the blank check instead
-    // of passing as absent.
-    if (media === undefined || media === null) continue;
+    // of passing as absent. The images material is the exception:
+    // nothing tops up a segment without a photo, so it is rejected.
+    if (media === undefined || media === null) {
+      if (imagesMode) {
+        return fail(
+          `segments.${i}.media`,
+          'the images material needs media on every segment',
+          'Send an image for this segment as { mediaId } or { url }, or use another material.',
+        );
+      }
+      continue;
+    }
     if (typeof media !== 'object') {
       return fail(`segments.${i}.media`, 'Media must be an object.', 'Send media as { mediaId } or { url }.');
     }
@@ -361,11 +378,11 @@ export function validateSegments(input: unknown): SegmentsResult {
     }
     mediaCount += 1;
   }
-  if (mediaCount > MAX_MEDIAS) {
+  if (mediaCount > mediaCap) {
     return fail(
       'segments',
-      `at most ${MAX_MEDIAS} medias are allowed per video`,
-      'Remove medias until at most six remain.',
+      `at most ${mediaCap} medias are allowed per video`,
+      `Remove medias until at most ${mediaCap} remain.`,
     );
   }
   return {
@@ -384,8 +401,8 @@ export function validateSegments(input: unknown): SegmentsResult {
   };
 }
 
-export function joinSegments(input: unknown): string {
-  const result = validateSegments(input);
+export function joinSegments(input: unknown, material?: string): string {
+  const result = validateSegments(input, material);
   if (!result.ok) {
     throw new Error(`${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`);
   }

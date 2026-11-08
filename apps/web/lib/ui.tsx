@@ -5,10 +5,10 @@
 //---------------
 
 export const INPUT_CLASS =
-  'mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-3.5 py-2.5 text-sm text-neutral-900 placeholder:text-neutral-400 transition-colors focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/10';
+  'mt-1.5 w-full rounded-lg border border-line bg-card px-3.5 py-2.5 text-sm text-ink placeholder:text-faint transition-colors focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink/10';
 
 export const SECTION_LABEL_CLASS =
-  'text-[11px] font-semibold uppercase tracking-[0.2em] text-neutral-500';
+  'text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-text';
 
 //---------------
 // Helpers puros

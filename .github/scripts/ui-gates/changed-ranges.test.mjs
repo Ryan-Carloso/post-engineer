@@ -250,6 +250,23 @@ describe('isTestishPath', () => {
     assert.equal(isTestishPath('lib/types.d.ts'), true);
     assert.equal(isTestishPath('lib/voices.ts'), false);
   });
+
+  it('drops generated *.gen.ts files, which drift tests pin instead', () => {
+    assert.equal(isTestishPath('lib/engine/schema.gen.ts'), true);
+    assert.equal(isTestishPath('lib/supabase/database.gen.ts'), true);
+    assert.equal(isTestishPath('lib/generation.ts'), false, 'a name merely containing "gen" still mutates');
+    assert.equal(isTestishPath('lib/gen.ts'), false);
+  });
+
+  it('drops a regenerated contract from the parsed ranges', () => {
+    const diff = `diff --git a/apps/web/lib/engine/schema.gen.ts b/apps/web/lib/engine/schema.gen.ts
+--- a/apps/web/lib/engine/schema.gen.ts
++++ b/apps/web/lib/engine/schema.gen.ts
+@@ -947 +947 @@
+-a
++b`;
+    assert.deepEqual(parseChangedRanges(diff), []);
+  });
 });
 
 describe('escapeBrackets', () => {

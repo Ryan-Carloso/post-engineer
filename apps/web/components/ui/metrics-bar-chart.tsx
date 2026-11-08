@@ -30,7 +30,7 @@ const BAR_HEIGHT = 44;
 const LEADER_COLOR = '#ff544c';
 
 export function MetricsBarChart({ data, metricLabel, formatValue }: MetricsBarChartProps): React.ReactElement {
-  const config: ChartConfig = { average: { label: metricLabel, color: '#c9d2dc' } };
+  const config: ChartConfig = { average: { label: metricLabel, theme: { light: '#c9d2dc', dark: '#3a4a64' } } };
   return (
     <ChartContainer
       config={config}
@@ -67,7 +67,7 @@ export function MetricsBarChart({ data, metricLabel, formatValue }: MetricsBarCh
           <LabelList
             dataKey="average"
             position="right"
-            className="fill-[#101728] font-semibold"
+            className="fill-ink font-semibold"
             fontSize={12}
             formatter={(value: number) => formatValue(value)}
           />

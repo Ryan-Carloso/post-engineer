@@ -117,17 +117,29 @@ describe('TokenHistory', () => {
 
     const credit = screen.getByText('+10');
     expect(credit).toBeInTheDocument();
-    expect(credit.className).toMatch(/emerald|green/);
+    expect(credit.className).toContain('text-success');
 
     const debit = screen.getByText('-2');
     expect(debit).toBeInTheDocument();
-    expect(debit.className).toMatch(/red/);
+    expect(debit.className).toContain('text-destructive');
 
     const refund = screen.getByText('+2');
     expect(refund).toBeInTheDocument();
-    expect(refund.className).toMatch(/emerald|green/);
+    expect(refund.className).toContain('text-success');
 
     expect(screen.getByText('Showing 3 of 3')).toBeInTheDocument();
+  });
+
+  it('colors a zero-amount movement as neutral, not as credit or debit', async () => {
+    mockFetch.mockResolvedValue(pageResponse([tx({ id: 'tx-zero', amount: 0, type: 'adjustment', description: 'No-op adjustment' })], 1, 0));
+    render(<TokenHistory />, { wrapper: Wrapper });
+
+    await waitFor(() => expect(screen.getByText('No-op adjustment')).toBeInTheDocument());
+
+    const zero = screen.getByText('0');
+    expect(zero.className).toContain('text-muted-text');
+    expect(zero.className).not.toContain('text-success');
+    expect(zero.className).not.toContain('text-destructive');
   });
 
   it('shows an empty state when there are no transactions', async () => {

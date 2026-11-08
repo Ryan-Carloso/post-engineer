@@ -10,4 +10,8 @@ export const postToolDescPt = {
   toolDescGetPostMetrics: 'Ver métricas de desempenho por vídeo',
   toolDescGetYouTubeRetentionCurve: 'Ver a curva de retenção de um vídeo seu do YouTube',
   toolDescCancelVideoTask: 'Cancelar/remover uma das suas tarefas de vídeo',
+  toolDescCreateExperiment: 'Criar um teste A/B de dois estilos de hook',
+  toolDescListExperiments: 'Listar os seus testes A/B',
+  toolDescAddExperimentPair: 'Criar os dois vídeos de um par do teste A/B',
+  toolDescGetExperimentResults: 'Comparar as duas variantes de um teste A/B',
 } as const;

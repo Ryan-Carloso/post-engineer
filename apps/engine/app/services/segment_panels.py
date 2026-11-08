@@ -25,7 +25,7 @@ from loguru import logger
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 from app.models.schema import VideoAspect
-from app.services import media_overlay, place_photos, video
+from app.services import media_overlay, panel_motion, place_photos, video
 from app.utils import utils
 
 # Where the photo may be full frame: never (face on screen), after the hook, or always.
@@ -79,6 +79,8 @@ class Panel:
     start: float
     end: float
     caption_bottom: Optional[int] = None
+    # "in"/"out": a full-frame photo that zooms slowly (images material, panel_motion).
+    motion: Optional[str] = None
 
 
 def _scale(width: int, height: int) -> float:
@@ -228,19 +230,35 @@ def caption_bands(task_id: str) -> list[tuple[float, float, int]]:
 
 
 def overlay_command(
-    video_path: str, panels: Sequence[Panel], output_path: str, codec: str, preset: str, ffmpeg: str
+    video_path: str,
+    panels: Sequence[Panel],
+    output_path: str,
+    codec: str,
+    preset: str,
+    ffmpeg: str,
+    frame_size: Optional[tuple[int, int]] = None,
 ) -> list[str]:
-    """ffmpeg argv overlaying each panel for its seconds, in segment order."""
+    """ffmpeg argv overlaying each panel for its seconds, in segment order.
+
+    A still panel is a looped image (shortest=1 ends it with the video). A
+    panel with motion is a single image zoompan turns into a finite clip of
+    frame_size, so its overlay passes the video through after the clip ends.
+    """
     command = [ffmpeg, "-y", "-i", video_path]
     for panel in panels:
-        command += ["-loop", "1", "-i", panel.path]
+        command += ["-i", panel.path] if _moves(panel, frame_size) else ["-loop", "1", "-i", panel.path]
     steps: list[str] = []
     source = "0:v"
     for position, panel in enumerate(panels):
         target = f"v{position}"
+        layer = f"{position + 1}:v"
+        ending = "shortest=1"
+        if frame_size is not None and _moves(panel, frame_size):
+            steps.append(panel_motion.zoom_filter(layer, panel, frame_size[0], frame_size[1], f"m{position}"))
+            layer, ending = f"m{position}", "eof_action=pass"
         steps.append(
-            f"[{source}][{position + 1}:v]overlay={panel.x}:{panel.y}"
-            f":enable='between(t,{panel.start:.3f},{panel.end:.3f})':shortest=1[{target}]"
+            f"[{source}][{layer}]overlay={panel.x}:{panel.y}"
+            f":enable='between(t,{panel.start:.3f},{panel.end:.3f})':{ending}[{target}]"
         )
         source = target
     return command + [
@@ -253,6 +271,19 @@ def overlay_command(
         "-c:a", "copy",
         output_path,
     ]
+
+
+def _moves(panel: Panel, frame_size: Optional[tuple[int, int]]) -> bool:
+    return panel.motion is not None and frame_size is not None
+
+
+def _frame_size(panels: Sequence[Panel]) -> Optional[tuple[int, int]]:
+    """The full-frame photo size zoompan renders at, when any panel moves."""
+    moving = next((panel for panel in panels if panel.motion is not None), None)
+    if moving is None:
+        return None
+    with Image.open(moving.path) as opened:
+        return opened.size
 
 
 def overlay_onto(task_id: str, video_path: str, record: Callable[..., None]) -> str:
@@ -269,15 +300,16 @@ def overlay_onto(task_id: str, video_path: str, record: Callable[..., None]) -> 
     if not panels:
         return video_path
     output_path = f"{os.path.splitext(video_path)[0]}-panels.mp4"
-    command = overlay_command(
-        video_path,
-        panels,
-        output_path,
-        video._get_effective_video_codec(),
-        video._get_configured_video_preset(),
-        utils.get_ffmpeg_binary(),
-    )
     try:
+        command = overlay_command(
+            video_path,
+            panels,
+            output_path,
+            video._get_effective_video_codec(),
+            video._get_configured_video_preset(),
+            utils.get_ffmpeg_binary(),
+            frame_size=_frame_size(panels),
+        )
         video._run_ffmpeg_bounded(command, timeout=OVERLAY_TIMEOUT_SECONDS, failure_message="segment panel overlay failed")
     except (RuntimeError, subprocess.TimeoutExpired, OSError) as exc:
         logger.error(f"segment panel overlay failed: {type(exc).__name__}")

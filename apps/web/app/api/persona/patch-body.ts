@@ -2,7 +2,7 @@
 //
 // Extracted from route.ts so the route module stays under the file-size
 // ratchet. All fields are optional on edit; missing fields parse as null.
-import { PERSONA_CTA_MAX_LENGTH, photoExtensionOf, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS } from '@/lib/persona-schema';
+import { FACE_QUALITIES, PERSONA_CTA_MAX_LENGTH, photoExtensionOf, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS } from '@/lib/persona-schema';
 import { isFileLike } from '@/lib/persona-images';
 
 function isVideoLayout(value: string): value is (typeof VIDEO_LAYOUTS)[number] {
@@ -12,7 +12,7 @@ function isVideoLayout(value: string): value is (typeof VIDEO_LAYOUTS)[number] {
 // parsePatchBody — all fields are optional on edit; returns
 // null for the ones missing from the multipart body.
 //---------------
-interface PersonaPatchBody {
+export interface PersonaPatchBody {
   name: string | null;
   photo: File | null;
   photoExtension: string | null;
@@ -25,6 +25,7 @@ interface PersonaPatchBody {
   ctaText: string | null;
   paragraphNumber: number | null;
   niche: string | null;
+  faceQuality: (typeof FACE_QUALITIES)[number] | null;
 }
 
 type ParsePatchResult =
@@ -98,6 +99,14 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
     }
     paragraphNumber = parsedNumber;
   }
+  const faceQuality = optionalString(formData.get('faceQuality'));
+  if (faceQuality !== null && !(FACE_QUALITIES as readonly string[]).includes(faceQuality)) {
+    return {
+      ok: false,
+      error: `Invalid faceQuality: ${faceQuality}. Use one of ${FACE_QUALITIES.join(', ')}.`,
+      logMessage: `Invalid faceQuality. Use one of ${FACE_QUALITIES.join(', ')}.`,
+    };
+  }
 
   return {
     ok: true,
@@ -114,6 +123,7 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
       ctaText,
       paragraphNumber,
       niche,
+      faceQuality: faceQuality as (typeof FACE_QUALITIES)[number] | null,
     },
   };
 }

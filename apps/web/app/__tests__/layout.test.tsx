@@ -97,3 +97,13 @@ describe('root layout metadata icons', () => {
     }
   });
 });
+
+describe('root layout theme setup', () => {
+  it('declares light and dark themeColor entries matching the backgrounds', async () => {
+    const { viewport } = await import('../layout');
+    expect(viewport.themeColor).toEqual([
+      { media: '(prefers-color-scheme: light)', color: '#f4f8fb' },
+      { media: '(prefers-color-scheme: dark)', color: '#0b1220' },
+    ]);
+  });
+});

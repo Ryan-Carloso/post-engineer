@@ -1,7 +1,7 @@
 // Hand-written request/response schemas for generate-openapi.mjs, keyed by
 // "METHOD /api/path". Each entry mirrors the route's own validation (cited in
 // the comment); endpoints without an entry keep the generic responses.
-import { metricsOperationSchemas } from './openapi-metrics-schemas.mjs';
+import { experimentLinkSchema, metricsOperationSchemas } from './openapi-metrics-schemas.mjs';
 
 const object = (properties, required = []) => ({
   type: 'object',
@@ -61,6 +61,11 @@ const segmentsBody = object(
       description: 'Hook first, body, CTA last. 60-200 words in total.',
       items: { $ref: '#/components/schemas/Segment' },
     },
+    facelessMaterial: {
+      type: 'string',
+      enum: ['broll', 'svg', 'images'],
+      description: "Optional. 'images' needs media on every segment (up to 12).",
+    },
   },
   ['segments'],
 );
@@ -85,8 +90,7 @@ const generateBody = object(
         mode: { type: 'string', enum: ['scheduled', 'asap'], default: 'scheduled' },
         providers: { ...strArray, maxItems: 20 },
         accounts: { type: 'object', additionalProperties: strArray },
-        // OpenAPI 3.0 cannot express "required unless mode is asap"; the
-        // route answers 400 when it is missing in scheduled mode.
+        // OpenAPI 3.0 cannot express "required unless mode is asap" (the route 400s).
         schedule: {
           ...object({ startAt: str, times: strArray, timezone: str }, ['startAt', 'times', 'timezone']),
           description: "Required when mode is 'scheduled' (the default); forbidden when mode is 'asap'.",
@@ -97,7 +101,11 @@ const generateBody = object(
     ),
     options: object({
       faceless: { type: 'boolean' },
-      facelessMaterial: { type: 'string', enum: ['broll', 'svg'] },
+      facelessMaterial: {
+        type: 'string',
+        enum: ['broll', 'svg', 'images'],
+        description: "'images' renders only the segment images: media on every segment, up to 12.",
+      },
       fullLipsync: { type: 'boolean', description: 'Persona talks for the whole video, not only the hook. Not with faceless.' },
       audioUrl: str,
       imageId: str,
@@ -114,6 +122,7 @@ const generateBody = object(
       language: str,
       niche: str,
     }, ['segments']), // segments-validation.ts: 400 without them
+    experiment: experimentLinkSchema,
     idempotencyKey: str,
   },
   ['title', 'publishing', 'options'],

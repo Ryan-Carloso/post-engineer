@@ -136,29 +136,29 @@ export interface Database {
         Row: {
         id: string;
         user_id: string;
-        schedule_id: string;
         name: string;
         variable: string;
         target_pairs: number;
         created_at: string;
+        persona_id: string | null;
         };
         Insert: {
         id?: string;
         user_id: string;
-        schedule_id: string;
         name: string;
         variable: string;
         target_pairs: number;
         created_at?: string;
+        persona_id?: string | null;
         };
         Update: {
         id?: string;
         user_id?: string;
-        schedule_id?: string;
         name?: string;
         variable?: string;
         target_pairs?: number;
         created_at?: string;
+        persona_id?: string | null;
         };
         Relationships: [];
       };
@@ -504,7 +504,7 @@ export interface Database {
         faceless: boolean;
         publish_attempts: number;
         publish_not_before: string | null;
-        faceless_material: 'broll' | 'svg';
+        faceless_material: 'broll' | 'svg' | 'images';
         segments: Json | null;
         title: string | null;
         full_lipsync: boolean;
@@ -526,7 +526,7 @@ export interface Database {
         faceless?: boolean;
         publish_attempts?: number;
         publish_not_before?: string | null;
-        faceless_material?: 'broll' | 'svg';
+        faceless_material?: 'broll' | 'svg' | 'images';
         segments?: Json | null;
         title?: string | null;
         full_lipsync?: boolean;
@@ -548,7 +548,7 @@ export interface Database {
         faceless?: boolean;
         publish_attempts?: number;
         publish_not_before?: string | null;
-        faceless_material?: 'broll' | 'svg';
+        faceless_material?: 'broll' | 'svg' | 'images';
         segments?: Json | null;
         title?: string | null;
         full_lipsync?: boolean;

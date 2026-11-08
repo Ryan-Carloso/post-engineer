@@ -40,6 +40,9 @@ describe('buildSlotRows', () => {
         { kind: 'body', text: 'Walk the Ribeira in the morning light.' },
         { kind: 'cta', text: 'Follow for more.' },
       ],
+      experiment_id: null,
+      variant_id: null,
+      experiment_pair: null,
     });
   });
 
@@ -56,6 +59,24 @@ describe('buildSlotRows', () => {
     expect(rows[0]?.segments).toBeNull();
     expect(rows[0]?.faceless_material).toBeUndefined();
     expect(rows[0]?.full_lipsync).toBe(false);
+  });
+
+  it('writes the experiment link columns when the video joins an experiment', () => {
+    const rows = buildSlotRows({
+      slots: [{ slotAtISO: '2026-09-08T09:00:00.000Z', dayIndex: 0, timeIndex: 0 }],
+      title: 'Porto walks',
+      scheduleId: 'sched-1',
+      userId: 'user-1',
+      faceless: false,
+      facelessMaterial: undefined,
+      segments: undefined,
+      experiment: { experimentId: '7b0e6c1e-0000-4000-8000-000000000001', variantId: 'hook-aggressive', pair: 2 },
+    });
+    expect(rows[0]).toMatchObject({
+      experiment_id: '7b0e6c1e-0000-4000-8000-000000000001',
+      variant_id: 'hook-aggressive',
+      experiment_pair: 2,
+    });
   });
 
 });

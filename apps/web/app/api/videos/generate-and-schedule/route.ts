@@ -29,8 +29,11 @@ import {
 } from '@/lib/schedule/slot-distribution';
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone } from '@/lib/timezone';
-import { computeVideoTokens, toFiniteNumber } from '@/lib/tokens';
+import { computeVideoTokens, netLedgerSpent, toFiniteNumber } from '@/lib/tokens';
 import { buildSlotRows } from './slot-rows';
+import { fetchReplay } from './replay';
+import { refundRollbackSpend } from './rollback-refund';
+import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, verifyExperimentPairAfterInsert } from './experiment-link';
 import type { Provider } from './providers-validation';
 import { checkFullLipsyncNarration } from './full-lipsync-preflight';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
@@ -124,6 +127,8 @@ const BodySchema = z.object({
   publishing: PublishingSchema,
   options: OptionsSchema,
   idempotencyKey: z.string().optional(),
+  // Paired A/B experiment link (issue #476), checked before the charge.
+  experiment: ExperimentLinkSchema.optional(),
 });
 
 type ParsedBody = z.infer<typeof BodySchema>;
@@ -322,48 +327,6 @@ async function validateAccounts(
 }
 
 
-//---------------
-// Replay helper: fetch an existing schedule + slots for an idempotent retry.
-//---------------
-async function fetchReplay(
-  supabase: SupabaseClient,
-  userId: string,
-  scheduleId: string,
-  voiceFallbackWarning: { code: string; fromVoice: string; toVoice: string } | null = null,
-): Promise<NextResponse | null> {
-  const { data: slots, error } = await supabase
-    .from('scheduled_posts')
-    .select('id, slot_at, title, task_id, status')
-    .eq('schedule_id', scheduleId)
-    .eq('user_id', userId)
-    .order('slot_at', { ascending: true });
-  if (error || !slots) {
-    logger.error('[generate-and-schedule] replay fetch failed', error, { scheduleId });
-    return null;
-  }
-  // Replay ASAP uses the stored publish_mode; pre-015 rows default scheduled.
-  const { data: scheduleRow } = await supabase
-    .from('schedules')
-    .select('publish_mode')
-    .eq('id', scheduleId)
-    .eq('user_id', userId)
-    .maybeSingle();
-  const mode =
-    (scheduleRow as { publish_mode?: unknown } | null)?.publish_mode === 'asap' ? 'asap' : 'scheduled';
-  return NextResponse.json({
-    success: true,
-    schedule: { id: scheduleId, mode },
-    slots: slots.map((row) => ({
-      slotId: (row as { id: string }).id,
-      slotAt: (row as { slot_at: string }).slot_at,
-      title: (row as { title: string }).title,
-      taskId: (row as { task_id: string | null }).task_id,
-      status: (row as { status: string }).status,
-    })),
-    replayed: true,
-    ...(voiceFallbackWarning !== null ? { warnings: [voiceFallbackWarning] } : {}),
-  });
-}
 
 async function postHandler(request: Request): Promise<NextResponse> {
   const startedAt = Date.now();
@@ -380,7 +343,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const rawIssues = rawKeyIssues(body);
   const parsed = BodySchema.safeParse(body);
   if (!parsed.success) return rejectInvalidRequest([...rawIssues, ...shapeIssues(parsed.error)]);
-  const { publishing, options, idempotencyKey } = parsed.data;
+  const { publishing, options, idempotencyKey, experiment } = parsed.data;
 
   // A blank/absent personaId means "post without a persona" (migration 012).
   // Null is the only accepted spelling so a caller cannot half-intend a
@@ -507,6 +470,16 @@ async function postHandler(request: Request): Promise<NextResponse> {
     if (preflight instanceof NextResponse) return preflight;
   }
 
+  // Idempotency anchor, resolved once: the experiment check below needs the
+  // same schedule id step 7 uses to tell a replay from a duplicate.
+  const idem = resolveIdempotency(userId, idempotencyKey, request);
+  const pairFacts = buildPairFacts({ providers, accountIds, prep, title, segments: options?.segments, fullLipsync: validatedOptions.fullLipsync, facelessMaterial: validatedOptions.facelessMaterial, audioUrl: validatedOptions.audioUrl });
+  if (experiment !== undefined) {
+    const link = await checkExperimentLink(supabase, { link: experiment, userId, personaId, replayScheduleId: idem.scheduleId, facts: pairFacts });
+    if (!link.ok && link.status === 500) return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
+    if (!link.ok) return validationFailed(ERROR_CODES.VALIDATION_FAILED, link.message, link.field, link.status);
+  }
+
   // 6. Cost for the single video, computed BEFORE the charge.
   const perVideoCost = computeVideoTokens(prep.faceless, prep.faceQuality, validatedOptions.fullLipsync === true);
   const totalCost = perVideoCost;
@@ -529,7 +502,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // retry addresses the same schedule row instead of creating a duplicate.
   // A 0-slot row is a zombie and is deleted below so the operation runs
   // fresh instead of being replayed empty.
-  const idem = resolveIdempotency(userId, idempotencyKey, request);
   const { data: existingSchedule, error: scheduleLookupError } = await supabase
     .from('schedules')
     .select('id')
@@ -579,14 +551,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
       if (replayed) return replayed;
     }
   }
-  // Read-your-ledger: a previous attempt may have spent but died before the
-  // schedule insert (no unique constraint on generation_id is assumed).
-  // Residual race vs a concurrent duplicate is documented below at insert.
+  // Read-your-ledger, net-based: the generation counts as already spent only
+  // while its spends exceed its refunds (see netLedgerSpent in lib/tokens).
   const { data: ledgerRows, error: ledgerError } = await supabase
     .from('token_transactions')
-    .select('id')
-    .eq('generation_id', idem.generationId)
-    .limit(1);
+    .select('type, amount')
+    .eq('generation_id', idem.generationId);
   // Fail closed: charging blind after a failed ledger read risks a double spend.
   if (ledgerError) {
     logger.error('[generate-and-schedule] spend ledger lookup failed', ledgerError, {
@@ -595,7 +565,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     });
     return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
   }
-  const alreadySpent = (ledgerRows?.length ?? 0) > 0;
+  const alreadySpent = netLedgerSpent(ledgerRows ?? []) > 0;
   if (alreadySpent) {
     logger.warn('[generate-and-schedule] spend ledger already has this generation_id; resuming without charging', {
       generationId: idem.generationId,
@@ -723,18 +693,13 @@ async function postHandler(request: Request): Promise<NextResponse> {
         personaId,
       });
       if (!alreadySpent) {
-        const { error: refundError } = await supabase.rpc('refund_generation_tokens', {
-          p_user_id: userId,
-          p_generation_id: idem.generationId,
-          p_reason: 'Persona already scheduled; refunded redundant spend',
+        await refundRollbackSpend(supabase, {
+          userId,
+          generationId: idem.generationId,
+          amount: totalCost,
+          reason: 'Persona already scheduled; refunded redundant spend',
+          failureLog: '[generate-and-schedule] persona-already-scheduled refund failed',
         });
-        if (refundError) {
-          logger.error('[generate-and-schedule] persona-already-scheduled refund failed', refundError, {
-            scheduleId: idem.scheduleId,
-            userId,
-            generationId: idem.generationId,
-          });
-        }
       }
       trackApiEvent('video_creation_failed', {
         userId,
@@ -754,22 +719,18 @@ async function postHandler(request: Request): Promise<NextResponse> {
       // When we skipped our spend (alreadySpent), there is nothing of ours
       // to undo — refunding would steal the legitimate prior spend.
       if (!alreadySpent) {
-        const { error: refundError } = await supabase.rpc('refund_generation_tokens', {
-          p_user_id: userId,
-          p_generation_id: idem.generationId,
-          p_reason: 'PK race; refunded redundant spend',
+        const refunded = await refundRollbackSpend(supabase, {
+          userId,
+          generationId: idem.generationId,
+          amount: totalCost,
+          reason: 'PK race; refunded redundant spend',
+          failureLog: '[generate-and-schedule] PK race refund failed; replaying winner anyway',
         });
-        if (refundError) {
-          // The winner's schedule exists regardless of whether our refund
-          // landed: still replay it below. A failed refund is a billing
-          // discrepancy, not a request failure — log it loudly for
-          // investigation instead of letting the log claim success.
-          logger.error('[generate-and-schedule] PK race refund failed; replaying winner anyway', refundError, {
-            scheduleId: idem.scheduleId,
-            userId,
-            generationId: idem.generationId,
-          });
-        } else {
+        // The winner's schedule exists regardless of whether our refund
+        // landed: still replay it below. A failed refund is a billing
+        // discrepancy, not a request failure — the helper logs it loudly
+        // for investigation instead of letting the log claim success.
+        if (refunded) {
           logger.error('[generate-and-schedule] schedule PK race; refunded redundant spend, replaying winner', scheduleError, {
             scheduleId: idem.scheduleId,
             userId,
@@ -797,18 +758,13 @@ async function postHandler(request: Request): Promise<NextResponse> {
       scheduleId: idem.scheduleId,
       userId,
     });
-    const { error: refundError } = await supabase.rpc('refund_generation_tokens', {
-      p_user_id: userId,
-      p_generation_id: idem.generationId,
-      p_reason: 'Unified generate+schedule: schedule insert failed; tokens refunded',
+    await refundRollbackSpend(supabase, {
+      userId,
+      generationId: idem.generationId,
+      amount: totalCost,
+      reason: 'Unified generate+schedule: schedule insert failed; tokens refunded',
+      failureLog: '[generate-and-schedule] refund after schedule insert failure failed',
     });
-    if (refundError) {
-      logger.error('[generate-and-schedule] refund after schedule insert failure failed', refundError, {
-        scheduleId: idem.scheduleId,
-        userId,
-        generationId: idem.generationId,
-      });
-    }
     trackApiEvent('video_creation_failed', { userId, errorCode: ERROR_CODES.INTERNAL_ERROR, failureStage: 'schedule_insert' });
     return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
   }
@@ -834,6 +790,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         facelessMaterial: validatedOptions.facelessMaterial,
         fullLipsync: validatedOptions.fullLipsync,
         segments: options?.segments,
+        experiment,
       }),
     )
     .select('id, slot_at, title');
@@ -846,15 +803,34 @@ async function postHandler(request: Request): Promise<NextResponse> {
     });
     await supabase.from('scheduled_posts').delete().eq('schedule_id', idem.scheduleId).eq('user_id', userId);
     await supabase.from('schedules').delete().eq('id', idem.scheduleId).eq('user_id', userId);
-    await supabase.rpc('refund_generation_tokens', {
-      p_user_id: userId,
-      p_generation_id: idem.generationId,
-      p_reason: 'Unified generate+schedule: slot insert failed; tokens refunded',
+    await refundRollbackSpend(supabase, {
+      userId,
+      generationId: idem.generationId,
+      amount: totalCost,
+      reason: 'Unified generate+schedule: slot insert failed; tokens refunded',
     });
     trackApiEvent('video_creation_failed', { userId, scheduleId: idem.scheduleId, errorCode: ERROR_CODES.INTERNAL_ERROR, failureStage: 'slot_insert' });
     return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
   }
   trackApiEvent('video_slots_created', { userId, scheduleId: idem.scheduleId, numberOfVideos: 1 });
+  if (experiment !== undefined) {
+    // Race guard: the partner may have committed since the pre-charge check.
+    const recheck = await verifyExperimentPairAfterInsert(supabase, { link: experiment, userId, facts: pairFacts });
+    if (!recheck.ok) {
+      logger.error('[generate-and-schedule] experiment pair re-check failed after insert; rolling back', undefined, { scheduleId: idem.scheduleId, userId, field: recheck.field });
+      await supabase.from('scheduled_posts').delete().eq('schedule_id', idem.scheduleId).eq('user_id', userId);
+      await supabase.from('schedules').delete().eq('id', idem.scheduleId).eq('user_id', userId);
+      await refundRollbackSpend(supabase, {
+        userId,
+        generationId: idem.generationId,
+        amount: totalCost,
+        reason: 'Unified generate+schedule: experiment pair mismatch; tokens refunded',
+      });
+      trackApiEvent('video_creation_failed', { userId, scheduleId: idem.scheduleId, errorCode: ERROR_CODES.VALIDATION_FAILED, failureStage: 'experiment_pair' });
+      if (recheck.status === 500) return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
+      return validationFailed(ERROR_CODES.VALIDATION_FAILED, recheck.message, recheck.field, recheck.status);
+    }
+  }
 
   // 11. Dispatch the one engine generation and bind the task_id.
   // A failed slot is an explicit terminal state (failed + refunded), never

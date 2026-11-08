@@ -47,6 +47,13 @@ name: Release MCP (auto)
 # release — the cost is an occasional version bump for a docs merge.
 # One workflow run at a time (concurrency group) so two merges cannot
 # open competing bump PRs for the same version.
+#
+# Stale bump branches (2026-11-04/07): a transient GitHub GraphQL error on
+# `gh pr create` left chore/mcp-auto-bump-1.42.0 pushed with no PR, and every
+# later run then failed pushing it ("[rejected] (fetch first)") because the
+# bump path assumed the ref did not exist. The bump path below now reuses a
+# remote bump branch when it already contains exactly this version bump,
+# and fails loudly (instead of overwriting it) when it contains anything else.
 
 on:
   workflow_run:
@@ -180,28 +187,87 @@ jobs:
           fi
 
           git fetch origin main
-          git checkout -B "$BRANCH" origin/main
-          # server.json carries the same version twice (server + npm package);
-          # release-mcp.yml refuses to publish to the MCP Registry if it drifts.
-          node -e "
-            const fs = require('fs');
-            const version = process.argv[1];
-            const p = 'apps/mcp/package.json';
-            const d = JSON.parse(fs.readFileSync(p, 'utf8'));
-            d.version = version;
-            fs.writeFileSync(p, JSON.stringify(d, null, 2) + '\n');
-            const s = 'apps/mcp/server.json';
-            const server = JSON.parse(fs.readFileSync(s, 'utf8'));
-            server.version = version;
-            server.packages[0].version = version;
-            fs.writeFileSync(s, JSON.stringify(server, null, 2) + '\n');
-          " "$NEW_VERSION"
-          git add apps/mcp/package.json apps/mcp/server.json
-          git commit -m "chore(mcp): auto-bump to ${NEW_VERSION} for release"
+          # A previous run may have pushed this branch and then failed before
+          # opening the PR (2026-11-04: a transient GitHub GraphQL error on
+          # `gh pr create` left chore/mcp-auto-bump-1.42.0 orphaned, and every
+          # later run then failed pushing it with "[rejected] (fetch first)").
+          # This branch is owned by this workflow and its only legitimate
+          # content is this exact version bump, so reuse it when it already
+          # is that bump; a stale ref must never fail the release again.
+          # versions_only prints a version file with every version field
+          # reset, so two files compare equal exactly when they differ only
+          # by the version bump itself — a changed description, script, or
+          # env entry inside package.json/server.json must refuse, not reuse.
+          versions_only() {
+            local ref="$1"
+            local file="$2"
+            git show "${ref}:${file}" 2>/dev/null | node -e "
+              let s = '';
+              process.stdin.on('data', (d) => { s += d; }).on('end', () => {
+                const j = JSON.parse(s);
+                j.version = '0.0.0';
+                if (Array.isArray(j.packages)) j.packages.forEach((p) => { p.version = '0.0.0'; });
+                console.log(JSON.stringify(j));
+              });
+            " 2>/dev/null || true
+          }
+          if git ls-remote --heads origin "refs/heads/${BRANCH}" | grep -q .; then
+            # Fetch with an explicit refspec: a bare `git fetch origin
+            # "$BRANCH"` only writes FETCH_HEAD in a single-branch clone and
+            # leaves origin/$BRANCH unresolved.
+            git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
+            # The checkout is shallow (fetch-depth: 2) and the bump branch
+            # may be based on an older main tip, so the two refs can share no
+            # locally walkable common ancestor and merge-base would die under
+            # set -e with no diagnostic. Unshallow first — this path runs
+            # only when a stale branch exists, so the one-time full-history
+            # fetch is worth it.
+            if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+              git fetch --unshallow origin main
+            fi
+            if ! REMOTE_BASE="$(git merge-base "origin/main" "origin/${BRANCH}")"; then
+              echo "::error::Cannot determine the base of ${BRANCH} against origin/main — refusing to reuse it. Delete it by hand (git push origin --delete ${BRANCH}) and re-run this job."
+              exit 1
+            fi
+            REMOTE_PKG_VERSION="$(git show "origin/${BRANCH}:apps/mcp/package.json" 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version" 2>/dev/null || true)"
+            REMOTE_SERVER_VERSIONS="$(git show "origin/${BRANCH}:apps/mcp/server.json" 2>/dev/null | node -p "const s = JSON.parse(require('fs').readFileSync(0, 'utf8')); s.version + ' ' + s.packages[0].version" 2>/dev/null || true)"
+            REMOTE_EXTRA_FILES="$(git diff --name-only "$REMOTE_BASE" "origin/${BRANCH}" | grep -v -e '^apps/mcp/package.json$' -e '^apps/mcp/server.json$' || true)"
+            if [ "$REMOTE_PKG_VERSION" = "$NEW_VERSION" ] && [ "$REMOTE_SERVER_VERSIONS" = "${NEW_VERSION} ${NEW_VERSION}" ] && [ -z "$REMOTE_EXTRA_FILES" ] \
+              && [ "$(versions_only "$REMOTE_BASE" apps/mcp/package.json)" = "$(versions_only "origin/${BRANCH}" apps/mcp/package.json)" ] \
+              && [ "$(versions_only "$REMOTE_BASE" apps/mcp/server.json)" = "$(versions_only "origin/${BRANCH}" apps/mcp/server.json)" ]; then
+              echo "Remote bump branch ${BRANCH} already contains the ${NEW_VERSION} bump — reusing it."
+              git checkout -B "$BRANCH" "origin/${BRANCH}"
+            else
+              echo "::error::Remote bump branch ${BRANCH} exists but does not contain the expected ${NEW_VERSION} bump — refusing to overwrite it. Delete it by hand (git push origin --delete ${BRANCH}) and re-run this job."
+              exit 1
+            fi
+          else
+            git checkout -B "$BRANCH" origin/main
+            # server.json carries the same version twice (server + npm package);
+            # release-mcp.yml refuses to publish to the MCP Registry if it drifts.
+            node -e "
+              const fs = require('fs');
+              const version = process.argv[1];
+              const p = 'apps/mcp/package.json';
+              const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+              d.version = version;
+              fs.writeFileSync(p, JSON.stringify(d, null, 2) + '\n');
+              const s = 'apps/mcp/server.json';
+              const server = JSON.parse(fs.readFileSync(s, 'utf8'));
+              server.version = version;
+              server.packages[0].version = version;
+              fs.writeFileSync(s, JSON.stringify(server, null, 2) + '\n');
+            " "$NEW_VERSION"
+            git add apps/mcp/package.json apps/mcp/server.json
+            git commit -m "chore(mcp): auto-bump to ${NEW_VERSION} for release"
+          fi
           git push origin "$BRANCH"
-          PR_URL="$(gh pr create \
+          if ! PR_URL="$(gh pr create \
             --title "chore(mcp): auto-bump to ${NEW_VERSION} for release" \
             --body "Auto-created by release-mcp-auto.yml: a merge to main touched apps/mcp/ code, but mcp-v${VERSION} was already published, so this PR bumps the package to ${NEW_VERSION} (minor only, never major). No code changes — version only. Merging this PR triggers the bump-only tagging path in the same workflow, which tags ${NEW_TAG} and release-mcp.yml publishes it to npm. Auto-merge is enabled; if it cannot merge, a manual tap on this PR has the same effect." \
-            --base main --head "$BRANCH")"
+            --base main --head "$BRANCH")"; then
+            echo "::error::Could not open the auto-bump PR for ${BRANCH}. The bump branch is pushed; the next run reuses it, or open the PR by hand: gh pr create --base main --head ${BRANCH}."
+            exit 1
+          fi
           gh pr merge --auto --squash "$PR_URL" || echo "Auto-merge could not be enabled; PR stays open for a manual tap."
           echo "Opened ${PR_URL}; merging it tags ${NEW_TAG} and publishes via release-mcp.yml."

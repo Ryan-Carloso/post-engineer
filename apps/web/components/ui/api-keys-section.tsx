@@ -74,18 +74,18 @@ export default function ApiKeysSection({
   };
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[#dfe5ec] bg-white shadow-[0_1px_2px_rgba(16,23,40,0.02)]">
+    <section className="overflow-hidden rounded-2xl border border-line bg-card shadow-[0_1px_2px_rgba(16,23,40,0.02)]">
       <div className="flex flex-col justify-between gap-4 p-4 sm:flex-row sm:items-center lg:p-6">
         <div className="flex min-w-0 items-center gap-3.5">
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-[#edf0f4] bg-white shadow-[0_4px_12px_rgba(16,23,40,0.06)]">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-hairline bg-card shadow-[0_4px_12px_rgba(16,23,40,0.06)]">
             <KeyIcon />
           </span>
           <div className="min-w-0">
             <div className="flex items-baseline gap-2">
-              <h2 className="text-lg font-bold tracking-tight text-[#101728]">{t('apiKeys.title')}</h2>
-              <span className="text-sm font-medium text-[#8a94a8]">({keys.length})</span>
+              <h2 className="text-lg font-bold tracking-tight text-ink">{t('apiKeys.title')}</h2>
+              <span className="text-sm font-medium text-faint">({keys.length})</span>
             </div>
-            <p className="text-sm leading-5 text-[#718096]">{t('apiKeys.subtitle')}</p>
+            <p className="text-sm leading-5 text-muted-text">{t('apiKeys.subtitle')}</p>
           </div>
         </div>
 
@@ -97,7 +97,7 @@ export default function ApiKeysSection({
               setIsCreating(true);
               setNewKeyData(null);
             }}
-            className="rounded-xl bg-[#101728] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1e293b]"
+            className="rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-on-ink transition-colors hover:bg-ink-soft"
           >
             {t('apiKeys.generateButton')}
           </Button>
@@ -108,20 +108,20 @@ export default function ApiKeysSection({
         {newKeyData ? (
           <div
             data-testid="api-key-created-banner"
-            className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950"
+            className="mb-6 rounded-xl border border-success/30 bg-success-soft p-4 text-success"
           >
             <div className="mb-2 flex items-center justify-between">
-              <span className="font-bold text-emerald-800">{t('apiKeys.createSuccess')}</span>
-              <span className="text-xs font-semibold text-emerald-600">({newKeyData.name})</span>
+              <span className="font-bold text-success">{t('apiKeys.createSuccess')}</span>
+              <span className="text-xs font-semibold text-success">({newKeyData.name})</span>
             </div>
-            <p className="mb-3 text-xs text-emerald-700">{t('apiKeys.warningCopyOnce')}</p>
+            <p className="mb-3 text-xs text-success">{t('apiKeys.warningCopyOnce')}</p>
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 readOnly
                 data-testid="raw-api-key-value"
                 value={newKeyData.key}
-                className="w-full rounded-lg border border-emerald-300 bg-white px-3 py-2 font-mono text-sm text-slate-800 select-all"
+                className="w-full rounded-lg border border-success/30 bg-card px-3 py-2 font-mono text-sm text-ink select-all"
               />
               <Button
                 type="button"
@@ -139,9 +139,9 @@ export default function ApiKeysSection({
           <form
             onSubmit={handleCreate}
             data-testid="create-api-key-form"
-            className="mb-6 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4"
+            className="mb-6 flex flex-col gap-3 rounded-xl border border-line bg-surface p-4"
           >
-            <label htmlFor="api-key-name-input" className="block text-xs font-medium text-slate-700">
+            <label htmlFor="api-key-name-input" className="block text-xs font-medium text-ink-soft">
               {t('apiKeys.nameLabel')}
             </label>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -153,21 +153,21 @@ export default function ApiKeysSection({
                 value={keyName}
                 onChange={(e) => setKeyName(e.target.value)}
                 autoFocus
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none"
+                className="w-full rounded-lg border border-line bg-card px-3 py-2 text-sm text-ink focus:border-muted-text focus:outline-none"
               />
               <div className="flex shrink-0 gap-2">
                 <Button
                   type="submit"
                   data-testid="submit-create-key-btn"
                   disabled={!canSubmit}
-                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-on-ink disabled:opacity-50"
                 >
                   {createMutation.isPending ? <SpinnerIcon /> : t('apiKeys.create')}
                 </Button>
                 <Button
                   type="button"
                   onClick={() => setIsCreating(false)}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  className="rounded-lg border border-line bg-card px-3 py-2 text-sm font-semibold text-ink-soft hover:bg-sunken"
                 >
                   {t('apiKeys.cancel')}
                 </Button>
@@ -177,21 +177,21 @@ export default function ApiKeysSection({
         ) : null}
 
         {query.isLoading ? (
-          <div className="flex justify-center py-6 text-slate-400">
+          <div className="flex justify-center py-6 text-faint">
             <SpinnerIcon />
           </div>
         ) : query.isError ? (
-          <p className="py-4 text-sm text-red-500">{t('apiKeys.loadError')}</p>
+          <p className="py-4 text-sm text-destructive">{t('apiKeys.loadError')}</p>
         ) : keys.length === 0 ? (
           <div
             data-testid="api-keys-empty-state"
-            className="flex flex-col items-center rounded-xl border border-dashed border-slate-200 px-6 py-10 text-center"
+            className="flex flex-col items-center rounded-xl border border-dashed border-line px-6 py-10 text-center"
           >
-            <span className="flex size-12 items-center justify-center rounded-xl border border-[#edf0f4] bg-white shadow-[0_4px_12px_rgba(16,23,40,0.06)]">
+            <span className="flex size-12 items-center justify-center rounded-xl border border-hairline bg-card shadow-[0_4px_12px_rgba(16,23,40,0.06)]">
               <KeyIcon />
             </span>
-            <p className="mt-4 text-sm font-bold text-slate-900">{t('apiKeys.emptyTitle')}</p>
-            <p className="mt-1 max-w-sm text-sm text-slate-500">{t('apiKeys.emptyDesc')}</p>
+            <p className="mt-4 text-sm font-bold text-ink">{t('apiKeys.emptyTitle')}</p>
+            <p className="mt-1 max-w-sm text-sm text-muted-text">{t('apiKeys.emptyDesc')}</p>
             <Button
               type="button"
               data-testid="api-keys-empty-cta"
@@ -199,7 +199,7 @@ export default function ApiKeysSection({
                 setIsCreating(true);
                 setNewKeyData(null);
               }}
-              className="mt-5 rounded-xl bg-[#101728] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1e293b]"
+              className="mt-5 rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-on-ink transition-colors hover:bg-ink-soft"
             >
               {t('apiKeys.emptyCta')}
             </Button>
@@ -208,23 +208,23 @@ export default function ApiKeysSection({
           <>
             <table className="hidden w-full border-collapse sm:table" data-testid="api-keys-table">
               <thead>
-                <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500">
+                <tr className="border-b border-hairline text-left text-xs font-semibold text-muted-text">
                   <th className="px-4 py-3 font-semibold">{t('apiKeys.colName')}</th>
                   <th className="px-4 py-3 font-semibold">{t('apiKeys.colLastUsed')}</th>
                   <th className="px-4 py-3 font-semibold">{t('apiKeys.colStatus')}</th>
                   <th className="px-4 py-3 text-right font-semibold">{t('apiKeys.colActions')}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-hairline">
                 {visibleKeys.map((key) => {
                   const isRevoked = Boolean(key.revokedAt);
                   return (
                     <tr key={key.id} data-testid={`api-key-row-${key.id}`} className="text-sm">
                       <td className="px-4 py-3.5">
-                        <span className="block font-semibold text-slate-900">{key.name}</span>
-                        <span className="mt-0.5 block font-mono text-xs text-slate-400">{key.keyPrefix}</span>
+                        <span className="block font-semibold text-ink">{key.name}</span>
+                        <span className="mt-0.5 block font-mono text-xs text-faint">{key.keyPrefix}</span>
                       </td>
-                      <td className="px-4 py-3.5 text-slate-600">
+                      <td className="px-4 py-3.5 text-muted-text">
                         {key.lastUsedAt
                           ? new Date(key.lastUsedAt).toLocaleDateString()
                           : t('apiKeys.neverUsed')}
@@ -232,7 +232,7 @@ export default function ApiKeysSection({
                       <td className="px-4 py-3.5">
                         <span
                           className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                            isRevoked ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
+                            isRevoked ? 'bg-destructive-soft text-destructive' : 'bg-success-soft text-success'
                           }`}
                         >
                           <span className={`size-1.5 rounded-full ${isRevoked ? 'bg-red-500' : 'bg-emerald-500'}`} />
@@ -246,7 +246,7 @@ export default function ApiKeysSection({
                             data-testid={`revoke-key-btn-${key.id}`}
                             onClick={() => handleRevoke(key.id)}
                             disabled={revokeMutation.isPending}
-                            className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                            className="rounded-lg border border-destructive/30 bg-card px-3 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive-soft"
                           >
                             {t('apiKeys.revoke')}
                           </Button>
@@ -257,7 +257,7 @@ export default function ApiKeysSection({
                 })}
               </tbody>
             </table>
-            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 sm:hidden">
+            <div className="divide-y divide-hairline rounded-xl border border-line sm:hidden">
               {visibleKeys.map((key) => {
                 const isRevoked = Boolean(key.revokedAt);
                 return (
@@ -267,16 +267,16 @@ export default function ApiKeysSection({
                   >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate font-semibold text-slate-900">{key.name}</span>
+                        <span className="truncate font-semibold text-ink">{key.name}</span>
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase ${
-                            isRevoked ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
+                            isRevoked ? 'bg-destructive-soft text-destructive' : 'bg-success-soft text-success'
                           }`}
                         >
                           {isRevoked ? t('apiKeys.revoked') : t('apiKeys.active')}
                         </span>
                       </div>
-                      <div className="mt-1 flex flex-col gap-0.5 text-xs text-slate-500">
+                      <div className="mt-1 flex flex-col gap-0.5 text-xs text-muted-text">
                         <span className="font-mono">{key.keyPrefix}</span>
                         <span>
                           {key.lastUsedAt
@@ -291,7 +291,7 @@ export default function ApiKeysSection({
                         type="button"
                         onClick={() => handleRevoke(key.id)}
                         disabled={revokeMutation.isPending}
-                        className="shrink-0 rounded-lg border border-red-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50"
+                        className="shrink-0 rounded-lg border border-destructive/30 bg-card px-2.5 py-1 text-[11px] font-semibold text-destructive hover:bg-destructive-soft"
                       >
                         {t('apiKeys.revoke')}
                       </Button>
@@ -306,7 +306,7 @@ export default function ApiKeysSection({
                 data-testid="api-keys-show-all-toggle"
                 onClick={() => setShowAllKeys((previous) => !previous)}
                 variant="ghost"
-                className="mt-3 rounded-lg px-2 py-1 text-sm font-semibold text-slate-500 hover:text-slate-800"
+                className="mt-3 rounded-lg px-2 py-1 text-sm font-semibold text-muted-text hover:text-ink"
               >
                 {showAllKeys ? t('apiKeys.showFewer') : t('apiKeys.showAll').replace('{count}', String(keys.length))}
               </Button>

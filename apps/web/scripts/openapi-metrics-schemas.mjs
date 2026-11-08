@@ -1,9 +1,14 @@
 // Request/response schemas of the metrics endpoints for generate-openapi.mjs,
 // split out of openapi-schemas.mjs (over the file-size cap). The helpers come
 // in as arguments so this module has no import cycle with openapi-schemas.mjs.
+// The experiment schemas ride along (openapi-schemas.mjs may not grow).
+import { experimentLinkSchema, experimentOperationSchemas } from './openapi-experiments-schemas.mjs';
+
+export { experimentLinkSchema };
 
 export function metricsOperationSchemas({ success, object, anyObject, str }) {
   return {
+    ...experimentOperationSchemas({ success, object, anyObject, str }),
     // apps/web/app/api/metrics/route.ts (KNOWN_PARAMS)
     'GET /api/metrics': {
       // parseMetricsQuery: omitting window returns 400 "window must be 24h, 7d or 28d."
