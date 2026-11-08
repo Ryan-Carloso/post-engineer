@@ -2,30 +2,38 @@ import '@testing-library/jest-dom/vitest';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ScheduledSlot } from '@/lib/api';
-import { CalendarView, type CalendarLabels } from '../calendar-view';
-
-const labels: CalendarLabels = {
-  grid: 'Posts calendar',
-  prev: 'Previous month',
-  next: 'Next month',
-  today: 'Today',
-  groups: { inProgress: 'In progress', published: 'Published', failed: 'Failed' },
-  dayLabel: (date, summary) => `${date}: ${summary}`,
-  dayEmpty: (date) => `${date}: no posts`,
-  more: (count) => `+${count}`,
+const EN: Record<string, string> = {
+  'posts.calendarGridLabel': 'Posts calendar',
+  'posts.calendarPrevMonth': 'Previous month',
+  'posts.calendarNextMonth': 'Next month',
+  'posts.calendarToday': 'Today',
+  'posts.groupInProgress': 'In progress',
+  'posts.groupPublished': 'Published',
+  'posts.groupFailed': 'Failed',
+  'posts.calendarDayLabel': '{date}: {summary}',
+  'posts.calendarDayEmpty': '{date}: no posts',
+  'posts.calendarMore': '+{count}',
 };
+
+vi.mock('@/lib/i18n/provider', () => ({
+  useI18n: () => ({
+    locale: 'en',
+    t: (key: string, vars: Record<string, string | number> = {}) =>
+      Object.entries(vars).reduce((out, [name, value]) => out.split(`{${name}}`).join(String(value)), EN[key] ?? key),
+  }),
+}));
+
+import { CalendarView } from '../calendar-view';
 
 function setup(overrides: Partial<React.ComponentProps<typeof CalendarView>> = {}) {
   const props = {
     year: 2030,
     month: 5,
-    locale: 'en' as const,
     firstWeekday: 0 as const,
     slotsByDay: new Map<string, Pick<ScheduledSlot, 'status'>[]>(),
     selectedKey: null,
     focusKey: '2030-06-12',
     todayKey: '2030-06-15',
-    labels,
     onSelect: vi.fn(),
     onFocusChange: vi.fn(),
     onMonthChange: vi.fn(),

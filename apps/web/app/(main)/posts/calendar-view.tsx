@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
-import { Check, ChevronLeft, ChevronRight, Clock, TriangleAlert } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ScheduledSlot } from '@/lib/api';
-import type { Locale } from '@/lib/i18n';
+import { useI18n } from '@/lib/i18n/provider';
 import { cn } from '@/lib/utils';
 import {
   INTL_TAG,
@@ -15,45 +15,22 @@ import {
   moveFocus,
   weekdayLabels,
 } from './calendar-days';
-import { GROUP_STYLE, STATUS_GROUP_ORDER, type StatusGroup } from './status';
+import { GROUP_ICON, GROUP_KEY, GROUP_STYLE, STATUS_GROUP_ORDER } from './status';
 
-//---------------
-// CalendarView — presentational month grid (ARIA grid pattern). One cell per
-// day showing per-post status markers (icon + color, never color alone; more
-// than 3 posts collapse into "+N"). Roving tabindex: arrows move between
-// days, Home/End jump within the week, PageUp/PageDown change month, Enter /
-// Space select. Day buckets are in the viewer's browser timezone — see
-// calendar-days.ts. Data fetching and the day's post list live in the page.
-//---------------
-
-const GROUP_ICON: Record<StatusGroup, typeof Check> = {
-  inProgress: Clock,
-  published: Check,
-  failed: TriangleAlert,
-};
-
-export interface CalendarLabels {
-  grid: string;
-  prev: string;
-  next: string;
-  today: string;
-  groups: Record<StatusGroup, string>;
-  dayLabel: (date: string, summary: string) => string;
-  dayEmpty: (date: string) => string;
-  more: (count: number) => string;
-}
+// CalendarView — month grid (ARIA grid pattern), one cell per day with per-post
+// status markers (icon + color; over 3 posts collapse into "+N"). Roving
+// tabindex: arrows, Home/End, PageUp/PageDown. Day buckets use the viewer's
+// browser timezone (calendar-days.ts). Data and the day's posts live in the page.
 
 interface CalendarViewProps {
   year: number;
   month: number; // 0-based
-  locale: Locale;
   firstWeekday: 0 | 1;
   slotsByDay: Map<string, Pick<ScheduledSlot, 'status'>[]>;
   selectedKey: string | null;
   focusKey: string;
   todayKey: string;
   disabled?: boolean;
-  labels: CalendarLabels;
   onSelect: (key: string) => void;
   onFocusChange: (key: string) => void;
   onMonthChange: (year: number, month: number) => void;
@@ -62,18 +39,17 @@ interface CalendarViewProps {
 export function CalendarView({
   year,
   month,
-  locale,
   firstWeekday,
   slotsByDay,
   selectedKey,
   focusKey,
   todayKey,
   disabled = false,
-  labels,
   onSelect,
   onFocusChange,
   onMonthChange,
 }: CalendarViewProps) {
+  const { t, locale } = useI18n();
   const grid = useMemo(() => buildMonthGrid(year, month, firstWeekday), [year, month, firstWeekday]);
   const weekdays = useMemo(() => weekdayLabels(locale, firstWeekday), [locale, firstWeekday]);
   const monthLabel = useMemo(
@@ -114,7 +90,7 @@ export function CalendarView({
           {monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}
         </h2>
         <div className="flex items-center gap-1">
-          <button type="button" aria-label={labels.prev} disabled={disabled} onClick={() => shiftMonth(-1)} className={NAV_BUTTON}>
+          <button type="button" aria-label={t('posts.calendarPrevMonth')} disabled={disabled} onClick={() => shiftMonth(-1)} className={NAV_BUTTON}>
             <ChevronLeft className="size-4" aria-hidden />
           </button>
           <button
@@ -127,15 +103,15 @@ export function CalendarView({
             }}
             className={cn(NAV_BUTTON, 'px-3 text-xs font-semibold')}
           >
-            {labels.today}
+            {t('posts.calendarToday')}
           </button>
-          <button type="button" aria-label={labels.next} disabled={disabled} onClick={() => shiftMonth(1)} className={NAV_BUTTON}>
+          <button type="button" aria-label={t('posts.calendarNextMonth')} disabled={disabled} onClick={() => shiftMonth(1)} className={NAV_BUTTON}>
             <ChevronRight className="size-4" aria-hidden />
           </button>
         </div>
       </div>
 
-      <div role="grid" aria-label={labels.grid} aria-busy={disabled}>
+      <div role="grid" aria-label={t('posts.calendarGridLabel', { month: monthLabel })} aria-busy={disabled}>
         <div role="row" className="grid grid-cols-7">
           {weekdays.map((weekday) => (
             <div
@@ -155,7 +131,7 @@ export function CalendarView({
               const { markers, overflow } = cellMarkers(slots);
               const counts = groupCounts(slots);
               const summary = STATUS_GROUP_ORDER.filter((group) => counts[group] > 0)
-                .map((group) => `${labels.groups[group]}: ${counts[group]}`)
+                .map((group) => `${t(GROUP_KEY[group])}: ${counts[group]}`)
                 .join(', ');
               const fullDate = dateFormat.format(day.date);
               const isSelected = selectedKey === day.key;
@@ -168,7 +144,7 @@ export function CalendarView({
                       else buttons.current.delete(day.key);
                     }}
                     tabIndex={day.key === tabStop ? 0 : -1}
-                    aria-label={slots.length === 0 ? labels.dayEmpty(fullDate) : labels.dayLabel(fullDate, summary)}
+                    aria-label={slots.length === 0 ? t('posts.calendarDayEmpty', { date: fullDate }) : t('posts.calendarDayLabel', { date: fullDate, summary })}
                     aria-current={day.key === todayKey ? 'date' : undefined}
                     aria-pressed={isSelected}
                     onClick={() => {
@@ -199,7 +175,7 @@ export function CalendarView({
                             </span>
                           );
                         })}
-                        {overflow > 0 && <span className="text-[10px] font-bold text-muted-text">{labels.more(overflow)}</span>}
+                        {overflow > 0 && <span className="text-[10px] font-bold text-muted-text">{t('posts.calendarMore', { count: overflow })}</span>}
                       </span>
                     )}
                   </button>
@@ -218,7 +194,7 @@ export function CalendarView({
               <span className={cn('inline-flex size-4 items-center justify-center rounded-full', GROUP_STYLE[group])}>
                 <Icon className="size-2.5" strokeWidth={3} aria-hidden />
               </span>
-              {labels.groups[group]}
+              {t(GROUP_KEY[group])}
             </li>
           );
         })}

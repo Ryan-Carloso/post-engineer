@@ -1,8 +1,5 @@
-//---------------
-// Range mode of GET /api/schedule/status (?from=&to=) — the calendar view.
-// Returns every slot, in any status, whose slot_at falls in [from, to),
-// instead of the upcoming/recent split capped by ?limit=.
-//---------------
+// Range mode of GET /api/schedule/status (?from=&to=): every slot, any status,
+// with slot_at in [from, to), instead of the upcoming/recent split.
 
 export const RANGE_MAX_SPAN_DAYS = 62;
 // Hard cap on slots per range request; one extra row is fetched to detect

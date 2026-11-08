@@ -214,9 +214,6 @@ export default function PostsPage() {
   };
 
   const dayFormat = new Intl.DateTimeFormat(INTL_TAG[locale], { dateStyle: 'full' });
-  const monthName = new Intl.DateTimeFormat(INTL_TAG[locale], { month: 'long', year: 'numeric' }).format(
-    new Date(cursor.year, cursor.month, 1),
-  );
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -345,26 +342,11 @@ export default function PostsPage() {
             <CalendarView
               year={cursor.year}
               month={cursor.month}
-              locale={locale}
               firstWeekday={firstWeekday}
               slotsByDay={slotsByDay}
               selectedKey={selectedKey}
               focusKey={focusKey}
               todayKey={todayKey}
-              labels={{
-                grid: t('posts.calendarGridLabel', { month: monthName }),
-                prev: t('posts.calendarPrevMonth'),
-                next: t('posts.calendarNextMonth'),
-                today: t('posts.calendarToday'),
-                groups: {
-                  inProgress: t(GROUP_KEY.inProgress),
-                  published: t(GROUP_KEY.published),
-                  failed: t(GROUP_KEY.failed),
-                },
-                dayLabel: (date, summary) => t('posts.calendarDayLabel', { date, summary }),
-                dayEmpty: (date) => t('posts.calendarDayEmpty', { date }),
-                more: (count) => t('posts.calendarMore', { count }),
-              }}
               onSelect={setSelectedKey}
               onFocusChange={setFocusKey}
               onMonthChange={(year, month) => setCursor({ year, month })}

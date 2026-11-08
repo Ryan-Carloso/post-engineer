@@ -2,12 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { HttpStatusError } from '@/lib/errors';
 import { mapSlot, type ScheduledSlot, type SlotRow } from '@/lib/api';
 
-//---------------
-// Range read of GET /api/schedule/status (?from=&to=): every slot of any
-// status in [from, to). Used by the posts calendar so a busy month is never
-// cut by the list view's POSTS_LIMIT. Lives outside lib/api.ts (over the
-// file-size cap).
-//---------------
+// Range read of GET /api/schedule/status (?from=&to=) for the posts calendar:
+// every slot in [from, to), never cut by the list view's POSTS_LIMIT.
 
 // Mirrors RANGE_MAX_SLOTS in app/api/schedule/status/range.ts (pinned by a
 // file-parsing sync test).

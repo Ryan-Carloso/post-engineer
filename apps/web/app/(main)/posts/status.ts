@@ -1,3 +1,4 @@
+import { Check, Clock, TriangleAlert } from 'lucide-react';
 import type { TranslationKey } from '@/lib/i18n';
 
 // Shared by the posts list and the post detail page. Colors are semantic
@@ -61,3 +62,5 @@ export const GROUP_KEY: Record<StatusGroup, TranslationKey> = {
   published: 'posts.groupPublished',
   failed: 'posts.groupFailed',
 };
+
+export const GROUP_ICON: Record<StatusGroup, typeof Check> = { inProgress: Clock, published: Check, failed: TriangleAlert };

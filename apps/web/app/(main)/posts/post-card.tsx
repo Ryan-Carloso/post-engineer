@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Check, Clock, Play, TriangleAlert } from 'lucide-react';
+import { Play } from 'lucide-react';
 import type { ScheduledSlot, ScheduleConfig, VideoGeneration } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +12,7 @@ import type { Locale, TranslationKey } from '@/lib/i18n';
 import { scheduleAccountIds, type AccountOption } from '@/lib/account-options';
 import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 import { cn } from '@/lib/utils';
-import { STATUS_KEY, STATUS_STYLE, statusGroupOf, type StatusGroup } from './status';
+import { GROUP_ICON, STATUS_KEY, STATUS_STYLE, statusGroupOf } from './status';
 
 //---------------
 // Cards of the posts list: scheduled posts (PostCard) and standalone video
@@ -21,12 +21,6 @@ import { STATUS_KEY, STATUS_STYLE, statusGroupOf, type StatusGroup } from './sta
 // title with the video thumbnail, inline failure message, then the network +
 // account chips. Extracted from page.tsx, which is over the file-size cap.
 //---------------
-
-const GROUP_ICON: Record<StatusGroup, typeof Check> = {
-  inProgress: Clock,
-  published: Check,
-  failed: TriangleAlert,
-};
 
 const CARD_BORDER = 'border-line shadow-[0_1px_2px_rgba(13,43,69,0.05)] hover:border-line';
 const MAX_CHIPS = 3;
@@ -47,32 +41,20 @@ export function formatTime(value: string, locale: Locale): string {
   return new Date(value).toLocaleTimeString(locale === 'pt' ? 'pt-BR' : 'en-US', { timeStyle: 'short' });
 }
 
-//---------------
-// resolveSlotAccounts — human-readable account labels for one slot, based
-// on the schedule's targeted account ids per provider.
-//---------------
+// Account labels of the accounts a slot's schedule targets.
 export function resolveSlotAccounts(schedule: ScheduleConfig | undefined, accounts: AccountOption[]): AccountOption[] {
   if (!schedule) return [];
   const ids = new Set(scheduleAccountIds(schedule));
   return accounts.filter((account) => ids.has(account.id));
 }
 
-//---------------
-// videoUrlFor — the engine download proxy serves the final render for a
-// task; only slots whose video was actually produced have one.
-//---------------
+// The engine download proxy serves a task's final render.
 function videoUrlFor(taskId: string | null | undefined): string | null {
   return taskId ? `/api/persona/video-download/${encodeURIComponent(taskId)}/final-1.mp4` : null;
 }
 
-//---------------
-// PostThumb — the 72×72 thumbnail on the card body's right: the video
-// itself (metadata-only preload, muted, control-less — playback happens
-// in the detail modal) under a small play glyph. The src carries a
-// #t=0.1 media fragment so the browser seeks and paints that frame as
-// the thumbnail — preload="metadata" alone renders an empty box in
-// Chrome even when the video exists.
-//---------------
+// 72×72 video thumbnail. The #t=0.1 fragment makes Chrome paint a frame;
+// preload="metadata" alone renders an empty box.
 const PostThumb = ({ src }: { src: string | null }) => {
   const thumbSrc = src ? `${src}#t=0.1` : null;
   return (
@@ -99,11 +81,7 @@ const StatusBadge = ({ status, label }: { status: string; label: string }) => {
   );
 };
 
-//---------------
-// AccountChips — one chip per targeted account (network glyph + label),
-// capped; the remainder collapses into "+N". Labels truncate so a long
-// handle never breaks the card on a 375px screen.
-//---------------
+// One chip per account (glyph + truncated label), capped with "+N".
 const AccountChips = ({ accounts }: { accounts: AccountOption[] }) => (
   <ul className="flex min-w-0 flex-wrap gap-1.5">
     {accounts.slice(0, MAX_CHIPS).map((account) => (
@@ -189,12 +167,8 @@ export const PostCard = ({
   );
 };
 
-//---------------
-// Generation history cards — standalone video generations (manual/debug),
-// not scheduled posts. A failed generation shows the friendly, translated
-// error for its error_code; the raw engine text stays in the database for
-// support and is never rendered (it may contain paths or upstream bodies).
-//---------------
+// Standalone video generations. A failure shows the translated message for
+// its error_code, never the raw engine text.
 export const GenerationCard = ({ generation, locale }: { generation: VideoGeneration; locale: Locale }) => {
   const { t } = useI18n();
   const videoUrl = videoUrlFor(generation.engineTaskId);
