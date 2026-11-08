@@ -23,6 +23,7 @@ import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 import { ANALYTICS_STATUSES } from '../metrics-query';
 
 const COUNTERS = { views: 1200, likes: 80, comments: 9, saves: null };
+const NO_EXPERIMENT = { experimentId: null, variantId: null, experimentPair: null };
 
 function duePost(overrides: Partial<DuePost> = {}): DuePost {
   return {
@@ -48,7 +49,7 @@ function deps(overrides: Partial<PostMetricsDeps> = {}): PostMetricsDeps {
     listDuePosts: vi.fn(async () => [duePost()]),
     fetchTaskSource: vi.fn(async () => ({ publishResults: [YT_ENTRY, IG_ENTRY], scriptAngle: 'myth' })),
     fetchCounters: vi.fn(async () => COUNTERS),
-    saveMetrics: vi.fn(async () => undefined),
+    saveMetrics: vi.fn(async () => NO_EXPERIMENT),
     markDone: vi.fn(async () => undefined),
     track: vi.fn(),
     now: () => new Date('2026-10-21T12:00:00.000Z'),
@@ -146,7 +147,20 @@ describe('collectPostMetrics', () => {
       ...COUNTERS,
       engaged_views: null,
       analytics_status: null,
+      experiment_id: null,
+      variant_id: null,
+      experiment_pair: null,
     });
+  });
+
+  it('tags the event with the experiment link the snapshot carries (issue #476)', async () => {
+    const d = deps({
+      saveMetrics: vi.fn(async () => ({ experimentId: 'exp-1', variantId: 'hook-aggressive', experimentPair: 2 })),
+    });
+    await collectPostMetrics(d);
+    expect(d.track).toHaveBeenCalledWith('post_metrics_collected', expect.objectContaining({
+      experiment_id: 'exp-1', variant_id: 'hook-aggressive', experiment_pair: 2,
+    }));
   });
 
   it('passes the window and clock to the fetcher and tracks only retention counts and status', async () => {
@@ -341,11 +355,13 @@ describe('createPostMetricsStore', () => {
     await expect(store.listDuePosts(new Date(), 51)).rejects.toThrow('due posts lookup failed: boom');
   });
 
-  it('upserts one row per post/video/window and throws on a write error', async () => {
-    const upsert = vi.fn(async () => ({ error: null }));
+  it('upserts one row per post/video/window, returns its experiment link and throws on a write error', async () => {
+    const single = vi.fn(async () => ({ data: { experiment_id: 'exp-1', variant_id: 'hook-calm', experiment_pair: 1 }, error: null }));
+    const select = vi.fn(() => ({ single }));
+    const upsert = vi.fn(() => ({ select }));
     const from = vi.fn(() => ({ upsert }));
     const store = createPostMetricsStore({ from } as unknown as SupabaseClient);
-    await store.saveMetrics({
+    const tag = await store.saveMetrics({
       postId: 'post-1',
       userId: 'user-1',
       provider: 'youtube',
@@ -381,8 +397,10 @@ describe('createPostMetricsStore', () => {
       },
       { onConflict: 'post_id,provider,external_id,metrics_window' },
     );
+    expect(select).toHaveBeenCalledWith('experiment_id, variant_id, experiment_pair');
+    expect(tag).toEqual({ experimentId: 'exp-1', variantId: 'hook-calm', experimentPair: 1 });
 
-    upsert.mockResolvedValueOnce({ error: { message: 'denied' } } as never);
+    single.mockResolvedValueOnce({ data: null, error: { message: 'denied' } } as never);
     await expect(
       store.saveMetrics({
         postId: 'post-1', userId: 'user-1', provider: 'youtube', accountId: 'a', externalId: 'b', window: '7d', scriptAngle: null, ...COUNTERS,
@@ -465,7 +483,8 @@ describe('migration 039 (post metrics retention + 28d window)', () => {
   const sql = readFileSync(join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '039_post-metrics-retention.sql'), 'utf8');
 
   it('adds every retention column saveMetrics writes', async () => {
-    const upsert = vi.fn(async (_row: unknown, _options: unknown) => ({ error: null }));
+    const single = vi.fn(async () => ({ data: { experiment_id: null, variant_id: null, experiment_pair: null }, error: null }));
+    const upsert = vi.fn((_row: unknown, _options: unknown) => ({ select: () => ({ single }) }));
     const store = createPostMetricsStore({ from: vi.fn(() => ({ upsert })) } as unknown as SupabaseClient);
     await store.saveMetrics({
       postId: 'p', userId: 'u', provider: 'youtube', accountId: 'a', externalId: 'v', window: '28d', scriptAngle: null,

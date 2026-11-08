@@ -3,6 +3,19 @@
 // because openapi-schemas.mjs is over the file-size cap. The helpers come in
 // as arguments so this module has no import cycle with openapi-schemas.mjs.
 
+// generate-and-schedule `experiment` (app/api/videos/generate-and-schedule/experiment-link.ts).
+export const experimentLinkSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['experimentId', 'variantId', 'pair'],
+  description: 'Join a paired A/B experiment: this video is one variant of one pair. Checked before the charge.',
+  properties: {
+    experimentId: { type: 'string', format: 'uuid' },
+    variantId: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,47}$' },
+    pair: { type: 'integer', minimum: 1, maximum: 20 },
+  },
+};
+
 export function experimentOperationSchemas({ success, object, anyObject, str }) {
   const variant = object(
     {

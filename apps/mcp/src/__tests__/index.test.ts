@@ -44,7 +44,7 @@ import {
 import { GetClonedVoiceShape, PreviewHouseVoiceShape } from '../cloned-voice-tools.js';
 import { GeneratePersonaVideoShape, ValidateScriptShape, ScoreDraftShape } from '../tools-single-video.js';
 import { CheckMediaShape, UploadMediaShape } from '../tools-user-media.js';
-import { CreateExperimentShape, GetExperimentResultsShape, ListExperimentsShape } from '../tools-experiments.js';
+import { AddExperimentPairShape, CreateExperimentShape, GetExperimentResultsShape, ListExperimentsShape } from '../tools-experiments.js';
 import { GetPostShape, GetPostMetricsShape, GetYouTubeRetentionCurveShape } from '../tools-posts.js';
 import { CancelVideoTaskShape } from '../video-task-tools.js';
 import { ListPromptsShape, GetPromptShape } from '../tools-prompts.js';
@@ -101,6 +101,7 @@ const EXPECTED_TOOLS = [
   'check_media',
   'create_experiment',
   'list_experiments',
+  'add_experiment_pair',
   'get_experiment_results',
   'get_video_status',
   'get_video_task_progress',
@@ -254,6 +255,7 @@ describe('registered tool schemas (single source of truth)', () => {
       check_media: CheckMediaShape,
       create_experiment: CreateExperimentShape,
       list_experiments: ListExperimentsShape,
+      add_experiment_pair: AddExperimentPairShape,
       get_experiment_results: GetExperimentResultsShape,
       get_video_status: GetVideoStatusShape,
       get_video_task_progress: GetVideoTaskProgressShape,

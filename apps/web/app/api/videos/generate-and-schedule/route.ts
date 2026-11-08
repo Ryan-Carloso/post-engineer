@@ -31,6 +31,8 @@ import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber } from '@/lib/tokens';
 import { buildSlotRows } from './slot-rows';
+import { fetchReplay } from './replay';
+import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, verifyExperimentPairAfterInsert } from './experiment-link';
 import type { Provider } from './providers-validation';
 import { checkFullLipsyncNarration } from './full-lipsync-preflight';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
@@ -124,6 +126,8 @@ const BodySchema = z.object({
   publishing: PublishingSchema,
   options: OptionsSchema,
   idempotencyKey: z.string().optional(),
+  // Paired A/B experiment link (issue #476), checked before the charge.
+  experiment: ExperimentLinkSchema.optional(),
 });
 
 type ParsedBody = z.infer<typeof BodySchema>;
@@ -322,48 +326,6 @@ async function validateAccounts(
 }
 
 
-//---------------
-// Replay helper: fetch an existing schedule + slots for an idempotent retry.
-//---------------
-async function fetchReplay(
-  supabase: SupabaseClient,
-  userId: string,
-  scheduleId: string,
-  voiceFallbackWarning: { code: string; fromVoice: string; toVoice: string } | null = null,
-): Promise<NextResponse | null> {
-  const { data: slots, error } = await supabase
-    .from('scheduled_posts')
-    .select('id, slot_at, title, task_id, status')
-    .eq('schedule_id', scheduleId)
-    .eq('user_id', userId)
-    .order('slot_at', { ascending: true });
-  if (error || !slots) {
-    logger.error('[generate-and-schedule] replay fetch failed', error, { scheduleId });
-    return null;
-  }
-  // Replay ASAP uses the stored publish_mode; pre-015 rows default scheduled.
-  const { data: scheduleRow } = await supabase
-    .from('schedules')
-    .select('publish_mode')
-    .eq('id', scheduleId)
-    .eq('user_id', userId)
-    .maybeSingle();
-  const mode =
-    (scheduleRow as { publish_mode?: unknown } | null)?.publish_mode === 'asap' ? 'asap' : 'scheduled';
-  return NextResponse.json({
-    success: true,
-    schedule: { id: scheduleId, mode },
-    slots: slots.map((row) => ({
-      slotId: (row as { id: string }).id,
-      slotAt: (row as { slot_at: string }).slot_at,
-      title: (row as { title: string }).title,
-      taskId: (row as { task_id: string | null }).task_id,
-      status: (row as { status: string }).status,
-    })),
-    replayed: true,
-    ...(voiceFallbackWarning !== null ? { warnings: [voiceFallbackWarning] } : {}),
-  });
-}
 
 async function postHandler(request: Request): Promise<NextResponse> {
   const startedAt = Date.now();
@@ -380,7 +342,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const rawIssues = rawKeyIssues(body);
   const parsed = BodySchema.safeParse(body);
   if (!parsed.success) return rejectInvalidRequest([...rawIssues, ...shapeIssues(parsed.error)]);
-  const { publishing, options, idempotencyKey } = parsed.data;
+  const { publishing, options, idempotencyKey, experiment } = parsed.data;
 
   // A blank/absent personaId means "post without a persona" (migration 012).
   // Null is the only accepted spelling so a caller cannot half-intend a
@@ -507,6 +469,16 @@ async function postHandler(request: Request): Promise<NextResponse> {
     if (preflight instanceof NextResponse) return preflight;
   }
 
+  // Idempotency anchor, resolved once: the experiment check below needs the
+  // same schedule id step 7 uses to tell a replay from a duplicate.
+  const idem = resolveIdempotency(userId, idempotencyKey, request);
+  const pairFacts = buildPairFacts({ providers, accountIds, prep, title, segments: options?.segments, fullLipsync: validatedOptions.fullLipsync, facelessMaterial: validatedOptions.facelessMaterial, audioUrl: validatedOptions.audioUrl });
+  if (experiment !== undefined) {
+    const link = await checkExperimentLink(supabase, { link: experiment, userId, personaId, replayScheduleId: idem.scheduleId, facts: pairFacts });
+    if (!link.ok && link.status === 500) return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
+    if (!link.ok) return validationFailed(ERROR_CODES.VALIDATION_FAILED, link.message, link.field, link.status);
+  }
+
   // 6. Cost for the single video, computed BEFORE the charge.
   const perVideoCost = computeVideoTokens(prep.faceless, prep.faceQuality, validatedOptions.fullLipsync === true);
   const totalCost = perVideoCost;
@@ -529,7 +501,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // retry addresses the same schedule row instead of creating a duplicate.
   // A 0-slot row is a zombie and is deleted below so the operation runs
   // fresh instead of being replayed empty.
-  const idem = resolveIdempotency(userId, idempotencyKey, request);
   const { data: existingSchedule, error: scheduleLookupError } = await supabase
     .from('schedules')
     .select('id')
@@ -834,6 +805,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         facelessMaterial: validatedOptions.facelessMaterial,
         fullLipsync: validatedOptions.fullLipsync,
         segments: options?.segments,
+        experiment,
       }),
     )
     .select('id, slot_at, title');
@@ -855,6 +827,19 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
   }
   trackApiEvent('video_slots_created', { userId, scheduleId: idem.scheduleId, numberOfVideos: 1 });
+  if (experiment !== undefined) {
+    // Race guard: the partner may have committed since the pre-charge check.
+    const recheck = await verifyExperimentPairAfterInsert(supabase, { link: experiment, userId, facts: pairFacts });
+    if (!recheck.ok) {
+      logger.error('[generate-and-schedule] experiment pair re-check failed after insert; rolling back', undefined, { scheduleId: idem.scheduleId, userId, field: recheck.field });
+      await supabase.from('scheduled_posts').delete().eq('schedule_id', idem.scheduleId).eq('user_id', userId);
+      await supabase.from('schedules').delete().eq('id', idem.scheduleId).eq('user_id', userId);
+      await supabase.rpc('refund_generation_tokens', { p_user_id: userId, p_generation_id: idem.generationId, p_reason: 'Unified generate+schedule: experiment pair mismatch; tokens refunded' });
+      trackApiEvent('video_creation_failed', { userId, scheduleId: idem.scheduleId, errorCode: ERROR_CODES.VALIDATION_FAILED, failureStage: 'experiment_pair' });
+      if (recheck.status === 500) return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
+      return validationFailed(ERROR_CODES.VALIDATION_FAILED, recheck.message, recheck.field, recheck.status);
+    }
+  }
 
   // 11. Dispatch the one engine generation and bind the task_id.
   // A failed slot is an explicit terminal state (failed + refunded), never

@@ -636,8 +636,8 @@ export class PostEngineerClient {
                 }),
           },
           options: input.options ?? undefined,
-          // A retry without a stable key would generate a second schedule:
-          // generate a fresh UUID per call when the caller did not supply one.
+          ...(input.experiment !== undefined ? { experiment: input.experiment } : {}),
+          // No caller key: a fresh UUID per call (a retry needs a stable key).
           idempotencyKey: input.idempotencyKey ?? randomUUID(),
         }),
       },

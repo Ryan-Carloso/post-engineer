@@ -2,7 +2,9 @@
 // split out of openapi-schemas.mjs (over the file-size cap). The helpers come
 // in as arguments so this module has no import cycle with openapi-schemas.mjs.
 // The experiment schemas ride along (openapi-schemas.mjs may not grow).
-import { experimentOperationSchemas } from './openapi-experiments-schemas.mjs';
+import { experimentLinkSchema, experimentOperationSchemas } from './openapi-experiments-schemas.mjs';
+
+export { experimentLinkSchema };
 
 export function metricsOperationSchemas({ success, object, anyObject, str }) {
   return {

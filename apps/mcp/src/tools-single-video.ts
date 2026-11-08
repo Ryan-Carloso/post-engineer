@@ -107,6 +107,14 @@ export async function handleGeneratePersonaVideo(
   client: PostEngineerClient,
   args: GeneratePersonaVideoArgs,
 ): Promise<McpToolResponse> {
+  return (await generatePersonaVideoOutcome(client, args)).response;
+}
+
+/** The tool response plus the ids of slots the route reported as `failed` (a 2xx replay of a failed dispatch). */
+export async function generatePersonaVideoOutcome(
+  client: PostEngineerClient,
+  args: GeneratePersonaVideoArgs,
+): Promise<{ response: McpToolResponse; failedSlotIds: string[] }> {
   try {
     const mode = args.mode ?? 'scheduled';
     if (mode === 'asap' && (args.startAt !== undefined || args.times !== undefined)) {
@@ -166,6 +174,7 @@ export async function handleGeneratePersonaVideo(
           ...(language === undefined ? {} : { language }),
         },
         idempotencyKey: args.idempotencyKey,
+        experiment: args.experiment,
       }),
     );
     const scheduleId = narrowed.schedule.id ?? '(unknown id)';
@@ -178,15 +187,18 @@ export async function handleGeneratePersonaVideo(
         `${i + 1}. ${slot.title ?? '(untitled)'} → ${slot.slotAt ?? '(unscheduled)'} [${slot.status ?? 'unknown'}${slot.taskId ? `, task ${slot.taskId}` : ''}]`,
     );
     return {
-      content: [
-        {
-          type: 'text',
-          text: `${humanSummary}\nScript (${countWords(script)} words):\n${script}\n${slotLines.join('\n')}\n${JSON.stringify(narrowed, null, 2)}`,
-        },
-      ],
+      response: {
+        content: [
+          {
+            type: 'text',
+            text: `${humanSummary}\nScript (${countWords(script)} words):\n${script}\n${slotLines.join('\n')}\n${JSON.stringify(narrowed, null, 2)}`,
+          },
+        ],
+      },
+      failedSlotIds: narrowed.slots.filter((slot) => slot.status === 'failed').map((slot) => slot.slotId ?? '(unknown slot id)'),
     };
   } catch (error) {
-    return errorResponse(`Error generating the video: ${sanitizeEngineError(getErrorMessage(error))}`);
+    return { response: errorResponse(`Error generating the video: ${sanitizeEngineError(getErrorMessage(error))}`), failedSlotIds: [] };
   }
 }
 

@@ -95,7 +95,15 @@ vi.mock('@/lib/engine-image-url', async (importOriginal) => {
   };
 });
 
+vi.mock('../generate-and-schedule/experiment-link', async (importOriginal) => {
+  // The link check has its own unit tests; here only the route wiring
+  // (called before the charge, link written on the slot) is under test.
+  const actual = await importOriginal<typeof import('../generate-and-schedule/experiment-link')>();
+  return { ...actual, checkExperimentLink: vi.fn().mockResolvedValue({ ok: true }), verifyExperimentPairAfterInsert: vi.fn().mockResolvedValue({ ok: true }) };
+});
+
 import { POST } from '../generate-and-schedule/route';
+import { checkExperimentLink, verifyExperimentPairAfterInsert } from '../generate-and-schedule/experiment-link';
 import { getPostHogServer } from '@/lib/posthog-server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -2901,5 +2909,90 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
     expect(res.status).toBe(200);
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
+  });
+});
+
+describe('POST /api/videos/generate-and-schedule — experiment link (issue #476)', () => {
+  const EXPERIMENT = { experimentId: '7b0e6c1e-0000-4000-8000-000000000001', variantId: 'hook-aggressive', pair: 2 };
+
+  it('checks the link with the pair facts and writes it on the slot', async () => {
+    const res = await post(baseBody({ experiment: EXPERIMENT, idempotencyKey: 'exp-key' }));
+    expect(res.status).toBe(200);
+    expect(checkExperimentLink).toHaveBeenCalledTimes(1);
+    const input = vi.mocked(checkExperimentLink).mock.calls[0][1];
+    expect(input).toMatchObject({
+      link: EXPERIMENT,
+      userId: USER_ID,
+      personaId: 'persona-1',
+      // Same deterministic schedule id the replay path uses.
+      replayScheduleId: deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:exp-key`),
+      facts: { providers: ['youtube'], accountIds: { youtube: ['acct-1'] }, faceless: false, fullLipsync: false, segments: DEFAULT_SEGMENTS },
+    });
+    const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
+    expect(slotRows[0]).toMatchObject({ experiment_id: EXPERIMENT.experimentId, variant_id: 'hook-aggressive', experiment_pair: 2 });
+  });
+
+  it('re-checks the pair after the slot insert and dispatches when it passes', async () => {
+    const res = await post(baseBody({ experiment: EXPERIMENT }));
+    expect(res.status).toBe(200);
+    expect(verifyExperimentPairAfterInsert).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(verifyExperimentPairAfterInsert).mock.calls[0][1]).toMatchObject({ link: EXPERIMENT, userId: USER_ID, facts: { providers: ['youtube'], segments: DEFAULT_SEGMENTS } });
+    expect(deletes).toEqual([]);
+    expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(0);
+    expect(vi.mocked(startEngineVideoTask)).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed post-insert re-check deletes slot + schedule, refunds and returns 400 without dispatching', async () => {
+    vi.mocked(verifyExperimentPairAfterInsert).mockResolvedValueOnce({ ok: false, status: 400, message: 'Both videos of a pair must use the same niche.', field: 'options.niche' });
+    const res = await post(baseBody({ experiment: EXPERIMENT }));
+    const json = await res.json();
+    expect(res.status).toBe(400);
+    expect(json).toMatchObject({ code: 'VALIDATION_FAILED', field: 'options.niche' });
+    expect(deletes).toContain('scheduled_posts');
+    expect(deletes).toContain('schedules');
+    const refunds = rpcCalls.filter((c) => c.name === 'refund_generation_tokens');
+    expect(refunds).toHaveLength(1);
+    expect(refunds[0].args.p_reason).toBe('Unified generate+schedule: experiment pair mismatch; tokens refunded');
+    expect(vi.mocked(startEngineVideoTask)).not.toHaveBeenCalled();
+  });
+
+  it('a failed post-insert lookup (500) also rolls back and returns INTERNAL_ERROR', async () => {
+    vi.mocked(verifyExperimentPairAfterInsert).mockResolvedValueOnce({ ok: false, status: 500, message: 'Failed to verify the experiment pair.', field: 'experiment.pair' });
+    const res = await post(baseBody({ experiment: EXPERIMENT }));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('INTERNAL_ERROR');
+    expect(deletes).toContain('schedules');
+    expect(rpcCalls.filter((c) => c.name === 'refund_generation_tokens')).toHaveLength(1);
+    expect(vi.mocked(startEngineVideoTask)).not.toHaveBeenCalled();
+  });
+
+  it('a rejected link returns its status before any charge or insert', async () => {
+    vi.mocked(checkExperimentLink).mockResolvedValueOnce({ ok: false, status: 409, message: 'This pair already has a video for this variant.', field: 'experiment.variantId' });
+    const res = await post(baseBody({ experiment: EXPERIMENT }));
+    const json = await res.json();
+    expect(res.status).toBe(409);
+    expect(json).toMatchObject({ code: 'VALIDATION_FAILED', field: 'experiment.variantId' });
+    expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    expect(inserts['schedules']).toBeUndefined();
+  });
+
+  it('a failed link lookup is a 500 INTERNAL_ERROR with no charge', async () => {
+    vi.mocked(checkExperimentLink).mockResolvedValueOnce({ ok: false, status: 500, message: 'Failed to load the experiment.', field: 'experiment.experimentId' });
+    const res = await post(baseBody({ experiment: EXPERIMENT }));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('INTERNAL_ERROR');
+    expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+  });
+
+  it('a malformed link is a 400 before auth; no link means no check and null columns', async () => {
+    const bad = await post(baseBody({ experiment: { ...EXPERIMENT, variantId: 'A' } }));
+    expect(bad.status).toBe(400);
+    expect(checkExperimentLink).not.toHaveBeenCalled();
+    const res = await post(baseBody());
+    expect(verifyExperimentPairAfterInsert).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(checkExperimentLink).not.toHaveBeenCalled();
+    const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
+    expect(slotRows[0]).toMatchObject({ experiment_id: null, variant_id: null, experiment_pair: null });
   });
 });
