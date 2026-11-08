@@ -26,7 +26,7 @@ export interface ProgressHistoryEntry {
 // to feature-detect.
 export interface GenerationFacts {
   faceless: boolean;
-  /** Stock only or drawings only (migration 029); 'broll' for older posts. */
+  /** Stock only, drawings only, or only the post's own images (migrations 029, 043); 'broll' for older posts. */
   material: FacelessMaterial;
   language: string | null;
   voiceId: string | null;

@@ -35,7 +35,7 @@ export interface OptionsInput {
 export interface ValidatedOptions {
   faceless: boolean;
   /** Resolved here: 'broll' when omitted. Applies to every post, with or
-   *  without a face (stock only, or illustrations only). */
+   *  without a face (stock only, illustrations only, or only the segment images). */
   facelessMaterial: FacelessMaterial;
   /** Opt-in full lip-sync (whole video talking head, no b-roll). */
   fullLipsync?: boolean;

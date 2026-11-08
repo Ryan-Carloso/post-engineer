@@ -13,7 +13,7 @@ export const facelessMaterialStrings = {
   en: {
     newPost: {
       faceMaterialLabel: 'Video material',
-      faceMaterialHint: 'What shows on screen during the video. The two never mix.',
+      faceMaterialHint: 'What shows on screen during the video. The options never mix.',
       faceMaterialBroll: 'Real video clips',
       faceMaterialBrollHint:
         'Only real filmed clips from a free video library (people, places, objects).',
@@ -29,13 +29,13 @@ export const facelessMaterialStrings = {
       generationMaterialImages: 'Only your images',
     },
     personas: {
-      layoutHint: 'The bottom half shows the material chosen for each post (real clips or drawings).',
+      layoutHint: 'The bottom half shows the material chosen for each post (real clips, drawings, or your own images).',
     },
   },
   pt: {
     newPost: {
       faceMaterialLabel: 'Material do vídeo',
-      faceMaterialHint: 'O que aparece na tela durante o vídeo. Os dois nunca se misturam.',
+      faceMaterialHint: 'O que aparece na tela durante o vídeo. As opções nunca se misturam.',
       faceMaterialBroll: 'Vídeos reais',
       faceMaterialBrollHint:
         'Só trechos filmados de verdade, de um banco de vídeos gratuito (pessoas, lugares, objetos).',
@@ -51,7 +51,7 @@ export const facelessMaterialStrings = {
       generationMaterialImages: 'Só as suas imagens',
     },
     personas: {
-      layoutHint: 'Na metade de baixo entra o material escolhido em cada post (vídeos reais ou desenhos).',
+      layoutHint: 'Na metade de baixo entra o material escolhido em cada post (vídeos reais, desenhos ou as suas imagens).',
     },
   },
 };
