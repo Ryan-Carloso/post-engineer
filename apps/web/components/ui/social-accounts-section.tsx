@@ -177,7 +177,7 @@ function SocialAccountsLoadError({ message, retryLabel, onRetry }: { message: st
   return (
     <div className="rounded-xl border border-red-200 bg-red-50/50 p-5 text-center">
       <p className="text-sm font-medium text-red-700">{message}</p>
-      <button type="button" onClick={onRetry} className="mt-3 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-soft">{retryLabel}</button>
+      <button type="button" onClick={onRetry} className="mt-3 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-soft">{retryLabel}</button>
     </div>
   );
 }

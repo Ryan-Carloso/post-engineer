@@ -50,7 +50,7 @@ const PersonasHeader = () => {
   const { t } = useI18n();
   return (
     <div className="flex items-center gap-3">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-white">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-on-ink">
         <SparklesIcon />
       </span>
       <div>
@@ -67,7 +67,7 @@ const PersonasHeader = () => {
 const PersonasEmptyState = () => {
   const { t } = useI18n();
   return (
-    <div className="rounded-2xl border border-dashed border-line bg-linear-to-b from-white to-surface px-6 py-14 text-center shadow-sm">
+    <div className="rounded-2xl border border-dashed border-line bg-linear-to-b from-card to-surface px-6 py-14 text-center shadow-sm">
       <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-accent/10 text-accent">
         <SparklesIcon />
       </span>
@@ -78,7 +78,7 @@ const PersonasEmptyState = () => {
       <div className="mt-7">
         <Link
           href="/persona"
-          className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-accent-hover hover:shadow-md [&_svg]:size-4"
+          className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-on-ink shadow-sm transition-all hover:bg-accent-hover hover:shadow-md [&_svg]:size-4"
         >
           <PlusIcon />
           {t('personas.createFirst')}
@@ -103,7 +103,7 @@ const PersonasPageError = () => {
         type="button"
         disabled={personasQuery.isFetching}
         onClick={() => void personasQuery.refetch()}
-        className="mt-5 inline-flex items-center justify-center rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+        className="mt-5 inline-flex items-center justify-center rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-on-ink disabled:opacity-60"
       >
         {t('personas.tryAgain')}
       </button>

@@ -200,7 +200,7 @@ const PersonaPageError = ({ onRetry, isRetrying }: PersonaPageErrorProps) => {
           type="button"
           disabled={isRetrying}
           onClick={() => void onRetry()}
-          className="mt-7 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-7 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-on-ink transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isRetrying && <SpinnerIcon />}
           {t('persona.tryAgain')}
@@ -218,7 +218,7 @@ const PersonaHeader = ({ editing }: { editing: boolean }) => {
   const { t } = useI18n();
   return (
     <div className="flex items-center gap-3">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-white">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-on-ink">
         <SparklesIcon />
       </span>
       <div>
@@ -373,7 +373,7 @@ const PersonaCharacterPicker = () => {
                     className="aspect-9/16 w-full object-cover"
                   />
                   {isSelected ? (
-                    <span className="absolute top-3 right-3 flex size-9 items-center justify-center rounded-full bg-accent text-white shadow-md ring-2 ring-white">
+                    <span className="absolute top-3 right-3 flex size-9 items-center justify-center rounded-full bg-accent text-on-ink shadow-md ring-2 ring-white">
                       <CheckIcon />
                     </span>
                   ) : null}
@@ -512,7 +512,7 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
         type="button"
         onClick={validateForm(() => void handleSubmit())}
         disabled={isPending || updateMutation.isPending}
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-on-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isPending ? (
           <>
@@ -629,7 +629,7 @@ const PersonaErrorDialog = () => {
           <button
             type="button"
             onClick={() => usePersonaStore.getState().setResult(null)}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-on-ink transition-colors hover:bg-accent-hover"
           >
             {t('persona.tryAgain')}
           </button>

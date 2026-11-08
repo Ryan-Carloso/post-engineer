@@ -22,6 +22,9 @@
   --destructive: #c2301e;
   --destructive-foreground: #ffffff;
   --destructive-soft: #ffe1de;
+  --destructive-hover: #a1250f;
+  --code: #101728;
+  --code-text: #8a94a8;
   --border: #d8e0e7;
   --input: #d7e2ea;
   --ring: #2e6bff;
@@ -64,6 +67,9 @@
   --destructive: #ff8f80;
   --destructive-foreground: #1a0a07;
   --destructive-soft: #3b1a17;
+  --destructive-hover: #ffb3a8;
+  --code: #070b14;
+  --code-text: #9aa9bd;
   --border: #2a3850;
   --input: #2a3850;
   --ring: #6e9bff;
@@ -109,6 +115,9 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-code: var(--code);
+  --color-code-text: var(--code-text);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

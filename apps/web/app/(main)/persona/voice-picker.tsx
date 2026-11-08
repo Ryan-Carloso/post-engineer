@@ -258,7 +258,7 @@ export const PersonaHouseVoicePicker = () => {
             type="button"
             onClick={() => setDialogOpen(true)}
             disabled={voicesQuery.data === undefined}
-            className="flex-1 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-ink-soft disabled:opacity-50 sm:flex-none"
+            className="flex-1 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-on-ink hover:bg-ink-soft disabled:opacity-50 sm:flex-none"
           >
             {selected === null ? t('persona.voicePickerChoose') : t('persona.voicePickerChange')}
           </button>
@@ -291,7 +291,7 @@ export const PersonaHouseVoicePicker = () => {
               type="button"
               onClick={playCustomPreview}
               disabled={previewLoading || previewText.trim() === ''}
-              className="shrink-0 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-ink-soft disabled:opacity-50"
+              className="shrink-0 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-on-ink hover:bg-ink-soft disabled:opacity-50"
             >
               {previewLoading ? t('persona.voicePreviewListening') : t('persona.voicePreviewListen')}
             </button>

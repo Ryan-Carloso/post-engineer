@@ -373,7 +373,7 @@ export const PersonaVoiceClonePanel = () => {
               type="button"
               onClick={submitPending}
               disabled={isSubmitting}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-on-ink"
             >
               {isSubmitting ? (
                 <span className="inline-flex items-center gap-2">

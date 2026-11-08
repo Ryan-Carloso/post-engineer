@@ -103,21 +103,21 @@ export default function McpDocsSection({ apiKey }: { apiKey: string | null }): R
   return (
     <section className="overflow-hidden rounded-2xl border border-line bg-card shadow-[0_1px_2px_rgba(16,23,40,0.02)]">
       <div className="p-4 lg:p-6">
-        <div className="overflow-hidden rounded-xl bg-ink shadow-[0_8px_24px_rgba(16,23,40,0.25)]">
+        <div className="overflow-hidden rounded-xl bg-code shadow-[0_8px_24px_rgba(16,23,40,0.25)]">
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
-            <span className="text-xs font-semibold text-faint">{t('apiKeys.installPromptTitle')}</span>
+            <span className="text-xs font-semibold text-code-text">{t('apiKeys.installPromptTitle')}</span>
             <Button
               type="button"
               data-testid="copy-mcp-prompt-btn"
               onClick={() => copy(prompt)}
-              className="rounded-lg bg-card/10 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-card/20"
+              className="rounded-lg bg-code-text/20 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-code-text/30"
             >
               {copied ? t('apiKeys.docsCopied') : t('apiKeys.copy')}
             </Button>
           </div>
           <pre
             data-testid="mcp-install-prompt"
-            className="max-h-80 overflow-auto p-4 font-mono text-xs leading-5 whitespace-pre-wrap text-faint select-text"
+            className="max-h-80 overflow-auto p-4 font-mono text-xs leading-5 whitespace-pre-wrap text-code-text select-text"
           >
             {prompt}
           </pre>

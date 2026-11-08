@@ -664,8 +664,8 @@ export const SlotDetail = ({
               type="button"
               onClick={handleDelete}
               disabled={deleteSlot.isPending || updateTitle.isPending}
-              className={`rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
-                armed ? 'bg-destructive hover:bg-[#8c1f0d]' : 'bg-destructive hover:bg-destructive'
+              className={`rounded-xl px-4 py-2 text-sm font-semibold text-destructive-foreground disabled:opacity-50 ${
+                armed ? 'bg-destructive-hover' : 'bg-destructive hover:bg-destructive-hover'
               }`}
             >
               {armed ? t('posts.deleteConfirm') : t('posts.delete')}

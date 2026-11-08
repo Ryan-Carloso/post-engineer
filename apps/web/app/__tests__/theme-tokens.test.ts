@@ -76,3 +76,40 @@ describe('shared UI uses theme tokens only', () => {
     expect(source).not.toMatch(/\b(?:bg|text|border|ring|divide|from|to|via)-\[#[0-9a-fA-F]{3,8}\]/);
   });
 });
+
+// Fills that invert in dark mode (bg-ink / bg-accent / bg-primary) need
+// text-on-ink; a literal text-white would render light-on-light there.
+const INVERTING_FILL = /(?<![\w:-])bg-(?:ink|accent|primary)(?![\w/-])/;
+const LITERAL_WHITE_TEXT = /(?<![\w-])text-white(?![\w/-])/;
+
+function allSourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return entry.name === '__tests__' || entry.name === 'node_modules' ? [] : allSourceFiles(path);
+    return entry.name.endsWith('.tsx') ? [path] : [];
+  });
+}
+
+describe('inverting fills use text-on-ink', () => {
+  const files = ['app', 'components', 'lib'].flatMap((dir) => allSourceFiles(join(webRoot, dir)));
+
+  it('scans the app, components and lib sources', () => {
+    expect(files.length).toBeGreaterThan(50);
+  });
+
+  it('has no text-white on a bg-ink / bg-accent / bg-primary element', () => {
+    const offenders = files.flatMap((file) =>
+      readFileSync(file, 'utf8')
+        .split('\n')
+        .map((line, index) => ({ file, line: index + 1, text: line }))
+        .filter(({ text }) => INVERTING_FILL.test(text) && LITERAL_WHITE_TEXT.test(text))
+        .map(({ file: f, line }) => `${f.replace(webRoot, '')}:${line}`),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('keeps no fixed hex hover on the destructive buttons', () => {
+    const detail = readFileSync(join(webRoot, 'app', '(main)', 'posts', '[id]', 'page.tsx'), 'utf8');
+    expect(detail.includes('hover:bg-[#')).toBe(false);
+  });
+});

@@ -63,7 +63,7 @@ export function InsufficientTokensDialog() {
               close();
               router.push('/billing');
             }}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-on-ink transition-colors hover:bg-accent-hover"
           >
             {isFree ? t('tokens.buyMore') : t('persona.upgradeCta')}
           </button>
