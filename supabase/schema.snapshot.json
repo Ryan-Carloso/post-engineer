@@ -323,12 +323,6 @@
                     "notNull": true
                 },
                 {
-                    "name": "schedule_id",
-                    "type": "uuid",
-                    "default": null,
-                    "notNull": true
-                },
-                {
                     "name": "name",
                     "type": "text",
                     "default": null,
@@ -351,6 +345,12 @@
                     "type": "timestamp with time zone",
                     "default": "now()",
                     "notNull": true
+                },
+                {
+                    "name": "persona_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": false
                 }
             ],
             "policies": {
@@ -363,8 +363,6 @@
             "constraints": {
                 "experiments_pkey": "PRIMARY KEY (id)",
                 "experiments_variable_check": "CHECK ((variable = 'hook'::text))",
-                "experiments_schedule_id_key": "UNIQUE (schedule_id)",
-                "experiments_schedule_id_fkey": "FOREIGN KEY (schedule_id) REFERENCES schedules(id) ON DELETE CASCADE",
                 "experiments_name_length_check": "CHECK (((char_length(name) >= 1) AND (char_length(name) <= 120)))",
                 "experiments_target_pairs_check": "CHECK (((target_pairs >= 3) AND (target_pairs <= 20)))"
             }
