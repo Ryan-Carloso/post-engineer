@@ -1,5 +1,6 @@
 //---------------
-// faceless-material — the video's material choice (stock or drawings),
+// faceless-material — the video's material choice (stock, drawings, or only
+// the images sent with the post),
 // offered for every post, with or without a face.
 //
 // The en/pt dictionaries are grandfathered over the 500-line file-size cap
@@ -25,6 +26,7 @@ export const facelessMaterialStrings = {
       generationMaterialLabel: 'Material',
       generationMaterialBroll: 'Real video clips',
       generationMaterialSvg: 'Drawings (illustrations)',
+      generationMaterialImages: 'Only your images',
     },
     personas: {
       layoutHint: 'The bottom half shows the material chosen for each post (real clips or drawings).',
@@ -46,6 +48,7 @@ export const facelessMaterialStrings = {
       generationMaterialLabel: 'Material',
       generationMaterialBroll: 'Vídeos reais',
       generationMaterialSvg: 'Desenhos (ilustrações)',
+      generationMaterialImages: 'Só as suas imagens',
     },
     personas: {
       layoutHint: 'Na metade de baixo entra o material escolhido em cada post (vídeos reais ou desenhos).',
