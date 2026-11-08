@@ -61,6 +61,11 @@ const segmentsBody = object(
       description: 'Hook first, body, CTA last. 60-200 words in total.',
       items: { $ref: '#/components/schemas/Segment' },
     },
+    facelessMaterial: {
+      type: 'string',
+      enum: ['broll', 'svg', 'images'],
+      description: "Optional. 'images' needs media on every segment (up to 12).",
+    },
   },
   ['segments'],
 );
@@ -96,7 +101,11 @@ const generateBody = object(
     ),
     options: object({
       faceless: { type: 'boolean' },
-      facelessMaterial: { type: 'string', enum: ['broll', 'svg'] },
+      facelessMaterial: {
+        type: 'string',
+        enum: ['broll', 'svg', 'images'],
+        description: "'images' renders only the segment images: media on every segment, up to 12.",
+      },
       fullLipsync: { type: 'boolean', description: 'Persona talks for the whole video, not only the hook. Not with faceless.' },
       audioUrl: str,
       imageId: str,

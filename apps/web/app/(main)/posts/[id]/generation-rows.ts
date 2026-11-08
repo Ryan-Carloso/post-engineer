@@ -5,8 +5,15 @@ import type { TranslationKey } from '@/lib/i18n';
 // buildGenerationRows — the label/value rows of the post's generation facts,
 // in display order. Extracted from page.tsx (grandfathered over the
 // file-size cap). The material row is always shown, face or not: the video
-// is either stock only or drawings only, and the post says which.
+// is stock only, drawings only, or only the post's own images, and the post
+// says which.
 //---------------
+const MATERIAL_LABELS: Record<SlotDetailPayload['generation']['material'], TranslationKey> = {
+  broll: 'posts.generationMaterialBroll',
+  svg: 'posts.generationMaterialSvg',
+  images: 'posts.generationMaterialImages',
+};
+
 export interface GenerationRow {
   label: string;
   value: string;
@@ -25,7 +32,7 @@ export function buildGenerationRows(
     },
     {
       label: t('posts.generationMaterialLabel'),
-      value: generation.material === 'svg' ? t('posts.generationMaterialSvg') : t('posts.generationMaterialBroll'),
+      value: t(MATERIAL_LABELS[generation.material]),
     },
   ];
   if (generation.language !== null) {

@@ -1,4 +1,4 @@
-import type { FacelessMaterial } from '@/lib/generation/faceless-materials';
+import { toFacelessMaterial, type FacelessMaterial } from '@/lib/generation/faceless-materials';
 
 // Generation facts for one slot: the read-only record of what the post
 // was generated with.
@@ -42,9 +42,10 @@ export function buildGenerationFacts(
   // report object-literal property lines, so this keeps every fact visible
   // to the coverage gate.
   const faceless = row.faceless === true;
-  // Only the literal 'svg' counts — mirrors the engine's slot_material rule,
-  // so a row predating migration 029 reads as the stock it rendered with.
-  const material = row.faceless_material === 'svg' ? 'svg' : 'broll';
+  // Only an exact 'svg' or 'images' counts — mirrors the engine's
+  // slot_material rule, so a row predating migration 029 reads as the stock
+  // it rendered with.
+  const material = toFacelessMaterial(row.faceless_material);
   const language = scheduleRow.post_language ?? null;
   const voiceId = scheduleRow.post_voice_id ?? null;
   const videoAspect = scheduleRow.post_video_aspect ?? null;
