@@ -550,8 +550,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
       if (replayed) return replayed;
     }
   }
-  // Read-your-ledger, net-based: a refund leaves the spend row in place, so
-  // only an unrefunded spend counts (see netLedgerSpent in lib/tokens).
+  // Read-your-ledger, net-based: the generation counts as already spent only
+  // while its spends exceed its refunds (see netLedgerSpent in lib/tokens).
   const { data: ledgerRows, error: ledgerError } = await supabase
     .from('token_transactions')
     .select('type, amount')

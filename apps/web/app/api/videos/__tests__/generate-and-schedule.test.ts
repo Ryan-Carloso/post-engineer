@@ -1379,6 +1379,34 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(failedUpdates).toHaveLength(1);
     });
 
+    it('refunds the re-charge when a fully-refunded retry fails dispatch', async () => {
+      // Attempt 1 spent and was fully refunded (net 0), so the retry
+      // re-charges under the same generation_id. If its dispatch then
+      // fails, the per-slot refund must still be attempted for the fresh
+      // charge — a refund cap counting only the first charge would answer
+      // nothing_to_refund and the user would pay for a failed video
+      // (migration 043 makes the cap net-aware; this pins the route half).
+      setup({
+        ...DEFAULT_CFG,
+        ledgerRows: [
+          { id: 'tx-spend', type: 'video_generation', amount: -2 },
+          { id: 'tx-refund', type: 'generation_refund', amount: 2 },
+        ],
+        engineFailSubjects: ['Porto trip'],
+      });
+      const res = await post(baseBody({ idempotencyKey: 'refunded-retry-dispatch-key' }));
+      const json = await res.json();
+      expect(res.status).toBe(502);
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', taskId: null, status: 'failed' });
+      // The retry charged again (net 0 before it) ...
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
+      // ... and the failed dispatch still attempts a refund of that charge.
+      const refunds = rpcCalls.filter((c) => c.name === 'refund_batch_tokens');
+      expect(refunds).toHaveLength(1);
+      expect(refunds[0].args.p_amount).toBe(2);
+      expect(refunds[0].args.p_refund_key).toMatch(/^batch:.*:slot:slot-0$/);
+    });
+
     it('returns 502 when the slot fails', async () => {
       setup({ ...DEFAULT_CFG, engineFailSubjects: ['Porto trip'] });
       const res = await post(baseBody());
