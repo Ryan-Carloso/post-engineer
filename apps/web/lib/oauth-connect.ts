@@ -18,7 +18,7 @@ import {
 // not exist — only for a browser signed in as that same owner.
 //---------------
 
-export const OAUTH_CONNECT_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'threads'] as const;
+export const OAUTH_CONNECT_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'threads', 'facebook'] as const;
 export type OAuthConnectProvider = (typeof OAUTH_CONNECT_PROVIDERS)[number];
 
 export function isOAuthConnectProvider(value: unknown): value is OAuthConnectProvider {
@@ -217,6 +217,19 @@ export async function buildOAuthConnectUrl(
       const { buildThreadsAuthorizationUrl } = await import('./threads');
       const { state, nonce } = createOAuthState({ provider: 'threads', redirectUri });
       const authUrl = buildThreadsAuthorizationUrl(state, redirectUri);
+      return { ok: true, authUrl, state, nonce };
+    }
+    if (provider === 'facebook') {
+      if (!process.env.FACEBOOK_CLIENT_ID || !process.env.FACEBOOK_CLIENT_SECRET) {
+        return {
+          ok: false,
+          error:
+            'Facebook credentials are not configured (FACEBOOK_CLIENT_ID / FACEBOOK_CLIENT_SECRET).',
+        };
+      }
+      const { buildFacebookAuthorizationUrl } = await import('./facebook');
+      const { state, nonce } = createOAuthState({ provider: 'facebook', redirectUri });
+      const authUrl = buildFacebookAuthorizationUrl(state, redirectUri);
       return { ok: true, authUrl, state, nonce };
     }
     // linkedin

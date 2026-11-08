@@ -62,6 +62,7 @@ const mockQueries = vi.hoisted(() => ({
   bluesky: { data: null as null | { accounts: unknown[] }, isLoading: false },
   linkedin: { data: null as null | { accounts: unknown[] }, isLoading: false },
   threads: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
+  facebook: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -70,6 +71,7 @@ vi.mock('@/lib/api', () => ({
   useBlueskyAccountsQuery: () => mockQueries.bluesky,
   useLinkedinAccountsQuery: () => mockQueries.linkedin,
   useThreadsAccountsQuery: () => mockQueries.threads,
+  useFacebookAccountsQuery: () => mockQueries.facebook,
 }));
 
 vi.mock('@/lib/account-card-telemetry', () => ({
@@ -135,6 +137,7 @@ function setConnectedAccounts() {
   mockQueries.bluesky = { ...connectedAccounts.bluesky };
   mockQueries.linkedin = { ...connectedAccounts.linkedin };
   mockQueries.threads = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
+  mockQueries.facebook = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
 }
 
 beforeEach(() => {
@@ -272,7 +275,7 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [] },
+            accounts: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [] },
           }),
         }),
       );
@@ -302,6 +305,7 @@ describe('PersonaPublishingAccountsSection', () => {
 
     expect(screen.getByText('No LinkedIn accounts connected.')).toBeInTheDocument();
     expect(screen.getByText('No Threads accounts connected.')).toBeInTheDocument();
+    expect(screen.getByText('No Facebook accounts connected.')).toBeInTheDocument();
     for (const link of screen.getAllByRole('link', { name: 'Connect accounts' })) {
       expect(link).toHaveAttribute('href', '/accounts');
     }
@@ -383,6 +387,66 @@ describe('PersonaPublishingAccountsSection', () => {
       shownLabel: 'th-2',
       labelOrigin: 'provider_id',
     }));
+  });
+
+  it('renders facebook pages, preselects saved ones and saves the toggled selection', async () => {
+    const fetchMock = mockFetchOnce({
+      success: true,
+      defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: ['fb-1'] },
+    });
+    mockQueries.youtube = { data: { accounts: [] }, isLoading: false };
+    mockQueries.instagram = { data: { accounts: [] }, isLoading: false };
+    mockQueries.bluesky = { data: { accounts: [] }, isLoading: false };
+    mockQueries.facebook = {
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'facebook', providerAccountId: 'fb-1', accountName: 'My Page' },
+          { provider: 'facebook', providerAccountId: 'fb-2' },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    };
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    await screen.findByTestId('publishing-accounts-save');
+
+    const checkboxes = () => screen.getAllByTestId('account-card-select') as HTMLInputElement[];
+    expect(checkboxes()).toHaveLength(2);
+    expect(checkboxes()[0].checked).toBe(true);
+    expect(checkboxes()[1].checked).toBe(false);
+    expect(screen.getByText('My Page')).toBeInTheDocument();
+    expect(reportAccountCardDisplay).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'facebook',
+      shownLabel: 'fb-2',
+      labelOrigin: 'provider_id',
+    }));
+
+    fireEvent.click(checkboxes()[1]);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ success: true, defaults: { facebook: ['fb-1', 'fb-2'] } }),
+    });
+    fireEvent.click(screen.getByTestId('publishing-accounts-save'));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        DEFAULTS_URL,
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({
+            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: ['fb-1', 'fb-2'] },
+          }),
+        }),
+      );
+    });
+  });
+
+  it('disables Save while the facebook pages are still loading', async () => {
+    mockFetchOnce(serverDefaults);
+    mockQueries.facebook = { data: { authenticated: true, accounts: [] }, isLoading: true, error: null };
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    expect(await screen.findByTestId('publishing-accounts-save')).toBeDisabled();
   });
 
   it('ignores non-string ids in the server defaults', async () => {

@@ -89,7 +89,7 @@ describe('metricsTargets', () => {
   });
 
   it('extracts a target for every provider in SOCIAL_PROVIDERS', () => {
-    const fixtures: Record<string, unknown> = { youtube: YT_ENTRY, instagram: IG_ENTRY, bluesky: BSKY_ENTRY, linkedin: LI_ENTRY, threads: { provider: 'threads', status: 'published', accountId: '42', postId: 'p1' } };
+    const fixtures: Record<string, unknown> = { youtube: YT_ENTRY, instagram: IG_ENTRY, bluesky: BSKY_ENTRY, linkedin: LI_ENTRY, threads: { provider: 'threads', status: 'published', accountId: '42', postId: 'p1' }, facebook: { provider: 'facebook', status: 'published', accountId: '111', postId: 'v1' } };
     for (const provider of SOCIAL_PROVIDERS) {
       const { targets } = metricsTargets([fixtures[provider]]);
       expect(targets.map((target) => target.provider), provider).toEqual([provider]);
@@ -110,12 +110,21 @@ describe('metricsTargets', () => {
   });
 });
 
-describe('post_metrics provider check (migration 034)', () => {
-  it('allows exactly the providers in SOCIAL_PROVIDERS', () => {
-    const sql = readFileSync(join(findRepoRoot(import.meta.url), 'supabase/migrations/034_threads-provider.sql'), 'utf8');
+// Each migration that re-creates the check must list every provider the
+// app supported at that point; the latest one (049) lists them all.
+describe('post_metrics provider check (migrations 034 and 049)', () => {
+  function listedProviders(file: string): string[] {
+    const sql = readFileSync(join(findRepoRoot(import.meta.url), 'supabase/migrations', file), 'utf8');
     const line = sql.split('\n').find((candidate) => candidate.includes('check (provider in'));
-    const listed = (line ?? '').split("'").filter((_, index) => index % 2 === 1);
-    expect([...listed].sort()).toEqual([...SOCIAL_PROVIDERS].sort());
+    return (line ?? '').split("'").filter((_, index) => index % 2 === 1);
+  }
+
+  it('034 allows the five providers supported when it shipped', () => {
+    expect(listedProviders('034_threads-provider.sql').sort()).toEqual(['bluesky', 'instagram', 'linkedin', 'threads', 'youtube']);
+  });
+
+  it('049 allows exactly the providers in SOCIAL_PROVIDERS', () => {
+    expect(listedProviders('049_facebook-provider.sql').sort()).toEqual([...SOCIAL_PROVIDERS].sort());
   });
 });
 

@@ -10,6 +10,7 @@ import {
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
   useThreadsAccountsQuery,
+  useFacebookAccountsQuery,
   useBlueskyAccountsQuery,
   useVideoGenerationsQuery,
   type ScheduledSlot,
@@ -42,7 +43,7 @@ import {
 
 type Tab = 'upcoming' | 'history';
 type View = 'list' | 'calendar';
-type ProviderFilter = 'all' | 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads';
+type ProviderFilter = 'all' | 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook';
 
 //---------------
 // resolveAccountFilter — a selected account only stays applied when it
@@ -61,7 +62,7 @@ function resolveAccountFilter(
   return accountId;
 }
 
-const PROVIDER_FILTERS: ProviderFilter[] = ['all', 'youtube', 'instagram', 'linkedin', 'bluesky', 'threads'];
+const PROVIDER_FILTERS: ProviderFilter[] = ['all', 'youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'];
 
 // Max rows fetched per tab; the API caps ?limit= at 500, the page asks for
 // fewer to keep the render cheap. Exported for tests.
@@ -90,6 +91,7 @@ export default function PostsPage() {
   const linkedinQuery = useLinkedinAccountsQuery();
   const blueskyQuery = useBlueskyAccountsQuery();
   const threadsQuery = useThreadsAccountsQuery();
+  const facebookQuery = useFacebookAccountsQuery();
 
   const scheduleById = useMemo(
     () => new Map((schedulesQuery.data ?? []).map((schedule) => [schedule.id, schedule])),
@@ -107,8 +109,9 @@ export default function PostsPage() {
       ...(linkedinQuery.data?.accounts ?? []).map(accountOption),
       ...(blueskyQuery.data?.accounts ?? []).map(accountOption),
       ...(threadsQuery.data?.accounts ?? []).map(accountOption),
+      ...(facebookQuery.data?.accounts ?? []).map(accountOption),
     ],
-    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data, threadsQuery.data],
+    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data, threadsQuery.data, facebookQuery.data],
   );
 
   const visibleAccounts = useMemo(

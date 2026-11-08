@@ -6,6 +6,7 @@ import { getSocialAccountTokens } from '@/lib/social-accounts';
 import { InstagramService } from '@/lib/instagram';
 import { getLinkedInSocialActions } from '@/lib/linkedin';
 import { getThreadsInsights } from '@/lib/threads';
+import { getFacebookVideoInsights } from '@/lib/facebook';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { PROVIDER_LABELS } from '@/lib/account-options';
 import type { CounterContext, MeasuredProvider, MetricsCounters, MetricsTarget } from './post-metrics';
@@ -95,8 +96,18 @@ export function threadsCounters(insights: Record<string, number>): MetricsCounte
   };
 }
 
+export function facebookCounters(insights: Record<string, number>): MetricsCounters {
+  return {
+    views: parseCount(insights.total_video_views),
+    likes: parseCount(insights.likes),
+    comments: parseCount(insights.comments),
+    // Facebook exposes no per-video save count.
+    saves: null,
+  };
+}
+
 // Ownership: getSocialAccountTokens only resolves the user's own accounts.
-async function ownerAccessToken(userId: string, provider: 'instagram' | 'linkedin' | 'threads', accountId: string): Promise<string> {
+async function ownerAccessToken(userId: string, provider: 'instagram' | 'linkedin' | 'threads' | 'facebook', accountId: string): Promise<string> {
   const label = PROVIDER_LABELS[provider];
   const { tokens } = await getSocialAccountTokens(createSupabaseServiceClient(), userId, provider, accountId);
   if (typeof tokens.access_token !== 'string' || tokens.access_token === '') {
@@ -136,6 +147,10 @@ export const COUNTER_FETCHERS: Record<MeasuredProvider, CounterFetcher> = {
   async threads(userId, target) {
     const token = await ownerAccessToken(userId, 'threads', target.accountId);
     return threadsCounters(await getThreadsInsights(token, target.externalId));
+  },
+  async facebook(userId, target) {
+    const token = await ownerAccessToken(userId, 'facebook', target.accountId);
+    return facebookCounters(await getFacebookVideoInsights(token, target.externalId));
   },
 };
 

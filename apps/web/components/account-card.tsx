@@ -7,17 +7,18 @@ import type { AccountLabelOrigin } from '@/lib/account-display-diagnostics';
 import { TrashIcon } from '@/lib/ui';
 import { useI18n } from '@/lib/i18n/provider';
 import { cn } from '@/lib/utils';
+import type { SocialProvider } from '@/lib/providers/registry';
 
 //---------------
 // AccountCard — shared social-account card.
-// Supports YouTube, Instagram, Bluesky, LinkedIn and Threads.
+// Supports YouTube, Instagram, Bluesky, LinkedIn, Threads and Facebook.
 // Used on the accounts page (select / disconnect), API-key creation
 // (checkbox selection) and the persona schedule (compact mode: avatar
 // only, falling back to the first letters of the name).
 //---------------
 
 export interface AccountCardProps {
-  type: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads';
+  type: SocialProvider;
   name: string;
   email?: string;
   thumbnail?: string;
