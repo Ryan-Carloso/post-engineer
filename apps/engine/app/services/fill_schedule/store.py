@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 import requests
@@ -31,7 +31,7 @@ from app.utils.supabase_retry import build_retrying_session, set_retry_budget
 # supabase_retry.worst_case_seconds (3 attempts, not 2). That is per REQUEST,
 # not per tick: a sustained Supabase outage makes each of the tick's stages
 # pay ~31s on its first call (generated, reconciled, published, plus publish's
-# recover_stale_publishing), so a tick runs ~2min instead of 0s and the
+# resumable_publishing_slots), so a tick runs ~2min instead of 0s and the
 # effective period stretches past TICK_SECONDS. The scheduler's connect
 # circuit breaker caps that; this comment records the underlying cost.
 REQUEST_TIMEOUT_SECONDS = (10, 30)
@@ -340,25 +340,6 @@ class ScheduleStore:
             },
         )
         return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
-
-    def recover_stale_publishing(self, older_than_minutes: int = 120) -> int:
-        """Stuck 'publishing' slots (crash mid-publish) → ready.
-
-        Only acts on old slots (>120min): a legitimate multi-provider
-        publish can take several minutes (video upload on a slow network).
-        Returns the PostgREST count.
-        """
-        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)).isoformat()
-        self._request(
-            "PATCH",
-            "scheduled_posts",
-            json={"status": SLOT_READY},
-            params={
-                "status": f"eq.{SLOT_PUBLISHING}",
-                "updated_at": f"lt.{cutoff}",
-            },
-        )
-        return 0
 
     def signed_url(self, bucket: str, path: str) -> str:
         """Signed URL valid long enough to reach the cutoff."""

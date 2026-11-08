@@ -74,9 +74,14 @@ function mockPostsClient(upcoming: unknown[], recent: unknown[], queue: unknown[
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
+    contains: vi.fn().mockReturnThis(),
     gte: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
-    limit: vi.fn(async () => ({ data: limitCalls++ === 0 ? upcoming : recent, error: null })),
+    // Upcoming, recent, then the publishing-with-notice query (empty here).
+    limit: vi.fn(async () => {
+      const call = limitCalls++;
+      return { data: call === 0 ? upcoming : call === 1 ? recent : [], error: null };
+    }),
     // The queue-positions query is awaited without .limit() (the real
     // Supabase chain is thenable); it resolves the queue fixture.
     then: (resolve: (value: unknown) => void) => resolve({ data: queue, error: null }),
@@ -105,9 +110,14 @@ function mockScopedPostsClient(schedules: Array<{ id: string; persona_id: string
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
+    contains: vi.fn().mockReturnThis(),
     gte: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
-    limit: vi.fn(async () => ({ data: limitCalls++ === 0 ? upcoming : recent, error: null })),
+    // Upcoming, recent, then the publishing-with-notice query (empty here).
+    limit: vi.fn(async () => {
+      const call = limitCalls++;
+      return { data: call === 0 ? upcoming : call === 1 ? recent : [], error: null };
+    }),
     // Thenable like the real Supabase chain: the queue-positions query is
     // awaited without .limit().
     then: (resolve: (value: unknown) => void) => resolve({ data: queue, error: null }),
@@ -407,7 +417,9 @@ describe('GET slot progress (0–100)', () => {
     const client = mockPostsClient(upcoming, recent, queue);
     mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-    const response = await GET(new Request('https://example.com/api/schedule/status'));
+    // The mock ignores .limit(), so fixtures can be bigger than the default
+    // 10; the route still caps the merged upcoming list at the limit.
+    const response = await GET(new Request('https://example.com/api/schedule/status?limit=50'));
     expect(response.status).toBe(200);
     return (await response.json()) as {
       upcoming: SlotPresentation[];
@@ -901,11 +913,11 @@ describe('GET query contracts', () => {
       ([column, options]) =>
         column === 'slot_at' && (options as { ascending?: boolean } | null)?.ascending === false,
     );
-    // Upcoming and the queue-positions query sort ascending; recent sorts
-    // descending. Counting (not just "contains") pins each query's
-    // direction — a flipped boolean on one query must not hide behind the
-    // other queries' calls.
-    expect(ascending).toHaveLength(2);
+    // Upcoming, publishing, and the queue-positions query sort ascending;
+    // recent sorts descending. Counting (not just "contains") pins each
+    // query's direction — a flipped boolean on one query must not hide
+    // behind the other queries' calls.
+    expect(ascending).toHaveLength(3);
     expect(descending).toHaveLength(1);
   });
 
@@ -942,7 +954,7 @@ describe('GET query contracts', () => {
   });
 
   it('puts a publishing slot with a user notice into upcoming', async () => {
-    const notice = 'Bluesky did not publish because the email on this account is not verified. This is a problem with your account. Only you can fix it: verify the email.';
+    const notice = 'Bluesky did not publish because the email on this account is not verified. This is a problem with your account. Only you can fix it: verify the email on Bluesky.';
     let limitCalls = 0;
     const publishingRow = {
       id: 'pub-1',
@@ -963,6 +975,7 @@ describe('GET query contracts', () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       in: vi.fn().mockReturnThis(),
+      contains: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
       order: vi.fn().mockReturnThis(),
       limit: vi.fn(async () => {
@@ -983,10 +996,48 @@ describe('GET query contracts', () => {
     expect(body.upcoming[0].status).toBe('publishing');
     expect(body.upcoming[0].userNotices[0].notice).toBe(notice);
     expect(body.upcoming[0].userNotices[0].requiresUser).toBe(true);
-    expect(body.upcoming[0].providerFailures[0].requiresUser).toBe(false);
+    expect(body.upcoming[0].providerFailures[0].requiresUser).toBe(true);
     expect(body.upcoming[0].providerFailures[0].notice).toContain('Only you can fix');
     expect(body.upcoming[0].publish_outcomes).toBeUndefined();
     expect(body.recent).toEqual([]);
+  });
+
+  it('filters publishing slots by user notice in SQL, before the limit', async () => {
+    const client = await getWithLimit(null);
+    expect(client.chain.contains).toHaveBeenCalledTimes(1);
+    expect(client.chain.contains).toHaveBeenCalledWith('publish_outcomes', '[{"requiresUser":true}]');
+  });
+
+  it('merges publishing slots into upcoming by slot_at and caps the list at the limit', async () => {
+    const outcome = { provider: 'bluesky', accountId: 'b1', status: 'failed', code: 'token_expired', requiresUser: true, notice: 'n' };
+    const upcomingRows = [
+      { id: 'up-1', slot_at: '2026-09-24T09:00:00Z', status: 'ready', title: 'A', schedule_id: 's1' },
+      { id: 'up-2', slot_at: '2026-09-24T11:00:00Z', status: 'ready', title: 'B', schedule_id: 's1' },
+    ];
+    const publishingRows = [
+      { id: 'pub-1', slot_at: '2026-09-24T10:00:00Z', status: 'publishing', title: 'P', schedule_id: 's1', publish_outcomes: [outcome] },
+    ];
+    let limitCalls = 0;
+    const chain = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      contains: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn(async () => {
+        const call = limitCalls++;
+        return { data: call === 0 ? upcomingRows : call === 2 ? publishingRows : [], error: null };
+      }),
+      then: (resolve: (value: unknown) => void) => resolve({ data: [], error: null }),
+    };
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue({ from: vi.fn(() => chain) } as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/status?limit=2'));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.upcoming.map((slot: { id: string }) => slot.id)).toEqual(['up-1', 'pub-1']);
   });
 });
 
@@ -1008,6 +1059,7 @@ function mockFailingPostsClient(options: {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
+    contains: vi.fn().mockReturnThis(),
     gte: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn(async () => {
@@ -1189,6 +1241,7 @@ describe('GET failure handling', () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       in: vi.fn().mockReturnThis(),
+      contains: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
       order: vi.fn().mockReturnThis(),
       limit: vi.fn(async () => ({ data: null, error: null })),
@@ -1241,6 +1294,7 @@ describe('GET range mode', () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       in: vi.fn().mockReturnThis(),
+      contains: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
       lt: vi.fn().mockReturnThis(),
       order: vi.fn().mockReturnThis(),

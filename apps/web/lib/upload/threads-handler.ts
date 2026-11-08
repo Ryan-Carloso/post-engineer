@@ -31,7 +31,7 @@ export interface ThreadsUploadResponse {
 }
 
 function rejected(error: string): ThreadsUploadResponse {
-  return { success: false, results: [accountFailure('', error)] };
+  return { success: false, results: [accountFailure('', error, 'publish_rejected')] };
 }
 
 export async function handleThreadsUpload(
@@ -71,11 +71,11 @@ export async function handleThreadsUpload(
       const accessToken = tokens.access_token;
 
       if (typeof accessToken !== 'string' || accessToken === '') {
-        results.push(accountFailure(accountId, 'Threads token not found'));
+        results.push(accountFailure(accountId, 'Threads token not found', 'token_missing'));
         continue;
       }
       if (typeof tokens.expiry_date === 'number' && Date.now() >= tokens.expiry_date) {
-        results.push(accountFailure(accountId, 'Threads token expired. Please reconnect the account.'));
+        results.push(accountFailure(accountId, 'Threads token expired. Please reconnect the account.', 'token_expired'));
         continue;
       }
 

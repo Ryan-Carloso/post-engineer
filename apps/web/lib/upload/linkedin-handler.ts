@@ -44,13 +44,13 @@ export async function handleLinkedinUpload(
   const rawFile = formData.get('video');
 
   if (accountIds.length === 0) {
-    return { success: false, results: [accountFailure('', 'At least one LinkedIn account ID is required')] };
+    return { success: false, results: [accountFailure('', 'At least one LinkedIn account ID is required', 'publish_rejected')] };
   }
   if (typeof captionRaw !== 'string' || captionRaw.trim() === '') {
-    return { success: false, results: [accountFailure('', 'Caption is required')] };
+    return { success: false, results: [accountFailure('', 'Caption is required', 'publish_rejected')] };
   }
   if (!(rawFile instanceof File)) {
-    return { success: false, results: [accountFailure('', 'Video file is required')] };
+    return { success: false, results: [accountFailure('', 'Video file is required', 'publish_rejected')] };
   }
 
   const buffer = new Uint8Array(await rawFile.arrayBuffer());
@@ -64,11 +64,11 @@ export async function handleLinkedinUpload(
       const accessToken = tokens.access_token;
 
       if (typeof accessToken !== 'string' || accessToken === '') {
-        results.push(accountFailure(accountId, 'LinkedIn token not found'));
+        results.push(accountFailure(accountId, 'LinkedIn token not found', 'token_missing'));
         continue;
       }
       if (typeof tokens.expiry_date === 'number' && Date.now() >= tokens.expiry_date) {
-        results.push(accountFailure(accountId, 'LinkedIn token expired. Please reconnect the account.'));
+        results.push(accountFailure(accountId, 'LinkedIn token expired. Please reconnect the account.', 'token_expired'));
         continue;
       }
 

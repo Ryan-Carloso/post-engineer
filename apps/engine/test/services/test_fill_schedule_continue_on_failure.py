@@ -25,9 +25,6 @@ class _FakeStore:
     def __init__(self):
         self.updates = []
 
-    def recover_stale_publishing(self):
-        pass
-
     def claim_ready_slot(self, slot_id):
         return True
 

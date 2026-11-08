@@ -11,9 +11,11 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
+from app.services import video_storage
 from app.services.fill_schedule import FillScheduleScheduler
+from app.services.fill_schedule import publish as publish_module
 from app.services.fill_schedule.account_outcomes import classify_failure, next_delay_seconds
 from app.services.upload_publisher import PublishError
 
@@ -21,7 +23,7 @@ UTC = timezone.utc
 NOW = datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
 EMAIL = (
     "Bluesky did not publish because the email on this account is not verified. "
-    "This is a problem with your account. Only you can fix it: verify the email."
+    "This is a problem with your account. Only you can fix it: verify the email on Bluesky."
 )
 
 
@@ -30,9 +32,6 @@ class _MemoryStore:
         self.slot = slot
         self.updates: list[tuple[str, dict]] = []
         self.refund_batch_calls: list[tuple] = []
-
-    def recover_stale_publishing(self) -> int:
-        return 0
 
     def ready_due_slots(self, now: datetime) -> list[dict]:
         status = self.slot.get("status", "ready")
@@ -236,9 +235,144 @@ class AccountRetryTests(unittest.TestCase):
         youtube = next(item for item in store.slot["publish_outcomes"] if item["provider"] == "youtube")
         self.assertEqual(youtube["status"], "published")
 
-    def test_delay_and_caption_classification(self) -> None:
+    def test_transient_account_failure_inside_a_200_is_retried_then_exhausted(self) -> None:
+        # A provider 503 reported per account inside a 200 response carries
+        # errorCode transient: it gets the 30s / 2min retries, not one shot.
+        slot = self._slot(["instagram"])
+        slot["schedules"]["instagram_account_ids"] = ["ig-1"]
+        store = _MemoryStore(slot)
+        calls: list[str] = []
+
+        def publish(**kwargs):
+            calls.append(type(kwargs["metadata"]).__name__)
+            return {
+                "success": False,
+                "results": [{
+                    "accountId": "ig-1",
+                    "success": False,
+                    "error": "Instagram API 503",
+                    "errorCode": "transient",
+                }],
+            }
+
+        scheduler = self._scheduler(store, publish)
+        scheduler.publish_due(NOW)
+        outcome = store.slot["publish_outcomes"][0]
+        self.assertEqual(outcome["status"], "retrying")
+        self.assertEqual(store.slot["status"], "publishing")
+        scheduler.publish_due(NOW + timedelta(seconds=30))
+        scheduler.publish_due(NOW + timedelta(seconds=150))
+        self.assertEqual(len(calls), 3)
+        outcome = store.slot["publish_outcomes"][0]
+        self.assertEqual(outcome["code"], "retries_exhausted")
+        self.assertFalse(outcome["requiresUser"])
+        self.assertEqual(store.slot["status"], "failed")
+
+    def test_one_unlabeled_rejection_applies_to_every_pending_account(self) -> None:
+        # A request-level rejection ("Caption is required") comes back as one
+        # result with no accountId. Each DID keeps its real code instead of a
+        # generic transient failure, so nothing is re-uploaded 3 times.
+        slot = self._slot(["bluesky"])
+        slot["schedules"]["bluesky_account_ids"] = ["bsky-1", "bsky-2"]
+        store = _MemoryStore(slot)
+        calls: list[str] = []
+
+        def publish(**kwargs):
+            calls.append("bluesky")
+            return {
+                "success": False,
+                "results": [{
+                    "accountId": "",
+                    "success": False,
+                    "error": "Caption is required",
+                    "errorCode": "publish_rejected",
+                }],
+            }
+
+        scheduler = self._scheduler(store, publish)
+        scheduler.publish_due(NOW)
+        outcomes = store.slot["publish_outcomes"]
+        self.assertEqual(sorted(item["accountId"] for item in outcomes), ["bsky-1", "bsky-2"])
+        for item in outcomes:
+            self.assertEqual(item["code"], "publish_rejected")
+            self.assertEqual(item["error"], "Caption is required")
+            self.assertEqual(item["status"], "failed")
+        self.assertEqual(store.slot["status"], "failed")
+        scheduler.publish_due(NOW + timedelta(minutes=5))
+        self.assertEqual(calls, ["bluesky"])
+
+    def test_video_read_failure_on_resume_never_fails_a_slot_with_a_live_account(self) -> None:
+        store = _MemoryStore(self._slot(["youtube", "bluesky"]))
+        calls: list[str] = []
+
+        def publish(**kwargs):
+            name = type(kwargs["metadata"]).__name__
+            calls.append(name)
+            if name == "YouTubeMetadata":
+                return {"success": True, "results": [{"success": True, "videoUrl": "https://youtu.be/abc"}]}
+            raise PublishError("upload API returned HTTP 503", status_code=503)
+
+        scheduler = self._scheduler(store, publish)
+        scheduler.publish_due(NOW)
+        self.assertEqual(store.slot["status"], "publishing")
+
+        calls.clear()
+        with patch.object(video_storage, "read_final_video_r2", side_effect=OSError("r2 down")):
+            scheduler.publish_due(NOW + timedelta(seconds=30))
+            self.assertEqual(store.slot["status"], "publishing")
+            scheduler.publish_due(NOW + timedelta(seconds=150))
+        self.assertEqual(calls, [])
+        self.assertEqual(store.slot["status"], "published")
+        self.assertEqual(store.refund_batch_calls, [])
+        by_provider = {item["provider"]: item for item in store.slot["publish_outcomes"]}
+        self.assertEqual(by_provider["youtube"]["status"], "published")
+        self.assertEqual(by_provider["bluesky"]["code"], "retries_exhausted")
+        self.assertEqual(by_provider["bluesky"]["attempts"], 3)
+
+    def test_video_read_failure_before_any_account_uses_the_account_budget(self) -> None:
+        store = _MemoryStore(self._slot(["youtube"]))
+        publish = MagicMock()
+        scheduler = self._scheduler(store, publish)
+        with patch.object(video_storage, "read_final_video_r2", side_effect=OSError("r2 down")):
+            scheduler.publish_due(NOW)
+            outcome = store.slot["publish_outcomes"][0]
+            self.assertEqual((outcome["status"], outcome["attempts"]), ("retrying", 1))
+            scheduler.publish_due(NOW + timedelta(seconds=30))
+            scheduler.publish_due(NOW + timedelta(seconds=150))
+        publish.assert_not_called()
+        self.assertEqual(store.slot["status"], "failed")
+        self.assertEqual(store.slot["publish_outcomes"][0]["code"], "retries_exhausted")
+        self.assertEqual(len(store.refund_batch_calls), 1)
+
+    def test_resumes_do_not_fire_publish_started_again(self) -> None:
+        store = _MemoryStore(self._slot(["youtube"]))
+
+        def publish(**kwargs):
+            raise PublishError("upload API returned HTTP 503", status_code=503)
+
+        scheduler = self._scheduler(store, publish)
+        with patch.object(publish_module, "track_event") as track:
+            scheduler.publish_due(NOW)
+            scheduler.publish_due(NOW + timedelta(seconds=30))
+            scheduler.publish_due(NOW + timedelta(seconds=150))
+        started = [c for c in track.call_args_list if c.args[0] == "video_publish_started"]
+        self.assertEqual(len(started), 1)
+        self.assertEqual(store.slot["status"], "failed")
+
+    def test_delay_and_classification_trust_the_code_not_the_text(self) -> None:
         self.assertEqual(next_delay_seconds(1), 30)
         self.assertEqual(next_delay_seconds(2), 120)
         self.assertIsNone(next_delay_seconds(3))
-        self.assertEqual(classify_failure("Invalid caption", None, 400), ("publish_rejected", False))
-        self.assertEqual(classify_failure("account disconnected", None, 200), ("disconnected", True))
+        self.assertEqual(classify_failure("email_not_verified", 200), ("email_not_verified", True))
+        self.assertEqual(classify_failure("token_missing", 200), ("token_missing", True))
+        self.assertEqual(classify_failure("publish_rejected", 200), ("publish_rejected", False))
+        self.assertEqual(classify_failure("transient", 200), ("transient", False))
+        # No code: the status decides.
+        self.assertEqual(classify_failure(None, 400), ("publish_rejected", False))
+        self.assertEqual(classify_failure(None, 503), ("transient", False))
+        self.assertEqual(classify_failure(None, 429), ("transient", False))
+        self.assertEqual(classify_failure(None, None), ("transient", False))
+        self.assertEqual(classify_failure(None, 200), ("transient", False))
+        self.assertEqual(classify_failure(None, 401), ("disconnected", True))
+        self.assertEqual(classify_failure(None, 403), ("disconnected", True))
+        self.assertEqual(classify_failure("  ", 422), ("publish_rejected", False))

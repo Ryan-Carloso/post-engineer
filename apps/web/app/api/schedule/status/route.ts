@@ -42,7 +42,7 @@ import { createEngineProbe, type EngineProbe } from '@/lib/engine-reachability';
 import { recordProgressHistory, type ProgressSample } from '@/lib/schedule-progress-history';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { parseRange, RANGE_MAX_SLOTS, RANGE_STATUSES } from './range';
-import { presentPublishRows, publishingWithUserNotice } from '@/lib/publish-user-notice';
+import { mergeBySlotAt, presentPublishRows, USER_NOTICE_OUTCOME_FILTER } from '@/lib/publish-user-notice';
 
 const RESULT_SELECT =
   'id, slot_at, status, title, error, published_at, schedule_id, task_id, publish_outcomes';
@@ -226,12 +226,15 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     .order('slot_at', { ascending: false });
   // A publishing slot is in neither list. Surface it in upcoming once an
   // account has a user notice, so MCP and the posts page can relay it
-  // during the 30s/2min gap. No order(): the slot_at sort counts stay put.
+  // during the 30s/2min gap. The notice filter runs in SQL (jsonb @>)
+  // before the limit, so a page of notice-less slots cannot hide it.
   let publishingQuery = supabase
     .from('scheduled_posts')
     .select(RESULT_SELECT)
     .eq('user_id', userId)
-    .in('status', ['publishing']);
+    .in('status', ['publishing'])
+    .contains('publish_outcomes', USER_NOTICE_OUTCOME_FILTER)
+    .order('slot_at', { ascending: true });
   if (scheduleIds) {
     upcomingQuery = upcomingQuery.in('schedule_id', scheduleIds);
     recentQuery = recentQuery.in('schedule_id', scheduleIds);
@@ -280,7 +283,7 @@ async function getHandler(request?: Request): Promise<NextResponse> {
   // presenting upcoming slots is not re-probed for the recent ones.
   const engineProbe = createEngineProbe();
   const upcomingEnriched = await withSlotPresentation(
-    [...presentPublishRows(upcoming.data), ...publishingWithUserNotice(publishing.data)],
+    mergeBySlotAt(presentPublishRows(publishing.data), presentPublishRows(upcoming.data), limit),
     userId,
     queuePositions,
     engineProbe,

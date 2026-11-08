@@ -12,7 +12,6 @@ from loguru import logger
 from app.services.analytics import scrub_error_text
 from app.services.fill_schedule.account_outcomes import (
     _account_ids,
-    _action_sentence,
     _blank,
     _due,
     _fail_outcome,
@@ -24,6 +23,7 @@ from app.services.fill_schedule.account_outcomes import (
     _publish_outcome,
     _targets_from_body,
     _upsert,
+    exhaust_outcome,
     lease_iso,
     load_outcomes,
 )
@@ -31,7 +31,7 @@ from app.services.fill_schedule.constants import MAX_PUBLISH_ATTEMPTS
 from app.services.fill_schedule.publish_results import entries_for_result, failed_entry
 from app.services import upload_publisher
 
-# Re-export the delay helper the publisher uses for the transport retry path.
+# Re-export the delay helper the publisher uses for the slot wake-up time.
 from app.services.fill_schedule.account_outcomes import next_delay_seconds as next_delay_seconds
 
 RecordResults = Callable[[list[dict[str, Any]]], bool]
@@ -53,12 +53,15 @@ class AccountPublishResult:
     provider_exceptions: list[tuple[str, BaseException]] = field(default_factory=list)
     failure_reason: str = ""
     state_write_failed: bool = False
+    # The final video could not be read: every due account spent one try.
+    transport_error: BaseException | None = None
+
 
 def publish_slot_accounts(
     slot: dict[str, Any],
     schedule: dict[str, Any],
     videos: list[Any],
-    video_bytes: bytes,
+    read_video: Callable[[], bytes],
     now: datetime,
     title: str,
     *,
@@ -68,7 +71,12 @@ def publish_slot_accounts(
     persist_outcomes: PersistOutcomes,
     record_results: RecordResults | None = None,
 ) -> AccountPublishResult:
-    """Publish every account that does not already have a terminal outcome."""
+    """Publish every account that does not already have a terminal outcome.
+
+    ``read_video`` runs once, only when an account is due. When it fails,
+    each due account records one transient try, so a storage outage uses
+    the same per-account budget and never fails accounts already live.
+    """
     outcomes = load_outcomes(slot)
     indexed = _index(outcomes)
     already_user = {
@@ -79,6 +87,7 @@ def publish_slot_accounts(
     result = AccountPublishResult(outcomes=outcomes)
     owner = schedule.get("user_id")
     lease = lease_iso(now)
+    video_bytes: bytes | None = None
 
     for video_path in videos:
         video_name = os.path.basename(str(video_path))
@@ -99,11 +108,7 @@ def publish_slot_accounts(
                 # A retrying row already at the cap was an in-flight last try
                 # that never recorded a result. Do not call the provider again.
                 if prior is not None and prior.get("status") == "retrying" and int(prior.get("attempts") or 0) >= MAX_PUBLISH_ATTEMPTS:
-                    _fail_outcome(prior, str(prior.get("error") or "publish failed"), "transient", None, now)
-                    prior["code"] = "retries_exhausted"
-                    prior["status"] = "failed"
-                    prior["notice"] = _action_sentence(provider_name, "retries_exhausted")
-                    prior["retryAt"] = None
+                    exhaust_outcome(prior)
                     _upsert(outcomes, prior)
                     continue
                 attempt = _prior_attempts(prior, slot) + 1
@@ -119,6 +124,19 @@ def publish_slot_accounts(
                 "publish_attempts": max_attempts,
                 "publish_not_before": lease,
             })
+            if video_bytes is None and result.transport_error is None:
+                try:
+                    video_bytes = read_video()
+                except (OSError, RuntimeError) as exc:
+                    result.transport_error = exc
+                    if not result.first_error:
+                        result.first_error = str(exc)
+            if result.transport_error is not None or video_bytes is None:
+                reason = str(result.transport_error) if result.transport_error else "video unavailable"
+                for outcome in started:
+                    _fail_outcome(outcome, reason, "transient", None, now)
+                persist_outcomes(outcomes, {"publish_attempts": max_attempts})
+                continue
             try:
                 metadata = _metadata(provider_name, title, schedule, [item["accountId"] for item in started])
             except RuntimeError as exc:

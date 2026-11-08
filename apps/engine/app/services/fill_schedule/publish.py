@@ -13,7 +13,6 @@ from app.services import upload_publisher
 from app.services import video_storage
 from app.services.analytics import scrub_error_text, track_event
 from app.services.fill_schedule.constants import (
-    MAX_PUBLISH_ATTEMPTS,
     SLOT_FAILED,
     SLOT_PUBLISHED,
     SLOT_PUBLISHING,
@@ -67,12 +66,8 @@ class BatchPublisher:
         if not self.base_url or not self.api_secret:
             logger.warning("fill_schedule: publish skipped — MPT_UPLOAD_API_BASE_URL/MONEYPRINT_API_SECRET missing")
             return 0
-        try:
-            self.store.recover_stale_publishing()
-        except Exception as exc:  # noqa: BLE001 — recovery is best-effort
-            logger.warning(
-                f"fill_schedule: stale publishing recovery failed: {notify_module.safe_diagnostic(exc)}"
-            )
+        # A slot left in publishing by a crash is resumed here once its
+        # lease (publish_not_before) passes; it never goes back to ready.
         # Snapshot before this tick parks new backoffs, so a slot we just
         # scheduled is not resumed in the same pass.
         resumable: list[dict[str, Any]] = []
@@ -101,8 +96,8 @@ class BatchPublisher:
                 return 0
         elif not self.store.claim_ready_slot(str(slot["id"])):
             return 0
-        outcomes = slot.get("publish_outcomes")
-        if not isinstance(outcomes, list) or not outcomes:
+        if not resumed:
+            # Once per publish: a resume (backoff, crash lease) is the same publish.
             track_event("video_publish_started", publish_tracking_context(slot, schedule))
         task = self.task_state.get_task(str(slot["task_id"]))
         videos = (task or {}).get("videos") or []
@@ -130,11 +125,6 @@ class BatchPublisher:
             return 0
         if not resumed:
             self.store.update_slot(slot["id"], publish_not_before=lease_iso(now))
-        try:
-            video_bytes = video_storage.read_final_video_r2(object_path)
-        except (OSError, RuntimeError) as exc:
-            self._fail_transport(slot, schedule, now, persona_name, title, exc)
-            return 0
         prior_results = (task or {}).get("publish_results")
 
         def record_results(entries: list[dict[str, Any]]) -> bool:
@@ -157,7 +147,7 @@ class BatchPublisher:
             slot,
             schedule,
             videos,
-            video_bytes,
+            lambda: video_storage.read_final_video_r2(object_path),
             now,
             title,
             base_url=self.base_url,
@@ -166,6 +156,16 @@ class BatchPublisher:
             persist_outcomes=persist_outcomes,
             record_results=record_results,
         )
+        if account_result.transport_error is not None:
+            logger.warning(
+                f"fill_schedule: slot {slot['id']} video read failed: "
+                f"{notify_module.safe_diagnostic(account_result.transport_error)}"
+            )
+            track_event(
+                "publish_provider_failed",
+                provider_failed_properties(slot, schedule, None, account_result.transport_error),
+                immediate=True,
+            )
         for provider_name, exc in account_result.provider_exceptions:
             track_event(
                 "publish_provider_failed",
@@ -285,55 +285,6 @@ class BatchPublisher:
             return min(wakes)
         delay = next_delay_seconds(1) or 30
         return (now + timedelta(seconds=delay)).isoformat()
-
-    def _fail_transport(
-        self,
-        slot: dict[str, Any],
-        schedule: dict[str, Any],
-        now: datetime,
-        persona_name: str,
-        title: str,
-        exc: BaseException,
-    ) -> None:
-        """R2 read failed before any account ran. Same 3-try budget, no Discord yet."""
-        logger.warning(f"fill_schedule: slot {slot['id']} publish failed: {exc}")
-        track_event(
-            "publish_provider_failed",
-            provider_failed_properties(slot, schedule, None, exc),
-            immediate=True,
-        )
-        attempts = int(slot.get("publish_attempts") or 0) + 1
-        reason = f"all providers failed: unknown: {exc}"
-        if attempts >= MAX_PUBLISH_ATTEMPTS:
-            self._fail_slot_permanently(
-                slot,
-                schedule,
-                f"publish failed after {attempts} attempts: {notify_module.safe_reason(exc)}",
-                f"Publish failed after {attempts} attempts; video refunded",
-                attempts=attempts,
-                emit_failed_event=False,
-            )
-            notify_safe(
-                self.notify,
-                notify_module.slot_failed_msg(persona_name, title, notify_module.safe_reason(exc)),
-            )
-            retryable = False
-        else:
-            delay = next_delay_seconds(attempts) or 30
-            self.store.update_slot(
-                slot["id"],
-                status=SLOT_PUBLISHING,
-                publish_attempts=attempts,
-                publish_not_before=(now + timedelta(seconds=delay)).isoformat(),
-            )
-            retryable = True
-        track_event(
-            "video_publish_failed",
-            publish_failed_properties(
-                slot, schedule, reason, retryable=retryable, attempts=attempts,
-            ),
-            immediate=True,
-        )
 
     def _fail_slot_permanently(
         self,

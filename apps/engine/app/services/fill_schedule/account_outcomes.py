@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from app.services.analytics import scrub_error_text
+from app.services.upload_publisher import RETRYABLE_STATUS_CODES
 from app.services.fill_schedule.constants import (
     MAX_PUBLISH_ATTEMPTS,
     PUBLISH_RETRY_DELAY_SECONDS,
@@ -20,13 +21,6 @@ USER_CODES = frozenset({
     "token_expired",
     "token_missing",
     "disconnected",
-})
-TRANSIENT_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
-_UNKNOWN_BODY = frozenset({
-    "upload API reported account failure",
-    "upload API returned an empty results list",
-    "upload API returned no per-account results and no link",
-    "upload API returned no successful account result",
 })
 _ACCOUNT_COLUMNS = {
     "youtube": "youtube_account_ids",
@@ -73,12 +67,12 @@ def user_notice(provider: str, code: str) -> str | None:
     if code == "email_not_verified":
         return (
             f"{label} did not publish because the email on this account is not verified. "
-            "This is a problem with your account. Only you can fix it: verify the email."
+            f"This is a problem with your account. Only you can fix it: verify the email on {label}."
         )
     if code in USER_CODES:
         return (
-            f"{label} did not publish because this account needs to be reconnected. "
-            "This is a problem with your account. Only you can fix it."
+            f"{label} did not publish because the account needs to be reconnected. "
+            f"This is a problem with your account. Only you can fix it: reconnect {label}."
         )
     return None
 
@@ -94,30 +88,28 @@ def _action_sentence(provider: str, code: str) -> str:
 
 
 def classify_failure(
-    message: str,
     error_code: str | None,
     status_code: int | None,
 ) -> tuple[str, bool]:
-    """Return (code, requires_user). User codes fail once. Transient retries."""
+    """Return (code, requires_user) from the handler's code, else the HTTP status.
+
+    The web upload handler owns the classification (lib/upload/account-error.ts)
+    and sends a stable ``errorCode``. The engine never reads the error text:
+    an English sentence like "Media ID not found" is not an account problem.
+    """
     code = error_code.strip() if isinstance(error_code, str) else ""
     if code in USER_CODES:
         return code, True
-    text = (message or "").lower()
-    if "email" in text and "not verified" in text:
-        return "email_not_verified", True
-    if "expired" in text or "reconnect" in text:
-        return "token_expired", True
-    if "not found" in text or "credential" in text:
-        return "token_missing", True
-    if "disconnected" in text or "unauthorized" in text:
-        return "disconnected", True
-    if message in _UNKNOWN_BODY:
-        return "transient", False
-    if status_code in TRANSIENT_STATUSES or "upload request failed" in text:
+    if code in ("transient", "publish_rejected"):
+        return code, False
+    # No code: an older handler, a network error, or an engine-side
+    # synthetic result. Decide from the status only.
+    if status_code is None or status_code in RETRYABLE_STATUS_CODES:
         return "transient", False
     if status_code in (401, 403):
         return "disconnected", True
-    if status_code is None and not code:
+    if 200 <= status_code < 300:
+        # A 2xx that published nothing with no code. Bounded by 3 tries.
         return "transient", False
     return "publish_rejected", False
 
@@ -195,7 +187,7 @@ def _fail_outcome(
     status_code: int | None,
     now: datetime,
 ) -> None:
-    code, requires_user = classify_failure(message, error_code, status_code)
+    code, requires_user = classify_failure(error_code, status_code)
     attempts = int(outcome.get("attempts") or 0)
     outcome["error"] = scrub_error_text(message, max_chars=200)
     outcome["requiresUser"] = requires_user
@@ -206,11 +198,7 @@ def _fail_outcome(
         outcome["retryAt"] = None
         return
     if attempts >= MAX_PUBLISH_ATTEMPTS:
-        outcome["status"] = "failed"
-        outcome["code"] = "retries_exhausted"
-        outcome["requiresUser"] = False
-        outcome["notice"] = _action_sentence(outcome["provider"], "retries_exhausted")
-        outcome["retryAt"] = None
+        exhaust_outcome(outcome)
         return
     delay = next_delay_seconds(attempts)
     outcome["status"] = "retrying"
@@ -218,6 +206,15 @@ def _fail_outcome(
     outcome["requiresUser"] = False
     outcome["notice"] = None
     outcome["retryAt"] = (now + timedelta(seconds=delay or 0)).isoformat()
+
+
+def exhaust_outcome(outcome: dict[str, Any]) -> None:
+    """Terminal: the account spent its 3 transient tries."""
+    outcome["status"] = "failed"
+    outcome["code"] = "retries_exhausted"
+    outcome["requiresUser"] = False
+    outcome["notice"] = _action_sentence(str(outcome.get("provider") or ""), "retries_exhausted")
+    outcome["retryAt"] = None
 
 
 def _publish_outcome(outcome: dict[str, Any], source: dict[str, Any]) -> None:
@@ -303,11 +300,18 @@ def _targets_from_body(
     if len(pending) == 1 and len(results) == 1 and pending[0] not in by_id:
         only = results[0] if isinstance(results[0], dict) else {}
         return {pending[0]: _interpret_result(only)}
+    # One unlabeled failure (a request-level rejection such as "Caption is
+    # required") applies to every pending account, with its own code. An
+    # unlabeled success is only trusted for a single pending account: it
+    # cannot say which of several accounts went live.
+    shared = unlabeled[0] if len(unlabeled) == 1 else None
+    if shared is not None and len(pending) > 1 and _interpret_result(shared)[0] != "failed":
+        shared = None
     assigned: dict[str, tuple[str, dict[str, Any]]] = {}
     for account_id in pending:
         item = by_id.get(account_id)
-        if item is None and len(unlabeled) == 1 and len(pending) == 1:
-            item = unlabeled[0]
+        if item is None:
+            item = shared
         if item is None:
             assigned[account_id] = ("failed", {"error": "upload API reported account failure"})
         else:

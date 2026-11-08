@@ -81,9 +81,6 @@ class _FakeStore:
         # by default the claim always wins (single-worker behavior)
         return True
 
-    def recover_stale_publishing(self, older_than_minutes=30):
-        return 0
-
     def publishing_slots(self):
         return []
 
@@ -2313,23 +2310,12 @@ class CoverageGapTests(unittest.TestCase):
         self.assertNotIn("ready", statuses)
         notify.assert_not_called()
 
-    def test_publish_due_recovers_stale_publishing_first(self):
-        # Recovery of stuck 'publishing' slots runs at the start of the stage.
+    def test_resumable_lookup_log_names_the_root_cause(self):
+        # The resume lookup failure is a log-only line, so it uses
+        # safe_diagnostic and keeps the urllib3 cause that safe_reason's
+        # 200-char cut drops.
         store = _FakeStore()
-        store.recover_stale_publishing = MagicMock(return_value=0)
-        store.ready_due_slots = lambda now: []
-        scheduler = self._scheduler(store)
-        scheduler.publisher.base_url = "https://post-engineer.com"
-        scheduler.publisher.api_secret = "secret"
-
-        scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
-        store.recover_stale_publishing.assert_called_once()
-
-    def test_stale_recovery_log_names_the_root_cause(self):
-        # The recovery failure is a log-only line, so it uses safe_diagnostic
-        # and keeps the urllib3 cause that safe_reason's 200-char cut drops.
-        store = _FakeStore()
-        store.recover_stale_publishing = MagicMock(
+        store.resumable_publishing_slots = MagicMock(
             side_effect=ConnectionError(
                 "HTTPSConnectionPool(host='db.example', port=443): Max retries "
                 "exceeded with url: /rest/v1/scheduled_posts?select=" + "x" * 600
@@ -2350,7 +2336,7 @@ class CoverageGapTests(unittest.TestCase):
         messages = [r["message"] for r in records if r["level"].name == "WARNING"]
         self.assertTrue(
             any("NameResolutionError" in m for m in messages),
-            f"expected the recovery log to name the root cause, got: {messages}",
+            f"expected the resume lookup log to name the root cause, got: {messages}",
         )
 
     def test_safe_diagnostic_is_confined_to_log_only_sites(self):
@@ -2382,17 +2368,14 @@ class CoverageGapTests(unittest.TestCase):
         root = pathlib.Path(fs.__file__).parent
         by_file = {p.name: called_helpers(p) for p in root.glob("*.py")}
 
-        # publish.py: log-only recovery line uses safe_diagnostic; the
-        # user-facing notify calls keep safe_reason.
+        # publish.py: the log-only resume-lookup and video-read lines use
+        # safe_diagnostic. Its user-facing reasons go through
+        # scrub_error_text (pinned by
+        # test_publish_failure_scrubs_full_message_before_truncation).
         self.assertIn(
             "safe_diagnostic",
             by_file["publish.py"],
             "publish.py lost its safe_diagnostic call site",
-        )
-        self.assertIn(
-            "safe_reason",
-            by_file["publish.py"],
-            "publish.py lost its user-facing safe_reason call site",
         )
         # Log-only sites allowed to call safe_diagnostic. Every OTHER file
         # reaches Discord (generate.py's slot_failed_msg, publish.py's
