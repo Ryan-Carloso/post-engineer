@@ -27,9 +27,9 @@ export const STATUS_KEY: Record<string, TranslationKey> = {
   failed: 'posts.statusFailed',
 };
 
-// Calendar grouping of the real slot statuses. `STATUS_STYLE` stays the
-// per-status badge; the group is what a calendar cell counts and what the
-// icon encodes (so status never relies on color alone).
+// Grouping of the real slot and generation statuses. `STATUS_STYLE` stays
+// the per-status badge; the group is what a calendar cell counts and what
+// the icon encodes (so status never relies on color alone).
 export type StatusGroup = 'inProgress' | 'published' | 'failed';
 
 export const STATUS_GROUP_ORDER: readonly StatusGroup[] = ['inProgress', 'published', 'failed'];
@@ -41,6 +41,7 @@ const GROUP_BY_STATUS: Record<string, StatusGroup> = {
   ready: 'inProgress',
   publishing: 'inProgress',
   published: 'published',
+  completed: 'published',
   failed: 'failed',
 };
 

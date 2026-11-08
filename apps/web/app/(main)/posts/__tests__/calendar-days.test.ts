@@ -80,11 +80,12 @@ describe('weekdayLabels', () => {
 });
 
 describe('status groups and cell markers', () => {
-  it('maps every real slot status to a group', () => {
+  it('maps every real slot and generation status to a group', () => {
     for (const status of ['pending', 'awaiting', 'generating', 'ready', 'publishing']) {
       expect(statusGroupOf(status)).toBe('inProgress');
     }
     expect(statusGroupOf('published')).toBe('published');
+    expect(statusGroupOf('completed')).toBe('published');
     expect(statusGroupOf('failed')).toBe('failed');
   });
 
