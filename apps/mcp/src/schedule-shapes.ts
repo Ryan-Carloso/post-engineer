@@ -100,6 +100,12 @@ export const GeneratePersonaVideoOptionsShape = {
     .boolean()
     .optional()
     .describe('Render the whole video as the persona talking, with no b-roll stock footage: every narration window is lip-synced to the persona face. Requires a persona with a photo and lip-sync enabled, so it cannot be combined with faceless (there is no face to render). Narration over 60 seconds is rejected by the engine before any GPU spend. Full lip-sync costs 8 tokens per video at face quality ok and 15 tokens at very_good, instead of the hook-only 2 and 3 tokens.'),
+  musicMood: z
+    .string()
+    .min(1)
+    .max(64)
+    .optional()
+    .describe('Background-music mood for the video: a mood from the engine BGM catalog, or "none" for explicit no music. Omitted lets the engine pick the first catalogued mood; an unknown mood is rejected by the engine with a 400. Works with faceless videos too.'),
   audioUrl: httpsUrlField('audioUrl').optional().describe('Public URL of custom audio for the videos (overrides the persona voice).'),
   imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to use for every video (overrides the deterministic per-video selection; see list_persona_images).'),
   voiceId: personaVoiceField().optional().describe('Voice ID override: id or label from list_voices. Never type a provider prefix.'),
