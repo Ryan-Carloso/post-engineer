@@ -65,8 +65,6 @@ function mockSupabase(handlers: {
   /** The post-delete re-read fails. The first select still returns scheduleSlots. */
   remainingSlotsError?: unknown;
   slotDeleteError?: unknown;
-  /** maybeSingle result for the post_face_quality lookup. */
-  scheduleLookup?: { data: unknown; error: unknown };
 }) {
   const insertedRows: Record<string, unknown>[] = [];
   const updatedRows: Record<string, unknown>[] = [];
@@ -194,10 +192,6 @@ function mockSupabase(handlers: {
         eq: vi.fn().mockReturnThis(),
         order: vi.fn().mockResolvedValue(handlers.list ?? { data: [], error: null }),
         maybeSingle: vi.fn(async () => {
-          const last = selectArgs[selectArgs.length - 1] ?? '';
-          if (last.includes('post_face_quality')) {
-            return handlers.scheduleLookup ?? { data: { id: 'schedule-lookup', post_face_quality: 'ok' }, error: null };
-          }
           return handlers.existing ?? { data: null, error: null };
         }),
         single: vi.fn().mockResolvedValue(
@@ -346,7 +340,7 @@ describe('/api/schedule', () => {
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { success: boolean; cancelledSlotIds: string[]; refunds: unknown[] };
-    expect(body).toEqual({ success: true, cancelledSlotIds: [], refunds: [] });
+    expect(body).toEqual({ success: true, cancelledSlotIds: [], refunds: [], batchDiscountWithheld: 0 });
     expect(db.deleteCalls.map((call) => call.table)).toEqual(['scheduled_posts', 'schedules']);
   });
 
@@ -503,12 +497,12 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
   });
 
   const MIXED_SLOTS = [
-    { id: 'slot-generating', status: 'generating', faceless: false, task_id: 'task-g' },
-    { id: 'slot-ready', status: 'ready', faceless: false, task_id: 'task-r' },
-    { id: 'slot-pending', status: 'pending', faceless: false, task_id: null },
-    { id: 'slot-published', status: 'published', faceless: false, task_id: 'task-pub' },
-    { id: 'slot-failed', status: 'failed', faceless: false, task_id: null },
-    { id: 'slot-publishing', status: 'publishing', faceless: false, task_id: 'task-ing' },
+    { id: 'slot-generating', status: 'generating', charged_tokens: 2, task_id: 'task-g' },
+    { id: 'slot-ready', status: 'ready', charged_tokens: 2, task_id: 'task-r' },
+    { id: 'slot-pending', status: 'pending', charged_tokens: 2, task_id: null },
+    { id: 'slot-published', status: 'published', charged_tokens: 2, task_id: 'task-pub' },
+    { id: 'slot-failed', status: 'failed', charged_tokens: 2, task_id: null },
+    { id: 'slot-publishing', status: 'publishing', charged_tokens: 2, task_id: 'task-ing' },
   ];
 
   function refundCalls(db: { rpcCalls: { name: string; params: unknown }[] }): Record<string, unknown>[] {
@@ -519,7 +513,6 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
 
   it('deletes pending, generating, and ready slots and refunds only those', async () => {
     const db = mockSupabase({
-      scheduleLookup: { data: { id: 's-1', post_face_quality: 'ok' }, error: null },
       scheduleSlots: MIXED_SLOTS,
       remove: { error: null },
     });
@@ -563,46 +556,41 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     );
   });
 
-  it('refunds a full lip-sync slot at the full price, not the hook price', async () => {
+  it('refunds the stored charged_tokens, never a recomputed list price', async () => {
+    // A full lip-sync very_good slot lists at 15; the stored charge wins.
     const db = mockSupabase({
-      scheduleLookup: { data: { id: 's-1', post_face_quality: 'very_good' }, error: null },
       scheduleSlots: [
-        { id: 'slot-full', status: 'pending', faceless: false, full_lipsync: true, task_id: null },
+        { id: 'slot-full', status: 'pending', faceless: false, full_lipsync: true, charged_tokens: 7, task_id: null },
       ],
       remove: { error: null },
     });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
     expect(res.status).toBe(200);
-    const refunds = refundCalls(db);
-    expect(refunds.map((params) => params.p_amount)).toEqual([15]);
-    // The amount above is only real if the route actually selects the
-    // full_lipsync column: the mock returns full fixture rows regardless
-    // of the requested columns, so pin the column list itself, or a
-    // dropped column would pass this test while production under-refunds.
-    expect(db.slotSelectArgs.some((arg) => arg.includes('full_lipsync'))).toBe(true);
+    expect(refundCalls(db).map((params) => params.p_amount)).toEqual([7]);
+    // The mock returns full fixture rows regardless of the requested
+    // columns, so pin the column list itself: a dropped column would pass
+    // the amount check above while production skips every slot.
+    expect(db.slotSelectArgs.every((arg) => arg.includes('charged_tokens'))).toBe(true);
   });
 
-  it('prices very_good at 3 and a faceless slot at 1', async () => {
-    const faced = mockSupabase({
-      scheduleLookup: { data: { id: 's-hq', post_face_quality: 'very_good' }, error: null },
-      scheduleSlots: [{ id: 'slot-hq', status: 'generating', faceless: false, task_id: 'task-hq' }],
+  it('cancels a free slot (charged 0) without calling the refund RPC', async () => {
+    const db = mockSupabase({
+      scheduleSlots: [
+        { id: 'slot-free', status: 'ready', charged_tokens: 0, task_id: 'task-free' },
+        { id: 'slot-paid', status: 'ready', charged_tokens: 3, task_id: 'task-paid' },
+      ],
     });
-    const facedRes = await DELETE(new Request('http://localhost/api/schedule?id=s-hq'));
-    expect(facedRes.status).toBe(200);
-    expect(refundCalls(faced).map((params) => params.p_amount)).toEqual([3]);
-
-    const faceless = mockSupabase({
-      scheduleLookup: { data: { id: 's-fl', post_face_quality: 'very_good' }, error: null },
-      scheduleSlots: [{ id: 'slot-fl', status: 'ready', faceless: true, task_id: 'task-fl' }],
-    });
-    const facelessRes = await DELETE(new Request('http://localhost/api/schedule?id=s-fl'));
-    expect(facelessRes.status).toBe(200);
-    expect(refundCalls(faceless).map((params) => params.p_amount)).toEqual([1]);
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { cancelledSlotIds: string[]; refunds: { slotId: string }[] };
+    expect(body.cancelledSlotIds).toEqual(['slot-free', 'slot-paid']);
+    expect(body.refunds.map((refund) => refund.slotId)).toEqual(['slot-paid']);
+    expect(refundCalls(db).map((params) => params.p_refund_key)).toEqual(['batch:s-1:slot:slot-paid']);
   });
 
   it('treats an already-refunded slot as success', async () => {
     mockSupabase({
-      scheduleSlots: [{ id: 'slot-g', status: 'generating', faceless: false, task_id: 'task-g' }],
+      scheduleSlots: [{ id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' }],
       rpc: { refundBatch: { data: { refunded: false, already_refunded: true }, error: null } },
     });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
@@ -618,7 +606,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
 
   it('logs a soft refund failure and still deletes the schedule', async () => {
     const db = mockSupabase({
-      scheduleSlots: [{ id: 'slot-g', status: 'generating', faceless: false, task_id: 'task-g' }],
+      scheduleSlots: [{ id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' }],
       rpc: { refundBatch: { data: { refunded: false, already_refunded: false }, error: null } },
     });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
@@ -635,7 +623,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
 
   it('does not delete the schedule when the slot delete fails', async () => {
     const db = mockSupabase({
-      scheduleSlots: [{ id: 'slot-g', status: 'generating', faceless: false, task_id: 'task-g' }],
+      scheduleSlots: [{ id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' }],
       slotDeleteError: { message: 'slot delete down' },
     });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
@@ -648,7 +636,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
 
   it('stops before any delete when the slot list cannot be read', async () => {
     const db = mockSupabase({
-      scheduleSlots: [{ id: 'slot-g', status: 'generating', faceless: false, task_id: 'task-g' }],
+      scheduleSlots: [{ id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' }],
       slotsError: { message: 'select down' },
     });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
@@ -661,7 +649,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
 
   it('skips refunds when the post-delete re-read fails', async () => {
     const db = mockSupabase({
-      scheduleSlots: [{ id: 'slot-g', status: 'generating', faceless: false, task_id: 'task-g' }],
+      scheduleSlots: [{ id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' }],
       remainingSlotsError: { message: 'reread down' },
     });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
@@ -679,22 +667,18 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     );
   });
 
-  it('stops before any delete when the schedule lookup fails', async () => {
+  it('never reads the schedule row to price a refund', async () => {
     const db = mockSupabase({
-      scheduleLookup: { data: null, error: { message: 'lookup down' } },
-      scheduleSlots: [{ id: 'slot-g', status: 'generating', faceless: false, task_id: 'task-g' }],
+      scheduleSlots: [{ id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' }],
     });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
-    expect(res.status).toBe(500);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('Failed to fetch schedule.');
-    expect(db.deleteCalls).toEqual([]);
+    expect(res.status).toBe(200);
+    expect(db.selectArgs).toEqual([]);
   });
 
   it('still removes orphan slots when the schedule row is already gone', async () => {
     const db = mockSupabase({
-      scheduleLookup: { data: null, error: null },
-      scheduleSlots: [{ id: 'slot-g', status: 'generating', faceless: false, task_id: 'task-g' }],
+      scheduleSlots: [{ id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' }],
     });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-orphan'));
     expect(res.status).toBe(200);
@@ -706,10 +690,14 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     const db = mockSupabase({
       scheduleSlots: [
         null,
-        { id: '', status: 'generating', faceless: false, task_id: 'task-empty' },
-        { id: 'slot-bad-status', faceless: false, task_id: 'task-x' },
-        { id: 'slot-bad-task', status: 'generating', faceless: false, task_id: 12 },
-        { id: 'slot-good', status: 'ready', faceless: 'yes', task_id: 'task-good' },
+        { id: '', status: 'generating', charged_tokens: 2, task_id: 'task-empty' },
+        { id: 'slot-bad-status', charged_tokens: 2, task_id: 'task-x' },
+        { id: 'slot-bad-task', status: 'generating', charged_tokens: 2, task_id: 12 },
+        { id: 'slot-no-charge', status: 'generating', task_id: 'task-nc' },
+        { id: 'slot-negative-charge', status: 'generating', charged_tokens: -1, task_id: 'task-neg' },
+        { id: 'slot-fractional-charge', status: 'generating', charged_tokens: 1.5, task_id: 'task-frac' },
+        { id: 'slot-text-charge', status: 'generating', charged_tokens: '2', task_id: 'task-text' },
+        { id: 'slot-good', status: 'ready', charged_tokens: 2, task_id: 'task-good' },
       ],
     });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
@@ -725,7 +713,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
 
   it('logs an RPC refund error and still deletes the schedule', async () => {
     const db = mockSupabase({
-      scheduleSlots: [{ id: 'slot-g', status: 'generating', faceless: false, task_id: 'task-g' }],
+      scheduleSlots: [{ id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' }],
       rpc: { refundBatch: { data: null, error: { message: 'rpc down' } } },
     });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
@@ -740,7 +728,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
 
   it('reports a schedule-row delete failure after the slots are already gone', async () => {
     const db = mockSupabase({
-      scheduleSlots: [{ id: 'slot-g', status: 'generating', faceless: false, task_id: 'task-g' }],
+      scheduleSlots: [{ id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' }],
       remove: { error: { message: 'schedule delete down' } },
     });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));

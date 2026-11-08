@@ -54,10 +54,14 @@ export const RATE_LIMITS = {
   billingCheckout: { name: 'billing-checkout', limit: 10, windowMs: 60_000 },
   // Video generation job submission: cost protection
   videoJob: { name: 'video-job', limit: 20, windowMs: 60_000 },
-  // Unified generate+schedule: one call can mint up to 10 videos, so the
-  // limit is lower than the single video-job profile. Keyed by user id
-  // (falling back to API-key id, then IP inside applyRateLimit).
-  generateAndSchedule: { name: 'generate-and-schedule', limit: 10, windowMs: 60_000 },
+  // Unified generate+schedule: one call is one video. 12 per minute so a
+  // full MCP batch (MAX_BATCH_VIDEOS, lib/billing/batch-discount.ts) fits
+  // in one window. Keyed by user id (falling back to API-key id, then IP
+  // inside applyRateLimit).
+  generateAndSchedule: { name: 'generate-and-schedule', limit: 12, windowMs: 60_000 },
+  // Batch discount: one call per MCP batch (plus retries). Each call reads
+  // up to MAX_BATCH_VIDEOS slots and credits at most two of them.
+  batchDiscount: { name: 'batch-discount', limit: 10, windowMs: 60_000 },
   // OAuth connect-url issuance (starts provider OAuth flows)
   connectUrl: { name: 'connect-url', limit: 30, windowMs: 60_000 },
   // OAuth /start routes (provider authorization redirects)

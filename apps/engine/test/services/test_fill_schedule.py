@@ -101,6 +101,7 @@ class BatchScheduleTests(unittest.TestCase):
             "id": "slot-batch-1",
             "slot_at": "2026-09-08T09:00:00+00:00",
             "title": title,
+            "charged_tokens": 2,
             "segments": [
             {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
             {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
@@ -180,7 +181,7 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertEqual(request.music_mood, "calm")
 
     def test_generate_batch_slot_without_a_stored_mood_uses_the_engine_default(self):
-        # Rows created before migration 045 have no music_mood, and a blank
+        # Rows created before migration 048 have no music_mood, and a blank
         # stored value is the same as absent: the request carries None and
         # the pipeline picks the first catalogued mood.
         for stored in (None, ""):
@@ -437,12 +438,15 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertEqual(user_id, "user-1")
         self.assertEqual(batch_gen_id, "batch:sched-batch-1")
         self.assertIn("slot-batch-1", refund_key)
-        self.assertEqual(amount, 2)  # face_mix 50% @ ok = ceil(0.5*2 + 0.5*1) = 2
+        self.assertEqual(amount, 2)  # the slot's stored charged_tokens
         self.assertEqual(store.updates[0][1]["status"], "failed")
 
-    def test_generate_batch_dispatch_failure_refunds_full_lipsync_at_full_price(self):
+    def test_generate_batch_dispatch_failure_refunds_the_stored_charge(self):
+        # A full lip-sync slot lists at 8; the slot stores what it was
+        # charged (8 here), and that is what comes back.
         slot = self._batch_slot()
         slot["full_lipsync"] = True
+        slot["charged_tokens"] = 8
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
         store.refund_batch_calls = []
@@ -463,9 +467,25 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertEqual(enqueued, 0)
         self.assertEqual(len(store.refund_batch_calls), 1)
         user_id, batch_gen_id, refund_key, amount, _reason, _task_id = store.refund_batch_calls[0]
-        # Full lip-sync @ ok, not the hook-only 2: dropping the
-        # slot_full_lipsync argument at the call site must fail this test.
         self.assertEqual(amount, 8)
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+
+    def test_generate_dispatch_failure_of_a_free_slot_makes_no_refund_call(self):
+        slot = self._batch_slot()
+        slot["charged_tokens"] = 0
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        store.refund_batch_tokens = MagicMock(return_value=True)
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(
+            scheduler.generator, "_dispatch_generation", side_effect=RuntimeError("dispatch down")
+        ):
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(enqueued, 0)
+        store.refund_batch_tokens.assert_not_called()
         self.assertEqual(store.updates[0][1]["status"], "failed")
 
     def test_non_english_slot_fails_and_refunds_without_dispatch(self):
@@ -738,7 +758,7 @@ class BatchScheduleTests(unittest.TestCase):
 
 class ReconcileTests(unittest.TestCase):
     def test_complete_task_becomes_ready(self):
-        slot = {"id": "slot-1", "task_id": "t-1", "schedules": {}}
+        slot = {"id": "slot-1", "task_id": "t-1", "schedule_id": "sched-1", "charged_tokens": 2}
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
         state = MagicMock()
@@ -757,7 +777,8 @@ class ReconcileTests(unittest.TestCase):
             "id": "slot-1",
             "task_id": "t-1",
             "user_id": "user-1",
-            "schedules": {"id": "sched-1", "user_id": "user-1"},
+            "schedule_id": "sched-1",
+            "charged_tokens": 2,
         }
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
@@ -788,6 +809,31 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(props["slotId"], "slot-1")
         self.assertEqual(props["cost_usd"], 0.1)
 
+    def test_reconcile_generated_event_carries_the_batch_id(self):
+        from app.services.fill_schedule import reconcile as rec_module
+
+        for batch_id, expected in (("batch-1", "batch-1"), (None, None), ("", None)):
+            with self.subTest(batch_id=batch_id):
+                slot = {
+                    "id": "slot-1",
+                    "task_id": "t-1",
+                    "user_id": "user-1",
+                    "schedule_id": "sched-1",
+                    "charged_tokens": 2,
+                    "batch_id": batch_id,
+                }
+                store = _FakeStore()
+                store.generating_slots = lambda slot=slot: [slot]
+                state = MagicMock()
+                state.get_task.return_value = {"state": 1}
+                scheduler = fs.FillScheduleScheduler(
+                    store=store, task_state=state, publish_video=MagicMock()
+                )
+                with patch.object(rec_module, "track_event") as track:
+                    scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+                (_, props), = [c[0] for c in track.call_args_list if c[0][0] == "video_generated"]
+                self.assertEqual(props.get("batch_id"), expected)
+
     def test_reconcile_generated_event_omits_cost_usd_when_absent(self):
         from app.services.fill_schedule import reconcile as rec_module
 
@@ -795,7 +841,8 @@ class ReconcileTests(unittest.TestCase):
             "id": "slot-1",
             "task_id": "t-1",
             "user_id": "user-1",
-            "schedules": {"id": "sched-1", "user_id": "user-1"},
+            "schedule_id": "sched-1",
+            "charged_tokens": 2,
         }
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
@@ -821,11 +868,8 @@ class ReconcileTests(unittest.TestCase):
             "id": "slot-1",
             "task_id": "t-1",
             "user_id": "user-1",
-            "schedules": {
-                "id": "sched-1",
-                                "user_id": "user-1",
-                "personas": {"name": "Ana", "face_quality": "ok"},
-            },
+            "schedule_id": "sched-1",
+            "charged_tokens": 2,
         }
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
@@ -851,11 +895,8 @@ class ReconcileTests(unittest.TestCase):
             "id": "slot-1",
             "task_id": "t-1",
             "user_id": "user-1",
-            "schedules": {
-                "id": "sched-1",
-                                "user_id": "user-1",
-                "personas": {"name": "Ana", "face_quality": "ok"},
-            },
+            "schedule_id": "sched-1",
+            "charged_tokens": 2,
         }
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
@@ -891,11 +932,8 @@ class ReconcileTests(unittest.TestCase):
             "id": "slot-1",
             "task_id": "t-1",
             "user_id": "user-1",
-            "schedules": {
-                "id": "sched-1",
-                                "user_id": "user-1",
-                "personas": {"name": "Ana", "face_quality": "ok"},
-            },
+            "schedule_id": "sched-1",
+            "charged_tokens": 2,
         }
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
@@ -908,20 +946,17 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
         self.assertEqual(store.updates[0][1]["error"], "")
 
-    def test_failed_task_without_persona_embed_marks_failed_without_throwing(self):
-        # Regression: a schedule with no persona embed (deleted persona)
-        # must not kill the reconcile stage with a RuntimeError every tick.
-        # The slot is marked failed, the refund is skipped, and processing
-        # continues instead of spamming PostHog with $exception.
+    def test_failed_slot_refunds_its_stored_charge_without_any_identity(self):
+        # The refund used to be skipped (prepaid tokens burned) when the
+        # schedule had no resolvable persona: the price was recomputed from
+        # the identity. It now reads the slot's stored charged_tokens, so a
+        # slot whose persona was deleted is refunded like any other.
         slot = {
             "id": "slot-1",
             "task_id": "t-1",
             "user_id": "user-1",
-            "schedules": {
-                "id": "sched-1",
-                "user_id": "user-1",
-                # No "personas" key: persona was deleted.
-            },
+            "schedule_id": "sched-1",
+            "charged_tokens": 2,
         }
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
@@ -931,30 +966,24 @@ class ReconcileTests(unittest.TestCase):
             store=store, task_state=state,
             publish_video=MagicMock(),
         )
-        # Must not raise; slot marked failed; refund skipped (no persona
-        # to compute the cost from).
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
         self.assertEqual(store.updates[0][1]["status"], "failed")
-        self.assertEqual(store.refund_batch_calls, [])
+        self.assertEqual(
+            store.refund_batch_calls,
+            [("user-1", "batch:sched-1", "batch:sched-1:slot:slot-1", 2, "Batch generation failed", "t-1")],
+        )
 
-    def test_failed_persona_less_slot_refunds_from_the_snapshot(self):
-        # The refund used to be skipped for EVERY failed batch slot: the
-        # reconciler's select fetched `schedules(id)` with no embed, so
-        # `persona_for` raised on every row and the prepaid tokens were
-        # burned. A persona-less post now resolves its identity from the
-        # snapshot and refunds like any other slot.
+    def test_failed_slot_refunds_the_stored_charge_not_the_list_price(self):
+        # A full lip-sync slot lists at 8; a discounted charge of 5 is what
+        # comes back. Recomputing from the flags must fail this test.
         slot = {
-            "id": "slot-np",
+            "id": "slot-d",
+            "task_id": "t-d",
             "user_id": "user-1",
-            "task_id": "t-np",
-            "faceless": True,
-            "schedules": {
-                "id": "sched-np",
-                "user_id": "user-1",
-                "personas": None,
-                "post_voice_id": "energetic",
-                "post_face_quality": "ok",
-            },
+            "faceless": False,
+            "full_lipsync": True,
+            "schedule_id": "sched-d",
+            "charged_tokens": 5,
         }
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
@@ -963,11 +992,61 @@ class ReconcileTests(unittest.TestCase):
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=state, publish_video=MagicMock()
         )
-        self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
+        scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual([call[3] for call in store.refund_batch_calls], [5])
+
+    def test_failed_free_slot_is_marked_failed_without_a_refund_call(self):
+        # Charged 0: nothing to give back, and the RPC rejects amount <= 0.
+        from app.services.fill_schedule import support as support_module
+
+        slot = {
+            "id": "slot-free",
+            "task_id": "t-free",
+            "user_id": "user-1",
+            "schedule_id": "sched-f",
+            "charged_tokens": 0,
+        }
+        store = _FakeStore()
+        store.generating_slots = lambda: [slot]
+        state = MagicMock()
+        state.get_task.return_value = {"state": -1, "error": "gpu exploded"}
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=state, publish_video=MagicMock()
+        )
+        with patch.object(support_module.logger, "error") as log_error:
+            self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
         self.assertEqual(store.updates[0][1]["status"], "failed")
-        self.assertEqual(len(store.refund_batch_calls), 1)
-        # Faceless is priced from the slot alone, so it is the faceless rate.
-        self.assertEqual(store.refund_batch_calls[0][3], 1)
+        self.assertEqual(store.refund_batch_calls, [])
+        # A free slot is not an error: nothing is logged as unreadable.
+        log_error.assert_not_called()
+
+    def test_failed_slot_with_unreadable_charge_skips_the_refund_loudly(self):
+        from app.services.fill_schedule import support as support_module
+
+        for bad in (None, -1, 1.5, "2", True):
+            with self.subTest(charged_tokens=bad):
+                slot = {
+                    "id": "slot-bad",
+                    "task_id": "t-bad",
+                    "user_id": "user-1",
+                    "schedule_id": "sched-bad",
+                    "charged_tokens": bad,
+                }
+                store = _FakeStore()
+                store.generating_slots = lambda slot=slot: [slot]
+                state = MagicMock()
+                state.get_task.return_value = {"state": -1, "error": "gpu exploded"}
+                scheduler = fs.FillScheduleScheduler(
+                    store=store, task_state=state, publish_video=MagicMock()
+                )
+                with patch.object(support_module.logger, "error") as log_error:
+                    scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+                self.assertEqual(store.updates[0][1]["status"], "failed")
+                self.assertEqual(store.refund_batch_calls, [])
+                log_error.assert_called_once_with(
+                    "fill_schedule: slot has no readable charged_tokens; refund skipped",
+                    slot_id="slot-bad",
+                )
 
     def test_failed_batch_task_refunds_batch_charge(self):
         # Batch slots are prepaid under `batch:{scheduleId}`; a failed task
@@ -980,11 +1059,8 @@ class ReconcileTests(unittest.TestCase):
             "user_id": "user-1",
             "task_id": "t-b1",
             "faceless": True,
-            "schedules": {
-                "id": "sched-b1",
-                                "user_id": "user-1",
-                "personas": {"face_quality": "ok"},
-            },
+            "schedule_id": "sched-b1",
+            "charged_tokens": 1,
         }
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
@@ -1015,11 +1091,8 @@ class ReconcileTests(unittest.TestCase):
             "user_id": "user-1",
             "task_id": "t-b1",
             "faceless": True,
-            "schedules": {
-                "id": "sched-b1",
-                "user_id": "user-1",
-                "personas": {"face_quality": "ok"},
-            },
+            "schedule_id": "sched-b1",
+            "charged_tokens": 1,
         }
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
@@ -1057,11 +1130,8 @@ class ReconcileTests(unittest.TestCase):
             "user_id": "user-1",
             "task_id": "t-b1",
             "faceless": True,
-            "schedules": {
-                "id": "sched-b1",
-                "user_id": "user-1",
-                "personas": {"face_quality": "ok"},
-            },
+            "schedule_id": "sched-b1",
+            "charged_tokens": 1,
         }
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
@@ -1090,11 +1160,8 @@ class ReconcileTests(unittest.TestCase):
             "user_id": "user-1",
             "task_id": "t-b1",
             "faceless": True,
-            "schedules": {
-                "id": "sched-b1",
-                "user_id": "user-1",
-                "personas": {"face_quality": "ok"},
-            },
+            "schedule_id": "sched-b1",
+            "charged_tokens": 1,
         }
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
@@ -1116,10 +1183,8 @@ class ReconcileTests(unittest.TestCase):
         slot = {
             "id": "slot-b2",
             "task_id": "t-b2",
-            "schedules": {
-                "id": "sched-b2",
-                                "personas": {"face_quality": "ok"},
-            },
+            "schedule_id": "sched-b2",
+            "charged_tokens": 2,
         }
         store = _FakeStore()
         store.generating_slots = lambda: [slot]
@@ -1360,6 +1425,7 @@ class PublishRetryLimitTests(unittest.TestCase):
             "title": "Tokyo coffee",
             "task_id": "t-1",
             "faceless": True,
+            "charged_tokens": 1,
             "publish_attempts": publish_attempts,
             "schedules": {
                 "id": "sched-1",
@@ -1446,9 +1512,27 @@ class PublishRetryLimitTests(unittest.TestCase):
         self.assertEqual(user_id, "user-1")
         self.assertEqual(generation_id, "batch:sched-1")
         self.assertEqual(refund_key, "batch:sched-1:slot:slot-1:publish")
-        # Faceless posts are priced at the faceless rate.
+        # The slot's stored charged_tokens.
         self.assertEqual(amount, 1)
         self.assertIn("3 attempts", reason)
+
+    def test_final_failure_of_a_free_slot_makes_no_refund_call(self):
+        slot = self._slot(publish_attempts=2)
+        slot["charged_tokens"] = 0
+        store, published = self._run_publish(slot)
+        self.assertEqual(published, 0)
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertEqual(store.refund_batch_calls, [])
+
+    def test_final_failure_refunds_the_stored_charge_without_an_identity(self):
+        # The refund used to be skipped when the schedule had no persona and
+        # no snapshot. The stored charge needs neither.
+        slot = self._slot(publish_attempts=2)
+        slot["charged_tokens"] = 3
+        for key in ("post_voice_id", "post_face_quality"):
+            del slot["schedules"][key]
+        store, _published = self._run_publish(slot)
+        self.assertEqual([call[3] for call in store.refund_batch_calls], [3])
 
     def test_final_failure_emits_refund_issued_on_landed_refund(self):
         # Publish failures refund too. The event fires only when the RPC
@@ -1982,26 +2066,24 @@ class CoverageGapTests(unittest.TestCase):
         self.assertFalse(fs.slot_faceless({"faceless": 1}))
         self.assertFalse(fs.slot_faceless({"faceless": "true"}))
 
-    # -- token_cost mirrors the web's computeVideoTokens -----------------------
-    def test_token_cost_faceless_is_flat_and_quality_prices_face(self):
-        self.assertEqual(fs.token_cost(True, "ok"), 1)
-        self.assertEqual(fs.token_cost(True, "very_good"), 1)
-        self.assertEqual(fs.token_cost(False, "ok"), 2)
-        self.assertEqual(fs.token_cost(False, "very_good"), 3)
-        # Unknown quality falls back to the cheaper "ok" tier, not the
-        # expensive one.
-        self.assertEqual(fs.token_cost(False, "bogus"), 2)
+    # -- slot_refund_amount reads the stored charge (migration 045) ----------
+    def test_slot_refund_amount_returns_the_stored_charge(self):
+        self.assertEqual(fs.slot_refund_amount({"id": "s", "charged_tokens": 15}), 15)
+        self.assertEqual(fs.slot_refund_amount({"id": "s", "charged_tokens": 1}), 1)
 
-    def test_token_cost_full_lipsync_prices(self):
-        self.assertEqual(fs.token_cost(False, "ok", True), 8)
-        self.assertEqual(fs.token_cost(False, "very_good", True), 15)
-        # A full lip-sync slot is never faceless; faceless still wins.
-        self.assertEqual(fs.token_cost(True, "ok", True), 1)
-        self.assertEqual(fs.token_cost(True, "very_good", True), 1)
-        # Unknown quality falls back to the "ok" full tier.
-        self.assertEqual(fs.token_cost(False, "bogus", True), 8)
+    def test_slot_refund_amount_ignores_the_price_flags(self):
+        slot = {"id": "s", "faceless": True, "full_lipsync": True, "charged_tokens": 7}
+        self.assertEqual(fs.slot_refund_amount(slot), 7)
 
-    # -- publish_due without env configured -------------------------------------
+    def test_slot_refund_amount_is_none_for_a_free_slot(self):
+        self.assertIsNone(fs.slot_refund_amount({"id": "s", "charged_tokens": 0}))
+
+    def test_slot_refund_amount_is_none_for_an_unreadable_charge(self):
+        for bad in (None, -1, 1.5, "2", True, False):
+            with self.subTest(charged_tokens=bad):
+                self.assertIsNone(fs.slot_refund_amount({"id": "s", "charged_tokens": bad}))
+        self.assertIsNone(fs.slot_refund_amount({"id": "s"}))
+
     def test_publish_due_skips_without_base_url(self):
         scheduler = self._scheduler(_FakeStore())
         scheduler.publisher.base_url = ""
@@ -2636,6 +2718,7 @@ class BatchDispatchTests(unittest.TestCase):
             "id": "slot-batch-1",
             "slot_at": "2026-09-08T09:00:00+00:00",
             "title": title,
+            "charged_tokens": 2,
             "segments": [
             {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
             {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
-import { getPost, getPostMetrics, getYouTubeRetentionCurve } from './client-posts.js';
+import { getPost, getPostMetrics, getYouTubeRetentionCurve, listPostsInRange } from './client-posts.js';
+import { ListPostsSchema } from './schedule-shapes.js';
 import {
   METRICS_FILTER_MAX_LENGTH,
   METRICS_NONE,
@@ -84,4 +85,20 @@ export async function handleGetYouTubeRetentionCurve(
   args: z.infer<typeof GetYouTubeRetentionCurveSchema>,
 ): Promise<McpToolResponse> {
   return handleLibraryCall(() => getYouTubeRetentionCurve(client, args), 'getting YouTube retention curve');
+}
+
+// list_posts — the upcoming/recent lists, or (with from + to) every post in a
+// window. The schema's from/to pairing is a .refine, which the SDK's shape
+// validation does not run, so the args are re-parsed here.
+export async function handleListPosts(client: PostEngineerClient, args: unknown): Promise<McpToolResponse> {
+  const parsed = ListPostsSchema.safeParse(args);
+  if (!parsed.success) {
+    const message = parsed.error.issues.map((issue) => issue.message).join('; ');
+    return { content: [{ type: 'text', text: `Error listing posts: ${message}` }], isError: true };
+  }
+  const { from, to, limit } = parsed.data;
+  if (from !== undefined && to !== undefined) {
+    return handleLibraryCall(() => listPostsInRange(client, { from, to }), 'listing posts');
+  }
+  return handleLibraryCall(() => client.listPosts(limit), 'listing posts');
 }

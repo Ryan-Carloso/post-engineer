@@ -1,6 +1,7 @@
 // Singular MCP-first tools: generate_persona_video and validate_script.
-// The batch tool was removed in Phase 4: one call
-// is one video, with a title and a complete segments script.
+// One call is one video, with a title and a complete segments script.
+// generate_persona_video_batch (tools-batch.ts) creates several videos by
+// running generatePersonaVideoOutcome once per video.
 // Validation runs mechanically before the client call, so a rejected script
 // never reaches the web route and never debits tokens. validate_script
 // then calls POST /api/videos/validate-script, which re-runs the same
@@ -110,11 +111,14 @@ export async function handleGeneratePersonaVideo(
   return (await generatePersonaVideoOutcome(client, args)).response;
 }
 
-/** The tool response plus the ids of slots the route reported as `failed` (a 2xx replay of a failed dispatch). */
+/**
+ * The tool response, the ids of slots the route reported as `failed` (a 2xx
+ * replay of a failed dispatch) and the created schedule id (null on error).
+ */
 export async function generatePersonaVideoOutcome(
   client: PostEngineerClient,
   args: GeneratePersonaVideoArgs,
-): Promise<{ response: McpToolResponse; failedSlotIds: string[] }> {
+): Promise<{ response: McpToolResponse; failedSlotIds: string[]; scheduleId: string | null }> {
   try {
     const mode = args.mode ?? 'scheduled';
     if (mode === 'asap' && (args.startAt !== undefined || args.times !== undefined)) {
@@ -197,9 +201,14 @@ export async function generatePersonaVideoOutcome(
         ],
       },
       failedSlotIds: narrowed.slots.filter((slot) => slot.status === 'failed').map((slot) => slot.slotId ?? '(unknown slot id)'),
+      scheduleId: narrowed.schedule.id,
     };
   } catch (error) {
-    return { response: errorResponse(`Error generating the video: ${sanitizeEngineError(getErrorMessage(error))}`), failedSlotIds: [] };
+    return {
+      response: errorResponse(`Error generating the video: ${sanitizeEngineError(getErrorMessage(error))}`),
+      failedSlotIds: [],
+      scheduleId: null,
+    };
   }
 }
 

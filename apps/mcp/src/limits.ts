@@ -115,3 +115,16 @@ export const EXPERIMENT_NAME_MAX_LENGTH = 120;
 export const EXPERIMENT_VARIANT_NAME_MAX_LENGTH = 80;
 export const EXPERIMENT_VARIANT_DESCRIPTION_MAX_LENGTH = 500;
 export const EXPERIMENT_VARIANT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
+
+/**
+ * Batch discount limits (issue #487), mirrored from
+ * `apps/web/lib/billing/batch-discount.ts` (MAX_BATCH_VIDEOS,
+ * BATCH_FREE_EVERY) and the batchKey rule of
+ * `apps/web/app/api/videos/batch-discount/route.ts`. Pinned by
+ * `batch-discount-sync.test.ts`.
+ */
+export const MAX_BATCH_VIDEOS = 12;
+export const BATCH_FREE_EVERY = 6;
+export const BATCH_WINDOW_MINUTES = 10;
+export const BATCH_KEY_MAX_LENGTH = 100;
+export const BATCH_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;

@@ -29,8 +29,8 @@ from app.services.fill_schedule.support import (
     slot_full_lipsync,
     slot_material,
     slot_music_mood,
+    slot_refund_amount,
     slot_user_id,
-    token_cost,
     track_refund_issued,
     voice_for,
 )
@@ -161,10 +161,8 @@ class BatchGenerator:
             user_id = slot_user_id(slot)
             if user_id is None:
                 raise RuntimeError("Scheduled slot has no user_id")
-            face_quality = str(identity.get("face_quality") or "ok")
-            cost = token_cost(faceless, face_quality, slot_full_lipsync(slot))
             # Prepaid at request time under this id: no spend here, only a
-            # refund if dispatch itself fails.
+            # refund of the slot's stored charge if dispatch itself fails.
             generation_id = f"batch:{schedule['id']}"
             task_id = new_task_id(slot)
             try:
@@ -195,9 +193,11 @@ class BatchGenerator:
                     persona_id=str(schedule.get("persona_id") or ""),
                 )
             except Exception:
-                # Refund just this video's prepaid cost; the id keeps the
-                # other videos' charges intact.
-                refunded = self.store.refund_batch_tokens(
+                # Refund just this video's stored charge; the id keeps the
+                # other videos' charges intact. A free slot (charged 0) has
+                # nothing to refund.
+                cost = slot_refund_amount(slot)
+                refunded = cost is not None and self.store.refund_batch_tokens(
                     user_id,
                     generation_id,
                     f"{generation_id}:slot:{slot['id']}",
@@ -208,7 +208,7 @@ class BatchGenerator:
                 # Fire refund_issued only on a landed refund (see reconcile.py
                 # for why never optimistically). The task never reached the
                 # engine, but the allocated id still links the ledger row.
-                if refunded:
+                if refunded and cost is not None:
                     track_refund_issued(
                         user_id=user_id,
                         amount=cost,

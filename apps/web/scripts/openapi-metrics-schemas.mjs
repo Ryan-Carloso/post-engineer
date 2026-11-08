@@ -3,12 +3,14 @@
 // in as arguments so this module has no import cycle with openapi-schemas.mjs.
 // The experiment schemas ride along (openapi-schemas.mjs may not grow).
 import { experimentLinkSchema, experimentOperationSchemas } from './openapi-experiments-schemas.mjs';
+import { batchOperationSchemas } from './openapi-batch-schemas.mjs';
 
 export { experimentLinkSchema };
 
 export function metricsOperationSchemas({ success, object, anyObject, str }) {
   return {
     ...experimentOperationSchemas({ success, object, anyObject, str }),
+    ...batchOperationSchemas({ success, object, str }),
     // apps/web/app/api/metrics/route.ts (KNOWN_PARAMS)
     'GET /api/metrics': {
       // parseMetricsQuery: omitting window returns 400 "window must be 24h, 7d or 28d."

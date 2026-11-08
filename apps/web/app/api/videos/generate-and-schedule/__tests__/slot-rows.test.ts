@@ -20,6 +20,7 @@ describe('buildSlotRows', () => {
       facelessMaterial: 'svg',
       fullLipsync: true,
       musicMood: 'calm',
+      chargedTokens: 1,
       segments: [
         { kind: 'hook', text: 'Porto wins you over slowly.' },
         { kind: 'body', text: 'Walk the Ribeira in the morning light.' },
@@ -37,6 +38,7 @@ describe('buildSlotRows', () => {
       faceless_material: 'svg',
       full_lipsync: true,
       music_mood: 'calm',
+      charged_tokens: 1,
       segments: [
         { kind: 'hook', text: 'Porto wins you over slowly.' },
         { kind: 'body', text: 'Walk the Ribeira in the morning light.' },
@@ -56,6 +58,7 @@ describe('buildSlotRows', () => {
       userId: 'user-1',
       faceless: false,
       facelessMaterial: undefined,
+      chargedTokens: 2,
       segments: undefined,
     });
     expect(rows[0]?.segments).toBeNull();
@@ -72,6 +75,7 @@ describe('buildSlotRows', () => {
       userId: 'user-1',
       faceless: false,
       facelessMaterial: undefined,
+      chargedTokens: 2,
       segments: undefined,
       experiment: { experimentId: '7b0e6c1e-0000-4000-8000-000000000001', variantId: 'hook-aggressive', pair: 2 },
     });
@@ -82,4 +86,20 @@ describe('buildSlotRows', () => {
     });
   });
 
+  it('writes the charged amount on every row, including a free (0) slot', () => {
+    const rows = buildSlotRows({
+      slots: [
+        { slotAtISO: '2026-09-08T09:00:00.000Z', dayIndex: 0, timeIndex: 0 },
+        { slotAtISO: '2026-09-09T09:00:00.000Z', dayIndex: 1, timeIndex: 0 },
+      ],
+      title: 'Porto walks',
+      scheduleId: 'sched-1',
+      userId: 'user-1',
+      faceless: false,
+      facelessMaterial: undefined,
+      chargedTokens: 0,
+      segments: undefined,
+    });
+    expect(rows.map((row) => row.charged_tokens)).toEqual([0, 0]);
+  });
 });

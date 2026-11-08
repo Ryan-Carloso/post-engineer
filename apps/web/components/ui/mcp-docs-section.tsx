@@ -52,6 +52,7 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'publish_video_direct', descKey: 'apiKeys.toolDescPublishVideoDirect', Icon: UploadIcon },
   { id: 'get_token_balance', descKey: 'apiKeys.toolDescGetTokenBalance', Icon: CoinsIcon },
   { id: 'generate_persona_video', descKey: 'apiKeys.toolDescGeneratePersonaVideo', Icon: FilmIcon },
+  { id: 'generate_persona_video_batch', descKey: 'apiKeys.toolDescGeneratePersonaVideoBatch', Icon: FilmIcon },
   { id: 'validate_script', descKey: 'apiKeys.toolDescValidateScript', Icon: CheckIcon },
   { id: 'score_draft', descKey: 'apiKeys.toolDescScoreDraft', Icon: CheckIcon },
   { id: 'upload_media', descKey: 'apiKeys.toolDescUploadMedia', Icon: UploadIcon },

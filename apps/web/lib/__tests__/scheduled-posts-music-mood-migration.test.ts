@@ -12,7 +12,7 @@ import { findRepoRoot } from '@/test/repo-root';
 // the engine's default mood instead of the requested one.
 //---------------
 const root = findRepoRoot(import.meta.url);
-const migration = readFileSync(join(root, 'supabase/migrations/045_scheduled-posts-music-mood.sql'), 'utf8');
+const migration = readFileSync(join(root, 'supabase/migrations/048_scheduled-posts-music-mood.sql'), 'utf8');
 const slotRows = readFileSync(join(root, 'apps/web/app/api/videos/generate-and-schedule/slot-rows.ts'), 'utf8');
 const route = readFileSync(join(root, 'apps/web/app/api/videos/generate-and-schedule/route.ts'), 'utf8');
 const support = readFileSync(join(root, 'apps/engine/app/services/fill_schedule/support.py'), 'utf8');

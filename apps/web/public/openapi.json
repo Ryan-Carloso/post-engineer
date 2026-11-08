@@ -3673,6 +3673,18 @@
                         "type": "object",
                         "additionalProperties": true
                       }
+                    },
+                    "slots": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      },
+                      "description": "Range mode only: every slot with slot_at in [from, to)."
+                    },
+                    "truncated": {
+                      "type": "boolean",
+                      "description": "Range mode only: true when the slot cap was hit."
                     }
                   },
                   "required": [
@@ -3726,6 +3738,22 @@
         "parameters": [
           {
             "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
             "in": "query",
             "required": false,
             "schema": {
@@ -4928,6 +4956,172 @@
                   "title",
                   "publishing",
                   "options"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/videos/batch-discount": {
+      "post": {
+        "operationId": "post_generate_persona_video_batch",
+        "summary": "generate persona video batch",
+        "tags": [
+          "videos"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "batchId": {
+                      "type": "string"
+                    },
+                    "videos": {
+                      "type": "integer"
+                    },
+                    "faceVideos": {
+                      "type": "integer"
+                    },
+                    "earnedFreeVideos": {
+                      "type": "integer"
+                    },
+                    "freeVideos": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "scheduleId": {
+                            "type": "string"
+                          },
+                          "slotId": {
+                            "type": "string"
+                          },
+                          "discountTokens": {
+                            "type": "integer",
+                            "minimum": 1
+                          }
+                        },
+                        "required": [
+                          "scheduleId",
+                          "slotId",
+                          "discountTokens"
+                        ]
+                      }
+                    },
+                    "discountTokens": {
+                      "type": "integer"
+                    },
+                    "chargedTokens": {
+                      "type": "integer"
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Stable warning codes: BATCH_DISCOUNT_CREDIT_FAILED, BATCH_DISCOUNT_SLOT_UPDATE_FAILED."
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SCHEDULE_NOT_FOUND: a schedule does not exist, is not yours, or has no video.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "BATCH_CONFLICT: a video already belongs to another batch; BATCH_WINDOW_EXCEEDED: the videos were not created within 10 minutes of the first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "batchKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "scheduleIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "minItems": 1,
+                    "maxItems": 12
+                  }
+                },
+                "required": [
+                  "batchKey",
+                  "scheduleIds"
                 ]
               }
             }
