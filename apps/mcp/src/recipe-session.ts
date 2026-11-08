@@ -159,14 +159,17 @@ export function withRecipeNudge<TArgs>(
 // re-runs the same pure validator the handler runs, so it never parses
 // the handler's error text.
 //---------------
-export function withScriptOutcome<TArgs extends { segments: unknown; recipe?: string }>(
+export function withScriptOutcome<
+  TArgs extends { segments: unknown; recipe?: string; facelessMaterial?: string; options?: { facelessMaterial?: string } },
+>(
   session: RecipeSession,
   toolName: ScriptTool,
   handler: (args: TArgs) => Promise<McpToolResponse>,
 ): (args: TArgs) => Promise<McpToolResponse> {
   return async (args: TArgs): Promise<McpToolResponse> => {
     const response = await session.run(args.recipe, () => handler(args));
-    if (response.isError !== true || validateSegments(args.segments).ok) {
+    const material = args.facelessMaterial ?? args.options?.facelessMaterial;
+    if (response.isError !== true || validateSegments(args.segments, material).ok) {
       return response;
     }
     session.recordScriptRejected();
