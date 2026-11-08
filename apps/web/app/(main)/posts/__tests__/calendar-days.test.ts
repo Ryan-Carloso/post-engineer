@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   bucketByDay,
   buildMonthGrid,
@@ -11,32 +11,32 @@ import {
 } from '../calendar-days';
 import { statusGroupOf } from '../status';
 
-afterEach(() => {
-  vi.unstubAllEnvs();
-});
-
 describe('day bucketing timezone (viewer browser timezone)', () => {
   // 2026-11-02T02:30Z is 23:30 on Nov 1 in São Paulo (UTC-3) but already
-  // Nov 2 in UTC and Tokyo. The bucket must follow the browser's timezone.
+  // Nov 2 in UTC and Tokyo. The zone is an argument: process.env.TZ does
+  // not move Date inside the Stryker worker, so a stubbed TZ fails there.
   const slot = { slotAt: '2026-11-02T02:30:00.000Z' };
 
   it('puts a 23:30 local post on the local day, not the UTC day', () => {
-    vi.stubEnv('TZ', 'America/Sao_Paulo');
-    expect([...bucketByDay([slot]).keys()]).toEqual(['2026-11-01']);
+    expect([...bucketByDay([slot], 'America/Sao_Paulo').keys()]).toEqual(['2026-11-01']);
   });
 
   it('moves the same instant to the next day for a viewer ahead of UTC', () => {
-    vi.stubEnv('TZ', 'Asia/Tokyo');
-    expect([...bucketByDay([slot]).keys()]).toEqual(['2026-11-02']);
+    expect([...bucketByDay([slot], 'Asia/Tokyo').keys()]).toEqual(['2026-11-02']);
   });
 
   it('keeps 00:30 local on the new day', () => {
-    vi.stubEnv('TZ', 'America/Sao_Paulo');
-    expect([...bucketByDay([{ slotAt: '2026-11-02T03:30:00.000Z' }]).keys()]).toEqual(['2026-11-02']);
+    expect([...bucketByDay([{ slotAt: '2026-11-02T03:30:00.000Z' }], 'America/Sao_Paulo').keys()]).toEqual(['2026-11-02']);
   });
 
   it('formats keys with zero padding', () => {
     expect(dayKey(new Date(2026, 0, 5))).toBe('2026-01-05');
+  });
+
+  it('uses the runtime timezone when the caller does not pass one', () => {
+    const date = new Date(2026, 0, 5, 12);
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(dayKey(date)).toBe(dayKey(date, zone));
   });
 });
 

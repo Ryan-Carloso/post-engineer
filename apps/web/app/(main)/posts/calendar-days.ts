@@ -5,11 +5,13 @@ import { STATUS_GROUP_ORDER, statusGroupOf, type StatusGroup } from './status';
 //---------------
 // Pure date helpers for the posts calendar.
 //
-// TIMEZONE: every day bucket uses the VIEWER'S BROWSER timezone (the local
-// getters of Date), not the persona's timezone and not UTC. A slot at
-// 23:30 local belongs to that local day; the same instant can sit in a
-// different cell for a viewer in another timezone. Pinned by
-// __tests__/calendar-days.test.ts (23:30 edge case).
+// TIMEZONE: every day bucket uses the VIEWER'S timezone, not the persona's
+// and not UTC. Intl's default zone is the browser zone. Tests pass an
+// explicit IANA zone: assigning process.env.TZ does not move Date inside
+// the Stryker worker (Node 22), so a stubbed TZ fails the dry run and
+// mutation.json is never written. A slot at 23:30 local belongs to that
+// local day; the same instant can sit in a different cell for a viewer in
+// another timezone. Pinned by __tests__/calendar-days.test.ts.
 //---------------
 
 export interface CalendarDay {
@@ -26,8 +28,15 @@ export const INTL_TAG: Record<Locale, string> = { pt: 'pt-BR', en: 'en-US' };
 
 const pad = (value: number): string => String(value).padStart(2, '0');
 
-export function dayKey(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+export function dayKey(date: Date, timeZone?: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
 // Parses a key made by dayKey back to local midnight.
@@ -74,10 +83,10 @@ export function weekdayLabels(locale: Locale, firstWeekday: 0 | 1): { short: str
   });
 }
 
-export function bucketByDay<T extends Pick<ScheduledSlot, 'slotAt'>>(slots: T[]): Map<string, T[]> {
+export function bucketByDay<T extends Pick<ScheduledSlot, 'slotAt'>>(slots: T[], timeZone?: string): Map<string, T[]> {
   const buckets = new Map<string, T[]>();
   for (const slot of slots) {
-    const key = dayKey(new Date(slot.slotAt));
+    const key = dayKey(new Date(slot.slotAt), timeZone);
     const list = buckets.get(key);
     if (list) list.push(slot);
     else buckets.set(key, [slot]);
