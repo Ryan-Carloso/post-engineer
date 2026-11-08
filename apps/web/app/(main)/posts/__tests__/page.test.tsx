@@ -191,7 +191,6 @@ describe('PostsPage', () => {
           ],
         },
       ],
-      recent: [],
     });
     render(<PostsPage />);
 
