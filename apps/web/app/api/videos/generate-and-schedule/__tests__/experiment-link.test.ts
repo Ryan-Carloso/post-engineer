@@ -3,7 +3,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
 
-import { checkExperimentLink, ExperimentLinkSchema, pairMismatch, type PairFacts } from '../experiment-link';
+import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, pairMismatch, verifyExperimentPairAfterInsert, type PairFacts } from '../experiment-link';
+import type { PersonaPrep } from '../persona-prep';
 
 //---------------
 // Experiment link checks for generate-and-schedule (issue #476). The
@@ -29,6 +30,16 @@ function facts(overrides: Partial<PairFacts> = {}): PairFacts {
     faceless: false,
     fullLipsync: false,
     segments: [{ ...SEGMENTS[0], text: 'Your squat is hurting you.' }, SEGMENTS[1], SEGMENTS[2]],
+    title: 'Squat form',
+    facelessMaterial: null,
+    voiceAudioUrl: null,
+    videoAspect: '9:16',
+    videoLayout: 'standard',
+    paragraphNumber: 3,
+    faceQuality: 'ok',
+    language: 'en-US',
+    niche: 'fitness',
+    ctaText: 'Follow for more.',
     ...overrides,
   };
 }
@@ -72,6 +83,14 @@ const PARTNER_SCHEDULE = {
   data: {
     providers: ['youtube'],
     post_voice_id: 'kokoro:af_heart',
+    post_voice_audio_url: null,
+    post_video_aspect: '9:16',
+    post_video_layout: 'standard',
+    post_paragraph_number: 3,
+    post_face_quality: 'ok',
+    post_language: 'en-US',
+    post_niche: 'fitness',
+    post_cta_text: 'Follow for more.',
     youtube_account_ids: ['chan-1'],
     instagram_account_ids: [],
     linkedin_account_ids: [],
@@ -86,6 +105,8 @@ const PARTNER_SLOT = {
   variant_id: 'hook-calm',
   faceless: false,
   full_lipsync: false,
+  title: 'Squat form',
+  faceless_material: 'broll',
   segments: [
     { text: SEGMENTS[0].text, kind: 'hook' },
     { media: { url: 'https://x/a.png' }, text: SEGMENTS[1].text, kind: 'body' },
@@ -121,6 +142,10 @@ describe('checkExperimentLink', () => {
     const { promise, filters } = run({ experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: { data: [], error: null } });
     await expect(promise).resolves.toEqual({ ok: true });
     expect(filters).toContainEqual({ table: 'experiments', column: 'user_id', value: USER_ID });
+    // The variants query is scoped through the experiment id the ownership query used.
+    const ownedId = filters.find((f) => f.table === 'experiments' && f.column === 'id')?.value;
+    expect(ownedId).toBe(EXPERIMENT_ID);
+    expect(filters).toContainEqual({ table: 'experiment_variants', column: 'experiment_id', value: ownedId });
     expect(filters).toContainEqual({ table: 'scheduled_posts', column: 'user_id', value: USER_ID });
     expect(filters).toContainEqual({ table: 'scheduled_posts', column: 'experiment_pair', value: 1 });
   });
@@ -202,6 +227,16 @@ describe('pairMismatch', () => {
     expect(pairMismatch(partner, facts({ voiceId: 'other' }))?.field).toBe('options.voiceId');
     expect(pairMismatch(partner, facts({ faceless: true }))?.field).toBe('options');
     expect(pairMismatch(partner, facts({ fullLipsync: true }))?.field).toBe('options');
+    expect(pairMismatch(partner, facts({ title: 'Other title' }))?.field).toBe('title');
+    expect(pairMismatch(partner, facts({ facelessMaterial: 'svg' }))?.field).toBe('options.facelessMaterial');
+    expect(pairMismatch(partner, facts({ voiceAudioUrl: 'https://x/v.mp3' }))?.field).toBe('options.audioUrl');
+    expect(pairMismatch(partner, facts({ videoAspect: '16:9' }))?.field).toBe('options.videoAspect');
+    expect(pairMismatch(partner, facts({ videoLayout: 'react' }))?.field).toBe('options.videoLayout');
+    expect(pairMismatch(partner, facts({ paragraphNumber: 4 }))?.field).toBe('options.paragraphNumber');
+    expect(pairMismatch(partner, facts({ faceQuality: 'very_good' }))?.field).toBe('options.faceQuality');
+    expect(pairMismatch(partner, facts({ language: 'pt-BR' }))?.field).toBe('options.language');
+    expect(pairMismatch(partner, facts({ niche: 'cooking' }))?.field).toBe('options.niche');
+    expect(pairMismatch(partner, facts({ ctaText: 'Subscribe.' }))?.field).toBe('options.ctaText');
     const otherBody = facts({ segments: [{ kind: 'hook', text: 'New hook.' }, { kind: 'body', text: 'Different body.' }, SEGMENTS[2]] });
     expect(pairMismatch(partner, otherBody)?.message).toContain('body and CTA segments must be identical');
   });
@@ -209,5 +244,81 @@ describe('pairMismatch', () => {
   it('compares account lists regardless of order', () => {
     const two = facts({ accountIds: { youtube: ['chan-1', 'chan-2'] } });
     expect(pairMismatch(two, facts({ accountIds: { youtube: ['chan-2', 'chan-1'] }, segments: [{ kind: 'hook', text: 'x.' }, SEGMENTS[1], SEGMENTS[2]] }))).toBeNull();
+  });
+});
+
+describe('pairMismatch faceless material default', () => {
+  it('treats an omitted material as the stored default broll', () => {
+    const partner = facts({ facelessMaterial: 'broll', segments: SEGMENTS });
+    expect(pairMismatch(partner, facts({ facelessMaterial: null }))).toBeNull();
+  });
+});
+
+describe('checkExperimentLink partner settings', () => {
+  it('400 on options.videoAspect when the stored partner schedule differs', async () => {
+    const schedule = { data: { ...PARTNER_SCHEDULE.data, post_video_aspect: '16:9' }, error: null };
+    const tables = { experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: { data: [PARTNER_SLOT], error: null }, schedule };
+    await expect(run(tables).promise).resolves.toMatchObject({ ok: false, status: 400, field: 'options.videoAspect' });
+  });
+
+  it('400 on title when the stored partner slot differs', async () => {
+    const slots = { data: [{ ...PARTNER_SLOT, title: 'Another topic' }], error: null };
+    const tables = { experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots, schedule: PARTNER_SCHEDULE };
+    await expect(run(tables).promise).resolves.toMatchObject({ ok: false, status: 400, field: 'title' });
+  });
+});
+
+describe('verifyExperimentPairAfterInsert', () => {
+  function verify(tables: Tables, overrides: { facts?: PairFacts } = {}) {
+    const mock = supabaseMock(tables);
+    const promise = verifyExperimentPairAfterInsert(mock.client, {
+      link: { experimentId: EXPERIMENT_ID, variantId: 'hook-aggressive', pair: 1 },
+      userId: USER_ID,
+      facts: overrides.facts ?? facts(),
+    });
+    return { promise, filters: mock.filters };
+  }
+  const OWN_SLOT = { ...PARTNER_SLOT, schedule_id: SCHEDULE_ID, variant_id: 'hook-aggressive' };
+
+  it('passes when no partner exists yet (only the own slot is visible)', async () => {
+    const { promise, filters } = verify({ slots: { data: [OWN_SLOT], error: null } });
+    await expect(promise).resolves.toEqual({ ok: true });
+    expect(filters).toContainEqual({ table: 'scheduled_posts', column: 'user_id', value: USER_ID });
+    expect(filters).toContainEqual({ table: 'scheduled_posts', column: 'experiment_pair', value: 1 });
+  });
+
+  it('passes when the committed partner differs only in the hook', async () => {
+    const { promise, filters } = verify({ slots: { data: [OWN_SLOT, PARTNER_SLOT], error: null }, schedule: PARTNER_SCHEDULE });
+    await expect(promise).resolves.toEqual({ ok: true });
+    expect(filters).toContainEqual({ table: 'schedules', column: 'id', value: 'sched-partner' });
+  });
+
+  it('400 with the field when a partner that committed meanwhile mismatches', async () => {
+    const schedule = { data: { ...PARTNER_SCHEDULE.data, post_niche: 'cooking' }, error: null };
+    const { promise } = verify({ slots: { data: [OWN_SLOT, PARTNER_SLOT], error: null }, schedule });
+    await expect(promise).resolves.toMatchObject({ ok: false, status: 400, field: 'options.niche' });
+  });
+
+  it('fails closed (500) when the pair or partner schedule cannot be read', async () => {
+    await expect(verify({ slots: { data: null, error: { message: 'boom' } } }).promise).resolves.toMatchObject({ ok: false, status: 500 });
+    await expect(
+      verify({ slots: { data: [OWN_SLOT, PARTNER_SLOT], error: null }, schedule: { data: null, error: null } }).promise,
+    ).resolves.toMatchObject({ ok: false, status: 500 });
+  });
+});
+
+describe('buildPairFacts', () => {
+  it('maps the resolved request values exactly as the route stores them', () => {
+    const prep = {
+      faceless: true, faceQuality: 'ok', voiceIdValue: 'v1', niche: 'fitness', ctaText: 'Go.', language: 'en-US',
+      videoAspect: '9:16', videoLayout: 'standard', paragraphNumber: 3,
+    } as unknown as PersonaPrep;
+    expect(
+      buildPairFacts({ providers: ['youtube'], accountIds: { youtube: ['a'] }, prep, title: 'T', segments: [], fullLipsync: true, facelessMaterial: undefined, audioUrl: undefined }),
+    ).toEqual({
+      providers: ['youtube'], accountIds: { youtube: ['a'] }, voiceId: 'v1', faceless: true, fullLipsync: true, segments: [], title: 'T',
+      facelessMaterial: null, voiceAudioUrl: null, videoAspect: '9:16', videoLayout: 'standard', paragraphNumber: 3, faceQuality: 'ok',
+      language: 'en-US', niche: 'fitness', ctaText: 'Go.',
+    });
   });
 });

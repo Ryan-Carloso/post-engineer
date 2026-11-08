@@ -88,7 +88,7 @@ export const GeneratePersonaVideoShape = {
   timezone: z.string().min(1).default('UTC').describe('IANA timezone for a naive startAt and the HH:MM times, e.g. "Europe/Lisbon". Defaults to UTC.'),
   options: z.object(GeneratePersonaVideoOptionsShape).optional().describe('Generation options applied to this video.'),
   idempotencyKey: z.string().min(1).optional().describe('Idempotency key: retrying the call with the same key returns the original schedule (replayed: true) instead of generating again.'),
-  experiment: ExperimentLinkShape.optional().describe('Join a paired A/B experiment (create_experiment): this video is one variant of one pair. The server rejects it before charging when the pair partner differs in anything but the hook. Prefer add_experiment_pair, which creates both videos of a pair.'),
+  experiment: ExperimentLinkShape.optional().describe('Join a paired A/B experiment (create_experiment): this video is one variant of one pair. The server rejects it when the pair partner differs in: the same providers and accounts, the same title, voice (id and audio URL), faceless and faceless material, full lip-sync, video aspect and layout, paragraph number, face quality, language, niche and CTA text, and identical body and CTA segments, with a different hook. The pinned options.imageId is not stored, so it is not compared: pass the same imageId (or none) to both videos yourself. Prefer add_experiment_pair, which creates both videos of a pair.'),
   // Telemetry-only: the recipe the script came from. Never forwarded in the
   // request body (handleGeneratePersonaVideo builds it field by field);
   // recipe-session.ts sends it as the X-MCP-Recipe header.

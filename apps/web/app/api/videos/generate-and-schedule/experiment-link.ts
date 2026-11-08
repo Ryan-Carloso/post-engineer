@@ -6,11 +6,19 @@
 //
 // Fairness is checked per pair: when the other variant's video of the same
 // pair already exists, this video must match it in everything except the
-// hook — providers, accounts, voice, faceless, full lip-sync and every
-// non-hook segment — and its hook must differ. Persona is checked against
-// the experiment for every video.
+// hook — providers, accounts, voice (id and audio URL), faceless, faceless
+// material, full lip-sync, title, aspect, layout, paragraph number, face
+// quality, language, niche, CTA text and every non-hook segment — and its
+// hook must differ. Persona is checked against the experiment for every
+// video. The pinned `options.imageId` is NOT compared: it is not stored on
+// the schedule or the slot, so the server cannot see the partner's value.
 //
-// Service role bypasses RLS: every query filters by user_id explicitly.
+// Two concurrent calls for the two variants can both see an empty pair, so
+// verifyExperimentPairAfterInsert re-runs the comparison once this video's
+// slot is inserted (the route rolls the video back when it fails).
+//
+// Service role bypasses RLS: every query is scoped to the user — directly by
+// user_id, or through an experiment id whose ownership was checked first.
 //---------------
 
 import { z } from 'zod';
@@ -18,6 +26,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from '@/lib/experiments/limits';
 import { logger } from '@/lib/logger';
+import type { PersonaPrep } from './persona-prep';
 
 export const ExperimentLinkSchema = z
   .object({
@@ -37,6 +46,66 @@ export interface PairFacts {
   faceless: boolean;
   fullLipsync: boolean;
   segments: unknown;
+  title: string;
+  /** null = column default (`broll`, migration 029). */
+  facelessMaterial: string | null;
+  voiceAudioUrl: string | null;
+  videoAspect: string | null;
+  videoLayout: string | null;
+  paragraphNumber: number | null;
+  faceQuality: string | null;
+  language: string | null;
+  niche: string | null;
+  ctaText: string | null;
+}
+
+/** scheduled_posts.faceless_material default (migration 029). */
+const DEFAULT_FACELESS_MATERIAL = 'broll';
+
+/** Scalar settings a pair must share, in check order, with their request field. */
+const SCALAR_SETTINGS: ReadonlyArray<{ field: string; label: string; read: (facts: PairFacts) => string | number | null }> = [
+  { field: 'title', label: 'title', read: (facts) => facts.title },
+  { field: 'options.facelessMaterial', label: 'faceless material', read: (facts) => facts.facelessMaterial ?? DEFAULT_FACELESS_MATERIAL },
+  { field: 'options.audioUrl', label: 'voice audio URL', read: (facts) => facts.voiceAudioUrl },
+  { field: 'options.videoAspect', label: 'video aspect', read: (facts) => facts.videoAspect },
+  { field: 'options.videoLayout', label: 'video layout', read: (facts) => facts.videoLayout },
+  { field: 'options.paragraphNumber', label: 'paragraph number', read: (facts) => facts.paragraphNumber },
+  { field: 'options.faceQuality', label: 'face quality', read: (facts) => facts.faceQuality },
+  { field: 'options.language', label: 'language', read: (facts) => facts.language },
+  { field: 'options.niche', label: 'niche', read: (facts) => facts.niche },
+  { field: 'options.ctaText', label: 'call to action text', read: (facts) => facts.ctaText },
+];
+
+/** The request's resolved values, exactly as the route stores them on the schedule and slot rows. */
+export function buildPairFacts(input: {
+  providers: string[];
+  accountIds: Record<string, string[]>;
+  prep: PersonaPrep;
+  title: string;
+  segments: unknown;
+  fullLipsync: boolean | undefined;
+  facelessMaterial: string | undefined;
+  audioUrl: string | undefined;
+}): PairFacts {
+  const { prep } = input;
+  return {
+    providers: input.providers,
+    accountIds: input.accountIds,
+    voiceId: prep.voiceIdValue ?? null,
+    faceless: prep.faceless,
+    fullLipsync: input.fullLipsync === true,
+    segments: input.segments,
+    title: input.title,
+    facelessMaterial: input.facelessMaterial ?? null,
+    voiceAudioUrl: input.audioUrl ?? null,
+    videoAspect: prep.videoAspect,
+    videoLayout: prep.videoLayout,
+    paragraphNumber: prep.paragraphNumber,
+    faceQuality: prep.faceQuality,
+    language: prep.language,
+    niche: prep.niche,
+    ctaText: prep.ctaText,
+  };
 }
 
 export type LinkCheck =
@@ -96,6 +165,11 @@ export function pairMismatch(partner: PairFacts, current: PairFacts): { field: s
   if (partner.faceless !== current.faceless || partner.fullLipsync !== current.fullLipsync) {
     return { field: 'options', message: 'Both videos of a pair must use the same faceless and full lip-sync settings.' };
   }
+  for (const setting of SCALAR_SETTINGS) {
+    if (setting.read(partner) !== setting.read(current)) {
+      return { field: setting.field, message: `Both videos of a pair must use the same ${setting.label}.` };
+    }
+  }
   const partnerScript = splitHook(partner.segments);
   const currentScript = splitHook(current.segments);
   if (canonical(partnerScript.rest) !== canonical(currentScript.rest)) {
@@ -148,7 +222,7 @@ export async function checkExperimentLink(
 
   const { data: pairSlots, error: slotsError } = await supabase
     .from('scheduled_posts')
-    .select('schedule_id, variant_id, segments, faceless, full_lipsync')
+    .select(PAIR_SLOT_COLUMNS)
     .eq('user_id', userId)
     .eq('experiment_id', link.experimentId)
     .eq('experiment_pair', link.pair);
@@ -167,10 +241,30 @@ export async function checkExperimentLink(
   }
   const partner = slots.find((slot) => slot.variant_id !== link.variantId);
   if (partner === undefined) return { ok: true };
+  return comparePartner(supabase, { link, userId, partner, facts: input.facts });
+}
 
+interface PartnerSlot {
+  schedule_id: string;
+  segments: unknown;
+  faceless: boolean;
+  full_lipsync: boolean;
+  title: string;
+  faceless_material: string | null;
+}
+
+const PAIR_SLOT_COLUMNS = 'schedule_id, variant_id, segments, faceless, full_lipsync, title, faceless_material';
+
+async function comparePartner(
+  supabase: SupabaseClient,
+  input: { link: ExperimentLink; userId: string; partner: PartnerSlot; facts: PairFacts },
+): Promise<LinkCheck> {
+  const { link, userId, partner } = input;
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
-    .select('providers, post_voice_id, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids')
+    .select(
+      'providers, post_voice_id, post_voice_audio_url, post_video_aspect, post_video_layout, post_paragraph_number, post_face_quality, post_language, post_niche, post_cta_text, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids',
+    )
     .eq('id', partner.schedule_id)
     .eq('user_id', userId)
     .maybeSingle();
@@ -188,8 +282,44 @@ export async function checkExperimentLink(
       faceless: partner.faceless,
       fullLipsync: partner.full_lipsync,
       segments: partner.segments,
+      title: partner.title,
+      facelessMaterial: partner.faceless_material,
+      voiceAudioUrl: schedule.post_voice_audio_url,
+      videoAspect: schedule.post_video_aspect,
+      videoLayout: schedule.post_video_layout,
+      paragraphNumber: schedule.post_paragraph_number,
+      faceQuality: schedule.post_face_quality,
+      language: schedule.post_language,
+      niche: schedule.post_niche,
+      ctaText: schedule.post_cta_text,
     },
     input.facts,
   );
   return mismatch === null ? { ok: true } : failure(400, mismatch.message, mismatch.field);
+}
+
+/**
+ * Post-insert re-check for the race where both variants of a pair were
+ * validated against an empty pair. Call it once this video's slot row is
+ * inserted: a partner that committed meanwhile is now visible. A failed
+ * result (any status) means the caller must roll the video back.
+ */
+export async function verifyExperimentPairAfterInsert(
+  supabase: SupabaseClient,
+  input: { link: ExperimentLink; userId: string; facts: PairFacts },
+): Promise<LinkCheck> {
+  const { link, userId } = input;
+  const { data: pairSlots, error } = await supabase
+    .from('scheduled_posts')
+    .select(PAIR_SLOT_COLUMNS)
+    .eq('user_id', userId)
+    .eq('experiment_id', link.experimentId)
+    .eq('experiment_pair', link.pair);
+  if (error) {
+    logger.error('[generate-and-schedule] experiment pair re-check failed', error, { experimentId: link.experimentId });
+    return failure(500, 'Failed to verify the experiment pair.', 'experiment.pair');
+  }
+  const partner = (pairSlots ?? []).find((slot) => slot.variant_id !== link.variantId);
+  if (partner === undefined) return { ok: true };
+  return comparePartner(supabase, { link, userId, partner, facts: input.facts });
 }

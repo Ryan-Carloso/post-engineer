@@ -32,7 +32,7 @@ import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, toFiniteNumber } from '@/lib/tokens';
 import { buildSlotRows } from './slot-rows';
 import { fetchReplay } from './replay';
-import { checkExperimentLink, ExperimentLinkSchema } from './experiment-link';
+import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, verifyExperimentPairAfterInsert } from './experiment-link';
 import type { Provider } from './providers-validation';
 import { checkFullLipsyncNarration } from './full-lipsync-preflight';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
@@ -472,8 +472,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // Idempotency anchor, resolved once: the experiment check below needs the
   // same schedule id step 7 uses to tell a replay from a duplicate.
   const idem = resolveIdempotency(userId, idempotencyKey, request);
+  const pairFacts = buildPairFacts({ providers, accountIds, prep, title, segments: options?.segments, fullLipsync: validatedOptions.fullLipsync, facelessMaterial: validatedOptions.facelessMaterial, audioUrl: validatedOptions.audioUrl });
   if (experiment !== undefined) {
-    const link = await checkExperimentLink(supabase, { link: experiment, userId, personaId, replayScheduleId: idem.scheduleId, facts: { providers, accountIds, voiceId: prep.voiceIdValue ?? null, faceless: prep.faceless, fullLipsync: validatedOptions.fullLipsync === true, segments: options?.segments } });
+    const link = await checkExperimentLink(supabase, { link: experiment, userId, personaId, replayScheduleId: idem.scheduleId, facts: pairFacts });
     if (!link.ok && link.status === 500) return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
     if (!link.ok) return validationFailed(ERROR_CODES.VALIDATION_FAILED, link.message, link.field, link.status);
   }
@@ -826,6 +827,19 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
   }
   trackApiEvent('video_slots_created', { userId, scheduleId: idem.scheduleId, numberOfVideos: 1 });
+  if (experiment !== undefined) {
+    // Race guard: the partner may have committed since the pre-charge check.
+    const recheck = await verifyExperimentPairAfterInsert(supabase, { link: experiment, userId, facts: pairFacts });
+    if (!recheck.ok) {
+      logger.error('[generate-and-schedule] experiment pair re-check failed after insert; rolling back', undefined, { scheduleId: idem.scheduleId, userId, field: recheck.field });
+      await supabase.from('scheduled_posts').delete().eq('schedule_id', idem.scheduleId).eq('user_id', userId);
+      await supabase.from('schedules').delete().eq('id', idem.scheduleId).eq('user_id', userId);
+      await supabase.rpc('refund_generation_tokens', { p_user_id: userId, p_generation_id: idem.generationId, p_reason: 'Unified generate+schedule: experiment pair mismatch; tokens refunded' });
+      trackApiEvent('video_creation_failed', { userId, scheduleId: idem.scheduleId, errorCode: ERROR_CODES.VALIDATION_FAILED, failureStage: 'experiment_pair' });
+      if (recheck.status === 500) return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
+      return validationFailed(ERROR_CODES.VALIDATION_FAILED, recheck.message, recheck.field, recheck.status);
+    }
+  }
 
   // 11. Dispatch the one engine generation and bind the task_id.
   // A failed slot is an explicit terminal state (failed + refunded), never
