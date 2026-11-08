@@ -243,8 +243,22 @@ class CompleteTaskTests(unittest.TestCase):
                 "user_id": "user-1",
                 "flow": "direct",
                 "pipeline": "video",
+                # No music phase ran for this completion: the mood is
+                # unknown, never absent (degraded identity convention).
+                "music_mood": "unknown",
             },
         )
+
+    def test_complete_task_attaches_music_mood_to_generated_event(self):
+        """The resolved BGM mood rides the direct video_generated event,
+        so PostHog can break the funnel down by mood (issue #489)."""
+        with (
+            patch.object(tm, "track_event") as track,
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+        ):
+            tm._complete_task(self.task_id, _params(), music_mood="calm")
+        _, props = track.call_args[0]
+        self.assertEqual(props["music_mood"], "calm")
 
     def test_complete_task_clears_milestone_cache(self):
         tm._progress_milestones[self.task_id] = 50
@@ -295,6 +309,7 @@ class CompleteTaskTests(unittest.TestCase):
                 "flow": "direct",
                 "pipeline": "video",
                 "cost_usd": 0.1,
+                "music_mood": "unknown",
             },
         )
 
