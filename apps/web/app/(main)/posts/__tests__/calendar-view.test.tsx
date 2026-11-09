@@ -12,7 +12,6 @@ const EN: Record<string, string> = {
   'posts.groupFailed': 'Failed',
   'posts.groupScheduled': 'Scheduled',
   'posts.groupInProgress': 'In progress',
-  'posts.calendarNotLoaded': 'Posts not loaded',
   'posts.filterActive': 'Filtered: only matching posts are shown',
   'posts.calendarDayLabel': '{date}: {summary}',
   'posts.calendarDayEmpty': '{date}: no posts',
@@ -99,24 +98,29 @@ describe('CalendarView', () => {
     expect(dayButton(/June 21, 2030/).closest('[data-selected="true"]')).toBeNull();
   });
 
-  it('draws today as a filled blue disc behind the day number, never as a cell border that reads like focus', () => {
+  it('draws today as an amber disc behind the day number, never as a cell border that reads like focus', () => {
     setup({ selectedKey: '2030-06-20' });
     const today = dayButton(/June 15, 2030/);
     const mark = today.querySelector('[data-today-mark="true"]');
     expect(mark).toHaveTextContent('15');
-    expect(mark?.className.split(/\s+/)).toContain('bg-info');
+    expect(mark?.className.split(/\s+/)).toContain('bg-warning');
+    expect(mark?.className.split(/\s+/)).not.toContain('bg-info');
     // No border frame on the cell and no accent fill that could read as selected.
     expect(today.className.split(/\s+/)).not.toContain('border-2');
     expect(today.className.split(/\s+/)).not.toContain('bg-accent');
     expect(today.closest('[data-today]')?.className.split(/\s+/)).not.toContain('bg-accent');
-    // Only today carries the disc.
+    // Only today carries the disc, and it stays while another day is selected.
     expect(dayButton(/June 20, 2030/).querySelector('[data-today-mark]')).toBeNull();
   });
 
-  it('keeps the today disc when today itself is selected, outlined in the card color against the selected fill', () => {
+  it('keeps the today disc when today itself is selected, separate from the selection outline', () => {
     setup({ selectedKey: '2030-06-15' });
-    const mark = dayButton(/June 15, 2030/).querySelector('[data-today-mark="true"]');
-    expect(mark?.className.split(/\s+/)).toEqual(expect.arrayContaining(['bg-info', 'border-2', 'border-card']));
+    const today = dayButton(/June 15, 2030/);
+    const mark = today.querySelector('[data-today-mark="true"]');
+    expect(mark?.className.split(/\s+/)).toContain('bg-warning');
+    expect(mark?.className.split(/\s+/)).not.toContain('border-2');
+    expect(today.className.split(/\s+/)).toContain('data-[selected-single=true]:outline-primary');
+    expect(today.className.split(/\s+/)).not.toContain('data-[selected-single=true]:bg-primary');
   });
 
   it('dims the days outside the shown month', () => {
@@ -125,7 +129,7 @@ describe('CalendarView', () => {
     const outside = within(grid)
       .getAllByRole('button')
       .find((button) => button.textContent === '1' && button.closest('[data-outside]') !== null);
-    expect(outside?.className.split(/\s+/)).toContain('[&>span]:opacity-45');
+    expect(outside?.querySelector('[data-day-number]')?.className.split(/\s+/)).toContain('opacity-45');
     expect(outside?.querySelector('[data-day-number]')?.className.split(/\s+/)).toContain('font-normal');
     const inside = dayButton(/June 20, 2030/);
     expect(inside.className.split(/\s+/)).toContain('[&>span]:opacity-100');
@@ -151,7 +155,7 @@ describe('CalendarView', () => {
     expect(cell).toHaveAccessibleName('Wednesday, June 5, 2030: Failed: 2, Published: 2, In progress: 1, Scheduled: 1');
   });
 
-  it('draws one status marker per group with its count, failure first, and tints a day with a failure', () => {
+  it('draws one status chip per group with its word and count, failure first, without painting the cell', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
@@ -168,19 +172,24 @@ describe('CalendarView', () => {
     const busy = dayButton(/June 5, 2030/);
     const markers = [...busy.querySelectorAll('[data-marker]')];
     expect(markers.map((marker) => marker.getAttribute('data-marker'))).toEqual(['failed', 'published', 'scheduled']);
+    expect(markers.map((marker) => marker.querySelector('[data-count]')?.textContent)).toEqual(['1', '1', '2']);
+    // Several groups: the word lives on the chip title, not in a label that
+    // would overflow the column. A single group still spells the word.
     expect(markers.map((marker) => marker.textContent)).toEqual(['1', '1', '2']);
-    expect(busy.className.split(/\s+/)).toContain('bg-destructive-soft');
-    // A published-only day: one marker, no failure tint.
+    expect(markers.map((marker) => marker.getAttribute('title'))).toEqual(['Failed: 1', 'Published: 1', 'Scheduled: 2']);
+    expect(busy.className.split(/\s+/)).not.toContain('bg-destructive-soft');
+    // A published-only day: one chip, and the cell itself stays unpainted.
     const published = dayButton(/June 6, 2030/);
-    expect([...published.querySelectorAll('[data-marker]')].map((marker) => marker.getAttribute('data-marker'))).toEqual([
-      'published',
-    ]);
+    const publishedMarker = published.querySelector('[data-marker]');
+    expect(publishedMarker?.getAttribute('data-marker')).toBe('published');
+    expect(publishedMarker?.textContent).toBe('Published1');
     expect(published.className.split(/\s+/)).not.toContain('bg-destructive-soft');
   });
 
-  // The selection is a navy outline over the cell's own background, never
-  // the solid navy fill that hid a failure and made an empty day a block.
-  it('keeps a selected failed day red under the navy selection outline', () => {
+  // Selection is a navy outline on a clear cell. A failure stays on the
+  // chip, so a selected failed day is not a red block and an empty day is
+  // not a filled block.
+  it('outlines a selected failed day and leaves the failure on the chip', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       ['2030-06-05', [{ status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' }]],
     ]);
@@ -188,20 +197,23 @@ describe('CalendarView', () => {
     const classes = dayButton(/June 5, 2030/).className.split(/\s+/);
     expect(classes).toEqual(
       expect.arrayContaining([
-        'bg-destructive-soft',
-        'data-[selected-single=true]:bg-destructive-soft',
+        'data-[selected-single=true]:bg-transparent',
         'data-[selected-single=true]:outline-primary',
         'data-[selected-single=true]:text-primary',
       ]),
     );
+    expect(classes).not.toContain('bg-destructive-soft');
     expect(classes).not.toContain('data-[selected-single=true]:bg-primary');
     expect(dayButton(/June 5, 2030/).querySelector('[data-marker="failed"]')).not.toBeNull();
   });
 
-  it('draws a selected day without a failure as a light tint with the same outline, not a navy block', () => {
+  it('draws a selected day as the same outline, not a navy or blue block', () => {
     setup({ selectedKey: '2030-06-20' });
     const classes = dayButton(/June 20, 2030/).className.split(/\s+/);
-    expect(classes).toEqual(expect.arrayContaining(['data-[selected-single=true]:bg-info-soft', 'data-[selected-single=true]:outline-primary']));
+    expect(classes).toEqual(
+      expect.arrayContaining(['data-[selected-single=true]:bg-transparent', 'data-[selected-single=true]:outline-primary']),
+    );
+    expect(classes).not.toContain('data-[selected-single=true]:bg-info-soft');
     expect(classes).not.toContain('data-[selected-single=true]:bg-primary');
     expect(classes).not.toContain('data-[selected-single=true]:text-primary-foreground');
   });
@@ -223,10 +235,11 @@ describe('CalendarView', () => {
     // images are asserted by DOM, not by role.
     expect(cell.querySelector('[data-personas]')).toHaveAttribute('data-personas', '2');
     expect([...cell.querySelectorAll('[data-personas] img')].map((img) => img.getAttribute('alt'))).toEqual(['Viva Leve', 'Bicuda']);
+    expect(cell.querySelector('[data-personas] span')?.className).toContain('[&_img]:grayscale');
     expect(cell.querySelector('[data-personas-more]')).toBeNull();
   });
 
-  it('shows at most two persona photos and counts the rest as +N', () => {
+  it('shows at most two persona photos and names the rest', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
@@ -240,7 +253,10 @@ describe('CalendarView', () => {
     setup({ slotsByDay });
     const cell = dayButton(/June 5, 2030/);
     expect(cell.querySelectorAll('[data-personas] img')).toHaveLength(2);
-    expect(cell.querySelector('[data-personas-more]')).toHaveTextContent('+1');
+    const more = cell.querySelector('[data-personas-more]');
+    expect(more).toHaveTextContent('+ Ana Fit');
+    expect(more).toHaveAttribute('title', 'Ana Fit');
+    expect(cell.querySelector('[data-personas]')?.className.split(/\s+/)).not.toContain('hidden');
   });
 
   it('still marks the status of a day whose posts resolve to no persona', () => {
@@ -256,7 +272,7 @@ describe('CalendarView', () => {
     setup({ slotsByDay });
     const cell = dayButton(/June 9, 2030/);
     expect(cell.querySelector('[data-personas]')).toBeNull();
-    expect(cell.querySelector('[data-marker="scheduled"]')).toHaveTextContent('2');
+    expect(cell.querySelector('[data-marker="scheduled"] [data-count]')).toHaveTextContent('2');
   });
 
   it('names empty days explicitly and draws no marker or persona', () => {
@@ -292,16 +308,20 @@ describe('CalendarView', () => {
     expect(screen.getByText('Filtered: only matching posts are shown').closest('[data-filter-hint]')).not.toBeNull();
   });
 
-  // A failed load must not read as an empty month: dimmed, disabled days,
-  // no selection, no markers, no legend — but the month can still change.
+  // A failed load must not read as an empty month: disabled days, readable
+  // numbers, no selection, no markers, no legend — but the month can still
+  // change. There is no "not loaded" pill over the cells.
   it('draws an unavailable grid when the posts could not be loaded, keeping the month navigation', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       ['2030-06-05', [{ status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' }]],
     ]);
     const props = setup({ slotsByDay, selectedKey: '2030-06-15', unavailable: true });
-    expect(screen.getByText('Posts not loaded')).toBeInTheDocument();
-    expect(dayButton(/June 5, 2030/)).toBeDisabled();
-    expect(dayButton(/June 5, 2030/).querySelector('[data-marker]')).toBeNull();
+    expect(screen.queryByText('Posts not loaded')).not.toBeInTheDocument();
+    const day = dayButton(/June 5, 2030/);
+    expect(day).toBeDisabled();
+    expect(day.className.split(/\s+/)).not.toContain('opacity-40');
+    expect(day.querySelector('[data-marker]')).toBeNull();
+    expect(screen.getByRole('grid').className.split(/\s+/)).not.toContain('opacity-40');
     expect(screen.getByRole('grid').querySelector('[data-selected="true"]')).toBeNull();
     expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
@@ -347,8 +367,12 @@ describe('CalendarView', () => {
     ]);
     setup({ slotsByDay });
     for (const day of [dayButton(/June 5, 2030/), dayButton(/June 15, 2030/)]) {
-      expect(day.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-18', 'sm:h-19']));
+      expect(day.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-20', 'sm:h-24']));
       expect(day.className.split(/\s+/)).not.toContain('h-auto');
+      // The month table, not the chip text, owns the column width.
+      const cell = day.parentElement;
+      expect(cell?.className.split(/\s+/)).toEqual(expect.arrayContaining(['basis-0', 'min-w-0']));
+      expect(day.closest('table')?.className.split(/\s+/)).toContain('table-fixed');
     }
   });
 
@@ -363,28 +387,32 @@ describe('CalendarView', () => {
     for (const name of ['Previous month', 'Next month']) {
       const classes = screen.getByRole('button', { name }).className.split(/\s+/);
       expect(classes).toContain('size-10');
+      expect(classes).toContain('text-ink');
       expect(classes).toContain('hover:bg-sunken');
       expect(classes).not.toContain('hover:bg-accent');
+      expect(classes).not.toContain('active:bg-line');
     }
   });
 
-  // One look and size in every state, so it never reads as disabled text
-  // and the arrows around it never shift.
-  it('keeps Today one enabled button with the same classes whether or not today is selected', () => {
+  // Pressed when today is the selected day: a solid fill of the same size,
+  // never a disabled-looking label, so the arrows around it never shift.
+  it('marks Today pressed when today is selected, and keeps it enabled', () => {
     setup({ selectedKey: '2030-06-15' });
     const onToday = screen.getByRole('button', { name: 'Today' });
     expect(onToday).toBeEnabled();
-    const onTodayClasses = onToday.className;
-    expect(onTodayClasses.split(/\s+/)).toEqual(expect.arrayContaining(['border', 'border-input', 'bg-card']));
-    expect(onTodayClasses).not.toContain('disabled:');
+    expect(onToday).toHaveAttribute('aria-pressed', 'true');
+    const onTodayClasses = onToday.className.split(/\s+/);
+    expect(onTodayClasses).toEqual(expect.arrayContaining(['h-10', 'px-3', 'bg-primary', 'text-on-ink']));
+    expect(onTodayClasses).not.toContain('opacity-50');
   });
 
-  it('gives Today the same classes when another day is selected', () => {
-    setup({ selectedKey: '2030-06-15' });
-    const selectedToday = screen.getByRole('button', { name: 'Today' }).className;
-    document.body.innerHTML = '';
+  it('leaves Today unpressed, at the same size, when another day is selected', () => {
     setup({ selectedKey: '2030-06-20' });
-    expect(screen.getByRole('button', { name: 'Today' }).className).toBe(selectedToday);
+    const today = screen.getByRole('button', { name: 'Today' });
+    expect(today).toBeEnabled();
+    expect(today).toHaveAttribute('aria-pressed', 'false');
+    expect(today.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-10', 'px-3', 'border', 'border-input', 'bg-card']));
+    expect(today.className.split(/\s+/)).not.toContain('bg-primary');
   });
 
   it('formats the weekday headers with Intl short names', () => {
@@ -397,6 +425,7 @@ describe('CalendarView', () => {
     setup();
     for (const header of screen.getAllByRole('columnheader', { hidden: true })) {
       expect(header.className.split(/\s+/)).toContain('capitalize');
+      expect(header.className.split(/\s+/)).toContain('text-center');
     }
   });
 

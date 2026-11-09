@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { RANGE_MAX_SLOTS, useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range';
 import { cn } from '@/lib/utils';
-import { CalendarView } from './calendar-view';
+import { CalendarLegend, CalendarView } from './calendar-view';
 import {
   FIRST_WEEKDAY,
   INTL_TAG,
@@ -61,9 +61,15 @@ export default function PostsPage() {
     () => bucketByDay((rangeQuery.data?.slots ?? []).filter(filters.passes)),
     [rangeQuery.data, filters.passes],
   );
-  const selectedKey = pickedKey ?? defaultDayForMonth(cursor.year, cursor.month, todayKey, slotsByDay.keys());
+  const monthPostCount = countMonthPosts(slotsByDay, cursor.year, cursor.month);
+  // A month with no posts is a month-level empty state: no day stays
+  // highlighted while the panel talks about the whole month.
+  const monthIsEmpty = monthPostCount === 0;
+  const selectedKey = monthIsEmpty
+    ? null
+    : (pickedKey ?? defaultDayForMonth(cursor.year, cursor.month, todayKey, slotsByDay.keys()));
   const selectedSlots = useMemo(
-    () => [...(slotsByDay.get(selectedKey) ?? [])].sort((a, b) => a.slotAt.localeCompare(b.slotAt)),
+    () => (selectedKey === null ? [] : [...(slotsByDay.get(selectedKey) ?? [])].sort((a, b) => a.slotAt.localeCompare(b.slotAt))),
     [slotsByDay, selectedKey],
   );
 
@@ -111,23 +117,23 @@ export default function PostsPage() {
     joins.refetch();
     if (askHasAnyPost) void hasAnyPostQuery.refetch();
   };
-  const dayFormat = new Intl.DateTimeFormat(INTL_TAG[locale], { weekday: 'long', day: 'numeric', month: 'long' });
+  // Short date so "Posts on Mon, Nov 9" / "Posts de seg., 9 de nov." stays
+  // on one line in the side panel.
+  const dayFormat = new Intl.DateTimeFormat(INTL_TAG[locale], { weekday: 'short', day: 'numeric', month: 'short' });
   const monthLabel = new Intl.DateTimeFormat(INTL_TAG[locale], { month: 'long', year: 'numeric' }).format(
     new Date(cursor.year, cursor.month, 1),
   );
-  const monthPostCount = countMonthPosts(slotsByDay, cursor.year, cursor.month);
   // The panel is scoped like its content: a month without posts is named
   // as a month, a day of a month with posts as that day.
-  const monthIsEmpty = monthPostCount === 0;
   const emptyReason = !monthIsEmpty ? 'day' : filters.hasActiveFilter ? 'filter' : 'month';
   // Only the weeks the month spans, like the calendar itself.
   const monthWeeks = gridDays.filter((week) => week.some((day) => day.inMonth)).length;
 
   return (
     <div className="mx-auto max-w-6xl">
-      {/* The header never changes shape: the one Refresh control stays put in
-          every state (on a load error it turns primary and shows its label
-          on a phone too), so the title and filters never jump. */}
+      {/* The header never changes shape. Refresh keeps its label on a phone
+          too, and a load error does not restyle it: the retry lives in the
+          side panel, so the title and the filters do not jump. */}
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-[-0.02em] text-primary">{t('posts.title')}</h1>
         <button
@@ -135,33 +141,28 @@ export default function PostsPage() {
           onClick={handleRefresh}
           disabled={rangeQuery.isFetching}
           aria-label={t('posts.refresh')}
-          className={cn(
-            'inline-flex h-10 min-w-10 items-center justify-center gap-2 rounded-xl border px-2.5 text-sm font-semibold disabled:cursor-default sm:px-4',
-            isError ? 'border-primary bg-primary px-4 text-on-ink hover:bg-accent-hover' : 'border-input bg-card text-primary hover:bg-sunken',
-          )}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-input bg-card px-4 text-sm font-semibold text-primary hover:bg-sunken disabled:cursor-default"
         >
           <RefreshCw className={cn('size-4', rangeQuery.isFetching && 'animate-spin')} aria-hidden />
-          <span className={cn(!isError && 'hidden sm:inline')}>{t('posts.refresh')}</span>
+          <span>{t('posts.refresh')}</span>
         </button>
       </div>
-      {/* The hint is for wide screens; on a phone the calendar comes first. */}
-      <p className="mt-1 hidden text-sm text-muted-foreground sm:block">{t('posts.subtitle')}</p>
+      {/* The hint is for wide screens; on a phone the calendar comes first.
+          An account with no posts does not tell the user to select a day. */}
+      {!isAccountEmpty && <p className="mt-1 hidden text-sm text-muted-foreground sm:block">{t('posts.subtitle')}</p>}
 
-      {!isAccountEmpty && <PostFiltersBar filters={filters} />}
+      <PostFiltersBar filters={filters} disabled={isLoading || isAccountEmpty} />
 
       <div className="mt-4 sm:mt-6">
         {isLoading ? (
           <CalendarLoadingSkeleton weeks={monthWeeks} />
-        ) : isAccountEmpty ? (
-          <AccountEmptyState />
         ) : (
-          <div className={cn(!isError && CALENDAR_LAYOUT_CLASS)}>
-            <div className="min-w-0">
-              {isError && <LoadErrorBanner messageKey={loadErrorKey} />}
+          <div className={cn('flex flex-col', CALENDAR_LAYOUT_CLASS)}>
+            <div className={cn('min-w-0 xl:col-start-1 xl:row-start-1', isError ? 'order-2 xl:order-0' : 'order-1')}>
               {rangeQuery.data?.truncated === true && (
                 <p className="mb-3 text-xs text-muted-foreground">{t('posts.calendarTruncated', { count: RANGE_MAX_SLOTS })}</p>
               )}
-              {/* On error the calendar stays, dimmed, so the month can still change. */}
+              {/* On error the days stay readable and the month can still change. */}
               <CalendarView
                 year={cursor.year}
                 month={cursor.month}
@@ -175,37 +176,53 @@ export default function PostsPage() {
                 onMonthChange={(year, month) => setCursor({ year, month })}
                 onMonthNavigate={handleMonthNavigate}
                 unavailable={isError}
+                muted={isAccountEmpty}
                 filtered={filters.hasActiveFilter}
+                legendClassName="hidden xl:block"
               />
             </div>
-            {!isError && (
-              <section ref={daySectionRef} aria-live="polite" className="mt-6 min-w-0 scroll-mt-4 xl:mt-0">
-                <h2 className="text-base font-bold tracking-[-0.01em] text-primary">
-                  {monthIsEmpty
-                    ? t('posts.calendarMonthHeading', { month: monthLabel })
-                    : t('posts.calendarDayHeading', { date: dayFormat.format(dateFromKey(selectedKey)) })}
-                </h2>
-                {!monthIsEmpty && <DaySummary slots={selectedSlots} />}
-                <div className="mt-3">
-                  {selectedSlots.length === 0 ? (
-                    <DayEmptyState
-                      reason={emptyReason}
-                      monthLabel={monthLabel}
-                      onClearFilters={filters.clear}
-                      onGoToday={showsTodayMonth ? undefined : () => handleSelect(todayKey)}
-                    />
-                  ) : (
-                    // One column in the side panel; two equal-height columns
-                    // in between; one on a phone.
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
-                      {selectedSlots.map((slot) => (
-                        <SlotCard key={slot.id} slot={slot} joins={joins} timeOnly />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </section>
-            )}
+            <section
+              ref={daySectionRef}
+              aria-live="polite"
+              className={cn(
+                'min-w-0 scroll-mt-4 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4',
+                isError ? 'order-1 mb-4 xl:order-0 xl:mb-0' : 'order-2 mt-4',
+              )}
+            >
+              {isError ? (
+                <LoadErrorBanner messageKey={loadErrorKey} onRetry={handleRefresh} />
+              ) : isAccountEmpty ? (
+                <AccountEmptyState />
+              ) : (
+                <>
+                  <h2 className="flex min-h-10 items-center text-base font-bold tracking-[-0.01em] text-primary">
+                    {monthIsEmpty || selectedKey === null
+                      ? t('posts.calendarMonthHeading', { month: monthLabel })
+                      : t('posts.calendarDayHeading', { date: dayFormat.format(dateFromKey(selectedKey)) })}
+                  </h2>
+                  {!monthIsEmpty && <DaySummary slots={selectedSlots} />}
+                  <div className="mt-3">
+                    {selectedSlots.length === 0 ? (
+                      <DayEmptyState
+                        reason={emptyReason}
+                        monthLabel={monthLabel}
+                        onClearFilters={filters.clear}
+                        onGoToday={showsTodayMonth ? undefined : () => handleSelect(todayKey)}
+                      />
+                    ) : (
+                      // One column in the side panel; two equal-height columns
+                      // in between; one on a phone.
+                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+                        {selectedSlots.map((slot) => (
+                          <SlotCard key={slot.id} slot={slot} joins={joins} timeOnly />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </section>
+            {!isError && <CalendarLegend filtered={filters.hasActiveFilter} className="order-3 mt-4 xl:hidden" />}
           </div>
         )}
       </div>

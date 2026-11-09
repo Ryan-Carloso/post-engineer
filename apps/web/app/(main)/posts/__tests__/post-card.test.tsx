@@ -45,12 +45,13 @@ function renderCard(slot: ScheduledSlot, timeOnly = false, accounts: typeof ACCO
 }
 
 describe('PostCard failure', () => {
-  // There is no retry endpoint: the card never offers a "Try again" that
-  // only opens the detail page.
-  it('offers no Try again action, only a See details link to the post detail', () => {
+  // There is no retry endpoint. The next step opens Recipes, where the
+  // post is scheduled again. See details stays secondary.
+  it('links a failed post to Recipes first and to its detail second', () => {
     renderCard(FAILED_SLOT);
 
     expect(screen.queryByText('posts.cardRetry')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'posts.cardReschedule' })).toHaveAttribute('href', '/recipes');
     expect(screen.getByRole('link', { name: 'posts.cardDetails' })).toHaveAttribute('href', '/posts/f1');
   });
 
@@ -62,16 +63,20 @@ describe('PostCard failure', () => {
     expect(within(box).getByText('posts.cardFailedFor')).toBeInTheDocument();
     expect(within(box).getByText('Europa Na Estrada')).toBeInTheDocument();
     expect(within(box).getByText('@vivalave')).toBeInTheDocument();
+    expect(within(box).getByRole('link', { name: 'posts.cardReschedule' })).toHaveAttribute('href', '/recipes');
     expect(within(box).getByRole('link', { name: 'posts.cardDetails' })).toBeInTheDocument();
+    expect(box.className.split(/\s+/)).toContain('text-ink');
+    expect(box.className.split(/\s+/)).not.toContain('text-destructive');
     // The chips are not repeated under the box.
     expect(screen.getAllByText('Europa Na Estrada')).toHaveLength(1);
   });
 
-  it('shows the permanent failure copy when the post cannot be retried, with the same details link', () => {
+  it('shows the permanent failure copy when the post cannot be retried, with the same next step', () => {
     renderCard({ ...FAILED_SLOT, retryable: false });
 
     expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
     expect(screen.queryByText('posts.cardFailedRetryable')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'posts.cardReschedule' })).toHaveAttribute('href', '/recipes');
     expect(screen.getByRole('link', { name: 'posts.cardDetails' })).toHaveAttribute('href', '/posts/f1');
   });
 
@@ -121,7 +126,9 @@ describe('PostCard status pill — the calendar vocabulary', () => {
 
     expect(screen.getByText('posts.statusGenerating')).toBeInTheDocument();
     expect(screen.getByText('45%')).toBeInTheDocument();
-    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '45');
+    const bar = screen.getByRole('progressbar');
+    expect(bar).toHaveAttribute('aria-valuenow', '45');
+    expect(bar.querySelector('div')?.className.split(/\s+/)).toContain('bg-info');
   });
 });
 

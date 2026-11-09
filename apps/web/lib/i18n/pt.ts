@@ -23,7 +23,7 @@ export const ptDictionary = {
     debug: 'Debug',
     debugHint: 'Ferramentas de validação',
     signOut: 'Sair',
-    posts: 'Posts',
+    posts: 'Publicações',
     postsHint: 'Calendário de posts',
     primaryNavigation: 'Navegação principal',
     profile: 'Perfil',
@@ -32,7 +32,7 @@ export const ptDictionary = {
   account: { ...accountI18nPt },
   // Posts page — history + upcoming posts from all accounts
   posts: {
-    title: 'Posts',
+    title: 'Publicações',
     subtitle: 'Calendário com os posts de todas as contas. Selecione um dia para ver os posts.',
     filterProvider: 'Rede',
     allProviders: 'Todas as redes',

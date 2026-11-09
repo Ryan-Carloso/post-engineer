@@ -90,11 +90,11 @@ const MainSidebar = () => {
   ];
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-[clamp(260px,22vw,320px)] shrink-0 flex-col overflow-y-auto border-r border-hairline bg-card shadow-[8px_0_28px_rgba(20,32,51,0.03)] md:flex">
+    <aside className="sticky top-0 hidden h-dvh w-[clamp(260px,22vw,320px)] shrink-0 flex-col overflow-hidden border-r border-hairline bg-card shadow-[8px_0_28px_rgba(20,32,51,0.03)] md:flex">
       <div
         data-testid="nav-brand"
         aria-label={t('nav.brand')}
-        className="group flex items-center gap-3 px-5 pt-8 pb-6 text-left transition-colors hover:bg-brand-soft lg:gap-3 lg:px-6 lg:pt-8 lg:pb-6"
+        className="group flex shrink-0 items-center gap-3 px-5 pt-8 pb-6 text-left transition-colors hover:bg-brand-soft lg:gap-3 lg:px-6 lg:pt-8 lg:pb-6"
       >
         <span className="shrink-0 transition-transform group-hover:rotate-3">
           <AppLogo size={48} className="shadow-[0_10px_24px_rgba(20,32,51,0.18)] lg:size-[56px]" />
@@ -108,13 +108,13 @@ const MainSidebar = () => {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1.5 px-3.5 py-4 lg:px-4 lg:py-6">
+      <nav className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3.5 py-4 lg:px-4 lg:py-6">
         {navItems.map((item) => (
           <SidebarTab key={item.href} item={item} isActive={isNavActive(item.href, pathname)} />
         ))}
       </nav>
 
-      <div className="space-y-3 border-t border-hairline bg-card p-4 lg:p-5">
+      <div data-sidebar-footer className="max-h-[50%] min-h-0 shrink space-y-3 overflow-y-auto border-t border-hairline bg-card p-4 lg:p-5">
         <AccountPanel />
         <SidebarLegalLinks />
       </div>
@@ -181,8 +181,8 @@ const MobileNavigation = () => {
   const tabs: Array<{
     href: string;
     labelKey: NavItem['labelKey'];
-    // Short label for tabs whose full label wraps in a ~70px tab
-    // ("API Key e MCP" breaks to two lines). The sidebar keeps the full label.
+    // Short label for tabs whose full label wraps in a ~70px tab.
+    // The sidebar keeps the full label.
     shortLabelKey?: 'nav.promptsShort';
     icon: () => React.JSX.Element;
   }> = [

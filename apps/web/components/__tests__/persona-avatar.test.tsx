@@ -114,6 +114,9 @@ describe('PersonaAvatar', () => {
 
     expect(screen.getByText('VL')).toBeInTheDocument();
     expect(screen.queryByTestId('icon-image')).not.toBeInTheDocument();
+    const circle = screen.getByText('VL').parentElement;
+    expect(circle?.className.split(/\s+/)).toContain('bg-sunken');
+    expect(circle?.className).not.toMatch(/\bbg-destructive\b|\bbg-info\b|\bbg-primary\b/);
   });
 
   it('keeps initials for a non-Latin name (unicode-aware)', () => {

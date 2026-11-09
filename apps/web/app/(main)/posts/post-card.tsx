@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ChevronRight, Play, TriangleAlert } from 'lucide-react';
 import type { ScheduledSlot, ScheduleConfig, VideoGeneration } from '@/lib/api';
 import { Card } from '@/components/ui/card';
+import { buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
 import { ProviderIcon } from '@/components/provider-icon';
@@ -14,6 +15,7 @@ import { scheduleAccountIds, type AccountOption } from '@/lib/account-options';
 import { categorizeGenerationError, GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 import { cn } from '@/lib/utils';
 import { CALENDAR_GROUP_ICON, CALENDAR_GROUP_KEY, CALENDAR_GROUP_PILL, STATUS_KEY, STATUS_STYLE, calendarGroupOf } from './status';
+import { CREATE_POSTS_HREF } from './day-section';
 
 //---------------
 // Cards of the posts list: scheduled posts (PostCard) and standalone video
@@ -25,9 +27,9 @@ import { CALENDAR_GROUP_ICON, CALENDAR_GROUP_KEY, CALENDAR_GROUP_PILL, STATUS_KE
 // then the title with the persona under it and the video thumbnail when
 // there is a video, the exact stage with the progress bar while the video
 // is generating or publishing, and the network + account chips. A failed
-// post shows a failure box instead of the chips: the reason, the accounts
-// it failed for and a link to its details. Extracted from page.tsx, which
-// is over the file-size cap.
+// post shows a failure box instead of the chips: a short reason, the
+// accounts it failed for, a link to Recipes and a secondary details link.
+// Extracted from page.tsx, which is over the file-size cap.
 //---------------
 
 // Cards open the post detail: hovering one outlines it.
@@ -110,11 +112,12 @@ const CardTitle = ({ title, personaName }: { title: string; personaName: string 
 );
 
 // The failure reason, full length (never clamped: a cut-off reason hides
-// exactly the part that says what went wrong), in a red box.
+// exactly the part that says what went wrong). The tint marks the box; the
+// words stay ink so the message is not red on pink.
 const FailureBox = ({ message, children }: { message: string; children?: ReactNode }) => (
-  <div className="mt-3 rounded-lg bg-destructive-soft p-3 text-destructive">
-    <p className="flex gap-2 text-sm leading-snug font-medium">
-      <TriangleAlert className="mt-px size-4 shrink-0" aria-hidden />
+  <div className="mt-3 rounded-lg bg-destructive-soft p-3 text-ink">
+    <p className="flex gap-2 text-sm leading-snug">
+      <TriangleAlert className="mt-px size-4 shrink-0 text-destructive" aria-hidden />
       <span>{message}</span>
     </p>
     {children}
@@ -178,11 +181,10 @@ export const PostCard = ({
       ? t(slot.retryable === true ? 'posts.cardFailedRetryable' : 'posts.cardFailedPermanent')
       : t(GENERATION_ERROR_KEY[failureCode]);
   const group = calendarGroupOf(slot.status);
-  // The card is not a single link: the failure box carries its own visible
-  // "See details" action, and a link cannot nest another link. The main
-  // content links to the post detail (the chevron says so); so does the
-  // action. There is no retry endpoint: a failed post is scheduled again
-  // by the user's AI agent, which the retryable copy says.
+  // The card is not a single link: the failure box carries its own actions,
+  // and a link cannot nest another link. The main content links to the post
+  // detail (the chevron says so). There is no retry endpoint, so the primary
+  // action opens Recipes, where the post is scheduled again.
   return (
     <Card
       className={cn(
@@ -216,7 +218,7 @@ export const PostCard = ({
               aria-valuemax={100}
               className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-sunken"
             >
-              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${slot.progress}%` }} />
+              <div className="h-full rounded-full bg-info transition-all" style={{ width: `${slot.progress}%` }} />
             </div>
           </div>
         )}
@@ -229,13 +231,18 @@ export const PostCard = ({
               <AccountChips accounts={accounts} onTint />
             </div>
           )}
-          <Link
-            href={`/posts/${slot.id}`}
-            className="mt-2.5 inline-flex h-9 items-center gap-1 rounded-md border border-destructive/40 bg-card px-3 text-sm font-semibold text-destructive transition-colors hover:bg-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            {t('posts.cardDetails')}
-            <ChevronRight className="size-4" aria-hidden />
-          </Link>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <Link href={CREATE_POSTS_HREF} className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5')}>
+              {t('posts.cardReschedule')}
+            </Link>
+            <Link
+              href={`/posts/${slot.id}`}
+              className="inline-flex h-8 items-center gap-1 rounded-md border border-input bg-card px-3 text-sm font-semibold text-ink transition-colors hover:bg-sunken focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              {t('posts.cardDetails')}
+              <ChevronRight className="size-4" aria-hidden />
+            </Link>
+          </div>
         </FailureBox>
       )}
       {!isFailed && accounts.length > 0 && (

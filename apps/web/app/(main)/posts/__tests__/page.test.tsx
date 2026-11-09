@@ -250,8 +250,10 @@ describe('PostsPage', () => {
     await user.selectOptions(selects[0], 'linkedin');
     expect(selects[0].className.split(/\s+/)).toContain('border-primary');
     expect(selects[1].className.split(/\s+/)).not.toContain('border-primary');
-    // The calendar says it is filtered.
-    expect(screen.getByText('posts.filterActive')).toBeInTheDocument();
+    // The calendar says it is filtered. The legend is drawn twice (inside
+    // the card from xl up, under the day list below that); jsdom does not
+    // apply the breakpoint, so both copies are in the tree.
+    expect(screen.getAllByText('posts.filterActive')).toHaveLength(2);
 
     // Two clear actions: the filter bar's and the empty panel's.
     const clears = screen.getAllByRole('button', { name: 'posts.clearFilters' });
@@ -307,10 +309,12 @@ describe('PostsPage', () => {
     expect(screen.getByText('posts.accountEmptyTitle')).toBeInTheDocument();
     expect(screen.getByText('posts.accountEmptyHint')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'posts.accountEmptyAction' })).toHaveAttribute('href', '/recipes');
-    // No grid, no zero-count summary, no filters for data that does not exist.
-    expect(screen.queryByRole('grid')).not.toBeInTheDocument();
+    // The frame stays: a faint calendar and disabled filters. No day to pick,
+    // and the line under the title does not say to select one.
+    expect(screen.getByRole('grid')).toBeInTheDocument();
+    expect(screen.queryByText('posts.subtitle')).not.toBeInTheDocument();
     expect(screen.queryByText(/posts\.group(Published|Failed|Scheduled):/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    for (const select of screen.getAllByRole('combobox')) expect(select).toBeDisabled();
   });
 
   it('shows the month empty state with a next step when the shown month has no posts', () => {
@@ -339,10 +343,12 @@ describe('PostsPage', () => {
     expect(vi.mocked(useHasAnyPostQuery).mock.calls.at(-1)?.[0]).toBe(true);
     expect(screen.getByText('posts.accountEmptyTitle')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'posts.accountEmptyAction' })).toHaveAttribute('href', '/recipes');
-    // No day heading, no grid, no "All accounts" filter for an account without posts.
-    expect(screen.queryByRole('grid')).not.toBeInTheDocument();
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    // No day heading. The calendar and the filters stay, and the filters
+    // cannot be used while there is nothing to filter.
+    expect(screen.getByRole('grid')).toBeInTheDocument();
+    for (const select of screen.getAllByRole('combobox')) expect(select).toBeDisabled();
     expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
+    expect(screen.queryByText('posts.subtitle')).not.toBeInTheDocument();
   });
 
   it('does not ask whether the account has any post when the month it opens on has posts', () => {
@@ -397,10 +403,13 @@ describe('PostsPage', () => {
     vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: true, isFetching: false, isError: false, refetch: vi.fn() } as never);
 
     render(<PostsPage />);
-    // A skeleton keeps the calendar layout in place; no lone spinner on
-    // an empty page, and the loading text is for screen readers only.
+    // A skeleton keeps the calendar layout in place, including the side
+    // panel. The loading text is visible, and the filters wait for data.
     expect(screen.getByRole('status')).toBeInTheDocument();
-    expect(screen.getByText('posts.loadingPosts').className.split(/\s+/)).toContain('sr-only');
+    expect(screen.getByText('posts.loadingPosts')).toBeVisible();
+    expect(screen.getByText('posts.loadingPosts').className.split(/\s+/)).not.toContain('sr-only');
+    expect(document.querySelector('[data-skeleton-panel]')).not.toBeNull();
+    for (const select of screen.getAllByRole('combobox')) expect(select).toBeDisabled();
     expect(screen.queryByTestId('icon-spinner')).not.toBeInTheDocument();
     // June 2030 starts on a Saturday and spans 6 weeks.
     expect(document.querySelectorAll('[data-skeleton-day]')).toHaveLength(42);
@@ -740,7 +749,7 @@ describe('PostsPage calendar view', () => {
       .find((button) => button.querySelector('[data-day-number]')?.textContent === '1');
     expect(day1).toBeDefined();
     expect((day1 as HTMLElement).querySelector('img[alt="Viva Leve"]')).not.toBeNull();
-    expect((day1 as HTMLElement).querySelector('[data-marker="scheduled"]')).toHaveTextContent('1');
+    expect((day1 as HTMLElement).querySelector('[data-marker="scheduled"] [data-count]')).toHaveTextContent('1');
   });
 
   it('summarizes only the groups the selected day has — no zero counts', async () => {
@@ -798,16 +807,18 @@ describe('PostsPage calendar view', () => {
   const selectedDayNumber = () =>
     screen.getByRole('grid').querySelector('[data-selected="true"] [data-day-number]')?.textContent;
 
-  it('month navigation selects the 1st of a month without posts, never the same day number', async () => {
+  it('month navigation leaves no day selected in a month without posts', async () => {
     mockQueries({ range: rangeSlots });
     const user = userEvent.setup();
     render(<PostsPage />);
 
-    // Today (June 15) is selected on open; July has no posts, so July 1 —
-    // not July 15 — is selected, and the list says the month is empty.
+    // Today (June 15) is selected on open. July has no posts, so the panel
+    // talks about the month and no day stays highlighted.
     await user.click(screen.getByRole('button', { name: 'posts.calendarNextMonth' }));
     expect(screen.getByText(/July 2030/)).toBeInTheDocument();
-    expect(selectedDayNumber()).toBe('1');
+    expect(screen.getByRole('grid').querySelector('[data-selected="true"]')).toBeNull();
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('posts.calendarMonthHeading');
+    expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
     expect(screen.getByText('posts.calendarMonthEmptyTitle')).toBeInTheDocument();
     expect(vi.mocked(useScheduleRangeQuery).mock.calls.at(-1)?.[0]).toBe('2030-07');
   });
@@ -894,16 +905,20 @@ describe('PostsPage calendar view', () => {
 
     const alert = screen.getByRole('alert');
     expect(within(alert).getByText('posts.loadErrorCalendar')).toBeInTheDocument();
-    expect(within(alert).getByText('posts.loadErrorRetryHint')).toBeInTheDocument();
-    // One refresh on the page, in the header (it never moves), none in the alert.
-    expect(within(alert).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(alert).queryByText('posts.loadErrorRetryHint')).not.toBeInTheDocument();
+    // The retry lives in the alert. The header Refresh stays one quiet control.
+    const retry = within(alert).getByRole('button', { name: 'posts.loadErrorRetry' });
     const refresh = screen.getByRole('button', { name: 'posts.refresh' });
-    expect(refresh.className.split(/\s+/)).toContain('bg-primary');
-    await user.click(refresh);
+    expect(refresh.className.split(/\s+/)).toContain('bg-card');
+    expect(refresh.className.split(/\s+/)).not.toContain('bg-primary');
+    await user.click(retry);
     expect(refetch).toHaveBeenCalledTimes(1);
-    // Not a live-looking empty month: no selection, a "not loaded" label,
-    // no day list.
-    expect(screen.getByText('posts.calendarNotLoaded')).toBeInTheDocument();
+    // Same frame as a loaded month: readable grid, no "not loaded" pill,
+    // no selection, no day list.
+    expect(screen.queryByText('posts.calendarNotLoaded')).not.toBeInTheDocument();
+    expect(screen.getByRole('grid').className.split(/\s+/)).not.toContain('opacity-40');
+    expect(screen.getByRole('grid').closest('.xl\\:grid')).not.toBeNull();
+    expect(alert.closest('.xl\\:grid')).toBe(screen.getByRole('grid').closest('.xl\\:grid'));
     expect(screen.getByRole('grid').querySelector('[data-selected="true"]')).toBeNull();
     expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
     expect(screen.queryByText('posts.calendarMonthHeading')).not.toBeInTheDocument();

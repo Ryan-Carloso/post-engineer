@@ -306,6 +306,20 @@ describe('app/(main)/layout — MainLayout', () => {
     expect(headerImg).toHaveAttribute('src', 'https://example.com/avatar.png');
   });
 
+  it('scrolls the sidebar footer so sign out stays reachable', () => {
+    vi.mocked(useSessionQuery).mockReturnValue({
+      data: { id: 'u1', email: 'test@example.com', user_metadata: { name: 'User' } },
+      isLoading: false,
+    } as never);
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const footer = document.querySelector('[data-sidebar-footer]');
+    expect(footer).not.toBeNull();
+    expect(footer?.className.split(/\s+/)).toContain('overflow-y-auto');
+    expect(within(footer as HTMLElement).getByTitle('nav.signOut')).toBeInTheDocument();
+    const aside = screen.getByTestId('nav-brand').closest('aside');
+    expect(aside?.className.split(/\s+/)).toContain('overflow-hidden');
+  });
+
   it('sign out button calls signOut and navigates to /login', async () => {
     vi.mocked(useSessionQuery).mockReturnValue({
       data: {
@@ -382,7 +396,7 @@ describe('app/(main)/layout — MainLayout', () => {
       const labels = within(getMobileNav())
         .getAllByRole('link')
         .map((link) => link.textContent);
-      // The mobile tab uses the short label: the full "API Key e MCP"
+      // The mobile tab uses the short label. The full prompts label
       // wraps to two lines in a ~70px tab.
       expect(labels).toEqual(['nav.posts', 'nav.persona', 'nav.accounts', 'nav.promptsShort']);
     });

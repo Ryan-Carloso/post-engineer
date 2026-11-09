@@ -207,7 +207,7 @@ const SELECT_CLASS = 'h-10 w-full truncate rounded-xl border border-input bg-car
 const SELECT_ACTIVE_CLASS = 'border-primary bg-info-soft ring-1 ring-primary';
 const LABEL_CLASS = 'flex min-w-0 flex-col gap-1 text-xs font-semibold text-muted-foreground';
 
-export function PostFiltersBar({ filters }: { filters: PostFilters }) {
+export function PostFiltersBar({ filters, disabled = false }: { filters: PostFilters; disabled?: boolean }) {
   const { t } = useI18n();
   return (
     // Side by side on a phone too (two columns), so the filters take one
@@ -218,11 +218,12 @@ export function PostFiltersBar({ filters }: { filters: PostFilters }) {
         {t('posts.filterProvider')}
         <select
           value={filters.provider}
+          disabled={disabled}
           onChange={(event) => {
             const next = PROVIDERS.find((item) => item === event.target.value) ?? 'all';
             filters.setProvider(next);
           }}
-          className={cn(SELECT_CLASS, filters.provider !== 'all' && SELECT_ACTIVE_CLASS)}
+          className={cn(SELECT_CLASS, filters.provider !== 'all' && SELECT_ACTIVE_CLASS, disabled && 'cursor-not-allowed opacity-60')}
         >
           <option value="all">{t('posts.allProviders')}</option>
           {PROVIDERS.map((item) => (
@@ -236,8 +237,9 @@ export function PostFiltersBar({ filters }: { filters: PostFilters }) {
         {t('posts.filterAccount')}
         <select
           value={filters.account}
+          disabled={disabled}
           onChange={(event) => filters.setAccount(event.target.value)}
-          className={cn(SELECT_CLASS, filters.account !== 'all' && SELECT_ACTIVE_CLASS)}
+          className={cn(SELECT_CLASS, filters.account !== 'all' && SELECT_ACTIVE_CLASS, disabled && 'cursor-not-allowed opacity-60')}
         >
           <option value="all">{t('posts.allAccounts')}</option>
           {filters.visibleAccounts.map((item) => (

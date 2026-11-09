@@ -55,21 +55,24 @@ export function calendarGroupOf(status: string): CalendarGroup {
   return 'scheduled';
 }
 
-// The status marker drawn in a day cell, in the legend and in the day
-// summary — one look per group everywhere. A failure is a solid red marker
-// (the loudest), the others soft tints of the same hue as the card pill.
+// The status marker in a day cell and in the legend. Solid fills so the
+// icon stays readable without the legend; the cell itself is not painted.
+// `text-on-ink` flips with the theme, so a light chip in dark mode keeps
+// dark text and a dark chip in light mode keeps light text.
 export const CALENDAR_GROUP_MARKER: Record<CalendarGroup, string> = {
   failed: 'bg-destructive text-destructive-foreground',
+  published: 'bg-success text-on-ink',
+  inProgress: 'bg-info text-on-ink',
+  scheduled: 'bg-ink-soft text-on-ink',
+};
+
+// The post card pill: the same hue as the marker, as a soft tint (a solid
+// chip on every card would shout over the title).
+export const CALENDAR_GROUP_PILL: Record<CalendarGroup, string> = {
+  failed: 'bg-destructive-soft text-destructive',
   published: 'bg-success-soft text-success',
   inProgress: 'bg-info-soft text-info',
   scheduled: 'bg-line text-ink-soft',
-};
-
-// The post card pill: the marker's hue as a soft tint (a solid red pill on
-// every failed card would shout over the failure box below it).
-export const CALENDAR_GROUP_PILL: Record<CalendarGroup, string> = {
-  ...CALENDAR_GROUP_MARKER,
-  failed: 'bg-destructive-soft text-destructive',
 };
 
 export const CALENDAR_GROUP_KEY: Record<CalendarGroup, TranslationKey> = {

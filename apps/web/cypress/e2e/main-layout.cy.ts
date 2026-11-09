@@ -105,12 +105,12 @@ describe('Main Layout — Sidebar', () => {
     cy.contains('Vídeos com IA para redes').should('be.visible');
 
     cy.contains('a', 'Início').should('not.exist');
-    cy.contains('a', 'Posts').should('be.visible');
+    cy.contains('a', 'Publicações').should('be.visible');
     cy.contains('a', 'Histórico').should('be.visible');
     cy.contains('a', 'Contas').should('be.visible');
     cy.contains('a', 'Personas').should('be.visible');
     cy.contains('a', 'Métricas').should('be.visible');
-    cy.contains('a', 'API Key e MCP').should('be.visible');
+    cy.contains('a', 'Chave de API e MCP').should('be.visible');
     // Billing is no longer a nav tab — it lives in the profile area
     // (sidebar footer), reachable from every page, like API Keys.
     cy.contains('a', 'Tokens').should('not.exist');
@@ -128,7 +128,7 @@ describe('Main Layout — Sidebar', () => {
     cy.url().should('include', '/accounts');
     cy.wait('@getAccounts');
 
-    cy.contains('a', 'Posts').click();
+    cy.contains('a', 'Publicações').click();
     cy.url().should('include', '/posts');
   });
 
@@ -140,7 +140,7 @@ describe('Main Layout — Sidebar', () => {
       .should('have.attr', 'class')
       .and('contain', 'bg-brand-soft');
 
-    cy.contains('a', 'Posts')
+    cy.contains('a', 'Publicações')
       .should('have.attr', 'class')
       .and('not.contain', 'bg-brand-soft');
   });
