@@ -81,7 +81,7 @@ export function checkSemantics(input: SemanticInput): Checked<CheckedRequest> {
   if (!segments.ok) issues.push(...segments.issues);
   const providers = validateProviders(input.providers);
   if (!providers.ok) issues.push(...providers.issues);
-  const pinterestBoardId = validatePinterestBoard(input.providers, input.pinterestBoardId);
+  const pinterestBoardId = validatePinterestBoard(providers.ok ? providers.value : input.providers, input.pinterestBoardId);
   if (!pinterestBoardId.ok) issues.push(...pinterestBoardId.issues);
   const options = validateOptions(input.options);
   if (!options.ok) issues.push(...options.issues);
