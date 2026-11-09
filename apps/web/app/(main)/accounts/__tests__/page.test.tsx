@@ -232,12 +232,12 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
 
   it('shows the shared connection slot when YouTube has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(6);
+    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(7);
   });
 
   it('shows the shared connection slot when Instagram has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(6);
+    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(7);
   });
 
   it('shows loading skeletons while loading', () => {

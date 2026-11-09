@@ -316,6 +316,23 @@ export const operationSchemas = {
       message: str,
     }),
   },
+  // apps/web/app/api/pinterest/boards/route.ts
+  'GET /api/pinterest/boards': {
+    query: [{ name: 'accountId', required: true, description: 'Pinterest user id stored at OAuth connect.' }],
+    response: success({
+      boards: {
+        type: 'array',
+        items: object(
+          {
+            id: str,
+            name: { type: 'string', nullable: true },
+            description: { type: 'string', nullable: true },
+          },
+          ['id'],
+        ),
+      },
+    }),
+  },
   'DELETE /api/account': {
     query: [
       { name: 'provider', required: true, enum: providers },

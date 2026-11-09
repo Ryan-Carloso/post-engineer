@@ -33,6 +33,10 @@ vi.mock('@/lib/api', () => ({
   useDeleteSlotMutation: vi.fn(),
 }));
 
+vi.mock('@/lib/pinterest-accounts', () => ({
+  usePinterestAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
+}));
+
 vi.mock('@/lib/ui', () => ({
   SpinnerIcon: () => <span data-testid="icon-spinner" />,
   ExternalLinkIcon: () => <span data-testid="icon-external-link" />,

@@ -61,6 +61,7 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
+        pinterest: [],
       });
     });
 
@@ -76,6 +77,7 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
+        pinterest: [],
       });
     });
 
@@ -90,6 +92,7 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
+        pinterest: [],
       });
     });
   });
@@ -122,6 +125,7 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
+        pinterest: [],
       });
     });
 
@@ -138,6 +142,7 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
+        pinterest: [],
       });
     });
   });
@@ -239,6 +244,7 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
+        pinterest: [],
       });
     });
 
@@ -254,6 +260,7 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
+        pinterest: [],
       });
     });
 
@@ -269,6 +276,7 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
+        pinterest: [],
       });
     });
   });
