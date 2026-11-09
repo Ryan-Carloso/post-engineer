@@ -283,7 +283,7 @@ class BatchPublisher:
         ]
         if wakes:
             return min(wakes)
-        delay = next_delay_seconds(1) or 30
+        delay = next_delay_seconds(1)
         return (now + timedelta(seconds=delay)).isoformat()
 
     def _fail_slot_permanently(

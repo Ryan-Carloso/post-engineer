@@ -40,7 +40,11 @@ _LINK_FIELDS = ("videoUrl", "permalink", "postId")
 
 
 def next_delay_seconds(attempts: int) -> int | None:
-    """Seconds after ``attempts`` transient tries. Attempt 3 is terminal, so 600 is unused."""
+    """Seconds after ``attempts`` transient tries.
+
+    The third delay (600s, index 2) is never scheduled: attempt 3 is
+    terminal, so this returns ``None`` for it instead.
+    """
     if attempts >= MAX_PUBLISH_ATTEMPTS:
         return None
     index = max(attempts - 1, 0)
