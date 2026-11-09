@@ -122,6 +122,8 @@ describe('GET /api/posts/[id]', () => {
         blueskyAccountIds: [],
         threadsAccountIds: [],
         facebookAccountIds: [],
+        pinterestAccountIds: [],
+        pinterestBoardId: null,
         timezone: 'UTC',
         publishMode: 'scheduled',
       },

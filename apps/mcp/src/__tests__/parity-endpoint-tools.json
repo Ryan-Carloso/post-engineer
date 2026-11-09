@@ -47,6 +47,9 @@
   "GET /api/metrics/retention-curve": [
     "get_youtube_retention_curve"
   ],
+  "GET /api/pinterest/boards": [
+    "list_pinterest_boards"
+  ],
   "GET /api/posts/[id]": [
     "get_post"
   ],

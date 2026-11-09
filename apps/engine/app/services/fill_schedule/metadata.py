@@ -6,6 +6,7 @@ from typing import Any
 
 from app.services import upload_publisher
 from app.services.fill_schedule.youtube_tags import derive_tags_from_title
+from app.services.publish_pinterest import validate_pinterest_metadata
 
 
 def metadata_for(provider: str, title: str, schedule: dict[str, Any]):
@@ -35,6 +36,13 @@ def metadata_for(provider: str, title: str, schedule: dict[str, Any]):
         return upload_publisher.FacebookMetadata(
             caption=title[: upload_publisher.FACEBOOK_CAPTION_MAX_LENGTH],
             account_ids=tuple(str(value) for value in schedule.get("facebook_account_ids", [])),
+        )
+    if provider == upload_publisher.PINTEREST_PROVIDER:
+        return upload_publisher.PinterestMetadata(
+            title=title[: upload_publisher.PINTEREST_TITLE_MAX_LENGTH],
+            description=title[: upload_publisher.PINTEREST_DESCRIPTION_MAX_LENGTH],
+            board_id=str(schedule.get("pinterest_board_id") or ""),
+            account_ids=tuple(str(value) for value in schedule.get("pinterest_account_ids", [])),
         )
     if provider == upload_publisher.INSTAGRAM_PROVIDER:
         return upload_publisher.InstagramMetadata(
@@ -77,6 +85,12 @@ def validate_publish_plan(schedule: dict[str, Any], title: str) -> None:
             threads = metadata
         elif isinstance(metadata, upload_publisher.FacebookMetadata):
             facebook = metadata
+        elif isinstance(metadata, upload_publisher.PinterestMetadata):
+            # Pinterest is validated here, not in validate_publish_metadata:
+            # upload_publisher.py is at the 500-line file-size cap, so
+            # its validator takes no new provider parameter. The pre-flight
+            # is the only production caller, so this is the whole gate.
+            validate_pinterest_metadata(metadata)
     upload_publisher.validate_publish_metadata(
         providers, youtube, instagram, bluesky=bluesky, linkedin=linkedin, threads=threads, facebook=facebook
     )

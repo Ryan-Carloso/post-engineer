@@ -165,6 +165,7 @@ const TARGET_EXTRACTORS: Record<MeasuredProvider, (record: Record<string, unknow
   linkedin: (record) => readString(record, 'postId'),
   threads: (record) => readString(record, 'postId'),
   facebook: (record) => readString(record, 'postId'),
+  pinterest: (record) => readString(record, 'postId'),
 };
 
 function isMeasuredProvider(value: unknown): value is MeasuredProvider {

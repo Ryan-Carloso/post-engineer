@@ -45,6 +45,7 @@ import { GetClonedVoiceShape, PreviewHouseVoiceShape } from '../cloned-voice-too
 import { GeneratePersonaVideoShape, ValidateScriptShape, ScoreDraftShape } from '../tools-single-video.js';
 import { CheckMediaShape, UploadMediaShape } from '../tools-user-media.js';
 import { GeneratePersonaVideoBatchShape } from '../tools-batch.js';
+import { ListPinterestBoardsShape } from '../tools-pinterest.js';
 import { AddExperimentPairShape, CreateExperimentShape, GetExperimentResultsShape, ListExperimentsShape } from '../tools-experiments.js';
 import { GetPostShape, GetPostMetricsShape, GetYouTubeRetentionCurveShape } from '../tools-posts.js';
 import { CancelVideoTaskShape } from '../video-task-tools.js';
@@ -75,6 +76,7 @@ const EXPECTED_TOOLS = [
   'list_faces',
   'update_persona',
   'list_social_accounts',
+  'list_pinterest_boards',
   'get_persona_publishing_accounts',
   'set_persona_publishing_accounts',
   'connect_account',
@@ -230,6 +232,7 @@ describe('registered tool schemas (single source of truth)', () => {
       list_faces: ListFacesShape,
       update_persona: UpdatePersonaShape,
       list_social_accounts: ListSocialAccountsShape,
+      list_pinterest_boards: ListPinterestBoardsShape,
       get_persona_publishing_accounts: GetPersonaPublishingAccountsShape,
       set_persona_publishing_accounts: SetPersonaPublishingAccountsShape,
       connect_account: ConnectAccountShape,

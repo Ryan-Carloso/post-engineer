@@ -301,4 +301,32 @@ describe('checkSemantics (direct)', () => {
     if (outcome.ok) return;
     expect(outcome.issues.map((i) => i.field)).toEqual(['options.faceless']);
   });
+
+  it('requires a Pinterest board even when the provider name has surrounding whitespace', () => {
+    const outcome = checkSemantics({
+      title: 'Porto trip',
+      segments,
+      providers: [' pinterest '],
+      options: {},
+      personaId: 'persona-1',
+    });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.issues.map((i) => i.field)).toContain('publishing.pinterestBoardId');
+  });
+
+  it('accepts a whitespace-padded Pinterest provider once the board is set', () => {
+    const outcome = checkSemantics({
+      title: 'Porto trip',
+      segments,
+      providers: [' pinterest '],
+      options: {},
+      personaId: 'persona-1',
+      pinterestBoardId: 'b1',
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.value.providers).toEqual(['pinterest']);
+    expect(outcome.value.pinterestBoardId).toBe('b1');
+  });
 });

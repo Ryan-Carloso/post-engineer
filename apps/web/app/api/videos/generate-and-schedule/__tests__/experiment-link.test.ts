@@ -26,6 +26,7 @@ function facts(overrides: Partial<PairFacts> = {}): PairFacts {
   return {
     providers: ['youtube'],
     accountIds: { youtube: ['chan-1'] },
+    pinterestBoardId: null,
     voiceId: 'kokoro:af_heart',
     faceless: false,
     fullLipsync: false,
@@ -272,6 +273,9 @@ describe('pairMismatch', () => {
     expect(pairMismatch(partner, facts({ language: 'pt-BR' }))?.field).toBe('options.language');
     expect(pairMismatch(partner, facts({ niche: 'cooking' }))?.field).toBe('options.niche');
     expect(pairMismatch(partner, facts({ ctaText: 'Subscribe.' }))?.field).toBe('options.ctaText');
+    const pinterestPartner = facts({ providers: ['pinterest'], accountIds: { pinterest: ['u1'] }, pinterestBoardId: 'b1', segments: SEGMENTS });
+    expect(pairMismatch(pinterestPartner, facts({ providers: ['pinterest'], accountIds: { pinterest: ['u1'] }, pinterestBoardId: 'b2' }))?.field).toBe('publishing.pinterestBoardId');
+    expect(pairMismatch(pinterestPartner, facts({ providers: ['pinterest'], accountIds: { pinterest: ['u1'] }, pinterestBoardId: 'b1' }))).toBeNull();
     const otherBody = facts({ segments: [{ kind: 'hook', text: 'New hook.' }, { kind: 'body', text: 'Different body.' }, SEGMENTS[2]] });
     expect(pairMismatch(partner, otherBody)?.message).toContain('body and CTA segments must be identical');
   });
@@ -300,6 +304,14 @@ describe('checkExperimentLink partner settings', () => {
     const slots = { data: [{ ...PARTNER_SLOT, title: 'Another topic' }], error: null };
     const tables = { experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots, schedule: PARTNER_SCHEDULE };
     await expect(run(tables).promise).resolves.toMatchObject({ ok: false, status: 400, field: 'title' });
+  });
+
+  it('400 on publishing.pinterestBoardId when the stored partner schedule uses another board', async () => {
+    const schedule = { data: { ...PARTNER_SCHEDULE.data, providers: ['pinterest'], pinterest_account_ids: ['u1'], pinterest_board_id: 'b1' }, error: null };
+    const tables = { experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: { data: [PARTNER_SLOT], error: null }, schedule };
+    await expect(
+      run(tables, { facts: facts({ providers: ['pinterest'], accountIds: { pinterest: ['u1'] }, pinterestBoardId: 'b2' }) }).promise,
+    ).resolves.toMatchObject({ ok: false, status: 400, field: 'publishing.pinterestBoardId' });
   });
 });
 
@@ -349,8 +361,8 @@ describe('verifyExperimentPairAfterInsert', () => {
 describe('buildPairFacts', () => {
   it('defaults a missing voice id, full lip-sync flag, material and audio URL to null/false', () => {
     const prep = { faceless: false, faceQuality: null, voiceIdValue: undefined, niche: null, ctaText: null, language: null, videoAspect: null, videoLayout: null, paragraphNumber: null } as unknown as PersonaPrep;
-    expect(buildPairFacts({ providers: [], accountIds: {}, prep, title: 'T', segments: [], fullLipsync: undefined, facelessMaterial: 'svg', audioUrl: 'https://x/v.mp3' })).toMatchObject({
-      voiceId: null, fullLipsync: false, facelessMaterial: 'svg', voiceAudioUrl: 'https://x/v.mp3',
+    expect(buildPairFacts({ providers: [], accountIds: {}, pinterestBoardId: undefined, prep, title: 'T', segments: [], fullLipsync: undefined, facelessMaterial: 'svg', audioUrl: 'https://x/v.mp3' })).toMatchObject({
+      voiceId: null, fullLipsync: false, facelessMaterial: 'svg', voiceAudioUrl: 'https://x/v.mp3', pinterestBoardId: null,
     });
   });
 
@@ -360,9 +372,9 @@ describe('buildPairFacts', () => {
       videoAspect: '9:16', videoLayout: 'standard', paragraphNumber: 3,
     } as unknown as PersonaPrep;
     expect(
-      buildPairFacts({ providers: ['youtube'], accountIds: { youtube: ['a'] }, prep, title: 'T', segments: [], fullLipsync: true, facelessMaterial: undefined, audioUrl: undefined }),
+      buildPairFacts({ providers: ['youtube'], accountIds: { youtube: ['a'] }, pinterestBoardId: 'b1', prep, title: 'T', segments: [], fullLipsync: true, facelessMaterial: undefined, audioUrl: undefined }),
     ).toEqual({
-      providers: ['youtube'], accountIds: { youtube: ['a'] }, voiceId: 'v1', faceless: true, fullLipsync: true, segments: [], title: 'T',
+      providers: ['youtube'], accountIds: { youtube: ['a'] }, pinterestBoardId: 'b1', voiceId: 'v1', faceless: true, fullLipsync: true, segments: [], title: 'T',
       facelessMaterial: null, voiceAudioUrl: null, videoAspect: '9:16', videoLayout: 'standard', paragraphNumber: 3, faceQuality: 'ok',
       language: 'en-US', niche: 'fitness', ctaText: 'Go.',
     });
