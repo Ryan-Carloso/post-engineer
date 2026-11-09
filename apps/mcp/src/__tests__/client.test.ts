@@ -754,6 +754,21 @@ describe('generate and schedule video client', () => {
     expect(publishing.providers).toEqual(['threads', 'facebook']);
   });
 
+  it('nests the 3speak account array under its own provider', async () => {
+    await client.generatePersonaVideo({
+      ...baseInput,
+      providers: ['3speak'],
+      threespeakAccountIds: ['alice'],
+    });
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect(publishing.accounts).toEqual({
+      youtube: ['chan-1'],
+      bluesky: ['did:plc:abc'],
+      '3speak': ['alice'],
+    });
+    expect(publishing.providers).toEqual(['3speak']);
+  });
+
   it('omits personaId entirely when the caller sends no persona', async () => {
     // A persona-less post is signalled by the ABSENT key, not by an empty
     // string: the API reads absence as "no persona", and sending `""` would
@@ -1034,6 +1049,41 @@ describe('generate and schedule video client', () => {
       client.connectBlueskyAccount('user.bsky.social', 'wrong')
     ).rejects.toThrow(/Failed to connect Bluesky account: 400/);
   });
+
+  it('connects a 3Speak account with username + posting key', async () => {
+    const mockResponse = { success: true, accountId: 'acc-1', providerAccountId: 'alice' };
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockResponse),
+    });
+
+    const result = await client.connectThreespeakAccount('alice', '5Kposting-key-123');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/threespeak-connect`,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({ username: 'alice', postingKey: '5Kposting-key-123' }),
+      })
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it('throws a clear error when the 3Speak connect request fails', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      text: async () => 'Invalid Hive posting key.',
+    });
+
+    await expect(
+      client.connectThreespeakAccount('alice', 'wrong')
+    ).rejects.toThrow(/Failed to connect 3Speak account: 422/);
+  });
 });
 
 describe('PostEngineerClient configuration', () => {
@@ -1133,6 +1183,21 @@ describe('PostEngineerClient configuration', () => {
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).not.toContain(JSON.stringify(password).slice(1, -1));
     expect((error as Error).message).not.toContain(password);
+    expect((error as Error).message).toContain('[redacted]');
+  });
+
+  it('never echoes the 3Speak posting key when the API error body reflects the payload', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      text: async () => `{"error":"invalid postingKey value '5Ksecret-key'"}`,
+    });
+
+    const c = new PostEngineerClient({ apiKey: 'k' });
+    const error = await c.connectThreespeakAccount('alice', '5Ksecret-key').catch((e) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain('5Ksecret-key');
     expect((error as Error).message).toContain('[redacted]');
   });
 
@@ -1815,6 +1880,22 @@ describe('publishVideoDirect', () => {
     expect(formData.get('provider')).toBe('facebook');
     expect(formData.getAll('facebookAccountIds')).toEqual(['page-1', 'page-2']);
     expect(formData.get('caption')).toBe('hello facebook');
+    expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('maps account ids to the threespeak field name and sends the caption', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: '3speak',
+      videoPath,
+      accountIds: ['alice'],
+      caption: 'hello 3speak',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('provider')).toBe('3speak');
+    expect(formData.getAll('threespeakAccountIds')).toEqual(['alice']);
+    expect(formData.get('caption')).toBe('hello 3speak');
     expect(formData.get('video')).toBeInstanceOf(Blob);
   });
 

@@ -424,6 +424,28 @@ export class PostEngineerClient {
     }
   }
 
+  async connectThreespeakAccount(username: string, postingKey: string): Promise<unknown> {
+    try {
+      return await this.request(
+        '/api/threespeak-connect',
+        { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ username, postingKey }) },
+        'connect 3Speak account'
+      );
+    } catch (error) {
+      // The upstream error body may echo the request payload: never let the
+      // posting key surface in agent-visible error text — raw, percent-encoded,
+      // or JSON-escaped.
+      const message = error instanceof Error ? error.message : String(error);
+      if (postingKey.length === 0) throw new Error(message);
+      const variants = [
+        postingKey,
+        encodeURIComponent(postingKey),
+        JSON.stringify(postingKey).slice(1, -1),
+      ];
+      throw new Error(variants.reduce((text, variant) => text.replaceAll(variant, '[redacted]'), message));
+    }
+  }
+
   async listSchedules(): Promise<unknown> {
     return this.request(
       '/api/schedule',
@@ -553,7 +575,7 @@ export class PostEngineerClient {
   async disconnectAccount(provider: string, providerAccountId: string): Promise<unknown> {
     // The route 400s INVALID_PROVIDER / INVALID_PARAMS — fail fast with the
     // field named before any fetch goes out.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', '3speak'];
     if (!validProviders.includes(provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }
@@ -592,7 +614,7 @@ export class PostEngineerClient {
     // record. Only set entries the caller provided: the server enforces
     // which providers need accounts and rejects unknown ones.
     const accounts: Record<string, string[]> = {};
-    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds };
+    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, '3speak': input.threespeakAccountIds };
     for (const [provider, ids] of Object.entries(byProvider)) if (ids !== undefined) accounts[provider] = ids;
     // A stray schedule plan in ASAP mode is a caller bug: the server 400s
     // ("publishing.schedule must not be set"), so fail fast with the same
@@ -747,7 +769,7 @@ export class PostEngineerClient {
     // Direct publish of a user-provided video — no generation, no schedule.
     // Mirrors the server-side 400s: provider-specific required fields and
     // per-provider account-id field names fail fast here, before any fetch.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', '3speak'];
     if (!validProviders.includes(input.provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }
@@ -806,7 +828,7 @@ export class PostEngineerClient {
         formData.append('igAccountIds', accountId);
       }
     } else {
-      const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds', facebook: 'facebookAccountIds' }[input.provider];
+      const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds', facebook: 'facebookAccountIds', '3speak': 'threespeakAccountIds' }[input.provider];
       formData.append('video', videoBlob, filename);
       formData.append('caption', caption);
       for (const accountId of input.accountIds) {
