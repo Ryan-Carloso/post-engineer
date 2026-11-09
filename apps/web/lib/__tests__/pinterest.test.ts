@@ -156,7 +156,7 @@ describe('publishPinterestVideo', () => {
     };
   }
 
-  function queueSuccess(options: { coverImageUrl?: string } = {}): void {
+  function queueSuccess(): void {
     mockFetch
       .mockResolvedValueOnce(jsonResponse(registerResponse()))
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
