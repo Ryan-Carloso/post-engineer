@@ -26,7 +26,8 @@ skipped with a warning recorded on the task; one bad URL never fails the
 video.
 
 Nothing here logs image content, local paths, or full URLs: warnings
-carry only the segment index and a stable reason.
+carry only the segment index, the image index within that segment,
+and a stable reason.
 """
 
 import contextlib
@@ -306,8 +307,9 @@ def prepare_segment_media(
 ) -> tuple[list[Panel], list[str]]:
     """Drawn photos (panels or full frame) with spoken intervals, plus skip warnings.
 
-    A warning carries only the segment index and a stable reason, never a
-    URL, a path or a mediaId, and the caller stores it on the task.
+    A warning carries only the segment index, the image index within that
+    segment, and a stable reason, never a URL, a path or a mediaId, and
+    the caller stores it on the task.
     """
     panels: list[Panel] = []
     skipped: list[str] = []
