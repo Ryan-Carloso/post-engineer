@@ -84,6 +84,7 @@ describe('handleRumbleUpload', () => {
     const result = await handleRumbleUpload(formData(overrides), 'user-1');
     expect(result.success).toBe(false);
     expect(result.results[0].error).toContain(message);
+    expect(result.results[0].errorCode).toBe('publish_rejected');
     expect(uploadRumbleVideo).not.toHaveBeenCalled();
   });
 
@@ -105,7 +106,10 @@ describe('handleRumbleUpload', () => {
   it('reports a channel without a stored token without calling Rumble', async () => {
     vi.mocked(getSocialAccountTokens).mockResolvedValue(tokens({}));
     const result = await handleRumbleUpload(formData(), 'user-1');
-    expect(result).toEqual({ success: false, results: [{ accountId: 'chan-1', success: false, error: 'Rumble access token not found' }] });
+    expect(result).toEqual({
+      success: false,
+      results: [{ accountId: 'chan-1', success: false, error: 'Rumble access token not found', errorCode: 'token_missing' }],
+    });
     expect(uploadRumbleVideo).not.toHaveBeenCalled();
   });
 
@@ -114,7 +118,12 @@ describe('handleRumbleUpload', () => {
       new RumbleError('invalid_token', 'RUMBLE_PUBLISH_FAILED: Invalid access token', 401),
     );
     const result = await handleRumbleUpload(formData(), 'user-1');
-    expect(result.results[0]).toEqual({ accountId: 'chan-1', success: false, error: 'RUMBLE_PUBLISH_FAILED: Invalid access token' });
+    expect(result.results[0]).toEqual({
+      accountId: 'chan-1',
+      success: false,
+      error: 'RUMBLE_PUBLISH_FAILED: Invalid access token',
+      errorCode: 'token_expired',
+    });
     expect(trackApiEvent).toHaveBeenCalledWith('publish_account_unauthorized', {
       provider: 'rumble',
       account_id: 'chan-1',
@@ -125,7 +134,8 @@ describe('handleRumbleUpload', () => {
 
   it('does not emit publish_account_unauthorized when the failure is not an invalid token', async () => {
     vi.mocked(uploadRumbleVideo).mockRejectedValueOnce(new RumbleError('upload_failed', 'RUMBLE_PUBLISH_FAILED: boom', 500));
-    await handleRumbleUpload(formData(), 'user-1');
+    const result = await handleRumbleUpload(formData(), 'user-1');
+    expect(result.results[0].errorCode).toBe('transient');
     expect(trackApiEvent).not.toHaveBeenCalled();
   });
 
@@ -135,12 +145,16 @@ describe('handleRumbleUpload', () => {
     expect(result.success).toBe(true);
     expect(result.results.map((entry) => entry.success)).toEqual([false, true]);
     expect(result.results[0].error).toBe('RUMBLE_PUBLISH_FAILED: boom');
+    expect(result.results[0].errorCode).toBe('transient');
     expect(touchSocialAccount).toHaveBeenCalledTimes(1);
   });
 
   it('fails as a whole when every channel fails, and a non-Error throw stays generic', async () => {
     vi.mocked(getSocialAccountTokens).mockRejectedValue('not an error');
     const result = await handleRumbleUpload(formData(), 'user-1');
-    expect(result).toEqual({ success: false, results: [{ accountId: 'chan-1', success: false, error: 'Unknown error' }] });
+    expect(result).toEqual({
+      success: false,
+      results: [{ accountId: 'chan-1', success: false, error: 'Unknown error', errorCode: 'transient' }],
+    });
   });
 });
