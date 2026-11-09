@@ -330,6 +330,12 @@ export const operationSchemas = {
     response: success({ accountId: str, did: str }),
     extraResponses: { 422: 'Bluesky rejected the handle or app password (code BLUESKY_CREDENTIAL_REJECTED).' },
   },
+  // apps/web/app/api/threespeak-connect/route.ts (JSON or form body)
+  'POST /api/threespeak-connect': {
+    request: object({ username: str, postingKey: str }, ['username', 'postingKey']),
+    response: success({ accountId: str, username: str }),
+    extraResponses: { 422: '3Speak rejected the username or posting key (code THREESPEAK_CREDENTIAL_REJECTED).' },
+  },
   // apps/web/app/api/persona/faces/route.ts
   'GET /api/persona/faces': {
     response: object({
