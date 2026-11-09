@@ -106,7 +106,7 @@ describe('handleFacebookUpload', () => {
   it('reports a Page without a stored token without calling Facebook', async () => {
     vi.mocked(getSocialAccountTokens).mockResolvedValue(tokens({}));
     const result = await handleFacebookUpload(formData(), 'user-1');
-    expect(result).toEqual({ success: false, results: [{ accountId: '111', success: false, error: 'Facebook Page token not found' }] });
+    expect(result).toEqual({ success: false, results: [{ accountId: '111', success: false, error: 'Facebook Page token not found', errorCode: 'token_missing' }] });
     expect(publishFacebookVideo).not.toHaveBeenCalled();
   });
 
@@ -115,7 +115,7 @@ describe('handleFacebookUpload', () => {
       new FacebookError('FACEBOOK_PUBLISH_FAILED: Invalid OAuth access token', 401),
     );
     const result = await handleFacebookUpload(formData(), 'user-1');
-    expect(result.results[0]).toEqual({ accountId: '111', success: false, error: 'FACEBOOK_PUBLISH_FAILED: Invalid OAuth access token' });
+    expect(result.results[0]).toEqual({ accountId: '111', success: false, error: 'FACEBOOK_PUBLISH_FAILED: Invalid OAuth access token', errorCode: 'token_expired' });
     expect(trackApiEvent).toHaveBeenCalledWith('publish_account_unauthorized', {
       provider: 'facebook',
       account_id: '111',
@@ -142,7 +142,7 @@ describe('handleFacebookUpload', () => {
   it('fails as a whole when every Page fails, and a non-Error throw stays generic', async () => {
     vi.mocked(getSocialAccountTokens).mockRejectedValue('not an error');
     const result = await handleFacebookUpload(formData(), 'user-1');
-    expect(result).toEqual({ success: false, results: [{ accountId: '111', success: false, error: 'Unknown error' }] });
+    expect(result).toEqual({ success: false, results: [{ accountId: '111', success: false, error: 'Unknown error', errorCode: 'transient' }] });
     expect(cleanupOldUploads).toHaveBeenCalledWith('facebook');
   });
 });

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from app.services.fill_schedule.account_outcomes import (
     USER_CODES,
+    _account_ids,
     _fail_outcome,
     _targets_from_body,
     exhaust_outcome,
@@ -26,6 +27,13 @@ class UserNoticeTests(unittest.TestCase):
             user_notice("bluesky", "email_not_verified"),
             "Bluesky did not publish because the email on this account is not verified. "
             "This is a problem with your account. Only you can fix it: verify the email on Bluesky.",
+        )
+
+    def test_facebook_notice_names_the_provider(self) -> None:
+        self.assertEqual(
+            user_notice("facebook", "token_expired"),
+            "Facebook did not publish because the account needs to be reconnected. "
+            "This is a problem with your account. Only you can fix it: reconnect Facebook.",
         )
 
     def test_reconnect_notice_for_every_other_user_code(self) -> None:
@@ -97,6 +105,14 @@ class TargetsFromBodyTests(unittest.TestCase):
         assigned = _targets_from_body(["a", "b"], body)
         self.assertEqual(assigned["a"][0], "published")
         self.assertEqual(assigned["b"][1]["errorCode"], "publish_rejected")
+
+
+class AccountIdsTests(unittest.TestCase):
+    def test_facebook_reads_the_schedule_column_not_the_synthetic_target(self) -> None:
+        self.assertEqual(_account_ids("facebook", {"facebook_account_ids": ["123", "456"]}), ["123", "456"])
+
+    def test_no_account_list_is_one_synthetic_target(self) -> None:
+        self.assertEqual(_account_ids("threads", {}), [""])
 
 
 if __name__ == "__main__":
