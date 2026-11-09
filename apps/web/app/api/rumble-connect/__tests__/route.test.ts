@@ -122,6 +122,21 @@ describe('POST /api/rumble-connect', () => {
     expect(await noToken.json()).toMatchObject({ success: false, error: 'Rumble access token is required.' });
   });
 
+  it('returns 400 for a null or array JSON body instead of crashing', async () => {
+    mockSupabase();
+    const rawJson = (raw: string) => new Request('http://localhost/api/rumble-connect', {
+      method: 'POST',
+      body: raw,
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test-key' },
+    });
+    const nullBody = await POST(rawJson('null'));
+    expect(nullBody.status).toBe(400);
+    expect(await nullBody.json()).toMatchObject({ success: false, error: 'Invalid JSON payload.' });
+    const arrayBody = await POST(rawJson('[]'));
+    expect(arrayBody.status).toBe(400);
+    expect(await arrayBody.json()).toMatchObject({ success: false, error: 'Invalid JSON payload.' });
+  });
+
   it('returns 400 for a non-string or blank channelId/token in JSON and saves nothing', async () => {
     const { inserted } = mockSupabase();
     const nonString = await POST(jsonRequest({ channelId: 123, accessToken: TOKEN }));

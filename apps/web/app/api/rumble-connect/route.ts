@@ -38,6 +38,10 @@ function errorResponse(
   return apiErrorResponse(status, error, { route, ...options });
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 async function readCredentials(request: Request): Promise<
   | { ok: true; channelId: string; accessToken: string }
   | { ok: false; error: string }
@@ -50,8 +54,13 @@ async function readCredentials(request: Request): Promise<
     } catch {
       return { ok: false, error: 'Invalid JSON payload.' };
     }
-    const channelId = (body as Record<string, unknown>).channelId;
-    const accessToken = (body as Record<string, unknown>).accessToken;
+    // A JSON `null` (or array) parses fine but is not an object: reading
+    // fields off it would throw a TypeError instead of returning the 400.
+    if (!isRecord(body)) {
+      return { ok: false, error: 'Invalid JSON payload.' };
+    }
+    const channelId = body.channelId;
+    const accessToken = body.accessToken;
     if (typeof channelId !== 'string' || !channelId.trim()) {
       return { ok: false, error: 'Rumble channel ID is required.' };
     }
