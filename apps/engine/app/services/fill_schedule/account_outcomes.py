@@ -292,7 +292,7 @@ def _targets_from_body(
         failed = {"error": "upload API returned no per-account results and no link"}
         return {account_id: ("failed", failed) for account_id in pending}
     if pending == [""]:
-        kind, source = _interpret_result(results[0] if len(results) == 1 else {
+        kind, source = _interpret_result(results[0] if len(results) == 1 and isinstance(results[0], dict) else {
             "success": any(isinstance(item, dict) and item.get("success") is True for item in results),
             "error": next(
                 (item.get("error") for item in results if isinstance(item, dict) and item.get("success") is not True),

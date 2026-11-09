@@ -2282,7 +2282,7 @@ class CoverageGapTests(unittest.TestCase):
         publish.assert_not_called()
         self.assertEqual(store.updates, [])
 
-    def test_publish_failure_after_claim_returns_slot_to_ready(self):
+    def test_transient_publish_failure_after_claim_stays_publishing(self):
         # A transient failure after the claim stays publishing. Discord waits
         # until the account has spent its three tries.
         from app.services.upload_publisher import PublishError

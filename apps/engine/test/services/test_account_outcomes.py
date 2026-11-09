@@ -106,6 +106,10 @@ class TargetsFromBodyTests(unittest.TestCase):
         self.assertEqual(assigned["a"][0], "published")
         self.assertEqual(assigned["b"][1]["errorCode"], "publish_rejected")
 
+    def test_single_non_dict_result_for_synthetic_target_fails_without_crashing(self) -> None:
+        assigned = _targets_from_body([""], {"results": ["garbage"]})
+        self.assertEqual(assigned[""], ("failed", {"error": "upload API reported account failure", "errorCode": None}))
+
 
 class AccountIdsTests(unittest.TestCase):
     def test_facebook_reads_the_schedule_column_not_the_synthetic_target(self) -> None:
