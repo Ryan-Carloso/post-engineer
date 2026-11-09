@@ -852,7 +852,7 @@ describe('Facebook Pages accounts section', () => {
     const fetchMock = vi.fn(async () => ({ ok: false, status, json: async () => body }));
     vi.stubGlobal('fetch', fetchMock);
     render(<AccountsPage />, { wrapper: createWrapper() });
-    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, 3speak.
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak.
     fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[7]);
     fireEvent.change(await screen.findByTestId('threespeak-handle-input'), { target: { value: 'alice' } });
     fireEvent.change(screen.getByTestId('threespeak-password-input'), { target: { value: '5K-posting-key' } });
