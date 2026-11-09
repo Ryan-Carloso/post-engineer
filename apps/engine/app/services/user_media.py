@@ -26,8 +26,8 @@ skipped with a warning recorded on the task; one bad URL never fails the
 video.
 
 Nothing here logs image content, local paths, or full URLs: warnings
-carry only the segment index, the image index within that segment,
-and a stable reason.
+carry only the segment index, a stable reason, and — for skipped
+images — the image index within that segment.
 """
 
 import contextlib
