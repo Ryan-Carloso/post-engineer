@@ -30,6 +30,7 @@ _ACCOUNT_COLUMNS = {
     "threads": "threads_account_ids",
     "facebook": "facebook_account_ids",
     "pinterest": "pinterest_account_ids",
+    "3speak": "threespeak_account_ids",
 }
 _LABELS = {
     "youtube": "YouTube",
@@ -39,6 +40,7 @@ _LABELS = {
     "threads": "Threads",
     "facebook": "Facebook",
     "pinterest": "Pinterest",
+    "3speak": "3Speak",
 }
 _LINK_FIELDS = ("videoUrl", "permalink", "postId")
 

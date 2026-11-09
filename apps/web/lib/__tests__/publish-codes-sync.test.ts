@@ -36,7 +36,9 @@ describe('publish code sync (web ↔ engine)', () => {
   it('engine provider labels match PROVIDER_LABELS', () => {
     const body = block(outcomes, '_LABELS = {', '}');
     const labels = Object.fromEntries(
-      [...body.matchAll(/"([a-z]+)":\s*"([^"]+)"/g)].map((match) => [match[1], match[2]]),
+      // Provider keys are lowercase letters, except '3speak' which starts
+      // with a digit — the class must allow it or the entry is invisible.
+      [...body.matchAll(/"([a-z0-9]+)":\s*"([^"]+)"/g)].map((match) => [match[1], match[2]]),
     );
     expect(labels).toEqual(PROVIDER_LABELS);
   });
