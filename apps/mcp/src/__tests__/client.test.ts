@@ -754,6 +754,21 @@ describe('generate and schedule video client', () => {
     expect(publishing.providers).toEqual(['threads', 'facebook']);
   });
 
+  it('nests the rumble channel ids under their own provider', async () => {
+    await client.generatePersonaVideo({
+      ...baseInput,
+      providers: ['rumble'],
+      rumbleAccountIds: ['chan-1', 'chan-2'],
+    });
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect(publishing.accounts).toEqual({
+      youtube: ['chan-1'],
+      bluesky: ['did:plc:abc'],
+      rumble: ['chan-1', 'chan-2'],
+    });
+    expect(publishing.providers).toEqual(['rumble']);
+  });
+
   it('omits personaId entirely when the caller sends no persona', async () => {
     // A persona-less post is signalled by the ABSENT key, not by an empty
     // string: the API reads absence as "no persona", and sending `""` would
@@ -1034,6 +1049,41 @@ describe('generate and schedule video client', () => {
       client.connectBlueskyAccount('user.bsky.social', 'wrong')
     ).rejects.toThrow(/Failed to connect Bluesky account: 400/);
   });
+
+  it('connects a Rumble account with channelId + accessToken', async () => {
+    const mockResponse = { success: true, accountId: 'acc-1', channelId: 'chan-1' };
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockResponse),
+    });
+
+    const result = await client.connectRumbleAccount('chan-1', 'a'.repeat(40));
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/rumble-connect`,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({ channelId: 'chan-1', accessToken: 'a'.repeat(40) }),
+      })
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it('throws a clear error when the Rumble connect request fails', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => 'Rumble access token must be the 40-character token issued by Rumble.',
+    });
+
+    await expect(
+      client.connectRumbleAccount('chan-1', 'wrong')
+    ).rejects.toThrow(/Failed to connect Rumble account: 400/);
+  });
 });
 
 describe('PostEngineerClient configuration', () => {
@@ -1133,6 +1183,22 @@ describe('PostEngineerClient configuration', () => {
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).not.toContain(JSON.stringify(password).slice(1, -1));
     expect((error as Error).message).not.toContain(password);
+    expect((error as Error).message).toContain('[redacted]');
+  });
+
+  it('never echoes the Rumble access token when the API error body reflects the payload', async () => {
+    const token = 'a'.repeat(40);
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => `{"error":"invalid accessToken value '${token}'"}`,
+    });
+
+    const c = new PostEngineerClient({ apiKey: 'k' });
+    const error = await c.connectRumbleAccount('chan-1', token).catch((e) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain(token);
     expect((error as Error).message).toContain('[redacted]');
   });
 
@@ -1816,6 +1882,36 @@ describe('publishVideoDirect', () => {
     expect(formData.getAll('facebookAccountIds')).toEqual(['page-1', 'page-2']);
     expect(formData.get('caption')).toBe('hello facebook');
     expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('maps account ids to the rumble field name and sends title + description instead of a caption', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'rumble',
+      videoPath,
+      accountIds: ['chan-1', 'chan-2'],
+      title: 'My video',
+      description: 'A description',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('provider')).toBe('rumble');
+    expect(formData.getAll('rumbleAccountIds')).toEqual(['chan-1', 'chan-2']);
+    expect(formData.get('title')).toBe('My video');
+    expect(formData.get('description')).toBe('A description');
+    expect(formData.get('caption')).toBeNull();
+    expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('fails fast when the rumble title or description is missing, without fetching', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await expect(
+      client.publishVideoDirect({ provider: 'rumble', videoPath, accountIds: ['chan-1'], description: 'A description' }),
+    ).rejects.toThrow(/title is required for rumble/);
+    await expect(
+      client.publishVideoDirect({ provider: 'rumble', videoPath, accountIds: ['chan-1'], title: 'My video' }),
+    ).rejects.toThrow(/description is required for rumble/);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('fails fast on an unknown provider without fetching', async () => {

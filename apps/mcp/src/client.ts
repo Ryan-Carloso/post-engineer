@@ -26,6 +26,7 @@ import type {
   PublishVideoDirectInput,
   UpdatePersonaInput,
 } from './client-types.js';
+import { buildDirectPublishForm, requireDirectPublishFields } from './direct-publish-form.js';
 
 // Re-exported so existing import sites (`./client.js`) keep working.
 export type {
@@ -182,6 +183,16 @@ function resolveBaseUrl(override: string | undefined): string {
   // identical: origin drops userinfo, trailing slashes are stripped so
   // `${baseUrl}${path}` never yields `//api/...`.
   return url.origin + url.pathname.replace(/\/+$/, '');
+}
+
+// The upstream error body may echo the request payload: never let a
+// manual credential (Bluesky app password, Rumble access token) surface in
+// agent-visible error text — raw, percent-encoded, or JSON-escaped.
+function redactSecretFromError(error: unknown, secret: string): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  if (secret.length === 0) return new Error(message);
+  const variants = [secret, encodeURIComponent(secret), JSON.stringify(secret).slice(1, -1)];
+  return new Error(variants.reduce((text, variant) => text.replaceAll(variant, '[redacted]'), message));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -407,20 +418,22 @@ export class PostEngineerClient {
       return await this.request(
         '/api/bluesky-connect',
         { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ handle, appPassword }) },
-        'connect Bluesky account'
+        'connect Bluesky account',
       );
     } catch (error) {
-      // The upstream error body may echo the request payload: never let the
-      // app password surface in agent-visible error text — raw, percent-encoded,
-      // or JSON-escaped.
-      const message = error instanceof Error ? error.message : String(error);
-      if (appPassword.length === 0) throw new Error(message);
-      const variants = [
-        appPassword,
-        encodeURIComponent(appPassword),
-        JSON.stringify(appPassword).slice(1, -1),
-      ];
-      throw new Error(variants.reduce((text, variant) => text.replaceAll(variant, '[redacted]'), message));
+      throw redactSecretFromError(error, appPassword);
+    }
+  }
+
+  async connectRumbleAccount(channelId: string, accessToken: string): Promise<unknown> {
+    try {
+      return await this.request(
+        '/api/rumble-connect',
+        { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ channelId, accessToken }) },
+        'connect Rumble account',
+      );
+    } catch (error) {
+      throw redactSecretFromError(error, accessToken);
     }
   }
 
@@ -553,7 +566,7 @@ export class PostEngineerClient {
   async disconnectAccount(provider: string, providerAccountId: string): Promise<unknown> {
     // The route 400s INVALID_PROVIDER / INVALID_PARAMS — fail fast with the
     // field named before any fetch goes out.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'rumble'];
     if (!validProviders.includes(provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }
@@ -592,7 +605,7 @@ export class PostEngineerClient {
     // record. Only set entries the caller provided: the server enforces
     // which providers need accounts and rejects unknown ones.
     const accounts: Record<string, string[]> = {};
-    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds };
+    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, rumble: input.rumbleAccountIds };
     for (const [provider, ids] of Object.entries(byProvider)) if (ids !== undefined) accounts[provider] = ids;
     // A stray schedule plan in ASAP mode is a caller bug: the server 400s
     // ("publishing.schedule must not be set"), so fail fast with the same
@@ -747,72 +760,17 @@ export class PostEngineerClient {
     // Direct publish of a user-provided video — no generation, no schedule.
     // Mirrors the server-side 400s: provider-specific required fields and
     // per-provider account-id field names fail fast here, before any fetch.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'rumble'];
     if (!validProviders.includes(input.provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }
     if (input.accountIds.length === 0) {
       throw new Error('At least one account ID is required.');
     }
-    // Provider-specific required fields, validated before any fetch so the
-    // agent gets a named failure instead of a server 400 after uploading.
-    let title = '';
-    let description = '';
-    let tags: string[] = [];
-    let privacyStatus = '';
-    let caption = '';
-    if (input.provider === 'youtube') {
-      if (input.title === undefined || input.title.trim().length === 0) {
-        throw new Error('title is required for youtube.');
-      }
-      if (input.description === undefined || input.description.trim().length === 0) {
-        throw new Error('description is required for youtube.');
-      }
-      if (input.tags === undefined || input.tags.length === 0) {
-        throw new Error('tags is required for youtube.');
-      }
-      const validPrivacy = ['public', 'private', 'unlisted'];
-      if (input.privacyStatus === undefined || !validPrivacy.includes(input.privacyStatus)) {
-        throw new Error('privacyStatus is required for youtube.');
-      }
-      title = input.title.trim();
-      description = input.description.trim();
-      tags = input.tags;
-      privacyStatus = input.privacyStatus;
-    } else {
-      if (input.caption === undefined || input.caption.trim().length === 0) {
-        throw new Error(`caption is required for ${input.provider}.`);
-      }
-      caption = input.caption.trim();
-    }
-
-    const formData = new FormData();
-    formData.append('provider', input.provider);
+    const fields = requireDirectPublishFields(input);
     const videoBlob = await videoFormFile(input.videoPath);
     const filename = basename(input.videoPath);
-    if (input.provider === 'youtube') {
-      formData.append('video', videoBlob, filename);
-      formData.append('title', title);
-      formData.append('description', description);
-      formData.append('tags', tags.join(','));
-      formData.append('privacyStatus', privacyStatus);
-      for (const accountId of input.accountIds) {
-        formData.append('accountIds', accountId);
-      }
-    } else if (input.provider === 'instagram') {
-      formData.append('file', videoBlob, filename);
-      formData.append('caption', caption);
-      for (const accountId of input.accountIds) {
-        formData.append('igAccountIds', accountId);
-      }
-    } else {
-      const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds', facebook: 'facebookAccountIds' }[input.provider];
-      formData.append('video', videoBlob, filename);
-      formData.append('caption', caption);
-      for (const accountId of input.accountIds) {
-        formData.append(accountField, accountId);
-      }
-    }
+    const formData = buildDirectPublishForm(input, fields, videoBlob, filename);
 
     const result: unknown = await this.request(
       '/api/upload-content',

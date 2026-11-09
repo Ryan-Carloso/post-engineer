@@ -169,6 +169,7 @@ export async function generatePersonaVideoOutcome(
         blueskyAccountIds: args.blueskyAccountIds,
         threadsAccountIds: args.threadsAccountIds,
         facebookAccountIds: args.facebookAccountIds,
+        rumbleAccountIds: args.rumbleAccountIds,
         mode,
         startAt: args.startAt,
         times: args.times,
@@ -259,7 +260,7 @@ export const ScoreDraftShape = {
     .max(10000, 'draft must be at most 10000 characters')
     .describe('The text to score: a post body, or with kind "script" the video segments joined by newlines, hook first, CTA last.'),
   network: z
-    .enum(['linkedin', 'youtube', 'instagram', 'bluesky', 'threads', 'facebook'])
+    .enum(['linkedin', 'youtube', 'instagram', 'bluesky', 'threads', 'facebook', 'rumble'])
     .optional()
     .describe('Network the draft is for; the publish check uses that network\'s rules. Defaults to linkedin.'),
   personaId: z
@@ -273,7 +274,7 @@ export const ScoreDraftShape = {
 export const ScoreDraftSchema = z.object(ScoreDraftShape);
 
 export const ScoreDraftDescription =
-  'Score a draft mechanically against the caller\'s own measured posts, without spending tokens. Returns a 0-100 score where every point is explained (hook, length, hashtags, slop markers, links, top-theme match, call to action), the baseline it was scored against (top angles by engagement), and the publish check for the requested network (linkedin, youtube, instagram, bluesky, threads, facebook): it fails only on an empty draft or the network\'s own ceiling where this repo has evidence for it (LinkedIn 3000 characters, Threads 500 characters, Facebook 63206 characters, Bluesky 300 graphemes); the rest are warnings. A failing publish check means: fix the draft before scheduling it for that network. Pass kind \'script\' for a video script (segments joined by newlines, hook first, CTA last): hashtags are not scored and publishCheck is null.';
+  'Score a draft mechanically against the caller\'s own measured posts, without spending tokens. Returns a 0-100 score where every point is explained (hook, length, hashtags, slop markers, links, top-theme match, call to action), the baseline it was scored against (top angles by engagement), and the publish check for the requested network (linkedin, youtube, instagram, bluesky, threads, facebook, rumble): it fails only on an empty draft or the network\'s own ceiling where this repo has evidence for it (LinkedIn 3000 characters, Threads 500 characters, Facebook 63206 characters, Bluesky 300 graphemes); the rest are warnings. A failing publish check means: fix the draft before scheduling it for that network. Pass kind \'script\' for a video script (segments joined by newlines, hook first, CTA last): hashtags are not scored and publishCheck is null.';
 
 export async function handleScoreDraft(
   client: PostEngineerClient,

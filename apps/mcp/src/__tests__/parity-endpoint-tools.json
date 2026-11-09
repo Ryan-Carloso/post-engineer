@@ -11,6 +11,9 @@
   "POST /api/bluesky-connect": [
     "connect_account"
   ],
+  "POST /api/rumble-connect": [
+    "connect_account"
+  ],
   "GET /api/persona/faces": [
     "list_faces"
   ],
