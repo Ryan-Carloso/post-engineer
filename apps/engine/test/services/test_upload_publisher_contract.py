@@ -55,6 +55,17 @@ class PublishMetadataValidationTest(unittest.TestCase):
             instagram=None,
         )
 
+    def test_accepts_pinterest_without_a_metadata_gate_here(self) -> None:
+        # Pinterest takes no parameter on validate_publish_metadata: its gate
+        # is fill_schedule.metadata.validate_publish_plan, so a pinterest-only
+        # call passes here even with no pinterest metadata attached.
+        metadata = upload_publisher.validate_publish_metadata(
+            providers=["pinterest"],
+            youtube=None,
+            instagram=None,
+        )
+        self.assertEqual(metadata.providers, ("pinterest",))
+
     def test_rejects_instagram_provider_without_metadata(self) -> None:
         self.assert_validation_error(
             "instagram provider requires instagram metadata",
