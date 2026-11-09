@@ -1088,6 +1088,29 @@ describe('slot tools', () => {
     expect(text).toContain('awaiting');
     expect(text).toContain('"title": "Launch day"');
     expect(text).not.toContain('extraUnpinnedField');
+    expect(text).toContain('"userNotices": []');
+  });
+
+  it('handleGetSlot relays a user notice and tells the agent not to retry', async () => {
+    const { handleGetSlot } = await import('../tools.js');
+    const notice = 'Bluesky did not publish because the email on this account is not verified. This is a problem with your account. Only you can fix it: verify the email.';
+    vi.mocked(mockClient.getSlot).mockResolvedValue({
+      success: true,
+      slot: {
+        id: 'slot-1',
+        scheduleId: 'sched-1',
+        slotAt: '2026-10-10T20:00:00Z',
+        status: 'publishing',
+        title: 'Launch day',
+        userNotices: [{ provider: 'bluesky', accountId: 'b1', code: 'email_not_verified', requiresUser: true, notice }],
+        providerFailures: [{ provider: 'bluesky', accountId: 'b1', code: 'email_not_verified', requiresUser: false, notice }],
+      },
+    });
+
+    const text = textOf(await handleGetSlot(mockClient, { slotId: 'slot-1' }));
+    expect(text).toContain(notice);
+    expect(text).toContain('Do not retry');
+    expect(text).toContain('Only the user can fix this account');
   });
 
   it('handleGetSlot surfaces API errors with the structured contract', async () => {

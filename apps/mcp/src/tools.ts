@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { filterVoicesPayload, ListVoicesSchema, type ListVoicesArgs } from './voice-filters.js';
-import { personaVoiceField, withResolvedPersonaVoice } from './voice-filters.js';
+import { filterVoicesPayload, ListVoicesSchema, personaVoiceField, withResolvedPersonaVoice, type ListVoicesArgs } from './voice-filters.js';
+import { noticeSummary, readNoticeList } from './publish-notices.js';
 import {
   CancelScheduleSchema,
   CancelScheduleShape,
@@ -61,9 +61,7 @@ import { CreatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar
 
 export type { McpToolResponse } from './tools-call.js';
 
-// Shared field definitions: path/tag/description limits appear in both the
-// create-persona images array and add_persona_image — define once so the
-// limits and descriptions can't drift apart.
+// Image path/tag/description limits are shared by create-persona and add_persona_image.
 const LibraryImageFields = {
   path: z.string().min(1).describe(`Local file path to the image (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB)`),
   tag: z.string().max(MAX_LIBRARY_TAG_LENGTH).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
@@ -463,7 +461,7 @@ export async function handleGetSlot(
   try {
     const narrowed = narrowSlotDetail(await client.getSlot(args.slotId));
     const slot = narrowed.slot;
-    const humanSummary = `Slot ${slot.id ?? args.slotId}: "${slot.title ?? '(untitled)'}" — ${slot.status ?? 'unknown'}, scheduled for ${slot.slotAt ?? '(unscheduled)'}.`;
+    const humanSummary = `Slot ${slot.id ?? args.slotId}: "${slot.title ?? '(untitled)'}" — ${slot.status ?? 'unknown'}, scheduled for ${slot.slotAt ?? '(unscheduled)'}.${noticeSummary(slot.userNotices)}`;
     return {
       content: [
         {
@@ -992,10 +990,7 @@ function narrowTokenTransactions(result: unknown): {
   };
 }
 
-/** Narrows the GET /api/schedule/slots/[slotId] envelope to the fields the
- * tool contract promises: the slot row, its schedule, and the persona.
- * Anything the API adds later rides through unparsed — the projection only
- * pins what the tool renders and documents. */
+/** Slot, schedule, and persona fields get_slot returns. */
 function narrowSlotDetail(result: unknown): {
   slot: {
     id: string | null;
@@ -1008,6 +1003,8 @@ function narrowSlotDetail(result: unknown): {
     stage: string | null;
     error: string | null;
     publishedAt: string | null;
+    userNotices: unknown[];
+    providerFailures: unknown[];
   };
   schedule: {
     id: string | null;
@@ -1052,6 +1049,8 @@ function narrowSlotDetail(result: unknown): {
       stage: str(slot.stage),
       error: str(slot.error),
       publishedAt: str(slot.publishedAt),
+      userNotices: readNoticeList(slot.userNotices),
+      providerFailures: readNoticeList(slot.providerFailures),
     },
     schedule:
       schedule === null

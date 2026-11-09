@@ -1,5 +1,5 @@
 -- ============================================================================
--- 051 — 3Speak (Hive) as a publishing provider.
+-- 052 — 3Speak (Hive) as a publishing provider.
 -- schedules gets its per-provider account list (the default keeps existing
 -- rows and every insert that predates the column valid), post_metrics and
 -- social_accounts accept the new provider. Idempotent.

@@ -153,17 +153,41 @@ class StoreRequestsTests(unittest.TestCase):
         self.requests.request.return_value = _response(json_data=[])
         self.assertFalse(self.store.claim_ready_slot("slot-1"))
 
-    def test_recover_stale_publishing_slots(self):
-        # Stuck 'publishing' slots (engine died mid-publish) older than the
-        # timeout go back to 'ready' for a safe retry.
-        self.requests.request.return_value = _response(status_code=204)
-        count = self.store.recover_stale_publishing(older_than_minutes=30)
-        self.assertEqual(count, 0)  # PATCH returns no rows without representation
-        method, url, kwargs = self._last_call()
-        self.assertEqual(method, "PATCH")
+    def test_resumable_publishing_slots_reads_due_publishing_rows(self):
+        # A publishing slot is resumed once its backoff or crash lease
+        # (publish_not_before) passes, or when it never parked one.
+        self.requests.request.return_value = _response(
+            json_data=[{"id": "slot-9", "status": "publishing"}, "junk"]
+        )
+        now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+        rows = self.store.resumable_publishing_slots(now)
+        self.assertEqual(rows, [{"id": "slot-9", "status": "publishing"}])
+        method, _, kwargs = self._last_call()
+        self.assertEqual(method, "GET")
         self.assertEqual(kwargs["params"]["status"], "eq.publishing")
-        self.assertIn("updated_at", kwargs["params"])
-        self.assertEqual(kwargs["json"]["status"], "ready")
+        self.assertEqual(
+            kwargs["params"]["or"],
+            f"(publish_not_before.is.null,publish_not_before.lte.{now.isoformat()})",
+        )
+        self.assertEqual(kwargs["params"]["order"], "slot_at.asc")
+
+    def test_claim_resumable_slot_moves_the_lease_only_while_due(self):
+        self.requests.request.return_value = _response(json_data=[{"id": "slot-9"}])
+        self.assertTrue(self.store.claim_resumable_slot("slot-9", "NOW", "LEASE"))
+        method, _, kwargs = self._last_call()
+        self.assertEqual(method, "PATCH")
+        self.assertEqual(kwargs["json"], {"publish_not_before": "LEASE"})
+        self.assertEqual(kwargs["params"]["id"], "eq.slot-9")
+        self.assertEqual(kwargs["params"]["status"], "eq.publishing")
+        self.assertEqual(
+            kwargs["params"]["or"],
+            "(publish_not_before.is.null,publish_not_before.lte.NOW)",
+        )
+        self.assertEqual(kwargs["headers"]["Prefer"], "return=representation")
+
+    def test_claim_resumable_slot_returns_false_when_another_worker_won(self):
+        self.requests.request.return_value = _response(json_data=[])
+        self.assertFalse(self.store.claim_resumable_slot("slot-9", "NOW", "LEASE"))
 
     def test_publishing_slots_lists_claimed(self):
         self.requests.request.return_value = _response(

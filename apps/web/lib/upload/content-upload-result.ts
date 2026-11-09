@@ -16,6 +16,11 @@ export interface ContentUploadAccountResult {
   mediaId?: string;
   permalink?: string;
   error?: string;
+  // Stable per-account failure code from classifyUploadAccountError
+  // (#504): 'transient' | 'token_expired' | 'disconnected' |
+  // 'publish_rejected' | 'email_not_verified'. The retry loop and the
+  // user notice read this, never the free-text error.
+  errorCode?: string;
 }
 
 export interface ContentUploadSuccess {

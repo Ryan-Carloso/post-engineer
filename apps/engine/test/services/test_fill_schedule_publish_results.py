@@ -114,10 +114,12 @@ class FillSchedulePublishResultsTests(TestCase):
         return store, state
 
     def _recorded_results(self, state):  # type: ignore[no-untyped-def]
+        # Each provider writes as it finishes. The last write is the task state.
+        recorded = None
         for call in state.update_task.call_args_list:
             if "publish_results" in call.kwargs:
-                return call.kwargs["publish_results"]
-        return None
+                recorded = call.kwargs["publish_results"]
+        return recorded
 
     def test_success_records_per_account_link_entries(self) -> None:
         publish_mock = MagicMock(
@@ -366,7 +368,8 @@ class FillSchedulePublishResultsTests(TestCase):
         self.assertIn("error", results[0])
         statuses = [kw.get("status") for _slot_id, kw in store.updates]
         self.assertNotIn("published", statuses)
-        self.assertIn("ready", statuses)
+        self.assertNotIn("ready", statuses)
+        self.assertIn("publishing", statuses)
 
     def test_empty_results_list_records_failed_entry_and_retries(self) -> None:
         # A 2xx body with an explicitly empty results list attempted no
@@ -384,8 +387,9 @@ class FillSchedulePublishResultsTests(TestCase):
         self.assertEqual(results[0]["status"], "failed")
         statuses = [kw.get("status") for _slot_id, kw in store.updates]
         self.assertNotIn("published", statuses)
-        # Every provider yielded nothing: the slot takes the retry path.
-        self.assertIn("ready", statuses)
+        # Every provider yielded nothing: the slot stays publishing to retry.
+        self.assertNotIn("ready", statuses)
+        self.assertIn("publishing", statuses)
 
     def test_linkless_body_without_results_records_failed_entry(self) -> None:
         # A 2xx body with no results list and no top-level link field
@@ -401,7 +405,8 @@ class FillSchedulePublishResultsTests(TestCase):
         self.assertEqual(results[0]["status"], "failed")
         statuses = [kw.get("status") for _slot_id, kw in store.updates]
         self.assertNotIn("published", statuses)
-        self.assertIn("ready", statuses)
+        self.assertNotIn("ready", statuses)
+        self.assertIn("publishing", statuses)
 
     def test_lost_state_write_fires_partial_failure_event(self) -> None:
         # persist_state_update reports a lost write by returning False;

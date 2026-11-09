@@ -45,6 +45,7 @@ from app.services.publish_threespeak import (  # noqa: F401 - re-exported for ca
     THREESPEAK_PROVIDER, ThreespeakMetadata,
     threespeak_fields, validate_threespeak_metadata,
 )
+from app.services.upload_publisher_failure import application_failure_reason
 
 VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
 
@@ -360,29 +361,6 @@ _PART_BUILDERS: _PartBuilders = {
 }
 
 
-def _application_failure_reason(result: dict[str, Any]) -> str | None:
-    """Discord-safe reason when a 2xx body did not publish anything.
-
-    Returns None when the body is a real success (including a provider
-    that posted to at least one account). The reason never includes
-    ``error``, ``errorType``, or per-account text: those fields are
-    remote-controlled and the reason reaches Discord via the task error.
-    """
-    if result.get("success") is False:
-        return "upload API reported failure"
-    accounts = result.get("results")
-    if (
-        isinstance(accounts, list)
-        and len(accounts) > 0
-        and all(
-            isinstance(account, dict) and account.get("success") is False
-            for account in accounts
-        )
-    ):
-        return "upload API reported failure for every account"
-    return None
-
-
 def publish_video(
     base_url: str,
     api_secret: str,
@@ -394,6 +372,7 @@ def publish_video(
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     sleep: Callable[[float], None] = time.sleep,
+    surface_application_failure: bool = False,
 ) -> dict[str, Any]:
     """Publish one finished video through the internal upload API.
 
@@ -458,8 +437,10 @@ def publish_video(
             # stays Discord-safe and the body is server logs only.
             # Not retried — the request completed; the post did not.
             if isinstance(result, dict):
-                failure = _application_failure_reason(result)
-                if failure is not None:
+                failure = application_failure_reason(result)
+                # Fill-schedule passes surface_application_failure so it can
+                # classify each account. Other callers still get the raise.
+                if failure is not None and not surface_application_failure:
                     raise PublishError(
                         failure,
                         status_code=response.status_code,

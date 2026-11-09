@@ -111,9 +111,9 @@ describe('metricsTargets', () => {
 });
 
 // Each migration that re-creates the check must list every provider the
-// app supported at that point; the latest one (051) lists them all.
+// app supported at that point; the latest one (052) lists them all.
 // A shipped migration is never edited, so 049 pins its historical list.
-describe('post_metrics provider check (migrations 034, 049, 050 and 051)', () => {
+describe('post_metrics provider check (migrations 034, 049, 050 and 052)', () => {
   function listedProviders(file: string): string[] {
     const sql = readFileSync(join(findRepoRoot(import.meta.url), 'supabase/migrations', file), 'utf8');
     const line = sql.split('\n').find((candidate) => candidate.includes('check (provider in'));
@@ -132,8 +132,8 @@ describe('post_metrics provider check (migrations 034, 049, 050 and 051)', () =>
     expect(listedProviders('050_pinterest-provider.sql').sort()).toEqual(['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'youtube']);
   });
 
-  it('051 allows exactly the providers in SOCIAL_PROVIDERS', () => {
-    expect(listedProviders('051_threespeak-provider.sql').sort()).toEqual([...SOCIAL_PROVIDERS].sort());
+  it('052 allows exactly the providers in SOCIAL_PROVIDERS', () => {
+    expect(listedProviders('052_threespeak-provider.sql').sort()).toEqual([...SOCIAL_PROVIDERS].sort());
   });
 });
 

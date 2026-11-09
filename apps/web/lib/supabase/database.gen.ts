@@ -515,6 +515,7 @@ export interface Database {
         batch_id: string | null;
         discount_tokens: number;
         music_mood: string | null;
+        publish_outcomes: Json;
         };
         Insert: {
         id?: string;
@@ -541,6 +542,7 @@ export interface Database {
         batch_id?: string | null;
         discount_tokens?: number;
         music_mood?: string | null;
+        publish_outcomes?: Json;
         };
         Update: {
         id?: string;
@@ -567,6 +569,7 @@ export interface Database {
         batch_id?: string | null;
         discount_tokens?: number;
         music_mood?: string | null;
+        publish_outcomes?: Json;
         };
         Relationships: [];
       };

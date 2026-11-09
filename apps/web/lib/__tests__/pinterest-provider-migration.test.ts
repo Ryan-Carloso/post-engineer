@@ -10,7 +10,7 @@ import { findRepoRoot } from '@/test/repo-root';
 // chain no longer defines can linger in production, so a plain add would
 // leave the old list in force). A shipped migration is never edited, so
 // this test pins the seven providers 050 shipped with; the live pin is
-// the 051 test. The schedule also carries one board id: a pin cannot
+// the 052 test. The schedule also carries one board id: a pin cannot
 // exist without a board.
 //---------------
 

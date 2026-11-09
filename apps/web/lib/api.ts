@@ -14,6 +14,7 @@ import { isVoiceOption } from './voice-catalog';
 import { HttpStatusError } from '@/lib/errors';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import type { PublishLink } from '@/lib/publish-links';
+import type { PublishProviderFailure, PublishUserNotice } from '@/lib/publish-user-notice';
 import { narrowGeneration, narrowProgressHistory, narrowPublishLinks, type GenerationFacts, type ProgressHistoryEntry } from './slot-detail';
 import { narrowScriptAngle } from './script-angle';
 import type { PersonaRecord } from './persona-record';
@@ -598,25 +599,18 @@ export interface ScheduledSlot {
   id: string;
   scheduleId: string;
   slotAt: string;
-  // The API presents the DB 'pending' state as 'awaiting'.
   status: 'awaiting' | 'generating' | 'ready' | 'publishing' | 'published' | 'failed';
   title: string | null;
   error?: string | null;
   publishedAt?: string | null;
-  // Engine task id, set when generation dispatches — poll progress with it.
   taskId?: string | null;
-  // Numeric 0–100 progress: 0 awaiting, 100 ready/publishing/published,
-  // live engine progress while generating (last known when failed).
   progress: number;
-  // Engine pipeline stage while generating (e.g. "lipsync"), "done" once
-  // complete, null otherwise.
   stage: string | null;
-  // 1-based position among the schedule's awaiting+generating slots
-  // (awaiting slots only, null otherwise) and the schedule total.
   queuePosition: number | null;
   queueTotal: number | null;
-  // Failed slots only: whether the failure looks transient/retryable.
   retryable: boolean | null;
+  userNotices?: PublishUserNotice[];
+  providerFailures?: PublishProviderFailure[];
 }
 
 export interface SlotRow {
@@ -633,6 +627,8 @@ export interface SlotRow {
   queuePosition?: number | null;
   queueTotal?: number | null;
   retryable?: boolean | null;
+  userNotices?: PublishUserNotice[];
+  providerFailures?: PublishProviderFailure[];
 }
 
 async function fetchSchedules(): Promise<ScheduleConfig[]> {
@@ -663,6 +659,8 @@ export function mapSlot(row: SlotRow): ScheduledSlot {
     queuePosition: typeof row.queuePosition === 'number' ? row.queuePosition : null,
     queueTotal: typeof row.queueTotal === 'number' ? row.queueTotal : null,
     retryable: typeof row.retryable === 'boolean' ? row.retryable : null,
+    userNotices: row.userNotices,
+    providerFailures: row.providerFailures,
   };
 }
 
@@ -840,6 +838,8 @@ export interface SlotDetailPayload {
     // Observed generation progress transitions, oldest first. Empty for
     // posts that never started generating (or predate the history table).
     progressHistory: ProgressHistoryEntry[];
+    userNotices?: PublishUserNotice[];
+    providerFailures?: PublishProviderFailure[];
   };
   schedule: {
     id: string;

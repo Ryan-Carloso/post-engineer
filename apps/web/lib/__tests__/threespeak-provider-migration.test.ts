@@ -5,7 +5,7 @@ import { findRepoRoot } from '@/test/repo-root';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 
 //---------------
-// supabase/migrations/051_threespeak-provider.sql — the schema the 3Speak
+// supabase/migrations/052_threespeak-provider.sql — the schema the 3Speak
 // (Hive) connect and publish paths depend on. Each provider check is
 // dropped and re-created with the full list (the lesson of 037: a live
 // constraint the chain no longer defines can linger in production, so a
@@ -14,7 +14,7 @@ import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 //---------------
 
 const sql = readFileSync(
-  join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '051_threespeak-provider.sql'),
+  join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '052_threespeak-provider.sql'),
   'utf8',
 );
 
@@ -26,7 +26,7 @@ function checkProviders(constraint: string): string[] {
   return match[1].split(',').map((entry) => entry.trim().replace(/^'|'$/g, ''));
 }
 
-describe('supabase/migrations/051_threespeak-provider.sql', () => {
+describe('supabase/migrations/052_threespeak-provider.sql', () => {
   it('adds the schedules threespeak account column with an empty default', () => {
     expect(sql).toContain("add column if not exists threespeak_account_ids text[] not null default '{}'");
   });

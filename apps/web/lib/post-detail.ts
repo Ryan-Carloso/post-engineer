@@ -4,12 +4,13 @@ import { enrichSlot } from './schedule-slot-presentation';
 import {
   fetchEnginePostMetricsSource,
   fetchEnginePublishResults,
-  fetchEngineScriptAngle,
   fetchEngineTaskProgress,
   type EngineTaskProgress,
 } from './engine-tasks';
 import { resolvePublishLinks, type PublishLink } from './publish-links';
 import { buildScheduleDetail, type ScheduleDetailRow } from './post-detail-schedule';
+import { resolveScriptAngle } from './post-detail-script-angle';
+import { noticesFromOutcomes, type PublishProviderFailure, type PublishUserNotice } from './publish-user-notice';
 import { buildGenerationFacts } from './generation-facts';
 import { isPersonaAllowed, isScopedApiKey, type PersonaScopeContext } from './api-keys';
 import { logger } from './logger';
@@ -58,6 +59,8 @@ export interface SlotPostDetail {
     scriptAngle: string | null;
     publishLinks: PublishLink[];
     progressHistory: Array<{ progress: number; stage: string | null; recordedAt: string }>;
+    userNotices: PublishUserNotice[];
+    providerFailures: PublishProviderFailure[];
     queuePosition: null;
     queueTotal: null;
   };
@@ -153,24 +156,6 @@ async function resolvePublishedSlotEngineData(
 }
 
 //---------------
-// resolveScriptAngle — the angle the engine built the script around, read
-// from the engine task record. Cosmetic on the detail page: no task yet or
-// a failed lookup degrades to null, but a failure is never silent.
-//---------------
-async function resolveScriptAngle(taskId: string | null, userId: string): Promise<string | null> {
-  if (taskId === null || taskId.length === 0) return null;
-  try {
-    return await fetchEngineScriptAngle(taskId, userId);
-  } catch (error) {
-    logger.warn('[post-detail] script angle unavailable', {
-      taskId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return null;
-  }
-}
-
-//---------------
 // getSlotPost — the full detail for a scheduled_posts id: slot row,
 // schedule, persona, live engine progress, publish links, progress
 // history. Null when the id is unknown, another user's, or the schedule
@@ -184,7 +169,7 @@ export async function getSlotPost(
 ): Promise<SlotPostDetail | null> {
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, faceless_material')
+    .select('id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, faceless_material, publish_outcomes')
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();
@@ -203,6 +188,7 @@ export async function getSlotPost(
     task_id: string | null;
     faceless: boolean | null;
     faceless_material: string | null;
+    publish_outcomes: unknown;
   };
 
   const { data: schedule, error: scheduleError } = await supabase
@@ -311,9 +297,7 @@ export async function getSlotPost(
     }),
   );
 
-  // One const per leaf (not an inline object literal): v8 coverage does not
-  // report object-literal property lines, so this keeps every leaf visible
-  // to the coverage gate.
+  // One const per leaf: v8 coverage skips object-literal property lines.
   const slotIdOut = row.id;
   const scheduleIdOut = row.schedule_id;
   const slotAtOut = row.slot_at;
@@ -325,6 +309,12 @@ export async function getSlotPost(
   const progressOut = enrichment.progress;
   const stageOut = enrichment.stage;
   const retryableOut = enrichment.retryable;
+  // The schedule's account lists live in buildScheduleDetail (extracted
+  // to post-detail-schedule.ts for the file-size ratchet); only the
+  // per-account publish notices stay inline here.
+  const publishNotices = noticesFromOutcomes(row.publish_outcomes);
+  const userNoticesOut = publishNotices.userNotices;
+  const providerFailuresOut = publishNotices.providerFailures;
 
   return {
     slot: {
@@ -346,6 +336,8 @@ export async function getSlotPost(
       // pending slots); the detail view doesn't render it.
       queuePosition: null,
       queueTotal: null,
+      userNotices: userNoticesOut,
+      providerFailures: providerFailuresOut,
     },
     schedule: buildScheduleDetail(scheduleRow),
     persona: personaRow,

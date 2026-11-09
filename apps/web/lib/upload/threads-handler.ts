@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { publishThreadsVideo, THREADS_TEXT_MAX_CHARS, THREADS_VIDEO_MAX_BYTES } from '@/lib/threads';
+import { accountFailure } from '@/lib/upload/account-error';
 import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import { cleanupOldUploads, uploadToStorage } from '@/lib/upload/handlers';
@@ -22,6 +23,7 @@ interface ThreadsAccountResult {
   postId?: string;
   permalink?: string;
   error?: string;
+  errorCode?: string;
 }
 
 export interface ThreadsUploadResponse {
@@ -30,7 +32,7 @@ export interface ThreadsUploadResponse {
 }
 
 function rejected(error: string): ThreadsUploadResponse {
-  return { success: false, results: [{ accountId: '', success: false, error }] };
+  return { success: false, results: [accountFailure('', error, 'publish_rejected')] };
 }
 
 export async function handleThreadsUpload(
@@ -70,11 +72,11 @@ export async function handleThreadsUpload(
       const accessToken = tokens.access_token;
 
       if (typeof accessToken !== 'string' || accessToken === '') {
-        results.push({ accountId, success: false, error: 'Threads token not found' });
+        results.push(accountFailure(accountId, 'Threads token not found', 'token_missing'));
         continue;
       }
       if (typeof tokens.expiry_date === 'number' && Date.now() >= tokens.expiry_date) {
-        results.push({ accountId, success: false, error: 'Threads token expired. Please reconnect the account.' });
+        results.push(accountFailure(accountId, 'Threads token expired. Please reconnect the account.', 'token_expired'));
         continue;
       }
 
@@ -94,9 +96,8 @@ export async function handleThreadsUpload(
         ...(published.permalink === null ? {} : { permalink: published.permalink }),
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
       reportAccountUnauthorized('threads', accountId, ownerUserId, error);
-      results.push({ accountId, success: false, error: message });
+      results.push(accountFailure(accountId, error));
     }
   }
 

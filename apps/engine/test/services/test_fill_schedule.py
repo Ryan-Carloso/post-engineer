@@ -81,9 +81,6 @@ class _FakeStore:
         # by default the claim always wins (single-worker behavior)
         return True
 
-    def recover_stale_publishing(self, older_than_minutes=30):
-        return 0
-
     def publishing_slots(self):
         return []
 
@@ -1249,7 +1246,7 @@ class PublishDueTests(unittest.TestCase):
         # video_path would break the provider upload.
         self.assertEqual(kwargs["video_path"], os.path.basename(self.video_path))
         self.assertEqual(kwargs["content_type"], "video/mp4")
-        self.assertEqual(store.updates[0][1]["status"], "published")
+        self.assertEqual(store.updates[-1][1]["status"], "published")
 
     def test_scheduled_publish_reads_from_the_verified_archive_path(self):
         # The R2 object path recorded at archive time is the only source:
@@ -1320,9 +1317,9 @@ class PublishDueTests(unittest.TestCase):
         self.assertEqual(metadata.caption, "Tokyo coffee")
         self.assertEqual(metadata.account_ids, ("urn:li:person:1", "urn:li:organization:2"))
 
-    def test_publish_error_returns_slot_to_ready(self):
-        # C2: publish failed -> slot goes back to 'ready' (retry with atomic
-        # claim on the next pass), never 'failed' directly nor 'ready' without claim.
+    def test_transient_publish_error_stays_publishing(self):
+        # A transient failure stays `publishing`. publish_not_before is the
+        # wait; the slot is not marked failed and is not returned to ready.
         from app.services.upload_publisher import PublishError
 
         store = _FakeStore()
@@ -1341,7 +1338,7 @@ class PublishDueTests(unittest.TestCase):
         scheduler.publisher.api_secret = "secret"
         published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         self.assertEqual(published, 0)
-        self.assertEqual(store.updates[0][1]["status"], "ready")
+        self.assertEqual(store.updates[-1][1]["status"], "publishing")
 
     def test_publish_failure_scrubs_full_message_before_truncation(self):
         # The video_publish_failed reason pins scrub-then-truncate like the
@@ -1461,11 +1458,11 @@ class PublishRetryLimitTests(unittest.TestCase):
 
         self.assertEqual(MAX_PUBLISH_ATTEMPTS, 3)
 
-    def test_failure_below_limit_returns_slot_to_ready_with_attempts_incremented(self):
+    def test_failure_below_limit_stays_publishing_with_attempts_incremented(self):
         store, published = self._run_publish(self._slot(publish_attempts=1))
         self.assertEqual(published, 0)
-        self.assertEqual(store.updates[0][1]["status"], "ready")
-        self.assertEqual(store.updates[0][1]["publish_attempts"], 2)
+        self.assertEqual(store.updates[-1][1]["status"], "publishing")
+        self.assertEqual(store.updates[-1][1]["publish_attempts"], 2)
         self.assertEqual(store.refund_batch_calls, [])
 
     def test_retry_backoff_schedules_the_next_attempt_by_the_failed_attempt_number(self):
@@ -1475,17 +1472,17 @@ class PublishRetryLimitTests(unittest.TestCase):
         # hammered every tick inside its recovery window.
         store, _ = self._run_publish(self._slot(publish_attempts=0))
         self.assertEqual(
-            store.updates[0][1]["publish_not_before"],
+            store.updates[-1][1]["publish_not_before"],
             "2026-09-07T12:00:30+00:00",
         )
         store, _ = self._run_publish(self._slot(publish_attempts=1))
         self.assertEqual(
-            store.updates[0][1]["publish_not_before"],
+            store.updates[-1][1]["publish_not_before"],
             "2026-09-07T12:02:00+00:00",
         )
         # The terminal (third) attempt keys no backoff: the slot is failed.
         store, _ = self._run_publish(self._slot(publish_attempts=2))
-        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertEqual(store.updates[-1][1]["status"], "failed")
 
     def test_retry_delays_match_the_documented_schedule(self):
         from app.services.fill_schedule.constants import PUBLISH_RETRY_DELAY_SECONDS
@@ -1498,15 +1495,15 @@ class PublishRetryLimitTests(unittest.TestCase):
         slot = self._slot()
         del slot["publish_attempts"]
         store, _ = self._run_publish(slot)
-        self.assertEqual(store.updates[0][1]["status"], "ready")
-        self.assertEqual(store.updates[0][1]["publish_attempts"], 1)
+        self.assertEqual(store.updates[-1][1]["status"], "publishing")
+        self.assertEqual(store.updates[-1][1]["publish_attempts"], 1)
         self.assertEqual(store.refund_batch_calls, [])
 
     def test_final_failure_marks_slot_failed_and_refunds_token(self):
         store, published = self._run_publish(self._slot(publish_attempts=2))
         self.assertEqual(published, 0)
-        self.assertEqual(store.updates[0][1]["status"], "failed")
-        self.assertEqual(store.updates[0][1]["publish_attempts"], 3)
+        self.assertEqual(store.updates[-1][1]["status"], "failed")
+        self.assertEqual(store.updates[-1][1]["publish_attempts"], 3)
         self.assertEqual(len(store.refund_batch_calls), 1)
         user_id, generation_id, refund_key, amount, reason, _task_id = store.refund_batch_calls[0]
         self.assertEqual(user_id, "user-1")
@@ -1521,7 +1518,7 @@ class PublishRetryLimitTests(unittest.TestCase):
         slot["charged_tokens"] = 0
         store, published = self._run_publish(slot)
         self.assertEqual(published, 0)
-        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertEqual(store.updates[-1][1]["status"], "failed")
         self.assertEqual(store.refund_batch_calls, [])
 
     def test_final_failure_refunds_the_stored_charge_without_an_identity(self):
@@ -1674,7 +1671,7 @@ class PublishRetryLimitTests(unittest.TestCase):
         scheduler.publisher.api_secret = "secret"
         # Must not raise: one slot's refund failure never kills the tick.
         scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
-        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertEqual(store.updates[-1][1]["status"], "failed")
 
     def test_refund_soft_failure_is_logged_loudly(self):
         # refund_batch_tokens returns a bool: False means the RPC answered
@@ -1709,7 +1706,7 @@ class PublishRetryLimitTests(unittest.TestCase):
                 datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
             )
         self.assertEqual(published, 0)
-        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertEqual(store.updates[-1][1]["status"], "failed")
         error_messages = [
             str(call.args[0]) for call in mock_logger.error.call_args_list
         ]
@@ -1882,6 +1879,8 @@ class NotifyIntegrationTests(unittest.TestCase):
             "id": "slot-1",
             "title": "Tokyo coffee",
             "task_id": "t-1",
+            "publish_attempts": 2,
+            "charged_tokens": 1,
             "schedules": {
                                 "user_id": "user-1",
                 "providers": ["youtube"],
@@ -2283,10 +2282,9 @@ class CoverageGapTests(unittest.TestCase):
         publish.assert_not_called()
         self.assertEqual(store.updates, [])
 
-    def test_publish_failure_after_claim_returns_slot_to_ready(self):
-        # Publish failed after the claim: slot goes back to 'ready' (not 'failed') -
-        # it may be a transient error; the claim on the next pass avoids
-        # duplication because publishing->ready is the only way back.
+    def test_transient_publish_failure_after_claim_stays_publishing(self):
+        # A transient failure after the claim stays publishing. Discord waits
+        # until the account has spent its three tries.
         from app.services.upload_publisher import PublishError
 
         store = _FakeStore()
@@ -2308,26 +2306,16 @@ class CoverageGapTests(unittest.TestCase):
         published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         self.assertEqual(published, 0)
         statuses = [fields.get("status") for _, fields in store.updates]
-        self.assertIn("ready", statuses)
-        notify.assert_called_once()  # failure notified
+        self.assertIn("publishing", statuses)
+        self.assertNotIn("ready", statuses)
+        notify.assert_not_called()
 
-    def test_publish_due_recovers_stale_publishing_first(self):
-        # Recovery of stuck 'publishing' slots runs at the start of the stage.
+    def test_resumable_lookup_log_names_the_root_cause(self):
+        # The resume lookup failure is a log-only line, so it uses
+        # safe_diagnostic and keeps the urllib3 cause that safe_reason's
+        # 200-char cut drops.
         store = _FakeStore()
-        store.recover_stale_publishing = MagicMock(return_value=0)
-        store.ready_due_slots = lambda now: []
-        scheduler = self._scheduler(store)
-        scheduler.publisher.base_url = "https://post-engineer.com"
-        scheduler.publisher.api_secret = "secret"
-
-        scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
-        store.recover_stale_publishing.assert_called_once()
-
-    def test_stale_recovery_log_names_the_root_cause(self):
-        # The recovery failure is a log-only line, so it uses safe_diagnostic
-        # and keeps the urllib3 cause that safe_reason's 200-char cut drops.
-        store = _FakeStore()
-        store.recover_stale_publishing = MagicMock(
+        store.resumable_publishing_slots = MagicMock(
             side_effect=ConnectionError(
                 "HTTPSConnectionPool(host='db.example', port=443): Max retries "
                 "exceeded with url: /rest/v1/scheduled_posts?select=" + "x" * 600
@@ -2348,7 +2336,7 @@ class CoverageGapTests(unittest.TestCase):
         messages = [r["message"] for r in records if r["level"].name == "WARNING"]
         self.assertTrue(
             any("NameResolutionError" in m for m in messages),
-            f"expected the recovery log to name the root cause, got: {messages}",
+            f"expected the resume lookup log to name the root cause, got: {messages}",
         )
 
     def test_safe_diagnostic_is_confined_to_log_only_sites(self):
@@ -2380,17 +2368,14 @@ class CoverageGapTests(unittest.TestCase):
         root = pathlib.Path(fs.__file__).parent
         by_file = {p.name: called_helpers(p) for p in root.glob("*.py")}
 
-        # publish.py: log-only recovery line uses safe_diagnostic; the
-        # user-facing notify calls keep safe_reason.
+        # publish.py: the log-only resume-lookup and video-read lines use
+        # safe_diagnostic. Its user-facing reasons go through
+        # scrub_error_text (pinned by
+        # test_publish_failure_scrubs_full_message_before_truncation).
         self.assertIn(
             "safe_diagnostic",
             by_file["publish.py"],
             "publish.py lost its safe_diagnostic call site",
-        )
-        self.assertIn(
-            "safe_reason",
-            by_file["publish.py"],
-            "publish.py lost its user-facing safe_reason call site",
         )
         # Log-only sites allowed to call safe_diagnostic. Every OTHER file
         # reaches Discord (generate.py's slot_failed_msg, publish.py's
