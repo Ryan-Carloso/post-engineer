@@ -39,6 +39,11 @@ export const PINTEREST_SCOPES = [
 const PINTEREST_API = 'https://api.pinterest.com/v5';
 const PINTEREST_OAUTH_URL = 'https://www.pinterest.com/oauth/';
 const REQUEST_TIMEOUT_MS = 15_000;
+// The S3 byte upload is not a JSON API call: a real video (tens to hundreds
+// of MB, up to the 2GB ceiling) cannot cross in 15s. Give the transfer its
+// own budget — the same 10 minutes the engine allows for uploads
+// (upload_publisher.DEFAULT_TIMEOUT_SECONDS).
+export const PINTEREST_UPLOAD_TIMEOUT_MS = 10 * 60_000;
 // Media processing is asynchronous: poll until the status settles, bounded
 // so a stuck video can never hang the publish forever.
 export const PINTEREST_MEDIA_MAX_POLLS = 24;
@@ -324,11 +329,21 @@ export async function publishPinterestVideo(
   const form = new FormData();
   for (const [key, value] of Object.entries(parameters)) form.append(key, value);
   form.append('file', new Blob([new Uint8Array(input.video)], { type: input.contentType }), input.filename);
-  const uploaded = await fetch(uploadUrl, {
-    method: 'POST',
-    body: form,
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
+  // A setTimeout-driven AbortController, not AbortSignal.timeout: the
+  // deadline must stay observable under vitest's fake timers, which do not
+  // fake AbortSignal.timeout.
+  const uploadController = new AbortController();
+  const uploadDeadline = setTimeout(() => uploadController.abort(), PINTEREST_UPLOAD_TIMEOUT_MS);
+  let uploaded: Response;
+  try {
+    uploaded = await fetch(uploadUrl, {
+      method: 'POST',
+      body: form,
+      signal: uploadController.signal,
+    });
+  } finally {
+    clearTimeout(uploadDeadline);
+  }
   if (!uploaded.ok) {
     throw new PinterestError(`PINTEREST_UPLOAD_FAILED: status ${uploaded.status}`, uploaded.status);
   }

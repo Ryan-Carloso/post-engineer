@@ -26,6 +26,7 @@ export const THUMBNAIL_HOST_ALLOWLIST = [
   'yt3.googleusercontent.com',
   'cdn.bsky.app',
   'media.licdn.com',
+  'i.pinimg.com',
 ] as const;
 
 // Wildcard hosts in next/image remotePatterns (next.config.ts): the

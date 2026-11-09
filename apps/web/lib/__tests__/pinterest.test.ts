@@ -4,6 +4,7 @@ import {
   PINTEREST_DESCRIPTION_MAX_CHARS,
   PINTEREST_SCOPES,
   PINTEREST_TITLE_MAX_CHARS,
+  PINTEREST_UPLOAD_TIMEOUT_MS,
   PINTEREST_VIDEO_MAX_BYTES,
   MAX_BOARD_LIST_PAGES,
   buildPinterestAuthorizationUrl,
@@ -268,6 +269,38 @@ describe('publishPinterestVideo', () => {
     ).rejects.toMatchObject({ statusCode: 403 });
   });
 
+  it('gives the S3 byte upload a 10-minute budget, not the 15s JSON timeout', async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse(registerResponse()))
+      .mockImplementationOnce((_url: unknown, init?: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError')),
+          );
+        }),
+      );
+    vi.useFakeTimers();
+    try {
+      const pending = publishPinterestVideo({
+        accessToken: 'at-1',
+        boardId: 'b1',
+        video,
+        filename: 'clip.mp4',
+        contentType: 'video/mp4',
+        sleep: async () => {},
+      });
+      const settled = vi.fn();
+      pending.then(settled, settled);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(settled).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(PINTEREST_UPLOAD_TIMEOUT_MS - 15_000);
+      await expect(pending).rejects.toThrow('aborted');
+      expect(settled).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('throws when the register step carries no media id', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({ upload_url: 'https://s3.example/upload', upload_parameters: {} }));
     await expect(
@@ -281,5 +314,6 @@ describe('Pinterest limits', () => {
     expect(PINTEREST_TITLE_MAX_CHARS).toBe(100);
     expect(PINTEREST_DESCRIPTION_MAX_CHARS).toBe(800);
     expect(PINTEREST_VIDEO_MAX_BYTES).toBe(2 * 1024 * 1024 * 1024);
+    expect(PINTEREST_UPLOAD_TIMEOUT_MS).toBe(10 * 60_000);
   });
 });
