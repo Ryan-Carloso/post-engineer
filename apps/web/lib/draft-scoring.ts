@@ -16,8 +16,9 @@
 
 import { BLUESKY_CAPTION_MAX_GRAPHEMES, countBlueskyGraphemes } from './bluesky';
 
-// The five networks Post Engineer publishes to (post_metrics.provider
-// check constraint, migration 034). The scorer buckets are universal;
+// The networks Post Engineer publishes to (post_metrics.provider
+// check constraint, re-created with the full list by the latest provider
+// migration, 049). The scorer buckets are universal;
 // only the publish check varies by network.
 export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky' | 'threads' | 'facebook';
 
@@ -54,7 +55,7 @@ export const LINKEDIN_SEE_MORE_FOLD_CHARS = 210;
 // code, so their ceilings below are the platforms' documented limits
 // (YouTube video descriptions, Instagram captions) and are warnings
 // only — never invented blocks. Only caps with in-repo evidence
-// (LinkedIn, Bluesky, Threads) fail the check.
+// (LinkedIn, Bluesky, Threads, Facebook) fail the check.
 export const YOUTUBE_DESCRIPTION_MAX_CHARS = 5000;
 export const INSTAGRAM_CAPTION_MAX_CHARS = 2200;
 // The route rejects drafts over this input cap with a 400 instead of
