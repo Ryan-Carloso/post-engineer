@@ -21,7 +21,8 @@ export interface CalendarDay {
 }
 
 // First weekday of the month grid per locale (0 = Sunday, 1 = Monday).
-// pt follows the Brazilian wall-calendar convention, en follows en-US.
+// pt is pt-BR (INTL_TAG): Brazilian wall calendars start on Sunday, as
+// en-US ones do — Monday would be the pt-PT convention, not this app's.
 export const FIRST_WEEKDAY: Record<Locale, 0 | 1> = { pt: 0, en: 0 };
 
 export const INTL_TAG: Record<Locale, string> = { pt: 'pt-BR', en: 'en-US' };
@@ -43,16 +44,6 @@ export function dayKey(date: Date, timeZone?: string): string {
 export function dateFromKey(key: string): Date {
   const [year, month, day] = key.split('-').map(Number);
   return new Date(year, month - 1, day);
-}
-
-// The same day-of-month in another month, clamped to that month's last
-// day (Jan 31 -> Feb 28). Month navigation keeps the selected day in the
-// month being shown instead of leaving the detail below on a day from the
-// month just left.
-export function sameDayInMonth(selectedKey: string, year: number, month: number): string {
-  const day = dateFromKey(selectedKey).getDate();
-  const lastDay = new Date(year, month + 1, 0).getDate();
-  return `${year}-${pad(month + 1)}-${pad(Math.min(day, lastDay))}`;
 }
 
 export function addDays(date: Date, days: number): Date {
@@ -103,10 +94,34 @@ export function calendarCounts(slots: Pick<ScheduledSlot, 'status'>[]): Record<C
 }
 
 //---------------
-// The persona photo a day cell shows, resolved from the joins the page
-// already loads (schedule -> persona -> photo URLs). The avatar renders the
-// photo when it has one and the persona initials otherwise, so a persona
-// without a photo URL still resolves.
+// Month navigation picks one predictable day: today when the month holds
+// today, otherwise the month's first day with posts (so the list below is
+// never empty when the month has posts), otherwise the 1st. Keys are
+// zero-padded YYYY-MM-DD, so string order is date order.
+//---------------
+export function defaultDayForMonth(year: number, month: number, todayKey: string, dayKeysWithPosts: Iterable<string>): string {
+  const prefix = `${monthKey(year, month)}-`;
+  if (todayKey.startsWith(prefix)) return todayKey;
+  let first: string | null = null;
+  for (const key of dayKeysWithPosts) {
+    if (key.startsWith(prefix) && (first === null || key < first)) first = key;
+  }
+  return first ?? `${prefix}01`;
+}
+
+// Posts on the days of one month (outside days of the grid excluded).
+export function countMonthPosts(slotsByDay: Map<string, unknown[]>, year: number, month: number): number {
+  const prefix = `${monthKey(year, month)}-`;
+  let count = 0;
+  for (const [key, slots] of slotsByDay) if (key.startsWith(prefix)) count += slots.length;
+  return count;
+}
+
+//---------------
+// The personas a day cell shows, resolved from the joins the page already
+// loads (schedule -> persona -> photo URLs). The avatar renders the photo
+// when it has one and the persona initials otherwise, so a persona without
+// a photo URL still resolves.
 //---------------
 
 export interface PersonaPhoto {
@@ -116,41 +131,30 @@ export interface PersonaPhoto {
   name: string;
 }
 
-export type DayRing = 'published' | 'failed' | 'scheduled';
-
-export interface DayPhoto {
-  persona: PersonaPhoto;
-  ring: DayRing;
-  mixed: boolean;
-}
-
-// The photo is the most relevant post's persona — a failed post first (it
-// needs attention), then a published one, then the earliest scheduled post —
-// while the ring reports the whole day: failed wins over published, and a
-// day holding both is mixed (split ring). The photo falls through to the
-// next post when a slot's schedule or persona is gone, but the ring still
-// counts that post: a failed post with no persona behind it is still a
-// failure.
-export function dayPhoto(
+// The distinct personas of a day, most relevant first — the persona of a
+// failed post (it needs attention), then of a published one, then of the
+// scheduled ones, each tier by time — capped at `max`. Slots whose schedule
+// or persona is gone are skipped: the status markers still count them.
+export function dayPersonas(
   slots: Pick<ScheduledSlot, 'status' | 'scheduleId' | 'slotAt'>[],
   scheduleById: Map<string, Pick<ScheduleConfig, 'personaId'>>,
   personaPhotoById: Map<string, PersonaPhoto>,
-): DayPhoto | null {
-  if (slots.length === 0) return null;
-  const counts = calendarCounts(slots);
-  const ring: DayRing = counts.failed > 0 ? 'failed' : counts.published > 0 ? 'published' : 'scheduled';
-  const mixed = counts.published > 0 && counts.failed > 0;
-  const byTime = [...slots].sort((a, b) => a.slotAt.localeCompare(b.slotAt));
-  const resolve = (slot: Pick<ScheduledSlot, 'scheduleId'>): PersonaPhoto | undefined => {
+  max: number,
+): PersonaPhoto[] {
+  const tier: Record<CalendarGroup, number> = { failed: 0, published: 1, scheduled: 2 };
+  const ordered = [...slots].sort(
+    (a, b) => tier[calendarGroupOf(a.status)] - tier[calendarGroupOf(b.status)] || a.slotAt.localeCompare(b.slotAt),
+  );
+  const seen = new Set<string>();
+  const personas: PersonaPhoto[] = [];
+  for (const slot of ordered) {
     const personaId = scheduleById.get(slot.scheduleId)?.personaId ?? null;
-    return personaId === null ? undefined : personaPhotoById.get(personaId);
-  };
-  for (const group of ['failed', 'published', 'scheduled'] as const) {
-    const slot = byTime.find((candidate) => calendarGroupOf(candidate.status) === group && resolve(candidate) !== undefined);
-    if (slot !== undefined) {
-      const persona = resolve(slot);
-      if (persona !== undefined) return { persona, ring, mixed };
-    }
+    if (personaId === null || seen.has(personaId)) continue;
+    const persona = personaPhotoById.get(personaId);
+    if (persona === undefined) continue;
+    seen.add(personaId);
+    personas.push(persona);
+    if (personas.length === max) break;
   }
-  return null;
+  return personas;
 }

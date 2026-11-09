@@ -11,7 +11,7 @@ export const ptDictionary = {
   // Sidebar / navigation
   nav: {
     brand: 'Post Engineer',
-    brandSubtitle: 'YouTube · Instagram',
+    brandSubtitle: 'Vídeos com IA para redes',
     accounts: 'Contas',
     accountsHint: 'Conectar e gerenciar',
     create: 'Criar post',
@@ -35,7 +35,7 @@ export const ptDictionary = {
   // Posts page — history + upcoming posts from all accounts
   posts: {
     title: 'Posts',
-    subtitle: 'Calendário com os posts de todas as contas. Clique num dia para ver os posts.',
+    subtitle: 'Calendário com os posts de todas as contas. Selecione um dia para ver os posts.',
     filterProvider: 'Rede',
     allProviders: 'Todas as redes',
     filterAccount: 'Conta',

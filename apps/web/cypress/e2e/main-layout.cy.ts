@@ -102,7 +102,7 @@ describe('Main Layout — Sidebar', () => {
 
     cy.get('[data-testid=nav-brand]').should('be.visible');
     cy.contains('Post Engineer').should('be.visible');
-    cy.contains('YouTube · Instagram').should('be.visible');
+    cy.contains('Vídeos com IA para redes').should('be.visible');
 
     cy.contains('a', 'Início').should('not.exist');
     cy.contains('a', 'Posts').should('be.visible');

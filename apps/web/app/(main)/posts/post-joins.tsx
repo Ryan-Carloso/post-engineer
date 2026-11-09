@@ -192,13 +192,15 @@ export function usePostFilters(joins: PostJoins): PostFilters {
   return { provider, account, visibleAccounts, hasActiveFilter: provider !== 'all' || account !== 'all', setProvider, setAccount, passes };
 }
 
-const SELECT_CLASS = 'rounded-xl border border-input bg-card px-3 py-2 text-sm font-medium text-primary';
-const LABEL_CLASS = 'flex flex-col gap-1 text-xs font-semibold text-muted-foreground';
+const SELECT_CLASS = 'h-10 w-full rounded-xl border border-input bg-card px-3 text-sm font-medium text-primary sm:w-auto';
+const LABEL_CLASS = 'flex min-w-0 flex-col gap-1 text-xs font-semibold text-muted-foreground';
 
 export function PostFiltersBar({ filters }: { filters: PostFilters }) {
   const { t } = useI18n();
   return (
-    <div className="mt-4 flex flex-wrap gap-3">
+    // Side by side on a phone too (two columns), so the filters take one
+    // row above the calendar instead of two.
+    <div className="mt-3 grid grid-cols-2 gap-3 sm:mt-4 sm:flex sm:flex-wrap">
       <label className={LABEL_CLASS}>
         {t('posts.filterProvider')}
         <select
@@ -232,7 +234,9 @@ export function PostFiltersBar({ filters }: { filters: PostFilters }) {
   );
 }
 
-export function SlotCard({ slot, joins }: { slot: ScheduledSlot; joins: PostJoins }) {
+// timeOnly: the calendar's day list already names the day in its heading,
+// so its cards show only the time; the history list keeps the full date.
+export function SlotCard({ slot, joins, timeOnly = false }: { slot: ScheduledSlot; joins: PostJoins; timeOnly?: boolean }) {
   const { t, locale } = useI18n();
   const schedule = joins.scheduleById.get(slot.scheduleId);
   // A post created without a persona (migration 012) has none to look up —
@@ -246,6 +250,7 @@ export function SlotCard({ slot, joins }: { slot: ScheduledSlot; joins: PostJoin
       personaName={personaName}
       accounts={resolveSlotAccounts(schedule, joins.accountOptions)}
       locale={locale}
+      timeOnly={timeOnly}
     />
   );
 }

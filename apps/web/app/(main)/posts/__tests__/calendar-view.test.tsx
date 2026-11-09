@@ -78,7 +78,7 @@ describe('CalendarView', () => {
     expect(screen.getAllByRole('columnheader', { hidden: true })).toHaveLength(7);
     expect(screen.getAllByRole('columnheader', { hidden: true })[0]).toHaveAccessibleName(/Sunday/);
     expect(screen.getByText(/June 2030/)).toBeInTheDocument();
-    // Fixed 6-week grid, so the range read always covers what is shown.
+    // June 2030 starts on a Saturday: its days span 6 weeks.
     expect(within(screen.getByRole('grid')).getAllByRole('row')).toHaveLength(6);
   });
 
@@ -94,36 +94,40 @@ describe('CalendarView', () => {
     expect(dayButton(/June 21, 2030/).closest('[data-selected="true"]')).toBeNull();
   });
 
-  it('draws today as a thick border, not a filled background, and keeps it readable when another day is selected', () => {
+  it('draws today as a filled blue disc behind the day number, never as a cell border that reads like focus', () => {
     setup({ selectedKey: '2030-06-20' });
     const today = dayButton(/June 15, 2030/);
-    // Thick primary border on the day button; no accent fill that could read
-    // as "selected" (a bare bg-accent token — hover: and data- variants in
-    // the shared button styles do not fill the cell).
-    expect(today.className).toContain('border-2');
-    expect(today.className).toContain('border-primary');
+    const mark = today.querySelector('[data-today-mark="true"]');
+    expect(mark).toHaveTextContent('15');
+    expect(mark?.className.split(/\s+/)).toContain('bg-info');
+    // No border frame on the cell and no accent fill that could read as selected.
+    expect(today.className.split(/\s+/)).not.toContain('border-2');
     expect(today.className.split(/\s+/)).not.toContain('bg-accent');
     expect(today.closest('[data-today]')?.className.split(/\s+/)).not.toContain('bg-accent');
-    // The selected day (not today) carries no today border.
-    expect(dayButton(/June 20, 2030/).className).not.toContain('border-primary');
-    expect(dayButton(/June 20, 2030/).className).not.toContain('border-card');
-    expect(dayButton(/June 20, 2030/).className.split(/\s+/)).not.toContain('border-ring');
+    // Only today carries the disc.
+    expect(dayButton(/June 20, 2030/).querySelector('[data-today-mark]')).toBeNull();
   });
 
-  it('keeps today readable when today itself is selected: the border switches to the ring color against the selected fill', () => {
+  it('keeps the today disc when today itself is selected, outlined in the card color against the selected fill', () => {
     setup({ selectedKey: '2030-06-15' });
-    const today = dayButton(/June 15, 2030/);
-    expect(today.className).toContain('border-2');
-    // A card-colored border sits on the card behind the button, so the
-    // frame vanishes against it; a primary border would vanish against
-    // the selected fill. The ring token contrasts with both the selected
-    // fill and the card, in both themes.
-    expect(today.className.split(/\s+/)).toContain('border-ring');
-    expect(today.className.split(/\s+/)).not.toContain('border-primary');
-    expect(today.className.split(/\s+/)).not.toContain('border-card');
+    const mark = dayButton(/June 15, 2030/).querySelector('[data-today-mark="true"]');
+    expect(mark?.className.split(/\s+/)).toEqual(expect.arrayContaining(['bg-info', 'border-2', 'border-card']));
   });
 
-  it('describes per-group counts in the accessible name: published, failed, scheduled — never in progress', () => {
+  it('dims the days outside the shown month', () => {
+    setup();
+    const grid = screen.getByRole('grid');
+    const outside = within(grid)
+      .getAllByRole('button')
+      .find((button) => button.textContent === '1' && button.closest('[data-outside]') !== null);
+    expect(outside?.className.split(/\s+/)).toContain('[&>span]:opacity-45');
+    expect(outside?.querySelector('span')?.className.split(/\s+/)).toContain('font-normal');
+    const inside = dayButton(/June 20, 2030/);
+    expect(inside.className.split(/\s+/)).toContain('[&>span]:opacity-100');
+    expect(inside.querySelector('span')?.className.split(/\s+/)).toContain('font-semibold');
+  });
+
+  it('describes per-group counts in the accessible name, failure first — never in progress', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
@@ -138,56 +142,47 @@ describe('CalendarView', () => {
     ]);
     setup({ slotsByDay });
     const cell = dayButton(/June 5, 2030/);
-    expect(cell).toHaveAccessibleName('Wednesday, June 5, 2030: Published: 2, Failed: 2, Scheduled: 1');
+    expect(cell).toHaveAccessibleName('Wednesday, June 5, 2030: Failed: 2, Published: 2, Scheduled: 1');
   });
 
-  it('shows the failed post persona photo with a failed ring on a mixed day', () => {
+  it('draws one status marker per group with its count, failure first, and tints a day with a failure', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
         [
+          { status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T08:00:00.000Z' },
           { status: 'published', scheduleId: 's2', slotAt: '2030-06-05T10:00:00.000Z' },
+          { status: 'awaiting', scheduleId: 's2', slotAt: '2030-06-05T11:00:00.000Z' },
           { status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' },
         ],
       ],
-    ]);
-    setup({ slotsByDay });
-    const cell = dayButton(/June 5, 2030/);
-    // The photo is aria-hidden (the day label carries the counts), so the
-    // image is asserted by DOM, not by role.
-    expect(cell.querySelector('img[alt="Viva Leve"]')).not.toBeNull();
-    const ring = cell.querySelector('[data-ring]');
-    expect(ring).not.toBeNull();
-    expect(ring).toHaveAttribute('data-ring', 'failed');
-    expect(ring).toHaveAttribute('data-mixed', 'true');
-  });
-
-  it('shows the published ring on a published-only day and no ring on a scheduled-only day', () => {
-    const slotsByDay = new Map<string, DaySlot[]>([
       ['2030-06-06', [{ status: 'published', scheduleId: 's2', slotAt: '2030-06-06T10:00:00.000Z' }]],
-      ['2030-06-07', [{ status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-07T10:00:00.000Z' }]],
     ]);
     setup({ slotsByDay });
+    const busy = dayButton(/June 5, 2030/);
+    const markers = [...busy.querySelectorAll('[data-marker]')];
+    expect(markers.map((marker) => marker.getAttribute('data-marker'))).toEqual(['failed', 'published', 'scheduled']);
+    expect(markers.map((marker) => marker.textContent)).toEqual(['1', '1', '2']);
+    expect(busy.className.split(/\s+/)).toContain('bg-destructive-soft');
+    // A published-only day: one marker, no failure tint.
     const published = dayButton(/June 6, 2030/);
-    expect(published.querySelector('img[alt="Bicuda"]')).not.toBeNull();
-    expect(published.querySelector('[data-ring]')).toHaveAttribute('data-ring', 'published');
-    expect(published.querySelector('[data-ring]')).toHaveAttribute('data-mixed', 'false');
-    const scheduled = dayButton(/June 7, 2030/);
-    expect(scheduled.querySelector('img[alt="Viva Leve"]')).not.toBeNull();
-    expect(scheduled.querySelector('[data-ring]')).toHaveAttribute('data-ring', 'scheduled');
-  });
-
-  it('shows a neutral count placeholder when no post on the day resolves to a persona', () => {
-    const slotsByDay = new Map<string, DaySlot[]>([
-      ['2030-06-09', [{ status: 'awaiting', scheduleId: 's-gone', slotAt: '2030-06-09T10:00:00.000Z' }]],
+    expect([...published.querySelectorAll('[data-marker]')].map((marker) => marker.getAttribute('data-marker'))).toEqual([
+      'published',
     ]);
-    setup({ slotsByDay });
-    const cell = dayButton(/June 9, 2030/);
-    expect(cell.querySelector('[data-photo="none"]')).toHaveTextContent('1');
-    expect(cell.querySelector('[data-ring]')).toBeNull();
+    expect(published.className.split(/\s+/)).not.toContain('bg-destructive-soft');
   });
 
-  it('shows how many posts a day holds on the photo: a multi-post day never looks like a single post', () => {
+  it('keeps the selected fill on a selected day with a failure instead of the failure tint', () => {
+    const slotsByDay = new Map<string, DaySlot[]>([
+      ['2030-06-05', [{ status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' }]],
+    ]);
+    setup({ slotsByDay, selectedKey: '2030-06-05' });
+    const cell = dayButton(/June 5, 2030/);
+    expect(cell.className.split(/\s+/)).not.toContain('bg-destructive-soft');
+    expect(cell.querySelector('[data-marker="failed"]')).not.toBeNull();
+  });
+
+  it("shows the day's distinct personas, the failed post's first", () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
@@ -197,16 +192,16 @@ describe('CalendarView', () => {
           { status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T14:00:00.000Z' },
         ],
       ],
-      ['2030-06-06', [{ status: 'published', scheduleId: 's2', slotAt: '2030-06-06T10:00:00.000Z' }]],
     ]);
     setup({ slotsByDay });
-    const busy = dayButton(/June 5, 2030/);
-    expect(busy.querySelector('[data-count="3"]')).toHaveTextContent('3');
-    // One post, one photo, no badge.
-    expect(dayButton(/June 6, 2030/).querySelector('[data-count]')).toBeNull();
+    const cell = dayButton(/June 5, 2030/);
+    // The photos are aria-hidden (the day label carries the counts), so the
+    // images are asserted by DOM, not by role.
+    expect(cell.querySelector('[data-personas]')).toHaveAttribute('data-personas', '2');
+    expect([...cell.querySelectorAll('[data-personas] img')].map((img) => img.getAttribute('alt'))).toEqual(['Viva Leve', 'Bicuda']);
   });
 
-  it('counts a multi-post day with no resolvable persona on the neutral placeholder', () => {
+  it('still marks the status of a day whose posts resolve to no persona', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-09',
@@ -218,23 +213,28 @@ describe('CalendarView', () => {
     ]);
     setup({ slotsByDay });
     const cell = dayButton(/June 9, 2030/);
-    expect(cell.querySelector('[data-photo="none"]')).toHaveAttribute('data-count', '2');
-    expect(cell.querySelector('[data-photo="none"]')).toHaveTextContent('2');
+    expect(cell.querySelector('[data-personas]')).toBeNull();
+    expect(cell.querySelector('[data-marker="scheduled"]')).toHaveTextContent('2');
   });
 
-  it('names empty days explicitly and draws no photo or placeholder', () => {
+  it('names empty days explicitly and draws no marker or persona', () => {
     setup();
     const cell = dayButton(/June 9, 2030/);
     expect(cell).toHaveAccessibleName('Sunday, June 9, 2030: no posts');
-    expect(cell.querySelector('[data-ring]')).toBeNull();
-    expect(cell.querySelector('[data-photo]')).toBeNull();
+    expect(cell.querySelector('[data-marker]')).toBeNull();
+    expect(cell.querySelector('[data-personas]')).toBeNull();
   });
 
-  it('legends only published, failed and scheduled — no in-progress blue', () => {
+  it('legends the same markers the cells draw — failed, published, scheduled — plus today', () => {
     setup();
-    expect(screen.getByText('Published')).toBeInTheDocument();
-    expect(screen.getByText('Failed')).toBeInTheDocument();
-    expect(screen.getByText('Scheduled')).toBeInTheDocument();
+    const legend = screen.getByText('Scheduled').closest('ul');
+    if (legend === null) throw new Error('legend not rendered');
+    expect([...legend.querySelectorAll('[data-marker]')].map((marker) => marker.getAttribute('data-marker'))).toEqual([
+      'failed',
+      'published',
+      'scheduled',
+    ]);
+    expect(within(legend).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Failed', 'Published', 'Scheduled', 'Today']);
     expect(screen.queryByText('In progress')).not.toBeInTheDocument();
   });
 
@@ -271,13 +271,47 @@ describe('CalendarView', () => {
     expect(buttons[2]).toHaveAccessibleName('Next month');
   });
 
-  it('keeps day cells compact so markers do not sit lost in tall empty cells', () => {
+  it('gives every day cell the same fixed height, so rows with markers do not grow', () => {
+    const slotsByDay = new Map<string, DaySlot[]>([
+      ['2030-06-05', [{ status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' }]],
+    ]);
+    setup({ slotsByDay });
+    for (const day of [dayButton(/June 5, 2030/), dayButton(/June 15, 2030/)]) {
+      expect(day.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-14', 'sm:h-20']));
+      expect(day.className.split(/\s+/)).not.toContain('h-auto');
+    }
+  });
+
+  it('shows only the weeks the month spans — no all-next-month row', () => {
+    // February 2026 starts on a Sunday and has 28 days: exactly 4 weeks.
+    setup({ year: 2026, month: 1, todayKey: '2026-02-10' });
+    expect(within(screen.getByRole('grid')).getAllByRole('row')).toHaveLength(4);
+  });
+
+  it('gives the month arrows a 40px target and no navy hover fill', () => {
     setup();
-    const day = dayButton(/June 15, 2030/);
-    expect(day.className).toContain('min-h-11');
-    expect(day.className).toContain('sm:min-h-14');
-    expect(day.className).not.toContain('min-h-12');
-    expect(day.className).not.toContain('sm:min-h-16');
+    for (const name of ['Previous month', 'Next month']) {
+      const classes = screen.getByRole('button', { name }).className.split(/\s+/);
+      expect(classes).toContain('size-10');
+      expect(classes).toContain('hover:bg-sunken');
+      expect(classes).not.toContain('hover:bg-accent');
+    }
+  });
+
+  it('disables Today while today is shown and selected, and enables it otherwise', () => {
+    setup({ selectedKey: '2030-06-15' });
+    expect(screen.getByRole('button', { name: 'Today' })).toBeDisabled();
+  });
+
+  it('keeps Today enabled when another day of the current month is selected', () => {
+    setup({ selectedKey: '2030-06-20' });
+    expect(screen.getByRole('button', { name: 'Today' })).toBeEnabled();
+  });
+
+  it('formats the weekday headers with Intl short names', () => {
+    setup();
+    const headers = screen.getAllByRole('columnheader', { hidden: true }).map((header) => header.textContent);
+    expect(headers).toEqual(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']);
   });
 
   it('moves keyboard focus with the arrow keys and selects with Enter', async () => {

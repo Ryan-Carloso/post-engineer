@@ -222,12 +222,15 @@ describe('PostHistoryPage', () => {
     expect(slotMessage.className.split(/\s+/)).not.toContain('line-clamp-2');
   });
 
-  it('marks a card without video with the no-video placeholder', () => {
+  it('draws no thumbnail tile on a card without video, and keeps the full date on history cards', () => {
     render(<PostHistoryPage />);
 
-    // The failed slot has no video: its thumbnail is the placeholder.
+    // The failed slot has no video: no tile at all, no placeholder.
     const card = screen.getByText('Failed topic').closest('a');
-    expect(card?.querySelector('[data-thumb="empty"]')).not.toBeNull();
+    expect(card).not.toBeNull();
+    expect(card?.querySelector('video')).toBeNull();
+    // History is not grouped by day: its cards keep the date with the time.
+    expect(card?.textContent).toContain('·');
   });
 
   it('shows the error state with a retry button', () => {

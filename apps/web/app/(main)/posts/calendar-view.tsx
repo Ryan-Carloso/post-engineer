@@ -1,29 +1,26 @@
 'use client';
 
-import { createContext, useCallback, useContext, useMemo, type ComponentProps, type MouseEventHandler } from 'react';
-import { UI, useDayPicker, type DayButton, type NavProps } from 'react-day-picker';
+import { createContext, useCallback, useContext, useMemo, type MouseEventHandler } from 'react';
+import { UI, useDayPicker, type NavProps } from 'react-day-picker';
 import { enUS, ptBR } from 'react-day-picker/locale';
 import type { ScheduleConfig, ScheduledSlot } from '@/lib/api';
 import type { Locale } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/provider';
-import { Button } from '@/components/ui/button';
-import { Calendar, CalendarDayButton } from '@/components/ui/calendar';
-import PersonaAvatar from '@/components/persona-avatar';
+import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { INTL_TAG, calendarCounts, dateFromKey, dayKey, dayPhoto, type DayPhoto, type PersonaPhoto } from './calendar-days';
-import { CALENDAR_GROUP_ICON, CALENDAR_GROUP_KEY, CALENDAR_GROUP_ORDER, CALENDAR_GROUP_STYLE } from './status';
+import { INTL_TAG, calendarCounts, dateFromKey, dayKey, dayPersonas, monthKey, type PersonaPhoto } from './calendar-days';
+import { CALENDAR_GROUP_KEY, CALENDAR_GROUP_ORDER } from './status';
+import { DayCellContext, PostsDayButton, StatusMarker, TODAY_MARK_CLASS } from './calendar-markers';
 
 // CalendarView — month calendar on the shadcn Calendar (react-day-picker:
-// grid semantics, keyboard navigation, focus). Each day shows the most
-// relevant post's persona photo (dayPhoto in calendar-days.ts): a green
-// ring means published, a red ring failed, a split ring a mixed day
-// (published + failed), no ring a day still to publish. A day with more
-// than one post carries a count badge on the photo, so it never looks like
-// a single-post day. Days with posts but no resolvable persona show a
-// neutral count instead of a photo. Today is a thick border, never a fill,
-// so it still reads as today when another day is selected. Day buckets use
-// the viewer's browser timezone (calendar-days.ts). Data and the selected
-// day's posts live in the page.
+// grid semantics, keyboard navigation, focus). Each day cell shows up to
+// three of the day's personas and one status marker per group, failure
+// first (calendar-markers.tsx); the legend below the grid draws the very
+// same markers. Today is a filled blue disc behind the day number, the
+// selected day fills the whole cell, so the two never look alike. The grid
+// shows only the weeks the month spans (no all-next-month sixth row). Day
+// buckets use the viewer's browser timezone (calendar-days.ts). Data and
+// the selected day's posts live in the page.
 
 interface CalendarViewProps {
   year: number;
@@ -45,31 +42,29 @@ interface CalendarViewProps {
 }
 
 const DAY_PICKER_LOCALE: Record<Locale, typeof enUS> = { pt: ptBR, en: enUS };
+const MAX_CELL_PERSONAS = 3;
 
-// The DayButton component is passed to react-day-picker once; the per-day
-// slots and photos reach it through context so a data refresh never remounts
-// the grid (which would drop keyboard focus).
-interface DayContextValue {
-  slotsByDay: Map<string, Pick<ScheduledSlot, 'status' | 'scheduleId' | 'slotAt'>[]>;
-  photoByDay: Map<string, DayPhoto>;
-}
-
-const SlotsContext = createContext<DayContextValue>({ slotsByDay: new Map(), photoByDay: new Map() });
+// The month arrows. shadcn's ghost button hovers to the navy accent fill
+// with no matching foreground token, so a hovered (or just-clicked) arrow
+// became a solid navy square hiding its navy chevron. These states only
+// tint, and the target is 40px for touch.
+const NAV_ARROW_CLASS =
+  'inline-flex size-10 items-center justify-center rounded-md p-0 text-primary transition-colors select-none hover:bg-sunken active:bg-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-disabled:opacity-50 [&_svg]:size-5';
 
 // The Today action lives inside the month navigation (prev / Today / next),
 // so the nav component needs it from context: passing a closure component
 // to react-day-picker would remount the nav on every render and drop
-// keyboard focus.
-const NavTodayContext = createContext<() => void>(() => {});
+// keyboard focus. `onToday` disables it when today is already shown and
+// selected.
+const NavTodayContext = createContext<{ goToday: () => void; onToday: boolean }>({ goToday: () => {}, onToday: false });
 
 // The month navigation: previous month, Today, next month. Mirrors
 // react-day-picker's default Nav (same buttons, labels and disabled
-// behaviour) with the Today action between the arrows, so Today sits next
-// to the month navigation instead of in the legend row below the calendar.
+// behaviour) with the Today action between the arrows.
 function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, ...navProps }: NavProps) {
   const { components, classNames, styles, labels } = useDayPicker();
   const { t } = useI18n();
-  const goToday = useContext(NavTodayContext);
+  const { goToday, onToday } = useContext(NavTodayContext);
   const handlePreviousClick: MouseEventHandler<HTMLButtonElement> = useCallback(
     (event) => {
       if (previousMonth) onPreviousClick?.(event);
@@ -100,9 +95,14 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
           orientation="left"
         />
       </components.PreviousMonthButton>
-      <Button type="button" variant="outline" size="sm" onClick={goToday}>
+      <button
+        type="button"
+        onClick={goToday}
+        disabled={onToday}
+        className="h-10 rounded-md border border-input bg-card px-3 text-sm font-semibold text-primary transition-colors hover:bg-sunken focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:bg-line disabled:cursor-default disabled:border-transparent disabled:bg-transparent disabled:font-medium disabled:text-muted-text"
+      >
         {t('posts.calendarToday')}
-      </Button>
+      </button>
       <components.NextMonthButton
         type="button"
         className={classNames[UI.NextMonthButton]}
@@ -123,90 +123,6 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
   );
 }
 
-// The day's persona photo. The status ring is a BORDER, not a box-shadow
-// ring: Tailwind v4's ring width sets its shadow through
-// `var(--tw-ring-inset,)` — an empty var() fallback this repo's Cypress
-// Electron drops at parse time, so a ring would be invisible there. A
-// border renders everywhere. The avatar's own ring is suppressed (ring-0)
-// so only the status border shows. A mixed day (published + failed) splits
-// the ring in two with a conic-gradient wrapper, because a border color
-// cannot be two colors at once.
-function DayPhotoBadge({ photo }: { photo: DayPhoto }) {
-  if (photo.mixed) {
-    return (
-      <span
-        data-ring={photo.ring}
-        data-mixed="true"
-        aria-hidden
-        className="rounded-full bg-[conic-gradient(var(--color-success)_0turn_0.5turn,var(--color-destructive)_0.5turn_1turn)] p-[2px]"
-      >
-        <PersonaAvatar {...photo.persona} size={32} className="ring-0" />
-      </span>
-    );
-  }
-  const borderClass =
-    photo.ring === 'published' ? 'border-2 border-success' : photo.ring === 'failed' ? 'border-2 border-destructive' : '';
-  return (
-    <span data-ring={photo.ring} data-mixed="false" aria-hidden className={cn('rounded-full', borderClass)}>
-      <PersonaAvatar {...photo.persona} size={32} className={borderClass === '' ? undefined : 'ring-0'} />
-    </span>
-  );
-}
-
-function PostsDayButton({ children, ...props }: ComponentProps<typeof DayButton>) {
-  const { slotsByDay, photoByDay } = useContext(SlotsContext);
-  const slots = slotsByDay.get(dayKey(props.day.date)) ?? [];
-  const photo = photoByDay.get(dayKey(props.day.date)) ?? null;
-  // Today is a thick border, never a fill: it must still read as today when
-  // another day is selected. When today itself is selected the border
-  // cannot be the card color — the border sits on the card behind the
-  // button, so a card-colored frame vanishes against it — nor the primary
-  // color, which matches the selected fill. The ring token contrasts with
-  // both the selected fill and the card in both themes, so today stays
-  // readable while selected. A border, not a box-shadow ring — see
-  // DayPhotoBadge for why.
-  const isToday = props.modifiers.today;
-  const isSelected = props.modifiers.selected;
-  return (
-    <CalendarDayButton
-      {...props}
-      className={cn(
-        'aspect-auto h-auto min-h-11 justify-start gap-1 py-1 sm:min-h-14 [&>span]:opacity-100',
-        isToday && (isSelected ? 'border-2 border-ring' : 'border-2 border-primary'),
-      )}
-    >
-      <span className="text-sm font-semibold tabular-nums">{children}</span>
-      {slots.length > 0 &&
-        (photo === null ? (
-          <span
-            data-photo="none"
-            data-count={slots.length}
-            aria-hidden
-            className="inline-flex size-8 items-center justify-center rounded-full bg-sunken text-xs font-bold text-muted-text"
-          >
-            {slots.length}
-          </span>
-        ) : (
-          // A multi-post day shows its count on the photo: one photo alone
-          // reads as one post. The accessible name already carries the
-          // per-group counts, so the badge is aria-hidden.
-          <span className="relative inline-flex">
-            <DayPhotoBadge photo={photo} />
-            {slots.length > 1 && (
-              <span
-                data-count={slots.length}
-                aria-hidden
-                className="absolute -right-1.5 -bottom-1.5 flex size-5 items-center justify-center rounded-full border border-line bg-card text-[10px] font-bold text-primary"
-              >
-                {slots.length}
-              </span>
-            )}
-          </span>
-        ))}
-    </CalendarDayButton>
-  );
-}
-
 export function CalendarView({
   year,
   month,
@@ -222,14 +138,21 @@ export function CalendarView({
 }: CalendarViewProps) {
   const { t, locale } = useI18n();
   const dateFormat = useMemo(() => new Intl.DateTimeFormat(INTL_TAG[locale], { dateStyle: 'full' }), [locale]);
+  // Weekday headers from Intl, not react-day-picker's date-fns names: the
+  // pt-BR ones keep their accent ("sáb", not "sab"). Intl's short pt-BR
+  // names end in a period ("sáb."), dropped for the column header.
+  const formatters = useMemo(() => {
+    const weekdayFormat = new Intl.DateTimeFormat(INTL_TAG[locale], { weekday: 'short' });
+    return { formatWeekdayName: (date: Date) => weekdayFormat.format(date).replace(/\.$/, '') };
+  }, [locale]);
 
-  const photoByDay = useMemo(() => {
-    const photos = new Map<string, DayPhoto>();
+  const personasByDay = useMemo(() => {
+    const personas = new Map<string, PersonaPhoto[]>();
     for (const [key, slots] of slotsByDay) {
-      const photo = dayPhoto(slots, scheduleById, personaPhotoById);
-      if (photo !== null) photos.set(key, photo);
+      const list = dayPersonas(slots, scheduleById, personaPhotoById, MAX_CELL_PERSONAS);
+      if (list.length > 0) personas.set(key, list);
     }
-    return photos;
+    return personas;
   }, [slotsByDay, scheduleById, personaPhotoById]);
 
   // Memoized so a data refresh that leaves slotsByDay untouched hands
@@ -258,23 +181,25 @@ export function CalendarView({
   );
 
   // The Today action in the month navigation: jump the shown month to today
-  // and select today.
+  // and select today. Nothing to do (disabled) when both already hold.
   const goToday = useCallback(() => {
     const now = dateFromKey(todayKey);
     onMonthChange(now.getFullYear(), now.getMonth());
     onSelect(todayKey);
   }, [todayKey, onMonthChange, onSelect]);
+  const onToday = selectedKey === todayKey && todayKey.startsWith(`${monthKey(year, month)}-`);
+  const navToday = useMemo(() => ({ goToday, onToday }), [goToday, onToday]);
+  const dayCells = useMemo(() => ({ slotsByDay, personasByDay }), [slotsByDay, personasByDay]);
 
   return (
     <div className="rounded-xl border border-line bg-card p-2 sm:p-4">
-      <SlotsContext.Provider value={{ slotsByDay, photoByDay }}>
-        <NavTodayContext.Provider value={goToday}>
+      <DayCellContext.Provider value={dayCells}>
+        <NavTodayContext.Provider value={navToday}>
           <Calendar
             mode="single"
             required
             locale={DAY_PICKER_LOCALE[locale]}
             weekStartsOn={firstWeekday}
-            fixedWeeks
             month={new Date(year, month, 1)}
             onMonthChange={(date) => onMonthChange(date.getFullYear(), date.getMonth())}
             onNextClick={(date) => onMonthNavigate(date.getFullYear(), date.getMonth())}
@@ -283,6 +208,7 @@ export function CalendarView({
             selected={selectedKey === null ? undefined : dateFromKey(selectedKey)}
             onSelect={(date) => onSelect(dayKey(date))}
             labels={labels}
+            formatters={formatters}
             className="w-full bg-transparent p-0 [--cell-size:--spacing(10)]"
             classNames={{
               root: 'w-full',
@@ -291,34 +217,34 @@ export function CalendarView({
               // title left-aligns with room to its right, so the title
               // never runs under the navigation.
               nav: 'absolute right-0 top-0 flex items-center gap-1',
+              button_previous: NAV_ARROW_CLASS,
+              button_next: NAV_ARROW_CLASS,
               month_caption: 'flex min-h-(--cell-size) w-full items-center justify-start pr-44',
-              // Tighter week gap: empty cells already shrank (see
-              // PostsDayButton), the rows close up with them.
-              week: 'mt-1 flex w-full',
-              // Today is drawn by the day button itself (thick ring, see
-              // PostsDayButton): drop shadcn's accent fill so today never
-              // reads as selected.
+              weekdays: 'flex gap-0.5',
+              weekday: 'flex-1 select-none text-xs font-medium text-muted-foreground',
+              week: 'mt-1 flex w-full gap-0.5',
+              // Today is drawn by the day number itself (see PostsDayButton):
+              // drop shadcn's accent fill so today never reads as selected.
               today: 'rounded-md',
-              // Rectangular cells (shadcn's are square), so the 6-week month stays short.
+              // Rectangular cells (shadcn's are square), so the month stays short.
               day: 'group/day relative h-full w-full select-none p-0 text-center',
             }}
             components={{ DayButton: PostsDayButton, Nav: CalendarNav }}
           />
         </NavTodayContext.Provider>
-      </SlotsContext.Provider>
+      </DayCellContext.Provider>
 
       <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-text">
-        {CALENDAR_GROUP_ORDER.map((group) => {
-          const Icon = CALENDAR_GROUP_ICON[group];
-          return (
-            <li key={group} className="flex items-center gap-1.5">
-              <span className={cn('inline-flex size-4 items-center justify-center rounded-full', CALENDAR_GROUP_STYLE[group])}>
-                <Icon className="size-2.5" strokeWidth={3} aria-hidden />
-              </span>
-              {t(CALENDAR_GROUP_KEY[group])}
-            </li>
-          );
-        })}
+        {CALENDAR_GROUP_ORDER.map((group) => (
+          <li key={group} className="flex items-center gap-1.5">
+            <StatusMarker group={group} />
+            {t(CALENDAR_GROUP_KEY[group])}
+          </li>
+        ))}
+        <li className="flex items-center gap-1.5">
+          <span aria-hidden className={cn('size-4 rounded-full', TODAY_MARK_CLASS)} />
+          {t('posts.calendarToday')}
+        </li>
       </ul>
     </div>
   );
