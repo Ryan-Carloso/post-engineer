@@ -114,14 +114,64 @@ describe('POST /api/threespeak-connect', () => {
     mockSupabase({ user: null });
     const res = await POST(formRequest({ username: 'alice', postingKey: '5Kx' }));
     expect(res.status).toBe(401);
+    expect(((await res.json()) as { error?: string }).error).toBe('Authentication required.');
   });
 
   it('returns 400 without username or posting key', async () => {
     mockSupabase();
     const noUsername = await POST(formRequest({ postingKey: '5Kx' }));
     expect(noUsername.status).toBe(400);
+    expect(((await noUsername.json()) as { error?: string }).error).toBe('Hive username is required.');
     const noKey = await POST(formRequest({ username: 'alice' }));
     expect(noKey.status).toBe(400);
+    expect(((await noKey.json()) as { error?: string }).error).toBe('Hive posting key is required.');
+  });
+
+  it('returns 400 with the field message for a blank username or posting key (JSON and FormData)', async () => {
+    mockSupabase();
+    const blankJsonUsername = await POST(jsonRequest({ username: '   ', postingKey: '5Kx' }));
+    expect(blankJsonUsername.status).toBe(400);
+    expect(((await blankJsonUsername.json()) as { error?: string }).error).toBe('Hive username is required.');
+    const blankJsonKey = await POST(jsonRequest({ username: 'alice', postingKey: '   ' }));
+    expect(blankJsonKey.status).toBe(400);
+    expect(((await blankJsonKey.json()) as { error?: string }).error).toBe('Hive posting key is required.');
+    const blankFormUsername = await POST(formRequest({ username: '   ', postingKey: '5Kx' }));
+    expect(blankFormUsername.status).toBe(400);
+    expect(((await blankFormUsername.json()) as { error?: string }).error).toBe('Hive username is required.');
+    const blankFormKey = await POST(formRequest({ username: 'alice', postingKey: '   ' }));
+    expect(blankFormKey.status).toBe(400);
+    expect(((await blankFormKey.json()) as { error?: string }).error).toBe('Hive posting key is required.');
+  });
+
+  it('trims a padded username before validating the credential', async () => {
+    mockSupabase();
+    vi.mocked(loginToThreespeak).mockResolvedValueOnce({ username: 'alice', accessToken: 'jwt-1' });
+    const res = await POST(formRequest({ username: '  Alice  ', postingKey: '5Kpostingkey' }));
+    expect(res.status).toBe(200);
+    expect(loginToThreespeak).toHaveBeenCalledWith('Alice', '5Kpostingkey');
+  });
+
+  it('returns 422 when the login error matches only by message (ThreespeakError name, no code)', async () => {
+    mockSupabase();
+    const error = new Error('Invalid Hive posting key.');
+    error.name = 'ThreespeakError';
+    vi.mocked(loginToThreespeak).mockRejectedValueOnce(error);
+    const res = await POST(formRequest({ username: 'alice', postingKey: 'wrong' }));
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ success: false, code: 'THREESPEAK_CREDENTIAL_REJECTED' });
+  });
+
+  it('returns 500 when login fails with a non-credentials error', async () => {
+    mockSupabase();
+    vi.mocked(loginToThreespeak).mockRejectedValueOnce(new Error('Studio is down.'));
+    const generic = await POST(formRequest({ username: 'alice', postingKey: '5Kpostingkey' }));
+    expect(generic.status).toBe(500);
+    expect(((await generic.json()) as { error?: string }).error).toBe('Could not connect the 3Speak account.');
+    vi.mocked(loginToThreespeak).mockRejectedValueOnce(
+      new ThreespeakError('login_failed', 'Studio is down.'),
+    );
+    const otherCode = await POST(formRequest({ username: 'alice', postingKey: '5Kpostingkey' }));
+    expect(otherCode.status).toBe(500);
   });
 
   it('rejects invalid credentials with 422 + THREESPEAK_CREDENTIAL_REJECTED (not 401) and saves nothing', async () => {
@@ -157,6 +207,7 @@ describe('POST /api/threespeak-connect', () => {
       provider: '3speak',
       provider_account_id: 'alice',
       account_name: 'alice',
+      account_metadata: {},
     });
     const body = (await res.json()) as { success: boolean; username: string };
     expect(body).toMatchObject({ success: true, username: 'alice' });

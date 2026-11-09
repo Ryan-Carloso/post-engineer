@@ -557,6 +557,18 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     expect(await screen.findByTestId('bluesky-connect-error')).toBeInTheDocument();
   }
 
+  it('bluesky connect dialog shows its title, hint, labels and security note', async () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[2]);
+    expect(await screen.findByRole('dialog', { name: 'accounts.blueskyConnectTitle' })).toBeInTheDocument();
+    expect(screen.getByText('accounts.blueskyConnectHint')).toBeInTheDocument();
+    expect(screen.getByText('accounts.blueskyHandleLabel')).toBeInTheDocument();
+    expect(screen.getByText('accounts.blueskyPasswordLabel')).toBeInTheDocument();
+    expect(screen.getByTestId('bluesky-connect-button')).toHaveTextContent('accounts.blueskyConnect');
+    expect(screen.getByText('accounts.blueskySecurityHint')).toBeInTheDocument();
+    expect(screen.getByLabelText('accounts.closeDialog')).toBeInTheDocument();
+  });
+
   it('bluesky connect dialog does NOT log the user out when the credential is rejected (422)', async () => {
     const notify = vi.mocked(notifyIfSessionExpired);
     notify.mockClear();
@@ -838,6 +850,18 @@ describe('Facebook Pages accounts section', () => {
     return fetchMock;
   }
 
+  it('3speak connect dialog shows its title, hint, labels and security note', async () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[6]);
+    expect(await screen.findByRole('dialog', { name: 'accounts.threespeakConnectTitle' })).toBeInTheDocument();
+    expect(screen.getByText('accounts.threespeakConnectHint')).toBeInTheDocument();
+    expect(screen.getByText('accounts.threespeakHandleLabel')).toBeInTheDocument();
+    expect(screen.getByText('accounts.threespeakPasswordLabel')).toBeInTheDocument();
+    expect(screen.getByTestId('threespeak-connect-button')).toHaveTextContent('accounts.threespeakConnect');
+    expect(screen.getByText('accounts.threespeakSecurityHint')).toBeInTheDocument();
+    expect(screen.getByLabelText('accounts.closeDialog')).toBeInTheDocument();
+  });
+
   it('3speak connect dialog posts the username and posting key to /api/threespeak-connect', async () => {
     const fetchMock = await submitThreespeakConnect(422, { success: false, code: 'THREESPEAK_CREDENTIAL_REJECTED' });
     expect(fetchMock).toHaveBeenCalledWith('/api/threespeak-connect', expect.objectContaining({ method: 'POST' }));
@@ -851,6 +875,35 @@ describe('Facebook Pages accounts section', () => {
   it('3speak connect dialog shows the generic error when the failure is not a rejected credential', async () => {
     await submitThreespeakConnect(500, { success: false, error: 'boom' });
     expect(screen.getByTestId('threespeak-connect-error')).toHaveTextContent('accounts.threespeakConnectError');
+  });
+
+  it('3speak connect dialog closes and refetches on success', async () => {
+    const refetch = vi.fn();
+    vi.mocked(useThreespeakAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [] },
+      isLoading: false,
+      error: null,
+      refetch,
+    });
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ success: true, accountId: 'row-1', username: 'alice' }) }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[6]);
+    fireEvent.change(await screen.findByTestId('threespeak-handle-input'), { target: { value: 'alice' } });
+    fireEvent.change(screen.getByTestId('threespeak-password-input'), { target: { value: '5K-posting-key' } });
+    fireEvent.click(screen.getByTestId('threespeak-connect-button'));
+    await waitFor(() => expect(screen.queryByTestId('threespeak-handle-input')).toBeNull());
+    expect(fetchMock).toHaveBeenCalledWith('/api/threespeak-connect', expect.objectContaining({ method: 'POST' }));
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it('3speak connect dialog does not submit with empty fields', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[6]);
+    fireEvent.click(await screen.findByTestId('threespeak-connect-button'));
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('3speak connect dialog does NOT log the user out when the credential is rejected (422)', async () => {

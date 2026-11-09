@@ -190,6 +190,41 @@ describe('PersonaPublishingAccountsSection', () => {
     expect(checkboxes[4].checked).toBe(true); // alice in defaults
   });
 
+  it('renders the 3Speak card with the Hive username when no stored name exists, and toggles it', async () => {
+    mockQueries.threespeak = { data: { authenticated: true, accounts: [{ provider: '3speak', recordId: 'r2', providerAccountId: 'bob', accountName: null, connectedAt: 0, lastUsed: 0 }] }, isLoading: false, error: null };
+    mockFetchOnce({ success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], '3speak': [] } });
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    await screen.findByTestId('publishing-accounts-save');
+
+    // The group heading names the provider, and the card falls back to the
+    // Hive username when the stored name is missing.
+    expect(screen.getByText('3Speak')).toBeInTheDocument();
+    expect(screen.getByText('bob')).toBeInTheDocument();
+    expect(reportAccountCardDisplay).toHaveBeenCalledWith(expect.objectContaining({
+      provider: '3speak',
+      shownLabel: 'bob',
+      labelOrigin: 'provider_id',
+    }));
+
+    const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
+    // 2 youtube + 1 instagram + 1 bluesky + 1 threespeak (bob, unchecked)
+    expect(checkboxes).toHaveLength(5);
+    expect(checkboxes[4].checked).toBe(false);
+    fireEvent.click(checkboxes[4]);
+    expect(checkboxes[4].checked).toBe(true);
+  });
+
+  it('renders no 3Speak card when the 3Speak query has no data', async () => {
+    mockQueries.threespeak = { data: undefined, isLoading: false, error: null } as unknown as typeof mockQueries.threespeak;
+    mockFetchOnce(serverDefaults);
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    await screen.findByTestId('publishing-accounts-save');
+
+    const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
+    // 2 youtube + 1 instagram + 1 bluesky + 0 threespeak
+    expect(checkboxes).toHaveLength(4);
+  });
+
   it('shows the load error and retries on demand', async () => {
     const fetchMock = mockFetchOnce({ success: false, error: 'boom' }, false, 500);
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
