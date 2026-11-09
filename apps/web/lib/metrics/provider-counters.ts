@@ -152,6 +152,12 @@ export const COUNTER_FETCHERS: Record<MeasuredProvider, CounterFetcher> = {
     const token = await ownerAccessToken(userId, 'facebook', target.accountId);
     return facebookCounters(await getFacebookVideoInsights(token, target.externalId));
   },
+  async rumble() {
+    // Rumble has no read API (no stats, analytics or video endpoint):
+    // there is nothing to fetch, so the snapshot stays unknown instead
+    // of failing the run on every Rumble video.
+    return { views: null, likes: null, comments: null, saves: null };
+  },
 };
 
 export async function fetchProviderCounters(

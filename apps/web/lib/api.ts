@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { createSupabaseClient } from '@/lib/supabase/client';
 import { useUploadStore } from '@/lib/store';
-import type { PublicAccountItem, BlueskyAccountData, LinkedinAccountData, ThreadsAccountData, FacebookAccountData } from '@/lib/providers/registry';
+import type { PublicAccountItem, BlueskyAccountData, LinkedinAccountData, ThreadsAccountData, FacebookAccountData, RumbleAccountData } from '@/lib/providers/registry';
 import { mapSchedule, type ScheduleRow } from '@/lib/schedule-row';
 import type {
   AccountResponse,
@@ -91,11 +91,6 @@ async function fetchInstagramAccounts(): Promise<InstagramAccountResponse> {
 //---------------
 // fetchBlueskyAccounts — Bluesky accounts (handle/did) via /api/account
 //---------------
-
-export interface BlueskyAccountResponse {
-  authenticated: boolean;
-  accounts: BlueskyAccountData[];
-}
 
 async function createPersona(formData: FormData): Promise<CreatePersonaResult> {
   const response = await fetch('/api/persona', { method: 'POST', body: formData });
@@ -585,6 +580,7 @@ const selectBlueskyAccounts = selectProviderAccounts<BlueskyAccountData>('bluesk
 const selectLinkedinAccounts = selectProviderAccounts<LinkedinAccountData>('linkedin');
 const selectThreadsAccounts = selectProviderAccounts<ThreadsAccountData>('threads');
 const selectFacebookAccounts = selectProviderAccounts<FacebookAccountData>('facebook');
+const selectRumbleAccounts = selectProviderAccounts<RumbleAccountData>('rumble');
 export function useYouTubeAccountsQuery(): UseQueryResult<AccountResponse, Error> {
   return useSocialAccountsQuery(selectYouTubeAccounts);
 }
@@ -593,7 +589,7 @@ export function useInstagramAccountsQuery(): UseQueryResult<InstagramAccountResp
   return useSocialAccountsQuery(selectInstagramAccounts);
 }
 
-export function useBlueskyAccountsQuery(): UseQueryResult<BlueskyAccountResponse, Error> {
+export function useBlueskyAccountsQuery(): UseQueryResult<ProviderAccountsResponse<BlueskyAccountData>, Error> {
   return useSocialAccountsQuery(selectBlueskyAccounts);
 }
 
@@ -609,6 +605,10 @@ export function useThreadsAccountsQuery(): UseQueryResult<ProviderAccountsRespon
 
 export function useFacebookAccountsQuery(): UseQueryResult<ProviderAccountsResponse<FacebookAccountData>, Error> {
   return useSocialAccountsQuery(selectFacebookAccounts);
+}
+
+export function useRumbleAccountsQuery(): UseQueryResult<ProviderAccountsResponse<RumbleAccountData>, Error> {
+  return useSocialAccountsQuery(selectRumbleAccounts);
 }
 
 //---------------
@@ -689,6 +689,7 @@ export interface ScheduleConfig {
   blueskyAccountIds: string[];
   threadsAccountIds: string[];
   facebookAccountIds: string[];
+  rumbleAccountIds: string[];
   daysOfWeek: number[];
   startHour: number | null;
   endHour: number | null;

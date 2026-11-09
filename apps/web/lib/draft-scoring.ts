@@ -20,7 +20,7 @@ import { BLUESKY_CAPTION_MAX_GRAPHEMES, countBlueskyGraphemes } from './bluesky'
 // check constraint, re-created with the full list by the latest provider
 // migration, 049). The scorer buckets are universal;
 // only the publish check varies by network.
-export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky' | 'threads' | 'facebook';
+export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky' | 'threads' | 'facebook' | 'rumble';
 
 // What the text is: a post body, or a video script (segments joined by
 // newlines, hook first, CTA last). A script is spoken, so hashtags do not
@@ -36,7 +36,7 @@ const SCORE_PROFILES = {
   script: { hook: 25, hookWords: [15, 40], length: 20, words: [60, 200], nearWords: [40, 250], slop: 25 },
 } as const;
 
-export const PUBLISH_NETWORKS: PublishNetwork[] = ['linkedin', 'youtube', 'instagram', 'bluesky', 'threads', 'facebook'];
+export const PUBLISH_NETWORKS: PublishNetwork[] = ['linkedin', 'youtube', 'instagram', 'bluesky', 'threads', 'facebook', 'rumble'];
 
 // LinkedIn's documented standard-post ceiling (LinkedIn Help, via its
 // public limits pages): a standard feed post holds at most 3000
@@ -47,6 +47,9 @@ export const LINKEDIN_POST_MAX_CHARS = 3000;
 export const THREADS_POST_MAX_CHARS = 500;
 // Facebook's documented feed-post ceiling; lib/facebook.ts and the engine pin the same value.
 export const FACEBOOK_POST_MAX_CHARS = 63206;
+// Rumble has no documented description ceiling, so the publish check has
+// no failure branch for it — the 100-character title ceiling lives at the
+// publish boundary instead (lib/rumble.ts, publish_rumble.py).
 // The feed shows roughly the first 210 characters on desktop (~140 on
 // mobile) before the "see more" fold: a first line longer than this is
 // a warning, never a failure — the fold is a display cut, not a cap.

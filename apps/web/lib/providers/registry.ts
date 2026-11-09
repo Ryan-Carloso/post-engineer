@@ -9,7 +9,7 @@ import type { AccountData, InstagramAccountData } from '@/lib/types';
 // client guards and the OAuth union all derive from here.
 //---------------
 
-export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook'] as const;
+export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'rumble'] as const;
 
 export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
 
@@ -68,18 +68,28 @@ export interface FacebookAccountData {
   lastUsed: number;
 }
 
+export interface RumbleAccountData {
+  provider: 'rumble';
+  recordId: string;
+  providerAccountId: string;
+  accountName: string | null;
+  connectedAt: number;
+  lastUsed: number;
+}
+
 export type PublicAccountItem =
   | AccountData
   | InstagramAccountData
   | BlueskyAccountData
   | LinkedinAccountData
   | ThreadsAccountData
-  | FacebookAccountData;
+  | FacebookAccountData
+  | RumbleAccountData;
 
 //---------------
 // ProviderDef — contract every provider must implement.
 // supportsOAuthCallback marks who has an OAuth flow (bluesky uses app
-// password, not OAuth).
+// password and rumble a manual access token, not OAuth).
 //---------------
 
 interface ProviderDef<OAuth extends boolean = boolean> {
@@ -241,6 +251,22 @@ const facebookDef: ProviderDef<true> = {
   },
 };
 
+// Rumble has no OAuth and no profile API: the account is the channel id
+// the user typed at connect, and the card shows that id.
+const rumbleDef: ProviderDef<false> = {
+  supportsOAuthCallback: false,
+  toPublicAccount(record) {
+    return {
+      provider: 'rumble',
+      recordId: record.id,
+      providerAccountId: record.providerAccountId,
+      accountName: record.accountName,
+      connectedAt: createdAtTimestamp(record),
+      lastUsed: lastUsedTimestamp(record),
+    };
+  },
+};
+
 //---------------
 // PROVIDER_REGISTRY — exhaustive by construction: a provider in the union without
 // an entry here (or vice versa) = compile error.
@@ -253,6 +279,7 @@ export const PROVIDER_REGISTRY = {
   linkedin: linkedinDef,
   threads: threadsDef,
   facebook: facebookDef,
+  rumble: rumbleDef,
 } satisfies Record<SocialProvider, ProviderDef>;
 
 // OAuthProvider — derived from the registry: whoever has supportsOAuthCallback: true.

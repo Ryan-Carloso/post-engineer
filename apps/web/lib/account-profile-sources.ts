@@ -151,6 +151,16 @@ const facebook: ProfileSource = {
   },
 };
 
+// Rumble has no profile API: the resync never applies, so the stored
+// channel id (written at connect) is never overwritten with a fallback.
+const rumble: ProfileSource = {
+  pictureKey: 'profilePictureUrl',
+  applies: () => false,
+  async fetch() {
+    throw new Error('RUMBLE_PROFILE_UNAVAILABLE: Rumble has no profile API');
+  },
+};
+
 export const PROFILE_SOURCES: Record<SocialProvider, ProfileSource> = {
   instagram,
   threads,
@@ -158,4 +168,5 @@ export const PROFILE_SOURCES: Record<SocialProvider, ProfileSource> = {
   bluesky,
   linkedin,
   facebook,
+  rumble,
 };

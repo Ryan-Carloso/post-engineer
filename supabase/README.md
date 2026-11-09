@@ -55,6 +55,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 047 | `migrations/047_restore-batch-discount-credit.sql` | `restore_batch_discount_credit`: when a batch earns a clawed-back free video again, tops that same discount `generation_refund` back up to the slot charge and returns the tokens, inside the migration 044 cap. A row that already holds the full amount is left untouched, so a retry of a credit that did land does not pay twice |
 | 048 | `migrations/048_scheduled-posts-music-mood.sql` | `scheduled_posts` gains nullable `music_mood` (issue #489): the requested BGM mood rides the slot row so a tick-dispatched or requeued slot renders with the requested mood instead of the engine default; pre-migration rows render the default |
 | 049 | `migrations/049_facebook-provider.sql` | Facebook Pages as a publishing provider: `schedules.facebook_account_ids` (default empty) and `facebook` in both the `post_metrics.provider` and `social_accounts.provider` checks (each dropped and re-created with the full list, so a live constraint the chain no longer defines cannot survive) |
+| 051 | `migrations/051_rumble-provider.sql` | Rumble as a publishing provider: `schedules.rumble_account_ids` (default empty) and `rumble` in both the `post_metrics.provider` and `social_accounts.provider` checks (each dropped and re-created with the full list, so a live constraint the chain no longer defines cannot survive) |
 
 ## Schema snapshot
 

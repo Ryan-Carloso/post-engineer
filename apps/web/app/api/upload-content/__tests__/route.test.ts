@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 
-const { mockRequireSupabaseSession, mockApplyRateLimit, mockHandleYoutubeUpload, mockHandleInstagramUpload, mockHandleBlueskyUpload, mockHandleLinkedinUpload, mockBuildUploadErrorResponse, apiErrorReportingCalls } = vi.hoisted(() => {
+const { mockRequireSupabaseSession, mockApplyRateLimit, mockHandleYoutubeUpload, mockHandleInstagramUpload, mockHandleBlueskyUpload, mockHandleLinkedinUpload, mockHandleRumbleUpload, mockBuildUploadErrorResponse, apiErrorReportingCalls } = vi.hoisted(() => {
   return {
     mockRequireSupabaseSession: vi.fn(),
     mockApplyRateLimit: vi.fn(),
@@ -9,6 +9,7 @@ const { mockRequireSupabaseSession, mockApplyRateLimit, mockHandleYoutubeUpload,
     mockHandleInstagramUpload: vi.fn(),
     mockHandleBlueskyUpload: vi.fn(),
     mockHandleLinkedinUpload: vi.fn(),
+    mockHandleRumbleUpload: vi.fn(),
     mockBuildUploadErrorResponse: vi.fn(),
     // Plain array (not a mock fn): beforeEach's clearAllMocks must not wipe
     // the registration record — the wrapper runs once at module import.
@@ -53,6 +54,9 @@ const { mockHandleFacebookUpload, mockHandleThreadsUpload } = vi.hoisted(() => (
 }));
 vi.mock('@/lib/upload/facebook-handler', () => ({
   handleFacebookUpload: (...args: unknown[]) => mockHandleFacebookUpload(...args),
+}));
+vi.mock('@/lib/upload/rumble-handler', () => ({
+  handleRumbleUpload: (...args: unknown[]) => mockHandleRumbleUpload(...args),
 }));
 vi.mock('@/lib/upload/threads-handler', () => ({
   handleThreadsUpload: (...args: unknown[]) => mockHandleThreadsUpload(...args),
@@ -290,7 +294,7 @@ describe('POST /api/upload-content', () => {
     expect(res.status).toBe(400);
     expect(mockBuildUploadErrorResponse).toHaveBeenCalled();
     const err = mockBuildUploadErrorResponse.mock.calls[0][0] as Error;
-    expect(err.message).toBe('Invalid provider. Use one of: youtube, instagram, bluesky, linkedin, threads, facebook');
+    expect(err.message).toBe('Invalid provider. Use one of: youtube, instagram, bluesky, linkedin, threads, facebook, rumble');
     // The validation error carries the offending field for the client.
     expect((err as ValidationError).field).toBe('provider');
   });
@@ -354,6 +358,19 @@ describe('POST /api/upload-content', () => {
     expect(mockHandleInstagramUpload).not.toHaveBeenCalled();
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
     expect(await res.json()).toEqual({ success: true, results: [{ accountId: '111', success: true, postId: 'vid-1' }] });
+  });
+
+  it('handles the rumble upload with the caller as the channel owner', async () => {
+    mockHandleRumbleUpload.mockResolvedValue({ success: true, results: [{ accountId: 'chan-1', success: true, postId: 'vid-1' }] });
+    const res = await POST(makeRequest({ provider: 'rumble' }));
+
+    expect(mockHandleRumbleUpload).toHaveBeenCalledTimes(1);
+    const [formData, userId] = mockHandleRumbleUpload.mock.calls[0] as [FormData, string];
+    expect(formData.get('provider')).toBe('rumble');
+    expect(userId).toBe(USER_ID);
+    expect(mockHandleFacebookUpload).not.toHaveBeenCalled();
+    expect(mockHandleThreadsUpload).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({ success: true, results: [{ accountId: 'chan-1', success: true, postId: 'vid-1' }] });
   });
 
   it('responds with a handled error when the handler throws', async () => {

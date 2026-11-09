@@ -91,6 +91,7 @@ describe('getPersonaDefaultAccounts', () => {
       linkedin: [],
       threads: [],
       facebook: [],
+      rumble: [],
     });
   });
 
@@ -212,6 +213,7 @@ describe('emptyPersonaDefaultAccounts', () => {
       linkedin: [],
       threads: [],
       facebook: [],
+      rumble: [],
     });
   });
 });

@@ -2,15 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
-import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 
 //---------------
 // supabase/migrations/049_facebook-provider.sql — the schema the Facebook
 // Pages connect and publish paths depend on. Each provider check is
 // dropped and re-created with the full list (the lesson of 037: a live
 // constraint the chain no longer defines can linger in production, so a
-// plain add would leave the old list in force), and both lists are pinned
-// to SOCIAL_PROVIDERS.
+// plain add would leave the old list in force). The lists are pinned to the
+// six providers live when 049 shipped — the migration file is frozen, so it
+// must NOT track SOCIAL_PROVIDERS as new providers land (the current list
+// is pinned by the 051 rumble migration test).
 //---------------
 
 const sql = readFileSync(
@@ -42,9 +43,16 @@ describe('supabase/migrations/049_facebook-provider.sql', () => {
   );
 
   it.each(['post_metrics_provider_check', 'social_accounts_provider_check'])(
-    '%s allows exactly the providers the app supports',
+    '%s allows exactly the six providers live when 049 shipped',
     (constraint) => {
-      expect(checkProviders(constraint).sort()).toEqual([...SOCIAL_PROVIDERS].sort());
+      expect(checkProviders(constraint).sort()).toEqual([
+        'bluesky',
+        'facebook',
+        'instagram',
+        'linkedin',
+        'threads',
+        'youtube',
+      ]);
     },
   );
 });

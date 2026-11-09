@@ -15,7 +15,7 @@ import { SOCIAL_PROVIDERS, type SocialProvider } from './providers/registry';
 export type PersonaDefaultAccounts = Record<SocialProvider, string[]>;
 
 export function emptyPersonaDefaultAccounts(): PersonaDefaultAccounts {
-  return { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [] };
+  return { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], rumble: [] };
 }
 
 function isSocialProvider(value: unknown): value is SocialProvider {

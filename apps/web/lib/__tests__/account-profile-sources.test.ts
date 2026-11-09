@@ -156,4 +156,12 @@ describe('PROFILE_SOURCES', () => {
     });
     expect(PROFILE_SOURCES.linkedin.pictureKey).toBe('picture');
   });
+
+  it('rumble never resyncs: there is no profile API, so the stored channel id stands', async () => {
+    expect(PROFILE_SOURCES.rumble.applies(record('rumble', 'chan-1'))).toBe(false);
+    await expect(PROFILE_SOURCES.rumble.fetch(supabase, 'u1', record('rumble', 'chan-1'))).rejects.toThrow(
+      'RUMBLE_PROFILE_UNAVAILABLE',
+    );
+    expect(getSocialAccountTokens).not.toHaveBeenCalled();
+  });
 });
