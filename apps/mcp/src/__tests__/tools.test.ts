@@ -62,6 +62,8 @@ describe('MCP Tool Handlers', () => {
     getVideoStatus: vi.fn(),
     getOAuthConnectUrl: vi.fn(),
     connectBlueskyAccount: vi.fn(),
+    connectThreespeakAccount: vi.fn(),
+    connectRumbleAccount: vi.fn(),
     request: vi.fn(),
     getHeaders: vi.fn().mockReturnValue({}),
   } as unknown as PostEngineerClient;
@@ -409,6 +411,10 @@ describe('MCP Tool Handlers', () => {
     expect(response.isError).toBeUndefined();
     const text = textOf(response);
     expect(text).toMatch(/connected/i);
+    // The success text names the fields, it never dumps the raw response.
+    expect(text).toContain('accountId=acc-1');
+    expect(text).toContain('did=did:plc:xyz');
+    expect(text).not.toContain('{');
     expect(text).not.toContain('super-secret-password');
   });
 
@@ -436,6 +442,105 @@ describe('MCP Tool Handlers', () => {
     const text = textOf(response);
     expect(text).toMatch(/Invalid handle or app password/);
     expect(text).not.toContain('super-secret-password');
+  });
+
+  it('handleConnectAccount connects 3Speak directly without echoing the posting key', async () => {
+    vi.mocked(mockClient.connectThreespeakAccount).mockResolvedValue({
+      success: true,
+      accountId: 'acc-1',
+      username: 'alice',
+    });
+
+    const response = await handleConnectAccount(mockClient, {
+      provider: '3speak',
+      username: 'alice',
+      postingKey: '5Ksuper-secret-key',
+    });
+
+    expect(mockClient.connectThreespeakAccount).toHaveBeenCalledWith(
+      'alice',
+      '5Ksuper-secret-key'
+    );
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toMatch(/connected/i);
+    expect(text).not.toContain('5Ksuper-secret-key');
+    // The success text names the fields, it never dumps the raw response.
+    expect(text).toContain('username=alice');
+    expect(text).toContain('accountId=acc-1');
+    expect(text).not.toContain('{');
+  });
+
+  it('handleConnectAccount requires username and postingKey for 3Speak', async () => {
+    vi.clearAllMocks();
+    const response = await handleConnectAccount(mockClient, { provider: '3speak' });
+
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toMatch(/username.*postingKey|postingKey.*username/i);
+    expect(mockClient.connectThreespeakAccount).not.toHaveBeenCalled();
+  });
+
+  it('handleConnectAccount never leaks the posting key on 3Speak errors', async () => {
+    vi.mocked(mockClient.connectThreespeakAccount).mockRejectedValue(
+      new Error('Failed to connect 3Speak account: 422 Invalid Hive posting key.')
+    );
+
+    const response = await handleConnectAccount(mockClient, {
+      provider: '3speak',
+      username: 'alice',
+      postingKey: '5Ksuper-secret-key',
+    });
+
+    expect(response.isError).toBe(true);
+    const text = textOf(response);
+    expect(text).toMatch(/Invalid Hive posting key/);
+    expect(text).not.toContain('5Ksuper-secret-key');
+  });
+
+  it('handleConnectAccount connects Rumble directly without echoing the access token', async () => {
+    vi.mocked(mockClient.connectRumbleAccount).mockResolvedValue({
+      success: true,
+      accountId: 'acc-1',
+      channelId: 'chan-1',
+    });
+
+    const response = await handleConnectAccount(mockClient, {
+      provider: 'rumble',
+      channelId: 'chan-1',
+      accessToken: 'a'.repeat(40),
+    });
+
+    expect(mockClient.connectRumbleAccount).toHaveBeenCalledWith('chan-1', 'a'.repeat(40));
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toMatch(/connected/i);
+    expect(text).not.toContain('a'.repeat(40));
+  });
+
+  it('handleConnectAccount requires channelId and accessToken for Rumble', async () => {
+    vi.clearAllMocks();
+    const response = await handleConnectAccount(mockClient, { provider: 'rumble' });
+
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toMatch(/channelId.*accessToken|accessToken.*channelId/i);
+    expect(mockClient.connectRumbleAccount).not.toHaveBeenCalled();
+  });
+
+  it('handleConnectAccount never leaks the access token on Rumble errors', async () => {
+    vi.mocked(mockClient.connectRumbleAccount).mockRejectedValue(
+      new Error('Failed to connect Rumble account: 400 Invalid channelId or access token.'),
+    );
+
+    const response = await handleConnectAccount(mockClient, {
+      provider: 'rumble',
+      channelId: 'chan-1',
+      accessToken: 'a'.repeat(40),
+    });
+
+    expect(response.isError).toBe(true);
+    const text = textOf(response);
+    expect(text).toMatch(/Invalid channelId or access token/);
+    expect(text).not.toContain('a'.repeat(40));
   });
 });
 
@@ -1030,6 +1135,29 @@ describe('slot tools', () => {
     expect(text).toContain('awaiting');
     expect(text).toContain('"title": "Launch day"');
     expect(text).not.toContain('extraUnpinnedField');
+    expect(text).toContain('"userNotices": []');
+  });
+
+  it('handleGetSlot relays a user notice and tells the agent not to retry', async () => {
+    const { handleGetSlot } = await import('../tools.js');
+    const notice = 'Bluesky did not publish because the email on this account is not verified. This is a problem with your account. Only you can fix it: verify the email.';
+    vi.mocked(mockClient.getSlot).mockResolvedValue({
+      success: true,
+      slot: {
+        id: 'slot-1',
+        scheduleId: 'sched-1',
+        slotAt: '2026-10-10T20:00:00Z',
+        status: 'publishing',
+        title: 'Launch day',
+        userNotices: [{ provider: 'bluesky', accountId: 'b1', code: 'email_not_verified', requiresUser: true, notice }],
+        providerFailures: [{ provider: 'bluesky', accountId: 'b1', code: 'email_not_verified', requiresUser: false, notice }],
+      },
+    });
+
+    const text = textOf(await handleGetSlot(mockClient, { slotId: 'slot-1' }));
+    expect(text).toContain(notice);
+    expect(text).toContain('Do not retry');
+    expect(text).toContain('Only the user can fix this account');
   });
 
   it('handleGetSlot surfaces API errors with the structured contract', async () => {
@@ -1704,5 +1832,34 @@ describe('publish video direct tool', () => {
     });
     expect(response.isError).toBe(true);
     expect(textOf(response)).toContain('"code":"UPLOAD_ERROR"');
+  });
+
+  it('handlePublishVideoDirect forwards the pinterest boardId and shows the pin link', async () => {
+    const { handlePublishVideoDirect } = await import('../tools.js');
+    vi.mocked(mockClient.publishVideoDirect).mockResolvedValue({
+      success: true,
+      provider: 'pinterest',
+      results: [
+        { accountId: 'user-9', success: true, postId: '123456789', permalink: 'https://www.pinterest.com/pin/123456789/' },
+      ],
+      successCount: 1,
+      logId: 'log-1',
+    });
+
+    const response = await handlePublishVideoDirect(mockClient, {
+      provider: 'pinterest',
+      videoPath: '/tmp/clip.mp4',
+      accountIds: ['user-9'],
+      caption: 'the pin description',
+      title: 'My pin',
+      boardId: 'b1',
+    });
+    expect(response.isError).toBeUndefined();
+    expect(vi.mocked(mockClient.publishVideoDirect).mock.calls[0][0]).toMatchObject({
+      provider: 'pinterest',
+      boardId: 'b1',
+      title: 'My pin',
+    });
+    expect(textOf(response)).toContain('https://www.pinterest.com/pin/123456789/');
   });
 });

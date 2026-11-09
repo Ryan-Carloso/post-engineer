@@ -19,6 +19,14 @@ export class AuthError extends Error {
   }
 }
 
+// The user's social account row is gone (disconnected or never connected).
+export class AccountNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AccountNotFoundError';
+  }
+}
+
 export class UploadError extends Error {
   constructor(
     message: string,
@@ -73,6 +81,23 @@ export class FacebookError extends Error {
   constructor(message: string, public statusCode: number) {
     super(message);
     this.name = 'FacebookError';
+  }
+}
+
+export class PinterestError extends Error {
+  constructor(message: string, public statusCode: number) {
+    super(message);
+    this.name = 'PinterestError';
+  }
+}
+
+export class RumbleError extends Error {
+  readonly code: 'invalid_token' | 'upload_failed' | 'unknown';
+
+  constructor(code: RumbleError['code'], message: string, public statusCode: number) {
+    super(message);
+    this.name = 'RumbleError';
+    this.code = code;
   }
 }
 

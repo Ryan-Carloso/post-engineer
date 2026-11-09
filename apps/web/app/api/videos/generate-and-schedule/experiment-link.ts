@@ -43,6 +43,8 @@ export type ExperimentLink = z.infer<typeof ExperimentLinkSchema>;
 export interface PairFacts {
   providers: string[];
   accountIds: Record<string, string[]>;
+  /** null = no Pinterest board (the video does not publish to Pinterest). */
+  pinterestBoardId: string | null;
   voiceId: string | null;
   faceless: boolean;
   fullLipsync: boolean;
@@ -81,6 +83,7 @@ const SCALAR_SETTINGS: ReadonlyArray<{ field: string; label: string; read: (fact
 export function buildPairFacts(input: {
   providers: string[];
   accountIds: Record<string, string[]>;
+  pinterestBoardId: string | null | undefined;
   prep: PersonaPrep;
   title: string;
   segments: unknown;
@@ -92,6 +95,7 @@ export function buildPairFacts(input: {
   return {
     providers: input.providers,
     accountIds: input.accountIds,
+    pinterestBoardId: input.pinterestBoardId ?? null,
     voiceId: prep.voiceIdValue ?? null,
     faceless: prep.faceless,
     fullLipsync: input.fullLipsync === true,
@@ -151,6 +155,9 @@ export function pairMismatch(partner: PairFacts, current: PairFacts): { field: s
     if (sortedList(partner.accountIds[provider]) !== sortedList(current.accountIds[provider])) {
       return { field: `publishing.accounts.${provider}`, message: 'Both videos of a pair must publish to the same accounts.' };
     }
+  }
+  if ((partner.pinterestBoardId ?? null) !== (current.pinterestBoardId ?? null)) {
+    return { field: 'publishing.pinterestBoardId', message: 'Both videos of a pair must publish to the same Pinterest board.' };
   }
   if (partner.voiceId !== current.voiceId) {
     return { field: 'options.voiceId', message: 'Both videos of a pair must use the same voice.' };
@@ -261,7 +268,7 @@ async function comparePartner(
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
     .select(
-      'providers, post_voice_id, post_voice_audio_url, post_video_aspect, post_video_layout, post_paragraph_number, post_face_quality, post_language, post_niche, post_cta_text, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids',
+      'providers, post_voice_id, post_voice_audio_url, post_video_aspect, post_video_layout, post_paragraph_number, post_face_quality, post_language, post_niche, post_cta_text, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids',
     )
     .eq('id', partner.schedule_id)
     .eq('user_id', userId)
@@ -276,6 +283,7 @@ async function comparePartner(
     {
       providers: schedule.providers,
       accountIds,
+      pinterestBoardId: schedule.pinterest_board_id ?? null,
       voiceId: schedule.post_voice_id,
       faceless: partner.faceless,
       fullLipsync: partner.full_lipsync,

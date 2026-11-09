@@ -9,7 +9,7 @@ import type { AccountData, InstagramAccountData } from '@/lib/types';
 // client guards and the OAuth union all derive from here.
 //---------------
 
-export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook'] as const;
+export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'] as const;
 
 export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
 
@@ -68,18 +68,49 @@ export interface FacebookAccountData {
   lastUsed: number;
 }
 
+export interface PinterestAccountData {
+  provider: 'pinterest';
+  recordId: string;
+  providerAccountId: string;
+  accountName: string | null;
+  profilePictureUrl?: string;
+  connectedAt: number;
+  lastUsed: number;
+}
+
+export interface ThreespeakAccountData {
+  provider: '3speak';
+  recordId: string;
+  providerAccountId: string;
+  accountName: string | null;
+  connectedAt: number;
+  lastUsed: number;
+}
+
+export interface RumbleAccountData {
+  provider: 'rumble';
+  recordId: string;
+  providerAccountId: string;
+  accountName: string | null;
+  connectedAt: number;
+  lastUsed: number;
+}
+
 export type PublicAccountItem =
   | AccountData
   | InstagramAccountData
   | BlueskyAccountData
   | LinkedinAccountData
   | ThreadsAccountData
-  | FacebookAccountData;
+  | FacebookAccountData
+  | PinterestAccountData
+  | ThreespeakAccountData
+  | RumbleAccountData;
 
 //---------------
 // ProviderDef — contract every provider must implement.
 // supportsOAuthCallback marks who has an OAuth flow (bluesky uses app
-// password, not OAuth).
+// password and rumble a manual access token, not OAuth).
 //---------------
 
 interface ProviderDef<OAuth extends boolean = boolean> {
@@ -241,6 +272,53 @@ const facebookDef: ProviderDef<true> = {
   },
 };
 
+const pinterestDef: ProviderDef<true> = {
+  supportsOAuthCallback: true,
+  toPublicAccount(record) {
+    return {
+      provider: 'pinterest',
+      recordId: record.id,
+      providerAccountId: record.providerAccountId,
+      accountName: record.accountName,
+      profilePictureUrl: asOptionalString(record.accountMetadata.profilePictureUrl),
+      connectedAt: createdAtTimestamp(record),
+      lastUsed: lastUsedTimestamp(record),
+    };
+  },
+};
+
+// 3Speak has no OAuth: the Hive posting key connects the account (like the
+// Bluesky app password), and the provider_account_id is the Hive username.
+const threespeakDef: ProviderDef<false> = {
+  supportsOAuthCallback: false,
+  toPublicAccount(record) {
+    return {
+      provider: '3speak',
+      recordId: record.id,
+      providerAccountId: record.providerAccountId,
+      accountName: record.accountName,
+      connectedAt: createdAtTimestamp(record),
+      lastUsed: lastUsedTimestamp(record),
+    };
+  },
+};
+
+// Rumble has no OAuth and no profile API: the account is the channel id
+// the user typed at connect, and the card shows that id.
+const rumbleDef: ProviderDef<false> = {
+  supportsOAuthCallback: false,
+  toPublicAccount(record) {
+    return {
+      provider: 'rumble',
+      recordId: record.id,
+      providerAccountId: record.providerAccountId,
+      accountName: record.accountName,
+      connectedAt: createdAtTimestamp(record),
+      lastUsed: lastUsedTimestamp(record),
+    };
+  },
+};
+
 //---------------
 // PROVIDER_REGISTRY — exhaustive by construction: a provider in the union without
 // an entry here (or vice versa) = compile error.
@@ -253,6 +331,9 @@ export const PROVIDER_REGISTRY = {
   linkedin: linkedinDef,
   threads: threadsDef,
   facebook: facebookDef,
+  pinterest: pinterestDef,
+  '3speak': threespeakDef,
+  rumble: rumbleDef,
 } satisfies Record<SocialProvider, ProviderDef>;
 
 // OAuthProvider — derived from the registry: whoever has supportsOAuthCallback: true.

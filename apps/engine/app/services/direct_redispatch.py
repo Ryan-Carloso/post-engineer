@@ -29,6 +29,7 @@ from app.models import const
 from app.models.schema import TaskVideoRequest
 from app.services.analytics import track_event
 from app.services.orphan_requeue import GENERATION_STAGES, MAX_AUTO_REQUEUES
+from app.services.script_segments import legacy_media_list
 
 
 @dataclass(frozen=True)
@@ -128,7 +129,13 @@ def triage_redispatch_direct(state: Any, task_id: str, data: dict[str, Any]) -> 
         )
         return False
     try:
-        request = TaskVideoRequest.model_validate(row["params"])
+        params = row["params"]
+        # A payload persisted before the media-list contract carries one
+        # object per segment; normalize it so the prepaid orphan is
+        # claimed instead of dropped as unvalidatable.
+        if isinstance(params.get("segments"), list):
+            params = {**params, "segments": legacy_media_list(params["segments"])}
+        request = TaskVideoRequest.model_validate(params)
     except ValidationError as exc:
         # Deterministic: the persisted payload can never validate (schema
         # drift or a corrupt row). Fail+refund instead of retrying it on

@@ -14,6 +14,8 @@ import { INSTAGRAM_USERNAME_FALLBACK, YOUTUBE_PLACEHOLDER_ACCOUNT_ID, type Socia
 import { InstagramService } from './instagram';
 import { fetchThreadsProfile } from './threads';
 import { fetchFacebookPageProfile } from './facebook';
+import { fetchPinterestUserProfile } from './pinterest';
+import { getValidPinterestAccessToken } from './pinterest-tokens';
 import { fetchLinkedInMemberProfile } from './linkedin';
 import { fetchBlueskyPublicProfile } from './bluesky-profile';
 import { createGoogleOAuth2Client } from './youtube';
@@ -151,6 +153,46 @@ const facebook: ProfileSource = {
   },
 };
 
+const pinterest: ProfileSource = {
+  pictureKey: 'profilePictureUrl',
+  applies: always,
+  async fetch(supabase, userId, record) {
+    const profile = await fetchPinterestUserProfile(
+      await getValidPinterestAccessToken(supabase, userId, record.providerAccountId),
+    );
+    return {
+      accountName: profile.username,
+      pictureUrl: profile.profileImage,
+      metadata: {
+        name: profile.username,
+        profilePictureUrl: profile.profileImage,
+      },
+    };
+  },
+};
+
+// 3Speak has no public profile endpoint in the documented Studio API
+// (my-videos returns videos, not a profile), so the resync never applies:
+// the card keeps the Hive username stored at connect time. fetch returns
+// the stored name so a future caller degrades safely instead of throwing.
+const threespeak: ProfileSource = {
+  pictureKey: 'profilePictureUrl',
+  applies: () => false,
+  async fetch(_supabase, _userId, record) {
+    return { accountName: record.accountName, pictureUrl: null, metadata: {} };
+  },
+};
+
+// Rumble has no profile API: the resync never applies, so the stored
+// channel id (written at connect) is never overwritten with a fallback.
+const rumble: ProfileSource = {
+  pictureKey: 'profilePictureUrl',
+  applies: () => false,
+  async fetch() {
+    throw new Error('RUMBLE_PROFILE_UNAVAILABLE: Rumble has no profile API');
+  },
+};
+
 export const PROFILE_SOURCES: Record<SocialProvider, ProfileSource> = {
   instagram,
   threads,
@@ -158,4 +200,7 @@ export const PROFILE_SOURCES: Record<SocialProvider, ProfileSource> = {
   bluesky,
   linkedin,
   facebook,
+  pinterest,
+  '3speak': threespeak,
+  rumble,
 };

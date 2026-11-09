@@ -3,6 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.gen';
 import { encryptTokens, decryptTokens } from '@/lib/token-crypto';
+import { AccountNotFoundError } from '@/lib/errors';
 import type { SocialProvider } from '@/lib/providers/registry';
 
 //---------------
@@ -194,7 +195,7 @@ export async function getSocialAccountTokens(
   }
 
   if (!data) {
-    throw new Error(
+    throw new AccountNotFoundError(
       `Social account not found for ${provider}/${providerAccountId}`,
     );
   }

@@ -32,12 +32,29 @@ def test_material_name_matches_the_shared_validator():
     assert match is not None and match.group(1) == faceless_material.IMAGES
 
 
-def test_images_media_cap_is_one_per_segment_on_both_sides():
-    assert _export_line("MAX_IMAGES_MODE_MEDIAS").endswith("= MAX_SEGMENTS;")
-    assert script_segments.MAX_IMAGES_MODE_MEDIAS == script_segments.MAX_SEGMENTS
-    segments_line = _export_line("MAX_SEGMENTS")
-    assert segments_line == f"export const MAX_SEGMENTS = {script_segments.MAX_SEGMENTS};"
+def test_image_density_constants_match_the_shared_validator():
+    from app.services import image_density
+
+    for name in ("WORDS_PER_IMAGE", "MIN_WORDS_PER_IMAGE", "MAX_IMAGES_MODE_MEDIAS"):
+        assert _export_line(name) == f"export const {name} = {getattr(image_density, name)};"
+    assert script_segments.MAX_IMAGES_MODE_MEDIAS == image_density.MAX_IMAGES_MODE_MEDIAS
+    assert _export_line("MAX_SEGMENTS") == f"export const MAX_SEGMENTS = {script_segments.MAX_SEGMENTS};"
 
 
 def test_other_materials_media_cap_matches_the_shared_validator():
     assert _export_line("MAX_MEDIAS") == f"export const MAX_MEDIAS = {script_segments.MAX_MEDIAS};"
+
+
+def test_repeated_photo_rule_matches_the_shared_validator():
+    # Web and MCP run generated copies of the shared file. This pins the
+    # engine and that source to the same rule and fix text only: it does
+    # not prove the comparison semantics agree (token format, trimmed
+    # identity, mediaId-vs-url distinctness, rule precedence). Those are
+    # pinned per validator by the repeat tests (test_repeated_photo.py
+    # and script-segments-repeat.test.ts), not by this string check.
+    rule = "the same photo must not repeat"
+    fix = "Use a different photo for each media item."
+    engine = Path(script_segments.__file__).read_text(encoding="utf-8")
+    shared = _shared_text()
+    assert rule in engine and rule in shared
+    assert fix in engine and fix in shared

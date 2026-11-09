@@ -26,4 +26,23 @@ describe('ProviderIcon', () => {
     const svg = screen.getByRole('img', { name: 'youtube' }).querySelector('svg');
     expect(svg).toHaveAttribute('aria-hidden', 'true');
   });
+
+  it('renders the 3Speak play-triangle glyph', () => {
+    render(<ProviderIcon provider="3speak" />);
+    const img = screen.getByRole('img', { name: '3speak' });
+    expect(img).toHaveClass('text-foreground');
+    expect(img.querySelector('svg path')).toHaveAttribute('d', 'M8 5.5v13l11-6.5-11-6.5Z');
+  });
+
+  it('renders the Rumble glyph in Rumble green with the evenodd play mark', () => {
+    render(<ProviderIcon provider="rumble" />);
+    const img = screen.getByRole('img', { name: 'rumble' });
+    expect(img).toHaveClass('text-[#85c742]');
+    const path = img.querySelector('path');
+    expect(path).toHaveAttribute('fill-rule', 'evenodd');
+    expect(path).toHaveAttribute(
+      'd',
+      'M5 2h14a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3ZM10 8.2v7.6L16.8 12 10 8.2Z',
+    );
+  });
 });

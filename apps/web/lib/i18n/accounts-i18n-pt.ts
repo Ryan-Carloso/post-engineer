@@ -57,6 +57,19 @@ export const accountsI18nPt = {
   blueskySecurityHint:
       'A app password equivale à sua senha — pode ser revogada a qualquer momento nas configurações do Bluesky.',
   blueskyDisconnect: 'Desconectar',
+  threespeakLabel: '3Speak',
+  threespeakDescription: 'Publique vídeos na blockchain Hive e ganhe recompensas em HIVE.',
+  threespeakConnectTitle: 'Conecte sua conta do 3Speak',
+  threespeakConnectHint:
+      'Informe seu usuário Hive e a posting key. A posting key só autoriza posts — não pode mover fundos nem alterar as chaves da sua conta.',
+  threespeakHandleLabel: 'Usuário Hive (ex.: alice)',
+  threespeakPasswordLabel: 'Posting key Hive',
+  threespeakConnect: 'Conectar com o 3Speak',
+  threespeakConnectError: 'Não foi possível conectar: verifique o usuário e a posting key.',
+  threespeakCredentialRejected: 'O 3Speak rejeitou este usuário ou posting key — confira os dois e tente novamente.',
+  threespeakSecurityHint:
+      'Sua posting key é armazenada criptografada. Nunca cole sua senha owner, active ou master — só a posting key.',
+  threespeakDisconnect: 'Desconectar',
   linkedinLabel: 'LinkedIn',
   linkedinDescription: 'Publique vídeos no seu perfil e nas páginas que administra.',
   linkedinConnectTitle: 'Conecte sua conta do LinkedIn',

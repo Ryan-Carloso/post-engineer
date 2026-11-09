@@ -61,13 +61,18 @@ export interface GeneratePersonaVideoInput {
   title: string;
   /** Paired A/B experiment link (issue #476); checked server-side before the charge. */
   experiment?: { experimentId: string; variantId: string; pair: number };
-  providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook')[];
+  providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble')[];
   youtubeAccountIds?: string[];
   instagramAccountIds?: string[];
   linkedinAccountIds?: string[];
   blueskyAccountIds?: string[];
   threadsAccountIds?: string[];
   facebookAccountIds?: string[];
+  pinterestAccountIds?: string[];
+  /** Pinterest only: the board the pin goes to (the id from list_pinterest_boards). Required when pinterest is selected. */
+  pinterestBoardId?: string;
+  threespeakAccountIds?: string[];
+  rumbleAccountIds?: string[];
   /**
    * Publish mode. 'scheduled' (default) slots the video at startAt + times;
    * 'asap' publishes it the moment generation finishes, with no scheduled
@@ -101,7 +106,7 @@ export interface GeneratePersonaVideoInput {
     segments?: Array<{
       kind: 'hook' | 'body' | 'cta';
       text: string;
-      media?: { mediaId?: string; url?: string; overlay?: { title: string; subtitle?: string; badge?: string } };
+      media?: Array<{ mediaId?: string; url?: string; overlay?: { title: string; subtitle?: string; badge?: string } }>;
       terms?: string[];
     }>;
   };
@@ -126,21 +131,23 @@ export interface UpdatePersonaInput {
 
 /** Input for publishing a user-provided video directly, without generation. */
 export interface PublishVideoDirectInput {
-  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook';
+  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble';
   /** Local path to the video file (.mp4 or .mov, max 2GB). */
   videoPath: string;
-  /** Target accounts (channel IDs / IG user IDs / DIDs / LinkedIn member IDs or org URNs / Threads user IDs / Facebook Page IDs). */
+  /** Target accounts (channel IDs / IG user IDs / DIDs / LinkedIn member IDs or org URNs / Threads user IDs / Facebook Page IDs / Pinterest user IDs / Hive usernames / Rumble Channel IDs). */
   accountIds: string[];
-  /** YouTube only: required. */
+  /** YouTube and Rumble: required. Pinterest: pin title (optional). */
   title?: string;
-  /** YouTube only: required. */
+  /** YouTube and Rumble: required. Pinterest: pin description (optional; caption is used when omitted). */
   description?: string;
   /** YouTube only: required, at least one tag. */
   tags?: string[];
   /** YouTube only: required. */
   privacyStatus?: 'public' | 'private' | 'unlisted';
-  /** Instagram/Bluesky/LinkedIn/Threads/Facebook: required. */
+  /** Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak: required. Pinterest: pin description when description is omitted. */
   caption?: string;
+  /** Pinterest only: required. The board the pin goes to (the id from list_pinterest_boards). */
+  boardId?: string;
 }
 
 /** One per-account outcome from a direct-publish upload. */
@@ -150,6 +157,8 @@ export interface DirectPublishAccountResult {
   videoId?: string;
   videoUrl?: string;
   postId?: string;
+  /** Ready-made post URL (Pinterest pin URL, Instagram/Threads/Facebook permalink). */
+  permalink?: string;
   error?: string;
 }
 

@@ -9,6 +9,8 @@ import {
   useBlueskyAccountsQuery,
   useFacebookAccountsQuery,
 } from '@/lib/api';
+import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
+import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
 import type { SocialProvider } from '@/lib/providers/registry';
 
 //---------------
@@ -34,6 +36,8 @@ export function usePostAccountCards(): AccountCardData[] {
   const blueskyQuery = useBlueskyAccountsQuery();
   const threadsQuery = useThreadsAccountsQuery();
   const facebookQuery = useFacebookAccountsQuery();
+  const pinterestQuery = usePinterestAccountsQuery();
+  const rumbleQuery = useRumbleAccountsQuery();
 
   return useMemo(
     () => [
@@ -73,7 +77,19 @@ export function usePostAccountCards(): AccountCardData[] {
         name: account.accountName ?? account.providerAccountId,
         thumbnail: account.profilePictureUrl,
       })),
+      ...(pinterestQuery.data?.accounts ?? []).map((account) => ({
+        id: account.providerAccountId,
+        type: 'pinterest' as const,
+        name: account.accountName ?? account.providerAccountId,
+        thumbnail: account.profilePictureUrl,
+      })),
+      // No thumbnail: Rumble has no profile API, so there is no avatar to show.
+      ...(rumbleQuery.data?.accounts ?? []).map((account) => ({
+        id: account.providerAccountId,
+        type: 'rumble' as const,
+        name: account.accountName ?? account.providerAccountId,
+      })),
     ],
-    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data, threadsQuery.data, facebookQuery.data],
+    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data, threadsQuery.data, facebookQuery.data, pinterestQuery.data, rumbleQuery.data],
   );
 }

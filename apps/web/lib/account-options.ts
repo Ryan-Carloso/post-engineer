@@ -15,6 +15,9 @@ export const PROVIDER_LABELS: Record<SocialProvider, string> = {
   bluesky: 'Bluesky',
   threads: 'Threads',
   facebook: 'Facebook',
+  pinterest: 'Pinterest',
+  '3speak': '3Speak',
+  rumble: 'Rumble',
 };
 
 // Every account a schedule targets, across all networks.
@@ -25,6 +28,9 @@ export function scheduleAccountIds(schedule: {
   blueskyAccountIds?: string[];
   threadsAccountIds?: string[];
   facebookAccountIds?: string[];
+  pinterestAccountIds?: string[];
+  threespeakAccountIds?: string[];
+  rumbleAccountIds?: string[];
 }): string[] {
   return [
     ...(schedule.youtubeAccountIds ?? []),
@@ -33,6 +39,9 @@ export function scheduleAccountIds(schedule: {
     ...(schedule.blueskyAccountIds ?? []),
     ...(schedule.threadsAccountIds ?? []),
     ...(schedule.facebookAccountIds ?? []),
+    ...(schedule.pinterestAccountIds ?? []),
+    ...(schedule.threespeakAccountIds ?? []),
+    ...(schedule.rumbleAccountIds ?? []),
   ];
 }
 
@@ -52,6 +61,15 @@ export function accountOption(account: PublicAccountItem): AccountOption {
   }
   if (account.provider === 'facebook') {
     return { id: account.providerAccountId, provider: 'facebook', label: account.accountName ?? account.providerAccountId };
+  }
+  if (account.provider === 'pinterest') {
+    return { id: account.providerAccountId, provider: 'pinterest', label: account.accountName ?? account.providerAccountId };
+  }
+  if (account.provider === '3speak') {
+    return { id: account.providerAccountId, provider: '3speak', label: account.accountName ?? account.providerAccountId };
+  }
+  if (account.provider === 'rumble') {
+    return { id: account.providerAccountId, provider: 'rumble', label: account.accountName ?? account.providerAccountId };
   }
   if (account.provider === 'instagram') return { id: account.igUserId, provider: 'instagram', label: `@${account.username}` };
   return { id: account.channelId, provider: 'youtube', label: account.channelName };

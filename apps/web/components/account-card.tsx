@@ -11,7 +11,7 @@ import type { SocialProvider } from '@/lib/providers/registry';
 
 //---------------
 // AccountCard — shared social-account card.
-// Supports YouTube, Instagram, Bluesky, LinkedIn, Threads and Facebook.
+// Supports YouTube, Instagram, Bluesky, LinkedIn, Threads, Facebook and Rumble.
 // Used on the accounts page (select / disconnect), API-key creation
 // (checkbox selection) and the persona schedule (compact mode: avatar
 // only, falling back to the first letters of the name).

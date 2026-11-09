@@ -16,6 +16,7 @@ import { categorizeGenerationError, GENERATION_ERROR_KEY } from '@/lib/generatio
 import { cn } from '@/lib/utils';
 import { CALENDAR_GROUP_ICON, CALENDAR_GROUP_KEY, CALENDAR_GROUP_PILL, STATUS_KEY, STATUS_STYLE, calendarGroupOf } from './status';
 import { CREATE_POSTS_HREF } from './day-section';
+import { PublishAccountNotices } from './publish-user-notice';
 
 //---------------
 // Cards of the posts list: scheduled posts (PostCard) and standalone video
@@ -222,6 +223,7 @@ export const PostCard = ({
             </div>
           </div>
         )}
+        <PublishAccountNotices status={slot.status} userNotices={slot.userNotices} compact />
       </Link>
       {isFailed && (
         <FailureBox message={failureMessage}>

@@ -81,6 +81,7 @@ import {
 } from './video-task-tools.js';
 import { GeneratePersonaVideoShape, ValidateScriptShape, ValidateScriptDescription, ScoreDraftShape, ScoreDraftDescription, handleGeneratePersonaVideo, handleValidateScript, handleScoreDraft } from './tools-single-video.js';
 import { CheckMediaDescription, CheckMediaShape, UploadMediaDescription, UploadMediaShape, handleCheckMedia, handleUploadMedia } from './tools-user-media.js';
+import { ListPinterestBoardsDescription, ListPinterestBoardsShape, handleListPinterestBoards } from './tools-pinterest.js';
 import { GeneratePersonaVideoBatchDescription, GeneratePersonaVideoBatchShape, handleGeneratePersonaVideoBatch } from './tools-batch.js';
 import { AddExperimentPairShape, CreateExperimentShape, GetExperimentResultsShape, ListExperimentsShape, handleAddExperimentPair, handleCreateExperiment, handleGetExperimentResults, handleListExperiments } from './tools-experiments.js';
 import { withTracking } from './analytics.js';
@@ -164,11 +165,20 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'list_social_accounts',
-    'List connected social accounts (YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky) with the account IDs needed for posting.',
+    'List connected social accounts (YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky, Pinterest, Rumble) with the account IDs needed for posting.',
     ListSocialAccountsShape,
     withTracking('list_social_accounts', withRecipeNudge(recipeSession, 'list_social_accounts', async () => {
       return handleListSocialAccounts(apiClient);
     }))
+  );
+
+  server.tool(
+    'list_pinterest_boards',
+    ListPinterestBoardsDescription,
+    ListPinterestBoardsShape,
+    withTracking('list_pinterest_boards', async (args) => {
+      return handleListPinterestBoards(apiClient, args);
+    })
   );
 
   server.tool(
@@ -191,7 +201,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'connect_account',
-    'Connect a social account. For youtube/instagram/linkedin/threads/facebook: returns an authorization URL — the user must open it in a browser where they are signed in to Post Engineer with the same account, and authorize; the account then connects automatically (verify with list_social_accounts). A browser that is not signed in, or signed in as another user, is rejected. For bluesky: connects directly with handle + appPassword (app password, not the main account password).',
+    'Connect a social account. For youtube/instagram/linkedin/threads/facebook/pinterest: returns an authorization URL — the user must open it in a browser where they are signed in to Post Engineer with the same account, and authorize; the account then connects automatically (verify with list_social_accounts). A browser that is not signed in, or signed in as another user, is rejected. For bluesky: connects directly with handle + appPassword (app password, not the main account password). For 3speak: connects directly with Hive username + posting key (posting key, not the owner/active/master password) For rumble: connects directly with channelId + accessToken (40-character Simple Upload API token, issued by emailing bd@rumble.com — no OAuth).',
     ConnectAccountShape,
     withTracking('connect_account', async (args) => {
       return handleConnectAccount(apiClient, args);
@@ -209,7 +219,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'list_posts',
-    'List upcoming (scheduled) and past (published/failed) posts across all connected accounts. With from + to (ISO-8601 timestamps with UTC offset, at most 62 days) it instead returns every post of any status (awaiting|generating|ready|publishing|published|failed) with slot_at in [from, to) as one slots list plus truncated (true when the cap was hit) — use it to read a day or month. Without from/to it returns two lists: upcoming slots and recent results, each with id, slot_at, status (awaiting|generating|ready|published|failed), title, schedule_id, task_id, progress (0-100: 0 for awaiting, 100 for ready/publishing/published, live engine progress for generating, last known for failed), stage (engine pipeline stage like "lipsync" while generating, "done" when complete, null otherwise), queuePosition/queueTotal (1-based position among the schedule\'s awaiting+generating slots; awaiting slots only, null otherwise). Failed slots also carry error and retryable (boolean: true when the failure looks transient). Use when the user asks about their posts — what is coming next, what already went out, how far a video has generated, where it sits in the queue, or why a post failed. Combine with list_schedules or list_social_accounts when persona/account names are needed.',
+    'List upcoming (scheduled) and past (published/failed) posts across all connected accounts. With from + to (ISO-8601 timestamps with UTC offset, at most 62 days) it instead returns every post of any status (awaiting|generating|ready|publishing|published|failed) with slot_at in [from, to) as one slots list plus truncated (true when the cap was hit) — use it to read a day or month. Without from/to it returns two lists: upcoming slots and recent results, each with id, slot_at, status (awaiting|generating|ready|publishing|published|failed; publishing appears in upcoming only when the slot already has userNotices), title, schedule_id, task_id, progress (0-100: 0 for awaiting, 100 for ready/publishing/published, live engine progress for generating, last known for failed), stage (engine pipeline stage like "lipsync" while generating, "done" when complete, null otherwise), queuePosition/queueTotal (1-based position among the schedule\'s awaiting+generating slots; awaiting slots only, null otherwise). Failed slots also carry error and retryable (boolean: true when the failure looks transient). Use when the user asks about their posts — what is coming next, what already went out, how far a video has generated, where it sits in the queue, or why a post failed. Combine with list_schedules or list_social_accounts when persona/account names are needed. A slot that is still publishing is included in upcoming when it already has userNotices (requiresUser true): relay each notice as-is and do not retry, because only the user can fix the account. providerFailures lists every terminal account failure; its requiresUser is true only for the failures also in userNotices.',
     ListPostsShape,
     withTracking('list_posts', async (args) => {
       return handleListPosts(apiClient, args);
@@ -227,7 +237,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'get_slot',
-    'Get one scheduled post\'s full detail by slot ID: status, title, scheduled time, generation progress, its schedule (providers, publish mode) and persona. Use the slotId from list_posts.',
+    'Get one scheduled post\'s full detail by slot ID: status, title, scheduled time, generation progress, its schedule (providers, publish mode) and persona. userNotices (requiresUser true) and providerFailures are on the slot as soon as an account fails, including while the slot is still publishing. Relay each userNotices notice. Only the user can fix that account. Do not retry it. Use the slotId from list_posts.',
     GetSlotShape,
     withTracking('get_slot', async (args) => {
       return handleGetSlot(apiClient, args);
@@ -417,7 +427,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'publish_video_direct',
-    `Publish a ready-made video file directly to social accounts — no generation, no schedule. Reads a local video (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB) and posts it immediately via POST /api/upload-content. YouTube requires title, description, tags, and privacyStatus; Instagram/Bluesky/LinkedIn/Threads/Facebook require caption.`,
+    `Publish a ready-made video file directly to social accounts — no generation, no schedule. Reads a local video (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB) and posts it immediately via POST /api/upload-content. YouTube requires title, description, tags, and privacyStatus; Rumble requires title and description; Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak require caption.`,
     PublishVideoDirectShape,
     withTracking('publish_video_direct', async (args) => {
       return handlePublishVideoDirect(apiClient, args);

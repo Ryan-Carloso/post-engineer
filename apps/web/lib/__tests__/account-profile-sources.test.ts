@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('server-only', () => ({}));
-vi.mock('@/lib/social-accounts', () => ({ getSocialAccountTokens: vi.fn() }));
+vi.mock('@/lib/social-accounts', () => ({ getSocialAccountTokens: vi.fn(), updateSocialAccountTokens: vi.fn() }));
 const { getProfile } = vi.hoisted(() => ({ getProfile: vi.fn() }));
 vi.mock('@/lib/instagram', () => ({
   InstagramService: vi.fn().mockImplementation(function InstagramServiceMock() {
@@ -14,15 +14,17 @@ vi.mock('@/lib/linkedin', () => ({ fetchLinkedInMemberProfile: vi.fn() }));
 vi.mock('@/lib/bluesky-profile', () => ({ fetchBlueskyPublicProfile: vi.fn() }));
 vi.mock('@/lib/youtube', () => ({ createGoogleOAuth2Client: vi.fn() }));
 vi.mock('@/lib/youtube-channel', () => ({ fetchYouTubeChannel: vi.fn() }));
+vi.mock('@/lib/pinterest', () => ({ fetchPinterestUserProfile: vi.fn(), refreshPinterestAccessToken: vi.fn() }));
 
 import { PROFILE_SOURCES } from '@/lib/account-profile-sources';
-import { getSocialAccountTokens, type SocialAccountRecord } from '@/lib/social-accounts';
+import { getSocialAccountTokens, updateSocialAccountTokens, type SocialAccountRecord } from '@/lib/social-accounts';
 import { fetchThreadsProfile } from '@/lib/threads';
 import { fetchFacebookPageProfile } from '@/lib/facebook';
 import { fetchLinkedInMemberProfile } from '@/lib/linkedin';
 import { fetchBlueskyPublicProfile } from '@/lib/bluesky-profile';
 import { createGoogleOAuth2Client } from '@/lib/youtube';
 import { fetchYouTubeChannel } from '@/lib/youtube-channel';
+import { fetchPinterestUserProfile, refreshPinterestAccessToken } from '@/lib/pinterest';
 import { SOCIAL_PROVIDERS, YOUTUBE_PLACEHOLDER_ACCOUNT_ID } from '@/lib/providers/registry';
 
 const supabase = {} as never;
@@ -38,10 +40,24 @@ describe('PROFILE_SOURCES', () => {
   beforeEach(() => {
     vi.mocked(getSocialAccountTokens).mockReset();
     vi.mocked(getSocialAccountTokens).mockResolvedValue({ tokens: { access_token: 'tok', refresh_token: 'rt' } } as never);
+    vi.mocked(updateSocialAccountTokens).mockReset();
+    vi.mocked(fetchPinterestUserProfile).mockReset();
+    vi.mocked(refreshPinterestAccessToken).mockReset();
   });
 
   it('covers every provider', () => {
     expect(Object.keys(PROFILE_SOURCES).sort()).toEqual([...SOCIAL_PROVIDERS].sort());
+  });
+
+  it('3speak never resyncs (no profile endpoint) and keeps the stored name', async () => {
+    const stored = record('3speak', 'alice');
+    expect(PROFILE_SOURCES['3speak'].applies(stored)).toBe(false);
+    await expect(PROFILE_SOURCES['3speak'].fetch(supabase, 'u1', stored)).resolves.toEqual({
+      accountName: 'stored',
+      pictureUrl: null,
+      metadata: {},
+    });
+    expect(getSocialAccountTokens).not.toHaveBeenCalled();
   });
 
   it('instagram reads with the stored token and drops the fallback username', async () => {
@@ -155,5 +171,50 @@ describe('PROFILE_SOURCES', () => {
       metadata: { name: 'Me', picture: 'https://media.licdn.com/p' },
     });
     expect(PROFILE_SOURCES.linkedin.pictureKey).toBe('picture');
+  });
+
+  it('pinterest reads with the stored token when it has not expired', async () => {
+    vi.mocked(getSocialAccountTokens).mockResolvedValue({
+      tokens: { access_token: 'tok', refresh_token: 'rt', expiry_date: Date.now() + 3_600_000 },
+    } as never);
+    vi.mocked(fetchPinterestUserProfile).mockResolvedValue({ id: 'pin-1', username: 'maker', profileImage: 'https://i.pinimg.com/p.jpg' });
+    const fetched = await PROFILE_SOURCES.pinterest.fetch(supabase, 'u1', record('pinterest', 'pin-1'));
+    expect(fetchPinterestUserProfile).toHaveBeenCalledWith('tok');
+    expect(refreshPinterestAccessToken).not.toHaveBeenCalled();
+    expect(fetched).toEqual({
+      accountName: 'maker',
+      pictureUrl: 'https://i.pinimg.com/p.jpg',
+      metadata: { name: 'maker', profilePictureUrl: 'https://i.pinimg.com/p.jpg' },
+    });
+    expect(PROFILE_SOURCES.pinterest.pictureKey).toBe('profilePictureUrl');
+  });
+
+  it('pinterest refreshes an expired token before reading the profile', async () => {
+    vi.mocked(getSocialAccountTokens).mockResolvedValue({
+      tokens: { access_token: 'old', refresh_token: 'rt', expiry_date: Date.now() - 1_000 },
+    } as never);
+    vi.mocked(refreshPinterestAccessToken).mockResolvedValue({
+      access_token: 'new', refresh_token: 'rt2', token_type: 'Bearer', expires_in: 2_592_000,
+    });
+    vi.mocked(fetchPinterestUserProfile).mockResolvedValue({ id: 'pin-1', username: 'maker', profileImage: 'https://i.pinimg.com/p.jpg' });
+    const fetched = await PROFILE_SOURCES.pinterest.fetch(supabase, 'u1', record('pinterest', 'pin-1'));
+    expect(refreshPinterestAccessToken).toHaveBeenCalledWith('rt');
+    expect(updateSocialAccountTokens).toHaveBeenCalledWith(
+      supabase,
+      'u1',
+      'pinterest',
+      'pin-1',
+      expect.objectContaining({ access_token: 'new', refresh_token: 'rt2', token_type: 'Bearer' }),
+    );
+    expect(fetchPinterestUserProfile).toHaveBeenCalledWith('new');
+    expect(fetched.accountName).toBe('maker');
+  });
+
+  it('rumble never resyncs: there is no profile API, so the stored channel id stands', async () => {
+    expect(PROFILE_SOURCES.rumble.applies(record('rumble', 'chan-1'))).toBe(false);
+    await expect(PROFILE_SOURCES.rumble.fetch(supabase, 'u1', record('rumble', 'chan-1'))).rejects.toThrow(
+      'RUMBLE_PROFILE_UNAVAILABLE',
+    );
+    expect(getSocialAccountTokens).not.toHaveBeenCalled();
   });
 });

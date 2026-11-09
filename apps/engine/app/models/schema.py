@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.config import config
 from app.models import publish as publish_models
 from app.services.script_segments import (
+    MAX_IMAGES_MODE_MEDIAS,
     MAX_OVERLAY_BADGE_CHARS,
     MAX_OVERLAY_SUBTITLE_CHARS,
     MAX_OVERLAY_TITLE_CHARS,
@@ -316,7 +317,7 @@ class ScriptSegment(BaseModel):
 
     kind: Literal["hook", "body", "cta"]
     text: str
-    media: Optional[SegmentMedia] = None
+    media: Optional[list[SegmentMedia]] = Field(None, max_length=MAX_IMAGES_MODE_MEDIAS)
     terms: Optional[list[str]] = None
 
 

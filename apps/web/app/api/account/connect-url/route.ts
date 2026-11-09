@@ -21,6 +21,7 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 // The state is stored server-side (oauth_states table) and the callback
 // consumes it as a fallback. Body: { provider: 'youtube' | 'instagram' | 'linkedin' | 'threads' | 'facebook' }.
 // Bluesky uses an app password: POST /api/bluesky-connect.
+// Rumble uses a manual access token: POST /api/rumble-connect.
 //
 // Error contract (agent/MCP-consumed API): failures return
 //   { success: false, error: '<stable-code>' }
@@ -34,6 +35,7 @@ export const CONNECT_URL_ERRORS = {
   AUTHENTICATION_REQUIRED: 'authentication_required',
   INVALID_JSON_BODY: 'invalid_json_body',
   BLUESKY_REQUIRES_APP_PASSWORD: 'bluesky_requires_app_password',
+  RUMBLE_REQUIRES_ACCESS_TOKEN: 'rumble_requires_access_token',
   INVALID_PROVIDER: 'invalid_provider',
   REDIRECT_URI_UNAVAILABLE: 'redirect_uri_unavailable',
   PROVIDER_NOT_CONFIGURED: 'provider_not_configured',
@@ -62,6 +64,7 @@ const REDIRECT_ENV: Record<OAuthConnectProvider, [string, string]> = {
   linkedin: ['LINKEDIN_REDIRECT_URI_LOCAL', 'LINKEDIN_REDIRECT_URI'],
   threads: ['THREADS_REDIRECT_URI_LOCAL', 'THREADS_REDIRECT_URI'],
   facebook: ['FACEBOOK_REDIRECT_URI_LOCAL', 'FACEBOOK_REDIRECT_URI'],
+  pinterest: ['PINTEREST_REDIRECT_URI_LOCAL', 'PINTEREST_REDIRECT_URI'],
 };
 
 async function postHandler(request: NextRequest): Promise<NextResponse> {
@@ -84,6 +87,9 @@ async function postHandler(request: NextRequest): Promise<NextResponse> {
 
     if (provider === 'bluesky') {
       return errorResponse(400, CONNECT_URL_ERRORS.BLUESKY_REQUIRES_APP_PASSWORD, 'POST /api/account/connect-url');
+    }
+    if (provider === 'rumble') {
+      return errorResponse(400, CONNECT_URL_ERRORS.RUMBLE_REQUIRES_ACCESS_TOKEN, 'POST /api/account/connect-url');
     }
     if (!isOAuthConnectProvider(provider)) {
       return errorResponse(400, CONNECT_URL_ERRORS.INVALID_PROVIDER, 'POST /api/account/connect-url');

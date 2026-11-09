@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { filterVoicesPayload, ListVoicesSchema, type ListVoicesArgs } from './voice-filters.js';
-import { personaVoiceField, withResolvedPersonaVoice } from './voice-filters.js';
+import { filterVoicesPayload, ListVoicesSchema, personaVoiceField, withResolvedPersonaVoice, type ListVoicesArgs } from './voice-filters.js';
+import { noticeSummary, readNoticeList } from './publish-notices.js';
 import {
   CancelScheduleSchema,
   CancelScheduleShape,
@@ -16,6 +16,11 @@ import {
   UpdateSlotTitleSchema,
   UpdateSlotTitleShape,
 } from './schedule-shapes.js';
+import {
+  DisconnectAccountSchema,
+  DisconnectAccountShape,
+} from './account-shapes.js';
+import { PublishVideoDirectSchema, PublishVideoDirectShape } from './publish-direct-shape.js';
 
 // Re-exported so existing import sites (`./tools.js`) keep working.
 export {
@@ -23,6 +28,8 @@ export {
   CancelScheduleShape,
   DeleteSlotSchema,
   DeleteSlotShape,
+  DisconnectAccountSchema,
+  DisconnectAccountShape,
   GeneratePersonaVideoOptionsShape,
   GetSlotSchema,
   GetSlotShape,
@@ -30,6 +37,8 @@ export {
   ListPostsShape,
   ListSchedulesSchema,
   ListSchedulesShape,
+  PublishVideoDirectSchema,
+  PublishVideoDirectShape,
   UpdateSlotTitleSchema,
   UpdateSlotTitleShape,
 };
@@ -40,7 +49,6 @@ import {
   MAX_LIBRARY_IMAGE_MB,
   MAX_LIBRARY_TAG_LENGTH,
   MAX_LIBRARY_DESCRIPTION_LENGTH,
-  MAX_UPLOAD_VIDEO_GB,
   VIDEO_LAYOUTS,
 } from './client.js';
 import { getErrorMessage, ApiError } from './errors.js';
@@ -49,9 +57,7 @@ import { CreatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar
 
 export type { McpToolResponse } from './tools-call.js';
 
-// Shared field definitions: path/tag/description limits appear in both the
-// create-persona images array and add_persona_image — define once so the
-// limits and descriptions can't drift apart.
+// Image path/tag/description limits are shared by create-persona and add_persona_image.
 const LibraryImageFields = {
   path: z.string().min(1).describe(`Local file path to the image (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB)`),
   tag: z.string().max(MAX_LIBRARY_TAG_LENGTH).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
@@ -113,18 +119,11 @@ export const ListFacesSchema = z.object(ListFacesShape);
 // update_persona lives in persona-update.ts (shape, schema and handler);
 // re-exported here so existing import sites keep working.
 export { UpdatePersonaShape, UpdatePersonaSchema, handleUpdatePersona } from './persona-update.js';
+export { ConnectAccountShape, ConnectAccountSchema, handleConnectAccount } from './connect-account.js';
 
 export const ListSocialAccountsShape = {};
 
 export const ListSocialAccountsSchema = z.object(ListSocialAccountsShape);
-
-export const ConnectAccountShape = {
-  provider: z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook']).describe('The social platform to connect'),
-  handle: z.string().min(1).optional().describe('Bluesky handle (e.g. user.bsky.social). Required only for bluesky.'),
-  appPassword: z.string().min(1).optional().describe('Bluesky app password (Settings > App passwords). Required only for bluesky. Never shared or logged.'),
-};
-
-export const ConnectAccountSchema = z.object(ConnectAccountShape);
 
 export const ListVideoGenerationsShape = {
   limit: z
@@ -184,20 +183,6 @@ export const DeletePersonaShape = {
 };
 
 export const DeletePersonaSchema = z.object(DeletePersonaShape);
-
-export const DisconnectAccountShape = {
-  provider: z
-    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'])
-    .describe('The social platform of the account to disconnect.'),
-  providerAccountId: z
-    .string()
-    .min(1, 'providerAccountId is required')
-    .describe(
-      'The account ID on that provider (the channelId / igUserId / providerAccountId / did field from list_social_accounts).',
-    ),
-};
-
-export const DisconnectAccountSchema = z.object(DisconnectAccountShape);
 
 export const GetTokenBalanceShape = {};
 
@@ -322,95 +307,6 @@ export async function handleListSocialAccounts(
   return handleLibraryCall(() => client.listSocialAccounts(), 'listing social accounts');
 }
 
-export async function handleConnectAccount(
-  client: PostEngineerClient,
-  args: z.infer<typeof ConnectAccountSchema>
-): Promise<McpToolResponse> {
-  if (args.provider === 'bluesky') {
-    if (!args.handle || !args.appPassword) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Error: Bluesky requires both handle and appPassword.',
-          },
-        ],
-        isError: true,
-      };
-    }
-    try {
-      const result = await client.connectBlueskyAccount(args.handle, args.appPassword);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Bluesky account connected successfully: ${JSON.stringify(result, null, 2)}`,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error connecting Bluesky account: ${getErrorMessage(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  try {
-    const parsed = z.object({ auth_url: z.string().url() }).safeParse(await client.getOAuthConnectUrl(args.provider));
-    if (!parsed.success) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Error: the connect endpoint did not return an auth_url.',
-          },
-        ],
-        isError: true,
-      };
-    }
-    const result = parsed.data;
-    // Never echo a non-https URL as a "open in your browser" authorization
-    // link: z.string().url() accepts any scheme, including javascript:.
-    if (new URL(result.auth_url).protocol !== 'https:') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Error: the connect endpoint returned a non-https auth_url.',
-          },
-        ],
-        isError: true,
-      };
-    }
-    return {
-      content: [
-        {
-          type: 'text',
-          text:
-            `To connect your ${args.provider} account, open this URL in a browser where you are signed in to Post Engineer with the same account as this API key, and authorize Post Engineer:\n\n` +
-            `${result.auth_url}\n\n` +
-            `Once you authorize, the account is connected automatically. Verify with list_social_accounts.`,
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error getting OAuth connect URL: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
-}
 
 export async function handleListSchedules(
   client: PostEngineerClient
@@ -432,7 +328,7 @@ export async function handleGetSlot(
   try {
     const narrowed = narrowSlotDetail(await client.getSlot(args.slotId));
     const slot = narrowed.slot;
-    const humanSummary = `Slot ${slot.id ?? args.slotId}: "${slot.title ?? '(untitled)'}" — ${slot.status ?? 'unknown'}, scheduled for ${slot.slotAt ?? '(unscheduled)'}.`;
+    const humanSummary = `Slot ${slot.id ?? args.slotId}: "${slot.title ?? '(untitled)'}" — ${slot.status ?? 'unknown'}, scheduled for ${slot.slotAt ?? '(unscheduled)'}.${noticeSummary(slot.userNotices)}`;
     return {
       content: [
         {
@@ -961,10 +857,7 @@ function narrowTokenTransactions(result: unknown): {
   };
 }
 
-/** Narrows the GET /api/schedule/slots/[slotId] envelope to the fields the
- * tool contract promises: the slot row, its schedule, and the persona.
- * Anything the API adds later rides through unparsed — the projection only
- * pins what the tool renders and documents. */
+/** Slot, schedule, and persona fields get_slot returns. */
 function narrowSlotDetail(result: unknown): {
   slot: {
     id: string | null;
@@ -977,6 +870,8 @@ function narrowSlotDetail(result: unknown): {
     stage: string | null;
     error: string | null;
     publishedAt: string | null;
+    userNotices: unknown[];
+    providerFailures: unknown[];
   };
   schedule: {
     id: string | null;
@@ -1021,6 +916,8 @@ function narrowSlotDetail(result: unknown): {
       stage: str(slot.stage),
       error: str(slot.error),
       publishedAt: str(slot.publishedAt),
+      userNotices: readNoticeList(slot.userNotices),
+      providerFailures: readNoticeList(slot.providerFailures),
     },
     schedule:
       schedule === null
@@ -1173,46 +1070,6 @@ export async function handleGetVideoTaskProgress(
   );
 }
 
-export const PublishVideoDirectShape = {
-  provider: z
-    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'])
-    .describe('The social platform to publish the video to.'),
-  videoPath: z
-    .string()
-    .min(1, 'videoPath is required')
-    .describe(
-      `Local path to the video file (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB). The video is published as-is: no generation, no schedule.`,
-    ),
-  accountIds: z
-    .array(z.string().min(1))
-    .min(1, 'At least one account ID is required')
-    .describe(
-      'Target accounts: the IDs from list_social_accounts (channel IDs for YouTube, IG user IDs for Instagram, DIDs for Bluesky, member IDs or org URNs for LinkedIn, user IDs for Threads, Page IDs for Facebook).',
-    ),
-  title: z
-    .string()
-    .optional()
-    .describe('YouTube only: required video title.'),
-  description: z
-    .string()
-    .optional()
-    .describe('YouTube only: required video description.'),
-  tags: z
-    .array(z.string())
-    .optional()
-    .describe('YouTube only: required list of tags.'),
-  privacyStatus: z
-    .enum(['public', 'private', 'unlisted'])
-    .optional()
-    .describe('YouTube only: required privacy status.'),
-  caption: z
-    .string()
-    .optional()
-    .describe('Instagram/Bluesky/LinkedIn/Threads/Facebook: required caption.'),
-};
-
-export const PublishVideoDirectSchema = z.object(PublishVideoDirectShape);
-
 export async function handlePublishVideoDirect(
   client: PostEngineerClient,
   args: z.infer<typeof PublishVideoDirectSchema>
@@ -1226,11 +1083,11 @@ export async function handlePublishVideoDirect(
       description: args.description,
       tags: args.tags,
       privacyStatus: args.privacyStatus,
-      caption: args.caption,
+      caption: args.caption, boardId: args.boardId,
     });
     const lines = result.results.map((account) => {
       if (account.success) {
-        const link = account.videoUrl ?? account.postId ?? account.videoId ?? '';
+        const link = account.videoUrl ?? account.permalink ?? account.postId ?? account.videoId ?? '';
         return `- ${account.accountId}: published${link ? ` (${link})` : ''}`;
       }
       return `- ${account.accountId}: FAILED — ${account.error ?? 'unknown error'}`;

@@ -166,23 +166,23 @@ describe('validateSegments', () => {
   it('rejects media with both mediaId and url', () => {
     const both = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: { mediaId: 'abc', url: 'https://example.com/x.jpg' } },
+      { kind: 'body', text: body, media: [{ mediaId: 'abc', url: 'https://example.com/x.jpg' }] },
       { kind: 'cta', text: cta },
     ]);
     expect(both.ok).toBe(false);
-    if (!both.ok) expect(both.error.field).toBe('segments.1.media');
+    if (!both.ok) expect(both.error.field).toBe('segments.1.media.0');
   });
 
   it('rejects more than 6 medias inside the word total, via the cap rule', () => {
     // 20 + 7*14 + 5 = 123 words and 9 segments: inside the total and the
     // segment cap, so the media cap rule is what fires.
     const hook20 = Array.from({ length: 20 }, () => 'word').join(' ') + '.';
-    const segments: Array<{ kind: string; text: string; media?: { url: string } }> = [{ kind: 'hook', text: hook20 }];
+    const segments: Array<{ kind: string; text: string; media?: Array<{ url: string }> }> = [{ kind: 'hook', text: hook20 }];
     for (let i = 0; i < 7; i += 1) {
       segments.push({
         kind: 'body',
         text: Array.from({ length: 12 }, () => 'body').join(' ') + ` number ${i}.`,
-        media: { url: `https://example.com/${i}.jpg` },
+        media: [{ url: `https://example.com/${i}.jpg` }],
       });
     }
     segments.push({ kind: 'cta', text: 'Save this video now please.' });
@@ -196,25 +196,25 @@ describe('validateSegments', () => {
   it('mirrors the engine media shape: blank values count as present, null is skipped', () => {
     const blankUrl = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: { mediaId: 'abc', url: '' } },
+      { kind: 'body', text: body, media: [{ mediaId: 'abc', url: '' }] },
       { kind: 'cta', text: cta },
     ]);
     expect(blankUrl.ok).toBe(false);
-    if (!blankUrl.ok) expect(blankUrl.error.field).toBe('segments.1.media');
+    if (!blankUrl.ok) expect(blankUrl.error.field).toBe('segments.1.media.0');
     const blankId = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: { mediaId: '   ' } },
+      { kind: 'body', text: body, media: [{ mediaId: '   ' }] },
       { kind: 'cta', text: cta },
     ]);
     expect(blankId.ok).toBe(false);
-    if (!blankId.ok) expect(blankId.error.field).toBe('segments.1.media');
+    if (!blankId.ok) expect(blankId.error.field).toBe('segments.1.media.0');
     const neither = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: {} },
+      { kind: 'body', text: body, media: [{}] },
       { kind: 'cta', text: cta },
     ]);
     expect(neither.ok).toBe(false);
-    if (!neither.ok) expect(neither.error.field).toBe('segments.1.media');
+    if (!neither.ok) expect(neither.error.field).toBe('segments.1.media.0');
     const nullMedia = validateSegments([
       { kind: 'hook', text: hook },
       { kind: 'body', text: body, media: null },
@@ -246,8 +246,8 @@ describe('validateSegments', () => {
   it('accepts a valid media shape and counts medias', () => {
     const result = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: { mediaId: 'abc' } },
-      { kind: 'body', text: `${body} Second part.`, media: { url: 'https://example.com/x.jpg' }, terms: ['restaurant kitchen'] },
+      { kind: 'body', text: body, media: [{ mediaId: 'abc' }] },
+      { kind: 'body', text: `${body} Second part.`, media: [{ url: 'https://example.com/x.jpg' }], terms: ['restaurant kitchen'] },
       { kind: 'cta', text: cta },
     ]);
     expect(result.ok).toBe(true);
@@ -284,12 +284,12 @@ describe('validateSegments', () => {
   it('rejects media with an unknown key, like the generation route does', () => {
     const result = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: { mediaId: 'abc', alt: 'kitchen' } },
+      { kind: 'body', text: body, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
       { kind: 'cta', text: cta },
     ]);
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error.field).toBe('segments.1.media');
+    expect(result.error.field).toBe('segments.1.media.0');
   });
 
   it('does not treat double-space or underscore differences as repeats, like the engine does', () => {

@@ -22,6 +22,10 @@ vi.mock('@/lib/api', () => ({
   useVideoGenerationsQuery: vi.fn(),
 }));
 
+vi.mock('@/lib/social-accounts-queries', () => ({
+  useRumbleAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() })),
+}));
+
 vi.mock('@/lib/ui', () => ({
   SpinnerIcon: () => <span data-testid="icon-spinner" />,
 }));

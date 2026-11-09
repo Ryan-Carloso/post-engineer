@@ -11,6 +11,12 @@
   "POST /api/bluesky-connect": [
     "connect_account"
   ],
+  "POST /api/threespeak-connect": [
+    "connect_account"
+  ],
+  "POST /api/rumble-connect": [
+    "connect_account"
+  ],
   "GET /api/persona/faces": [
     "list_faces"
   ],
@@ -46,6 +52,9 @@
   ],
   "GET /api/metrics/retention-curve": [
     "get_youtube_retention_curve"
+  ],
+  "GET /api/pinterest/boards": [
+    "list_pinterest_boards"
   ],
   "GET /api/posts/[id]": [
     "get_post"

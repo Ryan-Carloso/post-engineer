@@ -25,10 +25,18 @@ const hook =
 const body =
   'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
 const cta = 'Save this video before your next trip to Porto.';
+function photos(count: number, prefix: string) {
+  return Array.from({ length: count }, (_, index) => ({ url: `https://e.com/${prefix}${index}.jpg` }));
+}
 const withMedia = [
-  { kind: 'hook' as const, text: hook, media: { url: 'https://e.com/0.jpg' } },
-  { kind: 'body' as const, text: body, media: { mediaId: `${'a'.repeat(32)}.jpg` } },
-  { kind: 'cta' as const, text: cta, media: { url: 'https://e.com/2.jpg' } },
+  { kind: 'hook' as const, text: hook, media: photos(3, 'h') },
+  { kind: 'body' as const, text: body, media: [{ mediaId: `${'a'.repeat(32)}.jpg` }, ...photos(5, 'b')] },
+  { kind: 'cta' as const, text: cta, media: photos(2, 'c') },
+];
+const sparseMedia = [
+  { kind: 'hook' as const, text: hook, media: photos(1, 'h') },
+  { kind: 'body' as const, text: body, media: [{ mediaId: `${'a'.repeat(32)}.jpg` }] },
+  { kind: 'cta' as const, text: cta, media: photos(1, 'c') },
 ];
 const bodyWithoutMedia = withMedia.map((segment, index) =>
   index === 1 ? { kind: segment.kind, text: segment.text } : segment,
@@ -134,9 +142,9 @@ describe('validate_script with facelessMaterial', () => {
   });
 
   it('omits the material from the body when unset', async () => {
-    await new PostEngineerClient({ apiKey: 'test-token-123' }).validateScript(withMedia);
+    await new PostEngineerClient({ apiKey: 'test-token-123' }).validateScript(sparseMedia);
     const init = vi.mocked(global.fetch).mock.calls[0][1] as { body: string };
-    expect(JSON.parse(init.body)).toEqual({ segments: withMedia });
+    expect(JSON.parse(init.body)).toEqual({ segments: sparseMedia });
   });
 });
 

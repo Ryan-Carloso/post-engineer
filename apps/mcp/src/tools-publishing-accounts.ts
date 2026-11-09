@@ -33,7 +33,7 @@ export const SetPersonaPublishingAccountsShape = {
   accounts: z
     .record(z.string(), z.array(z.string().min(1)))
     .describe(
-      'Default publishing accounts per provider, e.g. { youtube: ["UC..."], bluesky: ["did:plc:..."] }. ' +
+      'Default publishing accounts per provider, e.g. { youtube: ["UC..."], bluesky: ["did:plc:..."], \'3speak\': ["alice"] }. ' +
         'Replaces the whole set: providers mapped to [] (or omitted) keep no defaults. ' +
         'Account IDs come from list_social_accounts (channelId / igUserId / providerAccountId / did).'
     ),

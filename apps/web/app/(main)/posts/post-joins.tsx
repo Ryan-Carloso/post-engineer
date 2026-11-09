@@ -14,6 +14,7 @@ import {
   type ScheduleConfig,
   type ScheduledSlot,
 } from '@/lib/api';
+import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
 import { useI18n } from '@/lib/i18n/provider';
 import { PROVIDER_LABELS, accountOption, type AccountOption, scheduleAccountIds } from '@/lib/account-options';
 import { Button } from '@/components/ui/button';
@@ -27,9 +28,9 @@ import type { PersonaPhoto } from './calendar-days';
 // publishing accounts), the network/account filters and the card itself.
 //---------------
 
-export type ProviderFilter = 'all' | 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook';
+export type ProviderFilter = 'all' | 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'rumble';
 
-const PROVIDERS: Exclude<ProviderFilter, 'all'>[] = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'];
+const PROVIDERS: Exclude<ProviderFilter, 'all'>[] = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'rumble'];
 
 //---------------
 // resolveAccountFilter — a selected account only stays applied when it
@@ -66,6 +67,7 @@ export function usePostJoins(): PostJoins {
   const blueskyQuery = useBlueskyAccountsQuery();
   const threadsQuery = useThreadsAccountsQuery();
   const facebookQuery = useFacebookAccountsQuery();
+  const rumbleQuery = useRumbleAccountsQuery();
 
   const scheduleById = useMemo(
     () => new Map((schedulesQuery.data ?? []).map((schedule) => [schedule.id, schedule])),
@@ -93,8 +95,9 @@ export function usePostJoins(): PostJoins {
       ...(blueskyQuery.data?.accounts ?? []).map(accountOption),
       ...(threadsQuery.data?.accounts ?? []).map(accountOption),
       ...(facebookQuery.data?.accounts ?? []).map(accountOption),
+      ...(rumbleQuery.data?.accounts ?? []).map(accountOption),
     ],
-    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data, threadsQuery.data, facebookQuery.data],
+    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data, threadsQuery.data, facebookQuery.data, rumbleQuery.data],
   );
   const { refetch: refetchSchedules } = schedulesQuery;
   const { refetch: refetchPersonas } = personasQuery;
@@ -104,6 +107,7 @@ export function usePostJoins(): PostJoins {
   const { refetch: refetchBluesky } = blueskyQuery;
   const { refetch: refetchThreads } = threadsQuery;
   const { refetch: refetchFacebook } = facebookQuery;
+  const { refetch: refetchRumble } = rumbleQuery;
   const refetch = useCallback(() => {
     void refetchSchedules();
     void refetchPersonas();
@@ -113,7 +117,8 @@ export function usePostJoins(): PostJoins {
     void refetchBluesky();
     void refetchThreads();
     void refetchFacebook();
-  }, [refetchSchedules, refetchPersonas, refetchYoutube, refetchInstagram, refetchLinkedin, refetchBluesky, refetchThreads, refetchFacebook]);
+    void refetchRumble();
+  }, [refetchSchedules, refetchPersonas, refetchYoutube, refetchInstagram, refetchLinkedin, refetchBluesky, refetchThreads, refetchFacebook, refetchRumble]);
 
   return {
     scheduleById,
@@ -134,7 +139,8 @@ export function usePostJoins(): PostJoins {
       linkedinQuery.isLoading ||
       blueskyQuery.isLoading ||
       threadsQuery.isLoading ||
-      facebookQuery.isLoading,
+      facebookQuery.isLoading ||
+      rumbleQuery.isLoading,
     isError:
       schedulesQuery.isError ||
       personasQuery.isError ||
@@ -143,7 +149,8 @@ export function usePostJoins(): PostJoins {
       linkedinQuery.isError ||
       blueskyQuery.isError ||
       threadsQuery.isError ||
-      facebookQuery.isError,
+      facebookQuery.isError ||
+      rumbleQuery.isError,
     refetch,
   };
 }

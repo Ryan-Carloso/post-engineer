@@ -44,11 +44,7 @@ export const componentSchemas = {
     properties: {
       kind: { type: 'string', enum: ['hook', 'body', 'cta'] },
       text: str,
-      media: {
-        type: 'object',
-        additionalProperties: false,
-        properties: { mediaId: str, url: str },
-      },
+      media: { type: 'array', maxItems: 30, items: { type: 'object', additionalProperties: false, properties: { mediaId: str, url: str } } },
       terms: strArray,
     },
   },
@@ -64,7 +60,7 @@ const segmentsBody = object(
     facelessMaterial: {
       type: 'string',
       enum: ['broll', 'svg', 'images'],
-      description: "Optional. 'images' needs media on every segment (up to 12).",
+      description: "Optional. 'images' needs a media list on every segment: about one image per ~3s, at most 30.",
     },
   },
   ['segments'],
@@ -104,7 +100,7 @@ const generateBody = object(
       facelessMaterial: {
         type: 'string',
         enum: ['broll', 'svg', 'images'],
-        description: "'images' renders only the segment images: media on every segment, up to 12.",
+        description: "'images' renders only the segment images: a media list on every segment, about one image per ~3s, at most 30.",
       },
       fullLipsync: { type: 'boolean', description: 'Persona talks for the whole video, not only the hook. Not with faceless.' },
       audioUrl: str,
@@ -316,6 +312,23 @@ export const operationSchemas = {
       message: str,
     }),
   },
+  // apps/web/app/api/pinterest/boards/route.ts
+  'GET /api/pinterest/boards': {
+    query: [{ name: 'accountId', required: true, description: 'Pinterest user id stored at OAuth connect.' }],
+    response: success({
+      boards: {
+        type: 'array',
+        items: object(
+          {
+            id: str,
+            name: { type: 'string', nullable: true },
+            description: { type: 'string', nullable: true },
+          },
+          ['id'],
+        ),
+      },
+    }),
+  },
   'DELETE /api/account': {
     query: [
       { name: 'provider', required: true, enum: providers },
@@ -333,6 +346,17 @@ export const operationSchemas = {
     request: object({ handle: str, appPassword: str }, ['handle', 'appPassword']),
     response: success({ accountId: str, did: str }),
     extraResponses: { 422: 'Bluesky rejected the handle or app password (code BLUESKY_CREDENTIAL_REJECTED).' },
+  },
+  // apps/web/app/api/threespeak-connect/route.ts (JSON or form body)
+  'POST /api/threespeak-connect': {
+    request: object({ username: str, postingKey: str }, ['username', 'postingKey']),
+    response: success({ accountId: str, username: str }),
+    extraResponses: { 422: '3Speak rejected the username or posting key (code THREESPEAK_CREDENTIAL_REJECTED).' },
+  },
+  // apps/web/app/api/rumble-connect/route.ts (JSON or form body)
+  'POST /api/rumble-connect': {
+    request: object({ channelId: str, accessToken: str }, ['channelId', 'accessToken']),
+    response: success({ accountId: str, channelId: str }),
   },
   // apps/web/app/api/persona/faces/route.ts
   'GET /api/persona/faces': {

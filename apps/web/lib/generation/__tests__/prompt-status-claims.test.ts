@@ -110,6 +110,25 @@ describe('prompt status claims', () => {
     expect(promptBase.FULL_SETUP_PROMPT).not.toContain('Bluesky video publishing');
   });
 
+  it('keeps image recipe docs as hub pointers, not a retyped media cap', () => {
+    const root = findRepoRoot(import.meta.url);
+    const docs: Array<[string, string]> = [
+      ['daily-news.md', 'https://post-engineer.com/recipes/daily-news'],
+      ['place-spotlight.md', 'https://post-engineer.com/recipes/place-spotlight'],
+      ['subject-spotlight.md', 'https://post-engineer.com/recipes/subject-spotlight'],
+      ['github-prs.md', 'https://post-engineer.com/recipes/github-prs'],
+    ];
+    for (const [file, href] of docs) {
+      const doc = readFileSync(join(root, 'docs', 'recipes', file), 'utf8');
+      expect(doc).toContain(href);
+      expect(doc).toContain('shared/prompt-base/prompt-base.ts');
+      expect(doc).not.toContain('At most 6');
+      expect(doc).not.toContain('at most 6');
+      expect(doc).not.toContain('## Steps');
+      expect(doc).not.toContain('## Limits');
+    }
+  });
+
   it('keeps the full-setup recipe doc a pointer to the hub, not a hand copy', () => {
     const root = findRepoRoot(import.meta.url);
     const doc = readFileSync(join(root, 'docs', 'recipes', 'full-setup.md'), 'utf8');

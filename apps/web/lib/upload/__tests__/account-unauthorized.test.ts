@@ -52,6 +52,15 @@ describe('isUnauthorizedError', () => {
     expect(isUnauthorizedError({ name: 'BlueskyError', code: 'invalid_credentials' })).toBe(true);
   });
 
+  it('is true for a dead Rumble token (invalid_token, no numeric status)', () => {
+    expect(isUnauthorizedError({ name: 'RumbleError', code: 'invalid_token' })).toBe(true);
+  });
+
+  it('is false for other Rumble failures', () => {
+    expect(isUnauthorizedError({ name: 'RumbleError', code: 'upload_failed' })).toBe(false);
+    expect(isUnauthorizedError({ name: 'RumbleError', code: 'unknown' })).toBe(false);
+  });
+
   it('is false for other Bluesky failures', () => {
     expect(isUnauthorizedError({ name: 'BlueskyError', code: 'upload_failed' })).toBe(false);
     expect(isUnauthorizedError({ name: 'BlueskyError', code: 'rate_limited' })).toBe(false);

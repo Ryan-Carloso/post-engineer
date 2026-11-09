@@ -555,12 +555,17 @@
           "media": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/SegmentMedia"
+                "items": {
+                  "$ref": "#/components/schemas/SegmentMedia"
+                },
+                "maxItems": 30,
+                "type": "array"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Media"
           },
           "terms": {
             "anyOf": [

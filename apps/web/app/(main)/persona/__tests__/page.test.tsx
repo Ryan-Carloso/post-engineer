@@ -63,10 +63,19 @@ vi.mock('@/lib/api', () => ({
   useLinkedinAccountsQuery: vi.fn(),
   useThreadsAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
   useFacebookAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
+  useThreespeakAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
   usePersonaImagesQuery: vi.fn(() => ({ data: [], isPending: false, isError: false })),
   useUploadPersonaImageMutation: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useUpdatePersonaImageMutation: vi.fn(() => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false })),
   useDeletePersonaImageMutation: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+}));
+
+vi.mock('@/lib/social-accounts-queries', () => ({
+  useRumbleAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
+}));
+
+vi.mock('@/lib/pinterest-accounts', () => ({
+  usePinterestAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
 }));
 
 vi.mock('@/lib/ui', () => ({

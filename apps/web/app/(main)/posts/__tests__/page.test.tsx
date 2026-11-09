@@ -22,6 +22,10 @@ vi.mock('@/lib/api', () => ({
   useBlueskyAccountsQuery: vi.fn(),
 }));
 
+vi.mock('@/lib/social-accounts-queries', () => ({
+  useRumbleAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() })),
+}));
+
 vi.mock('@/lib/schedule-range', () => ({
   RANGE_MAX_SLOTS: 1000,
   useScheduleRangeQuery: vi.fn(),
@@ -188,6 +192,31 @@ describe('PostsPage', () => {
     expect(screen.getAllByText('@vivalave').length).toBe(2);
     // History items are hidden on the calendar tab
     expect(screen.queryByText('Past topic')).not.toBeInTheDocument();
+  });
+
+  it('shows the account notice on a publishing card before the slot is finished', () => {
+    mockQueries({
+      upcoming: [
+        {
+          ...UPCOMING_SLOT,
+          status: 'publishing',
+          title: 'Publishing topic',
+          userNotices: [
+            {
+              provider: 'bluesky',
+              accountId: 'b1',
+              code: 'email_not_verified',
+              requiresUser: true,
+              notice: 'raw upstream must not render',
+            },
+          ],
+        },
+      ],
+    });
+    render(<PostsPage />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('posts.userNoticeEmail');
+    expect(screen.queryByText('raw upstream must not render')).not.toBeInTheDocument();
   });
 
   it('labels a slot from a persona-less schedule as "no persona", not a removed persona', () => {
@@ -670,7 +699,7 @@ describe('PostsPage fallbacks', () => {
     const options = within(providerSelect)
       .getAllByRole('option')
       .map((option) => option.textContent);
-    expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'LinkedIn', 'Bluesky', 'Threads', 'Facebook']);
+    expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'LinkedIn', 'Bluesky', 'Threads', 'Facebook', 'Rumble']);
   });
 
 });

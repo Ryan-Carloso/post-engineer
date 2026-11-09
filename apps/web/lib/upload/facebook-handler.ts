@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { publishFacebookVideo, FACEBOOK_TEXT_MAX_CHARS, FACEBOOK_VIDEO_MAX_BYTES } from '@/lib/facebook';
+import { accountFailure } from '@/lib/upload/account-error';
 import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import { cleanupOldUploads, uploadToStorage } from '@/lib/upload/handlers';
@@ -25,6 +26,7 @@ interface FacebookAccountResult {
   postId?: string;
   permalink?: string;
   error?: string;
+  errorCode?: string;
 }
 
 export interface FacebookUploadResponse {
@@ -33,7 +35,7 @@ export interface FacebookUploadResponse {
 }
 
 function rejected(error: string): FacebookUploadResponse {
-  return { success: false, results: [{ accountId: '', success: false, error }] };
+  return { success: false, results: [accountFailure('', error, 'publish_rejected')] };
 }
 
 export async function handleFacebookUpload(
@@ -73,7 +75,7 @@ export async function handleFacebookUpload(
       const pageAccessToken = tokens.access_token;
 
       if (typeof pageAccessToken !== 'string' || pageAccessToken === '') {
-        results.push({ accountId, success: false, error: 'Facebook Page token not found' });
+        results.push(accountFailure(accountId, 'Facebook Page token not found', 'token_missing'));
         continue;
       }
 
@@ -93,9 +95,10 @@ export async function handleFacebookUpload(
         ...(published.permalink === null ? {} : { permalink: published.permalink }),
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
       reportAccountUnauthorized('facebook', accountId, ownerUserId, error);
-      results.push({ accountId, success: false, error: message });
+      // A non-Error throw stays generic: accountFailure would surface a
+      // thrown string as the message.
+      results.push(accountFailure(accountId, error instanceof Error ? error : new Error('Unknown error')));
     }
   }
 

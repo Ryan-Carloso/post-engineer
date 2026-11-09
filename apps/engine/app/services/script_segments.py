@@ -21,6 +21,7 @@ import re
 from typing import Any, Callable, Sequence
 
 from app.services.faceless_material import IMAGES
+from app.services.image_density import MAX_IMAGES_MODE_MEDIAS, density_error
 from app.services.persona_hook import (
     PERSONA_HOOK_MAX_SECONDS,
     PERSONA_HOOK_MIN_SECONDS,
@@ -28,8 +29,8 @@ from app.services.persona_hook import (
 
 MAX_SEGMENTS = 12
 MAX_MEDIAS = 6
-# Images material: the photos are the whole picture, one per segment.
-MAX_IMAGES_MODE_MEDIAS = MAX_SEGMENTS
+# Images material: the photos are the whole picture. The cap and the
+# per-segment rhythm (one photo per ~3s) live in image_density.
 MIN_TOTAL_WORDS = 60
 MAX_TOTAL_WORDS = 200
 MIN_BODY_WORDS = 30
@@ -135,10 +136,10 @@ def _check_text_content(text: str, field: str) -> None:
         )
 
 
-def _check_media(media: Any, field: str) -> int:
+def _check_media_item(media: Any, field: str) -> None:
     if not isinstance(media, dict):
         raise SegmentValidationError(
-            field, "Media must be an object.", "Send media as { mediaId } or { url }."
+            field, "Media must be an object.", "Send each image as { mediaId } or { url }."
         )
     # Unknown media keys are rejected, not stripped, matching the
     # SegmentMedia extra="forbid" shape on the request path and the TS
@@ -175,7 +176,33 @@ def _check_media(media: Any, field: str) -> int:
         )
     if "overlay" in media and media["overlay"] is not None:
         _check_overlay(media["overlay"], f"{field}.overlay")
-    return 1
+
+
+def _remember_photo(item: Any, field: str, seen: set[tuple[str, str]]) -> None:
+    if not isinstance(item, dict):
+        return
+    for name in ("mediaId", "url"):
+        value = item.get(name)
+        if isinstance(value, str) and value.strip():
+            token = (name, value.strip())
+            if token in seen:
+                raise SegmentValidationError(field, "the same photo must not repeat", "Use a different photo for each media item.")
+            seen.add(token)
+            return
+
+
+def _check_media(media: Any, field: str, seen: set[tuple[str, str]]) -> int:
+    if not isinstance(media, list):
+        raise SegmentValidationError(
+            field,
+            "Media must be an array.",
+            "Send media as a list of { mediaId } or { url }.",
+        )
+    for index, item in enumerate(media):
+        item_field = f"{field}.{index}"
+        _check_media_item(item, item_field)
+        _remember_photo(item, item_field, seen)
+    return len(media)
 
 
 def _check_overlay(overlay: Any, field: str) -> None:
@@ -211,18 +238,38 @@ def _check_overlay(overlay: Any, field: str) -> None:
             )
 
 
+def legacy_media_list(segments: Any) -> Any:
+    """Wrap pre-list-contract single-object media in a list.
+
+    Rows stored before the media-list contract carry one object per
+    segment (`media: { mediaId | url, overlay? }`). Persisted-row
+    dispatch normalizes that shape here; fresh requests still reject
+    a single object in _check_media, so this must never run on the
+    request path.
+    """
+    if not isinstance(segments, list):
+        return segments
+    normalized = []
+    for segment in segments:
+        if isinstance(segment, dict) and isinstance(segment.get("media"), dict):
+            normalized.append({**segment, "media": [segment["media"]]})
+        else:
+            normalized.append(segment)
+    return normalized
+
+
 def validate_segments(segments: Any, material: str = "broll") -> dict[str, Any]:
     """Validate segments in rule order and return the normalized result.
 
     Rule order is deliberate: shape, then forbidden content, then hook
     punctuation, then repetition, then per-part word counts, then the
-    total, then the segment cap, then media shape, then the media cap.
+    total, then the segment cap, then media shape (including repeated photos), then the media cap.
     A caller that fixes the first reported error and resubmits converges
     without guessing.
 
     With the "images" material every segment must carry media (the photos
-    are the whole picture, nothing tops them up) and the media cap rises
-    to one per segment.
+    are the whole picture, nothing tops them up). Each segment needs about
+    one image per 3 seconds of speech, and the video cap is 30 images.
     """
     if not isinstance(segments, list) or not segments:
         raise SegmentValidationError(
@@ -360,20 +407,34 @@ def validate_segments(segments: Any, material: str = "broll") -> dict[str, Any]:
     images_mode = material == IMAGES
     media_cap = MAX_IMAGES_MODE_MEDIAS if images_mode else MAX_MEDIAS
     media_count = 0
+    seen_photos: set[tuple[str, str]] = set()
     for index, segment in enumerate(segments):
+        counted = 0
         if "media" in segment and segment["media"] is not None:
-            media_count += _check_media(segment["media"], f"segments.{index}.media")
-        elif images_mode:
+            counted = _check_media(segment["media"], f"segments.{index}.media", seen_photos)
+        if images_mode and counted == 0:
             raise SegmentValidationError(
                 f"segments.{index}.media",
                 "The images material needs media on every segment.",
-                "Send an image for this segment as { mediaId } or { url }, or use another material.",
+                "Send images for this segment as a list of { mediaId } or { url }, or use another material.",
             )
+        if images_mode and counted > 0:
+            problem = density_error(_word_count(texts[index]), counted)
+            if problem is not None:
+                rule, fix = problem
+                raise SegmentValidationError(f"segments.{index}.media", rule, fix)
+        media_count += counted
     if media_count > media_cap:
+        fix = f"Remove medias until there are at most {media_cap}."
+        if images_mode:
+            fix = (
+                f"Remove medias until there are at most {media_cap}, or merge "
+                f"segments so the per-segment minimums fit under {media_cap}."
+            )
         raise SegmentValidationError(
             "segments",
             f"At most {media_cap} medias are allowed.",
-            f"Remove medias until there are at most {media_cap}.",
+            fix,
         )
     body_texts = [texts[i] for i in body_indices]
     return {

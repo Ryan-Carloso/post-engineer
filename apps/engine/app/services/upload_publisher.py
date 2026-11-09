@@ -17,7 +17,13 @@ Wire contract (multipart/form-data):
 - Threads: ``provider=threads``, ``video`` (file), ``caption``,
   repeated ``threadsAccountIds`` fields.
 - Facebook: ``provider=facebook``, ``video`` (file), ``caption``,
+  repeated ``facebookAccountIds`` fields (see ``publish_facebook``). Pinterest: ``provider=pinterest``, ``video`` (file), ``title``, ``description``, ``boardId``, repeated ``pinterestAccountIds`` fields (see ``publish_pinterest``; validated by ``fill_schedule/metadata.py``).
+- 3Speak: ``provider=3speak``, ``video`` (file), ``caption``,
+  repeated ``threespeakAccountIds`` fields (see ``publish_threespeak``).
   repeated ``facebookAccountIds`` fields (see ``publish_facebook``).
+- Rumble: ``provider=rumble``, ``video`` (file), ``title``,
+  ``description``, ``license_type`` (``0`` = Personal Use), repeated
+  ``rumbleAccountIds`` fields (see ``publish_rumble``).
 
 This module owns only types, validation and multipart part builders; the HTTP
 transport lives in the client function of the same module.
@@ -31,10 +37,23 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.services.caption_text import (  # noqa: F401 - re-exported for callers
+    BLUESKY_CAPTION_MAX_GRAPHEMES, count_graphemes, truncate_bluesky_caption,
+)
 from app.services.publish_facebook import (  # noqa: F401 - re-exported for callers
     FACEBOOK_CAPTION_MAX_LENGTH, FACEBOOK_PROVIDER, FacebookMetadata,
     facebook_fields, validate_facebook_metadata,
 )
+from app.services.publish_pinterest import PINTEREST_DESCRIPTION_MAX_LENGTH, PINTEREST_PROVIDER, PINTEREST_TITLE_MAX_LENGTH, PinterestMetadata, pinterest_fields  # noqa: F401 - re-exported for callers
+from app.services.publish_threespeak import (  # noqa: F401 - re-exported for callers
+    THREESPEAK_PROVIDER, ThreespeakMetadata,
+    threespeak_fields, validate_threespeak_metadata,
+)
+from app.services.publish_rumble import (  # noqa: F401 - re-exported for callers
+    RUMBLE_PROVIDER, RUMBLE_TITLE_MAX_LENGTH, RumbleMetadata,
+    rumble_fields, validate_rumble_metadata,
+)
+from app.services.upload_publisher_failure import application_failure_reason
 
 VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
 
@@ -43,7 +62,6 @@ VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
 BASE_URL_ENV: str = "MPT_UPLOAD_API_BASE_URL"
 SERVICE_KEY_ENV: str = "MONEYPRINT_API_SECRET"
 INSTAGRAM_CAPTION_MAX_LENGTH: int = 2200
-BLUESKY_CAPTION_MAX_GRAPHEMES: int = 300
 LINKEDIN_CAPTION_MAX_LENGTH: int = 3000
 THREADS_CAPTION_MAX_LENGTH: int = 500
 
@@ -59,6 +77,9 @@ VALID_PROVIDERS: tuple[str, ...] = (
     LINKEDIN_PROVIDER,
     THREADS_PROVIDER,
     FACEBOOK_PROVIDER,
+    PINTEREST_PROVIDER,
+    THREESPEAK_PROVIDER,
+    RUMBLE_PROVIDER,
 )
 
 
@@ -132,6 +153,8 @@ class PublishMetadata:
     linkedin: LinkedInMetadata | None = None
     threads: ThreadsMetadata | None = None
     facebook: FacebookMetadata | None = None
+    threespeak: ThreespeakMetadata | None = None
+    rumble: RumbleMetadata | None = None
 
 
 @dataclass(frozen=True)
@@ -155,12 +178,14 @@ def validate_publish_metadata(
     linkedin: LinkedInMetadata | None = None,
     threads: ThreadsMetadata | None = None,
     facebook: FacebookMetadata | None = None,
+    threespeak: ThreespeakMetadata | None = None,
+    rumble: RumbleMetadata | None = None,
 ) -> PublishMetadata:
     """Validate provider selection and per-provider metadata.
 
     Raises:
-        ValueError: when providers are unknown/empty, a selected provider has
-            no metadata, or provider metadata violates the internal contract.
+        ValueError: when providers are unknown/empty, or a selected provider other than pinterest
+            (see fill_schedule/metadata.py) has no metadata, or metadata violates the contract.
     """
     if not providers:
         raise ValueError("at least one publish provider is required")
@@ -201,7 +226,7 @@ def validate_publish_metadata(
             raise ValueError("bluesky provider requires bluesky metadata")
         if not bluesky.account_ids:
             raise ValueError("bluesky publish requires at least one account id")
-        if _count_graphemes(bluesky.caption) > BLUESKY_CAPTION_MAX_GRAPHEMES:
+        if count_graphemes(bluesky.caption) > BLUESKY_CAPTION_MAX_GRAPHEMES:
             raise ValueError("bluesky caption exceeds 300 graphemes")
     if LINKEDIN_PROVIDER in providers:
         if linkedin is None:
@@ -225,6 +250,10 @@ def validate_publish_metadata(
             )
     if FACEBOOK_PROVIDER in providers:
         validate_facebook_metadata(facebook)
+    if THREESPEAK_PROVIDER in providers:
+        validate_threespeak_metadata(threespeak)
+    if RUMBLE_PROVIDER in providers:
+        validate_rumble_metadata(rumble)
 
     return PublishMetadata(
         providers=tuple(providers),
@@ -234,6 +263,8 @@ def validate_publish_metadata(
         linkedin=linkedin,
         threads=threads,
         facebook=facebook,
+        threespeak=threespeak,
+        rumble=rumble,
     )
 
 
@@ -295,41 +326,6 @@ def build_threads_parts(metadata: ThreadsMetadata) -> MultipartParts:
     )
 
 
-def _count_graphemes(text: str) -> int:
-    """Count user-perceived characters (emoji ZWJ sequences count as one)."""
-    import unicodedata
-    count = 0
-    previous_combining = False
-    for char in text:
-        if unicodedata.combining(char) or char == "\u200d":
-            previous_combining = True
-            continue
-        if previous_combining:
-            previous_combining = False
-            continue
-        count += 1
-    return count
-
-
-def truncate_bluesky_caption(caption: str) -> str:
-    """Truncate a caption to 300 graphemes with an ellipsis, never breaking emoji."""
-    if _count_graphemes(caption) <= BLUESKY_CAPTION_MAX_GRAPHEMES:
-        return caption
-    result: list[str] = []
-    count = 0
-    import unicodedata
-    for char in caption:
-        if count == BLUESKY_CAPTION_MAX_GRAPHEMES - 1:
-            break
-        if unicodedata.combining(char) or char == "\u200d":
-            if result:
-                result[-1] += char
-            continue
-        result.append(char)
-        count += 1
-    return "".join(result) + "…"
-
-
 def build_video_file_part(
     fileobj: io.BufferedIOBase | io.BytesIO,
     filename: str,
@@ -374,43 +370,24 @@ _PART_BUILDERS: _PartBuilders = {
     LINKEDIN_PROVIDER: (LinkedInMetadata, build_linkedin_parts),
     THREADS_PROVIDER: (ThreadsMetadata, build_threads_parts),
     FACEBOOK_PROVIDER: (FacebookMetadata, lambda metadata: MultipartParts(fields=facebook_fields(metadata))),
+    PINTEREST_PROVIDER: (PinterestMetadata, lambda metadata: MultipartParts(fields=pinterest_fields(metadata))),
+    THREESPEAK_PROVIDER: (ThreespeakMetadata, lambda metadata: MultipartParts(fields=threespeak_fields(metadata))),
+    RUMBLE_PROVIDER: (RumbleMetadata, lambda metadata: MultipartParts(fields=rumble_fields(metadata))),
 }
-
-
-def _application_failure_reason(result: dict[str, Any]) -> str | None:
-    """Discord-safe reason when a 2xx body did not publish anything.
-
-    Returns None when the body is a real success (including a provider
-    that posted to at least one account). The reason never includes
-    ``error``, ``errorType``, or per-account text: those fields are
-    remote-controlled and the reason reaches Discord via the task error.
-    """
-    if result.get("success") is False:
-        return "upload API reported failure"
-    accounts = result.get("results")
-    if (
-        isinstance(accounts, list)
-        and len(accounts) > 0
-        and all(
-            isinstance(account, dict) and account.get("success") is False
-            for account in accounts
-        )
-    ):
-        return "upload API reported failure for every account"
-    return None
 
 
 def publish_video(
     base_url: str,
     api_secret: str,
     owner_user_id: str,
-    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata,
+    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | PinterestMetadata | ThreespeakMetadata | RumbleMetadata,
     video_path: str,
     video_bytes: bytes,
     content_type: str,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     sleep: Callable[[float], None] = time.sleep,
+    surface_application_failure: bool = False,
 ) -> dict[str, Any]:
     """Publish one finished video through the internal upload API.
 
@@ -468,15 +445,17 @@ def publish_video(
                 result: dict[str, Any] = response.json()
             except ValueError as exc:
                 raise PublishError("upload API returned invalid JSON") from exc
-            # HTTP 200 is not success. Bluesky/LinkedIn/Threads/Facebook answer 200 with
+            # HTTP 200 is not success. Bluesky/LinkedIn/Threads/Facebook/3Speak answer 200 with
             # success:false (and often error/errorType). YouTube/Instagram
             # keep success:true and put per-account outcomes in results.
             # Either shape with nothing posted must raise: the message
             # stays Discord-safe and the body is server logs only.
             # Not retried — the request completed; the post did not.
             if isinstance(result, dict):
-                failure = _application_failure_reason(result)
-                if failure is not None:
+                failure = application_failure_reason(result)
+                # Fill-schedule passes surface_application_failure so it can
+                # classify each account. Other callers still get the raise.
+                if failure is not None and not surface_application_failure:
                     raise PublishError(
                         failure,
                         status_code=response.status_code,

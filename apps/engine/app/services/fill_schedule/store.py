@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 import requests
@@ -31,7 +31,7 @@ from app.utils.supabase_retry import build_retrying_session, set_retry_budget
 # supabase_retry.worst_case_seconds (3 attempts, not 2). That is per REQUEST,
 # not per tick: a sustained Supabase outage makes each of the tick's stages
 # pay ~31s on its first call (generated, reconciled, published, plus publish's
-# recover_stale_publishing), so a tick runs ~2min instead of 0s and the
+# resumable_publishing_slots), so a tick runs ~2min instead of 0s and the
 # effective period stretches past TICK_SECONDS. The scheduler's connect
 # circuit breaker caps that; this comment records the underlying cost.
 REQUEST_TIMEOUT_SECONDS = (10, 30)
@@ -58,7 +58,8 @@ class ScheduleStore:
     # generate/publish selects.
     SLOT_IDENTITY_SELECT = (
         "id,user_id,persona_id,providers,youtube_account_ids,"
-        "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,threads_account_ids,facebook_account_ids,"
+        "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,threads_account_ids,facebook_account_ids,pinterest_account_ids,pinterest_board_id,threespeak_account_ids,"
+        "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,threads_account_ids,facebook_account_ids,pinterest_account_ids,pinterest_board_id,rumble_account_ids,"
         "post_voice_id,post_niche,post_language,"
         "post_video_aspect,post_video_layout,post_paragraph_number,post_face_quality,"
         "post_voice_audio_url,post_cta_text,"
@@ -290,6 +291,46 @@ class ScheduleStore:
         )
         return bool(rows)
 
+    def resumable_publishing_slots(self, now_utc: datetime) -> list[dict[str, Any]]:
+        """Publishing slots whose backoff (or crash lease) has elapsed.
+
+        `publish_not_before` null covers a crash that never parked a lease.
+        A normal 30s/2min wait stays hidden until that timestamp.
+        """
+        rows = self._request(
+            "GET",
+            "scheduled_posts",
+            params={
+                "status": f"eq.{SLOT_PUBLISHING}",
+                "or": (
+                    "(publish_not_before.is.null,"
+                    f"publish_not_before.lte.{now_utc.isoformat()})"
+                ),
+                "select": self.SLOT_SELECT,
+                "order": "slot_at.asc",
+            },
+        )
+        return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+
+    def claim_resumable_slot(self, slot_id: str, now_iso: str, lease_iso: str) -> bool:
+        """One worker resumes a publishing slot and holds it until ``lease_iso``.
+
+        The PATCH matches only while the backoff is still due, then moves
+        `publish_not_before` forward. A second worker sees no row.
+        """
+        rows = self._request(
+            "PATCH",
+            "scheduled_posts",
+            json={"publish_not_before": lease_iso},
+            params={
+                "id": f"eq.{slot_id}",
+                "status": f"eq.{SLOT_PUBLISHING}",
+                "or": f"(publish_not_before.is.null,publish_not_before.lte.{now_iso})",
+            },
+            headers={**self._headers, "Prefer": "return=representation"},
+        )
+        return bool(rows)
+
     def publishing_slots(self) -> list[dict[str, Any]]:
         rows = self._request(
             "GET",
@@ -300,25 +341,6 @@ class ScheduleStore:
             },
         )
         return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
-
-    def recover_stale_publishing(self, older_than_minutes: int = 120) -> int:
-        """Stuck 'publishing' slots (crash mid-publish) → ready.
-
-        Only acts on old slots (>120min): a legitimate multi-provider
-        publish can take several minutes (video upload on a slow network).
-        Returns the PostgREST count.
-        """
-        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)).isoformat()
-        self._request(
-            "PATCH",
-            "scheduled_posts",
-            json={"status": SLOT_READY},
-            params={
-                "status": f"eq.{SLOT_PUBLISHING}",
-                "updated_at": f"lt.{cutoff}",
-            },
-        )
-        return 0
 
     def signed_url(self, bucket: str, path: str) -> str:
         """Signed URL valid long enough to reach the cutoff."""

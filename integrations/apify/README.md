@@ -1,6 +1,6 @@
 # Post Engineer: AI video generator and social scheduler
 
-Turn a short script (hook, body, call to action) into a vertical video presented by an AI persona, or a faceless video, and publish it to YouTube, Instagram, LinkedIn, Threads, Facebook Pages or Bluesky. One run creates one video.
+Turn a short script (hook, body, call to action) into a vertical video presented by an AI persona, or a faceless video, and publish it to YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky or 3Speak. One run creates one video.
 
 This Actor is a thin client for the [Post Engineer API](https://post-engineer.com/api-documentation.txt). Generation runs on Post Engineer and is paid with Post Engineer tokens, not Apify compute.
 
@@ -17,12 +17,12 @@ This Actor is a thin client for the [Post Engineer API](https://post-engineer.co
 | `apiKey` | to create a video | Your Post Engineer API key, stored as a secret input. Without it the run is a **dry run**: it validates the input and returns the request it would send, with nothing generated, published or charged. |
 | `title` | yes | Label of the scheduled post. |
 | `hook`, `body`, `cta` | yes | The script. 60 to 200 words in total. It is validated before any token is spent. |
-| `providers` | yes | Any of `youtube`, `instagram`, `linkedin`, `bluesky`, `threads`, `facebook`. |
+| `providers` | yes | Any of `youtube`, `instagram`, `linkedin`, `bluesky`, `threads`, `facebook`, `3speak`. |
 | `personaId` | no | AI persona that presents the video. Leave empty for a faceless video. |
 | `voiceId` | without a persona | Narration voice, an id from `GET /api/persona/voices` (prefilled with `chatterbox:kokoro_af_heart`). With a persona it overrides the persona's voice. |
 | `faceless` | no | No face on screen. Defaults to `true` when there is no persona; a video without a persona must be faceless. |
 | `facelessMaterial` | no | `broll` (stock footage), `svg` (animated scenes) or `images` (only your own images, set `images`). |
-| `images` | for `images` | Public https image URLs, one per segment, in order: the hook, each `body` paragraph (separate paragraphs with a blank line), the CTA. Up to 12. Each image fills the screen with a slow zoom while its part is spoken; no stock is added. A missing image is rejected before any token is spent. Use only images you have the rights to. |
+| `images` | for `images` | Public https image URLs, in order, about one image per 3 seconds of speech (about 8 words), at most 30. The actor splits the list across the hook, each body paragraph (separate paragraphs with a blank line) and the CTA. Each image fills the screen with a slow zoom for its share of that part; no stock is added. Too few images are rejected before any token is spent. Use only images you have the rights to. |
 | `fullLipsync` | no | The persona talks for the whole video instead of only the hook. Needs a persona; not with `faceless`. |
 | `accounts` | no | Account ids per provider, e.g. `{"youtube": ["<id>"]}`. Defaults to the persona's publishing accounts. |
 | `mode` | no | `asap` (default) publishes when the video is ready; `scheduled` uses `schedule`. |

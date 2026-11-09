@@ -13,8 +13,8 @@ from app.services import image_coverage, place_photos, segment_panels, user_medi
 # Hook spoken 0.0-1.2 s, CTA 5.0-5.9 s, audio 6.0 s.
 WORDS = [("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2), ("Visit", 5.0, 5.4), ("Porto", 5.4, 5.9)]
 SEGMENTS = [
-    {"kind": "hook", "text": "Welcome to Porto.", "media": {"url": "https://e.com/hook.jpg"}},
-    {"kind": "cta", "text": "Visit Porto.", "media": {"url": "https://e.com/cta.jpg"}},
+    {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/hook.jpg"}]},
+    {"kind": "cta", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
 ]
 
 
@@ -81,7 +81,7 @@ def test_a_dropped_photo_keeps_its_skip_warning_and_the_neighbour_covers_it(task
     warnings = _run(task_dir, _params("images"), download=only_cta)
     panels, _ = segment_panels._read_manifest("task-1")
     assert [(p.index, p.start, p.end) for p in panels] == [(1, 0.0, 6.0)]
-    assert warnings[0].startswith("segment 0 media skipped: ")
+    assert warnings[0].startswith("segment 0 image 0 media skipped: ")
     assert warnings[1:] == ["segment 1 image extended: a neighbour image covers a missing image"]
 
 

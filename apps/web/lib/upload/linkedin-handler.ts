@@ -7,6 +7,7 @@ import {
   createLinkedInMemberPost,
   createLinkedInOrganizationPost,
 } from '@/lib/linkedin';
+import { accountFailure } from '@/lib/upload/account-error';
 import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 
@@ -27,6 +28,7 @@ interface LinkedinAccountResult {
   success: boolean;
   postId?: string;
   error?: string;
+  errorCode?: string;
 }
 
 export interface LinkedinUploadResponse {
@@ -43,13 +45,13 @@ export async function handleLinkedinUpload(
   const rawFile = formData.get('video');
 
   if (accountIds.length === 0) {
-    return { success: false, results: [{ accountId: '', success: false, error: 'At least one LinkedIn account ID is required' }] };
+    return { success: false, results: [accountFailure('', 'At least one LinkedIn account ID is required', 'publish_rejected')] };
   }
   if (typeof captionRaw !== 'string' || captionRaw.trim() === '') {
-    return { success: false, results: [{ accountId: '', success: false, error: 'Caption is required' }] };
+    return { success: false, results: [accountFailure('', 'Caption is required', 'publish_rejected')] };
   }
   if (!(rawFile instanceof File)) {
-    return { success: false, results: [{ accountId: '', success: false, error: 'Video file is required' }] };
+    return { success: false, results: [accountFailure('', 'Video file is required', 'publish_rejected')] };
   }
 
   const buffer = new Uint8Array(await rawFile.arrayBuffer());
@@ -63,11 +65,11 @@ export async function handleLinkedinUpload(
       const accessToken = tokens.access_token;
 
       if (typeof accessToken !== 'string' || accessToken === '') {
-        results.push({ accountId, success: false, error: 'LinkedIn token not found' });
+        results.push(accountFailure(accountId, 'LinkedIn token not found', 'token_missing'));
         continue;
       }
       if (typeof tokens.expiry_date === 'number' && Date.now() >= tokens.expiry_date) {
-        results.push({ accountId, success: false, error: 'LinkedIn token expired. Please reconnect the account.' });
+        results.push(accountFailure(accountId, 'LinkedIn token expired. Please reconnect the account.', 'token_expired'));
         continue;
       }
 
@@ -86,9 +88,8 @@ export async function handleLinkedinUpload(
       await touchSocialAccount(supabase, ownerUserId, 'linkedin', accountId);
       results.push({ accountId, success: true, postId });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
       reportAccountUnauthorized('linkedin', accountId, ownerUserId, error);
-      results.push({ accountId, success: false, error: message });
+      results.push(accountFailure(accountId, error));
     }
   }
 

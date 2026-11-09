@@ -18,7 +18,10 @@ describe('account-columns', () => {
   it('maps every schedule provider to its own <provider>_account_ids column', () => {
     expect(Object.keys(PROVIDER_ACCOUNT_COLUMNS).sort()).toEqual([...VALID_SCHEDULE_PROVIDERS].sort());
     for (const [provider, column] of Object.entries(PROVIDER_ACCOUNT_COLUMNS)) {
-      expect(column).toBe(`${provider}_account_ids`);
+      // 3Speak's column spells the name out: a bare column name cannot
+      // start with a digit, so `3speak_account_ids` is not a valid
+      // unquoted identifier.
+      expect(column).toBe(provider === '3speak' ? 'threespeak_account_ids' : `${provider}_account_ids`);
     }
   });
 
@@ -34,8 +37,11 @@ describe('account-columns', () => {
       instagram_account_ids: [],
       linkedin_account_ids: [],
       bluesky_account_ids: [],
+      rumble_account_ids: [],
       threads_account_ids: [],
       facebook_account_ids: ['111', '222'],
+      pinterest_account_ids: [],
+      threespeak_account_ids: [],
     });
   });
 

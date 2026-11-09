@@ -65,7 +65,7 @@ def _segments(overlay):
     media = {"url": "https://e.com/p.jpg"}
     if overlay is not None:
         media["overlay"] = overlay
-    return [{**SEGMENTS_TEXT[0], "media": media}, SEGMENTS_TEXT[1]]
+    return [{**SEGMENTS_TEXT[0], "media": [media]}, SEGMENTS_TEXT[1]]
 
 
 def _panel_pixel(panel, offset_y):
@@ -79,7 +79,7 @@ def test_panel_carries_the_segment_interval_and_the_bottom_position(tmp_path):
     assert len(panels) == 1
     panel = panels[0]
     assert (panel.index, panel.start, panel.end) == (0, 0.0, 1.2)
-    assert panel.path.endswith("segment-panel-0.png") and os.path.exists(panel.path)
+    assert panel.path.endswith("segment-panel-0-0.png") and os.path.exists(panel.path)
     assert (panel.x, panel.y) == (0, 1920 - 30 - 730 - 40), "panel at 40px/30px from the bottom, minus the 40px shadow pad"
     assert panel.caption_bottom == 1920 - 30 - 730 - segment_panels.CAPTION_GAP
 
@@ -95,41 +95,41 @@ def test_card_is_painted_inside_the_panel(tmp_path):
 
 def test_downloaded_photo_is_removed_once_the_panel_is_drawn(tmp_path):
     _prepare(tmp_path, _segments(None))
-    assert not os.path.exists(tmp_path / "segment-media-0.raw")
+    assert not os.path.exists(tmp_path / "segment-media-0-0.raw")
 
 
 def test_text_that_does_not_fit_keeps_the_photo_and_warns(tmp_path):
     panels, skipped = _prepare(tmp_path, _segments({"title": "W" * 60}))
     assert len(panels) == 1, "a refused card must never cost the photo"
-    assert skipped == ["segment 0 media overlay skipped: overlay text does not fit"]
+    assert skipped == ["segment 0 image 0 media overlay skipped: overlay text does not fit"]
 
 
 def test_missing_font_keeps_the_photo_and_warns(tmp_path):
     panels, skipped = _prepare(tmp_path, _segments({"title": "Sushi"}), font_for=None)
     assert len(panels) == 1
-    assert skipped == ["segment 0 media overlay skipped: overlay font unavailable"]
+    assert skipped == ["segment 0 image 0 media overlay skipped: overlay font unavailable"]
 
 
 def test_photo_with_a_face_is_skipped_before_any_panel_is_drawn(tmp_path):
     panels, skipped = _prepare(tmp_path, _segments({"title": "Sushi"}), has_face=True)
     assert panels == []
-    assert skipped == ["segment 0 media skipped: face detected"]
-    assert not os.path.exists(tmp_path / "segment-panel-0.png")
+    assert skipped == ["segment 0 image 0 media skipped: face detected"]
+    assert not os.path.exists(tmp_path / "segment-panel-0-0.png")
 
 
 def test_segment_with_no_spoken_time_is_skipped_with_a_reason(tmp_path):
-    segments = [{**SEGMENTS_TEXT[0], "media": {"url": "https://e.com/p.jpg"}}, {"kind": "body", "text": "!!! ???"}]
-    segments[1]["media"] = {"url": "https://e.com/q.jpg"}
+    segments = [{**SEGMENTS_TEXT[0], "media": [{"url": "https://e.com/p.jpg"}]}, {"kind": "body", "text": "!!! ???"}]
+    segments[1]["media"] = [{"url": "https://e.com/q.jpg"}]
     panels, skipped = _prepare(tmp_path, segments)
     assert [panel.index for panel in panels] == [0]
-    assert skipped == ["segment 1 media skipped: segment has no spoken time"]
+    assert skipped == ["segment 1 image 0 media skipped: segment has no spoken time"]
 
 
 def test_panel_that_fails_to_draw_is_skipped_with_a_reason(tmp_path):
     with patch.object(segment_panels, "build_panel", return_value=None):
         panels, skipped = _prepare(tmp_path, _segments(None))
     assert panels == []
-    assert skipped == ["segment 0 media skipped: photo panel failed to render"]
+    assert skipped == ["segment 0 image 0 media skipped: photo panel failed to render"]
 
 
 def test_two_segments_sharing_one_media_id_each_get_their_own_panel_and_card(tmp_path, monkeypatch):
@@ -137,8 +137,8 @@ def test_two_segments_sharing_one_media_id_each_get_their_own_panel_and_card(tmp
     asset = tmp_path / "aabbccddeeff00112233445566778899.jpg"
     asset.write_bytes(_jpeg())
     segments = [
-        {**SEGMENTS_TEXT[0], "media": {"mediaId": asset.name, "overlay": {"title": "First"}}},
-        {**SEGMENTS_TEXT[1], "media": {"mediaId": asset.name, "overlay": {"title": "Second"}}},
+        {**SEGMENTS_TEXT[0], "media": [{"mediaId": asset.name, "overlay": {"title": "First"}}]},
+        {**SEGMENTS_TEXT[1], "media": [{"mediaId": asset.name, "overlay": {"title": "Second"}}]},
     ]
     with patch("app.services.user_media.face_detect.image_contains_face", return_value=False):
         panels, skipped = user_media.prepare_segment_media(
@@ -190,7 +190,7 @@ def test_prepare_segment_panels_warns_and_keeps_the_photo_when_the_font_is_missi
         place_photos, "download_image", side_effect=_download
     ), patch("app.services.user_media.face_detect.image_contains_face", return_value=False):
         warnings = user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
-    assert warnings == ["segment 0 media overlay skipped: overlay font unavailable"]
+    assert warnings == ["segment 0 image 0 media overlay skipped: overlay font unavailable"]
     panels, stored = segment_panels._read_manifest("task-1")
     assert len(panels) == 1 and stored == warnings
 
@@ -207,8 +207,8 @@ def test_prepare_segment_panels_without_segments_writes_nothing(tmp_path, monkey
 
 def _two_media_segments():
     return [
-        {**SEGMENTS_TEXT[0], "media": {"url": "https://e.com/hook.jpg", "overlay": {"title": "Hook place"}}},
-        {**SEGMENTS_TEXT[1], "media": {"url": "https://e.com/body.jpg", "overlay": {"title": "Body place"}}},
+        {**SEGMENTS_TEXT[0], "media": [{"url": "https://e.com/hook.jpg", "overlay": {"title": "Hook place"}}]},
+        {**SEGMENTS_TEXT[1], "media": [{"url": "https://e.com/body.jpg", "overlay": {"title": "Body place"}}]},
     ]
 
 

@@ -754,6 +754,53 @@ describe('generate and schedule video client', () => {
     expect(publishing.providers).toEqual(['threads', 'facebook']);
   });
 
+  it('nests the pinterest account array and board id under publishing', async () => {
+    await client.generatePersonaVideo({
+      ...baseInput,
+      providers: ['pinterest'],
+      pinterestAccountIds: ['user-9'],
+      pinterestBoardId: 'b1',
+    });
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect(publishing.accounts).toEqual({
+      youtube: ['chan-1'],
+      bluesky: ['did:plc:abc'],
+      pinterest: ['user-9'],
+    });
+    expect(publishing.providers).toEqual(['pinterest']);
+    expect(publishing.pinterestBoardId).toBe('b1');
+  });
+
+  it('nests the 3speak account array under its own provider', async () => {
+    await client.generatePersonaVideo({
+      ...baseInput,
+      providers: ['3speak'],
+      threespeakAccountIds: ['alice'],
+    });
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect(publishing.accounts).toEqual({
+      youtube: ['chan-1'],
+      bluesky: ['did:plc:abc'],
+      '3speak': ['alice'],
+    });
+    expect(publishing.providers).toEqual(['3speak']);
+  });
+
+  it('nests the rumble channel ids under their own provider', async () => {
+    await client.generatePersonaVideo({
+      ...baseInput,
+      providers: ['rumble'],
+      rumbleAccountIds: ['chan-1', 'chan-2'],
+    });
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect(publishing.accounts).toEqual({
+      youtube: ['chan-1'],
+      bluesky: ['did:plc:abc'],
+      rumble: ['chan-1', 'chan-2'],
+    });
+    expect(publishing.providers).toEqual(['rumble']);
+  });
+
   it('omits personaId entirely when the caller sends no persona', async () => {
     // A persona-less post is signalled by the ABSENT key, not by an empty
     // string: the API reads absence as "no persona", and sending `""` would
@@ -1034,6 +1081,76 @@ describe('generate and schedule video client', () => {
       client.connectBlueskyAccount('user.bsky.social', 'wrong')
     ).rejects.toThrow(/Failed to connect Bluesky account: 400/);
   });
+
+  it('connects a 3Speak account with username + posting key', async () => {
+    const mockResponse = { success: true, accountId: 'acc-1', providerAccountId: 'alice' };
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockResponse),
+    });
+
+    const result = await client.connectThreespeakAccount('alice', '5Kposting-key-123');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/threespeak-connect`,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({ username: 'alice', postingKey: '5Kposting-key-123' }),
+      })
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it('throws a clear error when the 3Speak connect request fails', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      text: async () => 'Invalid Hive posting key.',
+    });
+
+    await expect(
+      client.connectThreespeakAccount('alice', 'wrong')
+    ).rejects.toThrow(/Failed to connect 3Speak account: 422/);
+  });
+
+  it('connects a Rumble account with channelId + accessToken', async () => {
+    const mockResponse = { success: true, accountId: 'acc-1', channelId: 'chan-1' };
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockResponse),
+    });
+
+    const result = await client.connectRumbleAccount('chan-1', 'a'.repeat(40));
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/rumble-connect`,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({ channelId: 'chan-1', accessToken: 'a'.repeat(40) }),
+      })
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it('throws a clear error when the Rumble connect request fails', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => 'Rumble access token must be the 40-character token issued by Rumble.',
+    });
+
+    await expect(
+      client.connectRumbleAccount('chan-1', 'wrong')
+    ).rejects.toThrow(/Failed to connect Rumble account: 400/);
+  });
 });
 
 describe('PostEngineerClient configuration', () => {
@@ -1133,6 +1250,37 @@ describe('PostEngineerClient configuration', () => {
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).not.toContain(JSON.stringify(password).slice(1, -1));
     expect((error as Error).message).not.toContain(password);
+    expect((error as Error).message).toContain('[redacted]');
+  });
+
+  it('never echoes the 3Speak posting key when the API error body reflects the payload', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      text: async () => `{"error":"invalid postingKey value '5Ksecret-key'"}`,
+    });
+
+    const c = new PostEngineerClient({ apiKey: 'k' });
+    const error = await c.connectThreespeakAccount('alice', '5Ksecret-key').catch((e) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain('5Ksecret-key');
+    expect((error as Error).message).toContain('[redacted]');
+  });
+
+  it('never echoes the Rumble access token when the API error body reflects the payload', async () => {
+    const token = 'a'.repeat(40);
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => `{"error":"invalid accessToken value '${token}'"}`,
+    });
+
+    const c = new PostEngineerClient({ apiKey: 'k' });
+    const error = await c.connectRumbleAccount('chan-1', token).catch((e) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain(token);
     expect((error as Error).message).toContain('[redacted]');
   });
 
@@ -1816,6 +1964,176 @@ describe('publishVideoDirect', () => {
     expect(formData.getAll('facebookAccountIds')).toEqual(['page-1', 'page-2']);
     expect(formData.get('caption')).toBe('hello facebook');
     expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('maps account ids to the pinterest field name and sends title, description and boardId', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'pinterest',
+      videoPath,
+      accountIds: ['user-9'],
+      caption: 'the pin description',
+      title: 'My pin',
+      boardId: 'b1',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('provider')).toBe('pinterest');
+    expect(formData.getAll('pinterestAccountIds')).toEqual(['user-9']);
+    expect(formData.get('caption')).toBe('the pin description');
+    expect(formData.get('title')).toBe('My pin');
+    expect(formData.get('description')).toBe('the pin description');
+    expect(formData.get('boardId')).toBe('b1');
+    expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('uses the description when given for pinterest instead of the caption', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'pinterest',
+      videoPath,
+      accountIds: ['user-9'],
+      caption: 'caption text',
+      description: 'explicit description',
+      boardId: 'b1',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('description')).toBe('explicit description');
+  });
+
+  it('publishes to pinterest with a description and no caption', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'pinterest',
+      videoPath,
+      accountIds: ['user-9'],
+      description: 'description only',
+      boardId: 'b1',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('description')).toBe('description only');
+    expect(formData.get('caption')).toBe('');
+    expect(formData.get('boardId')).toBe('b1');
+  });
+
+  it('falls back to the caption for pinterest when the description is blank', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'pinterest',
+      videoPath,
+      accountIds: ['user-9'],
+      description: '   ',
+      caption: 'caption fallback',
+      boardId: 'b1',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('description')).toBe('caption fallback');
+  });
+
+  it('fails fast for pinterest with neither description nor caption', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await expect(
+      client.publishVideoDirect({
+        provider: 'pinterest',
+        videoPath,
+        accountIds: ['user-9'],
+        boardId: 'b1',
+      }),
+    ).rejects.toThrow('description or caption is required for pinterest.');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast for pinterest without a boardId', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await expect(
+      client.publishVideoDirect({
+        provider: 'pinterest',
+        videoPath,
+        accountIds: ['user-9'],
+        caption: 'hello pinterest',
+      }),
+    ).rejects.toThrow('boardId is required for pinterest.');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('narrows the pin permalink from a direct-publish response', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          provider: 'pinterest',
+          results: [
+            { accountId: 'user-9', success: true, postId: '123456789', permalink: 'https://www.pinterest.com/pin/123456789/' },
+          ],
+          successCount: 1,
+          logId: 'log-1',
+        }),
+    });
+    const videoPath = await writeTempVideo('clip.mp4');
+    const result = await client.publishVideoDirect({
+      provider: 'pinterest',
+      videoPath,
+      accountIds: ['user-9'],
+      caption: 'hello pinterest',
+      boardId: 'b1',
+    });
+    expect(result.results[0]).toEqual({
+      accountId: 'user-9',
+      success: true,
+      postId: '123456789',
+      permalink: 'https://www.pinterest.com/pin/123456789/',
+    });
+  });
+
+  it('maps account ids to the threespeak field name and sends the caption', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: '3speak',
+      videoPath,
+      accountIds: ['alice'],
+      caption: 'hello 3speak',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('provider')).toBe('3speak');
+    expect(formData.getAll('threespeakAccountIds')).toEqual(['alice']);
+    expect(formData.get('caption')).toBe('hello 3speak');
+    expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('maps account ids to the rumble field name and sends title + description instead of a caption', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'rumble',
+      videoPath,
+      accountIds: ['chan-1', 'chan-2'],
+      title: 'My video',
+      description: 'A description',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('provider')).toBe('rumble');
+    expect(formData.getAll('rumbleAccountIds')).toEqual(['chan-1', 'chan-2']);
+    expect(formData.get('title')).toBe('My video');
+    expect(formData.get('description')).toBe('A description');
+    expect(formData.get('caption')).toBeNull();
+    expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('fails fast when the rumble title or description is missing, without fetching', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await expect(
+      client.publishVideoDirect({ provider: 'rumble', videoPath, accountIds: ['chan-1'], description: 'A description' }),
+    ).rejects.toThrow(/title is required for rumble/);
+    await expect(
+      client.publishVideoDirect({ provider: 'rumble', videoPath, accountIds: ['chan-1'], title: 'My video' }),
+    ).rejects.toThrow(/description is required for rumble/);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('fails fast on an unknown provider without fetching', async () => {

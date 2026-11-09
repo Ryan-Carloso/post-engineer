@@ -1,5 +1,4 @@
 import '@testing-library/jest-dom/vitest';
-import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -28,7 +27,12 @@ vi.mock('@/lib/api', () => ({
   useLinkedinAccountsQuery: vi.fn(),
   useThreadsAccountsQuery: vi.fn(),
   useFacebookAccountsQuery: vi.fn(),
+  useThreespeakAccountsQuery: vi.fn(),
   useDisconnectAccountMutation: vi.fn(),
+}));
+
+vi.mock('@/lib/social-accounts-queries', () => ({
+  useRumbleAccountsQuery: vi.fn(),
 }));
 
 // Only notifyIfSessionExpired is doubled; the module's redirect behavior is
@@ -76,6 +80,12 @@ vi.mock('@/lib/oauth/threads-handler', () => ({
 }));
 vi.mock('@/lib/oauth/facebook-handler', () => ({
   useFacebookOAuth: vi.fn(),
+}));
+vi.mock('@/lib/oauth/pinterest-handler', () => ({
+  usePinterestOAuth: vi.fn(),
+}));
+vi.mock('@/lib/pinterest-accounts', () => ({
+  usePinterestAccountsQuery: vi.fn(),
 }));
 vi.mock('@/lib/oauth/linkedin-handler', () => ({
   useLinkedInOAuth: vi.fn(() => ({
@@ -139,13 +149,16 @@ vi.mock('@/components/account-card', () => ({
 
 import AccountsPage from '../page';
 import { reportAccountDisconnectFailed, useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
-import { useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery, useThreadsAccountsQuery, useFacebookAccountsQuery, useDisconnectAccountMutation } from '@/lib/api';
+import { useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery, useThreadsAccountsQuery, useFacebookAccountsQuery, useThreespeakAccountsQuery, useDisconnectAccountMutation } from '@/lib/api';
+import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
 import { useYouTubeOAuth } from '@/lib/oauth/google-handler';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { useInstagramOAuth } from '@/lib/oauth/instagram-handler';
 import { useLinkedInOAuth } from '@/lib/oauth/linkedin-handler';
 import { useThreadsOAuth } from '@/lib/oauth/threads-handler';
 import { useFacebookOAuth } from '@/lib/oauth/facebook-handler';
+import { usePinterestOAuth } from '@/lib/oauth/pinterest-handler';
+import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
 
 function createWrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -187,7 +200,11 @@ beforeEach(() => {
   vi.mocked(useThreadsAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
   vi.mocked(useThreadsOAuth).mockReturnValue(threadsOAuth);
   vi.mocked(useFacebookAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
+  vi.mocked(useThreespeakAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
   vi.mocked(useFacebookOAuth).mockReturnValue(facebookOAuth);
+  vi.mocked(usePinterestAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
+  vi.mocked(usePinterestOAuth).mockReturnValue(pinterestOAuth);
+  vi.mocked(useRumbleAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
   vi.mocked(useLinkedInOAuth).mockReturnValue({
     startOAuth: vi.fn().mockResolvedValue(undefined),
     isLoading: false,
@@ -201,6 +218,7 @@ beforeEach(() => {
 
 const threadsOAuth = { isLoading: false, error: null, startOAuth: vi.fn() } as unknown as ReturnType<typeof useThreadsOAuth>;
 const facebookOAuth = { isLoading: false, error: null, startOAuth: vi.fn() } as unknown as ReturnType<typeof useFacebookOAuth>;
+const pinterestOAuth = { isLoading: false, error: null, startOAuth: vi.fn() } as unknown as ReturnType<typeof usePinterestOAuth>;
 
 describe('app/(main)/accounts/page — AccountsPage', () => {
   it('renders page header', () => {
@@ -221,12 +239,12 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
 
   it('shows the shared connection slot when YouTube has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(6);
+    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(9);
   });
 
   it('shows the shared connection slot when Instagram has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(6);
+    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(9);
   });
 
   it('shows loading skeletons while loading', () => {
@@ -471,11 +489,18 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
       error: new Error('threads down'),
       refetch: vi.fn(),
     });
+    vi.mocked(useThreespeakAccountsQuery, { partial: true }).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error('3speak down'),
+      refetch: vi.fn(),
+    });
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(useAccountListErrorTelemetry).toHaveBeenCalledWith('instagram', 'ig down');
     expect(useAccountListErrorTelemetry).toHaveBeenCalledWith('bluesky', 'bsky down');
     expect(useAccountListErrorTelemetry).toHaveBeenCalledWith('linkedin', 'li down');
     expect(useAccountListErrorTelemetry).toHaveBeenCalledWith('threads', 'threads down');
+    expect(useAccountListErrorTelemetry).toHaveBeenCalledWith('3speak', '3speak down');
   });
 
   it('selects an Instagram account with the instagram provider id', () => {
@@ -537,6 +562,32 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('instagram');
   });
 
+  it('renders the dialog copy and starts closed with empty fields', async () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(screen.queryByTestId('bluesky-handle-input')).not.toBeInTheDocument();
+    // Section order: youtube, instagram, bluesky, linkedin, threads.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[2]);
+    expect(await screen.findByTestId('bluesky-handle-input')).toBeTruthy();
+    expect(screen.getByText('accounts.blueskyConnectTitle')).toBeTruthy();
+    expect(screen.getByText('accounts.blueskyConnectHint')).toBeTruthy();
+    expect(screen.getByText('accounts.blueskyHandleLabel')).toBeTruthy();
+    expect(screen.getByText('accounts.blueskyPasswordLabel')).toBeTruthy();
+    expect(screen.getByText('accounts.blueskyConnect')).toBeTruthy();
+    expect(screen.getByText('accounts.blueskySecurityHint')).toBeTruthy();
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-labelledby', 'bluesky-dialog-title');
+    expect(document.getElementById('bluesky-dialog-title')).toHaveTextContent('accounts.blueskyConnectTitle');
+    expect(screen.getByTestId('bluesky-handle-input')).toHaveValue('');
+    expect(screen.getByTestId('bluesky-password-input')).toHaveValue('');
+  });
+
+  it('closes the Bluesky dialog from its close button', async () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[2]);
+    expect(await screen.findByTestId('bluesky-handle-input')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'accounts.closeDialog' }));
+    await waitFor(() => expect(screen.queryByTestId('bluesky-handle-input')).not.toBeInTheDocument());
+  });
+
   async function submitBlueskyConnect(status: number, body: unknown): Promise<void> {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status, json: async () => body })));
     render(<AccountsPage />, { wrapper: createWrapper() });
@@ -547,6 +598,18 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     fireEvent.click(screen.getByTestId('bluesky-connect-button'));
     expect(await screen.findByTestId('bluesky-connect-error')).toBeInTheDocument();
   }
+
+  it('bluesky connect dialog shows its title, hint, labels and security note', async () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[2]);
+    expect(await screen.findByRole('dialog', { name: 'accounts.blueskyConnectTitle' })).toBeInTheDocument();
+    expect(screen.getByText('accounts.blueskyConnectHint')).toBeInTheDocument();
+    expect(screen.getByText('accounts.blueskyHandleLabel')).toBeInTheDocument();
+    expect(screen.getByText('accounts.blueskyPasswordLabel')).toBeInTheDocument();
+    expect(screen.getByTestId('bluesky-connect-button')).toHaveTextContent('accounts.blueskyConnect');
+    expect(screen.getByText('accounts.blueskySecurityHint')).toBeInTheDocument();
+    expect(screen.getByLabelText('accounts.closeDialog')).toBeInTheDocument();
+  });
 
   it('bluesky connect dialog does NOT log the user out when the credential is rejected (422)', async () => {
     const notify = vi.mocked(notifyIfSessionExpired);
@@ -657,8 +720,8 @@ describe('Threads accounts section', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.getByText('accounts.threadsLabel')).toBeTruthy();
     expect(screen.getByText('accounts.threadsDescription')).toBeTruthy();
-    // Threads sits right above Facebook, the last section on the page.
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak, rumble.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[4]);
     expect(threadsOAuth.startOAuth).toHaveBeenCalledTimes(1);
   });
 
@@ -719,8 +782,8 @@ describe('Facebook Pages accounts section', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.getByText('accounts.facebookLabel')).toBeTruthy();
     expect(screen.getByText('accounts.facebookDescription')).toBeTruthy();
-    // Facebook is the last section on the page, so its connect button is last.
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak, rumble.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[5]);
     expect(facebookOAuth.startOAuth).toHaveBeenCalledTimes(1);
   });
 
@@ -762,10 +825,34 @@ describe('Facebook Pages accounts section', () => {
   it('disables the connect button while the OAuth popup is opening', () => {
     vi.mocked(useFacebookOAuth).mockReturnValue({ ...facebookOAuth, isLoading: true });
     render(<AccountsPage />, { wrapper: createWrapper() });
-    const button = screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLButtonElement;
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak, rumble.
+    const button = screen.getAllByRole('button', { name: 'accounts.connectFirst' })[5] as HTMLButtonElement;
     expect(button).toBeDisabled();
   });
 
+  it('lists each connected Page, marking a stored name or the Page id', () => {
+    vi.mocked(useFacebookAccountsQuery, { partial: true }).mockReturnValue({
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'facebook', recordId: 'r1', providerAccountId: '111', accountName: 'My Page', connectedAt: 0, lastUsed: 0 },
+          { provider: 'facebook', recordId: 'r2', providerAccountId: '222', accountName: null, connectedAt: 0, lastUsed: 0 },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const cards = screen.getAllByTestId('account-card').filter((el) => el.getAttribute('data-provider') === 'facebook');
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveAttribute('data-label-origin', 'stored');
+    expect(cards[1]).toHaveAttribute('data-label-origin', 'provider_id');
+    expect(screen.getByText('My Page')).toBeTruthy();
+    expect(screen.getByText('222')).toBeTruthy();
+    // With a Page connected the button offers another one.
+    expect(screen.getAllByRole('button', { name: 'accounts.connectAnother' }).length).toBeGreaterThan(0);
+  });
   it('reports a Facebook disconnect failure for that provider', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({ success: false });
     vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
@@ -780,5 +867,395 @@ describe('Facebook Pages accounts section', () => {
     await screen.findByTestId('disconnect-dialog');
     fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
     await waitFor(() => expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('facebook', 'rejected'));
+  });
+
+  it('shows a 3Speak stored name over the Hive username when the row carries one', () => {
+    vi.mocked(useThreespeakAccountsQuery, { partial: true }).mockReturnValue({
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: '3speak', recordId: 'r1', providerAccountId: 'alice', accountName: 'Alice in Hive', connectedAt: 0, lastUsed: 0 },
+          { provider: '3speak', recordId: 'r2', providerAccountId: 'bob', accountName: null, connectedAt: 0, lastUsed: 0 },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const cards = screen.getAllByTestId('account-card').filter((el) => el.getAttribute('data-provider') === '3speak');
+    expect(cards).toHaveLength(2);
+    expect(within(cards[0]).getByText('Alice in Hive')).toBeTruthy();
+    expect(within(cards[1]).getByText('bob')).toBeTruthy();
+  });
+
+  it('disconnects a 3Speak account using its Hive username', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.mocked(useThreespeakAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [{ provider: '3speak', recordId: 'r1', providerAccountId: 'alice', accountName: 'Alice', connectedAt: 0, lastUsed: 0 }] },
+      isLoading: false,
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByTestId('3speak-disconnect-button'));
+    await screen.findByTestId('disconnect-dialog');
+    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'alice' }));
+    expect(useDisconnectAccountMutation).toHaveBeenCalledWith('3speak');
+  });
+
+  async function submitThreespeakConnect(status: number, body: unknown): Promise<ReturnType<typeof vi.fn>> {
+    const fetchMock = vi.fn(async () => ({ ok: false, status, json: async () => body }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak, rumble.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[7]);
+    fireEvent.change(await screen.findByTestId('threespeak-handle-input'), { target: { value: 'alice' } });
+    fireEvent.change(screen.getByTestId('threespeak-password-input'), { target: { value: '5K-posting-key' } });
+    fireEvent.click(screen.getByTestId('threespeak-connect-button'));
+    expect(await screen.findByTestId('threespeak-connect-error')).toBeInTheDocument();
+    return fetchMock;
+  }
+
+  it('3speak connect dialog shows its title, hint, labels and security note', async () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[7]);
+    expect(await screen.findByRole('dialog', { name: 'accounts.threespeakConnectTitle' })).toBeInTheDocument();
+    expect(screen.getByText('accounts.threespeakConnectHint')).toBeInTheDocument();
+    expect(screen.getByText('accounts.threespeakHandleLabel')).toBeInTheDocument();
+    expect(screen.getByText('accounts.threespeakPasswordLabel')).toBeInTheDocument();
+    expect(screen.getByTestId('threespeak-connect-button')).toHaveTextContent('accounts.threespeakConnect');
+    expect(screen.getByText('accounts.threespeakSecurityHint')).toBeInTheDocument();
+    expect(screen.getByLabelText('accounts.closeDialog')).toBeInTheDocument();
+  });
+
+  it('3speak connect dialog posts the username and posting key to /api/threespeak-connect', async () => {
+    const fetchMock = await submitThreespeakConnect(422, { success: false, code: 'THREESPEAK_CREDENTIAL_REJECTED' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/threespeak-connect', expect.objectContaining({ method: 'POST' }));
+    const sent = fetchMock.mock.calls[0][1].body as FormData;
+    expect(sent.get('username')).toBe('alice');
+    expect(sent.get('postingKey')).toBe('5K-posting-key');
+    // A rejected credential names itself instead of the generic error.
+    expect(screen.getByTestId('threespeak-connect-error')).toHaveTextContent('accounts.threespeakCredentialRejected');
+  });
+
+  it('3speak connect dialog shows the generic error when the failure is not a rejected credential', async () => {
+    await submitThreespeakConnect(500, { success: false, error: 'boom' });
+    expect(screen.getByTestId('threespeak-connect-error')).toHaveTextContent('accounts.threespeakConnectError');
+  });
+
+  it('3speak connect dialog closes and refetches on success', async () => {
+    const refetch = vi.fn();
+    vi.mocked(useThreespeakAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [] },
+      isLoading: false,
+      error: null,
+      refetch,
+    });
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ success: true, accountId: 'row-1', username: 'alice' }) }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[7]);
+    fireEvent.change(await screen.findByTestId('threespeak-handle-input'), { target: { value: 'alice' } });
+    fireEvent.change(screen.getByTestId('threespeak-password-input'), { target: { value: '5K-posting-key' } });
+    fireEvent.click(screen.getByTestId('threespeak-connect-button'));
+    await waitFor(() => expect(screen.queryByTestId('threespeak-handle-input')).toBeNull());
+    expect(fetchMock).toHaveBeenCalledWith('/api/threespeak-connect', expect.objectContaining({ method: 'POST' }));
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it('3speak connect dialog does not submit with empty fields', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[7]);
+    fireEvent.click(await screen.findByTestId('threespeak-connect-button'));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('3speak connect dialog does NOT log the user out when the credential is rejected (422)', async () => {
+    const notify = vi.mocked(notifyIfSessionExpired);
+    notify.mockClear();
+    await submitThreespeakConnect(422, { success: false, code: 'THREESPEAK_CREDENTIAL_REJECTED' });
+    // The 422 response still goes through the session-expiry check, which
+    // only acts on 401 (pinned in lib/__tests__/session-expiry.test.tsx).
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(notify).mock.calls[0][0]).toMatchObject({ status: 422 });
+  });
+
+  it('3speak connect dialog reports a dead hub session (401) to the session-expiry handler', async () => {
+    const notify = vi.mocked(notifyIfSessionExpired);
+    notify.mockClear();
+    await submitThreespeakConnect(401, { success: false, error: 'Authentication required.' });
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(notify).mock.calls[0][0]).toMatchObject({ status: 401 });
+  });
+});
+
+describe('Pinterest accounts section', () => {
+  beforeEach(() => {
+    vi.mocked(pinterestOAuth.startOAuth).mockClear();
+  });
+
+  it('renders the section with its localized copy and starts OAuth from its button', () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(screen.getByText('accounts.pinterestLabel')).toBeTruthy();
+    expect(screen.getByText('accounts.pinterestDescription')).toBeTruthy();
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak, rumble.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[6] as HTMLElement);
+    expect(pinterestOAuth.startOAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists each connected Pinterest account, marking a stored name or the account id', () => {
+    vi.mocked(usePinterestAccountsQuery, { partial: true }).mockReturnValue({
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'pinterest', recordId: 'r1', providerAccountId: '111', accountName: 'Maker', connectedAt: 0, lastUsed: 0 },
+          { provider: 'pinterest', recordId: 'r2', providerAccountId: '222', accountName: null, connectedAt: 0, lastUsed: 0 },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const cards = screen.getAllByTestId('account-card').filter((el) => el.getAttribute('data-provider') === 'pinterest');
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveAttribute('data-label-origin', 'stored');
+    expect(cards[1]).toHaveAttribute('data-label-origin', 'provider_id');
+    expect(screen.getByText('Maker')).toBeTruthy();
+    expect(screen.getByText('222')).toBeTruthy();
+    // With an account connected the button offers another one.
+    expect(screen.getAllByRole('button', { name: 'accounts.connectAnother' }).length).toBeGreaterThan(0);
+  });
+
+  it('reports a list error for the pinterest provider', () => {
+    vi.mocked(usePinterestAccountsQuery, { partial: true }).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error('pin down'),
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(useAccountListErrorTelemetry).toHaveBeenCalledWith('pinterest', 'pin down');
+  });
+
+  it('disables the connect button while the OAuth popup is opening', () => {
+    vi.mocked(usePinterestOAuth).mockReturnValue({ ...pinterestOAuth, isLoading: true });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const button = screen.getAllByRole('button', { name: 'accounts.connectFirst' })[6] as HTMLButtonElement;
+    expect(button).toBeDisabled();
+  });
+});
+
+describe('Rumble accounts section', () => {
+  async function submitRumbleConnect(status: number, body: unknown) {
+    const fetchMock = vi.fn(async () => ({ ok: status >= 200 && status < 300, status, json: async () => body }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    // Rumble is the last section on the page, so its connect button is last.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: 'chan-1' } });
+    fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
+    fireEvent.click(screen.getByTestId('rumble-connect-button'));
+    return fetchMock;
+  }
+
+  it('renders the section with its localized copy and opens the credential dialog from its button', async () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(screen.getByText('accounts.rumbleLabel')).toBeTruthy();
+    expect(screen.getByText('accounts.rumbleDescription')).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    expect(await screen.findByTestId('rumble-handle-input')).toBeTruthy();
+    expect(screen.getByTestId('rumble-password-input')).toBeTruthy();
+  });
+
+  it('lists each connected channel, marking a stored name or the channel id', () => {
+    vi.mocked(useRumbleAccountsQuery, { partial: true }).mockReturnValue({
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'rumble', recordId: 'r1', providerAccountId: 'chan-1', accountName: 'My Channel', connectedAt: 0, lastUsed: 0 },
+          { provider: 'rumble', recordId: 'r2', providerAccountId: 'chan-2', accountName: null, connectedAt: 0, lastUsed: 0 },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const cards = screen.getAllByTestId('account-card').filter((el) => el.getAttribute('data-provider') === 'rumble');
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveAttribute('data-label-origin', 'stored');
+    expect(cards[1]).toHaveAttribute('data-label-origin', 'provider_id');
+    expect(screen.getByText('My Channel')).toBeTruthy();
+    expect(screen.getByText('chan-2')).toBeTruthy();
+    // With a channel connected the button offers another one.
+    expect(screen.getAllByRole('button', { name: 'accounts.connectAnother' }).length).toBeGreaterThan(0);
+  });
+
+  it('reports a list error for the rumble provider', () => {
+    vi.mocked(useRumbleAccountsQuery, { partial: true }).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error('rumble down'),
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(useAccountListErrorTelemetry).toHaveBeenCalledWith('rumble', 'rumble down');
+  });
+
+  it('renders the dialog copy and starts closed with empty fields', async () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(screen.queryByTestId('rumble-handle-input')).not.toBeInTheDocument();
+    // Rumble is the last section on the page, so its connect button is last.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    expect(await screen.findByTestId('rumble-handle-input')).toBeTruthy();
+    expect(screen.getByText('accounts.rumbleConnectTitle')).toBeTruthy();
+    expect(screen.getByText('accounts.rumbleConnectHint')).toBeTruthy();
+    expect(screen.getByText('accounts.rumbleChannelLabel')).toBeTruthy();
+    expect(screen.getByText('accounts.rumbleTokenLabel')).toBeTruthy();
+    expect(screen.getByText('accounts.rumbleConnect')).toBeTruthy();
+    expect(screen.getByText('accounts.rumbleSecurityHint')).toBeTruthy();
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-labelledby', 'rumble-dialog-title');
+    expect(document.getElementById('rumble-dialog-title')).toHaveTextContent('accounts.rumbleConnectTitle');
+    expect(screen.getByTestId('rumble-handle-input')).toHaveValue('');
+    expect(screen.getByTestId('rumble-password-input')).toHaveValue('');
+  });
+
+  it('closes the Rumble dialog from its close button', async () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    expect(await screen.findByTestId('rumble-handle-input')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'accounts.closeDialog' }));
+    await waitFor(() => expect(screen.queryByTestId('rumble-handle-input')).not.toBeInTheDocument());
+  });
+
+  it('keeps the Rumble connect button disabled until both fields are non-blank', async () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    const button = await screen.findByTestId('rumble-connect-button');
+    expect(button).toBeDisabled();
+    fireEvent.change(screen.getByTestId('rumble-handle-input'), { target: { value: '   ' } });
+    expect(button).toBeDisabled();
+    fireEvent.change(screen.getByTestId('rumble-handle-input'), { target: { value: 'chan-1' } });
+    expect(button).toBeDisabled();
+    fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: '   ' } });
+    expect(button).toBeDisabled();
+    fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
+    expect(button).not.toBeDisabled();
+  });
+
+  it('renders no Rumble cards when the query has no data', () => {
+    vi.mocked(useRumbleAccountsQuery, { partial: true }).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(screen.queryAllByTestId('account-card')).toHaveLength(0);
+  });
+
+  it('posts trimmed values, closes the dialog and refetches on success', async () => {
+    const refetch = vi.fn();
+    vi.mocked(useRumbleAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [] },
+      isLoading: false,
+      error: null,
+      refetch,
+    });
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ success: true }) }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: '  chan-1  ' } });
+    fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
+    fireEvent.click(screen.getByTestId('rumble-connect-button'));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/rumble-connect');
+    expect(init.method).toBe('POST');
+    expect((init.body as FormData).get('channelId')).toBe('chan-1');
+    await waitFor(() => expect(screen.queryByTestId('rumble-handle-input')).not.toBeInTheDocument());
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('rumble-connect-error')).not.toBeInTheDocument();
+  });
+
+  it('disables the connect button while the request is pending and re-enables it after', async () => {
+    let resolveFetch: (value: unknown) => void = () => undefined;
+    const fetchMock = vi.fn(
+      () => new Promise((resolve) => { resolveFetch = resolve as (value: unknown) => void; }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: 'chan-1' } });
+    fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
+    fireEvent.click(screen.getByTestId('rumble-connect-button'));
+    await waitFor(() => expect(screen.getByTestId('rumble-connect-button')).toBeDisabled());
+    resolveFetch({ ok: true, status: 200, json: async () => ({ success: true }) });
+    await waitFor(() => expect(screen.queryByTestId('rumble-handle-input')).not.toBeInTheDocument());
+  });
+
+  it('reports a dead hub session (401), shows the error text and clears the token', async () => {
+    const notify = vi.mocked(notifyIfSessionExpired);
+    notify.mockClear();
+    const fetchMock = await submitRumbleConnect(401, { success: false, error: 'Authentication required.' });
+    expect(await screen.findByTestId('rumble-connect-error')).toHaveTextContent('accounts.rumbleConnectError');
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(notify).mock.calls[0][0]).toMatchObject({ status: 401 });
+    expect(screen.getByTestId('rumble-password-input')).toHaveValue('');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the error text when the connect request throws', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: 'chan-1' } });
+    fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
+    fireEvent.click(screen.getByTestId('rumble-connect-button'));
+    expect(await screen.findByTestId('rumble-connect-error')).toHaveTextContent('accounts.rumbleConnectError');
+  });
+
+  it('names the stored channel in the disconnect dialog', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.mocked(useRumbleAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [{ provider: 'rumble', recordId: 'r1', providerAccountId: 'chan-1', accountName: 'My Channel', connectedAt: 0, lastUsed: 0 }] },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByTestId('rumble-disconnect-button'));
+    expect(await screen.findByTestId('disconnect-dialog')).toHaveTextContent('My Channel');
+  });
+
+  it('posts channelId + accessToken to /api/rumble-connect and shows the error on a 400', async () => {
+    const fetchMock = await submitRumbleConnect(400, { success: false, error: 'bad token' });
+    expect(await screen.findByTestId('rumble-connect-error')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/rumble-connect');
+    const form = init.body as FormData;
+    expect(form.get('channelId')).toBe('chan-1');
+    expect(form.get('accessToken')).toBe('a'.repeat(40));
+  });
+
+  it('reports a Rumble disconnect failure for that provider', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: false });
+    vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.mocked(useRumbleAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [{ provider: 'rumble', recordId: 'r1', providerAccountId: 'chan-1', accountName: 'My Channel', connectedAt: 0, lastUsed: 0 }] },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByTestId('rumble-disconnect-button'));
+    await screen.findByTestId('disconnect-dialog');
+    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await waitFor(() => expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('rumble', 'rejected'));
   });
 });

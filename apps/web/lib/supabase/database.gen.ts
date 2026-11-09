@@ -365,7 +365,7 @@ export interface Database {
         id: string;
         post_id: string;
         user_id: string;
-        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook';
+        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble';
         account_id: string;
         external_id: string;
         metrics_window: '24h' | '7d' | '28d';
@@ -392,7 +392,7 @@ export interface Database {
         id?: string;
         post_id: string;
         user_id: string;
-        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook';
+        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble';
         account_id: string;
         external_id: string;
         metrics_window: '24h' | '7d' | '28d';
@@ -419,7 +419,7 @@ export interface Database {
         id?: string;
         post_id?: string;
         user_id?: string;
-        provider?: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook';
+        provider?: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble';
         account_id?: string;
         external_id?: string;
         metrics_window?: '24h' | '7d' | '28d';
@@ -515,6 +515,7 @@ export interface Database {
         batch_id: string | null;
         discount_tokens: number;
         music_mood: string | null;
+        publish_outcomes: Json;
         };
         Insert: {
         id?: string;
@@ -541,6 +542,7 @@ export interface Database {
         batch_id?: string | null;
         discount_tokens?: number;
         music_mood?: string | null;
+        publish_outcomes?: Json;
         };
         Update: {
         id?: string;
@@ -567,6 +569,7 @@ export interface Database {
         batch_id?: string | null;
         discount_tokens?: number;
         music_mood?: string | null;
+        publish_outcomes?: Json;
         };
         Relationships: [];
       };
@@ -623,6 +626,10 @@ export interface Database {
         post_cta_text: string | null;
         threads_account_ids: string[];
         facebook_account_ids: string[];
+        pinterest_account_ids: string[];
+        pinterest_board_id: string | null;
+        threespeak_account_ids: string[];
+        rumble_account_ids: string[];
         };
         Insert: {
         id?: string;
@@ -655,6 +662,10 @@ export interface Database {
         post_cta_text?: string | null;
         threads_account_ids?: string[];
         facebook_account_ids?: string[];
+        pinterest_account_ids?: string[];
+        pinterest_board_id?: string | null;
+        threespeak_account_ids?: string[];
+        rumble_account_ids?: string[];
         };
         Update: {
         id?: string;
@@ -687,6 +698,10 @@ export interface Database {
         post_cta_text?: string | null;
         threads_account_ids?: string[];
         facebook_account_ids?: string[];
+        pinterest_account_ids?: string[];
+        pinterest_board_id?: string | null;
+        threespeak_account_ids?: string[];
+        rumble_account_ids?: string[];
         };
         Relationships: [];
       };
@@ -694,7 +709,7 @@ export interface Database {
         Row: {
         id: string;
         user_id: string;
-        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook';
+        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble';
         provider_account_id: string;
         account_name: string | null;
         account_metadata: Json;
@@ -707,7 +722,7 @@ export interface Database {
         Insert: {
         id?: string;
         user_id: string;
-        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook';
+        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble';
         provider_account_id: string;
         account_name?: string | null;
         account_metadata: Json;
@@ -720,7 +735,7 @@ export interface Database {
         Update: {
         id?: string;
         user_id?: string;
-        provider?: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook';
+        provider?: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble';
         provider_account_id?: string;
         account_name?: string | null;
         account_metadata?: Json;

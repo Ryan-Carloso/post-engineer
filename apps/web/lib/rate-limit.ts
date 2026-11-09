@@ -42,6 +42,10 @@ export const RATE_LIMITS = {
   voicePreview: { name: 'voice-preview', limit: 10, windowMs: 24 * 60 * 60 * 1000 },
   // Instagram content posting
   instagramPost: { name: 'instagram-post', limit: 10, windowMs: 60_000 },
+  // Pinterest video Pin publishing (register + S3 upload + poll + pin create)
+  pinterestUpload: { name: 'pinterest-upload', limit: 10, windowMs: 60_000 },
+  // Pinterest board listing for the board picker (bounded read, no writes)
+  pinterestBoards: { name: 'pinterest-boards', limit: 60, windowMs: 60_000 },
   // OAuth token endpoint: brute-force / token-farming protection
   oauthToken: { name: 'oauth-token', limit: 30, windowMs: 60_000 },
   // OAuth dynamic client registration: abuse/registration-flood protection
@@ -50,6 +54,12 @@ export const RATE_LIMITS = {
   apiKeyManage: { name: 'api-key-manage', limit: 20, windowMs: 60_000 },
   // Bluesky credential exchange: credential-stuffing protection
   blueskyConnect: { name: 'bluesky-connect', limit: 10, windowMs: 60_000 },
+  // 3Speak credential exchange (Hive posting key): same protection as
+  // the Bluesky app-password exchange — a new route gets its own profile
+  // (never a reused semantic profile).
+  threespeakConnect: { name: 'threespeak-connect', limit: 10, windowMs: 60_000 },
+  // Rumble token connect: same shape as Bluesky (a pasted credential)
+  rumbleConnect: { name: 'rumble-connect', limit: 10, windowMs: 60_000 },
   // Billing checkout session creation: abuse protection
   billingCheckout: { name: 'billing-checkout', limit: 10, windowMs: 60_000 },
   // Video generation job submission: cost protection

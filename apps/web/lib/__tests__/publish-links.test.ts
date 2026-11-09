@@ -23,14 +23,18 @@ describe('resolvePublishLinks', () => {
     ]);
   });
 
-  it('uses the Instagram permalink as-is', () => {
+  it('uses the 3Speak permalink as-is', () => {
     expect(
       resolvePublishLinks([
-        { provider: 'instagram', permalink: 'https://www.instagram.com/p/XYZ/' },
+        { provider: '3speak', permalink: 'https://3speak.tv/watch?v=alice/my-video' },
       ]),
     ).toEqual([
-      { provider: 'instagram', url: 'https://www.instagram.com/p/XYZ/' },
+      { provider: '3speak', url: 'https://3speak.tv/watch?v=alice/my-video' },
     ]);
+  });
+
+  it('omits a 3Speak entry with only a video id (no URL can be derived from it)', () => {
+    expect(resolvePublishLinks([{ provider: '3speak', postId: 'video-1' }])).toEqual([]);
   });
 
   // Bluesky returns at://<did>/app.bsky.feed.post/<rkey>; the public web

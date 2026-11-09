@@ -143,13 +143,13 @@ def merge_prior_published(
     erase links an earlier attempt recorded — even though that post is
     live and the recorded link is its only trace. A prior published
     entry survives unless the new entries contain a published entry
-    for the same (provider, video): a failed re-attempt never erases
-    the link of a post that is already live.
+    for the same (provider, video, account): a failed re-attempt never
+    erases the link of a post that is already live.
     """
     if not isinstance(existing, list):
         return new_entries
     reposted = {
-        (entry.get("provider"), entry.get("video"))
+        (entry.get("provider"), entry.get("video"), entry.get("accountId"))
         for entry in new_entries
         if entry.get("status") == "published"
     }
@@ -158,6 +158,6 @@ def merge_prior_published(
         for entry in existing
         if isinstance(entry, dict)
         and entry.get("status") == "published"
-        and (entry.get("provider"), entry.get("video")) not in reposted
+        and (entry.get("provider"), entry.get("video"), entry.get("accountId")) not in reposted
     ]
     return preserved + new_entries

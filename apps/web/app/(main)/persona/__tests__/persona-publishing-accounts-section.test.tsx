@@ -63,6 +63,9 @@ const mockQueries = vi.hoisted(() => ({
   linkedin: { data: null as null | { accounts: unknown[] }, isLoading: false },
   threads: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
   facebook: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
+  pinterest: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
+  threespeak: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
+  rumble: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -72,6 +75,15 @@ vi.mock('@/lib/api', () => ({
   useLinkedinAccountsQuery: () => mockQueries.linkedin,
   useThreadsAccountsQuery: () => mockQueries.threads,
   useFacebookAccountsQuery: () => mockQueries.facebook,
+  useThreespeakAccountsQuery: () => mockQueries.threespeak,
+}));
+
+vi.mock('@/lib/pinterest-accounts', () => ({
+  usePinterestAccountsQuery: () => mockQueries.pinterest,
+}));
+
+vi.mock('@/lib/social-accounts-queries', () => ({
+  useRumbleAccountsQuery: () => mockQueries.rumble,
 }));
 
 vi.mock('@/lib/account-card-telemetry', () => ({
@@ -114,11 +126,16 @@ const connectedAccounts = {
     isLoading: false,
   },
   linkedin: { data: { accounts: [] }, isLoading: false },
+  threespeak: {
+    data: { authenticated: true, accounts: [{ provider: '3speak', recordId: 'r1', providerAccountId: 'alice', accountName: 'Alice', connectedAt: 0, lastUsed: 0 }] },
+    isLoading: false,
+    error: null,
+  },
 };
 
 const serverDefaults = {
   success: true,
-  defaults: { youtube: ['UC-1'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [] },
+  defaults: { youtube: ['UC-1'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], '3speak': ['alice'] },
 };
 
 function mockFetchOnce(body: unknown, ok = true, status = 200) {
@@ -138,6 +155,9 @@ function setConnectedAccounts() {
   mockQueries.linkedin = { ...connectedAccounts.linkedin };
   mockQueries.threads = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
   mockQueries.facebook = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
+  mockQueries.threespeak = { ...connectedAccounts.threespeak };
+  mockQueries.pinterest = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
+  mockQueries.rumble = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
 }
 
 beforeEach(() => {
@@ -174,11 +194,47 @@ describe('PersonaPublishingAccountsSection', () => {
     expect(screen.getByText('Default publishing accounts')).toBeInTheDocument();
 
     const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
-    // 2 youtube + 1 instagram + 1 bluesky + 0 linkedin
-    expect(checkboxes).toHaveLength(4);
+    // 2 youtube + 1 instagram + 1 bluesky + 0 linkedin + 1 threespeak
+    expect(checkboxes).toHaveLength(5);
     expect(checkboxes[0].checked).toBe(true); // UC-1 in defaults
     expect(checkboxes[1].checked).toBe(false); // UC-2 not in defaults
     expect(checkboxes[3].checked).toBe(true); // did:plc:abc in defaults
+    expect(checkboxes[4].checked).toBe(true); // alice in defaults
+  });
+
+  it('renders the 3Speak card with the Hive username when no stored name exists, and toggles it', async () => {
+    mockQueries.threespeak = { data: { authenticated: true, accounts: [{ provider: '3speak', recordId: 'r2', providerAccountId: 'bob', accountName: null, connectedAt: 0, lastUsed: 0 }] }, isLoading: false, error: null };
+    mockFetchOnce({ success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], '3speak': [] } });
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    await screen.findByTestId('publishing-accounts-save');
+
+    // The group heading names the provider, and the card falls back to the
+    // Hive username when the stored name is missing.
+    expect(screen.getByText('3Speak')).toBeInTheDocument();
+    expect(screen.getByText('bob')).toBeInTheDocument();
+    expect(reportAccountCardDisplay).toHaveBeenCalledWith(expect.objectContaining({
+      provider: '3speak',
+      shownLabel: 'bob',
+      labelOrigin: 'provider_id',
+    }));
+
+    const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
+    // 2 youtube + 1 instagram + 1 bluesky + 1 threespeak (bob, unchecked)
+    expect(checkboxes).toHaveLength(5);
+    expect(checkboxes[4].checked).toBe(false);
+    fireEvent.click(checkboxes[4]);
+    expect(checkboxes[4].checked).toBe(true);
+  });
+
+  it('renders no 3Speak card when the 3Speak query has no data', async () => {
+    mockQueries.threespeak = { data: undefined, isLoading: false, error: null } as unknown as typeof mockQueries.threespeak;
+    mockFetchOnce(serverDefaults);
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    await screen.findByTestId('publishing-accounts-save');
+
+    const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
+    // 2 youtube + 1 instagram + 1 bluesky + 0 threespeak
+    expect(checkboxes).toHaveLength(4);
   });
 
   it('shows the load error and retries on demand', async () => {
@@ -264,7 +320,7 @@ describe('PersonaPublishingAccountsSection', () => {
       json: () =>
         Promise.resolve({
           success: true,
-          defaults: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [] },
+          defaults: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], '3speak': ['alice'] },
         }),
     });
     fireEvent.click(screen.getByTestId('publishing-accounts-save'));
@@ -275,7 +331,7 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [] },
+            accounts: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': ['alice'], rumble: [] },
           }),
         }),
       );
@@ -306,6 +362,7 @@ describe('PersonaPublishingAccountsSection', () => {
     expect(screen.getByText('No LinkedIn accounts connected.')).toBeInTheDocument();
     expect(screen.getByText('No Threads accounts connected.')).toBeInTheDocument();
     expect(screen.getByText('No Facebook accounts connected.')).toBeInTheDocument();
+    expect(screen.getByText('No Rumble accounts connected.')).toBeInTheDocument();
     for (const link of screen.getAllByRole('link', { name: 'Connect accounts' })) {
       expect(link).toHaveAttribute('href', '/accounts');
     }
@@ -361,8 +418,8 @@ describe('PersonaPublishingAccountsSection', () => {
     await screen.findByTestId('publishing-accounts-save');
 
     const checkboxes = () => screen.getAllByTestId('account-card-select') as HTMLInputElement[];
-    // 2 youtube + 1 instagram + 1 bluesky + 2 linkedin + 2 threads
-    expect(checkboxes()).toHaveLength(8);
+    // 2 youtube + 1 instagram + 1 bluesky + 2 linkedin + 2 threads + 1 threespeak
+    expect(checkboxes()).toHaveLength(9);
     expect(checkboxes()[4].checked).toBe(false);
     fireEvent.click(checkboxes()[4]);
     expect(checkboxes()[4].checked).toBe(true);
@@ -397,6 +454,7 @@ describe('PersonaPublishingAccountsSection', () => {
     mockQueries.youtube = { data: { accounts: [] }, isLoading: false };
     mockQueries.instagram = { data: { accounts: [] }, isLoading: false };
     mockQueries.bluesky = { data: { accounts: [] }, isLoading: false };
+    mockQueries.threespeak = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
     mockQueries.facebook = {
       data: {
         authenticated: true,
@@ -435,7 +493,116 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: ['fb-1', 'fb-2'] },
+            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: ['fb-1', 'fb-2'], pinterest: [], '3speak': [], rumble: [] },
+          }),
+        }),
+      );
+    });
+  });
+
+  it('renders pinterest accounts, preselects saved ones and saves the toggled selection', async () => {
+    const fetchMock = mockFetchOnce({
+      success: true,
+      defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: ['pin-1'] },
+    });
+    mockQueries.youtube = { data: { accounts: [] }, isLoading: false };
+    mockQueries.instagram = { data: { accounts: [] }, isLoading: false };
+    mockQueries.bluesky = { data: { accounts: [] }, isLoading: false };
+    mockQueries.facebook = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
+    mockQueries.threespeak = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
+    mockQueries.pinterest = {
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'pinterest', providerAccountId: 'pin-1', accountName: 'Maker' },
+          { provider: 'pinterest', providerAccountId: 'pin-2' },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    };
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    await screen.findByTestId('publishing-accounts-save');
+
+    const checkboxes = () => screen.getAllByTestId('account-card-select') as HTMLInputElement[];
+    expect(checkboxes()).toHaveLength(2);
+    expect(checkboxes()[0].checked).toBe(true);
+    expect(checkboxes()[1].checked).toBe(false);
+    expect(screen.getByText('Maker')).toBeInTheDocument();
+    expect(reportAccountCardDisplay).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'pinterest',
+      shownLabel: 'pin-2',
+      labelOrigin: 'provider_id',
+    }));
+
+    fireEvent.click(checkboxes()[1]);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ success: true, defaults: { pinterest: ['pin-1', 'pin-2'] } }),
+    });
+    fireEvent.click(screen.getByTestId('publishing-accounts-save'));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        DEFAULTS_URL,
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({
+            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: ['pin-1', 'pin-2'], '3speak': [], rumble: [] },
+          }),
+        }),
+      );
+    });
+  });
+
+  it('renders rumble channels, preselects saved ones and saves the toggled selection', async () => {
+    const fetchMock = mockFetchOnce({
+      success: true,
+      defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], rumble: ['chan-1'] },
+    });
+    mockQueries.youtube = { data: { accounts: [] }, isLoading: false };
+    mockQueries.instagram = { data: { accounts: [] }, isLoading: false };
+    mockQueries.bluesky = { data: { accounts: [] }, isLoading: false };
+    mockQueries.threespeak = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
+    mockQueries.rumble = {
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'rumble', providerAccountId: 'chan-1', accountName: 'My Channel' },
+          { provider: 'rumble', providerAccountId: 'chan-2' },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    };
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    await screen.findByTestId('publishing-accounts-save');
+
+    const checkboxes = () => screen.getAllByTestId('account-card-select') as HTMLInputElement[];
+    expect(checkboxes()).toHaveLength(2);
+    expect(checkboxes()[0].checked).toBe(true);
+    expect(checkboxes()[1].checked).toBe(false);
+    expect(screen.getByText('My Channel')).toBeInTheDocument();
+    expect(reportAccountCardDisplay).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'rumble',
+      shownLabel: 'chan-2',
+      labelOrigin: 'provider_id',
+    }));
+
+    fireEvent.click(checkboxes()[1]);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ success: true, defaults: { rumble: ['chan-1', 'chan-2'] } }),
+    });
+    fireEvent.click(screen.getByTestId('publishing-accounts-save'));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        DEFAULTS_URL,
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({
+            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: ['chan-1', 'chan-2'] },
           }),
         }),
       );

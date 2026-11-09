@@ -26,6 +26,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import { useCopyText } from '@/lib/use-copy-text';
 import type { TranslationKey } from '@/lib/i18n';
 import { STATUS_KEY, STATUS_STYLE } from '../status';
+import { PublishAccountNotices } from '../publish-user-notice';
 
 //---------------
 // PostDetailPage (/posts/[id]) — the full-page post detail: big video
@@ -577,9 +578,7 @@ export const SlotDetail = ({
         </section>
       )}
 
-      {slot.status === 'failed' && slot.error && (
-        <p className="mt-6 text-sm text-destructive">{slot.error}</p>
-      )}
+      <PublishAccountNotices status={slot.status} error={slot.error} userNotices={slot.userNotices} />
 
       <PublishLinks links={publishLinks} />
 
