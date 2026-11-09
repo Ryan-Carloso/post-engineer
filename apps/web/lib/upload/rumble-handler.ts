@@ -1,6 +1,6 @@
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
-import { uploadRumbleVideo, RUMBLE_TITLE_MAX_LENGTH } from '@/lib/rumble';
+import { uploadRumbleVideo, RUMBLE_TITLE_MAX_LENGTH, RUMBLE_VIDEO_MAX_BYTES } from '@/lib/rumble';
 import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 
@@ -54,6 +54,7 @@ export async function handleRumbleUpload(
   if (typeof descriptionRaw !== 'string' || descriptionRaw.trim() === '') return rejected('Description is required');
   const description = descriptionRaw.trim();
   if (!(rawFile instanceof File)) return rejected('Video file is required');
+  if (rawFile.size > RUMBLE_VIDEO_MAX_BYTES) return rejected('Video exceeds the Rumble 4GB limit');
 
   // The bytes are checked rather than the client-declared type: MP4 and
   // MOV both carry `ftyp` at offset 4.

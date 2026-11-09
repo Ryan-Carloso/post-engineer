@@ -14,7 +14,7 @@ import { trackApiEvent } from '@/lib/analytics';
 import { RumbleError } from '@/lib/errors';
 import { handleRumbleUpload } from '@/lib/upload/rumble-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
-import { uploadRumbleVideo, RUMBLE_TITLE_MAX_LENGTH } from '@/lib/rumble';
+import { uploadRumbleVideo, RUMBLE_TITLE_MAX_LENGTH, RUMBLE_VIDEO_MAX_BYTES } from '@/lib/rumble';
 
 const MP4_BYTES = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
 const TOKEN = 'a'.repeat(40);
@@ -84,6 +84,16 @@ describe('handleRumbleUpload', () => {
     const result = await handleRumbleUpload(formData(overrides), 'user-1');
     expect(result.success).toBe(false);
     expect(result.results[0].error).toContain(message);
+    expect(uploadRumbleVideo).not.toHaveBeenCalled();
+  });
+
+  it('rejects a video over the 4GB cap without buffering it', async () => {
+    const oversized = new File([MP4_BYTES], 'clip.mp4', { type: 'video/mp4' });
+    // A real 4GB file cannot be built in a test: shadow the size getter.
+    Object.defineProperty(oversized, 'size', { value: RUMBLE_VIDEO_MAX_BYTES + 1 });
+    const result = await handleRumbleUpload(formData({ video: oversized }), 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.results[0].error).toContain('Video exceeds the Rumble 4GB limit');
     expect(uploadRumbleVideo).not.toHaveBeenCalled();
   });
 

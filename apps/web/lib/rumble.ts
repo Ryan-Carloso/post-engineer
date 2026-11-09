@@ -39,6 +39,10 @@ export const RUMBLE_ACCESS_TOKEN_PATTERN = /^[0-9a-f]{40}$/i;
 // Video bytes ride the request body, so the timeout covers the upload
 // itself (same 10-minute budget the engine allows the internal upload API).
 const RUMBLE_UPLOAD_TIMEOUT_MS = 600_000;
+// Rumble accepts up to 15GB (free) / 30GB (Premium), but this route buffers
+// the whole file in memory before forwarding it, so the cap is a memory
+// guard, not Rumble's platform limit — same 4GB as the Facebook handler.
+export const RUMBLE_VIDEO_MAX_BYTES = 4 * 1024 * 1024 * 1024; // 4GB
 
 export function isValidRumbleAccessToken(value: string): boolean {
   return RUMBLE_ACCESS_TOKEN_PATTERN.test(value);
