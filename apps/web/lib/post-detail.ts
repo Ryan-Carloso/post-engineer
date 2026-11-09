@@ -4,12 +4,12 @@ import { enrichSlot } from './schedule-slot-presentation';
 import {
   fetchEnginePostMetricsSource,
   fetchEnginePublishResults,
-  fetchEngineScriptAngle,
   fetchEngineTaskProgress,
   type EngineTaskProgress,
 } from './engine-tasks';
 import { resolvePublishLinks, type PublishLink } from './publish-links';
 import { buildGenerationFacts } from './generation-facts';
+import { resolveScriptAngle } from './post-detail-script-angle';
 import { isPersonaAllowed, isScopedApiKey, type PersonaScopeContext } from './api-keys';
 import { logger } from './logger';
 
@@ -151,23 +151,6 @@ async function resolvePublishedSlotEngineData(
   }
 }
 
-//---------------
-// resolveScriptAngle — the angle the engine built the script around, read
-// from the engine task record. Cosmetic on the detail page: no task yet or
-// a failed lookup degrades to null, but a failure is never silent.
-//---------------
-async function resolveScriptAngle(taskId: string | null, userId: string): Promise<string | null> {
-  if (taskId === null || taskId.length === 0) return null;
-  try {
-    return await fetchEngineScriptAngle(taskId, userId);
-  } catch (error) {
-    logger.warn('[post-detail] script angle unavailable', {
-      taskId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return null;
-  }
-}
 
 //---------------
 // getSlotPost — the full detail for a scheduled_posts id: slot row,

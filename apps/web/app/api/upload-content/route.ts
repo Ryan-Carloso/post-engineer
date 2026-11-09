@@ -138,9 +138,9 @@ async function postHandler(request: NextRequest) {
                 ? await handleFacebookUpload(formData, userId)
                 : provider === 'pinterest'
                   ? await handlePinterestUpload(formData, userId)
-                : provider === 'rumble'
-                  ? await handleRumbleUpload(formData, userId)
-                  : await handleInstagramUpload(formData, userId, logId, startTime);
+                  : provider === 'rumble'
+                    ? await handleRumbleUpload(formData, userId)
+                    : await handleInstagramUpload(formData, userId, logId, startTime);
 
     logger.info('[upload-content] handler finalizado', { provider, success: response.success, logId });
     return NextResponse.json(response);
