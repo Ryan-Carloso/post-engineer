@@ -143,6 +143,9 @@ To connect YouTube, Instagram, or LinkedIn accounts you need OAuth apps whose
   `FACEBOOK_REDIRECT_URI`. Connecting once adds every Page the user manages.
 - **Bluesky** uses an app password entered in the dashboard (encrypted at
   rest) — no OAuth app registration needed.
+- **Rumble** uses a manually issued 40-character Simple Upload API access
+  token (request it by emailing bd@rumble.com), entered in the dashboard
+  with the channel ID — no OAuth, no app registration, no env vars.
 
 ### 5. Stripe setup (token billing)
 

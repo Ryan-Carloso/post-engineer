@@ -137,6 +137,9 @@ OAuth cujos **redirect URIs correspondam exatamente** aos valores em
   usuário gerencia.
 - **Bluesky** usa uma app password inserida no painel (criptografada em repouso)
   — não é necessário registrar app de OAuth.
+- **Rumble** usa um token de acesso manual de 40 caracteres da Simple Upload API
+  (pedido por email para bd@rumble.com), inserido no painel com o ID do canal
+  — sem OAuth, sem registro de app, sem variáveis de ambiente.
 
 ### 5. Configuração do Stripe (cobrança por tokens)
 

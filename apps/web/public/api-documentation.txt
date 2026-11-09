@@ -133,9 +133,10 @@ GET /api/version.
 SOCIAL ACCOUNTS
 ================================================================================
 
-Supported: YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky.
+Supported: YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky, Rumble.
 Connect via POST /api/account/connect-url (returns an https auth_url to open in
-a browser) or POST /api/bluesky-connect (app password). Then map accounts to a
+a browser) or POST /api/bluesky-connect (app password) or POST /api/rumble-connect
+(access token issued by emailing bd@rumble.com). Then map accounts to a
 persona with PUT /api/persona/publishing-accounts.
 
 ================================================================================
