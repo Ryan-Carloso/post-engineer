@@ -1317,7 +1317,7 @@ class PublishDueTests(unittest.TestCase):
         self.assertEqual(metadata.caption, "Tokyo coffee")
         self.assertEqual(metadata.account_ids, ("urn:li:person:1", "urn:li:organization:2"))
 
-    def test_publish_error_returns_slot_to_ready(self):
+    def test_transient_publish_error_stays_publishing(self):
         # A transient failure stays `publishing`. publish_not_before is the
         # wait; the slot is not marked failed and is not returned to ready.
         from app.services.upload_publisher import PublishError
@@ -1458,7 +1458,7 @@ class PublishRetryLimitTests(unittest.TestCase):
 
         self.assertEqual(MAX_PUBLISH_ATTEMPTS, 3)
 
-    def test_failure_below_limit_returns_slot_to_ready_with_attempts_incremented(self):
+    def test_failure_below_limit_stays_publishing_with_attempts_incremented(self):
         store, published = self._run_publish(self._slot(publish_attempts=1))
         self.assertEqual(published, 0)
         self.assertEqual(store.updates[-1][1]["status"], "publishing")

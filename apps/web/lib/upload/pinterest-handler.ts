@@ -10,6 +10,7 @@ import {
   PINTEREST_VIDEO_MAX_BYTES,
 } from '@/lib/pinterest';
 import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
+import { accountFailure } from '@/lib/upload/account-error';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 
 //---------------
@@ -35,6 +36,7 @@ interface PinterestAccountResult {
   postId?: string;
   permalink?: string;
   error?: string;
+  errorCode?: string;
 }
 
 export interface PinterestUploadResponse {
@@ -43,7 +45,7 @@ export interface PinterestUploadResponse {
 }
 
 function rejected(error: string): PinterestUploadResponse {
-  return { success: false, results: [{ accountId: '', success: false, error }] };
+  return { success: false, results: [accountFailure('', error, 'publish_rejected')] };
 }
 
 export async function handlePinterestUpload(
@@ -125,7 +127,9 @@ export async function handlePinterestUpload(
         metadata: { accountId, error: message },
       });
       reportAccountUnauthorized('pinterest', accountId, ownerUserId, error);
-      results.push({ accountId, success: false, error: message });
+      // A non-Error throw stays generic: accountFailure would surface a
+      // thrown string as the message.
+      results.push(accountFailure(accountId, error instanceof Error ? error : new Error('Unknown error')));
     }
   }
 
