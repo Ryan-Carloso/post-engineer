@@ -444,10 +444,10 @@ describe('images material', () => {
     const body = buildGenerateBody(parseInput(imagesInput(urls(4))));
     assert.equal(body.options.facelessMaterial, 'images');
     assert.deepEqual(body.options.segments, [
-      { kind: 'hook', text: 'Stop scrolling.', media: { url: 'https://e.com/0.jpg' } },
-      { kind: 'body', text: 'Short videos keep attention.', media: { url: 'https://e.com/1.jpg' } },
-      { kind: 'body', text: 'They show a face early.', media: { url: 'https://e.com/2.jpg' } },
-      { kind: 'cta', text: 'Follow for more.', media: { url: 'https://e.com/3.jpg' } },
+      { kind: 'hook', text: 'Stop scrolling.', media: [{ url: 'https://e.com/0.jpg' }] },
+      { kind: 'body', text: 'Short videos keep attention.', media: [{ url: 'https://e.com/1.jpg' }] },
+      { kind: 'body', text: 'They show a face early.', media: [{ url: 'https://e.com/2.jpg' }] },
+      { kind: 'cta', text: 'Follow for more.', media: [{ url: 'https://e.com/3.jpg' }] },
     ]);
   });
 
@@ -461,8 +461,20 @@ describe('images material', () => {
     ['images without the images material', { ...baseInput(), images: urls(3) }, /only be used with facelessMaterial "images"/],
     ['the images material without images', { ...baseInput(), facelessMaterial: 'images' }, /needs images/],
     ['an empty image list', imagesInput([]), /needs images/],
-    ['too few images for the segments', imagesInput(urls(3)), /exactly 4 URLs: one for the hook, one per body paragraph \(2\)/],
-    ['too many images for the segments', imagesInput(urls(5)), /exactly 4 URLs/],
+    ['too few images for the segments', imagesInput(urls(3)), /between 4 and 4 URLs/],
+    ['too many images for the segments', imagesInput(urls(5)), /between 4 and 4 URLs/],
+    [
+      'per-segment minimums above the 30-image cap',
+      {
+        ...baseInput(),
+        hook: `${Array(25).fill('hook').join(' ')}.`,
+        body: Array.from({ length: 6 }, (_, i) => Array(25).fill(`body${i}`).join(' ')).join('\n\n'),
+        cta: Array(20).fill('cta').join(' '),
+        facelessMaterial: 'images',
+        images: urls(31),
+      },
+      /merge body paragraphs/,
+    ],
     ['an http image', imagesInput(['http://e.com/0.jpg', ...urls(3).slice(1)]), /images\[0\] must be an https URL/],
     ['a non-URL image', imagesInput(['https://e.com/0.jpg', 'not a url', ...urls(2)]), /images\[1\] must be an absolute https URL/],
     ['a non-string image', imagesInput([42, ...urls(3)]), /images\[0\] must be an absolute https URL/],

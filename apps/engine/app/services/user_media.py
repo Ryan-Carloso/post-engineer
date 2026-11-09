@@ -1,8 +1,9 @@
 """Per-segment user media (MCP first, Phase 2): photos shown as panels over the video.
 
-A segment carries either a mediaId (an upload_media temp asset, 1 hour
-TTL) or a direct image URL. The photo is shown as a framed panel over the
-video for the seconds its segment is spoken (segment_panels): the full
+A segment carries a list of photos, each a mediaId (an upload_media temp
+asset, 1 hour TTL) or a direct image URL. The segment's spoken time is
+split equally across them. Each photo is shown as a framed panel over the
+video for its slice (segment_panels): the full
 joined script is voiced once, Whisper's word times are walked segment by
 segment, and each panel is on screen for its segment's interval. When the
 word walk cannot match exactly (numbers, contractions, punctuation split
@@ -25,7 +26,8 @@ skipped with a warning recorded on the task; one bad URL never fails the
 video.
 
 Nothing here logs image content, local paths, or full URLs: warnings
-carry only the segment index and a stable reason.
+carry only the segment index, a stable reason, and — for skipped
+images — the image index within that segment.
 """
 
 import contextlib
@@ -41,6 +43,7 @@ from app.models.schema import VideoAspect
 from app.services import (
     face_detect, faceless_material, image_coverage, media_overlay, persona_hook, place_photos, segment_panels, subtitle, video,
 )
+from app.services.image_density import split_interval
 from app.services.lipsync_active import persona_lipsync_active
 from app.services.segment_panels import Panel
 from app.utils import file_security, utils
@@ -139,6 +142,11 @@ def segment_intervals_from_subtitle(
     return segment_intervals(segments, subtitle.file_to_words(subtitle_path), audio_duration)
 
 
+def _media_list(media: Any) -> list[Any]:
+    """The segment's photos. A missing value or a non-list is no photos."""
+    return list(media) if isinstance(media, list) else []
+
+
 def _segment_dict(segment: Any) -> dict[str, Any]:
     if isinstance(segment, dict):
         return segment
@@ -227,12 +235,12 @@ def _resolve_media_id(media_id: str) -> tuple[str, Optional[str]]:
     return (source, None) if failure is None else ("", _CODE_TO_REASON.get(failure, "unusable media"))
 
 
-def _resolve_url(url: str, index: int, task_dir: str, session=None) -> tuple[str, Optional[str]]:
+def _resolve_url(url: str, token: str, task_dir: str, session=None) -> tuple[str, Optional[str]]:
     """Download one URL to the task directory: (path, None), or ("", reason).
 
     The downloaded file is the caller's to remove once the panel is drawn.
     """
-    raw_path = os.path.join(task_dir, f"segment-media-{index}.raw")
+    raw_path = os.path.join(task_dir, f"segment-media-{token}.raw")
     try:
         place_photos.download_image(url, raw_path, session=session)
     except Exception as exc:  # noqa: BLE001 - one bad URL costs only this segment
@@ -248,9 +256,9 @@ def _resolve_url(url: str, index: int, task_dir: str, session=None) -> tuple[str
 def _overlay_font(params: Any, segments: Sequence[Any]) -> Optional[media_overlay.FontFor]:
     """The subtitle font as a size loader, only when some segment wants a card."""
     wants_card = any(
-        isinstance(_segment_dict(segment).get("media"), dict)
-        and isinstance(_segment_dict(segment)["media"].get("overlay"), dict)
+        isinstance(item, dict) and isinstance(item.get("overlay"), dict)
         for segment in segments
+        for item in _media_list(_segment_dict(segment).get("media"))
     )
     if not wants_card:
         return None
@@ -299,8 +307,9 @@ def prepare_segment_media(
 ) -> tuple[list[Panel], list[str]]:
     """Drawn photos (panels or full frame) with spoken intervals, plus skip warnings.
 
-    A warning carries only the segment index and a stable reason, never a
-    URL, a path or a mediaId, and the caller stores it on the task.
+    A warning carries only the segment index, the image index within that
+    segment, and a stable reason, never a URL, a path or a mediaId, and
+    the caller stores it on the task.
     """
     panels: list[Panel] = []
     skipped: list[str] = []
@@ -310,45 +319,54 @@ def prepare_segment_media(
         logger.warning(f"segment media for task {task_id}: proportional intervals (word walk mismatched)")
     hook_end = _hook_end(video_script, subtitle_path, audio_duration)
     for index, segment in enumerate(dicts):
-        media = segment.get("media")
-        if not isinstance(media, dict):
+        items = _media_list(segment.get("media"))
+        if not items:
             continue
         start, end = intervals[index] if index < len(intervals) else (0.0, 0.0)
         if end <= start:
-            skipped.append(f"segment {index} media skipped: {REASON_NO_SPOKEN_TIME}")
+            skipped.extend(
+                f"segment {index} image {image_index} media skipped: {REASON_NO_SPOKEN_TIME}"
+                for image_index in range(len(items))
+            )
             continue
-        media_id = media.get("mediaId")
-        url = media.get("url")
-        downloaded = ""
-        if isinstance(media_id, str) and media_id:
-            photo, reason = _resolve_media_id(media_id)
-        elif isinstance(url, str) and url:
-            photo, reason = _resolve_url(url, index, task_dir, session=session)
-            downloaded = photo
-        else:
-            continue
-        if reason is not None:
-            skipped.append(f"segment {index} media skipped: {reason}")
-            continue
-        overlay = media.get("overlay")
-        overlay = overlay if isinstance(overlay, dict) else None
-        out_path = os.path.join(task_dir, f"segment-panel-{index}.png")
-        on_face = face == segment_panels.FACE_FULL or (face == segment_panels.FACE_HOOK and start < hook_end)
-        try:
-            if on_face:
-                built = segment_panels.build_panel(photo, overlay, font_for, aspect, out_path)
+        for image_index, (media, (slice_start, slice_end)) in enumerate(zip(items, split_interval(start, end, len(items)))):
+            if not isinstance(media, dict):
+                continue
+            media_id = media.get("mediaId")
+            url = media.get("url")
+            downloaded = ""
+            if isinstance(media_id, str) and media_id:
+                photo, reason = _resolve_media_id(media_id)
+            elif isinstance(url, str) and url:
+                photo, reason = _resolve_url(url, f"{index}-{image_index}", task_dir, session=session)
+                downloaded = photo
             else:
-                built = segment_panels.build_full(photo, overlay, font_for, aspect, out_path)
-        finally:
-            if downloaded:
-                with contextlib.suppress(OSError):
-                    os.remove(downloaded)
-        if built is None:
-            skipped.append(f"segment {index} media skipped: {REASON_PANEL_FAILED}")
-            continue
-        if built.card_reason is not None:
-            skipped.append(f"segment {index} media overlay skipped: {built.card_reason}")
-        panels.append(Panel(index=index, path=built.path, x=built.x, y=built.y, start=start, end=end, caption_bottom=built.caption_bottom))
+                continue
+            if reason is not None:
+                skipped.append(f"segment {index} image {image_index} media skipped: {reason}")
+                continue
+            overlay = media.get("overlay")
+            overlay = overlay if isinstance(overlay, dict) else None
+            out_path = os.path.join(task_dir, f"segment-panel-{index}-{image_index}.png")
+            on_face = face == segment_panels.FACE_FULL or (face == segment_panels.FACE_HOOK and slice_start < hook_end)
+            try:
+                if on_face:
+                    built = segment_panels.build_panel(photo, overlay, font_for, aspect, out_path)
+                else:
+                    built = segment_panels.build_full(photo, overlay, font_for, aspect, out_path)
+            finally:
+                if downloaded:
+                    with contextlib.suppress(OSError):
+                        os.remove(downloaded)
+            if built is None:
+                skipped.append(f"segment {index} image {image_index} media skipped: {REASON_PANEL_FAILED}")
+                continue
+            if built.card_reason is not None:
+                skipped.append(f"segment {index} image {image_index} media overlay skipped: {built.card_reason}")
+            panels.append(Panel(
+                index=index, path=built.path, x=built.x, y=built.y,
+                start=slice_start, end=slice_end, caption_bottom=built.caption_bottom,
+            ))
     return panels, skipped
 
 

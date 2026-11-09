@@ -103,7 +103,7 @@ export const GeneratePersonaVideoOptionsShape = {
   facelessMaterial: z
     .enum(FACELESS_MATERIALS)
     .optional()
-    .describe('What fills the video, with or without a face: "broll" = real stock footage only, "svg" = drawn illustrations only, "images" = only the images you send on the segments (no stock, no drawings): every segment needs media (upload_media or a public image url), up to 12, each shown full frame with a slow zoom while its segment is spoken. Use images you have the rights to. The materials never mix. Defaults to "broll".'),
+    .describe('What fills the video, with or without a face: "broll" = real stock footage only, "svg" = drawn illustrations only, "images" = only the images you send on the segments (no stock, no drawings): every segment\'s media is a list, about one image per ~3s of speech (about 8 words; a 60s video needs about 20 images, split across segments, at most 30), each shown full frame with a slow zoom for its share of the segment. Use images you have the rights to. The materials never mix. Defaults to "broll".'),
   fullLipsync: z
     .boolean()
     .optional()

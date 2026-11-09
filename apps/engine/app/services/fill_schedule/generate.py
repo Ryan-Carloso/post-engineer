@@ -21,6 +21,7 @@ from app.services.fill_schedule.constants import (
 from app.services.fill_schedule.metadata import validate_publish_plan
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.language_gate import ENGLISH_ONLY_VIDEO_MESSAGE, is_english_language
+from app.services.script_segments import legacy_media_list
 from app.services.fill_schedule.support import (
     build_persona_params,
     notify_safe,
@@ -98,7 +99,11 @@ class BatchGenerator:
             # loudly here — before dispatch, so nothing is spent and
             # nothing needs refunding.
             title = str(slot.get("title") or "").strip()
-            segments = slot.get("segments")
+            # Rows stored before the media-list contract carry one object
+            # per segment; normalize so a prepaid slot renders instead of
+            # failing on a Pydantic list_type error with no refund. A
+            # genuinely malformed row still fails loudly below.
+            segments = legacy_media_list(slot.get("segments"))
             if not segments:
                 raise RuntimeError("Slot has no script segments")
             # Pre-flight before anything about the job itself: a slot that

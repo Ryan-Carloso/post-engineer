@@ -101,7 +101,7 @@ export interface GeneratePersonaVideoInput {
     segments?: Array<{
       kind: 'hook' | 'body' | 'cta';
       text: string;
-      media?: { mediaId?: string; url?: string; overlay?: { title: string; subtitle?: string; badge?: string } };
+      media?: Array<{ mediaId?: string; url?: string; overlay?: { title: string; subtitle?: string; badge?: string } }>;
       terms?: string[];
     }>;
   };
