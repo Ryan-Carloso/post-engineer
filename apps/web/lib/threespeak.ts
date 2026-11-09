@@ -41,9 +41,8 @@ export const THREESPEAK_COMMUNITY_ID = 'hive-181335';
 // title. The description carries the full caption.
 export const THREESPEAK_TITLE_MAX_CHARS = 200;
 
-// Upload size cap enforced before the file is buffered: 3Speak documents
-// no cap, so this matches the MCP direct-publish cap (2GB) and the
-// YouTube handler.
+// Upload size cap, enforced before buffering: 3Speak documents no cap,
+// so this matches the MCP direct-publish cap (2GB) and the YouTube handler.
 export const THREESPEAK_VIDEO_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 
 const JSON_TIMEOUT_MS = 30_000;
