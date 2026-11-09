@@ -123,13 +123,28 @@ describe('getSlotPost', () => {
       'id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, faceless_material, publish_outcomes'
     );
     expect(chains['schedules'].select).toHaveBeenCalledWith(
-      'id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode'
+      'id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode'
     );
     expect(detail?.slot.progress).toBe(42);
     expect(detail?.slot.stage).toBe('video');
     expect(detail?.schedule.publishMode).toBe('scheduled');
     expect(detail?.persona?.name).toBe('Viva Leve');
     expect(detail?.generation).toMatchObject({ faceless: false, material: 'svg' });
+  });
+
+  it('returns the schedule facebook page ids, empty when the column is absent', async () => {
+    const tables = {
+      scheduled_posts: { data: SLOT_ROW, error: null },
+      personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    };
+    const withPages = mockSupabase({ ...tables, schedules: { data: { ...SCHEDULE_ROW, providers: ['facebook'], facebook_account_ids: ['page-1', 'page-2'] }, error: null } });
+    const detail = await getSlotPost(withPages.supabase, 'slot-1', 'user-1', null);
+    expect(detail?.schedule.facebookAccountIds).toEqual(['page-1', 'page-2']);
+
+    const legacy = mockSupabase({ ...tables, schedules: { data: SCHEDULE_ROW, error: null } });
+    const legacyDetail = await getSlotPost(legacy.supabase, 'slot-1', 'user-1', null);
+    expect(legacyDetail?.schedule.facebookAccountIds).toEqual([]);
   });
 
   it('returns the script angle the engine recorded for the slot task', async () => {

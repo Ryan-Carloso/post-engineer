@@ -133,7 +133,7 @@ GET /api/version.
 SOCIAL ACCOUNTS
 ================================================================================
 
-Supported: YouTube, Instagram, LinkedIn, Threads, Bluesky.
+Supported: YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky.
 Connect via POST /api/account/connect-url (returns an https auth_url to open in
 a browser) or POST /api/bluesky-connect (app password). Then map accounts to a
 persona with PUT /api/persona/publishing-accounts.

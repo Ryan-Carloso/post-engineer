@@ -6,11 +6,6 @@ import { useMemo, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import {
   usePostDetailQuery,
-  useYouTubeAccountsQuery,
-  useInstagramAccountsQuery,
-  useLinkedinAccountsQuery,
-  useThreadsAccountsQuery,
-  useBlueskyAccountsQuery,
   useUpdateSlotMutation,
   useDeleteSlotMutation,
   type ScheduledSlot,
@@ -23,6 +18,7 @@ import AccountCard from '@/components/account-card';
 import { buildGenerationRows } from './generation-rows';
 import { DetailProgressBar } from './detail-progress-bar';
 import { ScriptAngleSection } from './script-angle-section';
+import { usePostAccountCards, type AccountCardData } from './account-cards';
 import { ExternalLinkIcon } from '@/lib/ui';
 import type { PublishLink } from '@/lib/publish-links';
 import { PROVIDER_LABELS, scheduleAccountIds } from '@/lib/account-options';
@@ -38,15 +34,6 @@ import { PublishAccountNotices } from '../publish-user-notice';
 // awaiting/failed slots. Resolved by id through the unified detail
 // endpoint (GET /api/posts/[id]), never by scanning the history lists.
 //---------------
-
-interface AccountCardData {
-  id: string;
-  type: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads';
-  name: string;
-  email?: string;
-  thumbnail?: string;
-  handle?: string;
-}
 
 const GENERATION_ERROR_KEY: Record<string, TranslationKey> = {
   custom_audio_invalid: 'posts.errorCustomAudio',
@@ -102,50 +89,7 @@ export default function PostDetailPage() {
   // One lookup resolves the id: a scheduled post comes back as a slot,
   // a direct generation as a generation. A 404 is a genuine miss.
   const postQuery = usePostDetailQuery(id);
-  const youtubeQuery = useYouTubeAccountsQuery();
-  const instagramQuery = useInstagramAccountsQuery();
-  const linkedinQuery = useLinkedinAccountsQuery();
-  const blueskyQuery = useBlueskyAccountsQuery();
-  const threadsQuery = useThreadsAccountsQuery();
-
-  // Target accounts resolved from the same account queries the accounts
-  // screen uses, mapped to the shared AccountCard props (real thumbnails
-  // and names).
-  const accountOptions: AccountCardData[] = useMemo(
-    () => [
-      ...(youtubeQuery.data?.accounts ?? []).map((account) => ({
-        id: account.channelId,
-        type: 'youtube' as const,
-        name: account.channelName,
-        email: account.email,
-        thumbnail: account.thumbnail,
-      })),
-      ...(instagramQuery.data?.accounts ?? []).map((account) => ({
-        id: account.igUserId,
-        type: 'instagram' as const,
-        name: `@${account.username}`,
-        thumbnail: account.profilePictureUrl,
-      })),
-      ...(linkedinQuery.data?.accounts ?? []).map((account) => ({
-        id: account.providerAccountId,
-        type: 'linkedin' as const,
-        name: account.accountName ?? account.providerAccountId,
-      })),
-      ...(blueskyQuery.data?.accounts ?? []).map((account) => ({
-        id: account.did,
-        type: 'bluesky' as const,
-        name: account.handle,
-        handle: `@${account.handle}`,
-      })),
-      ...(threadsQuery.data?.accounts ?? []).map((account) => ({
-        id: account.providerAccountId,
-        type: 'threads' as const,
-        name: account.accountName ?? account.providerAccountId,
-        thumbnail: account.profilePictureUrl,
-      })),
-    ],
-    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data, threadsQuery.data],
-  );
+  const accountOptions = usePostAccountCards();
 
   const post: PostDetail | null = postQuery.data ?? null;
   const slotDetail = post?.kind === 'slot' ? post : null;

@@ -14,6 +14,7 @@ export interface ScheduleRow {
   linkedin_account_ids: string[];
   bluesky_account_ids: string[];
   threads_account_ids: string[];
+  facebook_account_ids: string[];
   days_of_week: number[] | null;
   start_hour: number | null;
   end_hour: number | null;
@@ -34,6 +35,7 @@ export function mapSchedule(row: ScheduleRow): ScheduleConfig {
     linkedinAccountIds: row.linkedin_account_ids ?? [],
     blueskyAccountIds: row.bluesky_account_ids ?? [],
     threadsAccountIds: row.threads_account_ids ?? [],
+    facebookAccountIds: row.facebook_account_ids ?? [],
     daysOfWeek: row.days_of_week ?? [],
     startHour: row.start_hour ?? null,
     endHour: row.end_hour ?? null,

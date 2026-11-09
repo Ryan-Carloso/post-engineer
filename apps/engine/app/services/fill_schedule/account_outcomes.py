@@ -28,6 +28,7 @@ _ACCOUNT_COLUMNS = {
     "linkedin": "linkedin_account_ids",
     "bluesky": "bluesky_account_ids",
     "threads": "threads_account_ids",
+    "facebook": "facebook_account_ids",
 }
 _LABELS = {
     "youtube": "YouTube",
@@ -35,6 +36,7 @@ _LABELS = {
     "linkedin": "LinkedIn",
     "bluesky": "Bluesky",
     "threads": "Threads",
+    "facebook": "Facebook",
 }
 _LINK_FIELDS = ("videoUrl", "permalink", "postId")
 

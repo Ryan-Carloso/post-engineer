@@ -123,6 +123,7 @@ describe('GET /api/posts/[id]', () => {
         linkedinAccountIds: [],
         blueskyAccountIds: [],
         threadsAccountIds: [],
+        facebookAccountIds: [],
         timezone: 'UTC',
         publishMode: 'scheduled',
       },

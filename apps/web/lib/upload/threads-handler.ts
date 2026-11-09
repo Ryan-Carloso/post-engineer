@@ -4,6 +4,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { publishThreadsVideo, THREADS_TEXT_MAX_CHARS, THREADS_VIDEO_MAX_BYTES } from '@/lib/threads';
 import { accountFailure } from '@/lib/upload/account-error';
+import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import { cleanupOldUploads, uploadToStorage } from '@/lib/upload/handlers';
 
@@ -95,6 +96,7 @@ export async function handleThreadsUpload(
         ...(published.permalink === null ? {} : { permalink: published.permalink }),
       });
     } catch (error) {
+      reportAccountUnauthorized('threads', accountId, ownerUserId, error);
       results.push(accountFailure(accountId, error));
     }
   }

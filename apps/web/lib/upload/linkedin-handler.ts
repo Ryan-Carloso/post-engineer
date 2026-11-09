@@ -8,6 +8,7 @@ import {
   createLinkedInOrganizationPost,
 } from '@/lib/linkedin';
 import { accountFailure } from '@/lib/upload/account-error';
+import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 
 //---------------
@@ -87,6 +88,7 @@ export async function handleLinkedinUpload(
       await touchSocialAccount(supabase, ownerUserId, 'linkedin', accountId);
       results.push({ accountId, success: true, postId });
     } catch (error) {
+      reportAccountUnauthorized('linkedin', accountId, ownerUserId, error);
       results.push(accountFailure(accountId, error));
     }
   }

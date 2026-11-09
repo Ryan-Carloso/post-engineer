@@ -9,6 +9,7 @@ import {
   truncateBlueskyCaption,
   validateVideoForBluesky,
 } from '@/lib/bluesky';
+import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 
 //---------------
 // handleBlueskyUpload — publishes the video to the user's Bluesky account.
@@ -111,6 +112,7 @@ export async function handleBlueskyUpload(
       await touchSocialAccount(supabase, ownerUserId, 'bluesky', did);
       results.push({ accountId: did, success: true, postId });
     } catch (error) {
+      reportAccountUnauthorized('bluesky', did, ownerUserId, error);
       results.push(accountFailure(did, error));
     }
   }

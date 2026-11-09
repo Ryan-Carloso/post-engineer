@@ -164,7 +164,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'list_social_accounts',
-    'List connected social accounts (YouTube, Instagram, LinkedIn, Threads, Bluesky) with the account IDs needed for posting.',
+    'List connected social accounts (YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky) with the account IDs needed for posting.',
     ListSocialAccountsShape,
     withTracking('list_social_accounts', withRecipeNudge(recipeSession, 'list_social_accounts', async () => {
       return handleListSocialAccounts(apiClient);
@@ -191,7 +191,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'connect_account',
-    'Connect a social account. For youtube/instagram/linkedin/threads: returns an authorization URL — the user must open it in a browser where they are signed in to Post Engineer with the same account, and authorize; the account then connects automatically (verify with list_social_accounts). A browser that is not signed in, or signed in as another user, is rejected. For bluesky: connects directly with handle + appPassword (app password, not the main account password).',
+    'Connect a social account. For youtube/instagram/linkedin/threads/facebook: returns an authorization URL — the user must open it in a browser where they are signed in to Post Engineer with the same account, and authorize; the account then connects automatically (verify with list_social_accounts). A browser that is not signed in, or signed in as another user, is rejected. For bluesky: connects directly with handle + appPassword (app password, not the main account password).',
     ConnectAccountShape,
     withTracking('connect_account', async (args) => {
       return handleConnectAccount(apiClient, args);
@@ -417,7 +417,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'publish_video_direct',
-    `Publish a ready-made video file directly to social accounts — no generation, no schedule. Reads a local video (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB) and posts it immediately via POST /api/upload-content. YouTube requires title, description, tags, and privacyStatus; Instagram/Bluesky/LinkedIn/Threads require caption.`,
+    `Publish a ready-made video file directly to social accounts — no generation, no schedule. Reads a local video (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB) and posts it immediately via POST /api/upload-content. YouTube requires title, description, tags, and privacyStatus; Instagram/Bluesky/LinkedIn/Threads/Facebook require caption.`,
     PublishVideoDirectShape,
     withTracking('publish_video_direct', async (args) => {
       return handlePublishVideoDirect(apiClient, args);

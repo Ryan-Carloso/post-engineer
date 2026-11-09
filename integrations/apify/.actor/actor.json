@@ -2,7 +2,7 @@
   "actorSpecification": 1,
   "name": "post-engineer-video",
   "title": "Post Engineer: AI video generator and social scheduler",
-  "description": "Turn a hook, body and call to action into a short video with an AI persona (or faceless), then publish it to YouTube, Instagram, LinkedIn, Threads or Bluesky.",
+  "description": "Turn a hook, body and call to action into a short video with an AI persona (or faceless), then publish it to YouTube, Instagram, LinkedIn, Threads, Facebook Pages or Bluesky.",
   "version": "0.1",
   "buildTag": "latest",
   "defaultMemoryMbytes": 256,

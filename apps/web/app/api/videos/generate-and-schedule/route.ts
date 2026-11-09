@@ -35,6 +35,7 @@ import { fetchReplay } from './replay';
 import { refundRollbackSpend } from './rollback-refund';
 import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, verifyExperimentPairAfterInsert } from './experiment-link';
 import type { Provider } from './providers-validation';
+import { scheduleAccountColumns } from './account-columns';
 import { checkFullLipsyncNarration } from './full-lipsync-preflight';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
 import { segmentsRequestSchema } from './segments-schema';
@@ -641,11 +642,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     // NULL for a post created without one (migration 012).
     persona_id: personaId,
     providers,
-    youtube_account_ids: accountIds.youtube ?? [],
-    instagram_account_ids: accountIds.instagram ?? [],
-    linkedin_account_ids: accountIds.linkedin ?? [],
-    bluesky_account_ids: accountIds.bluesky ?? [],
-    threads_account_ids: accountIds.threads ?? [],
+    ...scheduleAccountColumns(accountIds),
     days_of_week: null, start_hour: null, end_hour: null,
     posts_per_day: 1,
     times: sortedTimes,

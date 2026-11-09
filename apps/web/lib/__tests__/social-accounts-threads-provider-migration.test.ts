@@ -19,9 +19,11 @@ import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 // creates it and production still holds only the four pre-Threads
 // providers.
 //
-// This migration re-creates the constraint with the full provider
-// list, and the sync test below pins that list to SOCIAL_PROVIDERS
-// so the next provider addition cannot repeat the miss.
+// This migration re-created the constraint with the five providers of
+// its time. A shipped migration is never edited, so this test pins that
+// historical list; the current list is pinned by the latest migration
+// that re-creates the check (049, facebook-provider-migration.test.ts)
+// and by the schema snapshot (migration-check-constraints-sync.test.ts).
 //---------------
 
 const repoRoot = findRepoRoot(import.meta.url);
@@ -64,9 +66,14 @@ describe('supabase/migrations/037_social-accounts-threads-provider.sql', () => {
     expect(dropAt).toBeLessThan(addAt);
   });
 
-  it('allows exactly the providers the app supports', () => {
+  it('allows exactly the five providers supported when it shipped', () => {
     const sql = readSql();
-    expect(checkProviders(sql).sort()).toEqual([...SOCIAL_PROVIDERS].sort());
+    expect(checkProviders(sql).sort()).toEqual(['bluesky', 'instagram', 'linkedin', 'threads', 'youtube']);
+  });
+
+  it('lists only providers the app still supports', () => {
+    const sql = readSql();
+    for (const provider of checkProviders(sql)) expect(SOCIAL_PROVIDERS).toContain(provider);
   });
 
   it('allows threads', () => {

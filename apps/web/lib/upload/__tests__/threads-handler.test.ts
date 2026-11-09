@@ -4,11 +4,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@/lib/social-accounts', () => ({ getSocialAccountTokens: vi.fn(), touchSocialAccount: vi.fn() }));
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({ __mock: 'service-client' })) }));
 vi.mock('@/lib/upload/handlers', () => ({ uploadToStorage: vi.fn(async () => 'https://s.example/signed.mp4'), cleanupOldUploads: vi.fn() }));
+vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('@/lib/threads', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/threads')>()),
   publishThreadsVideo: vi.fn(),
 }));
 
+import { trackApiEvent } from '@/lib/analytics';
+import { ThreadsError } from '@/lib/errors';
 import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { cleanupOldUploads, uploadToStorage } from '@/lib/upload/handlers';
@@ -66,6 +69,26 @@ describe('handleThreadsUpload', () => {
     const result = await handleThreadsUpload(formData(), 'user-1');
     expect(result.results[0].error).toContain('reconnect');
     expect(publishThreadsVideo).not.toHaveBeenCalled();
+  });
+
+  it('emits publish_account_unauthorized when Threads rejects the token with 401', async () => {
+    vi.mocked(publishThreadsVideo).mockRejectedValueOnce(
+      new ThreadsError('THREADS_PUBLISH_FAILED: Invalid OAuth access token', 401),
+    );
+    const result = await handleThreadsUpload(formData(), 'user-1');
+    expect(result.results[0].success).toBe(false);
+    expect(trackApiEvent).toHaveBeenCalledWith('publish_account_unauthorized', {
+      provider: 'threads',
+      account_id: '42',
+      user_id: 'user-1',
+      status: 401,
+    });
+  });
+
+  it('does not emit publish_account_unauthorized when the Threads failure is not a 401', async () => {
+    vi.mocked(publishThreadsVideo).mockRejectedValueOnce(new ThreadsError('THREADS_PUBLISH_FAILED: boom', 500));
+    await handleThreadsUpload(formData(), 'user-1');
+    expect(trackApiEvent).not.toHaveBeenCalled();
   });
 
   it('keeps going after one account fails and is a success if any landed', async () => {

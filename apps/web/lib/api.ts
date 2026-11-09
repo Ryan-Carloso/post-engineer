@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { createSupabaseClient } from '@/lib/supabase/client';
 import { useUploadStore } from '@/lib/store';
-import type { PublicAccountItem, BlueskyAccountData, LinkedinAccountData, ThreadsAccountData } from '@/lib/providers/registry';
+import type { PublicAccountItem, BlueskyAccountData, LinkedinAccountData, ThreadsAccountData, FacebookAccountData } from '@/lib/providers/registry';
 import { mapSchedule, type ScheduleRow } from '@/lib/schedule-row';
 import type {
   AccountResponse,
@@ -585,6 +585,7 @@ const selectInstagramAccounts = selectProviderAccounts<InstagramAccountData>('in
 const selectBlueskyAccounts = selectProviderAccounts<BlueskyAccountData>('bluesky');
 const selectLinkedinAccounts = selectProviderAccounts<LinkedinAccountData>('linkedin');
 const selectThreadsAccounts = selectProviderAccounts<ThreadsAccountData>('threads');
+const selectFacebookAccounts = selectProviderAccounts<FacebookAccountData>('facebook');
 export function useYouTubeAccountsQuery(): UseQueryResult<AccountResponse, Error> {
   return useSocialAccountsQuery(selectYouTubeAccounts);
 }
@@ -597,22 +598,18 @@ export function useBlueskyAccountsQuery(): UseQueryResult<BlueskyAccountResponse
   return useSocialAccountsQuery(selectBlueskyAccounts);
 }
 
-export interface LinkedinAccountResponse {
-  authenticated: boolean;
-  accounts: LinkedinAccountData[];
-}
+export type ProviderAccountsResponse<T extends PublicAccountItem> = { authenticated: boolean; accounts: T[] };
 
-export function useLinkedinAccountsQuery(): UseQueryResult<LinkedinAccountResponse, Error> {
+export function useLinkedinAccountsQuery(): UseQueryResult<ProviderAccountsResponse<LinkedinAccountData>, Error> {
   return useSocialAccountsQuery(selectLinkedinAccounts);
 }
 
-export interface ThreadsAccountResponse {
-  authenticated: boolean;
-  accounts: ThreadsAccountData[];
+export function useThreadsAccountsQuery(): UseQueryResult<ProviderAccountsResponse<ThreadsAccountData>, Error> {
+  return useSocialAccountsQuery(selectThreadsAccounts);
 }
 
-export function useThreadsAccountsQuery(): UseQueryResult<ThreadsAccountResponse, Error> {
-  return useSocialAccountsQuery(selectThreadsAccounts);
+export function useFacebookAccountsQuery(): UseQueryResult<ProviderAccountsResponse<FacebookAccountData>, Error> {
+  return useSocialAccountsQuery(selectFacebookAccounts);
 }
 
 //---------------
@@ -692,6 +689,7 @@ export interface ScheduleConfig {
   linkedinAccountIds: string[];
   blueskyAccountIds: string[];
   threadsAccountIds: string[];
+  facebookAccountIds: string[];
   daysOfWeek: number[];
   startHour: number | null;
   endHour: number | null;
@@ -958,6 +956,7 @@ export interface SlotDetailPayload {
     linkedinAccountIds: string[];
     blueskyAccountIds: string[];
     threadsAccountIds: string[];
+    facebookAccountIds: string[];
     // The schedule's IANA timezone — the detail page renders the slot time
     // in this zone so "10:00" is never ambiguous about whose 10:00 it is.
     timezone: string;
