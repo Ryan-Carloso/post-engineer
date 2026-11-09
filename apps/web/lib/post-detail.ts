@@ -9,6 +9,7 @@ import {
   type EngineTaskProgress,
 } from './engine-tasks';
 import { resolvePublishLinks, type PublishLink } from './publish-links';
+import { buildScheduleDetail, type ScheduleDetailRow } from './post-detail-schedule';
 import { buildGenerationFacts } from './generation-facts';
 import { isPersonaAllowed, isScopedApiKey, type PersonaScopeContext } from './api-keys';
 import { logger } from './logger';
@@ -211,29 +212,7 @@ export async function getSlotPost(
     .eq('user_id', userId)
     .maybeSingle();
   if (scheduleError) throw scheduleError;
-  const scheduleRow = schedule as {
-    id: string;
-    persona_id: string | null;
-    providers: string[] | null;
-    youtube_account_ids: string[] | null;
-    instagram_account_ids: string[] | null;
-    linkedin_account_ids: string[] | null;
-    bluesky_account_ids: string[] | null;
-    threads_account_ids: string[] | null;
-    facebook_account_ids: string[] | null;
-    pinterest_account_ids: string[] | null;
-    pinterest_board_id: string | null;
-    threespeak_account_ids: string[] | null;
-    timezone: string;
-    post_language: string | null;
-    post_voice_id: string | null;
-    post_video_aspect: string | null;
-    post_video_layout: string | null;
-    post_niche: string | null;
-    post_paragraph_number: number | null;
-    post_face_quality: string | null;
-    publish_mode: string | null;
-  } | null;
+  const scheduleRow = schedule as ScheduleDetailRow | null;
   // Ownership re-check: the service client (API-key/OAuth callers)
   // bypasses RLS, so the schedule must belong to the caller.
   if (!scheduleRow) return null;
@@ -346,20 +325,6 @@ export async function getSlotPost(
   const progressOut = enrichment.progress;
   const stageOut = enrichment.stage;
   const retryableOut = enrichment.retryable;
-  const scheduleId2 = scheduleRow.id;
-  const personaIdOut = scheduleRow.persona_id;
-  const providersOut = scheduleRow.providers ?? [];
-  const youtubeAccountIdsOut = scheduleRow.youtube_account_ids ?? [];
-  const instagramAccountIdsOut = scheduleRow.instagram_account_ids ?? [];
-  const linkedinAccountIdsOut = scheduleRow.linkedin_account_ids ?? [];
-  const blueskyAccountIdsOut = scheduleRow.bluesky_account_ids ?? [];
-  const threadsAccountIdsOut = scheduleRow.threads_account_ids ?? [];
-  const facebookAccountIdsOut = scheduleRow.facebook_account_ids ?? [];
-  const pinterestAccountIdsOut = scheduleRow.pinterest_account_ids ?? [];
-  const pinterestBoardIdOut = scheduleRow.pinterest_board_id ?? null;
-  const threespeakAccountIdsOut = scheduleRow.threespeak_account_ids ?? [];
-  const timezoneOut = scheduleRow.timezone;
-  const publishModeOut = scheduleRow.publish_mode === 'asap' ? 'asap' : 'scheduled';
 
   return {
     slot: {
@@ -382,22 +347,7 @@ export async function getSlotPost(
       queuePosition: null,
       queueTotal: null,
     },
-    schedule: {
-      id: scheduleId2,
-      personaId: personaIdOut,
-      providers: providersOut,
-      youtubeAccountIds: youtubeAccountIdsOut,
-      instagramAccountIds: instagramAccountIdsOut,
-      linkedinAccountIds: linkedinAccountIdsOut,
-      blueskyAccountIds: blueskyAccountIdsOut,
-      threadsAccountIds: threadsAccountIdsOut,
-      facebookAccountIds: facebookAccountIdsOut,
-      pinterestAccountIds: pinterestAccountIdsOut,
-      pinterestBoardId: pinterestBoardIdOut,
-      threespeakAccountIds: threespeakAccountIdsOut,
-      timezone: timezoneOut,
-      publishMode: publishModeOut,
-    },
+    schedule: buildScheduleDetail(scheduleRow),
     persona: personaRow,
     generation: buildGenerationFacts(row, scheduleRow),
   };

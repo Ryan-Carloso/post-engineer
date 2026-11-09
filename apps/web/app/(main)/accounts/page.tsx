@@ -3,20 +3,15 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import AccountCard from '@/components/account-card';
-import DisconnectAccountDialog from '@/components/ui/disconnect-account-dialog';
 import SocialAccountsSection from '@/components/ui/social-accounts-section';
 import { KeyConnectDialog } from '@/components/ui/social-accounts-section';
 import {
   useBlueskyAccountsQuery,
-  useThreespeakAccountsQuery,
-  useDisconnectAccountMutation,
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
   useThreadsAccountsQuery,
   useFacebookAccountsQuery,
   useYouTubeAccountsQuery,
-  type DisconnectableProvider,
-  type DisconnectAccountResult,
 } from '@/lib/api';
 import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
 import { useUploadStore } from '@/lib/store';
@@ -27,11 +22,12 @@ import { useThreadsOAuth } from '@/lib/oauth/threads-handler';
 import { useFacebookOAuth } from '@/lib/oauth/facebook-handler';
 import { usePinterestOAuth } from '@/lib/oauth/pinterest-handler';
 import { ProviderIcon } from '@/components/provider-icon';
-import { useAccountListErrorTelemetry, reportAccountDisconnectFailed } from '@/lib/account-card-telemetry';
-import { ERROR_CODES } from '@/lib/error-codes';
+import { useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
 import { useI18n } from '@/lib/i18n/provider';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { AccountsIcon, GoogleIcon, InstagramIcon } from '@/lib/ui';
+import { BrandIcon, connectedLabel, useDisconnectFlow } from './accounts-section-helpers';
+import { ThreespeakAccountsSection } from './threespeak-accounts-section';
 
 export default function AccountsPage(): React.ReactElement {
   return (
@@ -246,94 +242,6 @@ function LinkedinAccountsSection(): ReactNode {
 }
 
 //---------------
-// Brand mark and the translated connected-count.
-//---------------
-
-function BrandIcon({ className, children }: { className: string; children: ReactNode }): ReactNode {
-  return <span className={`flex size-9 items-center justify-center rounded-lg ${className} [&>svg]:size-5`}>{children}</span>;
-}
-
-function connectedLabel(t: ReturnType<typeof useI18n>['t'], count: number): string {
-  return t(count === 1 ? 'accounts.accountConnected' : 'accounts.accountsConnected', { count });
-}
-
-//---------------
-// useDisconnectFlow — one dialog-backed disconnect flow per provider
-// section. The trash button on the card opens the confirmation dialog;
-// confirming runs the disconnect, and a throw or success:false is shown
-// in the section and sent to PostHog.
-//---------------
-
-interface PendingDisconnect {
-  providerAccountId: string;
-  label: string;
-}
-
-function useDisconnectFlow(provider: DisconnectableProvider): {
-  disconnectError: string | null;
-  onDisconnect: (providerAccountId: string, label: string) => void;
-  dialog: ReactNode;
-} {
-  const { t } = useI18n();
-  const disconnect = useDisconnectAccountMutation(provider);
-  const [disconnectError, setDisconnectError] = useState<string | null>(null);
-  const [pending, setPending] = useState<PendingDisconnect | null>(null);
-
-  // Opening the dialog clears a previous section error, so the fresh
-  // attempt starts from a clean panel.
-  const onDisconnect = (providerAccountId: string, label: string): void => {
-    setDisconnectError(null);
-    setPending({ providerAccountId, label });
-  };
-
-  const confirm = (): void => {
-    if (pending === null || disconnect.isPending) return;
-    void handleDisconnect(t, disconnect, provider, pending.providerAccountId, setDisconnectError)
-      .finally(() => setPending(null));
-  };
-
-  const dialog = (
-    <DisconnectAccountDialog
-      open={pending !== null}
-      onClose={() => { if (!disconnect.isPending) setPending(null); }}
-      onConfirm={confirm}
-      pending={disconnect.isPending}
-      accountName={pending?.label ?? ''}
-      title={t('accounts.disconnectQuestion')}
-      body={t('accounts.disconnectBody')}
-      cancelLabel={t('accounts.disconnectCancel')}
-      confirmLabel={t('accounts.disconnectConfirm')}
-    />
-  );
-
-  return { disconnectError, onDisconnect, dialog };
-}
-
-//---------------
-// handleDisconnect — runs the disconnect for one account. A throw or
-// success:false is shown in the section and sent to PostHog.
-//---------------
-
-async function handleDisconnect(
-  t: ReturnType<typeof useI18n>['t'],
-  disconnect: { mutateAsync: (input: { providerAccountId: string }) => Promise<DisconnectAccountResult> },
-  provider: DisconnectableProvider,
-  providerAccountId: string,
-  onError: (message: string) => void,
-): Promise<void> {
-  try {
-    const result = await disconnect.mutateAsync({ providerAccountId });
-    if (!result.success) {
-      reportAccountDisconnectFailed(provider, 'rejected');
-      onError(t('accounts.disconnectError'));
-    }
-  } catch {
-    reportAccountDisconnectFailed(provider, 'threw');
-    onError(t('accounts.disconnectError'));
-  }
-}
-
-//---------------
 // Threads accounts: one query and one OAuth flow.
 //---------------
 
@@ -431,89 +339,6 @@ function PinterestAccountsSection(): ReactNode {
       onConnect={() => void oauth.startOAuth()}
       onRetry={() => void query.refetch()}
       dialog={flow.dialog}
-    />
-  );
-}
-
-// 3Speak accounts: one query and a key dialog owned by the page — same
-// shape as Bluesky (no OAuth: a Hive username plus its posting key).
-// A rejected key is 422, not 401; only a dead hub session is 401 here.
-//---------------
-
-function ThreespeakAccountsSection(): ReactNode {
-  const { t } = useI18n();
-  const query = useThreespeakAccountsQuery();
-  const flow = useDisconnectFlow('3speak');
-  const [open, setOpen] = useState(false);
-  const [handle, setHandle] = useState('');
-  const [appPassword, setAppPassword] = useState('');
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const accounts = query.data?.accounts ?? [];
-  useAccountListErrorTelemetry('3speak', query.error?.message ?? null);
-
-  const connect = async (): Promise<void> => {
-    if (!handle.trim() || !appPassword.trim() || pending) return;
-    setPending(true);
-    setError(null);
-    try {
-      const formData = new FormData();
-      formData.append('username', handle.trim());
-      formData.append('postingKey', appPassword);
-      const response = await fetch('/api/threespeak-connect', { method: 'POST', body: formData });
-      if (!response.ok) {
-        // 401 here means a dead hub session (a rejected Hive posting key
-        // is 422), so it triggers the host-wide session-expiry redirect.
-        notifyIfSessionExpired(response);
-        // A rejected credential is 422 THREESPEAK_CREDENTIAL_REJECTED: name
-        // it, so the user knows the username/key pair is what 3Speak refused.
-        // (notifyIfSessionExpired reads only the status, so the body is
-        // still unread here.)
-        const body: unknown = await response.json().catch(() => null);
-        const code = (body as { code?: unknown } | null)?.code;
-        setError(
-          code === ERROR_CODES.THREESPEAK_CREDENTIAL_REJECTED
-            ? t('accounts.threespeakCredentialRejected')
-            : t('accounts.threespeakConnectError'),
-        );
-        setAppPassword('');
-        return;
-      }
-      setOpen(false);
-      setHandle('');
-      setAppPassword('');
-      void query.refetch();
-    } catch {
-      setError(t('accounts.threespeakConnectError'));
-      setAppPassword('');
-    } finally {
-      setPending(false);
-    }
-  };
-
-  return (
-    <SocialAccountsSection
-      icon={<BrandIcon className="bg-muted"><ProviderIcon provider="3speak" /></BrandIcon>}
-      label={t('accounts.threespeakLabel')}
-      description={t('accounts.threespeakDescription')}
-      connectedLabel={connectedLabel(t, accounts.length)}
-      count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="3speak" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
-      isLoading={query.isLoading}
-      loadError={query.error?.message ?? null}
-      connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
-      connectError={null}
-      disconnectError={flow.disconnectError}
-      connectDisabled={false}
-      retryLabel={t('accounts.tryAgain')}
-      onConnect={() => setOpen(true)}
-      onRetry={() => void query.refetch()}
-      dialog={
-        <>
-          {flow.dialog}
-          {open ? <KeyConnectDialog idPrefix="threespeak" title={t('accounts.threespeakConnectTitle')} hint={t('accounts.threespeakConnectHint')} handleLabel={t('accounts.threespeakHandleLabel')} passwordLabel={t('accounts.threespeakPasswordLabel')} submitLabel={t('accounts.threespeakConnect')} securityHint={t('accounts.threespeakSecurityHint')} closeLabel={t('accounts.closeDialog')} handle={handle} appPassword={appPassword} error={error} pending={pending} onHandleChange={setHandle} onPasswordChange={setAppPassword} onSubmit={() => void connect()} onClose={() => setOpen(false)} /> : null}
-        </>
-      }
     />
   );
 }

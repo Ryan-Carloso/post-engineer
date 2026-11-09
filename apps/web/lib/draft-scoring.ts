@@ -55,10 +55,7 @@ export const LINKEDIN_SEE_MORE_FOLD_CHARS = 210;
 // code, so their ceilings below are the platforms' documented limits
 // (YouTube video descriptions, Instagram captions) and are warnings
 // only — never invented blocks. Only caps with in-repo evidence
-// (LinkedIn, Bluesky, Threads, Facebook, Pinterest) fail the check.
-// 3Speak has no
-// documented post-body cap at all, so it has no case in the publish
-// check below: a draft never fails for 3Speak on length.
+// (LinkedIn, Bluesky, Threads, Facebook, Pinterest) fail the check; 3Speak has no documented post-body cap, so it has no case here.
 export const YOUTUBE_DESCRIPTION_MAX_CHARS = 5000;
 export const INSTAGRAM_CAPTION_MAX_CHARS = 2200;
 // The route rejects drafts over this input cap with a 400 instead of
