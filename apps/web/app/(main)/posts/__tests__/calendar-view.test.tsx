@@ -15,6 +15,8 @@ const EN: Record<string, string> = {
   'posts.filterActive': 'Filtered: only matching posts are shown',
   'posts.calendarDayLabel': '{date}: {summary}',
   'posts.calendarDayEmpty': '{date}: no posts',
+  'posts.loadErrorCalendar': 'Could not load the calendar posts.',
+  'posts.loadErrorRetry': 'Try again',
 };
 
 vi.mock('@/lib/i18n/provider', () => ({
@@ -174,15 +176,15 @@ describe('CalendarView', () => {
     expect(markers.map((marker) => marker.getAttribute('data-marker'))).toEqual(['failed', 'published']);
     expect(markers.map((marker) => marker.querySelector('[data-count]')?.textContent)).toEqual(['1', '1']);
     expect(busy.querySelector('[data-overflow-count]')).toHaveTextContent('+2');
-    // Several groups: icons and counts only in the cell; a single group spells the word.
+    // Several groups: compact icon-and-count chips only; the legend carries the words.
     expect(markers.map((marker) => marker.textContent)).toEqual(['1', '1']);
     expect(markers.map((marker) => marker.getAttribute('title'))).toEqual(['Failed: 1', 'Published: 1']);
     expect(busy.className.split(/\s+/)).not.toContain('bg-destructive-soft');
-    // A published-only day: one chip, and the cell itself stays unpainted.
+    // A published-only day: one compact chip, and the cell itself stays unpainted.
     const published = dayButton(/June 6, 2030/);
     const publishedMarker = published.querySelector('[data-marker]');
     expect(publishedMarker?.getAttribute('data-marker')).toBe('published');
-    expect(publishedMarker?.textContent).toContain('Published');
+    expect(publishedMarker?.textContent).toBe('1');
     expect(published.className.split(/\s+/)).not.toContain('bg-destructive-soft');
   });
 
@@ -299,7 +301,14 @@ describe('CalendarView', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       ['2030-06-05', [{ status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' }]],
     ]);
-    const props = setup({ slotsByDay, selectedKey: '2030-06-15', unavailable: true });
+    const onLoadErrorRetry = vi.fn();
+    const props = setup({
+      slotsByDay,
+      selectedKey: '2030-06-15',
+      unavailable: true,
+      loadErrorMessageKey: 'posts.loadErrorCalendar',
+      onLoadErrorRetry,
+    });
     expect(screen.queryByText('Posts not loaded')).not.toBeInTheDocument();
     const day = dayButton(/June 5, 2030/);
     expect(day).toBeDisabled();
@@ -308,10 +317,23 @@ describe('CalendarView', () => {
     expect(screen.getByRole('grid').className.split(/\s+/)).not.toContain('opacity-40');
     expect(screen.getByRole('grid').querySelector('[data-selected="true"]')).toBeNull();
     expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
-    expect(document.querySelector('[data-calendar-load-error]')).not.toBeNull();
+    const cover = document.querySelector('[data-calendar-load-error]');
+    expect(cover).not.toBeNull();
+    expect(cover?.closest('[data-calendar-card]')).not.toBeNull();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onLoadErrorRetry).toHaveBeenCalledTimes(1);
     expect(dayButton(/June 15, 2030/).querySelector('[data-today-mark]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
     expect(props.onMonthNavigate).toHaveBeenLastCalledWith(2030, 6);
+  });
+
+  it('keeps seven table cells per week on a narrow layout', () => {
+    setup();
+    const headerRow = screen.getByRole('grid').querySelector('thead tr');
+    expect(headerRow?.children).toHaveLength(7);
+    const firstWeek = within(screen.getByRole('grid')).getAllByRole('row')[0];
+    expect(firstWeek.children).toHaveLength(7);
   });
 
   it('hides the legend when the visible month has no posts', () => {
@@ -362,7 +384,7 @@ describe('CalendarView', () => {
       expect(day.className.split(/\s+/)).not.toContain('h-auto');
       // The month table, not the chip text, owns the column width.
       const cell = day.parentElement;
-      expect(cell?.className.split(/\s+/)).toEqual(expect.arrayContaining(['basis-0', 'min-w-0']));
+      expect(cell?.className.split(/\s+/)).toEqual(expect.arrayContaining(['table-cell', 'min-w-0']));
       expect(day.closest('table')?.className.split(/\s+/)).toContain('table-fixed');
     }
   });

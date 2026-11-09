@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useMemo, type MouseEventHandler
 import { UI, useDayPicker, type NavProps } from 'react-day-picker';
 import { enUS, ptBR } from 'react-day-picker/locale';
 import type { ScheduleConfig, ScheduledSlot } from '@/lib/api';
-import type { Locale } from '@/lib/i18n';
+import type { Locale, TranslationKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/provider';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,7 @@ import { CALENDAR_GROUP_KEY, CALENDAR_GROUP_ORDER } from './status';
 import { DayCellContext, PostsDayButton } from './calendar-markers';
 import { CalendarChromeContext, PostsCalendarWeek, PostsCalendarWeeks } from './calendar-week';
 import { CalendarLegend } from './calendar-legend';
+import { LoadErrorBanner } from './day-section';
 
 // CalendarView — month calendar on the shadcn Calendar (react-day-picker:
 // grid semantics, keyboard navigation, focus). Each day cell shows up to
@@ -56,6 +57,8 @@ interface CalendarViewProps {
   legendClassName?: string;
   // Hide status chips and the legend when the month has no posts.
   showLegend?: boolean;
+  loadErrorMessageKey?: TranslationKey;
+  onLoadErrorRetry?: () => void;
 }
 
 const DAY_PICKER_LOCALE: Record<Locale, typeof enUS> = { pt: ptBR, en: enUS };
@@ -165,6 +168,8 @@ export function CalendarView({
   filtered = false,
   legendClassName,
   showLegend = true,
+  loadErrorMessageKey,
+  onLoadErrorRetry,
 }: CalendarViewProps) {
   const { t, locale } = useI18n();
   const dateFormat = useMemo(() => new Intl.DateTimeFormat(INTL_TAG[locale], { dateStyle: 'full' }), [locale]);
@@ -221,7 +226,14 @@ export function CalendarView({
   const chrome = useMemo(() => ({ filtered, showLegend: legendVisible }), [filtered, legendVisible]);
 
   return (
-    <div className={cn('relative max-w-full min-w-0 rounded-xl border border-line bg-card p-2 sm:p-3', muted && 'pointer-events-none')}>
+    <div
+      data-calendar-card
+      className={cn(
+        'relative max-w-full min-w-0 rounded-xl border border-line bg-card p-2 sm:p-3',
+        muted && 'pointer-events-none',
+        unavailable && '[&_thead]:invisible [&_tbody]:invisible',
+      )}
+    >
       <DayCellContext.Provider value={dayCells}>
         <CalendarChromeContext.Provider value={chrome}>
         <NavTodayContext.Provider value={navToday}>
@@ -251,11 +263,11 @@ export function CalendarView({
               button_previous: NAV_ARROW_CLASS,
               button_next: NAV_ARROW_CLASS,
               month_caption: 'flex min-h-(--cell-size) w-full items-center justify-start pr-44',
-              weekdays: 'flex w-full min-w-0 gap-0.5',
-              // basis-0 keeps the seven headers equal. A busy day's chips must
-              // not widen one column and shove the numbers off their headers.
-              weekday: 'min-w-0 flex-1 basis-0 select-none text-center text-xs font-medium capitalize text-muted-foreground',
-              week: 'mt-1 flex w-full min-w-0 gap-0.5',
+              weekdays: 'table-row',
+              // Equal table cells so seven columns stay aligned on narrow screens.
+              weekday:
+                'table-cell min-w-0 w-[14.2857%] select-none px-0.5 pb-1 text-center text-xs font-medium capitalize text-muted-foreground',
+              week: 'table-row',
               // table-fixed: a table sizes columns from cell content, so a
               // busy day's chips were widening the month past the screen.
               month_grid: 'w-full table-fixed border-collapse',
@@ -267,16 +279,19 @@ export function CalendarView({
               disabled: 'text-primary opacity-100',
               // Equal share of the fixed table. The chip row clips itself; the
               // cell does not, or it would crop the selection outline.
-              day: 'group/day relative min-w-0 flex-1 basis-0 p-0 text-center',
+              day: 'group/day relative min-w-0 w-[14.2857%] table-cell p-0 text-center align-top',
             }}
             components={{ DayButton: PostsDayButton, Nav: CalendarNav, Week: PostsCalendarWeek, Weeks: PostsCalendarWeeks }}
           />
-          {unavailable && (
+          {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined && (
             <div
               data-calendar-load-error
-              className="pointer-events-none absolute inset-x-2 bottom-2 top-12 rounded-lg bg-card/92 sm:inset-x-3"
-              aria-hidden
-            />
+              className="absolute inset-x-2 bottom-2 top-12 z-10 flex items-center justify-center rounded-lg bg-card p-2 sm:inset-x-3 sm:p-3"
+            >
+              <div className="pointer-events-auto w-full max-w-md">
+                <LoadErrorBanner messageKey={loadErrorMessageKey} onRetry={onLoadErrorRetry} />
+              </div>
+            </div>
           )}
         </NavTodayContext.Provider>
         </CalendarChromeContext.Provider>

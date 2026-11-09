@@ -279,9 +279,8 @@ describe('PostsPage', () => {
     await user.selectOptions(selects[0], 'youtube');
     expect(selects[0].className.split(/\s+/)).toContain('border-primary');
     expect(selects[1].className.split(/\s+/)).not.toContain('border-primary');
-    // The calendar says it is filtered when the month still has posts (desktop
-    // legend in the card and the mobile copy under the weekday row).
-    expect(screen.getAllByText('posts.filterActive')).toHaveLength(2);
+    // The calendar says it is filtered when the month still has posts (one legend below the grid).
+    expect(screen.getAllByText('posts.filterActive')).toHaveLength(1);
 
     const clears = screen.getAllByRole('button', { name: 'posts.clearFilters' });
     expect(clears).toHaveLength(1);
@@ -339,7 +338,8 @@ describe('PostsPage', () => {
     // The frame stays: a faint calendar and disabled filters. No day to pick,
     // and the line under the title does not say to select one.
     expect(screen.getByRole('grid')).toBeInTheDocument();
-    expect(screen.queryByText('posts.subtitle')).not.toBeInTheDocument();
+    expect(screen.getByText('posts.subtitle')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('posts.calendarMonthHeading');
     expect(screen.queryByText(/posts\.group(Published|Failed|Scheduled):/)).not.toBeInTheDocument();
     for (const select of screen.getAllByRole('combobox')) expect(select).toBeDisabled();
   });
@@ -375,7 +375,8 @@ describe('PostsPage', () => {
     expect(screen.getByRole('grid')).toBeInTheDocument();
     for (const select of screen.getAllByRole('combobox')) expect(select).toBeDisabled();
     expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
-    expect(screen.queryByText('posts.subtitle')).not.toBeInTheDocument();
+    expect(screen.getByText('posts.subtitle')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('posts.calendarMonthHeading');
   });
 
   it('does not ask whether the account has any post when the month it opens on has posts', () => {
@@ -933,7 +934,8 @@ describe('PostsPage calendar view', () => {
     const alert = screen.getByRole('alert');
     expect(within(alert).getByText('posts.loadErrorCalendar')).toBeInTheDocument();
     expect(within(alert).queryByText('posts.loadErrorRetryHint')).not.toBeInTheDocument();
-    // The retry lives in the alert. The header Refresh stays one quiet control.
+  expect(alert.closest('[data-calendar-card]')).not.toBeNull();
+    // The retry lives in the calendar error cover. The header Refresh stays one quiet control.
     const retry = within(alert).getByRole('button', { name: 'posts.loadErrorRetry' });
     const refresh = screen.getByRole('button', { name: 'posts.refresh' });
     expect(refresh.className.split(/\s+/)).toContain('bg-card');
@@ -944,8 +946,6 @@ describe('PostsPage calendar view', () => {
     // no selection, no day list.
     expect(screen.queryByText('posts.calendarNotLoaded')).not.toBeInTheDocument();
     expect(screen.getByRole('grid').className.split(/\s+/)).not.toContain('opacity-40');
-    expect(screen.getByRole('grid').closest('.xl\\:grid')).not.toBeNull();
-    expect(alert.closest('.xl\\:grid')).toBe(screen.getByRole('grid').closest('.xl\\:grid'));
     expect(screen.getByRole('grid').querySelector('[data-selected="true"]')).toBeNull();
     expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
     expect(screen.queryByText('posts.calendarMonthHeading')).not.toBeInTheDocument();

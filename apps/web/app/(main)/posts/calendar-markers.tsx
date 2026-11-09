@@ -78,7 +78,7 @@ export function PostsDayButton({ children, ...props }: ComponentProps<typeof Day
   const groups = CALENDAR_GROUP_ORDER.filter((group) => counts[group] > 0);
   const visibleGroups = groups.slice(0, MAX_CELL_MARKERS);
   const overflowCount = groups.slice(MAX_CELL_MARKERS).reduce((sum, group) => sum + counts[group], 0);
-  const labeled = groups.length === 1;
+  const labeled = false;
   const { today: isToday, outside: isOutside } = props.modifiers;
   return (
     <CalendarDayButton

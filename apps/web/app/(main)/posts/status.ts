@@ -62,7 +62,7 @@ export function calendarGroupOf(status: string): CalendarGroup {
 export const CALENDAR_GROUP_MARKER: Record<CalendarGroup, string> = {
   failed: 'bg-destructive text-destructive-foreground',
   published: 'bg-success text-on-ink',
-  inProgress: 'bg-brand text-on-ink',
+  inProgress: 'bg-info text-on-ink',
   scheduled: 'bg-ink-soft text-on-ink',
 };
 

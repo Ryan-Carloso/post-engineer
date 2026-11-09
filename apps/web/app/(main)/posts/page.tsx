@@ -19,7 +19,7 @@ import {
   gridRange,
   monthKey,
 } from './calendar-days';
-import { AccountEmptyState, DayEmptyState, DaySummary, LoadErrorBanner } from './day-section';
+import { AccountEmptyState, DayEmptyState, DaySummary } from './day-section';
 import { CALENDAR_LAYOUT_CLASS, CalendarLoadingSkeleton } from './loading-skeleton';
 import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-joins';
 
@@ -103,9 +103,9 @@ export default function PostsPage() {
     setCursor({ year: date.getFullYear(), month: date.getMonth() });
     const section = daySectionRef.current;
     if (section === null || typeof window.matchMedia !== 'function' || !window.matchMedia(NARROW_SCREEN_QUERY).matches) return;
-    if (section.getBoundingClientRect().top > window.innerHeight - 120) {
+    requestAnimationFrame(() => {
       section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    });
   }, []);
   const handleMonthNavigate = useCallback((year: number, month: number) => {
     setCursor({ year, month });
@@ -149,7 +149,7 @@ export default function PostsPage() {
       </div>
       {/* The hint is for wide screens; on a phone the calendar comes first.
           An account with no posts does not tell the user to select a day. */}
-      {!isAccountEmpty && <p className="mt-1 hidden text-sm text-muted-foreground sm:block">{t('posts.subtitle')}</p>}
+      <p className="mt-1 text-sm text-muted-foreground">{t('posts.subtitle')}</p>
 
       <PostFiltersBar filters={filters} disabled={isLoading || isAccountEmpty} />
 
@@ -178,8 +178,9 @@ export default function PostsPage() {
                 unavailable={isError}
                 muted={isAccountEmpty}
                 filtered={filters.hasActiveFilter}
-                legendClassName="hidden xl:block"
                 showLegend={!isAccountEmpty && monthPostCount > 0}
+                loadErrorMessageKey={isError ? loadErrorKey : undefined}
+                onLoadErrorRetry={isError ? handleRefresh : undefined}
               />
             </div>
             <section
@@ -190,21 +191,28 @@ export default function PostsPage() {
                 isError ? 'order-1 mb-4 xl:order-0 xl:mb-0' : 'order-2 mt-4',
               )}
             >
-              {isError ? (
-                <LoadErrorBanner messageKey={loadErrorKey} onRetry={handleRefresh} />
-              ) : isAccountEmpty ? (
-                <AccountEmptyState />
+              {isError ? null : isAccountEmpty ? (
+                <>
+                  <h2 className="text-base font-bold tracking-[-0.01em] text-primary">
+                    {t('posts.calendarMonthHeading', { month: monthLabel })}
+                  </h2>
+                  <div className="mt-3">
+                    <AccountEmptyState />
+                  </div>
+                </>
               ) : (
                 <>
-                  <h2 className="flex min-h-10 flex-nowrap items-center gap-2 text-base font-bold tracking-[-0.01em] text-primary">
+                  <h2 className="flex min-h-10 flex-col justify-center gap-0.5 text-base font-bold tracking-[-0.01em] text-primary">
                     {monthIsEmpty || selectedKey === null ? (
                       t('posts.calendarMonthHeading', { month: monthLabel })
                     ) : (
                       <>
-                        <span className="min-w-0 truncate">{t('posts.calendarDayHeading', { date: dayFormat.format(dateFromKey(selectedKey)) })}</span>
+                        <span>{t('posts.calendarDayHeading', { date: dayFormat.format(dateFromKey(selectedKey)) })}</span>
                         {selectedSlots.length > 0 && (
-                          <span className="shrink-0 text-sm font-semibold text-muted-foreground">
-                            · {t('posts.calendarDayPostCount', { count: selectedSlots.length })}
+                          <span className="text-sm font-semibold text-muted-foreground">
+                            {selectedSlots.length === 1
+                              ? t('posts.calendarDayPostCountOne')
+                              : t('posts.calendarDayPostCountMany', { count: selectedSlots.length })}
                           </span>
                         )}
                       </>
