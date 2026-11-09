@@ -27,6 +27,7 @@ import type {
   PublishVideoDirectInput,
   UpdatePersonaInput,
 } from './client-types.js';
+import { buildDirectPublishForm, requireDirectPublishFields } from './direct-publish-form.js';
 
 // Re-exported so existing import sites (`./client.js`) keep working.
 export type {
@@ -421,6 +422,18 @@ export class PostEngineerClient {
     }
   }
 
+  async connectRumbleAccount(channelId: string, accessToken: string): Promise<unknown> {
+    try {
+      return await this.request(
+        '/api/rumble-connect',
+        { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ channelId, accessToken }) },
+        'connect Rumble account',
+      );
+    } catch (error) {
+      throw redactSecretFromError(error, accessToken);
+    }
+  }
+
   async listSchedules(): Promise<unknown> {
     return this.request(
       '/api/schedule',
@@ -550,7 +563,7 @@ export class PostEngineerClient {
   async disconnectAccount(provider: string, providerAccountId: string): Promise<unknown> {
     // The route 400s INVALID_PROVIDER / INVALID_PARAMS — fail fast with the
     // field named before any fetch goes out.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'];
     if (!validProviders.includes(provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }
@@ -589,7 +602,7 @@ export class PostEngineerClient {
     // record. Only set entries the caller provided: the server enforces
     // which providers need accounts and rejects unknown ones.
     const accounts: Record<string, string[]> = {};
-    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, pinterest: input.pinterestAccountIds, '3speak': input.threespeakAccountIds };
+    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, pinterest: input.pinterestAccountIds, '3speak': input.threespeakAccountIds, rumble: input.rumbleAccountIds };
     for (const [provider, ids] of Object.entries(byProvider)) if (ids !== undefined) accounts[provider] = ids;
     // A stray schedule plan in ASAP mode is a caller bug: the server 400s
     // ("publishing.schedule must not be set"), so fail fast with the same
@@ -744,72 +757,17 @@ export class PostEngineerClient {
     // Direct publish of a user-provided video — no generation, no schedule.
     // Mirrors the server-side 400s: provider-specific required fields and
     // per-provider account-id field names fail fast here, before any fetch.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'];
     if (!validProviders.includes(input.provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }
     if (input.accountIds.length === 0) {
       throw new Error('At least one account ID is required.');
     }
-    // Provider-specific required fields, validated before any fetch so the
-    // agent gets a named failure instead of a server 400 after uploading.
-    let title = '';
-    let description = '';
-    let tags: string[] = [];
-    let privacyStatus = '';
-    let caption = '';
-    if (input.provider === 'youtube') {
-      if (input.title === undefined || input.title.trim().length === 0) {
-        throw new Error('title is required for youtube.');
-      }
-      if (input.description === undefined || input.description.trim().length === 0) {
-        throw new Error('description is required for youtube.');
-      }
-      if (input.tags === undefined || input.tags.length === 0) {
-        throw new Error('tags is required for youtube.');
-      }
-      const validPrivacy = ['public', 'private', 'unlisted'];
-      if (input.privacyStatus === undefined || !validPrivacy.includes(input.privacyStatus)) {
-        throw new Error('privacyStatus is required for youtube.');
-      }
-      title = input.title.trim();
-      description = input.description.trim();
-      tags = input.tags;
-      privacyStatus = input.privacyStatus;
-    } else if (input.provider === 'pinterest') {
-      if (input.boardId === undefined || input.boardId.trim().length === 0) throw new Error('boardId is required for pinterest.');
-      const explicitDescription = input.description?.trim() ?? '';
-      description = explicitDescription !== '' ? explicitDescription : input.caption?.trim() ?? '';
-      if (description.length === 0) throw new Error('description or caption is required for pinterest.'); caption = input.caption?.trim() ?? ''; title = input.title?.trim() ?? '';
-    } else { if (input.caption === undefined || input.caption.trim().length === 0) throw new Error(`caption is required for ${input.provider}.`); caption = input.caption.trim(); }
-
-    const formData = new FormData();
-    formData.append('provider', input.provider);
+    const fields = requireDirectPublishFields(input);
     const videoBlob = await videoFormFile(input.videoPath);
     const filename = basename(input.videoPath);
-    if (input.provider === 'youtube') {
-      formData.append('video', videoBlob, filename);
-      formData.append('title', title);
-      formData.append('description', description);
-      formData.append('tags', tags.join(','));
-      formData.append('privacyStatus', privacyStatus);
-      for (const accountId of input.accountIds) {
-        formData.append('accountIds', accountId);
-      }
-    } else if (input.provider === 'instagram') {
-      formData.append('file', videoBlob, filename);
-      formData.append('caption', caption);
-      for (const accountId of input.accountIds) {
-        formData.append('igAccountIds', accountId);
-      }
-    } else {
-      const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds', facebook: 'facebookAccountIds', pinterest: 'pinterestAccountIds', '3speak': 'threespeakAccountIds' }[input.provider];
-      formData.append('video', videoBlob, filename);
-      formData.append('caption', caption); if (input.provider === 'pinterest') { formData.append('title', title); formData.append('description', description); formData.append('boardId', input.boardId ?? ''); }
-      for (const accountId of input.accountIds) {
-        formData.append(accountField, accountId);
-      }
-    }
+    const formData = buildDirectPublishForm(input, fields, videoBlob, filename);
 
     const result: unknown = await this.request(
       '/api/upload-content',

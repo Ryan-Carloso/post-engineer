@@ -8,7 +8,7 @@ import { resolveScriptLanguage, useUploadStore } from '@/lib/store';
 describe('useUploadStore', () => {
   beforeEach(() => {
     useUploadStore.setState({
-      selectedAccountIds: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [] },
+      selectedAccountIds: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [] },
       mode: 'youtube',
       file: null,
       title: '',
@@ -63,6 +63,7 @@ describe('useUploadStore', () => {
         facebook: [],
         pinterest: [],
         '3speak': [],
+        rumble: [],
       });
     });
 
@@ -80,6 +81,7 @@ describe('useUploadStore', () => {
         facebook: [],
         pinterest: [],
         '3speak': [],
+        rumble: [],
       });
     });
 
@@ -96,6 +98,7 @@ describe('useUploadStore', () => {
         facebook: [],
         pinterest: [],
         '3speak': [],
+        rumble: [],
       });
     });
   });
@@ -130,6 +133,7 @@ describe('useUploadStore', () => {
         facebook: [],
         pinterest: [],
         '3speak': [],
+        rumble: [],
       });
     });
 
@@ -148,6 +152,7 @@ describe('useUploadStore', () => {
         facebook: [],
         pinterest: [],
         '3speak': [],
+        rumble: [],
       });
     });
   });
@@ -251,6 +256,7 @@ describe('useUploadStore', () => {
         facebook: [],
         pinterest: [],
         '3speak': [],
+        rumble: [],
       });
     });
 
@@ -268,6 +274,7 @@ describe('useUploadStore', () => {
         facebook: [],
         pinterest: [],
         '3speak': [],
+        rumble: [],
       });
     });
 
@@ -285,6 +292,7 @@ describe('useUploadStore', () => {
         facebook: [],
         pinterest: [],
         '3speak': [],
+        rumble: [],
       });
     });
   });

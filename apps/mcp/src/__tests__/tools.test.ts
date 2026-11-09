@@ -63,6 +63,7 @@ describe('MCP Tool Handlers', () => {
     getOAuthConnectUrl: vi.fn(),
     connectBlueskyAccount: vi.fn(),
     connectThreespeakAccount: vi.fn(),
+    connectRumbleAccount: vi.fn(),
     request: vi.fn(),
     getHeaders: vi.fn().mockReturnValue({}),
   } as unknown as PostEngineerClient;
@@ -494,6 +495,52 @@ describe('MCP Tool Handlers', () => {
     const text = textOf(response);
     expect(text).toMatch(/Invalid Hive posting key/);
     expect(text).not.toContain('5Ksuper-secret-key');
+  });
+
+  it('handleConnectAccount connects Rumble directly without echoing the access token', async () => {
+    vi.mocked(mockClient.connectRumbleAccount).mockResolvedValue({
+      success: true,
+      accountId: 'acc-1',
+      channelId: 'chan-1',
+    });
+
+    const response = await handleConnectAccount(mockClient, {
+      provider: 'rumble',
+      channelId: 'chan-1',
+      accessToken: 'a'.repeat(40),
+    });
+
+    expect(mockClient.connectRumbleAccount).toHaveBeenCalledWith('chan-1', 'a'.repeat(40));
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toMatch(/connected/i);
+    expect(text).not.toContain('a'.repeat(40));
+  });
+
+  it('handleConnectAccount requires channelId and accessToken for Rumble', async () => {
+    vi.clearAllMocks();
+    const response = await handleConnectAccount(mockClient, { provider: 'rumble' });
+
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toMatch(/channelId.*accessToken|accessToken.*channelId/i);
+    expect(mockClient.connectRumbleAccount).not.toHaveBeenCalled();
+  });
+
+  it('handleConnectAccount never leaks the access token on Rumble errors', async () => {
+    vi.mocked(mockClient.connectRumbleAccount).mockRejectedValue(
+      new Error('Failed to connect Rumble account: 400 Invalid channelId or access token.'),
+    );
+
+    const response = await handleConnectAccount(mockClient, {
+      provider: 'rumble',
+      channelId: 'chan-1',
+      accessToken: 'a'.repeat(40),
+    });
+
+    expect(response.isError).toBe(true);
+    const text = textOf(response);
+    expect(text).toMatch(/Invalid channelId or access token/);
+    expect(text).not.toContain('a'.repeat(40));
   });
 });
 

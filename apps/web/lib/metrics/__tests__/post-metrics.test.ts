@@ -89,7 +89,7 @@ describe('metricsTargets', () => {
   });
 
   it('extracts a target for every provider in SOCIAL_PROVIDERS', () => {
-    const fixtures: Record<string, unknown> = { youtube: YT_ENTRY, instagram: IG_ENTRY, bluesky: BSKY_ENTRY, linkedin: LI_ENTRY, threads: { provider: 'threads', status: 'published', accountId: '42', postId: 'p1' }, facebook: { provider: 'facebook', status: 'published', accountId: '111', postId: 'v1' }, pinterest: { provider: 'pinterest', status: 'published', accountId: 'pin-acct', postId: '1234567890123456' }, '3speak': { provider: '3speak', status: 'published', accountId: 'alice', postId: 'vid-7' } };
+    const fixtures: Record<string, unknown> = { youtube: YT_ENTRY, instagram: IG_ENTRY, bluesky: BSKY_ENTRY, linkedin: LI_ENTRY, threads: { provider: 'threads', status: 'published', accountId: '42', postId: 'p1' }, facebook: { provider: 'facebook', status: 'published', accountId: '111', postId: 'v1' }, pinterest: { provider: 'pinterest', status: 'published', accountId: 'pin-acct', postId: '1234567890123456' }, '3speak': { provider: '3speak', status: 'published', accountId: 'alice', postId: 'vid-7' }, rumble: { provider: 'rumble', status: 'published', accountId: 'chan-1', postId: 'vid-1' } };
     for (const provider of SOCIAL_PROVIDERS) {
       const { targets } = metricsTargets([fixtures[provider]]);
       expect(targets.map((target) => target.provider), provider).toEqual([provider]);
@@ -113,6 +113,7 @@ describe('metricsTargets', () => {
 // Each migration that re-creates the check must list every provider the
 // app supported at that point; the latest one (052) lists them all.
 // A shipped migration is never edited, so 049 pins its historical list.
+
 describe('post_metrics provider check (migrations 034, 049, 050 and 052)', () => {
   function listedProviders(file: string): string[] {
     const sql = readFileSync(join(findRepoRoot(import.meta.url), 'supabase/migrations', file), 'utf8');
@@ -132,8 +133,12 @@ describe('post_metrics provider check (migrations 034, 049, 050 and 052)', () =>
     expect(listedProviders('050_pinterest-provider.sql').sort()).toEqual(['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'youtube']);
   });
 
-  it('052 allows exactly the providers in SOCIAL_PROVIDERS', () => {
-    expect(listedProviders('052_threespeak-provider.sql').sort()).toEqual([...SOCIAL_PROVIDERS].sort());
+  it('052 allows exactly the eight providers it shipped with', () => {
+    expect(listedProviders('052_threespeak-provider.sql').sort()).toEqual(['3speak', 'bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'youtube']);
+  });
+
+  it('053 allows exactly the providers in SOCIAL_PROVIDERS', () => {
+    expect(listedProviders('053_rumble-provider.sql').sort()).toEqual([...SOCIAL_PROVIDERS].sort());
   });
 });
 

@@ -20,6 +20,10 @@ Wire contract (multipart/form-data):
   repeated ``facebookAccountIds`` fields (see ``publish_facebook``). Pinterest: ``provider=pinterest``, ``video`` (file), ``title``, ``description``, ``boardId``, repeated ``pinterestAccountIds`` fields (see ``publish_pinterest``; validated by ``fill_schedule/metadata.py``).
 - 3Speak: ``provider=3speak``, ``video`` (file), ``caption``,
   repeated ``threespeakAccountIds`` fields (see ``publish_threespeak``).
+  repeated ``facebookAccountIds`` fields (see ``publish_facebook``).
+- Rumble: ``provider=rumble``, ``video`` (file), ``title``,
+  ``description``, ``license_type`` (``0`` = Personal Use), repeated
+  ``rumbleAccountIds`` fields (see ``publish_rumble``).
 
 This module owns only types, validation and multipart part builders; the HTTP
 transport lives in the client function of the same module.
@@ -44,6 +48,10 @@ from app.services.publish_pinterest import PINTEREST_DESCRIPTION_MAX_LENGTH, PIN
 from app.services.publish_threespeak import (  # noqa: F401 - re-exported for callers
     THREESPEAK_PROVIDER, ThreespeakMetadata,
     threespeak_fields, validate_threespeak_metadata,
+)
+from app.services.publish_rumble import (  # noqa: F401 - re-exported for callers
+    RUMBLE_PROVIDER, RUMBLE_TITLE_MAX_LENGTH, RumbleMetadata,
+    rumble_fields, validate_rumble_metadata,
 )
 from app.services.upload_publisher_failure import application_failure_reason
 
@@ -71,6 +79,7 @@ VALID_PROVIDERS: tuple[str, ...] = (
     FACEBOOK_PROVIDER,
     PINTEREST_PROVIDER,
     THREESPEAK_PROVIDER,
+    RUMBLE_PROVIDER,
 )
 
 
@@ -145,6 +154,7 @@ class PublishMetadata:
     threads: ThreadsMetadata | None = None
     facebook: FacebookMetadata | None = None
     threespeak: ThreespeakMetadata | None = None
+    rumble: RumbleMetadata | None = None
 
 
 @dataclass(frozen=True)
@@ -169,6 +179,7 @@ def validate_publish_metadata(
     threads: ThreadsMetadata | None = None,
     facebook: FacebookMetadata | None = None,
     threespeak: ThreespeakMetadata | None = None,
+    rumble: RumbleMetadata | None = None,
 ) -> PublishMetadata:
     """Validate provider selection and per-provider metadata.
 
@@ -241,6 +252,8 @@ def validate_publish_metadata(
         validate_facebook_metadata(facebook)
     if THREESPEAK_PROVIDER in providers:
         validate_threespeak_metadata(threespeak)
+    if RUMBLE_PROVIDER in providers:
+        validate_rumble_metadata(rumble)
 
     return PublishMetadata(
         providers=tuple(providers),
@@ -251,6 +264,7 @@ def validate_publish_metadata(
         threads=threads,
         facebook=facebook,
         threespeak=threespeak,
+        rumble=rumble,
     )
 
 
@@ -358,6 +372,7 @@ _PART_BUILDERS: _PartBuilders = {
     FACEBOOK_PROVIDER: (FacebookMetadata, lambda metadata: MultipartParts(fields=facebook_fields(metadata))),
     PINTEREST_PROVIDER: (PinterestMetadata, lambda metadata: MultipartParts(fields=pinterest_fields(metadata))),
     THREESPEAK_PROVIDER: (ThreespeakMetadata, lambda metadata: MultipartParts(fields=threespeak_fields(metadata))),
+    RUMBLE_PROVIDER: (RumbleMetadata, lambda metadata: MultipartParts(fields=rumble_fields(metadata))),
 }
 
 
@@ -365,7 +380,7 @@ def publish_video(
     base_url: str,
     api_secret: str,
     owner_user_id: str,
-    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | PinterestMetadata | ThreespeakMetadata,
+    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | PinterestMetadata | ThreespeakMetadata | RumbleMetadata,
     video_path: str,
     video_bytes: bytes,
     content_type: str,

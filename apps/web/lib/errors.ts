@@ -91,6 +91,16 @@ export class PinterestError extends Error {
   }
 }
 
+export class RumbleError extends Error {
+  readonly code: 'invalid_token' | 'upload_failed' | 'unknown';
+
+  constructor(code: RumbleError['code'], message: string, public statusCode: number) {
+    super(message);
+    this.name = 'RumbleError';
+    this.code = code;
+  }
+}
+
 export class NetworkError extends Error {
   constructor(message: string, public networkDetails?: Record<string, unknown>) {
     super(message);

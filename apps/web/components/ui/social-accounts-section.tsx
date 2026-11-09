@@ -96,10 +96,13 @@ export default function SocialAccountsSection({
 
 //---------------
 // KeyConnectDialog — the connect dialog for key-based providers (Bluesky
-// app password, 3Speak Hive posting key): a handle/username field plus a
-// secret field, no OAuth redirect. `idPrefix` scopes the dialog title id
-// and testids so two key dialogs on one page never collide; it defaults
-// to 'bluesky' for the original caller.
+// app password, 3Speak Hive posting key, Rumble access token): a
+// handle/username field plus a secret field, no OAuth redirect. `idPrefix`
+// scopes the dialog title id and testids so two key dialogs on one page
+// never collide; it defaults to 'bluesky' for the original caller.
+// Test-id/aria prefix: 'bluesky' keeps the Bluesky dialog's testids
+// (bluesky-handle-input, ...); 'rumble' gives the Rumble dialog
+// rumble-handle-input, ... Same two-field credential dialog, three providers.
 //---------------
 
 export interface KeyConnectDialogProps {

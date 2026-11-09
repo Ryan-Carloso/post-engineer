@@ -27,9 +27,8 @@ export type { PersonaRecord };
 // API — typed fetch clients
 //---------------
 
-// Social-account queries live in lib/social-accounts-queries.ts (extracted
-// for the file-size ratchet); re-exported here so existing import sites
-// (`@/lib/api`) keep working.
+// Social-account queries live in lib/social-accounts-queries.ts; re-exported
+// here so existing `@/lib/api` import sites keep working.
 export {
   useBlueskyAccountsQuery,
   useFacebookAccountsQuery,
@@ -584,6 +583,7 @@ export interface ScheduleConfig {
   pinterestAccountIds: string[];
   pinterestBoardId: string | null;
   threespeakAccountIds: string[];
+  rumbleAccountIds: string[];
   daysOfWeek: number[];
   startHour: number | null;
   endHour: number | null;

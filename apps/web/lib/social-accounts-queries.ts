@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { PublicAccountItem, BlueskyAccountData, LinkedinAccountData, ThreadsAccountData, FacebookAccountData, ThreespeakAccountData } from '@/lib/providers/registry';
+import type { PublicAccountItem, BlueskyAccountData, LinkedinAccountData, ThreadsAccountData, FacebookAccountData, ThreespeakAccountData, RumbleAccountData } from '@/lib/providers/registry';
 import type {
   AccountResponse,
   AccountData,
@@ -108,6 +108,7 @@ const selectLinkedinAccounts = selectProviderAccounts<LinkedinAccountData>('link
 const selectThreadsAccounts = selectProviderAccounts<ThreadsAccountData>('threads');
 const selectFacebookAccounts = selectProviderAccounts<FacebookAccountData>('facebook');
 const selectThreespeakAccounts = selectProviderAccounts<ThreespeakAccountData>('3speak');
+const selectRumbleAccounts = selectProviderAccounts<RumbleAccountData>('rumble');
 export function useYouTubeAccountsQuery(): UseQueryResult<AccountResponse, Error> {
   return useSocialAccountsQuery(selectYouTubeAccounts);
 }
@@ -136,4 +137,8 @@ export function useFacebookAccountsQuery(): UseQueryResult<ProviderAccountsRespo
 
 export function useThreespeakAccountsQuery(): UseQueryResult<ProviderAccountsResponse<ThreespeakAccountData>, Error> {
   return useSocialAccountsQuery(selectThreespeakAccounts);
+}
+
+export function useRumbleAccountsQuery(): UseQueryResult<ProviderAccountsResponse<RumbleAccountData>, Error> {
+  return useSocialAccountsQuery(selectRumbleAccounts);
 }

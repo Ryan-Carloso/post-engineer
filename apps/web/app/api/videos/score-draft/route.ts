@@ -4,6 +4,7 @@
 // Scores one draft against the caller's own measured posts (post_metrics)
 // and runs the publish check for the requested network (linkedin, threads, facebook,
 // youtube, instagram, bluesky, 3speak). It never debits tokens, never
+// rumble, youtube, instagram, bluesky). It never debits tokens, never
 // schedules, never calls the engine: there is no database write and no
 // external call on this path at all — the baseline is one capped read
 // of the caller's own rows, plus one ownership read when personaId is given.

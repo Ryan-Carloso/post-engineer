@@ -3,6 +3,7 @@ import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { handleFacebookUpload } from '@/lib/upload/facebook-handler';
 import { handlePinterestUpload } from '@/lib/upload/pinterest-handler';
 import { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
+import { handleRumbleUpload } from '@/lib/upload/rumble-handler';
 import { logger } from '@/lib/logger';
 import { ValidationError } from '@/lib/errors';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -21,7 +22,7 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 //---------------
 // Unified content upload — POST /api/upload-content
 // FormData:
-//   provider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak'
+//   provider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble'
 //   youtube:    video, title, description, tags, privacyStatus, accountIds (repeatable)
 //   instagram:  file, caption, igAccountIds (repeatable)
 //   bluesky:    video, caption, did (repeatable)
@@ -30,6 +31,7 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 //   facebook:   video, caption, facebookAccountIds (repeatable; Page ids)
 //   pinterest:  video, title, description, boardId, pinterestAccountIds (repeatable; user ids)
 //   3speak:     video, caption, threespeakAccountIds (repeatable; Hive usernames)
+//   rumble:     video, title, description, rumbleAccountIds (repeatable; channel ids)
 //   engine:     userId (MONEYPRINT_API_SECRET only — internal publish-back)
 // Auth = Supabase session (UI), personal API key (pe_live_...), or
 // Authorization: Bearer <MONEYPRINT_API_SECRET> (engine). Per-user rate limit.
@@ -140,7 +142,9 @@ async function postHandler(request: NextRequest) {
                   ? await handlePinterestUpload(formData, userId)
                   : provider === '3speak'
                     ? await handleThreespeakUpload(formData, userId)
-                    : await handleInstagramUpload(formData, userId, logId, startTime);
+                    : provider === 'rumble'
+                      ? await handleRumbleUpload(formData, userId)
+                      : await handleInstagramUpload(formData, userId, logId, startTime);
 
     logger.info('[upload-content] handler finalizado', { provider, success: response.success, logId });
     return NextResponse.json(response);

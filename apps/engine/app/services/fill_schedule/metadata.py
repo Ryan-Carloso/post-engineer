@@ -51,6 +51,12 @@ def metadata_for(provider: str, title: str, schedule: dict[str, Any]):
             caption=title,
             account_ids=tuple(str(value) for value in schedule.get("threespeak_account_ids", [])),
         )
+    if provider == upload_publisher.RUMBLE_PROVIDER:
+        return upload_publisher.RumbleMetadata(
+            title=title[: upload_publisher.RUMBLE_TITLE_MAX_LENGTH],
+            description=title,
+            account_ids=tuple(str(value) for value in schedule.get("rumble_account_ids", [])),
+        )
     if provider == upload_publisher.INSTAGRAM_PROVIDER:
         return upload_publisher.InstagramMetadata(
             caption=title[:2200],
@@ -79,6 +85,7 @@ def validate_publish_plan(schedule: dict[str, Any], title: str) -> None:
     threads = None
     facebook = None
     threespeak = None
+    rumble = None
     for provider in providers:
         metadata = metadata_for(provider, title, schedule)
         if isinstance(metadata, upload_publisher.YouTubeMetadata):
@@ -101,6 +108,8 @@ def validate_publish_plan(schedule: dict[str, Any], title: str) -> None:
             validate_pinterest_metadata(metadata)
         elif isinstance(metadata, upload_publisher.ThreespeakMetadata):
             threespeak = metadata
+        elif isinstance(metadata, upload_publisher.RumbleMetadata):
+            rumble = metadata
     upload_publisher.validate_publish_metadata(
         providers,
         youtube,
@@ -110,4 +119,5 @@ def validate_publish_plan(schedule: dict[str, Any], title: str) -> None:
         threads=threads,
         facebook=facebook,
         threespeak=threespeak,
+        rumble=rumble,
     )

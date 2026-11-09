@@ -2,21 +2,24 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
-import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 
 //---------------
 // supabase/migrations/052_threespeak-provider.sql — the schema the 3Speak
 // (Hive) connect and publish paths depend on. Each provider check is
 // dropped and re-created with the full list (the lesson of 037: a live
 // constraint the chain no longer defines can linger in production, so a
-// plain add would leave the old list in force), and both lists are pinned
-// to SOCIAL_PROVIDERS.
+// plain add would leave the old list in force). A shipped migration is
+// never edited, so this test pins the eight providers 052 shipped with;
+// the live pin is the 053 test.
 //---------------
 
 const sql = readFileSync(
   join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '052_threespeak-provider.sql'),
   'utf8',
 );
+
+// The eight providers 052 shipped with, in the order the migration lists them.
+const PROVIDERS_AT_052 = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak'];
 
 function checkProviders(constraint: string): string[] {
   const start = sql.indexOf(`add constraint ${constraint}`);
@@ -42,9 +45,9 @@ describe('supabase/migrations/052_threespeak-provider.sql', () => {
   );
 
   it.each(['post_metrics_provider_check', 'social_accounts_provider_check'])(
-    '%s allows exactly the providers the app supports',
+    '%s allows exactly the eight providers 052 shipped with',
     (constraint) => {
-      expect(checkProviders(constraint).sort()).toEqual([...SOCIAL_PROVIDERS].sort());
+      expect(checkProviders(constraint).sort()).toEqual([...PROVIDERS_AT_052].sort());
     },
   );
 });

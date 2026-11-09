@@ -33,6 +33,10 @@ vi.mock('@/lib/api', () => ({
   useDeleteSlotMutation: vi.fn(),
 }));
 
+vi.mock('@/lib/social-accounts-queries', () => ({
+  useRumbleAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
+}));
+
 vi.mock('@/lib/pinterest-accounts', () => ({
   usePinterestAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
 }));

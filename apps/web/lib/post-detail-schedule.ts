@@ -19,6 +19,7 @@ export interface ScheduleDetailRow {
     pinterest_account_ids: string[] | null;
     pinterest_board_id: string | null;
     threespeak_account_ids: string[] | null;
+    rumble_account_ids: string[] | null;
     timezone: string;
     post_language: string | null;
     post_voice_id: string | null;
@@ -43,6 +44,7 @@ export function buildScheduleDetail(scheduleRow: ScheduleDetailRow) {
   const pinterestAccountIdsOut = scheduleRow.pinterest_account_ids ?? [];
   const pinterestBoardIdOut = scheduleRow.pinterest_board_id ?? null;
   const threespeakAccountIdsOut = scheduleRow.threespeak_account_ids ?? [];
+  const rumbleAccountIdsOut = scheduleRow.rumble_account_ids ?? [];
   const timezoneOut = scheduleRow.timezone;
   const publishModeOut: 'asap' | 'scheduled' = scheduleRow.publish_mode === 'asap' ? 'asap' : 'scheduled';
   return {
@@ -58,6 +60,7 @@ export function buildScheduleDetail(scheduleRow: ScheduleDetailRow) {
     pinterestAccountIds: pinterestAccountIdsOut,
     pinterestBoardId: pinterestBoardIdOut,
     threespeakAccountIds: threespeakAccountIdsOut,
+    rumbleAccountIds: rumbleAccountIdsOut,
     timezone: timezoneOut,
     publishMode: publishModeOut,
   };

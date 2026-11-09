@@ -212,3 +212,11 @@ describe('fetchProviderCounters (3speak)', () => {
     expect(getSocialAccountTokens).not.toHaveBeenCalled();
   });
 });
+
+describe('fetchProviderCounters (rumble)', () => {
+  it('returns unknown counters without touching any token or API', async () => {
+    const counters = await fetchProviderCounters('user-1', { provider: 'rumble', accountId: 'chan-1', externalId: 'vid-1' }, CTX);
+    expect(counters).toEqual({ views: null, likes: null, comments: null, saves: null });
+    expect(getSocialAccountTokens).not.toHaveBeenCalled();
+  });
+});

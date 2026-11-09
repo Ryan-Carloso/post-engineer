@@ -2,7 +2,7 @@
 
 Next.js 15 app (TypeScript, strict mode): the Post Engineer dashboard and all
 API routes (`app/**/route.ts`). Owns authentication (Supabase), personas,
-scheduling, OAuth for social accounts (YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky, 3Speak),
+scheduling, OAuth for social accounts (YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky, 3Speak) and manual-token connect (Rumble),
 token billing (Stripe), API keys, and the MCP OAuth server.
 
 ## Develop

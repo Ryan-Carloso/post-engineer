@@ -7,7 +7,7 @@ import { MAX_UPLOAD_VIDEO_GB } from './limits.js';
 
 export const PublishVideoDirectShape = {
   provider: z
-    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak'])
+    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'])
     .describe('The social platform to publish the video to.'),
   videoPath: z
     .string()
@@ -19,16 +19,16 @@ export const PublishVideoDirectShape = {
     .array(z.string().min(1))
     .min(1, 'At least one account ID is required')
     .describe(
-      'Target accounts: the IDs from list_social_accounts (channel IDs for YouTube, IG user IDs for Instagram, DIDs for Bluesky, member IDs or org URNs for LinkedIn, user IDs for Threads, Page IDs for Facebook, user IDs for Pinterest, Hive usernames for 3Speak).',
+      'Target accounts: the IDs from list_social_accounts (channel IDs for YouTube, IG user IDs for Instagram, DIDs for Bluesky, member IDs or org URNs for LinkedIn, user IDs for Threads, Page IDs for Facebook, user IDs for Pinterest, Hive usernames for 3Speak, Channel IDs for Rumble).',
     ),
   title: z
     .string()
     .optional()
-    .describe('YouTube only: required video title. Pinterest: pin title (optional).'),
+    .describe('YouTube/Rumble: required video title. Pinterest: pin title (optional).'),
   description: z
     .string()
     .optional()
-    .describe('YouTube only: required video description. Pinterest: pin description (optional; caption is used when omitted).'),
+    .describe('YouTube/Rumble: required video description. Pinterest: pin description (optional; caption is used when omitted).'),
   tags: z
     .array(z.string())
     .optional()

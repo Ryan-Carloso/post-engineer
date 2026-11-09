@@ -58,6 +58,8 @@ export const RATE_LIMITS = {
   // the Bluesky app-password exchange — a new route gets its own profile
   // (never a reused semantic profile).
   threespeakConnect: { name: 'threespeak-connect', limit: 10, windowMs: 60_000 },
+  // Rumble token connect: same shape as Bluesky (a pasted credential)
+  rumbleConnect: { name: 'rumble-connect', limit: 10, windowMs: 60_000 },
   // Billing checkout session creation: abuse protection
   billingCheckout: { name: 'billing-checkout', limit: 10, windowMs: 60_000 },
   // Video generation job submission: cost protection

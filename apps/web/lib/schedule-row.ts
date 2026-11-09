@@ -19,6 +19,7 @@ export interface ScheduleRow {
   /** The board a schedule's Pinterest pins go to (migration 050). */
   pinterest_board_id: string | null;
   threespeak_account_ids: string[];
+  rumble_account_ids: string[];
   days_of_week: number[] | null;
   start_hour: number | null;
   end_hour: number | null;
@@ -43,6 +44,7 @@ export function mapSchedule(row: ScheduleRow): ScheduleConfig {
     pinterestAccountIds: row.pinterest_account_ids ?? [],
     pinterestBoardId: row.pinterest_board_id ?? null,
     threespeakAccountIds: row.threespeak_account_ids ?? [],
+    rumbleAccountIds: row.rumble_account_ids ?? [],
     daysOfWeek: row.days_of_week ?? [],
     startHour: row.start_hour ?? null,
     endHour: row.end_hour ?? null,

@@ -9,7 +9,7 @@ import type { AccountData, InstagramAccountData } from '@/lib/types';
 // client guards and the OAuth union all derive from here.
 //---------------
 
-export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak'] as const;
+export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'] as const;
 
 export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
 
@@ -87,6 +87,15 @@ export interface ThreespeakAccountData {
   lastUsed: number;
 }
 
+export interface RumbleAccountData {
+  provider: 'rumble';
+  recordId: string;
+  providerAccountId: string;
+  accountName: string | null;
+  connectedAt: number;
+  lastUsed: number;
+}
+
 export type PublicAccountItem =
   | AccountData
   | InstagramAccountData
@@ -95,12 +104,13 @@ export type PublicAccountItem =
   | ThreadsAccountData
   | FacebookAccountData
   | PinterestAccountData
-  | ThreespeakAccountData;
+  | ThreespeakAccountData
+  | RumbleAccountData;
 
 //---------------
 // ProviderDef — contract every provider must implement.
 // supportsOAuthCallback marks who has an OAuth flow (bluesky uses app
-// password, not OAuth).
+// password and rumble a manual access token, not OAuth).
 //---------------
 
 interface ProviderDef<OAuth extends boolean = boolean> {
@@ -293,6 +303,22 @@ const threespeakDef: ProviderDef<false> = {
   },
 };
 
+// Rumble has no OAuth and no profile API: the account is the channel id
+// the user typed at connect, and the card shows that id.
+const rumbleDef: ProviderDef<false> = {
+  supportsOAuthCallback: false,
+  toPublicAccount(record) {
+    return {
+      provider: 'rumble',
+      recordId: record.id,
+      providerAccountId: record.providerAccountId,
+      accountName: record.accountName,
+      connectedAt: createdAtTimestamp(record),
+      lastUsed: lastUsedTimestamp(record),
+    };
+  },
+};
+
 //---------------
 // PROVIDER_REGISTRY — exhaustive by construction: a provider in the union without
 // an entry here (or vice versa) = compile error.
@@ -307,6 +333,7 @@ export const PROVIDER_REGISTRY = {
   facebook: facebookDef,
   pinterest: pinterestDef,
   '3speak': threespeakDef,
+  rumble: rumbleDef,
 } satisfies Record<SocialProvider, ProviderDef>;
 
 // OAuthProvider — derived from the registry: whoever has supportsOAuthCallback: true.

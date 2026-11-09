@@ -1,4 +1,4 @@
-"""Publish metadata models for task requests (YouTube / Instagram / Bluesky / LinkedIn / Threads / Facebook / Pinterest / 3Speak)."""
+"""Publish metadata models for task requests (YouTube / Instagram / Bluesky / LinkedIn / Threads / Facebook / Pinterest / 3Speak / Rumble)."""
 
 from typing import Literal, Optional
 
@@ -70,11 +70,19 @@ class ThreespeakPublish(BaseModel):
     account_ids: list[str] = Field(min_length=1)
 
 
+class RumblePublish(BaseModel):
+    """Rumble publish fields required by the internal upload API."""
+
+    title: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1)
+    account_ids: list[str] = Field(min_length=1)
+
+
 class PublishParams(BaseModel):
-    """Optional publish selection for a task (YouTube/Instagram/Bluesky/LinkedIn/Threads/Facebook/Pinterest/3Speak)."""
+    """Optional publish selection for a task (YouTube/Instagram/Bluesky/LinkedIn/Threads/Facebook/Pinterest/3Speak/Rumble)."""
 
     providers: list[
-        Literal["youtube", "instagram", "bluesky", "linkedin", "threads", "facebook", "pinterest", "3speak"]
+        Literal["youtube", "instagram", "bluesky", "linkedin", "threads", "facebook", "pinterest", "3speak", "rumble"]
     ] = Field(min_length=1)
     youtube: Optional[YouTubePublish] = None
     instagram: Optional[InstagramPublish] = None
@@ -84,6 +92,7 @@ class PublishParams(BaseModel):
     facebook: Optional[FacebookPublish] = None
     pinterest: Optional[PinterestPublish] = None
     threespeak: Optional[ThreespeakPublish] = None
+    rumble: Optional[RumblePublish] = None
 
     @model_validator(mode="after")
     def check_provider_metadata(self) -> "PublishParams":
@@ -103,4 +112,6 @@ class PublishParams(BaseModel):
             raise ValueError("pinterest provider requires pinterest metadata")
         if "3speak" in self.providers and self.threespeak is None:
             raise ValueError("3speak provider requires 3speak metadata")
+        if "rumble" in self.providers and self.rumble is None:
+            raise ValueError("rumble provider requires rumble metadata")
         return self

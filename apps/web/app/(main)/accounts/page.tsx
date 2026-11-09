@@ -1,18 +1,19 @@
 'use client';
 
-import { useState } from 'react';
 import type { ReactNode } from 'react';
 import AccountCard from '@/components/account-card';
 import SocialAccountsSection from '@/components/ui/social-accounts-section';
-import { KeyConnectDialog } from '@/components/ui/social-accounts-section';
 import {
-  useBlueskyAccountsQuery,
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
   useThreadsAccountsQuery,
   useFacebookAccountsQuery,
   useYouTubeAccountsQuery,
 } from '@/lib/api';
+import {
+  BlueskyAccountsSection,
+  RumbleAccountsSection,
+} from './credential-accounts-sections';
 import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
 import { useUploadStore } from '@/lib/store';
 import { useYouTubeOAuth } from '@/lib/oauth/google-handler';
@@ -24,7 +25,6 @@ import { usePinterestOAuth } from '@/lib/oauth/pinterest-handler';
 import { ProviderIcon } from '@/components/provider-icon';
 import { useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
 import { useI18n } from '@/lib/i18n/provider';
-import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { AccountsIcon, GoogleIcon, InstagramIcon } from '@/lib/ui';
 import { BrandIcon, connectedLabel, useDisconnectFlow } from './accounts-section-helpers';
 import { ThreespeakAccountsSection } from './threespeak-accounts-section';
@@ -42,6 +42,7 @@ export default function AccountsPage(): React.ReactElement {
         <FacebookAccountsSection />
         <PinterestAccountsSection />
         <ThreespeakAccountsSection />
+        <RumbleAccountsSection />
       </main>
     </div>
   );
@@ -136,77 +137,7 @@ function InstagramAccountsSection(): ReactNode {
   );
 }
 
-//---------------
-// Bluesky accounts: one query and a dialog owned by the page.
-//---------------
 
-function BlueskyAccountsSection(): ReactNode {
-  const { t } = useI18n();
-  const query = useBlueskyAccountsQuery();
-  const flow = useDisconnectFlow('bluesky');
-  const [open, setOpen] = useState(false);
-  const [handle, setHandle] = useState('');
-  const [appPassword, setAppPassword] = useState('');
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const accounts = query.data?.accounts ?? [];
-  useAccountListErrorTelemetry('bluesky', query.error?.message ?? null);
-
-  const connect = async (): Promise<void> => {
-    if (!handle.trim() || !appPassword.trim() || pending) return;
-    setPending(true);
-    setError(null);
-    try {
-      const formData = new FormData();
-      formData.append('handle', handle.trim());
-      formData.append('appPassword', appPassword);
-      const response = await fetch('/api/bluesky-connect', { method: 'POST', body: formData });
-      if (!response.ok) {
-        // 401 here means a dead hub session (a rejected Bluesky credential
-        // is 422), so it triggers the host-wide session-expiry redirect.
-        notifyIfSessionExpired(response);
-        setError(t('accounts.blueskyConnectError'));
-        setAppPassword('');
-        return;
-      }
-      setOpen(false);
-      setHandle('');
-      setAppPassword('');
-      void query.refetch();
-    } catch {
-      setError(t('accounts.blueskyConnectError'));
-      setAppPassword('');
-    } finally {
-      setPending(false);
-    }
-  };
-
-  return (
-    <SocialAccountsSection
-      icon={<BrandIcon className="bg-info-soft text-info"><BlueskyIcon /></BrandIcon>}
-      label={t('accounts.blueskyLabel')}
-      description={t('accounts.blueskyDescription')}
-      connectedLabel={connectedLabel(t, accounts.length)}
-      count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="bluesky" name={account.displayName ?? account.handle} thumbnail={account.avatar} showDisconnect onDisconnect={() => flow.onDisconnect(account.did, account.displayName ?? account.handle)} />)}
-      isLoading={query.isLoading}
-      loadError={query.error?.message ?? null}
-      connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
-      connectError={null}
-      disconnectError={flow.disconnectError}
-      connectDisabled={false}
-      retryLabel={t('accounts.tryAgain')}
-      onConnect={() => setOpen(true)}
-      onRetry={() => void query.refetch()}
-      dialog={
-        <>
-          {flow.dialog}
-          {open ? <KeyConnectDialog title={t('accounts.blueskyConnectTitle')} hint={t('accounts.blueskyConnectHint')} handleLabel={t('accounts.blueskyHandleLabel')} passwordLabel={t('accounts.blueskyPasswordLabel')} submitLabel={t('accounts.blueskyConnect')} securityHint={t('accounts.blueskySecurityHint')} closeLabel={t('accounts.closeDialog')} handle={handle} appPassword={appPassword} error={error} pending={pending} onHandleChange={setHandle} onPasswordChange={setAppPassword} onSubmit={() => void connect()} onClose={() => setOpen(false)} /> : null}
-        </>
-      }
-    />
-  );
-}
 
 //---------------
 // LinkedIn accounts: one query and one OAuth flow.
@@ -240,6 +171,7 @@ function LinkedinAccountsSection(): ReactNode {
     />
   );
 }
+
 
 //---------------
 // Threads accounts: one query and one OAuth flow.
@@ -352,9 +284,6 @@ function LinkedinAccountCard({ name, thumbnail, storedDisplayName, labelOrigin, 
   return <div className="relative"><AccountCard type="linkedin" name={name} thumbnail={thumbnail} storedDisplayName={storedDisplayName} labelOrigin={labelOrigin} showDisconnect={showDisconnect} onDisconnect={onDisconnect} /><span className="absolute top-2 right-2 rounded border border-info/30 bg-info-soft px-1.5 py-0.5 text-[10px] font-semibold text-info">{t(isOrganization ? 'accounts.pageBadge' : 'accounts.memberBadge')}</span></div>;
 }
 
-function BlueskyIcon(): ReactNode {
-  return <svg viewBox="0 0 24 24" className="size-5" fill="currentColor" aria-hidden="true"><path d="M12 10.8c-1.087-2.114-4.046-6.033-6.798-7.978C2.566 1.01.562 1.098.064 1.855c-.499.757.06 3.708 1.277 5.196.76.93 1.883 2.022 3.19 2.904-1.538-.24-3.02.052-3.585.754-.79.982.294 3.029 2.424 4.573 1.187.86 2.662 1.5 4.082 1.788-1.555.288-3.04 1.017-3.575 2.015-.72 1.343.682 2.72 3.125 3.076 2.1.307 4.653-.355 5.998-1.71 1.345 1.355 3.898 2.017 5.998 1.71 2.443-.356 3.845-1.733 3.125-3.076-.535-.998-2.02-1.727-3.575-2.015 1.42-.288 2.895-.928 4.082-1.788 2.13-1.544 3.214-3.591 2.424-4.573-.565-.702-2.047-.994-3.585-.754 1.307-.882 2.43-1.974 3.19-2.904 1.217-1.488 1.776-4.439 1.277-5.196-.498-.757-2.502-.845-5.138.967C16.046 4.767 13.087 8.686 12 10.8z" /></svg>;
-}
 
 function LinkedinIcon(): ReactNode {
   return <svg viewBox="0 0 24 24" className="size-5" fill="currentColor" aria-hidden="true"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.03-3.04-1.85-3.04-1.86 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.36-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z" /></svg>;

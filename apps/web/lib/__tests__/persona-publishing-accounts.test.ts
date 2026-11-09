@@ -93,6 +93,7 @@ describe('getPersonaDefaultAccounts', () => {
       facebook: [],
       pinterest: [],
       '3speak': [],
+      rumble: [],
     });
   });
 
@@ -216,6 +217,7 @@ describe('emptyPersonaDefaultAccounts', () => {
       facebook: [],
       pinterest: [],
       '3speak': [],
+      rumble: [],
     });
   });
 });

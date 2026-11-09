@@ -17,8 +17,6 @@ import {
   UpdateSlotTitleShape,
 } from './schedule-shapes.js';
 import {
-  ConnectAccountSchema,
-  ConnectAccountShape,
   DisconnectAccountSchema,
   DisconnectAccountShape,
 } from './account-shapes.js';
@@ -28,8 +26,6 @@ import { PublishVideoDirectSchema, PublishVideoDirectShape } from './publish-dir
 export {
   CancelScheduleSchema,
   CancelScheduleShape,
-  ConnectAccountSchema,
-  ConnectAccountShape,
   DeleteSlotSchema,
   DeleteSlotShape,
   DisconnectAccountSchema,
@@ -123,6 +119,7 @@ export const ListFacesSchema = z.object(ListFacesShape);
 // update_persona lives in persona-update.ts (shape, schema and handler);
 // re-exported here so existing import sites keep working.
 export { UpdatePersonaShape, UpdatePersonaSchema, handleUpdatePersona } from './persona-update.js';
+export { ConnectAccountShape, ConnectAccountSchema, handleConnectAccount } from './connect-account.js';
 
 export const ListSocialAccountsShape = {};
 
@@ -310,136 +307,6 @@ export async function handleListSocialAccounts(
   return handleLibraryCall(() => client.listSocialAccounts(), 'listing social accounts');
 }
 
-export async function handleConnectAccount(
-  client: PostEngineerClient,
-  args: z.infer<typeof ConnectAccountSchema>
-): Promise<McpToolResponse> {
-  if (args.provider === 'bluesky') {
-    if (!args.handle || !args.appPassword) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Error: Bluesky requires both handle and appPassword.',
-          },
-        ],
-        isError: true,
-      };
-    }
-    try {
-      const result = await client.connectBlueskyAccount(args.handle, args.appPassword);
-      // Project the upstream response to named fields: stringifying the
-      // whole body would surface any field the route adds later.
-      const { accountId, did } = result as { accountId?: string; did?: string };
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Bluesky account connected successfully: accountId=${accountId} did=${did}`,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error connecting Bluesky account: ${getErrorMessage(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  if (args.provider === '3speak') {
-    if (!args.username || !args.postingKey) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Error: 3Speak requires both username and postingKey.',
-          },
-        ],
-        isError: true,
-      };
-    }
-    try {
-      const result = await client.connectThreespeakAccount(args.username, args.postingKey);
-      // Project the upstream response to named fields: stringifying the
-      // whole body would surface any field the route adds later.
-      const { accountId, username } = result as { accountId?: string; username?: string };
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `3Speak account connected successfully: username=${username} accountId=${accountId}`,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error connecting 3Speak account: ${getErrorMessage(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  try {
-    const parsed = z.object({ auth_url: z.string().url() }).safeParse(await client.getOAuthConnectUrl(args.provider));
-    if (!parsed.success) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Error: the connect endpoint did not return an auth_url.',
-          },
-        ],
-        isError: true,
-      };
-    }
-    const result = parsed.data;
-    // Never echo a non-https URL as a "open in your browser" authorization
-    // link: z.string().url() accepts any scheme, including javascript:.
-    if (new URL(result.auth_url).protocol !== 'https:') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Error: the connect endpoint returned a non-https auth_url.',
-          },
-        ],
-        isError: true,
-      };
-    }
-    return {
-      content: [
-        {
-          type: 'text',
-          text:
-            `To connect your ${args.provider} account, open this URL in a browser where you are signed in to Post Engineer with the same account as this API key, and authorize Post Engineer:\n\n` +
-            `${result.auth_url}\n\n` +
-            `Once you authorize, the account is connected automatically. Verify with list_social_accounts.`,
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error getting OAuth connect URL: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
-}
 
 export async function handleListSchedules(
   client: PostEngineerClient

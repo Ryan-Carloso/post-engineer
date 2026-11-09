@@ -146,6 +146,9 @@ To connect YouTube, Instagram, or LinkedIn accounts you need OAuth apps whose
 - **3Speak** uses a Hive posting key entered in the dashboard (encrypted at
   rest) — no OAuth app registration needed. The posting key only authorizes
   posts; never paste an owner, active, or master password.
+- **Rumble** uses a manually issued 40-character Simple Upload API access
+  token (request it by emailing bd@rumble.com), entered in the dashboard
+  with the channel ID — no OAuth, no app registration, no env vars.
 
 ### 5. Stripe setup (token billing)
 

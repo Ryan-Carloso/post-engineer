@@ -353,6 +353,11 @@ export const operationSchemas = {
     response: success({ accountId: str, username: str }),
     extraResponses: { 422: '3Speak rejected the username or posting key (code THREESPEAK_CREDENTIAL_REJECTED).' },
   },
+  // apps/web/app/api/rumble-connect/route.ts (JSON or form body)
+  'POST /api/rumble-connect': {
+    request: object({ channelId: str, accessToken: str }, ['channelId', 'accessToken']),
+    response: success({ accountId: str, channelId: str }),
+  },
   // apps/web/app/api/persona/faces/route.ts
   'GET /api/persona/faces': {
     response: object({
