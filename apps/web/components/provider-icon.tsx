@@ -2,7 +2,7 @@ import type { SocialProvider } from '@/lib/providers/registry';
 
 //---------------
 // ProviderIcon — the network glyph used on post cards. The icon map is
-// exhaustive by construction (`satisfies Record<SocialProvider, ...>`,
+// exhaustive by construction (typed `Record<SocialProvider, ...>`,
 // same pattern as PROVIDER_REGISTRY): adding a network to
 // SOCIAL_PROVIDERS without adding its glyph here is a typecheck error,
 // never a silent missing icon. Lucide dropped brand marks, so each
@@ -14,9 +14,10 @@ interface ProviderGlyph {
   label: string;
   className: string;
   path: string;
+  fillRule?: 'evenodd';
 }
 
-const PROVIDER_GLYPHS = {
+const PROVIDER_GLYPHS: Record<SocialProvider, ProviderGlyph> = {
   youtube: {
     label: 'youtube',
     className: 'text-[#ff2d20]',
@@ -53,14 +54,23 @@ const PROVIDER_GLYPHS = {
     path:
       'M24 12.07C24 5.41 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.04V9.41c0-3.02 1.8-4.7 4.54-4.7 1.31 0 2.68.24 2.68.24v2.97h-1.5c-1.5 0-1.96.93-1.96 1.89v2.26h3.32l-.53 3.5h-2.8V24C19.62 23.1 24 18.1 24 12.07Z',
   },
-} satisfies Record<SocialProvider, ProviderGlyph>;
+  rumble: {
+    label: 'rumble',
+    className: 'text-[#85c742]',
+    // Simplified play mark in Rumble green, not the official logo path:
+    // a rounded square with the triangle cut out (evenodd).
+    fillRule: 'evenodd',
+    path:
+      'M5 2h14a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3ZM10 8.2v7.6L16.8 12 10 8.2Z',
+  },
+};
 
 export function ProviderIcon({ provider }: { provider: SocialProvider }) {
   const glyph = PROVIDER_GLYPHS[provider];
   return (
     <span role="img" aria-label={glyph.label} className={`inline-flex ${glyph.className}`}>
       <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
-        <path d={glyph.path} />
+        <path d={glyph.path} fillRule={glyph.fillRule} />
       </svg>
     </span>
   );

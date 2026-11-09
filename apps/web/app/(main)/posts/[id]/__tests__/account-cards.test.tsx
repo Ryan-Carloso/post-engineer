@@ -8,6 +8,7 @@ const mockQueries = vi.hoisted(() => ({
   bluesky: { data: undefined as undefined | { accounts: unknown[] } },
   threads: { data: undefined as undefined | { accounts: unknown[] } },
   facebook: { data: undefined as undefined | { accounts: unknown[] } },
+  rumble: { data: undefined as undefined | { accounts: unknown[] } },
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -17,6 +18,7 @@ vi.mock('@/lib/api', () => ({
   useBlueskyAccountsQuery: () => mockQueries.bluesky,
   useThreadsAccountsQuery: () => mockQueries.threads,
   useFacebookAccountsQuery: () => mockQueries.facebook,
+  useRumbleAccountsQuery: () => mockQueries.rumble,
 }));
 
 import { usePostAccountCards } from '../account-cards';
@@ -47,6 +49,14 @@ describe('usePostAccountCards', () => {
         ],
       },
     };
+    mockQueries.rumble = {
+      data: {
+        accounts: [
+          { providerAccountId: 'chan-1', accountName: 'My Channel' },
+          { providerAccountId: 'chan-2', accountName: null },
+        ],
+      },
+    };
 
     const { result } = renderHook(() => usePostAccountCards());
 
@@ -58,6 +68,8 @@ describe('usePostAccountCards', () => {
       { id: 'th-1', type: 'threads', name: 'thr', thumbnail: 'https://th/p.png' },
       { id: 'fb-1', type: 'facebook', name: 'My Page', thumbnail: 'https://fb/p.png' },
       { id: 'fb-2', type: 'facebook', name: 'fb-2', thumbnail: undefined },
+      { id: 'chan-1', type: 'rumble', name: 'My Channel' },
+      { id: 'chan-2', type: 'rumble', name: 'chan-2' },
     ]);
   });
 

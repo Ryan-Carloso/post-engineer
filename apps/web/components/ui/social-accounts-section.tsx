@@ -94,7 +94,11 @@ export default function SocialAccountsSection({
   );
 }
 
-export interface BlueskyConnectDialogProps {
+export interface CredentialConnectDialogProps {
+  // Test-id/aria prefix: 'bluesky' keeps the Bluesky dialog's testids
+  // (bluesky-handle-input, ...); 'rumble' gives the Rumble dialog
+  // rumble-handle-input, ... Same two-field credential dialog, two providers.
+  idPrefix: string;
   title: string;
   hint: string;
   handleLabel: string;
@@ -112,7 +116,8 @@ export interface BlueskyConnectDialogProps {
   onClose: () => void;
 }
 
-export function BlueskyConnectDialog({
+export function CredentialConnectDialog({
+  idPrefix,
   title,
   hint,
   handleLabel,
@@ -128,19 +133,19 @@ export function BlueskyConnectDialog({
   onPasswordChange,
   onSubmit,
   onClose,
-}: BlueskyConnectDialogProps): ReactNode {
+}: CredentialConnectDialogProps): ReactNode {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/60 p-4" onMouseDown={onClose}>
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="bluesky-dialog-title"
+        aria-labelledby={`${idPrefix}-dialog-title`}
         className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl outline-none"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 id="bluesky-dialog-title" className="text-lg font-bold text-ink">{title}</h2>
+            <h2 id={`${idPrefix}-dialog-title`} className="text-lg font-bold text-ink">{title}</h2>
             <p className="mt-2 text-sm leading-5 text-muted-text">{hint}</p>
           </div>
           <button type="button" aria-label={closeLabel} onClick={onClose} className="rounded-md px-2 py-1 text-xl text-faint hover:bg-sunken hover:text-ink">×</button>
@@ -148,16 +153,16 @@ export function BlueskyConnectDialog({
         <div className="mt-5 grid gap-4">
           <label className="text-sm font-medium text-ink-soft">
             {handleLabel}
-            <input data-testid="bluesky-handle-input" type="text" value={handle} onChange={(event) => onHandleChange(event.target.value)} autoComplete="off" className="mt-1.5 w-full rounded-lg border border-line bg-card px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink focus:ring-2 focus:ring-ink/10" />
+            <input data-testid={`${idPrefix}-handle-input`} type="text" value={handle} onChange={(event) => onHandleChange(event.target.value)} autoComplete="off" className="mt-1.5 w-full rounded-lg border border-line bg-card px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink focus:ring-2 focus:ring-ink/10" />
           </label>
           <label className="text-sm font-medium text-ink-soft">
             {passwordLabel}
-            <input data-testid="bluesky-password-input" type="password" value={appPassword} onChange={(event) => onPasswordChange(event.target.value)} autoComplete="off" className="mt-1.5 w-full rounded-lg border border-line bg-card px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink focus:ring-2 focus:ring-ink/10" />
+            <input data-testid={`${idPrefix}-password-input`} type="password" value={appPassword} onChange={(event) => onPasswordChange(event.target.value)} autoComplete="off" className="mt-1.5 w-full rounded-lg border border-line bg-card px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink focus:ring-2 focus:ring-ink/10" />
           </label>
-          <Button type="button" data-testid="bluesky-connect-button" onClick={onSubmit} disabled={!handle.trim() || !appPassword.trim() || pending} className="w-full">
+          <Button type="button" data-testid={`${idPrefix}-connect-button`} onClick={onSubmit} disabled={!handle.trim() || !appPassword.trim() || pending} className="w-full">
             {submitLabel}
           </Button>
-          {error ? <p data-testid="bluesky-connect-error" className="text-sm text-destructive">{error}</p> : null}
+          {error ? <p data-testid={`${idPrefix}-connect-error`} className="text-sm text-destructive">{error}</p> : null}
           <p className="text-xs leading-4 text-faint">{securityHint}</p>
         </div>
       </div>

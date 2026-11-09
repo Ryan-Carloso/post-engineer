@@ -28,6 +28,7 @@ vi.mock('@/lib/api', () => ({
   useLinkedinAccountsQuery: vi.fn(),
   useThreadsAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
   useFacebookAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
+  useRumbleAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
   useBlueskyAccountsQuery: vi.fn(),
   useUpdateSlotMutation: vi.fn(),
   useDeleteSlotMutation: vi.fn(),
