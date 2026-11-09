@@ -513,6 +513,11 @@ export function buildUploadErrorResponse(
 export { handleBlueskyUpload } from '@/lib/upload/bluesky-handler';
 export type { BlueskyUploadResponse } from '@/lib/upload/bluesky-handler';
 
+// Reexport of the 3Speak handler (implemented in threespeak-handler.ts) so
+// /api/upload-content imports every provider from this module.
+export { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
+export type { ThreespeakUploadResponse } from '@/lib/upload/threespeak-handler';
+
 // Reexport of the LinkedIn handler (implemented in linkedin-handler.ts) so
 // /api/upload-content imports every provider from this module.
 export { handleLinkedinUpload } from '@/lib/upload/linkedin-handler';

@@ -14,6 +14,7 @@ export const PROVIDER_ACCOUNT_COLUMNS = {
   bluesky: 'bluesky_account_ids',
   threads: 'threads_account_ids',
   facebook: 'facebook_account_ids',
+  '3speak': 'threespeak_account_ids',
 } as const satisfies Record<Provider, string>;
 
 export type ScheduleAccountColumns = {
@@ -32,5 +33,6 @@ export function scheduleAccountColumns(
     bluesky_account_ids: accountIds.bluesky ?? [],
     threads_account_ids: accountIds.threads ?? [],
     facebook_account_ids: accountIds.facebook ?? [],
+    threespeak_account_ids: accountIds['3speak'] ?? [],
   };
 }

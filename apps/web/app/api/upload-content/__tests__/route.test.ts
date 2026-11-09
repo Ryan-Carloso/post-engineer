@@ -47,15 +47,19 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-const { mockHandleFacebookUpload, mockHandleThreadsUpload } = vi.hoisted(() => ({
+const { mockHandleFacebookUpload, mockHandleThreadsUpload, mockHandleThreespeakUpload } = vi.hoisted(() => ({
   mockHandleFacebookUpload: vi.fn(),
   mockHandleThreadsUpload: vi.fn(),
+  mockHandleThreespeakUpload: vi.fn(),
 }));
 vi.mock('@/lib/upload/facebook-handler', () => ({
   handleFacebookUpload: (...args: unknown[]) => mockHandleFacebookUpload(...args),
 }));
 vi.mock('@/lib/upload/threads-handler', () => ({
   handleThreadsUpload: (...args: unknown[]) => mockHandleThreadsUpload(...args),
+}));
+vi.mock('@/lib/upload/threespeak-handler', () => ({
+  handleThreespeakUpload: (...args: unknown[]) => mockHandleThreespeakUpload(...args),
 }));
 
 vi.mock('@/lib/upload/handlers', () => ({
@@ -290,7 +294,7 @@ describe('POST /api/upload-content', () => {
     expect(res.status).toBe(400);
     expect(mockBuildUploadErrorResponse).toHaveBeenCalled();
     const err = mockBuildUploadErrorResponse.mock.calls[0][0] as Error;
-    expect(err.message).toBe('Invalid provider. Use one of: youtube, instagram, bluesky, linkedin, threads, facebook');
+    expect(err.message).toBe('Invalid provider. Use one of: youtube, instagram, bluesky, linkedin, threads, facebook, 3speak');
     // The validation error carries the offending field for the client.
     expect((err as ValidationError).field).toBe('provider');
   });
@@ -354,6 +358,20 @@ describe('POST /api/upload-content', () => {
     expect(mockHandleInstagramUpload).not.toHaveBeenCalled();
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
     expect(await res.json()).toEqual({ success: true, results: [{ accountId: '111', success: true, postId: 'vid-1' }] });
+  });
+
+  it('handles the 3speak upload with the caller as the Hive owner', async () => {
+    mockHandleThreespeakUpload.mockResolvedValue({ success: true, results: [{ accountId: 'alice', success: true, postId: 'video-1' }] });
+    const res = await POST(makeRequest({ provider: '3speak' }));
+
+    expect(mockHandleThreespeakUpload).toHaveBeenCalledTimes(1);
+    const [formData, userId] = mockHandleThreespeakUpload.mock.calls[0] as [FormData, string];
+    expect(formData.get('provider')).toBe('3speak');
+    expect(userId).toBe(USER_ID);
+    expect(mockHandleFacebookUpload).not.toHaveBeenCalled();
+    expect(mockHandleInstagramUpload).not.toHaveBeenCalled();
+    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({ success: true, results: [{ accountId: 'alice', success: true, postId: 'video-1' }] });
   });
 
   it('responds with a handled error when the handler throws', async () => {

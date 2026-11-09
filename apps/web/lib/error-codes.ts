@@ -25,6 +25,7 @@ export const ERROR_CODES = {
   RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
   VALIDATION_FAILED: 'VALIDATION_FAILED',
   BLUESKY_CREDENTIAL_REJECTED: 'BLUESKY_CREDENTIAL_REJECTED',
+  THREESPEAK_CREDENTIAL_REJECTED: 'THREESPEAK_CREDENTIAL_REJECTED',
   VOICE_UNAVAILABLE: 'VOICE_UNAVAILABLE',
   UNKNOWN_VOICE: 'UNKNOWN_VOICE',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
@@ -50,6 +51,7 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   RATE_LIMIT_EXCEEDED: 'Too many video generation requests. Please try again later.',
   VALIDATION_FAILED: 'Request validation failed.',
   BLUESKY_CREDENTIAL_REJECTED: 'Invalid Bluesky handle or app password.',
+  THREESPEAK_CREDENTIAL_REJECTED: 'Invalid Hive username or posting key.',
   VOICE_UNAVAILABLE: 'The persona’s voice is unavailable and there is no default voice for its language. Update the persona.',
   UNKNOWN_VOICE:
     'Unknown voice "{attempt}". Not a house voice and not one of your clones. Pick one from GET /api/persona/voices.',

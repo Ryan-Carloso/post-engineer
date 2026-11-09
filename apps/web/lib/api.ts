@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { createSupabaseClient } from '@/lib/supabase/client';
 import { useUploadStore } from '@/lib/store';
-import type { PublicAccountItem, BlueskyAccountData, LinkedinAccountData, ThreadsAccountData, FacebookAccountData } from '@/lib/providers/registry';
+import type { PublicAccountItem, BlueskyAccountData, LinkedinAccountData, ThreadsAccountData, FacebookAccountData, ThreespeakAccountData } from '@/lib/providers/registry';
 import { mapSchedule, type ScheduleRow } from '@/lib/schedule-row';
 import type {
   AccountResponse,
@@ -585,6 +585,7 @@ const selectBlueskyAccounts = selectProviderAccounts<BlueskyAccountData>('bluesk
 const selectLinkedinAccounts = selectProviderAccounts<LinkedinAccountData>('linkedin');
 const selectThreadsAccounts = selectProviderAccounts<ThreadsAccountData>('threads');
 const selectFacebookAccounts = selectProviderAccounts<FacebookAccountData>('facebook');
+const selectThreespeakAccounts = selectProviderAccounts<ThreespeakAccountData>('3speak');
 export function useYouTubeAccountsQuery(): UseQueryResult<AccountResponse, Error> {
   return useSocialAccountsQuery(selectYouTubeAccounts);
 }
@@ -609,6 +610,10 @@ export function useThreadsAccountsQuery(): UseQueryResult<ProviderAccountsRespon
 
 export function useFacebookAccountsQuery(): UseQueryResult<ProviderAccountsResponse<FacebookAccountData>, Error> {
   return useSocialAccountsQuery(selectFacebookAccounts);
+}
+
+export function useThreespeakAccountsQuery(): UseQueryResult<ProviderAccountsResponse<ThreespeakAccountData>, Error> {
+  return useSocialAccountsQuery(selectThreespeakAccounts);
 }
 
 //---------------
@@ -689,6 +694,7 @@ export interface ScheduleConfig {
   blueskyAccountIds: string[];
   threadsAccountIds: string[];
   facebookAccountIds: string[];
+  threespeakAccountIds: string[];
   daysOfWeek: number[];
   startHour: number | null;
   endHour: number | null;
@@ -957,6 +963,7 @@ export interface SlotDetailPayload {
     blueskyAccountIds: string[];
     threadsAccountIds: string[];
     facebookAccountIds: string[];
+    threespeakAccountIds: string[];
     // The schedule's IANA timezone — the detail page renders the slot time
     // in this zone so "10:00" is never ambiguous about whose 10:00 it is.
     timezone: string;

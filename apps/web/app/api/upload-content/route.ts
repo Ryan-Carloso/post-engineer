@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { handleFacebookUpload } from '@/lib/upload/facebook-handler';
+import { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
 import { logger } from '@/lib/logger';
 import { ValidationError } from '@/lib/errors';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -19,13 +20,14 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 //---------------
 // Unified content upload — POST /api/upload-content
 // FormData:
-//   provider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook'
+//   provider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | '3speak'
 //   youtube:    video, title, description, tags, privacyStatus, accountIds (repeatable)
 //   instagram:  file, caption, igAccountIds (repeatable)
 //   bluesky:    video, caption, did (repeatable)
 //   linkedin:   video, caption, linkedinAccountIds (repeatable; member id or org URN)
 //   threads:    video, caption, threadsAccountIds (repeatable)
 //   facebook:   video, caption, facebookAccountIds (repeatable; Page ids)
+//   3speak:     video, caption, threespeakAccountIds (repeatable; Hive usernames)
 //   engine:     userId (MONEYPRINT_API_SECRET only — internal publish-back)
 // Auth = Supabase session (UI), personal API key (pe_live_...), or
 // Authorization: Bearer <MONEYPRINT_API_SECRET> (engine). Per-user rate limit.
@@ -128,7 +130,9 @@ async function postHandler(request: NextRequest) {
               ? await handleThreadsUpload(formData, userId)
               : provider === 'facebook'
                 ? await handleFacebookUpload(formData, userId)
-                : await handleInstagramUpload(formData, userId, logId, startTime);
+                : provider === '3speak'
+                  ? await handleThreespeakUpload(formData, userId)
+                  : await handleInstagramUpload(formData, userId, logId, startTime);
 
     logger.info('[upload-content] handler finalizado', { provider, success: response.success, logId });
     return NextResponse.json(response);

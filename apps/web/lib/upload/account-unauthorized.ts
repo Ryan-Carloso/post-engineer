@@ -36,6 +36,7 @@ export function httpStatusOf(error: unknown): number | undefined {
 export function isUnauthorizedError(error: unknown): boolean {
   if (httpStatusOf(error) === 401) return true;
   if (isBlueskyInvalidCredentials(error)) return true;
+  if (isThreespeakInvalidCredentials(error)) return true;
   return error instanceof Error && /^unauthorized$/i.test(error.message.trim());
 }
 
@@ -51,6 +52,21 @@ function isBlueskyInvalidCredentials(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
   const record = error as Record<string, unknown>;
   return record.name === 'BlueskyError' && record.code === 'invalid_credentials';
+}
+
+//---------------
+// isThreespeakInvalidCredentials — same shape as Bluesky: a dead Hive
+// posting key surfaces as ThreespeakError code 'invalid_credentials'
+// (the Studio login memo no longer decrypts with it, or Studio rejects
+// the minted JWT), never as a numeric 401. A stored credential that no
+// longer authenticates is exactly the account that needs reconnecting.
+// Duck-typed (name + code) so this leaf stays free of the 3Speak client
+// import.
+//---------------
+function isThreespeakInvalidCredentials(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const record = error as Record<string, unknown>;
+  return record.name === 'ThreespeakError' && record.code === 'invalid_credentials';
 }
 
 export function reportAccountUnauthorized(

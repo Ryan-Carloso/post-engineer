@@ -70,6 +70,7 @@ export interface SlotPostDetail {
     blueskyAccountIds: string[];
     threadsAccountIds: string[];
     facebookAccountIds: string[];
+    threespeakAccountIds: string[];
     timezone: string;
     publishMode: 'scheduled' | 'asap';
   };
@@ -203,7 +204,7 @@ export async function getSlotPost(
 
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
-    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode')
+    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, threespeak_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode')
     .eq('id', row.schedule_id)
     .eq('user_id', userId)
     .maybeSingle();
@@ -218,6 +219,7 @@ export async function getSlotPost(
     bluesky_account_ids: string[] | null;
     threads_account_ids: string[] | null;
     facebook_account_ids: string[] | null;
+    threespeak_account_ids: string[] | null;
     timezone: string;
     post_language: string | null;
     post_voice_id: string | null;
@@ -349,6 +351,7 @@ export async function getSlotPost(
   const blueskyAccountIdsOut = scheduleRow.bluesky_account_ids ?? [];
   const threadsAccountIdsOut = scheduleRow.threads_account_ids ?? [];
   const facebookAccountIdsOut = scheduleRow.facebook_account_ids ?? [];
+  const threespeakAccountIdsOut = scheduleRow.threespeak_account_ids ?? [];
   const timezoneOut = scheduleRow.timezone;
   const publishModeOut = scheduleRow.publish_mode === 'asap' ? 'asap' : 'scheduled';
 
@@ -383,6 +386,7 @@ export async function getSlotPost(
       blueskyAccountIds: blueskyAccountIdsOut,
       threadsAccountIds: threadsAccountIdsOut,
       facebookAccountIds: facebookAccountIdsOut,
+      threespeakAccountIds: threespeakAccountIdsOut,
       timezone: timezoneOut,
       publishMode: publishModeOut,
     },

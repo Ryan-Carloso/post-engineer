@@ -151,6 +151,18 @@ const facebook: ProfileSource = {
   },
 };
 
+// 3Speak has no public profile endpoint in the documented Studio API
+// (my-videos returns videos, not a profile), so the resync never applies:
+// the card keeps the Hive username stored at connect time. fetch returns
+// the stored name so a future caller degrades safely instead of throwing.
+const threespeak: ProfileSource = {
+  pictureKey: 'profilePictureUrl',
+  applies: () => false,
+  async fetch(_supabase, _userId, record) {
+    return { accountName: record.accountName, pictureUrl: null, metadata: {} };
+  },
+};
+
 export const PROFILE_SOURCES: Record<SocialProvider, ProfileSource> = {
   instagram,
   threads,
@@ -158,4 +170,5 @@ export const PROFILE_SOURCES: Record<SocialProvider, ProfileSource> = {
   bluesky,
   linkedin,
   facebook,
+  '3speak': threespeak,
 };
