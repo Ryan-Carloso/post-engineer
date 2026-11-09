@@ -67,7 +67,7 @@ export function ProviderIcon({ provider }: { provider: SocialProvider }) {
   const glyph = PROVIDER_GLYPHS[provider];
   return (
     <span role="img" aria-label={glyph.label} className={`inline-flex ${glyph.className}`}>
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
+      <svg viewBox="0 0 24 24" className="size-5" fill="currentColor" aria-hidden="true">
         <path d={glyph.path} />
       </svg>
     </span>
