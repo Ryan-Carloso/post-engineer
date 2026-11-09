@@ -18,6 +18,8 @@ Wire contract (multipart/form-data):
   repeated ``threadsAccountIds`` fields.
 - Facebook: ``provider=facebook``, ``video`` (file), ``caption``,
   repeated ``facebookAccountIds`` fields (see ``publish_facebook``).
+- 3Speak: ``provider=3speak``, ``video`` (file), ``caption``,
+  repeated ``threespeakAccountIds`` fields (see ``publish_threespeak``).
 
 This module owns only types, validation and multipart part builders; the HTTP
 transport lives in the client function of the same module.
@@ -34,6 +36,10 @@ from typing import Any
 from app.services.publish_facebook import (  # noqa: F401 - re-exported for callers
     FACEBOOK_CAPTION_MAX_LENGTH, FACEBOOK_PROVIDER, FacebookMetadata,
     facebook_fields, validate_facebook_metadata,
+)
+from app.services.publish_threespeak import (  # noqa: F401 - re-exported for callers
+    THREESPEAK_PROVIDER, ThreespeakMetadata,
+    threespeak_fields, validate_threespeak_metadata,
 )
 
 VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
@@ -59,6 +65,7 @@ VALID_PROVIDERS: tuple[str, ...] = (
     LINKEDIN_PROVIDER,
     THREADS_PROVIDER,
     FACEBOOK_PROVIDER,
+    THREESPEAK_PROVIDER,
 )
 
 
@@ -132,6 +139,7 @@ class PublishMetadata:
     linkedin: LinkedInMetadata | None = None
     threads: ThreadsMetadata | None = None
     facebook: FacebookMetadata | None = None
+    threespeak: ThreespeakMetadata | None = None
 
 
 @dataclass(frozen=True)
@@ -155,6 +163,7 @@ def validate_publish_metadata(
     linkedin: LinkedInMetadata | None = None,
     threads: ThreadsMetadata | None = None,
     facebook: FacebookMetadata | None = None,
+    threespeak: ThreespeakMetadata | None = None,
 ) -> PublishMetadata:
     """Validate provider selection and per-provider metadata.
 
@@ -225,6 +234,8 @@ def validate_publish_metadata(
             )
     if FACEBOOK_PROVIDER in providers:
         validate_facebook_metadata(facebook)
+    if THREESPEAK_PROVIDER in providers:
+        validate_threespeak_metadata(threespeak)
 
     return PublishMetadata(
         providers=tuple(providers),
@@ -234,6 +245,7 @@ def validate_publish_metadata(
         linkedin=linkedin,
         threads=threads,
         facebook=facebook,
+        threespeak=threespeak,
     )
 
 
@@ -374,6 +386,7 @@ _PART_BUILDERS: _PartBuilders = {
     LINKEDIN_PROVIDER: (LinkedInMetadata, build_linkedin_parts),
     THREADS_PROVIDER: (ThreadsMetadata, build_threads_parts),
     FACEBOOK_PROVIDER: (FacebookMetadata, lambda metadata: MultipartParts(fields=facebook_fields(metadata))),
+    THREESPEAK_PROVIDER: (ThreespeakMetadata, lambda metadata: MultipartParts(fields=threespeak_fields(metadata))),
 }
 
 
@@ -404,7 +417,7 @@ def publish_video(
     base_url: str,
     api_secret: str,
     owner_user_id: str,
-    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata,
+    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | ThreespeakMetadata,
     video_path: str,
     video_bytes: bytes,
     content_type: str,
@@ -468,7 +481,7 @@ def publish_video(
                 result: dict[str, Any] = response.json()
             except ValueError as exc:
                 raise PublishError("upload API returned invalid JSON") from exc
-            # HTTP 200 is not success. Bluesky/LinkedIn/Threads/Facebook answer 200 with
+            # HTTP 200 is not success. Bluesky/LinkedIn/Threads/Facebook/3Speak answer 200 with
             # success:false (and often error/errorType). YouTube/Instagram
             # keep success:true and put per-account outcomes in results.
             # Either shape with nothing posted must raise: the message
