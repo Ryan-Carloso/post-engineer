@@ -2,7 +2,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Memo, PrivateKey } from '@hiveio/dhive';
 import {
-  ThreespeakError,
   loginToThreespeak,
   parseMp4DurationSeconds,
   tusUploadVideo,
