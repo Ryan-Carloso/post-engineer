@@ -18,6 +18,9 @@ Wire contract (multipart/form-data):
   repeated ``threadsAccountIds`` fields.
 - Facebook: ``provider=facebook``, ``video`` (file), ``caption``,
   repeated ``facebookAccountIds`` fields (see ``publish_facebook``).
+- Rumble: ``provider=rumble``, ``video`` (file), ``title``,
+  ``description``, ``license_type`` (``0`` = Personal Use), repeated
+  ``rumbleAccountIds`` fields (see ``publish_rumble``).
 
 This module owns only types, validation and multipart part builders; the HTTP
 transport lives in the client function of the same module.
@@ -31,9 +34,16 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.services.bluesky_caption import (  # noqa: F401 - re-exported for callers
+    BLUESKY_CAPTION_MAX_GRAPHEMES, count_graphemes, truncate_bluesky_caption,
+)
 from app.services.publish_facebook import (  # noqa: F401 - re-exported for callers
     FACEBOOK_CAPTION_MAX_LENGTH, FACEBOOK_PROVIDER, FacebookMetadata,
     facebook_fields, validate_facebook_metadata,
+)
+from app.services.publish_rumble import (  # noqa: F401 - re-exported for callers
+    RUMBLE_PROVIDER, RUMBLE_TITLE_MAX_LENGTH, RumbleMetadata,
+    rumble_fields, validate_rumble_metadata,
 )
 
 VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
@@ -43,7 +53,6 @@ VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
 BASE_URL_ENV: str = "MPT_UPLOAD_API_BASE_URL"
 SERVICE_KEY_ENV: str = "MONEYPRINT_API_SECRET"
 INSTAGRAM_CAPTION_MAX_LENGTH: int = 2200
-BLUESKY_CAPTION_MAX_GRAPHEMES: int = 300
 LINKEDIN_CAPTION_MAX_LENGTH: int = 3000
 THREADS_CAPTION_MAX_LENGTH: int = 500
 
@@ -59,6 +68,7 @@ VALID_PROVIDERS: tuple[str, ...] = (
     LINKEDIN_PROVIDER,
     THREADS_PROVIDER,
     FACEBOOK_PROVIDER,
+    RUMBLE_PROVIDER,
 )
 
 
@@ -132,6 +142,7 @@ class PublishMetadata:
     linkedin: LinkedInMetadata | None = None
     threads: ThreadsMetadata | None = None
     facebook: FacebookMetadata | None = None
+    rumble: RumbleMetadata | None = None
 
 
 @dataclass(frozen=True)
@@ -155,6 +166,7 @@ def validate_publish_metadata(
     linkedin: LinkedInMetadata | None = None,
     threads: ThreadsMetadata | None = None,
     facebook: FacebookMetadata | None = None,
+    rumble: RumbleMetadata | None = None,
 ) -> PublishMetadata:
     """Validate provider selection and per-provider metadata.
 
@@ -201,7 +213,7 @@ def validate_publish_metadata(
             raise ValueError("bluesky provider requires bluesky metadata")
         if not bluesky.account_ids:
             raise ValueError("bluesky publish requires at least one account id")
-        if _count_graphemes(bluesky.caption) > BLUESKY_CAPTION_MAX_GRAPHEMES:
+        if count_graphemes(bluesky.caption) > BLUESKY_CAPTION_MAX_GRAPHEMES:
             raise ValueError("bluesky caption exceeds 300 graphemes")
     if LINKEDIN_PROVIDER in providers:
         if linkedin is None:
@@ -225,6 +237,8 @@ def validate_publish_metadata(
             )
     if FACEBOOK_PROVIDER in providers:
         validate_facebook_metadata(facebook)
+    if RUMBLE_PROVIDER in providers:
+        validate_rumble_metadata(rumble)
 
     return PublishMetadata(
         providers=tuple(providers),
@@ -234,6 +248,7 @@ def validate_publish_metadata(
         linkedin=linkedin,
         threads=threads,
         facebook=facebook,
+        rumble=rumble,
     )
 
 
@@ -295,41 +310,6 @@ def build_threads_parts(metadata: ThreadsMetadata) -> MultipartParts:
     )
 
 
-def _count_graphemes(text: str) -> int:
-    """Count user-perceived characters (emoji ZWJ sequences count as one)."""
-    import unicodedata
-    count = 0
-    previous_combining = False
-    for char in text:
-        if unicodedata.combining(char) or char == "\u200d":
-            previous_combining = True
-            continue
-        if previous_combining:
-            previous_combining = False
-            continue
-        count += 1
-    return count
-
-
-def truncate_bluesky_caption(caption: str) -> str:
-    """Truncate a caption to 300 graphemes with an ellipsis, never breaking emoji."""
-    if _count_graphemes(caption) <= BLUESKY_CAPTION_MAX_GRAPHEMES:
-        return caption
-    result: list[str] = []
-    count = 0
-    import unicodedata
-    for char in caption:
-        if count == BLUESKY_CAPTION_MAX_GRAPHEMES - 1:
-            break
-        if unicodedata.combining(char) or char == "\u200d":
-            if result:
-                result[-1] += char
-            continue
-        result.append(char)
-        count += 1
-    return "".join(result) + "…"
-
-
 def build_video_file_part(
     fileobj: io.BufferedIOBase | io.BytesIO,
     filename: str,
@@ -374,6 +354,7 @@ _PART_BUILDERS: _PartBuilders = {
     LINKEDIN_PROVIDER: (LinkedInMetadata, build_linkedin_parts),
     THREADS_PROVIDER: (ThreadsMetadata, build_threads_parts),
     FACEBOOK_PROVIDER: (FacebookMetadata, lambda metadata: MultipartParts(fields=facebook_fields(metadata))),
+    RUMBLE_PROVIDER: (RumbleMetadata, lambda metadata: MultipartParts(fields=rumble_fields(metadata))),
 }
 
 
@@ -404,7 +385,7 @@ def publish_video(
     base_url: str,
     api_secret: str,
     owner_user_id: str,
-    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata,
+    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | RumbleMetadata,
     video_path: str,
     video_bytes: bytes,
     content_type: str,

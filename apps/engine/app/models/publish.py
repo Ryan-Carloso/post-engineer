@@ -1,4 +1,4 @@
-"""Publish metadata models for task requests (YouTube / Instagram / Bluesky / LinkedIn / Threads / Facebook)."""
+"""Publish metadata models for task requests (YouTube / Instagram / Bluesky / LinkedIn / Threads / Facebook / Rumble)."""
 
 from typing import Literal, Optional
 
@@ -50,16 +50,25 @@ class FacebookPublish(BaseModel):
     account_ids: list[str] = Field(min_length=1)
 
 
-class PublishParams(BaseModel):
-    """Optional publish selection for a task (YouTube/Instagram/Bluesky/LinkedIn/Threads/Facebook)."""
+class RumblePublish(BaseModel):
+    """Rumble publish fields required by the internal upload API."""
 
-    providers: list[Literal["youtube", "instagram", "bluesky", "linkedin", "threads", "facebook"]] = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1)
+    account_ids: list[str] = Field(min_length=1)
+
+
+class PublishParams(BaseModel):
+    """Optional publish selection for a task (YouTube/Instagram/Bluesky/LinkedIn/Threads/Facebook/Rumble)."""
+
+    providers: list[Literal["youtube", "instagram", "bluesky", "linkedin", "threads", "facebook", "rumble"]] = Field(min_length=1)
     youtube: Optional[YouTubePublish] = None
     instagram: Optional[InstagramPublish] = None
     bluesky: Optional["BlueskyPublish"] = None
     linkedin: Optional[LinkedInPublish] = None
     threads: Optional[ThreadsPublish] = None
     facebook: Optional[FacebookPublish] = None
+    rumble: Optional[RumblePublish] = None
 
     @model_validator(mode="after")
     def check_provider_metadata(self) -> "PublishParams":
@@ -75,4 +84,6 @@ class PublishParams(BaseModel):
             raise ValueError("threads provider requires threads metadata")
         if "facebook" in self.providers and self.facebook is None:
             raise ValueError("facebook provider requires facebook metadata")
+        if "rumble" in self.providers and self.rumble is None:
+            raise ValueError("rumble provider requires rumble metadata")
         return self
