@@ -54,6 +54,7 @@ describe('validateSegments repeated photos', () => {
     if (result.ok) return;
     expect(result.error.field).toBe('segments.2.media.0');
     expect(result.error.rule).toBe(REPEAT_RULE);
+    expect(result.error.fix).toBe(REPEAT_FIX);
   });
 
   it('accepts distinct photos, including the same characters as mediaId and as url', () => {

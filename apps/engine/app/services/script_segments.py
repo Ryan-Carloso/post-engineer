@@ -263,7 +263,7 @@ def validate_segments(segments: Any, material: str = "broll") -> dict[str, Any]:
 
     Rule order is deliberate: shape, then forbidden content, then hook
     punctuation, then repetition, then per-part word counts, then the
-    total, then the segment cap, then media shape, then repeated photos, then the media cap.
+    total, then the segment cap, then media shape (including repeated photos), then the media cap.
     A caller that fixes the first reported error and resubmits converges
     without guessing.
 

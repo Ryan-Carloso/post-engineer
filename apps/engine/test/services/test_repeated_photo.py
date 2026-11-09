@@ -65,6 +65,7 @@ def test_trimmed_media_id_matches_the_untrimmed_copy():
         script_segments.validate_segments(segments)
     assert exc_info.value.field == "segments.2.media.0"
     assert exc_info.value.rule == REPEAT_RULE
+    assert exc_info.value.fix == REPEAT_FIX
 
 
 def test_same_string_as_media_id_and_url_is_not_the_same_photo():
