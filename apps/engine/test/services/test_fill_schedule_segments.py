@@ -124,3 +124,19 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
         dispatch.assert_not_called()
         self.assertEqual(store.updates[0][1]["status"], "failed")
         self.assertIn("segments", store.updates[0][1]["error"])
+
+    def test_legacy_single_object_media_dispatches_as_a_list(self):
+        # Rows stored before the media-list contract carry one object per
+        # segment; dispatch normalizes it to a list instead of failing the
+        # prepaid slot on a Pydantic list_type error with no refund.
+        legacy = [
+            dict(SEGMENTS[0]),
+            dict(SEGMENTS[1], media={"mediaId": "abc123def456abc123def456abc12345.jpg"}),
+            dict(SEGMENTS[2]),
+        ]
+        request = self._dispatched_request(_slot(faceless=True, segments=legacy))
+        self.assertIsNotNone(request.segments)
+        self.assertEqual(
+            request.segments[1].media[0].mediaId,
+            "abc123def456abc123def456abc12345.jpg",
+        )

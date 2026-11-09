@@ -223,6 +223,26 @@ def _check_overlay(overlay: Any, field: str) -> None:
             )
 
 
+def legacy_media_list(segments: Any) -> Any:
+    """Wrap pre-list-contract single-object media in a list.
+
+    Rows stored before the media-list contract carry one object per
+    segment (`media: { mediaId | url, overlay? }`). Persisted-row
+    dispatch normalizes that shape here; fresh requests still reject
+    a single object in _check_media, so this must never run on the
+    request path.
+    """
+    if not isinstance(segments, list):
+        return segments
+    normalized = []
+    for segment in segments:
+        if isinstance(segment, dict) and isinstance(segment.get("media"), dict):
+            normalized.append({**segment, "media": [segment["media"]]})
+        else:
+            normalized.append(segment)
+    return normalized
+
+
 def validate_segments(segments: Any, material: str = "broll") -> dict[str, Any]:
     """Validate segments in rule order and return the normalized result.
 

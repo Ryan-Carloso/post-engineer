@@ -590,8 +590,7 @@ def test_the_six_media_cap_still_holds_outside_the_images_material():
     assert exc_info.value.fix == "Remove medias until there are at most 6."
 
 
-def test_images_cap_fix_names_merging_when_minimums_exceed_the_cap():
-    # Hook 25 words + six 25-word body segments + a 20-word CTA = 195
+def test_images_cap_fix_names_merging_when_minimums_exceed_the_cap():    # Hook 25 words + six 25-word body segments + a 20-word CTA = 195
     # words: every segment meets its density minimum (4, 4 x 6, 3 = 31
     # photos) yet the 30-photo cap fires, and removing any photo
     # re-triggers density. The cap fix must name the escape (merge
@@ -610,6 +609,33 @@ def test_images_cap_fix_names_merging_when_minimums_exceed_the_cap():
     assert exc_info.value.field == "segments"
     assert exc_info.value.rule == "At most 30 medias are allowed."
     assert "merge segments" in exc_info.value.fix
+
+
+def test_legacy_media_list_wraps_a_single_object_media():
+    segments = [
+        {"kind": "hook", "text": "Hook text."},
+        {"kind": "body", "text": "Body text.", "media": {"mediaId": "abc.jpg"}},
+        {"kind": "cta", "text": "Cta text.", "media": [{"url": "https://example.com/x.jpg"}]},
+        {"kind": "body", "text": "No media here."},
+        {"kind": "body", "text": "Null media.", "media": None},
+    ]
+    wrapped = script_segments.legacy_media_list(segments)
+    assert wrapped[1]["media"] == [{"mediaId": "abc.jpg"}]
+    assert wrapped[2]["media"] == [{"url": "https://example.com/x.jpg"}]
+    assert "media" not in wrapped[3]
+    assert wrapped[4]["media"] is None
+    assert script_segments.legacy_media_list("not a list") == "not a list"
+
+
+def test_fresh_single_object_media_is_still_rejected():
+    # Only persisted-row dispatch normalizes the legacy shape; a fresh
+    # request still sends media as a list, and a single object is a 400.
+    segments = _images_segments()
+    segments[1]["media"] = {"mediaId": "abc.jpg"}
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments, "images")
+    assert exc_info.value.field == "segments.1.media"
+    assert exc_info.value.rule == "Media must be an array."
 
 
 def test_segments_to_script_forwards_the_material_to_validation():
