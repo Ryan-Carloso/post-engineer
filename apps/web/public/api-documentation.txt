@@ -108,6 +108,7 @@ GET    /api/account                                           list social accoun
 DELETE /api/account                                           disconnect account
 POST   /api/account/connect-url                               connect account (OAuth URL)
 POST   /api/bluesky-connect                                   connect account (Bluesky)
+POST   /api/rumble-connect                                    connect account (Rumble)
 GET    /api/schedule                                          list schedules
 DELETE /api/schedule                                          cancel schedule
 GET    /api/schedule/status                                   list posts

@@ -520,7 +520,7 @@ describe('PostsPage fallbacks', () => {
     const options = within(providerSelect)
       .getAllByRole('option')
       .map((option) => option.textContent);
-    expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'LinkedIn', 'Bluesky', 'Threads', 'Facebook']);
+    expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'LinkedIn', 'Bluesky', 'Threads', 'Facebook', 'Rumble']);
   });
 
 });

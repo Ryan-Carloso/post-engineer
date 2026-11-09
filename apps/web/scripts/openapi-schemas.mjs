@@ -334,6 +334,11 @@ export const operationSchemas = {
     response: success({ accountId: str, did: str }),
     extraResponses: { 422: 'Bluesky rejected the handle or app password (code BLUESKY_CREDENTIAL_REJECTED).' },
   },
+  // apps/web/app/api/rumble-connect/route.ts (JSON or form body)
+  'POST /api/rumble-connect': {
+    request: object({ channelId: str, accessToken: str }, ['channelId', 'accessToken']),
+    response: success({ accountId: str, channelId: str }),
+  },
   // apps/web/app/api/persona/faces/route.ts
   'GET /api/persona/faces': {
     response: object({
