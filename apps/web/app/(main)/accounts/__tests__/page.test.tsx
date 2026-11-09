@@ -539,6 +539,32 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('instagram');
   });
 
+  it('renders the dialog copy and starts closed with empty fields', async () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(screen.queryByTestId('bluesky-handle-input')).not.toBeInTheDocument();
+    // Section order: youtube, instagram, bluesky, linkedin, threads.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[2]);
+    expect(await screen.findByTestId('bluesky-handle-input')).toBeTruthy();
+    expect(screen.getByText('accounts.blueskyConnectTitle')).toBeTruthy();
+    expect(screen.getByText('accounts.blueskyConnectHint')).toBeTruthy();
+    expect(screen.getByText('accounts.blueskyHandleLabel')).toBeTruthy();
+    expect(screen.getByText('accounts.blueskyPasswordLabel')).toBeTruthy();
+    expect(screen.getByText('accounts.blueskyConnect')).toBeTruthy();
+    expect(screen.getByText('accounts.blueskySecurityHint')).toBeTruthy();
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-labelledby', 'bluesky-dialog-title');
+    expect(document.getElementById('bluesky-dialog-title')).toHaveTextContent('accounts.blueskyConnectTitle');
+    expect(screen.getByTestId('bluesky-handle-input')).toHaveValue('');
+    expect(screen.getByTestId('bluesky-password-input')).toHaveValue('');
+  });
+
+  it('closes the Bluesky dialog from its close button', async () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[2]);
+    expect(await screen.findByTestId('bluesky-handle-input')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'accounts.closeDialog' }));
+    await waitFor(() => expect(screen.queryByTestId('bluesky-handle-input')).not.toBeInTheDocument());
+  });
+
   async function submitBlueskyConnect(status: number, body: unknown): Promise<void> {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status, json: async () => body })));
     render(<AccountsPage />, { wrapper: createWrapper() });
@@ -840,6 +866,134 @@ describe('Rumble accounts section', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(useAccountListErrorTelemetry).toHaveBeenCalledWith('rumble', 'rumble down');
+  });
+
+  it('renders the dialog copy and starts closed with empty fields', async () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(screen.queryByTestId('rumble-handle-input')).not.toBeInTheDocument();
+    // Rumble is the last section on the page, so its connect button is last.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    expect(await screen.findByTestId('rumble-handle-input')).toBeTruthy();
+    expect(screen.getByText('accounts.rumbleConnectTitle')).toBeTruthy();
+    expect(screen.getByText('accounts.rumbleConnectHint')).toBeTruthy();
+    expect(screen.getByText('accounts.rumbleChannelLabel')).toBeTruthy();
+    expect(screen.getByText('accounts.rumbleTokenLabel')).toBeTruthy();
+    expect(screen.getByText('accounts.rumbleConnect')).toBeTruthy();
+    expect(screen.getByText('accounts.rumbleSecurityHint')).toBeTruthy();
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-labelledby', 'rumble-dialog-title');
+    expect(document.getElementById('rumble-dialog-title')).toHaveTextContent('accounts.rumbleConnectTitle');
+    expect(screen.getByTestId('rumble-handle-input')).toHaveValue('');
+    expect(screen.getByTestId('rumble-password-input')).toHaveValue('');
+  });
+
+  it('closes the Rumble dialog from its close button', async () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    expect(await screen.findByTestId('rumble-handle-input')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'accounts.closeDialog' }));
+    await waitFor(() => expect(screen.queryByTestId('rumble-handle-input')).not.toBeInTheDocument());
+  });
+
+  it('keeps the Rumble connect button disabled until both fields are non-blank', async () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    const button = await screen.findByTestId('rumble-connect-button');
+    expect(button).toBeDisabled();
+    fireEvent.change(screen.getByTestId('rumble-handle-input'), { target: { value: '   ' } });
+    expect(button).toBeDisabled();
+    fireEvent.change(screen.getByTestId('rumble-handle-input'), { target: { value: 'chan-1' } });
+    expect(button).toBeDisabled();
+    fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: '   ' } });
+    expect(button).toBeDisabled();
+    fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
+    expect(button).not.toBeDisabled();
+  });
+
+  it('renders no Rumble cards when the query has no data', () => {
+    vi.mocked(useRumbleAccountsQuery, { partial: true }).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(screen.queryAllByTestId('account-card')).toHaveLength(0);
+  });
+
+  it('posts trimmed values, closes the dialog and refetches on success', async () => {
+    const refetch = vi.fn();
+    vi.mocked(useRumbleAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [] },
+      isLoading: false,
+      error: null,
+      refetch,
+    });
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ success: true }) }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: '  chan-1  ' } });
+    fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
+    fireEvent.click(screen.getByTestId('rumble-connect-button'));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/rumble-connect');
+    expect(init.method).toBe('POST');
+    expect((init.body as FormData).get('channelId')).toBe('chan-1');
+    await waitFor(() => expect(screen.queryByTestId('rumble-handle-input')).not.toBeInTheDocument());
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('rumble-connect-error')).not.toBeInTheDocument();
+  });
+
+  it('disables the connect button while the request is pending and re-enables it after', async () => {
+    let resolveFetch: (value: unknown) => void = () => undefined;
+    const fetchMock = vi.fn(
+      () => new Promise((resolve) => { resolveFetch = resolve as (value: unknown) => void; }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: 'chan-1' } });
+    fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
+    fireEvent.click(screen.getByTestId('rumble-connect-button'));
+    await waitFor(() => expect(screen.getByTestId('rumble-connect-button')).toBeDisabled());
+    resolveFetch({ ok: true, status: 200, json: async () => ({ success: true }) });
+    await waitFor(() => expect(screen.queryByTestId('rumble-handle-input')).not.toBeInTheDocument());
+  });
+
+  it('reports a dead hub session (401), shows the error text and clears the token', async () => {
+    const notify = vi.mocked(notifyIfSessionExpired);
+    notify.mockClear();
+    const fetchMock = await submitRumbleConnect(401, { success: false, error: 'Authentication required.' });
+    expect(await screen.findByTestId('rumble-connect-error')).toHaveTextContent('accounts.rumbleConnectError');
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(notify).mock.calls[0][0]).toMatchObject({ status: 401 });
+    expect(screen.getByTestId('rumble-password-input')).toHaveValue('');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the error text when the connect request throws', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: 'chan-1' } });
+    fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
+    fireEvent.click(screen.getByTestId('rumble-connect-button'));
+    expect(await screen.findByTestId('rumble-connect-error')).toHaveTextContent('accounts.rumbleConnectError');
+  });
+
+  it('names the stored channel in the disconnect dialog', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.mocked(useRumbleAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [{ provider: 'rumble', recordId: 'r1', providerAccountId: 'chan-1', accountName: 'My Channel', connectedAt: 0, lastUsed: 0 }] },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByTestId('rumble-disconnect-button'));
+    expect(await screen.findByTestId('disconnect-dialog')).toHaveTextContent('My Channel');
   });
 
   it('posts channelId + accessToken to /api/rumble-connect and shows the error on a 400', async () => {
