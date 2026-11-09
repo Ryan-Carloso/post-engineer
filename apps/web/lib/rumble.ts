@@ -25,8 +25,9 @@
 
 import { RumbleError } from '@/lib/errors';
 
-// Rumble's upload-form ceiling; the engine (publish_rumble.py) and the
-// draft scorer pin the same value.
+// Rumble's upload-form ceiling; the engine (publish_rumble.py) pins the
+// same value. The draft scorer does not enforce it: the ceiling lives at
+// the publish boundary (see draft-scoring.ts).
 export const RUMBLE_TITLE_MAX_LENGTH = 100;
 export const RUMBLE_SIMPLE_UPLOAD_URL = 'https://rumble.com/api/simple-upload.php';
 // Rumble's documented license values: 0 = Personal Use / not for sale,

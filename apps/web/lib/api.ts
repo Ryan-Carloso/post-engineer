@@ -5,6 +5,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { createSupabaseClient } from '@/lib/supabase/client';
 import { useUploadStore } from '@/lib/store';
 import type { PublicAccountItem, BlueskyAccountData, LinkedinAccountData, ThreadsAccountData, FacebookAccountData, RumbleAccountData } from '@/lib/providers/registry';
+import { selectProviderAccounts, type ServerAccountPayload } from '@/lib/account-selectors';
 import { mapSchedule, type ScheduleRow } from '@/lib/schedule-row';
 import type {
   AccountResponse,
@@ -32,26 +33,6 @@ export type { PersonaRecord };
 //---------------
 // API — typed fetch clients
 //---------------
-
-interface ServerAccountPayload {
-  authenticated: boolean;
-  accounts: PublicAccountItem[];
-  message?: string;
-}
-
-//---------------
-// fetchProviderAccounts — single fetch from /api/account filtered by provider.
-// The shape and the provider list come from the registry (lib/providers/registry.ts):
-// the server already returns each account with provider and correct fields.
-//---------------
-function selectProviderAccounts<T extends PublicAccountItem>(
-  provider: T['provider'],
-): (payload: ServerAccountPayload) => { authenticated: boolean; accounts: T[] } {
-  return (payload) => ({
-    authenticated: payload.authenticated,
-    accounts: payload.accounts.filter((item): item is T => item.provider === provider),
-  });
-}
 
 async function fetchProviderAccounts<T extends PublicAccountItem>(
   provider: T['provider'],
