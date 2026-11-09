@@ -11,7 +11,7 @@ import { findRepoRoot } from '@/test/repo-root';
 // plain add would leave the old list in force). The lists are pinned to the
 // six providers live when 049 shipped — the migration file is frozen, so it
 // must NOT track SOCIAL_PROVIDERS as new providers land (the current list
-// is pinned by the 051 rumble migration test).
+// is pinned by the 052 rumble migration test).
 //---------------
 
 const sql = readFileSync(
