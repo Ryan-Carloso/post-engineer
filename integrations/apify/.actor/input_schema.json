@@ -84,7 +84,7 @@
     "images": {
       "title": "Images",
       "type": "array",
-      "description": "Only with facelessMaterial images: public https image URLs, one per segment, in order: hook, each body paragraph (split the body with blank lines), CTA. Up to 12. Each image fills the screen with a slow zoom while its part is spoken; no stock is added. Use images you have the rights to.",
+      "description": "Only with facelessMaterial images: public https image URLs, in order, about one image per 3 seconds of speech, at most 30. They are split across the hook, each body paragraph (split the body with blank lines) and the CTA. Each image fills the screen with a slow zoom for its share of that part; no stock is added. Use images you have the rights to.",
       "editor": "stringList"
     },
     "fullLipsync": {

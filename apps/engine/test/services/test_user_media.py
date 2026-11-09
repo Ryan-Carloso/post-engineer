@@ -17,7 +17,7 @@ import pytest
 from PIL import Image
 
 from app.models.schema import VideoAspect, VideoParams
-from app.services import place_photos, user_media
+from app.services import image_coverage, place_photos, user_media
 from app.services.place_names import PreparedPhoto  # noqa: F401 - pins the shared photo shape
 from app.utils import ssrf
 
@@ -144,7 +144,8 @@ def test_intervals_read_from_the_subtitle_word_file():
 
 
 def _media_segments(tmp_path, media):
-    return [{"kind": "hook", "text": "Welcome to Porto.", "media": media}]
+    items = media if isinstance(media, list) else [media]
+    return [{"kind": "hook", "text": "Welcome to Porto.", "media": items}]
 
 
 def test_media_id_resolves_from_the_temp_assets_directory(tmp_path, monkeypatch):
@@ -207,8 +208,8 @@ def test_one_bad_url_costs_only_that_segment(tmp_path, monkeypatch):
         return dest_path
 
     segments = [
-        {"kind": "hook", "text": "Welcome to Porto.", "media": {"url": "https://e.com/bad.jpg"}},
-        {"kind": "body", "text": "Where the river meets the sea.", "media": {"url": "https://e.com/good.jpg"}},
+        {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/bad.jpg"}]},
+        {"kind": "body", "text": "Where the river meets the sea.", "media": [{"url": "https://e.com/good.jpg"}]},
         {"kind": "cta", "text": "Visit Porto soon."},
     ]
     with patch.object(place_photos, "download_image", side_effect=fake_download):
@@ -238,8 +239,8 @@ def test_too_small_and_face_photos_are_skipped(tmp_path, monkeypatch):
         return dest_path
 
     segments = [
-        {"kind": "hook", "text": "Welcome to Porto.", "media": {"url": "https://e.com/small.jpg"}},
-        {"kind": "body", "text": "Where the river meets the sea.", "media": {"url": "https://e.com/face.jpg"}},
+        {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/small.jpg"}]},
+        {"kind": "body", "text": "Where the river meets the sea.", "media": [{"url": "https://e.com/face.jpg"}]},
         {"kind": "cta", "text": "Visit Porto soon."},
     ]
     with patch.object(place_photos, "download_image", side_effect=fake_download), patch(
@@ -342,3 +343,42 @@ def test_check_media_face_detected_when_a_face_is_present(tmp_path):
         return dest_path
 
     assert _check("https://e.com/porto.jpg", tmp_path, download, face=True) == "face_detected"
+
+
+def test_two_photos_split_the_segment_and_a_dropped_one_is_covered(tmp_path):
+    def fake_download(url, dest_path, session=None):
+        if "drop" in url:
+            raise ssrf.UnsafeUrlError("photo download failed: HTTP 403.")
+        with open(dest_path, "wb") as handle:
+            handle.write(_jpeg())
+        return dest_path
+
+    words = [("Welcome", 0.0, 2.0), ("to", 2.0, 3.0), ("Porto", 3.0, 4.0)]
+    both = [{
+        "kind": "hook",
+        "text": "Welcome to Porto.",
+        "media": [{"url": "https://e.com/a.jpg"}, {"url": "https://e.com/b.jpg"}],
+    }]
+    with patch.object(place_photos, "download_image", side_effect=fake_download):
+        prepared, skipped = user_media.prepare_segment_media(
+            "task-1", both, _write_words(tmp_path, words), 4.0, str(tmp_path), VideoAspect.portrait,
+        )
+    assert skipped == []
+    assert [(panel.start, panel.end) for panel in prepared] == [(0.0, 2.0), (2.0, 4.0)]
+    assert prepared[0].path.endswith("segment-panel-0-0.png")
+    assert prepared[1].path.endswith("segment-panel-0-1.png")
+
+    dropped = [{
+        "kind": "hook",
+        "text": "Welcome to Porto.",
+        "media": [{"url": "https://e.com/drop.jpg"}, {"url": "https://e.com/keep.jpg"}],
+    }]
+    with patch.object(place_photos, "download_image", side_effect=fake_download):
+        prepared, skipped = user_media.prepare_segment_media(
+            "task-1", dropped, _write_words(tmp_path, words), 4.0, str(tmp_path), VideoAspect.portrait,
+        )
+    assert skipped == ["segment 0 image 0 media skipped: download blocked"]
+    assert [(panel.start, panel.end) for panel in prepared] == [(2.0, 4.0)]
+    covered, warnings = image_coverage.extend_over_gaps(prepared, 0.0, 4.0)
+    assert [(panel.start, panel.end) for panel in covered] == [(0.0, 4.0)]
+    assert warnings == ["segment 0 image extended: a neighbour image covers a missing image"]

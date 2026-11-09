@@ -44,11 +44,7 @@ export const componentSchemas = {
     properties: {
       kind: { type: 'string', enum: ['hook', 'body', 'cta'] },
       text: str,
-      media: {
-        type: 'object',
-        additionalProperties: false,
-        properties: { mediaId: str, url: str },
-      },
+      media: { type: 'array', maxItems: 30, items: { type: 'object', additionalProperties: false, properties: { mediaId: str, url: str } } },
       terms: strArray,
     },
   },
@@ -64,7 +60,7 @@ const segmentsBody = object(
     facelessMaterial: {
       type: 'string',
       enum: ['broll', 'svg', 'images'],
-      description: "Optional. 'images' needs media on every segment (up to 12).",
+      description: "Optional. 'images' needs a media list on every segment: about one image per ~3s, at most 30.",
     },
   },
   ['segments'],
@@ -104,7 +100,7 @@ const generateBody = object(
       facelessMaterial: {
         type: 'string',
         enum: ['broll', 'svg', 'images'],
-        description: "'images' renders only the segment images: media on every segment, up to 12.",
+        description: "'images' renders only the segment images: a media list on every segment, about one image per ~3s, at most 30.",
       },
       fullLipsync: { type: 'boolean', description: 'Persona talks for the whole video, not only the hook. Not with faceless.' },
       audioUrl: str,

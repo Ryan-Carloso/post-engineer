@@ -102,7 +102,7 @@ describe('buildJobPayload — request allowlist', () => {
 
   it('forwards segments next to the joined script so the engine can render per-segment media', () => {
     const segments = [
-      { kind: 'hook', text: 'Welcome to Porto.', media: { mediaId: 'aabbccddeeff00112233445566778899.png' } },
+      { kind: 'hook', text: 'Welcome to Porto.', media: [{ mediaId: 'aabbccddeeff00112233445566778899.png' }] },
       { kind: 'body', text: 'Where the river meets the sea.' },
       { kind: 'cta', text: 'Visit Porto soon.' },
     ];

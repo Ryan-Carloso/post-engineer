@@ -310,7 +310,7 @@ def test_max_medias_is_400():
             {
                 "kind": "body",
                 "text": " ".join(["body"] * 12) + f" number {i}.",
-                "media": {"url": f"https://example.com/{i}.jpg"},
+                "media": [{"url": f"https://example.com/{i}.jpg"}],
             }
         )
     segments.append({"kind": "cta", "text": "Save this video now please."})
@@ -323,34 +323,34 @@ def test_max_medias_is_400():
 def test_media_id_and_url_together_is_400():
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body(), "media": {"mediaId": "abc", "url": "https://example.com/x.jpg"}},
+        {"kind": "body", "text": _body(), "media": [{"mediaId": "abc", "url": "https://example.com/x.jpg"}]},
         {"kind": "cta", "text": _cta()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments)
-    assert exc_info.value.field == "segments.1.media"
+    assert exc_info.value.field == "segments.1.media.0"
 
 
 def test_media_with_neither_id_nor_url_is_400():
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body(), "media": {}},
+        {"kind": "body", "text": _body(), "media": [{}]},
         {"kind": "cta", "text": _cta()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments)
-    assert exc_info.value.field == "segments.1.media"
+    assert exc_info.value.field == "segments.1.media.0"
 
 
 def test_media_with_unknown_key_is_400():
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body(), "media": {"mediaId": "abc", "alt": "kitchen"}},
+        {"kind": "body", "text": _body(), "media": [{"mediaId": "abc", "alt": "kitchen"}]},
         {"kind": "cta", "text": _cta()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments)
-    assert exc_info.value.field == "segments.1.media"
+    assert exc_info.value.field == "segments.1.media.0"
 
 
 def test_media_shape_error_precedes_media_cap():
@@ -366,20 +366,20 @@ def test_media_shape_error_precedes_media_cap():
             {
                 "kind": "body",
                 "text": " ".join(["body"] * 12) + f" number {i}.",
-                "media": media,
+                "media": [media],
             }
         )
     segments.append({"kind": "cta", "text": _cta()})
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments)
-    assert exc_info.value.field == "segments.2.media"
+    assert exc_info.value.field == "segments.2.media.0"
 
 
 def test_valid_media_shape_passes():
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body(), "media": {"mediaId": "abc"}},
-        {"kind": "body", "text": _body() + " Second part.", "media": {"url": "https://example.com/x.jpg"}, "terms": ["restaurant kitchen"]},
+        {"kind": "body", "text": _body(), "media": [{"mediaId": "abc"}]},
+        {"kind": "body", "text": _body() + " Second part.", "media": [{"url": "https://example.com/x.jpg"}], "terms": ["restaurant kitchen"]},
         {"kind": "cta", "text": _cta()},
     ]
     result = script_segments.validate_segments(segments)
@@ -389,7 +389,7 @@ def test_valid_media_shape_passes():
 def _with_overlay(overlay):
     return [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body(), "media": {"url": "https://example.com/x.jpg", "overlay": overlay}},
+        {"kind": "body", "text": _body(), "media": [{"url": "https://example.com/x.jpg", "overlay": overlay}]},
         {"kind": "cta", "text": _cta()},
     ]
 
@@ -421,7 +421,7 @@ def test_media_overlay_with_only_a_title_passes():
 def test_media_overlay_with_a_bad_shape_is_400_on_the_overlay_field(overlay):
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(_with_overlay(overlay))
-    assert exc_info.value.field == "segments.1.media.overlay"
+    assert exc_info.value.field == "segments.1.media.0.overlay"
 
 
 @pytest.mark.parametrize(
@@ -437,16 +437,16 @@ def test_media_overlay_text_at_the_limit_passes_and_one_over_is_400(key, limit):
     assert script_segments.validate_segments(_with_overlay(at_limit))["media_count"] == 1
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(_with_overlay({"title": "Sushi", key: "x" * (limit + 1)}))
-    assert exc_info.value.field == "segments.1.media.overlay"
+    assert exc_info.value.field == "segments.1.media.0.overlay"
     assert str(limit) in exc_info.value.rule
 
 
 def test_media_overlay_needs_a_photo_to_sit_on():
     segments = _with_overlay({"title": "Sushi"})
-    del segments[1]["media"]["url"]
+    del segments[1]["media"][0]["url"]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments)
-    assert exc_info.value.field == "segments.1.media"
+    assert exc_info.value.field == "segments.1.media.0"
 
 
 def test_hook_word_guard_below_15_is_400():
@@ -508,14 +508,23 @@ def test_supplied_segments_script_calls_no_llm():
     assert task_service.generate_script("test-task", params) == joined
 
 
-# ---- images material: every segment carries media, up to one per segment
+# ---- images material: a list of photos, about one per 3 seconds
 
 
-def _images_segments(count_body=1, media=True):
-    segments = [{"kind": "hook", "text": _hook(), "media": {"url": "https://example.com/h.jpg"}}]
-    for i in range(count_body):
-        segments.append({"kind": "body", "text": _body(), "media": {"url": f"https://example.com/{i}.jpg"}})
-    segments.append({"kind": "cta", "text": _cta(), "media": {"mediaId": "a" * 32 + ".jpg"}})
+def _photos(count, prefix):
+    return [{"url": f"https://example.com/{prefix}{i}.jpg"} for i in range(count)]
+
+
+def _images_segments(media=True):
+    segments = [
+        {"kind": "hook", "text": _hook(), "media": _photos(3, "h")},
+        {"kind": "body", "text": _body(), "media": _photos(6, "b")},
+        {
+            "kind": "cta",
+            "text": _cta(),
+            "media": [{"mediaId": "a" * 32 + ".jpg"}, {"url": "https://example.com/c.jpg"}],
+        },
+    ]
     if not media:
         del segments[1]["media"]
     return segments
@@ -523,7 +532,7 @@ def _images_segments(count_body=1, media=True):
 
 def test_images_material_accepts_media_on_every_segment():
     result = script_segments.validate_segments(_images_segments(), "images")
-    assert result["media_count"] == 3
+    assert result["media_count"] == 11
 
 
 def test_images_material_rejects_a_segment_without_media_on_that_segment():
@@ -543,25 +552,35 @@ def test_images_material_rejects_a_null_media_like_a_missing_one():
 
 def test_other_materials_still_allow_segments_without_media():
     for material in ("broll", "svg"):
-        assert script_segments.validate_segments(_images_segments(media=False), material)["media_count"] == 2
+        assert script_segments.validate_segments(_images_segments(media=False), material)["media_count"] == 5
 
 
 def _many_media_segments(count):
     # 20 + count*14 + 5 words: inside the total and the segment cap for count <= 10.
-    segments = [{"kind": "hook", "text": " ".join(["word"] * 20) + ".", "media": {"url": "https://example.com/h.jpg"}}]
+    segments = [{"kind": "hook", "text": " ".join(["word"] * 20) + ".", "media": [{"url": "https://example.com/h.jpg"}]}]
     for i in range(count):
         segments.append(
-            {"kind": "body", "text": " ".join(["body"] * 12) + f" number {i}.", "media": {"url": f"https://example.com/{i}.jpg"}}
+            {
+                "kind": "body",
+                "text": " ".join(["body"] * 12) + f" number {i}.",
+                "media": [{"url": f"https://example.com/{i}.jpg"}],
+            }
         )
-    segments.append({"kind": "cta", "text": "Save this video now please.", "media": {"url": "https://example.com/c.jpg"}})
+    segments.append({"kind": "cta", "text": "Save this video now please.", "media": [{"url": "https://example.com/c.jpg"}]})
     return segments
 
 
-def test_images_material_allows_one_media_per_segment_up_to_the_segment_cap():
-    assert script_segments.MAX_IMAGES_MODE_MEDIAS == script_segments.MAX_SEGMENTS == 12
-    segments = _many_media_segments(10)
-    assert len(segments) == 12
-    assert script_segments.validate_segments(segments, "images")["media_count"] == 12
+def test_images_density_names_how_many_photos_a_segment_is_missing():
+    segments = _images_segments()
+    segments[1]["text"] = " ".join(["word"] * 32)
+    segments[1]["media"] = _photos(1, "few")
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments, "images")
+    assert exc_info.value.field == "segments.1.media"
+    assert exc_info.value.rule == (
+        "segment has 32 words (~12s) and needs at least 4 images (one per ~3s); it has 1."
+    )
+    assert exc_info.value.fix == "Add 3 more images to this segment's media array."
 
 
 def test_the_six_media_cap_still_holds_outside_the_images_material():
@@ -571,9 +590,63 @@ def test_the_six_media_cap_still_holds_outside_the_images_material():
     assert exc_info.value.fix == "Remove medias until there are at most 6."
 
 
+def test_images_cap_fix_names_merging_when_minimums_exceed_the_cap():    # Hook 25 words + six 25-word body segments + a 20-word CTA = 195
+    # words: every segment meets its density minimum (4, 4 x 6, 3 = 31
+    # photos) yet the 30-photo cap fires, and removing any photo
+    # re-triggers density. The cap fix must name the escape (merge
+    # segments) so fix-and-resubmit converges instead of bouncing
+    # between the two errors.
+    segments = [
+        {"kind": "hook", "text": " ".join(["hook"] * 25) + ".", "media": _photos(4, "h")},
+        *[
+            {"kind": "body", "text": " ".join([f"body{i}"] * 25), "media": _photos(4, f"b{i}")}
+            for i in range(6)
+        ],
+        {"kind": "cta", "text": " ".join(["cta"] * 20), "media": _photos(3, "c")},
+    ]
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments, "images")
+    assert exc_info.value.field == "segments"
+    assert exc_info.value.rule == "At most 30 medias are allowed."
+    assert "merge segments" in exc_info.value.fix
+
+
+def test_legacy_media_list_wraps_a_single_object_media():
+    segments = [
+        {"kind": "hook", "text": "Hook text."},
+        {"kind": "body", "text": "Body text.", "media": {"mediaId": "abc.jpg"}},
+        {"kind": "cta", "text": "Cta text.", "media": [{"url": "https://example.com/x.jpg"}]},
+        {"kind": "body", "text": "No media here."},
+        {"kind": "body", "text": "Null media.", "media": None},
+    ]
+    wrapped = script_segments.legacy_media_list(segments)
+    assert wrapped[1]["media"] == [{"mediaId": "abc.jpg"}]
+    assert wrapped[2]["media"] == [{"url": "https://example.com/x.jpg"}]
+    assert "media" not in wrapped[3]
+    assert wrapped[4]["media"] is None
+    assert script_segments.legacy_media_list("not a list") == "not a list"
+
+
+def test_fresh_single_object_media_is_still_rejected():
+    # Only persisted-row dispatch normalizes the legacy shape; a fresh
+    # request still sends media as a list, and a single object is a 400.
+    segments = _images_segments()
+    segments[1]["media"] = {"mediaId": "abc.jpg"}
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments, "images")
+    assert exc_info.value.field == "segments.1.media"
+    assert exc_info.value.rule == "Media must be an array."
+
+
 def test_segments_to_script_forwards_the_material_to_validation():
-    with pytest.raises(SegmentValidationError):
-        script_segments.segments_to_script(_images_segments(media=False), "images")
-    assert script_segments.segments_to_script(_images_segments(media=False)) == script_segments.segments_to_script(
-        _images_segments()
-    )
+    # Sparse on purpose: the dense images script has 11 photos, over the
+    # 6-photo cap the default material still enforces.
+    sparse = [
+        {"kind": "hook", "text": _hook()},
+        {"kind": "body", "text": _body(), "media": _photos(1, "b")},
+        {"kind": "cta", "text": _cta(), "media": _photos(1, "c")},
+    ]
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.segments_to_script(sparse, "images")
+    assert exc_info.value.field == "segments.0.media"
+    assert script_segments.segments_to_script(sparse) == "\n\n".join([_hook(), _body(), _cta()])
