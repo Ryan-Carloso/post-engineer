@@ -19,6 +19,14 @@ export class AuthError extends Error {
   }
 }
 
+// The user's social account row is gone (disconnected or never connected).
+export class AccountNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AccountNotFoundError';
+  }
+}
+
 export class UploadError extends Error {
   constructor(
     message: string,

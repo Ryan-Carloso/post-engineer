@@ -18,14 +18,10 @@ import { parseMediaUpload } from '@/lib/media/upload-schema';
 import type { SocialProvider } from '@/lib/types';
 import { InstagramService } from '@/lib/instagram';
 import { httpStatusOf, reportAccountUnauthorized } from './account-unauthorized';
+import { classifyUploadAccountError } from '@/lib/upload/account-error';
 import type { OAuth2Client } from 'google-auth-library';
 
-//---------------
-// Upload handlers — unified multi-account publishing logic.
-// provider=youtube → video upload to N channels.
-// provider=instagram → media upload + publish to N profiles.
-// A failure on one account does NOT abort the others (aggregated result).
-//---------------
+// Upload handlers — one account failing does not abort the others.
 
 interface ContentUploadAccountResult {
   accountId: string;
@@ -37,6 +33,7 @@ interface ContentUploadAccountResult {
   mediaId?: string;
   permalink?: string;
   error?: string;
+  errorCode?: string;
 }
 
 interface ContentUploadSuccess {
@@ -204,7 +201,7 @@ export async function handleYoutubeUpload(
         metadata: { accountId, error: message },
       });
       reportAccountUnauthorized('youtube', accountId, ownerUserId, error);
-      results.push({ accountId, success: false, error: message });
+      results.push({ accountId, success: false, ...classifyUploadAccountError(error) });
     }
   }
 
@@ -429,7 +426,7 @@ export async function handleInstagramUpload(
         metadata: { igUserId, error: message, status: httpStatusOf(error) },
       });
       reportAccountUnauthorized('instagram', igUserId, ownerUserId, error);
-      results.push({ accountId: igUserId, success: false, error: message });
+      results.push({ accountId: igUserId, success: false, ...classifyUploadAccountError(error) });
     }
   }
 

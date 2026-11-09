@@ -25,9 +25,6 @@ class _FakeStore:
     def __init__(self):
         self.updates = []
 
-    def recover_stale_publishing(self):
-        pass
-
     def claim_ready_slot(self, slot_id):
         return True
 
@@ -104,7 +101,7 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
 
         # Slot published (partial success), not failed.
         self.assertEqual(published, 1)
-        self.assertEqual(store.updates[0][1]["status"], "published")
+        self.assertEqual(store.updates[-1][1]["status"], "published")
         # Per-provider failure event fired for youtube.
         failed_calls = [
             c for c in track.call_args_list
@@ -125,7 +122,7 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
         self.assertTrue(props["reason"])
 
     def test_all_providers_fail_goes_through_retry_path(self):
-        """Every provider down: slot back to ready (retryable), not published."""
+        """Every provider down: slot stays publishing for the next try."""
         store = _FakeStore()
         store.ready_due_slots = lambda now: [self._slot()]
 
@@ -139,9 +136,10 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
             )
 
         self.assertEqual(published, 0)
-        # Back to ready for retry (attempt 1 of 3).
-        self.assertEqual(store.updates[0][1]["status"], "ready")
-        self.assertEqual(store.updates[0][1]["publish_attempts"], 1)
+        # Still publishing (attempt 1 of 3). The lease write has no status.
+        self.assertEqual(store.updates[-1][1]["status"], "publishing")
+        self.assertEqual(store.updates[-1][1]["publish_attempts"], 1)
+        self.assertEqual(store.updates[-1][1]["publish_not_before"], "2026-09-07T12:00:30+00:00")
 
     def test_partial_failure_does_not_retry(self):
         """Partial success is terminal: no retry, no refund."""
@@ -157,7 +155,7 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
         scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
 
         # Published, not back to ready — no retry scheduled.
-        statuses = [u[1]["status"] for u in store.updates]
+        statuses = [u[1]["status"] for u in store.updates if "status" in u[1]]
         self.assertIn("published", statuses)
         self.assertNotIn("ready", statuses)
 

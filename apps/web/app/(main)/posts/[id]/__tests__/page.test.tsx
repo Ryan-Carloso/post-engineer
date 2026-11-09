@@ -313,6 +313,29 @@ describe('PostDetailPage', () => {
     expect(link.getAttribute('rel')).toContain('noopener');
   });
 
+  it('shows the account notice while the slot is still publishing', () => {
+    mockQueries({
+      slot: slotPayload({
+        id: 'u1',
+        status: 'publishing',
+        error: 'upload API reported failure',
+        userNotices: [{
+          provider: 'bluesky',
+          accountId: 'b1',
+          code: 'email_not_verified',
+          requiresUser: true,
+          notice: 'raw upstream must not render',
+        }],
+      }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'u1' });
+    render(<DetailPage />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('posts.userNoticeEmail');
+    expect(screen.queryByText('upload API reported failure')).not.toBeInTheDocument();
+    expect(screen.queryByText('raw upstream must not render')).not.toBeInTheDocument();
+  });
+
   it('shows no published-links section when the post is not published yet', () => {
     mockQueries({ slot: slotPayload({ id: 'u1', status: 'generating', taskId: 'task-7' }) });
     vi.mocked(useParams).mockReturnValue({ id: 'u1' });
