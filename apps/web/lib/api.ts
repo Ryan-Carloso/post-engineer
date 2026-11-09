@@ -772,7 +772,7 @@ export function mapSlot(row: SlotRow): ScheduledSlot {
   };
 }
 
-async function fetchScheduleStatus(limit?: number): Promise<{ upcoming: ScheduledSlot[]; recent: ScheduledSlot[] }> {
+export async function fetchScheduleStatus(limit?: number): Promise<{ upcoming: ScheduledSlot[]; recent: ScheduledSlot[] }> {
   const url = typeof limit === 'number' ? `/api/schedule/status?limit=${limit}` : '/api/schedule/status';
   const response = await fetch(url);
   const data: ScheduleStatusPayload | null = await response.json().catch(() => null);

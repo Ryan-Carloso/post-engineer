@@ -85,10 +85,10 @@ export function bucketByDay<T extends Pick<ScheduledSlot, 'slotAt'>>(slots: T[],
   return buckets;
 }
 
-// Calendar counts: only outcomes (published / failed) plus scheduled —
-// anything not yet published counts as scheduled, with no status color.
+// Calendar counts: one per calendar group (status.ts), so the cells, the
+// legend, the day summary and the card pills count the same thing.
 export function calendarCounts(slots: Pick<ScheduledSlot, 'status'>[]): Record<CalendarGroup, number> {
-  const counts: Record<CalendarGroup, number> = { published: 0, failed: 0, scheduled: 0 };
+  const counts: Record<CalendarGroup, number> = { published: 0, failed: 0, inProgress: 0, scheduled: 0 };
   for (const slot of slots) counts[calendarGroupOf(slot.status)] += 1;
   return counts;
 }
@@ -133,7 +133,7 @@ export interface PersonaPhoto {
 
 // The distinct personas of a day, most relevant first — the persona of a
 // failed post (it needs attention), then of a published one, then of the
-// scheduled ones, each tier by time — capped at `max`. Slots whose schedule
+// in-progress and scheduled ones, each tier by time — capped at `max`. Slots whose schedule
 // or persona is gone are skipped: the status markers still count them.
 export function dayPersonas(
   slots: Pick<ScheduledSlot, 'status' | 'scheduleId' | 'slotAt'>[],
@@ -141,7 +141,7 @@ export function dayPersonas(
   personaPhotoById: Map<string, PersonaPhoto>,
   max: number,
 ): PersonaPhoto[] {
-  const tier: Record<CalendarGroup, number> = { failed: 0, published: 1, scheduled: 2 };
+  const tier: Record<CalendarGroup, number> = { failed: 0, published: 1, inProgress: 2, scheduled: 3 };
   const ordered = [...slots].sort(
     (a, b) => tier[calendarGroupOf(a.status)] - tier[calendarGroupOf(b.status)] || a.slotAt.localeCompare(b.slotAt),
   );

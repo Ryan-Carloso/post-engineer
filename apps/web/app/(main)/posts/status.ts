@@ -1,8 +1,9 @@
-import { Check, Clock, TriangleAlert } from 'lucide-react';
+import { Check, Clock, LoaderCircle, TriangleAlert } from 'lucide-react';
 import type { TranslationKey } from '@/lib/i18n';
 
-// Shared by the posts list and the post detail page. Colors are semantic
-// tokens (see globals.css), so both light and dark themes stay readable.
+// Per-status badges of the post detail page and the video generation cards
+// (post cards use the calendar groups below). Colors are semantic tokens
+// (see globals.css), so both light and dark themes stay readable.
 // `awaiting` is what the API reports for a DB `pending` slot.
 export const STATUS_STYLE: Record<string, string> = {
   pending: 'bg-sunken text-muted-text',
@@ -31,64 +32,56 @@ export const STATUS_KEY: Record<string, TranslationKey> = {
   failed: 'posts.statusFailed',
 };
 
-// Grouping of the real slot and generation statuses. `STATUS_STYLE` stays
-// the per-status badge; the group is what the post card icon encodes (so
-// status never relies on color alone).
-export type StatusGroup = 'inProgress' | 'published' | 'failed';
-
-const GROUP_BY_STATUS: Record<string, StatusGroup> = {
-  pending: 'inProgress',
-  awaiting: 'inProgress',
-  generating: 'inProgress',
-  ready: 'inProgress',
-  publishing: 'inProgress',
-  published: 'published',
-  completed: 'published',
-  failed: 'failed',
-};
-
-export function statusGroupOf(status: string): StatusGroup {
-  // An unknown status is still pending work, never silently "published".
-  return GROUP_BY_STATUS[status] ?? 'inProgress';
-}
-
-export const GROUP_ICON: Record<StatusGroup, typeof Check> = { inProgress: Clock, published: Check, failed: TriangleAlert };
-
-// Calendar groups — the calendar shows only outcomes (published / failed);
-// anything not yet published is scheduled. The in-progress card badges
-// (generating, ready, publishing) share the scheduled clock icon, so a card
-// still reads as part of the day's "scheduled" count.
-// Post cards and the detail page keep their per-status badges above.
-export type CalendarGroup = 'published' | 'failed' | 'scheduled';
+// Calendar groups — ONE vocabulary for a post's state, shared by the day
+// cell markers, the legend, the day summary and the post card pill, so a
+// post is never named one way on the card and another on the calendar.
+// In progress = work running right now (the video is generating or being
+// published); scheduled = waiting for its time (not started yet, or its
+// video is ready and waits for the publish slot). The card adds the exact
+// stage (e.g. "Generating video 45%") under the pill.
+export type CalendarGroup = 'published' | 'failed' | 'inProgress' | 'scheduled';
 
 // Failure first: day markers, the legend, the day summary and the day's
 // accessible name all list a failure before anything else.
-export const CALENDAR_GROUP_ORDER: readonly CalendarGroup[] = ['failed', 'published', 'scheduled'];
+export const CALENDAR_GROUP_ORDER: readonly CalendarGroup[] = ['failed', 'published', 'inProgress', 'scheduled'];
+
+const IN_PROGRESS_STATUSES = new Set(['generating', 'publishing', 'running']);
 
 export function calendarGroupOf(status: string): CalendarGroup {
   if (status === 'published' || status === 'completed') return 'published';
   if (status === 'failed') return 'failed';
+  if (IN_PROGRESS_STATUSES.has(status)) return 'inProgress';
   // An unknown status is still unpublished work, never silently "published".
   return 'scheduled';
 }
 
 // The status marker drawn in a day cell, in the legend and in the day
 // summary — one look per group everywhere. A failure is a solid red marker
-// (the loudest), published a soft green one, scheduled a neutral one.
+// (the loudest), the others soft tints of the same hue as the card pill.
 export const CALENDAR_GROUP_MARKER: Record<CalendarGroup, string> = {
   failed: 'bg-destructive text-destructive-foreground',
   published: 'bg-success-soft text-success',
+  inProgress: 'bg-info-soft text-info',
   scheduled: 'bg-line text-ink-soft',
+};
+
+// The post card pill: the marker's hue as a soft tint (a solid red pill on
+// every failed card would shout over the failure box below it).
+export const CALENDAR_GROUP_PILL: Record<CalendarGroup, string> = {
+  ...CALENDAR_GROUP_MARKER,
+  failed: 'bg-destructive-soft text-destructive',
 };
 
 export const CALENDAR_GROUP_KEY: Record<CalendarGroup, TranslationKey> = {
   published: 'posts.groupPublished',
   failed: 'posts.groupFailed',
+  inProgress: 'posts.groupInProgress',
   scheduled: 'posts.groupScheduled',
 };
 
 export const CALENDAR_GROUP_ICON: Record<CalendarGroup, typeof Check> = {
   published: Check,
   failed: TriangleAlert,
+  inProgress: LoaderCircle,
   scheduled: Clock,
 };

@@ -25,6 +25,7 @@ vi.mock('@/lib/api', () => ({
 vi.mock('@/lib/schedule-range', () => ({
   RANGE_MAX_SLOTS: 1000,
   useScheduleRangeQuery: vi.fn(),
+  useHasAnyPostQuery: vi.fn(() => ({ data: true, isLoading: false, refetch: vi.fn() })),
 }));
 
 vi.mock('next/image', () => ({
@@ -51,7 +52,7 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 import PostsPage from '../page';
-import { useScheduleRangeQuery } from '@/lib/schedule-range';
+import { useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range';
 import {
   useSchedulesQuery,
   usePersonaListQuery,
@@ -121,6 +122,8 @@ function mockQueries(overrides: {
     isError: false,
     refetch: vi.fn(),
   } as never);
+  // The account has posts somewhere unless a test says otherwise.
+  vi.mocked(useHasAnyPostQuery).mockReturnValue({ data: true, isLoading: false, isError: false, refetch: vi.fn() } as never);
   vi.mocked(useSchedulesQuery).mockReturnValue({
     data: (overrides.schedules ?? [SCHEDULE]) as never,
     isLoading: false,
@@ -215,7 +218,7 @@ describe('PostsPage', () => {
     expect(text).not.toContain('2030');
     // The title is the card's main line, the persona the secondary one.
     expect(screen.getByText('Upcoming topic').className.split(/\s+/)).toContain('font-semibold');
-    expect(screen.getByText('Viva Leve').className.split(/\s+/)).toContain('text-muted-foreground');
+    expect(screen.getByText('Viva Leve').className.split(/\s+/)).toContain('text-ink-soft');
     // Chips: network glyph (role img) + account label — they sit in the card root, next to the link.
     const chips = within(card as HTMLElement);
     expect(chips.getByRole('img', { name: 'youtube' })).toBeInTheDocument();
@@ -231,8 +234,33 @@ describe('PostsPage', () => {
     // First select is the provider filter
     await user.selectOptions(selects[0], 'linkedin');
 
-    expect(screen.getByText('posts.noResultsForFilter')).toBeInTheDocument();
+    // The filter empties the whole month: the panel names the month and
+    // offers to clear the filters.
+    expect(screen.getByText('posts.filterMonthEmptyTitle')).toBeInTheDocument();
+    expect(screen.getByText('posts.calendarMonthHeading')).toBeInTheDocument();
     expect(screen.queryByText('Upcoming topic')).not.toBeInTheDocument();
+  });
+
+  it('marks an applied filter and clears every filter with one action', async () => {
+    const user = userEvent.setup();
+    render(<PostsPage />);
+    expect(screen.queryByRole('button', { name: 'posts.clearFilters' })).not.toBeInTheDocument();
+
+    const selects = screen.getAllByRole('combobox');
+    await user.selectOptions(selects[0], 'linkedin');
+    expect(selects[0].className.split(/\s+/)).toContain('border-primary');
+    expect(selects[1].className.split(/\s+/)).not.toContain('border-primary');
+    // The calendar says it is filtered.
+    expect(screen.getByText('posts.filterActive')).toBeInTheDocument();
+
+    // Two clear actions: the filter bar's and the empty panel's.
+    const clears = screen.getAllByRole('button', { name: 'posts.clearFilters' });
+    expect(clears).toHaveLength(2);
+    await user.click(clears[1]);
+    expect(selects[0]).toHaveValue('all');
+    expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'posts.clearFilters' })).not.toBeInTheDocument();
+    expect(screen.queryByText('posts.filterActive')).not.toBeInTheDocument();
   });
 
   it('filters slots by account', async () => {
@@ -259,7 +287,7 @@ describe('PostsPage', () => {
     await waitFor(() => {
       expect(screen.queryByText('Upcoming topic')).not.toBeInTheDocument();
     });
-    expect(screen.getByText('posts.noResultsForFilter')).toBeInTheDocument();
+    expect(screen.getByText('posts.filterMonthEmptyTitle')).toBeInTheDocument();
   });
 
   it('hides slots whose schedule no longer exists', () => {
@@ -292,20 +320,97 @@ describe('PostsPage', () => {
     expect(screen.getByText('posts.calendarMonthEmptyTitle')).toBeInTheDocument();
     expect(screen.getByText('posts.calendarMonthEmptyHint')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'posts.schedulePostsAction' })).toHaveAttribute('href', '/recipes');
+    // The panel is scoped like its message: it names the month, not a day.
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('posts.calendarMonthHeading');
+    expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
+    // Today's month already: no "Go to today".
+    expect(screen.queryByRole('button', { name: 'posts.calendarGoToday' })).not.toBeInTheDocument();
     // The calendar stays, and an empty day shows no zero-count chips.
     expect(screen.getByRole('grid')).toBeInTheDocument();
     expect(screen.queryByText(/posts\.group(Published|Failed|Scheduled):/)).not.toBeInTheDocument();
   });
 
-  it('shows a loading skeleton while the calendar range is loading', () => {
+  it('tells "no posts yet" apart from an empty month when the account never had a post', () => {
+    mockQueries({ range: [] });
+    vi.mocked(useHasAnyPostQuery).mockReturnValue({ data: false, isLoading: false, refetch: vi.fn() } as never);
+    render(<PostsPage />);
+
+    // Asked only because the month it opens on is empty.
+    expect(vi.mocked(useHasAnyPostQuery).mock.calls.at(-1)?.[0]).toBe(true);
+    expect(screen.getByText('posts.accountEmptyTitle')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'posts.accountEmptyAction' })).toHaveAttribute('href', '/recipes');
+    // No day heading, no grid, no "All accounts" filter for an account without posts.
+    expect(screen.queryByRole('grid')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
+  });
+
+  it('does not ask whether the account has any post when the month it opens on has posts', () => {
+    render(<PostsPage />);
+    expect(vi.mocked(useHasAnyPostQuery).mock.calls.at(-1)?.[0]).toBe(false);
+    expect(screen.getByRole('grid')).toBeInTheDocument();
+  });
+
+  it('keeps the month empty state when the "any post" read fails, never a dead end', () => {
+    mockQueries({ range: [] });
+    vi.mocked(useHasAnyPostQuery).mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch: vi.fn() } as never);
+    render(<PostsPage />);
+
+    expect(screen.getByText('posts.calendarMonthEmptyTitle')).toBeInTheDocument();
+    expect(screen.queryByText('posts.accountEmptyTitle')).not.toBeInTheDocument();
+  });
+
+  it('shows the skeleton, not a flash of the month state, while the "any post" read loads', () => {
+    mockQueries({ range: [] });
+    vi.mocked(useHasAnyPostQuery).mockReturnValue({ data: undefined, isLoading: true, refetch: vi.fn() } as never);
+    render(<PostsPage />);
+
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(screen.queryByText('posts.calendarMonthEmptyTitle')).not.toBeInTheDocument();
+  });
+
+  it('offers "Go to today" from an empty month that is not today\'s, and it selects today', async () => {
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    await user.click(screen.getByRole('button', { name: 'posts.calendarNextMonth' }));
+    expect(screen.getByText('posts.calendarMonthEmptyTitle')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'posts.calendarGoToday' }));
+    expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('posts.calendarDayHeading');
+  });
+
+  it('names the day, not the month, for an empty day in a month with posts', async () => {
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    const day2 = within(screen.getByRole('grid'))
+      .getAllByRole('button')
+      .find((button) => button.textContent === '2' && button.closest('[data-outside]') === null);
+    await user.click(day2 as HTMLElement);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('posts.calendarDayHeading');
+    expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
+    expect(screen.queryByText('posts.calendarMonthEmptyTitle')).not.toBeInTheDocument();
+  });
+
+  it('shows a loading skeleton with the shown month\'s weeks while the calendar range is loading', () => {
     vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: true, isFetching: false, isError: false, refetch: vi.fn() } as never);
 
     render(<PostsPage />);
     // A skeleton keeps the calendar layout in place; no lone spinner on
-    // an empty page.
+    // an empty page, and the loading text is for screen readers only.
     expect(screen.getByRole('status')).toBeInTheDocument();
-    expect(screen.getByText('posts.loadingPosts')).toBeInTheDocument();
+    expect(screen.getByText('posts.loadingPosts').className.split(/\s+/)).toContain('sr-only');
     expect(screen.queryByTestId('icon-spinner')).not.toBeInTheDocument();
+    // June 2030 starts on a Saturday and spans 6 weeks.
+    expect(document.querySelectorAll('[data-skeleton-day]')).toHaveLength(42);
+  });
+
+  it('puts the day panel beside the calendar on wide screens', () => {
+    render(<PostsPage />);
+    const layout = screen.getByRole('grid').closest('.xl\\:grid');
+    expect(layout).not.toBeNull();
+    expect(layout?.querySelector('section')).toHaveTextContent('Upcoming topic');
   });
 
   it('shows the error state when the personas query fails', () => {
@@ -350,9 +455,8 @@ describe('PostsPage', () => {
 
     // Without this, a failed account fetch could never clear without a
     // full page reload.
-    const errorPanel = screen.getByText('posts.loadErrorSupporting').closest('div');
-    if (!errorPanel) throw new Error('error panel not rendered');
-    await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));
+    expect(screen.getByText('posts.loadErrorSupporting')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'posts.refresh' }));
     expect(youtubeRefetch).toHaveBeenCalledTimes(1);
   });
 
@@ -385,9 +489,8 @@ describe('PostsPage', () => {
 
     // Without this, a failed personas fetch could never clear without a
     // full page reload.
-    const errorPanel = screen.getByText('posts.loadErrorSupporting').closest('div');
-    if (!errorPanel) throw new Error('error panel not rendered');
-    await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));
+    expect(screen.getByText('posts.loadErrorSupporting')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'posts.refresh' }));
     expect(personasRefetch).toHaveBeenCalledTimes(1);
   });
 
@@ -491,7 +594,7 @@ describe('PostsPage fallbacks', () => {
     // Unknown statuses degrade to the scheduled look the calendar counts
     // them under, never an unstyled badge.
     const badge = within(screen.getByText('Upcoming topic').closest('a') as HTMLElement).getByText('posts.groupScheduled');
-    expect(badge.className).toContain('bg-sunken');
+    expect(badge.className).toContain('bg-line');
   });
 
   it('shows a progress bar on a publishing card but not on a ready one', () => {
@@ -640,7 +743,7 @@ describe('PostsPage calendar view', () => {
     expect((day1 as HTMLElement).querySelector('[data-marker="scheduled"]')).toHaveTextContent('1');
   });
 
-  it('summarizes only the groups the selected day has — no zero counts, never in progress', async () => {
+  it('summarizes only the groups the selected day has — no zero counts', async () => {
     mockQueries({ range: rangeSlots });
     const user = userEvent.setup();
     render(<PostsPage />);
@@ -654,7 +757,7 @@ describe('PostsPage calendar view', () => {
     expect(screen.getByText('posts.groupPublished: 1')).toBeInTheDocument();
     expect(screen.getByText('posts.groupScheduled: 1')).toBeInTheDocument();
     expect(screen.queryByText(/posts\.groupFailed:/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/posts\.groupInProgress/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/posts\.groupInProgress:/)).not.toBeInTheDocument();
   });
 
   it('warns when the range read was truncated', () => {
@@ -782,7 +885,7 @@ describe('PostsPage calendar view', () => {
     expect(screen.getByRole('button', { name: 'posts.refresh' })).toBeDisabled();
   });
 
-  it('keeps the month navigation on a load error and shows a single refresh control in an alert', async () => {
+  it('keeps the month navigation on a load error, dims the grid and keeps the one refresh control in the header', async () => {
     mockQueries();
     const refetch = vi.fn();
     vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isFetching: false, isError: true, refetch } as never);
@@ -791,13 +894,31 @@ describe('PostsPage calendar view', () => {
 
     const alert = screen.getByRole('alert');
     expect(within(alert).getByText('posts.loadErrorCalendar')).toBeInTheDocument();
-    // One refresh on the page: the header one hides while the alert shows.
-    expect(screen.getAllByRole('button', { name: 'posts.refresh' })).toHaveLength(1);
-    await user.click(within(alert).getByRole('button', { name: 'posts.refresh' }));
+    expect(within(alert).getByText('posts.loadErrorRetryHint')).toBeInTheDocument();
+    // One refresh on the page, in the header (it never moves), none in the alert.
+    expect(within(alert).queryByRole('button')).not.toBeInTheDocument();
+    const refresh = screen.getByRole('button', { name: 'posts.refresh' });
+    expect(refresh.className.split(/\s+/)).toContain('bg-primary');
+    await user.click(refresh);
     expect(refetch).toHaveBeenCalledTimes(1);
+    // Not a live-looking empty month: no selection, a "not loaded" label,
+    // no day list.
+    expect(screen.getByText('posts.calendarNotLoaded')).toBeInTheDocument();
+    expect(screen.getByRole('grid').querySelector('[data-selected="true"]')).toBeNull();
+    expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
+    expect(screen.queryByText('posts.calendarMonthHeading')).not.toBeInTheDocument();
     // The month can still change.
-    expect(screen.getByRole('button', { name: 'posts.calendarNextMonth' })).toBeInTheDocument();
-    expect(screen.getByRole('grid')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'posts.calendarNextMonth' })).toBeEnabled();
+  });
+
+  it('keeps the header Refresh in the same place, with the same label, with or without an error', () => {
+    const { unmount } = render(<PostsPage />);
+    const normal = screen.getByRole('button', { name: 'posts.refresh' });
+    expect(normal.className.split(/\s+/)).toContain('bg-card');
+    unmount();
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isFetching: false, isError: true, refetch: vi.fn() } as never);
+    render(<PostsPage />);
+    expect(screen.getAllByRole('button', { name: 'posts.refresh' })).toHaveLength(1);
   });
 });
 

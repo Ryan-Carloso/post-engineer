@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import { FilterX } from 'lucide-react';
 import {
   useSchedulesQuery,
   usePersonaListQuery,
@@ -15,6 +16,8 @@ import {
 } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import { PROVIDER_LABELS, accountOption, type AccountOption, scheduleAccountIds } from '@/lib/account-options';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { PostCard, resolveSlotAccounts } from './post-card';
 import type { PersonaPhoto } from './calendar-days';
 
@@ -152,6 +155,7 @@ export interface PostFilters {
   hasActiveFilter: boolean;
   setProvider: (next: ProviderFilter) => void;
   setAccount: (next: string) => void;
+  clear: () => void;
   passes: (slot: ScheduledSlot) => boolean;
 }
 
@@ -189,18 +193,27 @@ export function usePostFilters(joins: PostJoins): PostFilters {
     },
     [scheduleById, provider, account],
   );
-  return { provider, account, visibleAccounts, hasActiveFilter: provider !== 'all' || account !== 'all', setProvider, setAccount, passes };
+  const clear = useCallback(() => {
+    setProviderState('all');
+    setAccount('all');
+  }, []);
+  const hasActiveFilter = provider !== 'all' || account !== 'all';
+  return { provider, account, visibleAccounts, hasActiveFilter, setProvider, setAccount, clear, passes };
 }
 
-const SELECT_CLASS = 'h-10 w-full rounded-xl border border-input bg-card px-3 text-sm font-medium text-primary sm:w-auto';
+// One fixed width on wide screens, so the selects do not change size with
+// the locale or the chosen option; an applied filter is outlined in navy.
+const SELECT_CLASS = 'h-10 w-full truncate rounded-xl border border-input bg-card px-3 text-sm font-medium text-primary sm:w-48';
+const SELECT_ACTIVE_CLASS = 'border-primary bg-info-soft ring-1 ring-primary';
 const LABEL_CLASS = 'flex min-w-0 flex-col gap-1 text-xs font-semibold text-muted-foreground';
 
 export function PostFiltersBar({ filters }: { filters: PostFilters }) {
   const { t } = useI18n();
   return (
     // Side by side on a phone too (two columns), so the filters take one
-    // row above the calendar instead of two.
-    <div className="mt-3 grid grid-cols-2 gap-3 sm:mt-4 sm:flex sm:flex-wrap">
+    // row above the calendar instead of two. "Clear filters" shows only
+    // while a filter is applied.
+    <div className="mt-3 grid grid-cols-2 gap-3 sm:mt-4 sm:flex sm:flex-wrap sm:items-end">
       <label className={LABEL_CLASS}>
         {t('posts.filterProvider')}
         <select
@@ -209,7 +222,7 @@ export function PostFiltersBar({ filters }: { filters: PostFilters }) {
             const next = PROVIDERS.find((item) => item === event.target.value) ?? 'all';
             filters.setProvider(next);
           }}
-          className={SELECT_CLASS}
+          className={cn(SELECT_CLASS, filters.provider !== 'all' && SELECT_ACTIVE_CLASS)}
         >
           <option value="all">{t('posts.allProviders')}</option>
           {PROVIDERS.map((item) => (
@@ -221,7 +234,11 @@ export function PostFiltersBar({ filters }: { filters: PostFilters }) {
       </label>
       <label className={LABEL_CLASS}>
         {t('posts.filterAccount')}
-        <select value={filters.account} onChange={(event) => filters.setAccount(event.target.value)} className={SELECT_CLASS}>
+        <select
+          value={filters.account}
+          onChange={(event) => filters.setAccount(event.target.value)}
+          className={cn(SELECT_CLASS, filters.account !== 'all' && SELECT_ACTIVE_CLASS)}
+        >
           <option value="all">{t('posts.allAccounts')}</option>
           {filters.visibleAccounts.map((item) => (
             <option key={`${item.provider}:${item.id}`} value={item.id}>
@@ -230,6 +247,12 @@ export function PostFiltersBar({ filters }: { filters: PostFilters }) {
           ))}
         </select>
       </label>
+      {filters.hasActiveFilter && (
+        <Button type="button" variant="ghost" className="col-span-2 h-10 gap-1.5 justify-self-start text-primary hover:bg-sunken hover:text-primary" onClick={filters.clear}>
+          <FilterX aria-hidden />
+          {t('posts.clearFilters')}
+        </Button>
+      )}
     </div>
   );
 }

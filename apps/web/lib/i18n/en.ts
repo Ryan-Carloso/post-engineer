@@ -20,8 +20,6 @@ export const enDictionary: Dictionary = {
     personaHint: 'Identity and voice',
     billing: 'Tokens',
     billingHint: 'Prepaid tokens',
-    apiKeys: 'API Keys',
-    apiKeysHint: 'MCP and integrations',
     debug: 'Debug',
     debugHint: 'Validation tools',
     signOut: 'Sign out',

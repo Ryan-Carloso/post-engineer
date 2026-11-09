@@ -145,9 +145,9 @@ describe('PostHistoryPage', () => {
     render(<PostHistoryPage />);
 
     expect(screen.getByText('Past topic')).toBeInTheDocument();
-    expect(screen.getByText('posts.statusPublished')).toBeInTheDocument();
+    expect(screen.getByText('posts.groupPublished')).toBeInTheDocument();
     expect(screen.getByText('Failed topic')).toBeInTheDocument();
-    expect(screen.getByText('posts.statusFailed')).toBeInTheDocument();
+    expect(screen.getByText('posts.groupFailed')).toBeInTheDocument();
     // The failure is localized inline; the raw engine/upstream text is never rendered.
     expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
     expect(screen.queryByText('Upload failed')).not.toBeInTheDocument();

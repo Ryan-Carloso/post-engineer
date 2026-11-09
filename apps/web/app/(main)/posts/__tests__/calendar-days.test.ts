@@ -10,7 +10,7 @@ import {
   defaultDayForMonth,
   gridRange,
 } from '../calendar-days';
-import { CALENDAR_GROUP_ORDER, STATUS_KEY, calendarGroupOf, statusGroupOf } from '../status';
+import { CALENDAR_GROUP_ICON, CALENDAR_GROUP_KEY, CALENDAR_GROUP_MARKER, CALENDAR_GROUP_ORDER, CALENDAR_GROUP_PILL, STATUS_KEY, calendarGroupOf } from '../status';
 
 describe('day bucketing timezone (viewer browser timezone)', () => {
   // 2026-11-02T02:30Z is 23:30 on Nov 1 in São Paulo (UTC-3) but already
@@ -73,23 +73,13 @@ describe('buildMonthGrid', () => {
 });
 
 describe('calendar groups and day counts', () => {
+  // One vocabulary for the cells, legend, day summary and card pills:
+  // running work is "in progress", waiting work is "scheduled".
   it('maps every real slot and generation status to a group', () => {
-    for (const status of ['pending', 'awaiting', 'generating', 'ready', 'publishing']) {
-      expect(statusGroupOf(status)).toBe('inProgress');
+    for (const status of ['generating', 'publishing', 'running']) {
+      expect(calendarGroupOf(status)).toBe('inProgress');
     }
-    expect(statusGroupOf('published')).toBe('published');
-    expect(statusGroupOf('completed')).toBe('published');
-    expect(statusGroupOf('failed')).toBe('failed');
-  });
-
-  it('treats an unknown status as in progress, never as published', () => {
-    expect(statusGroupOf('something-new')).toBe('inProgress');
-  });
-
-  // The calendar shows only outcomes (published / failed): anything not
-  // yet published counts as scheduled, with no status color of its own.
-  it('maps unpublished statuses to scheduled on the calendar', () => {
-    for (const status of ['pending', 'awaiting', 'generating', 'ready', 'publishing', 'something-new']) {
+    for (const status of ['pending', 'awaiting', 'ready']) {
       expect(calendarGroupOf(status)).toBe('scheduled');
     }
     expect(calendarGroupOf('published')).toBe('published');
@@ -97,24 +87,41 @@ describe('calendar groups and day counts', () => {
     expect(calendarGroupOf('failed')).toBe('failed');
   });
 
-  it('counts published, failed and scheduled', () => {
+  it('treats an unknown status as scheduled, never as published', () => {
+    expect(calendarGroupOf('something-new')).toBe('scheduled');
+  });
+
+  it('counts failed, published, in progress and scheduled', () => {
     expect(
       calendarCounts([
         { status: 'awaiting' as const },
         { status: 'ready' as const },
+        { status: 'generating' as const },
         { status: 'published' as const },
         { status: 'failed' as const },
       ]),
-    ).toEqual({ published: 1, failed: 1, scheduled: 2 });
+    ).toEqual({ published: 1, failed: 1, inProgress: 1, scheduled: 2 });
   });
 });
 
 describe('calendar vocabulary', () => {
   it('lists a failure first everywhere the calendar orders its groups', () => {
-    expect(CALENDAR_GROUP_ORDER).toEqual(['failed', 'published', 'scheduled']);
+    expect(CALENDAR_GROUP_ORDER).toEqual(['failed', 'published', 'inProgress', 'scheduled']);
   });
 
-  it('labels an awaiting card with the calendar word for it: scheduled, not pending', () => {
+  it('gives every group a word, an icon, a marker and a card pill', () => {
+    for (const group of CALENDAR_GROUP_ORDER) {
+      expect(CALENDAR_GROUP_KEY[group]).toMatch(/^posts\.group/);
+      expect(CALENDAR_GROUP_ICON[group]).toBeDefined();
+      expect(CALENDAR_GROUP_MARKER[group]).not.toBe('');
+      expect(CALENDAR_GROUP_PILL[group]).not.toBe('');
+    }
+    // The pill is the marker's hue; only the failure marker is solid.
+    expect(CALENDAR_GROUP_PILL.inProgress).toBe(CALENDAR_GROUP_MARKER.inProgress);
+    expect(CALENDAR_GROUP_PILL.failed).toBe('bg-destructive-soft text-destructive');
+  });
+
+  it('keeps the detail page word for an awaiting post: scheduled, not pending', () => {
     expect(STATUS_KEY.awaiting).toBe('posts.groupScheduled');
     // A standalone generation that has not started is still "pending".
     expect(STATUS_KEY.pending).toBe('posts.statusPending');

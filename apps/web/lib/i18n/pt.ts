@@ -20,8 +20,6 @@ export const ptDictionary = {
     personaHint: 'Identidade e voz',
     billing: 'Tokens',
     billingHint: 'Tokens pré-pagos',
-    apiKeys: 'API Keys',
-    apiKeysHint: 'MCP e integrações',
     debug: 'Debug',
     debugHint: 'Ferramentas de validação',
     signOut: 'Sair',

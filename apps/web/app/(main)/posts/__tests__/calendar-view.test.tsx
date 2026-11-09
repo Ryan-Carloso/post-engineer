@@ -11,6 +11,9 @@ const EN: Record<string, string> = {
   'posts.groupPublished': 'Published',
   'posts.groupFailed': 'Failed',
   'posts.groupScheduled': 'Scheduled',
+  'posts.groupInProgress': 'In progress',
+  'posts.calendarNotLoaded': 'Posts not loaded',
+  'posts.filterActive': 'Filtered: only matching posts are shown',
   'posts.calendarDayLabel': '{date}: {summary}',
   'posts.calendarDayEmpty': '{date}: no posts',
 };
@@ -42,10 +45,12 @@ import type { PersonaPhoto } from '../calendar-days';
 const SCHEDULES = new Map([
   ['s1', { personaId: 'p1' }],
   ['s2', { personaId: 'p2' }],
+  ['s3', { personaId: 'p3' }],
 ]);
 const PHOTOS = new Map<string, PersonaPhoto>([
   ['p1', { name: 'Viva Leve', avatarUrl: 'https://example.test/viva.jpg' }],
   ['p2', { name: 'Bicuda', photoUrl: 'https://example.test/bicuda.jpg' }],
+  ['p3', { name: 'Ana Fit', photoUrl: 'https://example.test/ana.jpg' }],
 ]);
 
 type DaySlot = Pick<ScheduledSlot, 'status' | 'scheduleId' | 'slotAt'>;
@@ -121,18 +126,19 @@ describe('CalendarView', () => {
       .getAllByRole('button')
       .find((button) => button.textContent === '1' && button.closest('[data-outside]') !== null);
     expect(outside?.className.split(/\s+/)).toContain('[&>span]:opacity-45');
-    expect(outside?.querySelector('span')?.className.split(/\s+/)).toContain('font-normal');
+    expect(outside?.querySelector('[data-day-number]')?.className.split(/\s+/)).toContain('font-normal');
     const inside = dayButton(/June 20, 2030/);
     expect(inside.className.split(/\s+/)).toContain('[&>span]:opacity-100');
-    expect(inside.querySelector('span')?.className.split(/\s+/)).toContain('font-semibold');
+    expect(inside.querySelector('[data-day-number]')?.className.split(/\s+/)).toContain('font-semibold');
   });
 
-  it('describes per-group counts in the accessible name, failure first — never in progress', () => {
+  it('describes per-group counts in the accessible name, failure first, in the legend order', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
         [
           { status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T08:00:00.000Z' },
+          { status: 'generating', scheduleId: 's1', slotAt: '2030-06-05T09:00:00.000Z' },
           { status: 'published', scheduleId: 's1', slotAt: '2030-06-05T10:00:00.000Z' },
           { status: 'published', scheduleId: 's2', slotAt: '2030-06-05T12:00:00.000Z' },
           { status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T14:00:00.000Z' },
@@ -142,7 +148,7 @@ describe('CalendarView', () => {
     ]);
     setup({ slotsByDay });
     const cell = dayButton(/June 5, 2030/);
-    expect(cell).toHaveAccessibleName('Wednesday, June 5, 2030: Failed: 2, Published: 2, Scheduled: 1');
+    expect(cell).toHaveAccessibleName('Wednesday, June 5, 2030: Failed: 2, Published: 2, In progress: 1, Scheduled: 1');
   });
 
   it('draws one status marker per group with its count, failure first, and tints a day with a failure', () => {
@@ -172,14 +178,32 @@ describe('CalendarView', () => {
     expect(published.className.split(/\s+/)).not.toContain('bg-destructive-soft');
   });
 
-  it('keeps the selected fill on a selected day with a failure instead of the failure tint', () => {
+  // The selection is a navy outline over the cell's own background, never
+  // the solid navy fill that hid a failure and made an empty day a block.
+  it('keeps a selected failed day red under the navy selection outline', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       ['2030-06-05', [{ status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' }]],
     ]);
     setup({ slotsByDay, selectedKey: '2030-06-05' });
-    const cell = dayButton(/June 5, 2030/);
-    expect(cell.className.split(/\s+/)).not.toContain('bg-destructive-soft');
-    expect(cell.querySelector('[data-marker="failed"]')).not.toBeNull();
+    const classes = dayButton(/June 5, 2030/).className.split(/\s+/);
+    expect(classes).toEqual(
+      expect.arrayContaining([
+        'bg-destructive-soft',
+        'data-[selected-single=true]:bg-destructive-soft',
+        'data-[selected-single=true]:outline-primary',
+        'data-[selected-single=true]:text-primary',
+      ]),
+    );
+    expect(classes).not.toContain('data-[selected-single=true]:bg-primary');
+    expect(dayButton(/June 5, 2030/).querySelector('[data-marker="failed"]')).not.toBeNull();
+  });
+
+  it('draws a selected day without a failure as a light tint with the same outline, not a navy block', () => {
+    setup({ selectedKey: '2030-06-20' });
+    const classes = dayButton(/June 20, 2030/).className.split(/\s+/);
+    expect(classes).toEqual(expect.arrayContaining(['data-[selected-single=true]:bg-info-soft', 'data-[selected-single=true]:outline-primary']));
+    expect(classes).not.toContain('data-[selected-single=true]:bg-primary');
+    expect(classes).not.toContain('data-[selected-single=true]:text-primary-foreground');
   });
 
   it("shows the day's distinct personas, the failed post's first", () => {
@@ -199,6 +223,24 @@ describe('CalendarView', () => {
     // images are asserted by DOM, not by role.
     expect(cell.querySelector('[data-personas]')).toHaveAttribute('data-personas', '2');
     expect([...cell.querySelectorAll('[data-personas] img')].map((img) => img.getAttribute('alt'))).toEqual(['Viva Leve', 'Bicuda']);
+    expect(cell.querySelector('[data-personas-more]')).toBeNull();
+  });
+
+  it('shows at most two persona photos and counts the rest as +N', () => {
+    const slotsByDay = new Map<string, DaySlot[]>([
+      [
+        '2030-06-05',
+        [
+          { status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T10:00:00.000Z' },
+          { status: 'awaiting', scheduleId: 's2', slotAt: '2030-06-05T12:00:00.000Z' },
+          { status: 'awaiting', scheduleId: 's3', slotAt: '2030-06-05T14:00:00.000Z' },
+        ],
+      ],
+    ]);
+    setup({ slotsByDay });
+    const cell = dayButton(/June 5, 2030/);
+    expect(cell.querySelectorAll('[data-personas] img')).toHaveLength(2);
+    expect(cell.querySelector('[data-personas-more]')).toHaveTextContent('+1');
   });
 
   it('still marks the status of a day whose posts resolve to no persona', () => {
@@ -225,17 +267,45 @@ describe('CalendarView', () => {
     expect(cell.querySelector('[data-personas]')).toBeNull();
   });
 
-  it('legends the same markers the cells draw — failed, published, scheduled — plus today', () => {
+  it('legends the same markers the cells draw — failed, published, in progress, scheduled — plus today', () => {
     setup();
     const legend = screen.getByText('Scheduled').closest('ul');
     if (legend === null) throw new Error('legend not rendered');
     expect([...legend.querySelectorAll('[data-marker]')].map((marker) => marker.getAttribute('data-marker'))).toEqual([
       'failed',
       'published',
+      'inProgress',
       'scheduled',
     ]);
-    expect(within(legend).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Failed', 'Published', 'Scheduled', 'Today']);
-    expect(screen.queryByText('In progress')).not.toBeInTheDocument();
+    expect(within(legend).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      'Failed',
+      'Published',
+      'In progress',
+      'Scheduled',
+      'Today',
+    ]);
+    expect(legend.querySelector('[data-filter-hint]')).toBeNull();
+  });
+
+  it('says in the legend when a filter hides some posts', () => {
+    setup({ filtered: true });
+    expect(screen.getByText('Filtered: only matching posts are shown').closest('[data-filter-hint]')).not.toBeNull();
+  });
+
+  // A failed load must not read as an empty month: dimmed, disabled days,
+  // no selection, no markers, no legend — but the month can still change.
+  it('draws an unavailable grid when the posts could not be loaded, keeping the month navigation', () => {
+    const slotsByDay = new Map<string, DaySlot[]>([
+      ['2030-06-05', [{ status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' }]],
+    ]);
+    const props = setup({ slotsByDay, selectedKey: '2030-06-15', unavailable: true });
+    expect(screen.getByText('Posts not loaded')).toBeInTheDocument();
+    expect(dayButton(/June 5, 2030/)).toBeDisabled();
+    expect(dayButton(/June 5, 2030/).querySelector('[data-marker]')).toBeNull();
+    expect(screen.getByRole('grid').querySelector('[data-selected="true"]')).toBeNull();
+    expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
+    expect(props.onMonthNavigate).toHaveBeenLastCalledWith(2030, 6);
   });
 
   it('selects a day on click', () => {
@@ -277,7 +347,7 @@ describe('CalendarView', () => {
     ]);
     setup({ slotsByDay });
     for (const day of [dayButton(/June 5, 2030/), dayButton(/June 15, 2030/)]) {
-      expect(day.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-14', 'sm:h-20']));
+      expect(day.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-18', 'sm:h-19']));
       expect(day.className.split(/\s+/)).not.toContain('h-auto');
     }
   });
@@ -298,20 +368,36 @@ describe('CalendarView', () => {
     }
   });
 
-  it('disables Today while today is shown and selected, and enables it otherwise', () => {
+  // One look and size in every state, so it never reads as disabled text
+  // and the arrows around it never shift.
+  it('keeps Today one enabled button with the same classes whether or not today is selected', () => {
     setup({ selectedKey: '2030-06-15' });
-    expect(screen.getByRole('button', { name: 'Today' })).toBeDisabled();
+    const onToday = screen.getByRole('button', { name: 'Today' });
+    expect(onToday).toBeEnabled();
+    const onTodayClasses = onToday.className;
+    expect(onTodayClasses.split(/\s+/)).toEqual(expect.arrayContaining(['border', 'border-input', 'bg-card']));
+    expect(onTodayClasses).not.toContain('disabled:');
   });
 
-  it('keeps Today enabled when another day of the current month is selected', () => {
+  it('gives Today the same classes when another day is selected', () => {
+    setup({ selectedKey: '2030-06-15' });
+    const selectedToday = screen.getByRole('button', { name: 'Today' }).className;
+    document.body.innerHTML = '';
     setup({ selectedKey: '2030-06-20' });
-    expect(screen.getByRole('button', { name: 'Today' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Today' }).className).toBe(selectedToday);
   });
 
   it('formats the weekday headers with Intl short names', () => {
     setup();
     const headers = screen.getAllByRole('columnheader', { hidden: true }).map((header) => header.textContent);
     expect(headers).toEqual(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']);
+  });
+
+  it('capitalizes the weekday headers (pt-BR Intl names are lowercase)', () => {
+    setup();
+    for (const header of screen.getAllByRole('columnheader', { hidden: true })) {
+      expect(header.className.split(/\s+/)).toContain('capitalize');
+    }
   });
 
   it('moves keyboard focus with the arrow keys and selects with Enter', async () => {

@@ -196,13 +196,6 @@ describe('app/(main)/layout — MainLayout', () => {
     expect(firstTab).toHaveAttribute('href', '/posts');
   });
 
-  it('does not render an API Keys tab in the sidebar nav (moved to the profile area)', () => {
-    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const sidebar = screen.getByTestId('nav-brand').closest('aside');
-    const nav = within(sidebar as HTMLElement).getByRole('navigation');
-    expect(within(nav).queryByText('nav.apiKeys')).toBeNull();
-  });
-
   it('posts tab links to /posts', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const postsLink = screen.getAllByText('nav.posts')[0].closest('a');
@@ -249,7 +242,8 @@ describe('app/(main)/layout — MainLayout', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const panelLink = screen.getByTestId('profile-api-keys-link');
     expect(panelLink).toHaveAttribute('href', '/recipes');
-    expect(panelLink).toHaveTextContent('nav.apiKeys');
+    // Same name as the nav tab that opens the same hub.
+    expect(panelLink).toHaveTextContent('nav.prompts');
   });
 
   it('renders locale switcher', () => {
@@ -391,11 +385,6 @@ describe('app/(main)/layout — MainLayout', () => {
       // The mobile tab uses the short label: the full "API Key e MCP"
       // wraps to two lines in a ~70px tab.
       expect(labels).toEqual(['nav.posts', 'nav.persona', 'nav.accounts', 'nav.promptsShort']);
-    });
-
-    it('has no API Keys tab in the mobile nav (moved to the profile area)', () => {
-      render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-      expect(within(getMobileNav()).queryByText('nav.apiKeys')).toBeNull();
     });
 
     it('has no Billing tab in the mobile nav (moved to the profile area)', () => {

@@ -2,11 +2,11 @@
 
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { CalendarPlus, CalendarX2, Filter, RefreshCw, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { CalendarCheck, CalendarPlus, CalendarX2, Filter, FilterX, TriangleAlert, type LucideIcon } from 'lucide-react';
 import type { ScheduledSlot } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { calendarCounts } from './calendar-days';
 import { StatusMarker } from './calendar-markers';
@@ -64,8 +64,9 @@ function CreatePostsLink({ labelKey }: { labelKey: TranslationKey }) {
   );
 }
 
-// A brand-new account: no schedule, so no post in any month. Replaces the
-// calendar, which would only be an empty grid.
+// An account with no post in any month (no schedule yet, or schedules
+// that never produced a post). Replaces the calendar and the filters,
+// which would only be an empty grid and empty choices.
 export function AccountEmptyState() {
   const { t } = useI18n();
   return (
@@ -78,21 +79,58 @@ export function AccountEmptyState() {
   );
 }
 
-// What the list under the calendar shows when the selected day has no
-// posts: a filter that hides everything, a month without posts, or one
-// empty day in a month that has some.
-export function DayEmptyState({ reason, monthLabel }: { reason: 'filter' | 'month' | 'day'; monthLabel: string }) {
+// What the list under the calendar shows when it has no posts, scoped like
+// its heading: a whole month (the heading names the month) that is empty or
+// emptied by a filter, or one empty day in a month that has posts (the
+// heading names the day). Every state offers a next step that is not a
+// dead end: clear the filters, go back to today, or schedule posts.
+export function DayEmptyState({
+  reason,
+  monthLabel,
+  onClearFilters,
+  onGoToday,
+}: {
+  reason: 'filter' | 'month' | 'day';
+  monthLabel: string;
+  onClearFilters: () => void;
+  // Omitted when the shown month already holds today.
+  onGoToday?: () => void;
+}) {
   const { t } = useI18n();
   if (reason === 'filter') {
-    return <EmptyState compact icon={Filter} title={t('posts.noResultsForFilter')} description={t('posts.filterEmptyHint')} />;
+    return (
+      <EmptyState
+        compact
+        icon={Filter}
+        title={t('posts.filterMonthEmptyTitle', { month: monthLabel })}
+        description={t('posts.filterEmptyHint')}
+        action={
+          <Button type="button" size="sm" variant="outline" className="gap-1.5 bg-card text-primary hover:bg-sunken hover:text-primary" onClick={onClearFilters}>
+            <FilterX aria-hidden />
+            {t('posts.clearFilters')}
+          </Button>
+        }
+      />
+    );
   }
   if (reason === 'month') {
     return (
       <EmptyState
+        compact
         icon={CalendarX2}
         title={t('posts.calendarMonthEmptyTitle', { month: monthLabel })}
         description={t('posts.calendarMonthEmptyHint')}
-        action={<CreatePostsLink labelKey="posts.schedulePostsAction" />}
+        action={
+          <div className="flex flex-wrap justify-center gap-2">
+            {onGoToday !== undefined && (
+              <Button type="button" size="sm" variant="outline" className="gap-1.5 bg-card text-primary hover:bg-sunken hover:text-primary" onClick={onGoToday}>
+                <CalendarCheck aria-hidden />
+                {t('posts.calendarGoToday')}
+              </Button>
+            )}
+            <CreatePostsLink labelKey="posts.schedulePostsAction" />
+          </div>
+        }
       />
     );
   }
@@ -129,26 +167,20 @@ export function DaySummary({ slots }: { slots: Pick<ScheduledSlot, 'status'>[] }
   );
 }
 
-// The load error: one compact alert with the only refresh control on the
-// page while it shows (the header one hides).
-export function LoadErrorBanner({ messageKey, onRetry, retrying }: { messageKey: TranslationKey; onRetry: () => void; retrying: boolean }) {
+// The load error: one compact alert that names what failed and points at
+// the page's single Refresh control (in the page header, which never moves,
+// so the title and filters do not jump when the error appears or clears).
+export function LoadErrorBanner({ messageKey }: { messageKey: TranslationKey }) {
   const { t } = useI18n();
   return (
     <div
       role="alert"
-      className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 text-destructive"
+      className="mb-4 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 text-destructive"
     >
-      <TriangleAlert className="size-5 shrink-0" aria-hidden />
-      <p className="min-w-0 flex-1 text-sm font-semibold">{t(messageKey)}</p>
-      <button
-        type="button"
-        onClick={onRetry}
-        disabled={retrying}
-        className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-on-ink hover:bg-accent-hover disabled:opacity-50"
-      >
-        <RefreshCw className={cn('size-4', retrying && 'animate-spin')} aria-hidden />
-        {t('posts.refresh')}
-      </button>
+      <TriangleAlert className="mt-px size-5 shrink-0" aria-hidden />
+      <p className="min-w-0 flex-1 text-sm">
+        <span className="font-semibold">{t(messageKey)}</span> {t('posts.loadErrorRetryHint')}
+      </p>
     </div>
   );
 }

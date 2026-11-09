@@ -35,65 +35,93 @@ const FAILED_SLOT: ScheduledSlot = {
   retryable: true,
 };
 
-function renderCard(slot: ScheduledSlot, timeOnly = false) {
-  render(<PostCard slot={slot} personaName="Viva Leve" accounts={[]} locale="en" timeOnly={timeOnly} />);
+const ACCOUNTS = [
+  { id: 'ch1', provider: 'youtube' as const, label: 'Europa Na Estrada' },
+  { id: 'ig1', provider: 'instagram' as const, label: '@vivalave' },
+];
+
+function renderCard(slot: ScheduledSlot, timeOnly = false, accounts: typeof ACCOUNTS = []) {
+  render(<PostCard slot={slot} personaName="Viva Leve" accounts={accounts} locale="en" timeOnly={timeOnly} />);
 }
 
-describe('PostCard retry', () => {
-  it('shows a Try again link to the post detail on a failed card that can be retried', () => {
+describe('PostCard failure', () => {
+  // There is no retry endpoint: the card never offers a "Try again" that
+  // only opens the detail page.
+  it('offers no Try again action, only a See details link to the post detail', () => {
     renderCard(FAILED_SLOT);
 
-    const retry = screen.getByRole('link', { name: 'posts.cardRetry' });
-    expect(retry).toHaveAttribute('href', '/posts/f1');
+    expect(screen.queryByText('posts.cardRetry')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'posts.cardDetails' })).toHaveAttribute('href', '/posts/f1');
   });
 
-  it('shows no Try again link on a failed card that cannot be retried', () => {
+  it('puts the failure reason, the accounts it failed for and the details link together in one red box', () => {
+    renderCard(FAILED_SLOT, false, ACCOUNTS);
+
+    const box = screen.getByText('posts.cardFailedRetryable').closest('.bg-destructive-soft');
+    if (!(box instanceof HTMLElement)) throw new Error('failure box not rendered');
+    expect(within(box).getByText('posts.cardFailedFor')).toBeInTheDocument();
+    expect(within(box).getByText('Europa Na Estrada')).toBeInTheDocument();
+    expect(within(box).getByText('@vivalave')).toBeInTheDocument();
+    expect(within(box).getByRole('link', { name: 'posts.cardDetails' })).toBeInTheDocument();
+    // The chips are not repeated under the box.
+    expect(screen.getAllByText('Europa Na Estrada')).toHaveLength(1);
+  });
+
+  it('shows the permanent failure copy when the post cannot be retried, with the same details link', () => {
     renderCard({ ...FAILED_SLOT, retryable: false });
 
-    expect(screen.queryByRole('link', { name: 'posts.cardRetry' })).not.toBeInTheDocument();
+    expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
+    expect(screen.queryByText('posts.cardFailedRetryable')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'posts.cardDetails' })).toHaveAttribute('href', '/posts/f1');
   });
 
-  it('shows no Try again link when retryable is unknown', () => {
+  it('treats an unknown retryable flag as permanent', () => {
     renderCard({ ...FAILED_SLOT, retryable: null });
 
-    expect(screen.queryByRole('link', { name: 'posts.cardRetry' })).not.toBeInTheDocument();
+    expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
   });
 
-  it('shows no Try again link on a published card', () => {
-    renderCard({
-      ...FAILED_SLOT,
-      status: 'published',
-      title: 'Published topic',
-      error: null,
-      publishedAt: '2030-06-01T10:05:00.000Z',
-    });
+  it('shows no failure box and no details link on a published card, and keeps its chips', () => {
+    renderCard(
+      { ...FAILED_SLOT, status: 'published', title: 'Published topic', error: null, publishedAt: '2030-06-01T10:05:00.000Z' },
+      false,
+      ACCOUNTS,
+    );
 
-    expect(screen.queryByRole('link', { name: 'posts.cardRetry' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'posts.cardDetails' })).not.toBeInTheDocument();
+    expect(screen.queryByText('posts.cardFailedFor')).not.toBeInTheDocument();
+    expect(screen.getByText('Europa Na Estrada')).toBeInTheDocument();
   });
 
-  it('keeps the card itself linked to the post detail', () => {
+  it('keeps the card itself linked to the post detail, with a chevron that says so', () => {
     renderCard(FAILED_SLOT);
 
-    expect(screen.getByRole('link', { name: /Failed topic/ })).toHaveAttribute('href', '/posts/f1');
+    const link = screen.getByRole('link', { name: /Failed topic/ });
+    expect(link).toHaveAttribute('href', '/posts/f1');
+    expect(link.querySelector('[data-card-chevron]')).not.toBeNull();
   });
 });
 
-describe('PostCard failure', () => {
-  it('puts the failure reason and its Try again action together in one red box', () => {
-    renderCard(FAILED_SLOT);
+describe('PostCard status pill — the calendar vocabulary', () => {
+  it.each([
+    ['awaiting', 'posts.groupScheduled'],
+    ['ready', 'posts.groupScheduled'],
+    ['generating', 'posts.groupInProgress'],
+    ['publishing', 'posts.groupInProgress'],
+    ['published', 'posts.groupPublished'],
+    ['failed', 'posts.groupFailed'],
+  ] as const)('labels a %s post with the calendar group word %s', (status, label) => {
+    renderCard({ ...FAILED_SLOT, status });
 
-    const message = screen.getByText('posts.cardFailedRetryable');
-    const box = message.closest('div');
-    if (box === null) throw new Error('failure box not rendered');
-    expect(box.className.split(/\s+/)).toContain('bg-destructive-soft');
-    expect(within(box).getByRole('link', { name: 'posts.cardRetry' })).toBeInTheDocument();
+    expect(document.querySelector(`[data-status="${status}"]`)).toHaveTextContent(label);
   });
 
-  it('shows the permanent failure copy, with no action, when the post cannot be retried', () => {
-    renderCard({ ...FAILED_SLOT, retryable: false });
+  it('names the exact stage with the percent under the In progress pill', () => {
+    renderCard({ ...FAILED_SLOT, status: 'generating', progress: 45 });
 
-    const box = screen.getByText('posts.cardFailedPermanent').closest('div');
-    expect(box?.querySelector('a')).toBeNull();
+    expect(screen.getByText('posts.statusGenerating')).toBeInTheDocument();
+    expect(screen.getByText('45%')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '45');
   });
 });
 
