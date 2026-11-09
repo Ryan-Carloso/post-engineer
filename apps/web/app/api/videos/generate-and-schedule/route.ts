@@ -473,7 +473,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // Idempotency anchor, resolved once: the experiment check below needs the
   // same schedule id step 7 uses to tell a replay from a duplicate.
   const idem = resolveIdempotency(userId, idempotencyKey, request);
-  const pairFacts = buildPairFacts({ providers, accountIds, prep, title, segments: options?.segments, fullLipsync: validatedOptions.fullLipsync, facelessMaterial: validatedOptions.facelessMaterial, audioUrl: validatedOptions.audioUrl });
+  const pairFacts = buildPairFacts({ providers, accountIds, pinterestBoardId, prep, title, segments: options?.segments, fullLipsync: validatedOptions.fullLipsync, facelessMaterial: validatedOptions.facelessMaterial, audioUrl: validatedOptions.audioUrl });
   if (experiment !== undefined) {
     const link = await checkExperimentLink(supabase, { link: experiment, userId, personaId, replayScheduleId: idem.scheduleId, facts: pairFacts });
     if (!link.ok && link.status === 500) return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
