@@ -41,7 +41,7 @@
     "providers": {
       "title": "Publish to",
       "type": "array",
-      "description": "One or more of: youtube, instagram, linkedin, bluesky, threads, facebook. Connect the accounts first at https://post-engineer.com.",
+      "description": "One or more of: youtube, instagram, linkedin, bluesky, threads, facebook, rumble. Connect the accounts first at https://post-engineer.com.",
       "editor": "stringList",
       "prefill": [
         "youtube"
