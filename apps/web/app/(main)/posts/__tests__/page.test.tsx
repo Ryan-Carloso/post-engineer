@@ -18,6 +18,7 @@ vi.mock('@/lib/api', () => ({
   useInstagramAccountsQuery: vi.fn(),
   useLinkedinAccountsQuery: vi.fn(),
   useThreadsAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() })),
+  useFacebookAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() })),
   useBlueskyAccountsQuery: vi.fn(),
 }));
 
@@ -503,7 +504,7 @@ describe('PostsPage fallbacks', () => {
     const options = within(providerSelect)
       .getAllByRole('option')
       .map((option) => option.textContent);
-    expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'LinkedIn', 'Bluesky', 'Threads']);
+    expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'LinkedIn', 'Bluesky', 'Threads', 'Facebook']);
   });
 
 });

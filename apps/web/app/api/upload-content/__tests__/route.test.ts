@@ -47,6 +47,17 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
+const { mockHandleFacebookUpload, mockHandleThreadsUpload } = vi.hoisted(() => ({
+  mockHandleFacebookUpload: vi.fn(),
+  mockHandleThreadsUpload: vi.fn(),
+}));
+vi.mock('@/lib/upload/facebook-handler', () => ({
+  handleFacebookUpload: (...args: unknown[]) => mockHandleFacebookUpload(...args),
+}));
+vi.mock('@/lib/upload/threads-handler', () => ({
+  handleThreadsUpload: (...args: unknown[]) => mockHandleThreadsUpload(...args),
+}));
+
 vi.mock('@/lib/upload/handlers', () => ({
   handleYoutubeUpload: (...args: unknown[]) => mockHandleYoutubeUpload(...args),
   handleInstagramUpload: (...args: unknown[]) => mockHandleInstagramUpload(...args),
@@ -279,7 +290,7 @@ describe('POST /api/upload-content', () => {
     expect(res.status).toBe(400);
     expect(mockBuildUploadErrorResponse).toHaveBeenCalled();
     const err = mockBuildUploadErrorResponse.mock.calls[0][0] as Error;
-    expect(err.message).toBe('Invalid provider. Use one of: youtube, instagram, bluesky, linkedin, threads');
+    expect(err.message).toBe('Invalid provider. Use one of: youtube, instagram, bluesky, linkedin, threads, facebook');
     // The validation error carries the offending field for the client.
     expect((err as ValidationError).field).toBe('provider');
   });
@@ -329,6 +340,20 @@ describe('POST /api/upload-content', () => {
     expect(mockHandleBlueskyUpload).not.toHaveBeenCalled();
     const body = (await res.json()) as { success: boolean; provider: string };
     expect(body).toEqual({ success: true, provider: 'linkedin', results: [] });
+  });
+
+  it('handles the facebook upload with the caller as the Page owner', async () => {
+    mockHandleFacebookUpload.mockResolvedValue({ success: true, results: [{ accountId: '111', success: true, postId: 'vid-1' }] });
+    const res = await POST(makeRequest({ provider: 'facebook' }));
+
+    expect(mockHandleFacebookUpload).toHaveBeenCalledTimes(1);
+    const [formData, userId] = mockHandleFacebookUpload.mock.calls[0] as [FormData, string];
+    expect(formData.get('provider')).toBe('facebook');
+    expect(userId).toBe(USER_ID);
+    expect(mockHandleThreadsUpload).not.toHaveBeenCalled();
+    expect(mockHandleInstagramUpload).not.toHaveBeenCalled();
+    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({ success: true, results: [{ accountId: '111', success: true, postId: 'vid-1' }] });
   });
 
   it('responds with a handled error when the handler throws', async () => {

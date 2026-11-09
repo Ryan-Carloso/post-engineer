@@ -159,7 +159,7 @@ const scheduleSummary = object({
   id: str,
   persona_id: { type: 'string', nullable: true },
   providers: strArray,
-  ...fields(strArray, ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads'].map((p) => `${p}_account_ids`)),
+  ...fields(strArray, ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'].map((p) => `${p}_account_ids`)),
   days_of_week: { type: 'array', items: int },
   ...fields(int, ['start_hour', 'end_hour', 'posts_per_day']),
   timezone: str,
@@ -169,7 +169,7 @@ const scheduleSummary = object({
 });
 
 const anyObject = { type: 'object', additionalProperties: true };
-const providers = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads'];
+const providers = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'];
 // Engine-backed routes proxy the engine response, wrapped as BaseResponse.
 const engineEnvelope = object({
   status: { type: 'integer' },
@@ -225,7 +225,7 @@ export const operationSchemas = {
     request: object(
       {
         draft: { type: 'string', minLength: 1, maxLength: 10000 },
-        network: { type: 'string', enum: ['linkedin', 'youtube', 'instagram', 'bluesky', 'threads'] },
+        network: { type: 'string', enum: ['linkedin', 'youtube', 'instagram', 'bluesky', 'threads', 'facebook'] },
         personaId: { type: 'string', format: 'uuid' },
         kind: { type: 'string', enum: ['post', 'script'] },
       },
@@ -325,7 +325,7 @@ export const operationSchemas = {
   },
   // apps/web/app/api/account/connect-url/route.ts
   'POST /api/account/connect-url': {
-    request: object({ provider: { type: 'string', enum: ['youtube', 'instagram', 'linkedin', 'threads'] } }, ['provider']),
+    request: object({ provider: { type: 'string', enum: ['youtube', 'instagram', 'linkedin', 'threads', 'facebook'] } }, ['provider']),
     response: success({ auth_url: { type: 'string', format: 'uri', description: 'https URL to open in a browser.' } }),
   },
   // apps/web/app/api/bluesky-connect/route.ts (JSON or form body)

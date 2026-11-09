@@ -7,6 +7,7 @@ import {
   createLinkedInMemberPost,
   createLinkedInOrganizationPost,
 } from '@/lib/linkedin';
+import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 
 //---------------
@@ -86,6 +87,7 @@ export async function handleLinkedinUpload(
       results.push({ accountId, success: true, postId });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
+      reportAccountUnauthorized('linkedin', accountId, ownerUserId, error);
       results.push({ accountId, success: false, error: message });
     }
   }

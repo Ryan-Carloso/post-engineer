@@ -14,10 +14,13 @@ import {
   useBlueskyAccountsQuery,
   useLinkedinAccountsQuery,
   useThreadsAccountsQuery,
+  useFacebookAccountsQuery,
 } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import { SpinnerIcon } from '@/lib/ui';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
+import type { SocialProvider } from '@/lib/providers/registry';
+import { emptyPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 
 //---------------
 // PersonaPublishingAccountsSection — per-persona default publishing accounts
@@ -30,7 +33,7 @@ import { InlineFieldError, SectionDivider } from './persona-section-parts';
 // local state — nothing is sent until Save.
 //---------------
 
-type PublishingProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads';
+type PublishingProvider = SocialProvider;
 type PublishingDefaults = Record<PublishingProvider, string[]>;
 
 const PROVIDERS: readonly { provider: PublishingProvider; label: string }[] = [
@@ -39,9 +42,10 @@ const PROVIDERS: readonly { provider: PublishingProvider; label: string }[] = [
   { provider: 'bluesky', label: 'Bluesky' },
   { provider: 'linkedin', label: 'LinkedIn' },
   { provider: 'threads', label: 'Threads' },
+  { provider: 'facebook', label: 'Facebook' },
 ];
 
-const EMPTY_DEFAULTS: PublishingDefaults = { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [] };
+const EMPTY_DEFAULTS: PublishingDefaults = emptyPersonaDefaultAccounts();
 
 //---------------
 // API helpers — the route is built in parallel (issue #212); the contract is
@@ -85,7 +89,7 @@ async function fetchDefaults(personaId: string, loadError: string): Promise<Publ
     logger.warn('[persona-publishing-accounts] non-uuid personaId; skipping defaults fetch', {
       personaId,
     });
-    return { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [] };
+    return emptyPersonaDefaultAccounts();
   }
   const res = await fetch(`/api/persona/publishing-accounts?personaId=${encodeURIComponent(personaId)}`);
   if (!res.ok) notifyIfSessionExpired(res);
@@ -127,6 +131,7 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
   const bluesky = useBlueskyAccountsQuery();
   const linkedin = useLinkedinAccountsQuery();
   const threads = useThreadsAccountsQuery();
+  const facebook = useFacebookAccountsQuery();
 
   const [selection, setSelection] = useState<PublishingDefaults>(EMPTY_DEFAULTS);
   const [loading, setLoading] = useState(true);
@@ -247,10 +252,24 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
         />
       ),
     })),
+    facebook: (facebook.data?.accounts ?? []).map((account) => ({
+      id: account.providerAccountId,
+      card: (
+        <AccountCard
+          key={`facebook:${account.providerAccountId}`}
+          type="facebook"
+          name={account.accountName ?? account.providerAccountId}
+          labelOrigin={account.accountName ? 'stored' : 'provider_id'}
+          thumbnail={account.profilePictureUrl}
+          selected={selection.facebook.includes(account.providerAccountId)}
+          onSelect={() => toggle('facebook', account.providerAccountId)}
+        />
+      ),
+    })),
   };
 
   const accountsLoading =
-    youtube.isLoading || instagram.isLoading || bluesky.isLoading || linkedin.isLoading || threads.isLoading;
+    youtube.isLoading || instagram.isLoading || bluesky.isLoading || linkedin.isLoading || threads.isLoading || facebook.isLoading;
 
   return (
     <section>

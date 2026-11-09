@@ -27,6 +27,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from '@/lib/experiments/limits';
 import { logger } from '@/lib/logger';
 import type { PersonaPrep } from './persona-prep';
+import { PROVIDER_ACCOUNT_COLUMNS } from './account-columns';
 
 export const ExperimentLinkSchema = z
   .object({
@@ -111,14 +112,6 @@ export function buildPairFacts(input: {
 export type LinkCheck =
   | { ok: true }
   | { ok: false; status: 400 | 404 | 409 | 500; message: string; field: string };
-
-const PROVIDER_ACCOUNT_COLUMNS = {
-  youtube: 'youtube_account_ids',
-  instagram: 'instagram_account_ids',
-  linkedin: 'linkedin_account_ids',
-  bluesky: 'bluesky_account_ids',
-  threads: 'threads_account_ids',
-} as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -268,7 +261,7 @@ async function comparePartner(
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
     .select(
-      'providers, post_voice_id, post_voice_audio_url, post_video_aspect, post_video_layout, post_paragraph_number, post_face_quality, post_language, post_niche, post_cta_text, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids',
+      'providers, post_voice_id, post_voice_audio_url, post_video_aspect, post_video_layout, post_paragraph_number, post_face_quality, post_language, post_niche, post_cta_text, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids',
     )
     .eq('id', partner.schedule_id)
     .eq('user_id', userId)

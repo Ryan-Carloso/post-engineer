@@ -8,6 +8,7 @@ import {
   truncateBlueskyCaption,
   validateVideoForBluesky,
 } from '@/lib/bluesky';
+import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 
 //---------------
 // handleBlueskyUpload — publishes the video to the user's Bluesky account.
@@ -110,6 +111,7 @@ export async function handleBlueskyUpload(
       results.push({ accountId: did, success: true, postId });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
+      reportAccountUnauthorized('bluesky', did, ownerUserId, error);
       results.push({ accountId: did, success: false, error: message });
     }
   }

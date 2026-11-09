@@ -48,6 +48,15 @@ describe('isUnauthorizedError', () => {
     expect(isUnauthorizedError(new Error('Unauthorized'))).toBe(true);
   });
 
+  it('is true for a dead Bluesky credential (invalid_credentials, no numeric status)', () => {
+    expect(isUnauthorizedError({ name: 'BlueskyError', code: 'invalid_credentials' })).toBe(true);
+  });
+
+  it('is false for other Bluesky failures', () => {
+    expect(isUnauthorizedError({ name: 'BlueskyError', code: 'upload_failed' })).toBe(false);
+    expect(isUnauthorizedError({ name: 'BlueskyError', code: 'rate_limited' })).toBe(false);
+  });
+
   it('is false for other failures', () => {
     expect(isUnauthorizedError(new Error('socket hang up'))).toBe(false);
     expect(isUnauthorizedError({ response: { status: 500 } })).toBe(false);

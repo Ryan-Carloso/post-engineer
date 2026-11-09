@@ -14,6 +14,7 @@ export const PROVIDER_LABELS: Record<SocialProvider, string> = {
   linkedin: 'LinkedIn',
   bluesky: 'Bluesky',
   threads: 'Threads',
+  facebook: 'Facebook',
 };
 
 // Every account a schedule targets, across all networks.
@@ -23,6 +24,7 @@ export function scheduleAccountIds(schedule: {
   linkedinAccountIds?: string[];
   blueskyAccountIds?: string[];
   threadsAccountIds?: string[];
+  facebookAccountIds?: string[];
 }): string[] {
   return [
     ...(schedule.youtubeAccountIds ?? []),
@@ -30,6 +32,7 @@ export function scheduleAccountIds(schedule: {
     ...(schedule.linkedinAccountIds ?? []),
     ...(schedule.blueskyAccountIds ?? []),
     ...(schedule.threadsAccountIds ?? []),
+    ...(schedule.facebookAccountIds ?? []),
   ];
 }
 
@@ -46,6 +49,9 @@ export function accountOption(account: PublicAccountItem): AccountOption {
   }
   if (account.provider === 'threads') {
     return { id: account.providerAccountId, provider: 'threads', label: account.accountName === null ? account.providerAccountId : `@${account.accountName}` };
+  }
+  if (account.provider === 'facebook') {
+    return { id: account.providerAccountId, provider: 'facebook', label: account.accountName ?? account.providerAccountId };
   }
   if (account.provider === 'instagram') return { id: account.igUserId, provider: 'instagram', label: `@${account.username}` };
   return { id: account.channelId, provider: 'youtube', label: account.channelName };

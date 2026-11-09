@@ -737,6 +737,23 @@ describe('generate and schedule video client', () => {
     });
   });
 
+  it('nests the threads and facebook account arrays under their own providers', async () => {
+    await client.generatePersonaVideo({
+      ...baseInput,
+      providers: ['threads', 'facebook'],
+      threadsAccountIds: ['th-1'],
+      facebookAccountIds: ['page-1', 'page-2'],
+    });
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect(publishing.accounts).toEqual({
+      youtube: ['chan-1'],
+      bluesky: ['did:plc:abc'],
+      threads: ['th-1'],
+      facebook: ['page-1', 'page-2'],
+    });
+    expect(publishing.providers).toEqual(['threads', 'facebook']);
+  });
+
   it('omits personaId entirely when the caller sends no persona', async () => {
     // A persona-less post is signalled by the ABSENT key, not by an empty
     // string: the API reads absence as "no persona", and sending `""` would
@@ -1782,6 +1799,22 @@ describe('publishVideoDirect', () => {
 
     const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
     expect(formData.getAll('threadsAccountIds')).toEqual(['t-1']);
+    expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('maps account ids to the facebook field name and sends the caption', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'facebook',
+      videoPath,
+      accountIds: ['page-1', 'page-2'],
+      caption: 'hello facebook',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('provider')).toBe('facebook');
+    expect(formData.getAll('facebookAccountIds')).toEqual(['page-1', 'page-2']);
+    expect(formData.get('caption')).toBe('hello facebook');
     expect(formData.get('video')).toBeInstanceOf(Blob);
   });
 

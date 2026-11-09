@@ -60,7 +60,7 @@ const nextConfig: NextConfig = {
         hostname: '**.cdninstagram.com',
       },
       // Account avatars: new YouTube channels serve from googleusercontent,
-      // Instagram/Threads sometimes from fbcdn, plus Bluesky and LinkedIn.
+      // Instagram/Threads/Facebook Pages sometimes from fbcdn, plus Bluesky and LinkedIn.
       // A host missing here makes next/image refuse the card picture.
       {
         protocol: 'https',

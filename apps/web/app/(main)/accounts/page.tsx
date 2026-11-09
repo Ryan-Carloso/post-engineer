@@ -12,6 +12,7 @@ import {
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
   useThreadsAccountsQuery,
+  useFacebookAccountsQuery,
   useYouTubeAccountsQuery,
   type DisconnectableProvider,
   type DisconnectAccountResult,
@@ -21,6 +22,7 @@ import { useYouTubeOAuth } from '@/lib/oauth/google-handler';
 import { useInstagramOAuth } from '@/lib/oauth/instagram-handler';
 import { useLinkedInOAuth } from '@/lib/oauth/linkedin-handler';
 import { useThreadsOAuth } from '@/lib/oauth/threads-handler';
+import { useFacebookOAuth } from '@/lib/oauth/facebook-handler';
 import { ProviderIcon } from '@/components/provider-icon';
 import { useAccountListErrorTelemetry, reportAccountDisconnectFailed } from '@/lib/account-card-telemetry';
 import { useI18n } from '@/lib/i18n/provider';
@@ -37,6 +39,7 @@ export default function AccountsPage(): React.ReactElement {
         <BlueskyAccountsSection />
         <LinkedinAccountsSection />
         <ThreadsAccountsSection />
+        <FacebookAccountsSection />
       </main>
     </div>
   );
@@ -308,7 +311,7 @@ function useDisconnectFlow(provider: DisconnectableProvider): {
 async function handleDisconnect(
   t: ReturnType<typeof useI18n>['t'],
   disconnect: { mutateAsync: (input: { providerAccountId: string }) => Promise<DisconnectAccountResult> },
-  provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads',
+  provider: DisconnectableProvider,
   providerAccountId: string,
   onError: (message: string) => void,
 ): Promise<void> {
@@ -343,6 +346,40 @@ function ThreadsAccountsSection(): ReactNode {
       connectedLabel={connectedLabel(t, accounts.length)}
       count={accounts.length}
       accounts={accounts.map((account) => <AccountCard key={account.recordId} type="threads" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
+      isLoading={query.isLoading}
+      loadError={query.error?.message ?? null}
+      connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
+      connectError={oauth.error}
+      disconnectError={flow.disconnectError}
+      connectDisabled={oauth.isLoading}
+      retryLabel={t('accounts.tryAgain')}
+      onConnect={() => void oauth.startOAuth()}
+      onRetry={() => void query.refetch()}
+      dialog={flow.dialog}
+    />
+  );
+}
+
+//---------------
+// Facebook Pages: one query and one OAuth flow. Each managed Page is its
+// own account (connecting once adds every Page the user manages).
+//---------------
+
+function FacebookAccountsSection(): ReactNode {
+  const { t } = useI18n();
+  const query = useFacebookAccountsQuery();
+  const oauth = useFacebookOAuth();
+  const flow = useDisconnectFlow('facebook');
+  const accounts = query.data?.accounts ?? [];
+  useAccountListErrorTelemetry('facebook', query.error?.message ?? null);
+  return (
+    <SocialAccountsSection
+      icon={<BrandIcon className="bg-muted"><ProviderIcon provider="facebook" /></BrandIcon>}
+      label={t('accounts.facebookLabel')}
+      description={t('accounts.facebookDescription')}
+      connectedLabel={connectedLabel(t, accounts.length)}
+      count={accounts.length}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="facebook" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
