@@ -27,8 +27,18 @@ vi.mock('@/lib/schedule-range', () => ({
   useScheduleRangeQuery: vi.fn(),
 }));
 
+vi.mock('next/image', () => ({
+  // eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element
+  default: (props: React.ComponentProps<'img'>) => <img {...props} />,
+}));
+
+vi.mock('@/lib/logger', () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
 vi.mock('@/lib/ui', () => ({
   SpinnerIcon: () => <span data-testid="icon-spinner" />,
+  ImageIcon: () => <span data-testid="icon-image" />,
 }));
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -118,7 +128,7 @@ function mockQueries(overrides: {
     refetch: vi.fn(),
   } as never);
   vi.mocked(usePersonaListQuery).mockReturnValue({
-    data: [{ id: 'p1', name: 'Viva Leve' }] as never,
+    data: [{ id: 'p1', name: 'Viva Leve', avatarUrl: 'https://example.test/viva.jpg' }] as never,
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -213,13 +223,13 @@ describe('PostsPage', () => {
   it('renders the status badge first, then date, and network + account chips', () => {
     render(<PostsPage />);
 
-    const card = screen.getByText('Upcoming topic').closest('a');
+    const card = screen.getByText('Upcoming topic').closest('a')?.parentElement;
     expect(card).not.toBeNull();
     const text = card?.textContent ?? '';
     // Status label precedes the date + time, which precede the persona and title.
     expect(text.indexOf('posts.statusPending')).toBeLessThan(text.indexOf('·'));
     expect(text.indexOf('·')).toBeLessThan(text.indexOf('Viva Leve'));
-    // Chips: network glyph (role img) + account label.
+    // Chips: network glyph (role img) + account label — they sit in the card root, next to the link.
     const chips = within(card as HTMLElement);
     expect(chips.getByRole('img', { name: 'youtube' })).toBeInTheDocument();
     expect(chips.getByText('Europa Na Estrada')).toBeInTheDocument();
@@ -273,11 +283,15 @@ describe('PostsPage', () => {
     expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
   });
 
-  it('shows a loading spinner while the calendar range is loading', () => {
+  it('shows a loading skeleton while the calendar range is loading', () => {
     vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: true, isFetching: false, isError: false, refetch: vi.fn() } as never);
 
     render(<PostsPage />);
-    expect(screen.getByTestId('icon-spinner')).toBeInTheDocument();
+    // A skeleton keeps the calendar layout in place; no lone spinner on
+    // an empty page.
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(screen.getByText('posts.loadingPosts')).toBeInTheDocument();
+    expect(screen.queryByTestId('icon-spinner')).not.toBeInTheDocument();
   });
 
   it('shows the error state when the personas query fails', () => {
@@ -291,7 +305,8 @@ describe('PostsPage', () => {
     } as never);
 
     render(<PostsPage />);
-    expect(screen.getByText('posts.loadError')).toBeInTheDocument();
+    // The error names the supporting data, not the calendar posts.
+    expect(screen.getByText('posts.loadErrorSupporting')).toBeInTheDocument();
   });
 
   it('shows the error state when an account query fails', () => {
@@ -305,7 +320,7 @@ describe('PostsPage', () => {
     } as never);
 
     render(<PostsPage />);
-    expect(screen.getByText('posts.loadError')).toBeInTheDocument();
+    expect(screen.getByText('posts.loadErrorSupporting')).toBeInTheDocument();
   });
 
   it('retry refetches the account queries as well', async () => {
@@ -321,7 +336,7 @@ describe('PostsPage', () => {
 
     // Without this, a failed account fetch could never clear without a
     // full page reload.
-    const errorPanel = screen.getByText('posts.loadError').closest('div');
+    const errorPanel = screen.getByText('posts.loadErrorSupporting').closest('div');
     if (!errorPanel) throw new Error('error panel not rendered');
     await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));
     expect(youtubeRefetch).toHaveBeenCalledTimes(1);
@@ -356,7 +371,7 @@ describe('PostsPage', () => {
 
     // Without this, a failed personas fetch could never clear without a
     // full page reload.
-    const errorPanel = screen.getByText('posts.loadError').closest('div');
+    const errorPanel = screen.getByText('posts.loadErrorSupporting').closest('div');
     if (!errorPanel) throw new Error('error panel not rendered');
     await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));
     expect(personasRefetch).toHaveBeenCalledTimes(1);
@@ -514,7 +529,7 @@ describe('PostsPage fallbacks', () => {
     } as never);
     render(<PostsPage />);
 
-    const card = within(screen.getByText('Upcoming topic').closest('a') as HTMLElement);
+    const card = within(screen.getByText('Upcoming topic').closest('a')?.parentElement as HTMLElement);
     expect(card.getByText('Alpha One')).toBeInTheDocument();
     expect(card.getByText('Beta Two')).toBeInTheDocument();
     expect(card.getByText('Gamma Three')).toBeInTheDocument();
@@ -595,7 +610,37 @@ describe('PostsPage calendar view', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'linkedin');
 
     const cells = screen.getAllByRole('gridcell');
-    expect(cells.some((cell) => cell.querySelector('[data-group]') !== null)).toBe(false);
+    expect(cells.some((cell) => cell.querySelector('[data-ring]') !== null)).toBe(false);
+  });
+
+  it('shows the persona photo with the scheduled ring on a day whose post is still to publish', () => {
+    mockQueries();
+    render(<PostsPage />);
+
+    // June 1 holds the awaiting UPCOMING_SLOT: photo, no status color.
+    const day1 = within(screen.getByRole('grid'))
+      .getAllByRole('button', { name: 'posts.calendarDayLabel' })
+      .find((button) => button.textContent === '1');
+    expect(day1).toBeDefined();
+    expect((day1 as HTMLElement).querySelector('img[alt="Viva Leve"]')).not.toBeNull();
+    expect((day1 as HTMLElement).querySelector('[data-ring]')).toHaveAttribute('data-ring', 'scheduled');
+  });
+
+  it('counts the selected day as published, failed and scheduled — never in progress', async () => {
+    mockQueries({ range: rangeSlots });
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    // June 5 holds one awaiting and one published post.
+    const day5 = within(screen.getByRole('grid'))
+      .getAllByRole('button', { name: 'posts.calendarDayLabel' })
+      .find((button) => button.textContent?.startsWith('5'));
+    await user.click(day5 as HTMLElement);
+
+    expect(screen.getByText('posts.groupPublished: 1')).toBeInTheDocument();
+    expect(screen.getByText('posts.groupScheduled: 1')).toBeInTheDocument();
+    expect(screen.getByText('posts.groupFailed: 0')).toBeInTheDocument();
+    expect(screen.queryByText(/posts\.groupInProgress/)).not.toBeInTheDocument();
   });
 
   it('warns when the range read was truncated', () => {
@@ -610,7 +655,80 @@ describe('PostsPage calendar view', () => {
     vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isFetching: false, isError: true, refetch: vi.fn() } as never);
     render(<PostsPage />);
 
-    expect(screen.getByText('posts.loadError')).toBeInTheDocument();
+    // The error names the calendar posts, not the supporting data.
+    expect(screen.getByText('posts.loadErrorCalendar')).toBeInTheDocument();
+  });
+
+  it('clicking an outside day selects it and moves the shown month to it', async () => {
+    mockQueries({ range: rangeSlots });
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    // The June grid's last week shows July 1-6 as outside days; picking
+    // one must not leave the calendar on June with a July detail below.
+    // Outside days without posts carry the empty-day label, so match by
+    // the cell, not by the label.
+    const july1 = within(screen.getByRole('grid'))
+      .getAllByRole('button')
+      .find((button) => button.textContent === '1' && button.closest('[data-outside]') !== null);
+    expect(july1).toBeDefined();
+    await user.click(july1 as HTMLElement);
+
+    expect(screen.getByText(/July 2030/)).toBeInTheDocument();
+    expect(vi.mocked(useScheduleRangeQuery).mock.calls.at(-1)?.[0]).toBe('2030-07');
+  });
+
+  it('month navigation moves the selection into the new month', async () => {
+    mockQueries({ range: rangeSlots });
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    // Today (June 15) is selected on open; next month must select July 15,
+    // not keep the detail on a June day below a July calendar.
+    await user.click(screen.getByRole('button', { name: 'posts.calendarNextMonth' }));
+    expect(screen.getByText(/July 2030/)).toBeInTheDocument();
+    const selected = screen.getByRole('grid').querySelector('[data-selected="true"]');
+    expect(selected?.textContent).toBe('15');
+    expect(vi.mocked(useScheduleRangeQuery).mock.calls.at(-1)?.[0]).toBe('2030-07');
+  });
+
+  it('shows the categorized failure reason on a failed card, never the raw engine text', async () => {
+    const restartSlot = {
+      ...FAILED_SLOT,
+      id: 'c4',
+      slotAt: '2030-06-07T14:00:00.000Z',
+      title: 'Calendar restart failure',
+      error: 'The engine restarted while generating your video.',
+      retryable: true,
+    };
+    mockQueries({ range: [restartSlot] });
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    const day7 = within(screen.getByRole('grid'))
+      .getAllByRole('button', { name: 'posts.calendarDayLabel' })
+      .find((button) => button.textContent?.startsWith('7'));
+    await user.click(day7 as HTMLElement);
+
+    expect(screen.getByText('Calendar restart failure')).toBeInTheDocument();
+    expect(screen.getByText('posts.errorEngineRestart')).toBeInTheDocument();
+    expect(screen.queryByText('The engine restarted while generating your video.')).not.toBeInTheDocument();
+  });
+
+  it('marks a card without video with the no-video placeholder, not a bare grey square', async () => {
+    mockQueries({ range: rangeSlots });
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    // June 7 holds the failed slot: no video, so its thumbnail is the
+    // placeholder.
+    const day7 = within(screen.getByRole('grid'))
+      .getAllByRole('button', { name: 'posts.calendarDayLabel' })
+      .find((button) => button.textContent?.startsWith('7'));
+    await user.click(day7 as HTMLElement);
+
+    const card = screen.getByText('Calendar failed').closest('a');
+    expect(card?.querySelector('[data-thumb="empty"]')).not.toBeNull();
   });
 
   it('disables the refresh button while a refetch is in flight', () => {

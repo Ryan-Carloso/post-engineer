@@ -135,18 +135,18 @@ def test_missing_preferred_model_is_skipped(mod):
 def test_openrouter_entries_skipped_without_key(mod):
     prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
     available = {
-        "openrouter/thinkingmachines/inkling:free": mod.ModelMeta(
-            model_id="openrouter/thinkingmachines/inkling:free",
+        "openrouter/nvidia/nemotron-3.5-lightning:free": mod.ModelMeta(
+            model_id="openrouter/nvidia/nemotron-3.5-lightning:free",
             context=1_000_000,
-            max_output=64_000,
+            max_output=65_536,
             tool_support=True,
         )
     }
     env = _env()
     attempts, _, decisions = mod.build_chain(prefs, available, env)
-    assert "openrouter/thinkingmachines/inkling:free" not in attempts
+    assert "openrouter/nvidia/nemotron-3.5-lightning:free" not in attempts
     assert any(
-        d.model_id == "openrouter/thinkingmachines/inkling:free"
+        d.model_id == "openrouter/nvidia/nemotron-3.5-lightning:free"
         and "openrouter key missing" in d.reason
         for d in decisions
     )

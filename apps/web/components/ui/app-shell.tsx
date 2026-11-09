@@ -178,11 +178,18 @@ const MobileNavigation = () => {
   // Any navigation (a link inside the sheet included) closes the sheet.
   useEffect(() => setMoreOpen(false), [pathname]);
 
-  const tabs: Array<{ href: string; labelKey: NavItem['labelKey']; icon: () => React.JSX.Element }> = [
+  const tabs: Array<{
+    href: string;
+    labelKey: NavItem['labelKey'];
+    // Short label for tabs whose full label wraps in a ~70px tab
+    // ("API Key e MCP" breaks to two lines). The sidebar keeps the full label.
+    shortLabelKey?: 'nav.promptsShort';
+    icon: () => React.JSX.Element;
+  }> = [
     { href: '/posts', labelKey: 'nav.posts', icon: CalendarIcon },
     { href: '/personas', labelKey: 'nav.persona', icon: SparklesIcon },
     { href: '/accounts', labelKey: 'nav.accounts', icon: AccountsIcon },
-    { href: '/recipes', labelKey: 'nav.prompts', icon: KeyIcon },
+    { href: '/recipes', labelKey: 'nav.prompts', shortLabelKey: 'nav.promptsShort', icon: KeyIcon },
   ];
   const moreLinks: Array<{ href: string; labelKey: NavItem['labelKey']; icon: () => React.JSX.Element }> = [
     { href: HISTORY_HREF, labelKey: 'nav.history', icon: HistoryIcon },
@@ -204,14 +211,14 @@ const MobileNavigation = () => {
             className={`${MOBILE_TAB_CLASS} ${isActive ? 'font-semibold text-primary' : 'text-muted-text'}`}
           >
             <span className="[&>svg]:size-5"><Icon /></span>
-            <span>{t(tab.labelKey)}</span>
+            <span className="whitespace-nowrap">{t(tab.shortLabelKey ?? tab.labelKey)}</span>
           </Link>
         );
       })}
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
         <SheetTrigger className={`${MOBILE_TAB_CLASS} ${moreActive ? 'font-semibold text-primary' : 'text-muted-text'}`}>
           <Ellipsis className="size-5" aria-hidden />
-          <span>{t('nav.more')}</span>
+          <span className="whitespace-nowrap">{t('nav.more')}</span>
         </SheetTrigger>
         <SheetContent side="bottom" aria-describedby={undefined} className="rounded-t-3xl bg-card pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
           <SheetTitle className="text-base text-primary">{t('nav.moreTitle')}</SheetTitle>
