@@ -1,4 +1,5 @@
 import { getErrorMessage, VideoTooLargeError, ApiError, readApiFailure } from './errors.js';
+import { redactSecretFromError } from './secret-redaction.js';
 import {
   MAX_LIBRARY_IMAGE_BYTES,
   MAX_LIBRARY_IMAGE_MB,
@@ -403,46 +404,21 @@ export class PostEngineerClient {
   }
 
   async connectBlueskyAccount(handle: string, appPassword: string): Promise<unknown> {
-    try {
-      return await this.request(
-        '/api/bluesky-connect',
-        { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ handle, appPassword }) },
-        'connect Bluesky account'
-      );
-    } catch (error) {
-      // The upstream error body may echo the request payload: never let the
-      // app password surface in agent-visible error text — raw, percent-encoded,
-      // or JSON-escaped.
-      const message = error instanceof Error ? error.message : String(error);
-      if (appPassword.length === 0) throw new Error(message);
-      const variants = [
-        appPassword,
-        encodeURIComponent(appPassword),
-        JSON.stringify(appPassword).slice(1, -1),
-      ];
-      throw new Error(variants.reduce((text, variant) => text.replaceAll(variant, '[redacted]'), message));
-    }
+    return this.connectKeyAccount('/api/bluesky-connect', { handle, appPassword }, appPassword, 'connect Bluesky account');
   }
 
   async connectThreespeakAccount(username: string, postingKey: string): Promise<unknown> {
+    return this.connectKeyAccount('/api/threespeak-connect', { username, postingKey }, postingKey, 'connect 3Speak account');
+  }
+
+  // Key-based account connect (Bluesky app password, Hive posting key):
+  // one POST plus secret redaction on failure, so neither secret ever
+  // reaches agent-visible error text.
+  private async connectKeyAccount(endpoint: string, payload: Record<string, string>, secret: string, label: string): Promise<unknown> {
     try {
-      return await this.request(
-        '/api/threespeak-connect',
-        { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ username, postingKey }) },
-        'connect 3Speak account'
-      );
+      return await this.request(endpoint, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify(payload) }, label);
     } catch (error) {
-      // The upstream error body may echo the request payload: never let the
-      // posting key surface in agent-visible error text — raw, percent-encoded,
-      // or JSON-escaped.
-      const message = error instanceof Error ? error.message : String(error);
-      if (postingKey.length === 0) throw new Error(message);
-      const variants = [
-        postingKey,
-        encodeURIComponent(postingKey),
-        JSON.stringify(postingKey).slice(1, -1),
-      ];
-      throw new Error(variants.reduce((text, variant) => text.replaceAll(variant, '[redacted]'), message));
+      throw redactSecretFromError(error, secret);
     }
   }
 

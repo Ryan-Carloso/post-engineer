@@ -16,13 +16,24 @@ import {
   UpdateSlotTitleSchema,
   UpdateSlotTitleShape,
 } from './schedule-shapes.js';
+import {
+  ConnectAccountSchema,
+  ConnectAccountShape,
+  DisconnectAccountSchema,
+  DisconnectAccountShape,
+} from './account-shapes.js';
+import { PublishVideoDirectSchema, PublishVideoDirectShape } from './publish-direct-shape.js';
 
 // Re-exported so existing import sites (`./tools.js`) keep working.
 export {
   CancelScheduleSchema,
   CancelScheduleShape,
+  ConnectAccountSchema,
+  ConnectAccountShape,
   DeleteSlotSchema,
   DeleteSlotShape,
+  DisconnectAccountSchema,
+  DisconnectAccountShape,
   GeneratePersonaVideoOptionsShape,
   GetSlotSchema,
   GetSlotShape,
@@ -30,6 +41,8 @@ export {
   ListPostsShape,
   ListSchedulesSchema,
   ListSchedulesShape,
+  PublishVideoDirectSchema,
+  PublishVideoDirectShape,
   UpdateSlotTitleSchema,
   UpdateSlotTitleShape,
 };
@@ -40,7 +53,6 @@ import {
   MAX_LIBRARY_IMAGE_MB,
   MAX_LIBRARY_TAG_LENGTH,
   MAX_LIBRARY_DESCRIPTION_LENGTH,
-  MAX_UPLOAD_VIDEO_GB,
   VIDEO_LAYOUTS,
 } from './client.js';
 import { getErrorMessage, ApiError } from './errors.js';
@@ -118,16 +130,6 @@ export const ListSocialAccountsShape = {};
 
 export const ListSocialAccountsSchema = z.object(ListSocialAccountsShape);
 
-export const ConnectAccountShape = {
-  provider: z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', '3speak']).describe('The social platform to connect'),
-  handle: z.string().min(1).optional().describe('Bluesky handle (e.g. user.bsky.social). Required only for bluesky.'),
-  appPassword: z.string().min(1).optional().describe('Bluesky app password (Settings > App passwords). Required only for bluesky. Never shared or logged.'),
-  username: z.string().min(1).optional().describe('Hive username (e.g. alice). Required only for 3speak.'),
-  postingKey: z.string().min(1).optional().describe('Hive posting key (the posting key only — never the owner, active, or master password). Required only for 3speak. Never shared or logged.'),
-};
-
-export const ConnectAccountSchema = z.object(ConnectAccountShape);
-
 export const ListVideoGenerationsShape = {
   limit: z
     .number()
@@ -186,20 +188,6 @@ export const DeletePersonaShape = {
 };
 
 export const DeletePersonaSchema = z.object(DeletePersonaShape);
-
-export const DisconnectAccountShape = {
-  provider: z
-    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', '3speak'])
-    .describe('The social platform of the account to disconnect.'),
-  providerAccountId: z
-    .string()
-    .min(1, 'providerAccountId is required')
-    .describe(
-      'The account ID on that provider (the channelId / igUserId / providerAccountId / did field from list_social_accounts).',
-    ),
-};
-
-export const DisconnectAccountSchema = z.object(DisconnectAccountShape);
 
 export const GetTokenBalanceShape = {};
 
@@ -1209,46 +1197,6 @@ export async function handleGetVideoTaskProgress(
     'fetching video task progress'
   );
 }
-
-export const PublishVideoDirectShape = {
-  provider: z
-    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', '3speak'])
-    .describe('The social platform to publish the video to.'),
-  videoPath: z
-    .string()
-    .min(1, 'videoPath is required')
-    .describe(
-      `Local path to the video file (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB). The video is published as-is: no generation, no schedule.`,
-    ),
-  accountIds: z
-    .array(z.string().min(1))
-    .min(1, 'At least one account ID is required')
-    .describe(
-      'Target accounts: the IDs from list_social_accounts (channel IDs for YouTube, IG user IDs for Instagram, DIDs for Bluesky, member IDs or org URNs for LinkedIn, user IDs for Threads, Page IDs for Facebook, Hive usernames for 3Speak).',
-    ),
-  title: z
-    .string()
-    .optional()
-    .describe('YouTube only: required video title.'),
-  description: z
-    .string()
-    .optional()
-    .describe('YouTube only: required video description.'),
-  tags: z
-    .array(z.string())
-    .optional()
-    .describe('YouTube only: required list of tags.'),
-  privacyStatus: z
-    .enum(['public', 'private', 'unlisted'])
-    .optional()
-    .describe('YouTube only: required privacy status.'),
-  caption: z
-    .string()
-    .optional()
-    .describe('Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak: required caption.'),
-};
-
-export const PublishVideoDirectSchema = z.object(PublishVideoDirectShape);
 
 export async function handlePublishVideoDirect(
   client: PostEngineerClient,
