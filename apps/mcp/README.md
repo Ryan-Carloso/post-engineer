@@ -143,11 +143,12 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `add_persona_image`: add an image to a persona image library from a local file path (JPG/JPEG, PNG, or WebP, max 9MB). Optional tag and description drive the deterministic per-video image selection.
 - `update_persona_image`: update a persona library image tag, description, or primary flag.
 - `remove_persona_image`: remove an image from a persona image library.
-- `publish_video_direct`: publish a ready-made video file directly to social accounts — no generation, no schedule (local .mp4/.mov, max 2GB; YouTube needs title, description, tags, privacyStatus; others need caption).
+- `publish_video_direct`: publish a ready-made video file directly to social accounts — no generation, no schedule (local .mp4/.mov, max 2GB; YouTube needs title, description, tags, privacyStatus; Pinterest needs a boardId from `list_pinterest_boards`; others need caption).
 - `list_social_accounts`: list connected social accounts with the account IDs needed for scheduling.
+- `list_pinterest_boards`: list the boards of a connected Pinterest account (id + name) — the id is the boardId for Pinterest publishing.
 - `get_persona_publishing_accounts`: list a persona's default publishing accounts per provider. `generate_persona_video` falls back to these when no account IDs are passed; explicit IDs always win.
 - `set_persona_publishing_accounts`: replace a persona's default publishing accounts per provider (account IDs from `list_social_accounts`; providers mapped to `[]` keep no defaults).
-- `connect_account`: connect a social account. For youtube/instagram/linkedin/threads/facebook: returns an authorization URL — the user must open it in a browser where they are signed in to Post Engineer with the same account, and authorize; the account then connects automatically (verify with `list_social_accounts`). A browser that is not signed in, or signed in as another user, is rejected. For bluesky: connects directly with handle + app password. For 3speak: connects directly with Hive username + posting key (posting key, not the owner/active/master password).
+- `connect_account`: connect a social account. For youtube/instagram/linkedin/threads/facebook/pinterest: returns an authorization URL — the user must open it in a browser where they are signed in to Post Engineer with the same account, and authorize; the account then connects automatically (verify with `list_social_accounts`). A browser that is not signed in, or signed in as another user, is rejected. For bluesky: connects directly with handle + app password. For 3speak: connects directly with Hive username + posting key (posting key, not the owner/active/master password).
 - `list_schedules`: list automation schedules.
 - `list_posts`: list upcoming (scheduled) and past (published/failed) posts across all connected accounts. With `from` + `to` (ISO-8601 with UTC offset, at most 62 days) it returns every post of any status in that window as one `slots` list, plus `truncated`.
 - `cancel_schedule`: cancel a schedule by its ID.
@@ -181,6 +182,7 @@ database row id and is rejected):
 | LinkedIn | `linkedinAccountIds` | `providerAccountId` |
 | Threads | `threadsAccountIds` | `providerAccountId` |
 | Facebook | `facebookAccountIds` | `providerAccountId` (Page ID) |
+| Pinterest | `pinterestAccountIds` (+ `pinterestBoardId` from `list_pinterest_boards`) | `providerAccountId` |
 | Bluesky | `blueskyAccountIds` | `did` (e.g. `did:plc:...`) |
 | 3Speak | `threespeakAccountIds` | `providerAccountId` (Hive username) |
 

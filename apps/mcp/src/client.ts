@@ -199,7 +199,7 @@ function narrowDirectPublishAccountResult(value: unknown): DirectPublishAccountR
   };
   if (typeof value.videoId === 'string') result.videoId = value.videoId;
   if (typeof value.videoUrl === 'string') result.videoUrl = value.videoUrl;
-  if (typeof value.postId === 'string') result.postId = value.postId;
+  if (typeof value.postId === 'string') result.postId = value.postId; if (typeof value.permalink === 'string') result.permalink = value.permalink;
   if (typeof value.error === 'string') result.error = value.error;
   return result;
 }
@@ -550,7 +550,7 @@ export class PostEngineerClient {
   async disconnectAccount(provider: string, providerAccountId: string): Promise<unknown> {
     // The route 400s INVALID_PROVIDER / INVALID_PARAMS — fail fast with the
     // field named before any fetch goes out.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', '3speak'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak'];
     if (!validProviders.includes(provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }
@@ -589,7 +589,7 @@ export class PostEngineerClient {
     // record. Only set entries the caller provided: the server enforces
     // which providers need accounts and rejects unknown ones.
     const accounts: Record<string, string[]> = {};
-    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, '3speak': input.threespeakAccountIds };
+    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, pinterest: input.pinterestAccountIds, '3speak': input.threespeakAccountIds };
     for (const [provider, ids] of Object.entries(byProvider)) if (ids !== undefined) accounts[provider] = ids;
     // A stray schedule plan in ASAP mode is a caller bug: the server 400s
     // ("publishing.schedule must not be set"), so fail fast with the same
@@ -615,7 +615,7 @@ export class PostEngineerClient {
           title,
           publishing: {
             mode,
-            providers: input.providers,
+            providers: input.providers, ...(input.pinterestBoardId ? { pinterestBoardId: input.pinterestBoardId } : {}),
             accounts,
             // ASAP mode carries no schedule plan: the timezone is kept for
             // display, matching the API contract.
@@ -744,7 +744,7 @@ export class PostEngineerClient {
     // Direct publish of a user-provided video — no generation, no schedule.
     // Mirrors the server-side 400s: provider-specific required fields and
     // per-provider account-id field names fail fast here, before any fetch.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', '3speak'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak'];
     if (!validProviders.includes(input.provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }
@@ -776,12 +776,12 @@ export class PostEngineerClient {
       description = input.description.trim();
       tags = input.tags;
       privacyStatus = input.privacyStatus;
-    } else {
-      if (input.caption === undefined || input.caption.trim().length === 0) {
-        throw new Error(`caption is required for ${input.provider}.`);
-      }
-      caption = input.caption.trim();
-    }
+    } else if (input.provider === 'pinterest') {
+      if (input.boardId === undefined || input.boardId.trim().length === 0) throw new Error('boardId is required for pinterest.');
+      const explicitDescription = input.description?.trim() ?? '';
+      description = explicitDescription !== '' ? explicitDescription : input.caption?.trim() ?? '';
+      if (description.length === 0) throw new Error('description or caption is required for pinterest.'); caption = input.caption?.trim() ?? ''; title = input.title?.trim() ?? '';
+    } else { if (input.caption === undefined || input.caption.trim().length === 0) throw new Error(`caption is required for ${input.provider}.`); caption = input.caption.trim(); }
 
     const formData = new FormData();
     formData.append('provider', input.provider);
@@ -803,9 +803,9 @@ export class PostEngineerClient {
         formData.append('igAccountIds', accountId);
       }
     } else {
-      const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds', facebook: 'facebookAccountIds', '3speak': 'threespeakAccountIds' }[input.provider];
+      const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds', facebook: 'facebookAccountIds', pinterest: 'pinterestAccountIds', '3speak': 'threespeakAccountIds' }[input.provider];
       formData.append('video', videoBlob, filename);
-      formData.append('caption', caption);
+      formData.append('caption', caption); if (input.provider === 'pinterest') { formData.append('title', title); formData.append('description', description); formData.append('boardId', input.boardId ?? ''); }
       for (const accountId of input.accountIds) {
         formData.append(accountField, accountId);
       }

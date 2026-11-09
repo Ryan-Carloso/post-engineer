@@ -62,6 +62,7 @@ const REDIRECT_ENV: Record<OAuthConnectProvider, [string, string]> = {
   linkedin: ['LINKEDIN_REDIRECT_URI_LOCAL', 'LINKEDIN_REDIRECT_URI'],
   threads: ['THREADS_REDIRECT_URI_LOCAL', 'THREADS_REDIRECT_URI'],
   facebook: ['FACEBOOK_REDIRECT_URI_LOCAL', 'FACEBOOK_REDIRECT_URI'],
+  pinterest: ['PINTEREST_REDIRECT_URI_LOCAL', 'PINTEREST_REDIRECT_URI'],
 };
 
 async function postHandler(request: NextRequest): Promise<NextResponse> {

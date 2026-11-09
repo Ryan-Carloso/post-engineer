@@ -9,7 +9,7 @@ import type { AccountData, InstagramAccountData } from '@/lib/types';
 // client guards and the OAuth union all derive from here.
 //---------------
 
-export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', '3speak'] as const;
+export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak'] as const;
 
 export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
 
@@ -68,6 +68,16 @@ export interface FacebookAccountData {
   lastUsed: number;
 }
 
+export interface PinterestAccountData {
+  provider: 'pinterest';
+  recordId: string;
+  providerAccountId: string;
+  accountName: string | null;
+  profilePictureUrl?: string;
+  connectedAt: number;
+  lastUsed: number;
+}
+
 export interface ThreespeakAccountData {
   provider: '3speak';
   recordId: string;
@@ -84,6 +94,7 @@ export type PublicAccountItem =
   | LinkedinAccountData
   | ThreadsAccountData
   | FacebookAccountData
+  | PinterestAccountData
   | ThreespeakAccountData;
 
 //---------------
@@ -251,6 +262,21 @@ const facebookDef: ProviderDef<true> = {
   },
 };
 
+const pinterestDef: ProviderDef<true> = {
+  supportsOAuthCallback: true,
+  toPublicAccount(record) {
+    return {
+      provider: 'pinterest',
+      recordId: record.id,
+      providerAccountId: record.providerAccountId,
+      accountName: record.accountName,
+      profilePictureUrl: asOptionalString(record.accountMetadata.profilePictureUrl),
+      connectedAt: createdAtTimestamp(record),
+      lastUsed: lastUsedTimestamp(record),
+    };
+  },
+};
+
 // 3Speak has no OAuth: the Hive posting key connects the account (like the
 // Bluesky app password), and the provider_account_id is the Hive username.
 const threespeakDef: ProviderDef<false> = {
@@ -279,6 +305,7 @@ export const PROVIDER_REGISTRY = {
   linkedin: linkedinDef,
   threads: threadsDef,
   facebook: facebookDef,
+  pinterest: pinterestDef,
   '3speak': threespeakDef,
 } satisfies Record<SocialProvider, ProviderDef>;
 

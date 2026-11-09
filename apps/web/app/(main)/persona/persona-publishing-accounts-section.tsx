@@ -17,6 +17,7 @@ import {
   useFacebookAccountsQuery,
   useThreespeakAccountsQuery,
 } from '@/lib/api';
+import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
 import { useI18n } from '@/lib/i18n/provider';
 import { SpinnerIcon } from '@/lib/ui';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
@@ -44,6 +45,7 @@ const PROVIDERS: readonly { provider: PublishingProvider; label: string }[] = [
   { provider: 'linkedin', label: 'LinkedIn' },
   { provider: 'threads', label: 'Threads' },
   { provider: 'facebook', label: 'Facebook' },
+  { provider: 'pinterest', label: 'Pinterest' },
   { provider: '3speak', label: '3Speak' },
 ];
 
@@ -134,6 +136,7 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
   const linkedin = useLinkedinAccountsQuery();
   const threads = useThreadsAccountsQuery();
   const facebook = useFacebookAccountsQuery();
+  const pinterest = usePinterestAccountsQuery();
   const threespeak = useThreespeakAccountsQuery();
 
   const [selection, setSelection] = useState<PublishingDefaults>(EMPTY_DEFAULTS);
@@ -269,6 +272,20 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
         />
       ),
     })),
+    pinterest: (pinterest.data?.accounts ?? []).map((account) => ({
+      id: account.providerAccountId,
+      card: (
+        <AccountCard
+          key={`pinterest:${account.providerAccountId}`}
+          type="pinterest"
+          name={account.accountName ?? account.providerAccountId}
+          labelOrigin={account.accountName ? 'stored' : 'provider_id'}
+          thumbnail={account.profilePictureUrl}
+          selected={selection.pinterest.includes(account.providerAccountId)}
+          onSelect={() => toggle('pinterest', account.providerAccountId)}
+        />
+      ),
+    })),
     '3speak': (threespeak.data?.accounts ?? []).map((account) => ({
       id: account.providerAccountId,
       card: (
@@ -285,7 +302,7 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
   };
 
   const accountsLoading =
-    youtube.isLoading || instagram.isLoading || bluesky.isLoading || linkedin.isLoading || threads.isLoading || facebook.isLoading || threespeak.isLoading;
+    youtube.isLoading || instagram.isLoading || bluesky.isLoading || linkedin.isLoading || threads.isLoading || facebook.isLoading || pinterest.isLoading || threespeak.isLoading;
 
   return (
     <section>

@@ -8,7 +8,7 @@ import type { UploadContentResult } from '@/lib/types';
 
 type StoreState = ReturnType<typeof useUploadStore.getState>;
 const emptyState: Partial<StoreState> = {
-  selectedAccountIds: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], '3speak': [] },
+  selectedAccountIds: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [] },
   mode: 'youtube',
   file: null,
   title: '',
@@ -116,6 +116,7 @@ describe('useUploadStore setters', () => {
       linkedin: [],
       threads: [],
       facebook: [],
+      pinterest: [],
       '3speak': [],
     });
 
@@ -127,6 +128,7 @@ describe('useUploadStore setters', () => {
       linkedin: [],
       threads: [],
       facebook: [],
+      pinterest: [],
       '3speak': [],
     });
   });

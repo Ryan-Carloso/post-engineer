@@ -305,6 +305,18 @@
                     "notNull": true
                 },
                 {
+                    "name": "pinterest_account_ids",
+                    "type": "text[]",
+                    "default": "'{}'::text[]",
+                    "notNull": true
+                },
+                {
+                    "name": "pinterest_board_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
                     "name": "threespeak_account_ids",
                     "type": "text[]",
                     "default": "'{}'::text[]",
@@ -595,7 +607,7 @@
             "constraints": {
                 "post_metrics_pkey": "PRIMARY KEY (id)",
                 "post_metrics_post_id_fkey": "FOREIGN KEY (post_id) REFERENCES scheduled_posts(id) ON DELETE CASCADE",
-                "post_metrics_provider_check": "CHECK ((provider = ANY (ARRAY['youtube'::text, 'instagram'::text, 'bluesky'::text, 'linkedin'::text, 'threads'::text, 'facebook'::text, '3speak'::text])))",
+                "post_metrics_provider_check": "CHECK ((provider = ANY (ARRAY['youtube'::text, 'instagram'::text, 'bluesky'::text, 'linkedin'::text, 'threads'::text, 'facebook'::text, 'pinterest'::text, '3speak'::text])))",
                 "post_metrics_metrics_window_check": "CHECK ((metrics_window = ANY (ARRAY['24h'::text, '7d'::text, '28d'::text])))",
                 "post_metrics_analytics_status_check": "CHECK ((analytics_status = ANY (ARRAY['ok'::text, 'scope_missing'::text, 'not_owned'::text, 'no_data'::text])))",
                 "post_metrics_post_id_provider_external_id_metrics_window_key": "UNIQUE (post_id, provider, external_id, metrics_window)"
@@ -1086,7 +1098,7 @@
             },
             "constraints": {
                 "social_accounts_pkey": "PRIMARY KEY (id)",
-                "social_accounts_provider_check": "CHECK ((provider = ANY (ARRAY['youtube'::text, 'instagram'::text, 'bluesky'::text, 'linkedin'::text, 'threads'::text, 'facebook'::text, '3speak'::text])))",
+                "social_accounts_provider_check": "CHECK ((provider = ANY (ARRAY['youtube'::text, 'instagram'::text, 'bluesky'::text, 'linkedin'::text, 'threads'::text, 'facebook'::text, 'pinterest'::text, '3speak'::text])))",
                 "social_accounts_user_provider_account_key": "UNIQUE (user_id, provider, provider_account_id)"
             }
         },

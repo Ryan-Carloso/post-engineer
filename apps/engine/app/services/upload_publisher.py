@@ -17,7 +17,7 @@ Wire contract (multipart/form-data):
 - Threads: ``provider=threads``, ``video`` (file), ``caption``,
   repeated ``threadsAccountIds`` fields.
 - Facebook: ``provider=facebook``, ``video`` (file), ``caption``,
-  repeated ``facebookAccountIds`` fields (see ``publish_facebook``).
+  repeated ``facebookAccountIds`` fields (see ``publish_facebook``). Pinterest: ``provider=pinterest``, ``video`` (file), ``title``, ``description``, ``boardId``, repeated ``pinterestAccountIds`` fields (see ``publish_pinterest``; validated by ``fill_schedule/metadata.py``).
 - 3Speak: ``provider=3speak``, ``video`` (file), ``caption``,
   repeated ``threespeakAccountIds`` fields (see ``publish_threespeak``).
 
@@ -40,6 +40,7 @@ from app.services.publish_facebook import (  # noqa: F401 - re-exported for call
     FACEBOOK_CAPTION_MAX_LENGTH, FACEBOOK_PROVIDER, FacebookMetadata,
     facebook_fields, validate_facebook_metadata,
 )
+from app.services.publish_pinterest import PINTEREST_DESCRIPTION_MAX_LENGTH, PINTEREST_PROVIDER, PINTEREST_TITLE_MAX_LENGTH, PinterestMetadata, pinterest_fields  # noqa: F401 - re-exported for callers
 from app.services.publish_threespeak import (  # noqa: F401 - re-exported for callers
     THREESPEAK_PROVIDER, ThreespeakMetadata,
     threespeak_fields, validate_threespeak_metadata,
@@ -67,6 +68,7 @@ VALID_PROVIDERS: tuple[str, ...] = (
     LINKEDIN_PROVIDER,
     THREADS_PROVIDER,
     FACEBOOK_PROVIDER,
+    PINTEREST_PROVIDER,
     THREESPEAK_PROVIDER,
 )
 
@@ -170,8 +172,8 @@ def validate_publish_metadata(
     """Validate provider selection and per-provider metadata.
 
     Raises:
-        ValueError: when providers are unknown/empty, a selected provider has
-            no metadata, or provider metadata violates the internal contract.
+        ValueError: when providers are unknown/empty, or a selected provider other than pinterest
+            (see fill_schedule/metadata.py) has no metadata, or metadata violates the contract.
     """
     if not providers:
         raise ValueError("at least one publish provider is required")
@@ -353,6 +355,7 @@ _PART_BUILDERS: _PartBuilders = {
     LINKEDIN_PROVIDER: (LinkedInMetadata, build_linkedin_parts),
     THREADS_PROVIDER: (ThreadsMetadata, build_threads_parts),
     FACEBOOK_PROVIDER: (FacebookMetadata, lambda metadata: MultipartParts(fields=facebook_fields(metadata))),
+    PINTEREST_PROVIDER: (PinterestMetadata, lambda metadata: MultipartParts(fields=pinterest_fields(metadata))),
     THREESPEAK_PROVIDER: (ThreespeakMetadata, lambda metadata: MultipartParts(fields=threespeak_fields(metadata))),
 }
 
@@ -384,7 +387,7 @@ def publish_video(
     base_url: str,
     api_secret: str,
     owner_user_id: str,
-    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | ThreespeakMetadata,
+    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | PinterestMetadata | ThreespeakMetadata,
     video_path: str,
     video_bytes: bytes,
     content_type: str,

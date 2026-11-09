@@ -17,11 +17,11 @@ alter table public.post_metrics
 
 alter table public.post_metrics
   add constraint post_metrics_provider_check
-  check (provider in ('youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', '3speak'));
+  check (provider in ('youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak'));
 
 alter table public.social_accounts
   drop constraint if exists social_accounts_provider_check;
 
 alter table public.social_accounts
   add constraint social_accounts_provider_check
-  check (provider in ('youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', '3speak'));
+  check (provider in ('youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak'));

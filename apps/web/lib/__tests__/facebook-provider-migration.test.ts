@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
+import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 
 //---------------
 // supabase/migrations/049_facebook-provider.sql — the schema the Facebook
@@ -10,10 +11,13 @@ import { findRepoRoot } from '@/test/repo-root';
 // constraint the chain no longer defines can linger in production, so a
 // plain add would leave the old list in force).
 //
-// The provider list is FROZEN at the six providers 049 shipped with:
-// 051 added 3Speak, so the live pin is now the 051 test plus the
-// migration-check-constraints-sync test (which reads the snapshot). A
-// migration file is append-only history — its list never grows.
+// This migration re-created the constraint with the six providers of
+// its time. A shipped migration is never edited, so this test pins that
+// historical list; the current list is pinned by the latest migration
+// that re-creates the check (051, threespeak-provider-migration.test.ts)
+// and by the schema snapshot (migration-check-constraints-sync.test.ts).
+// The provider list is FROZEN at the six providers 049 shipped with.
+// A migration file is append-only history — its list never grows.
 //---------------
 
 // The six providers 049 shipped with, in the order the migration lists them.
@@ -51,6 +55,13 @@ describe('supabase/migrations/049_facebook-provider.sql', () => {
     '%s allows exactly the providers 049 shipped with',
     (constraint) => {
       expect(checkProviders(constraint).sort()).toEqual([...PROVIDERS_AT_049].sort());
+    },
+  );
+
+  it.each(['post_metrics_provider_check', 'social_accounts_provider_check'])(
+    '%s lists only providers the app still supports',
+    (constraint) => {
+      for (const provider of checkProviders(constraint)) expect(SOCIAL_PROVIDERS).toContain(provider);
     },
   );
 });

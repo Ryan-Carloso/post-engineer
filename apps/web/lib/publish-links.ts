@@ -12,6 +12,8 @@
 //   linkedin  → postId     urn:li:share:<id>  (no public URL is returned)
 //   threads   → permalink  ready-made post URL (best-effort; no URL can be derived from the id)
 //   facebook  → permalink  ready-made post URL (best-effort; no URL can be derived from the id)
+//   pinterest → permalink  ready-made pin URL; a bare numeric pin id derives
+//              https://www.pinterest.com/pin/<id>/
 //   3speak    → permalink  ready-made watch URL (best-effort; the video id alone builds no URL)
 //
 // So three providers arrive with a URL and two need one derived. A provider
@@ -23,7 +25,7 @@
 // and it must stay safe to import from a client component.
 //---------------
 
-export type PublishProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | '3speak';
+export type PublishProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak';
 
 export interface PublishLink {
   provider: PublishProvider;
@@ -37,6 +39,7 @@ const PROVIDERS: ReadonlySet<string> = new Set<PublishProvider>([
   'linkedin',
   'threads',
   'facebook',
+  'pinterest',
   '3speak',
 ]);
 
@@ -90,6 +93,15 @@ function linkedinPostUrl(postId: string): string | null {
 }
 
 //---------------
+// pinterestPostUrl — the pin id is a bare numeric id; anything else
+// yields null rather than a URL that 404s.
+//---------------
+function pinterestPostUrl(postId: string): string | null {
+  if (!/^[0-9]+$/.exec(postId)) return null;
+  return `https://www.pinterest.com/pin/${postId}/`;
+}
+
+//---------------
 // resolvePublishLinks — map the engine's raw entries to links, dropping
 // anything malformed. Returns [] rather than throwing: this runs during
 // render and must never take the post detail page down.
@@ -126,7 +138,9 @@ export function resolvePublishLinks(
         ? blueskyPostUrl(postId)
         : typed === 'linkedin'
           ? linkedinPostUrl(postId)
-          : null;
+          : typed === 'pinterest'
+            ? pinterestPostUrl(postId)
+            : null;
     if (derived !== null && isHttpsUrl(derived)) links.push({ provider: typed, url: derived });
   }
   return links;

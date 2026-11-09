@@ -152,6 +152,14 @@ export const COUNTER_FETCHERS: Record<MeasuredProvider, CounterFetcher> = {
     const token = await ownerAccessToken(userId, 'facebook', target.accountId);
     return facebookCounters(await getFacebookVideoInsights(token, target.externalId));
   },
+  async pinterest() {
+    // Pinterest exposes no per-Pin metrics the collector can read with the
+    // Standard-access scopes (pin-level analytics need the Ads API), so a
+    // published Pin is measured as unknown on every counter rather than
+    // failing the whole metrics run. The target extractor still records
+    // the pin id, so wiring the fetcher later needs no schema change.
+    return { views: null, likes: null, comments: null, saves: null };
+  },
   // 3Speak's documented Studio API exposes no per-video analytics
   // endpoint, so there is nothing to count. Null counters record the row
   // (views/likes/comments/saves all "no data") and close the window

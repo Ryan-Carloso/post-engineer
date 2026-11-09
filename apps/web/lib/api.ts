@@ -580,6 +580,8 @@ export interface ScheduleConfig {
   blueskyAccountIds: string[];
   threadsAccountIds: string[];
   facebookAccountIds: string[];
+  pinterestAccountIds: string[];
+  pinterestBoardId: string | null;
   threespeakAccountIds: string[];
   daysOfWeek: number[];
   startHour: number | null;
@@ -849,6 +851,8 @@ export interface SlotDetailPayload {
     blueskyAccountIds: string[];
     threadsAccountIds: string[];
     facebookAccountIds: string[];
+    pinterestAccountIds: string[];
+    pinterestBoardId: string | null;
     threespeakAccountIds: string[];
     // The schedule's IANA timezone — the detail page renders the slot time
     // in this zone so "10:00" is never ambiguous about whose 10:00 it is.

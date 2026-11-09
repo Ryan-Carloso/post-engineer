@@ -78,6 +78,12 @@ vi.mock('@/lib/oauth/threads-handler', () => ({
 vi.mock('@/lib/oauth/facebook-handler', () => ({
   useFacebookOAuth: vi.fn(),
 }));
+vi.mock('@/lib/oauth/pinterest-handler', () => ({
+  usePinterestOAuth: vi.fn(),
+}));
+vi.mock('@/lib/pinterest-accounts', () => ({
+  usePinterestAccountsQuery: vi.fn(),
+}));
 vi.mock('@/lib/oauth/linkedin-handler', () => ({
   useLinkedInOAuth: vi.fn(() => ({
     startOAuth: vi.fn().mockResolvedValue(undefined),
@@ -147,6 +153,8 @@ import { useInstagramOAuth } from '@/lib/oauth/instagram-handler';
 import { useLinkedInOAuth } from '@/lib/oauth/linkedin-handler';
 import { useThreadsOAuth } from '@/lib/oauth/threads-handler';
 import { useFacebookOAuth } from '@/lib/oauth/facebook-handler';
+import { usePinterestOAuth } from '@/lib/oauth/pinterest-handler';
+import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
 
 function createWrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -190,6 +198,8 @@ beforeEach(() => {
   vi.mocked(useFacebookAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
   vi.mocked(useThreespeakAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
   vi.mocked(useFacebookOAuth).mockReturnValue(facebookOAuth);
+  vi.mocked(usePinterestAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
+  vi.mocked(usePinterestOAuth).mockReturnValue(pinterestOAuth);
   vi.mocked(useLinkedInOAuth).mockReturnValue({
     startOAuth: vi.fn().mockResolvedValue(undefined),
     isLoading: false,
@@ -203,6 +213,7 @@ beforeEach(() => {
 
 const threadsOAuth = { isLoading: false, error: null, startOAuth: vi.fn() } as unknown as ReturnType<typeof useThreadsOAuth>;
 const facebookOAuth = { isLoading: false, error: null, startOAuth: vi.fn() } as unknown as ReturnType<typeof useFacebookOAuth>;
+const pinterestOAuth = { isLoading: false, error: null, startOAuth: vi.fn() } as unknown as ReturnType<typeof usePinterestOAuth>;
 
 describe('app/(main)/accounts/page — AccountsPage', () => {
   it('renders page header', () => {
@@ -223,12 +234,12 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
 
   it('shows the shared connection slot when YouTube has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(7);
+    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(8);
   });
 
   it('shows the shared connection slot when Instagram has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(7);
+    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(8);
   });
 
   it('shows loading skeletons while loading', () => {
@@ -678,7 +689,7 @@ describe('Threads accounts section', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.getByText('accounts.threadsLabel')).toBeTruthy();
     expect(screen.getByText('accounts.threadsDescription')).toBeTruthy();
-    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, 3speak.
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak.
     fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[4]);
     expect(threadsOAuth.startOAuth).toHaveBeenCalledTimes(1);
   });
@@ -740,7 +751,7 @@ describe('Facebook Pages accounts section', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.getByText('accounts.facebookLabel')).toBeTruthy();
     expect(screen.getByText('accounts.facebookDescription')).toBeTruthy();
-    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, 3speak.
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak.
     fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[5]);
     expect(facebookOAuth.startOAuth).toHaveBeenCalledTimes(1);
   });
@@ -783,7 +794,7 @@ describe('Facebook Pages accounts section', () => {
   it('disables the connect button while the OAuth popup is opening', () => {
     vi.mocked(useFacebookOAuth).mockReturnValue({ ...facebookOAuth, isLoading: true });
     render(<AccountsPage />, { wrapper: createWrapper() });
-    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, 3speak.
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak.
     const button = screen.getAllByRole('button', { name: 'accounts.connectFirst' })[5] as HTMLButtonElement;
     expect(button).toBeDisabled();
   });
@@ -842,7 +853,7 @@ describe('Facebook Pages accounts section', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<AccountsPage />, { wrapper: createWrapper() });
     // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, 3speak.
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[6]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[7]);
     fireEvent.change(await screen.findByTestId('threespeak-handle-input'), { target: { value: 'alice' } });
     fireEvent.change(screen.getByTestId('threespeak-password-input'), { target: { value: '5K-posting-key' } });
     fireEvent.click(screen.getByTestId('threespeak-connect-button'));
@@ -852,7 +863,7 @@ describe('Facebook Pages accounts section', () => {
 
   it('3speak connect dialog shows its title, hint, labels and security note', async () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[6]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[7]);
     expect(await screen.findByRole('dialog', { name: 'accounts.threespeakConnectTitle' })).toBeInTheDocument();
     expect(screen.getByText('accounts.threespeakConnectHint')).toBeInTheDocument();
     expect(screen.getByText('accounts.threespeakHandleLabel')).toBeInTheDocument();
@@ -888,7 +899,7 @@ describe('Facebook Pages accounts section', () => {
     const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ success: true, accountId: 'row-1', username: 'alice' }) }));
     vi.stubGlobal('fetch', fetchMock);
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[6]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[7]);
     fireEvent.change(await screen.findByTestId('threespeak-handle-input'), { target: { value: 'alice' } });
     fireEvent.change(screen.getByTestId('threespeak-password-input'), { target: { value: '5K-posting-key' } });
     fireEvent.click(screen.getByTestId('threespeak-connect-button'));
@@ -901,7 +912,7 @@ describe('Facebook Pages accounts section', () => {
     const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }));
     vi.stubGlobal('fetch', fetchMock);
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[6]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[7]);
     fireEvent.click(await screen.findByTestId('threespeak-connect-button'));
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -922,5 +933,62 @@ describe('Facebook Pages accounts section', () => {
     await submitThreespeakConnect(401, { success: false, error: 'Authentication required.' });
     expect(notify).toHaveBeenCalledTimes(1);
     expect(vi.mocked(notify).mock.calls[0][0]).toMatchObject({ status: 401 });
+  });
+});
+
+describe('Pinterest accounts section', () => {
+  beforeEach(() => {
+    vi.mocked(pinterestOAuth.startOAuth).mockClear();
+  });
+
+  it('renders the section with its localized copy and starts OAuth from its button', () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(screen.getByText('accounts.pinterestLabel')).toBeTruthy();
+    expect(screen.getByText('accounts.pinterestDescription')).toBeTruthy();
+    // Pinterest is the last section on the page, so its connect button is last.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[6] as HTMLElement);
+    expect(pinterestOAuth.startOAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists each connected Pinterest account, marking a stored name or the account id', () => {
+    vi.mocked(usePinterestAccountsQuery, { partial: true }).mockReturnValue({
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'pinterest', recordId: 'r1', providerAccountId: '111', accountName: 'Maker', connectedAt: 0, lastUsed: 0 },
+          { provider: 'pinterest', recordId: 'r2', providerAccountId: '222', accountName: null, connectedAt: 0, lastUsed: 0 },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const cards = screen.getAllByTestId('account-card').filter((el) => el.getAttribute('data-provider') === 'pinterest');
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveAttribute('data-label-origin', 'stored');
+    expect(cards[1]).toHaveAttribute('data-label-origin', 'provider_id');
+    expect(screen.getByText('Maker')).toBeTruthy();
+    expect(screen.getByText('222')).toBeTruthy();
+    // With an account connected the button offers another one.
+    expect(screen.getAllByRole('button', { name: 'accounts.connectAnother' }).length).toBeGreaterThan(0);
+  });
+
+  it('reports a list error for the pinterest provider', () => {
+    vi.mocked(usePinterestAccountsQuery, { partial: true }).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error('pin down'),
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(useAccountListErrorTelemetry).toHaveBeenCalledWith('pinterest', 'pin down');
+  });
+
+  it('disables the connect button while the OAuth popup is opening', () => {
+    vi.mocked(usePinterestOAuth).mockReturnValue({ ...pinterestOAuth, isLoading: true });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const button = screen.getAllByRole('button', { name: 'accounts.connectFirst' })[6] as HTMLButtonElement;
+    expect(button).toBeDisabled();
   });
 });

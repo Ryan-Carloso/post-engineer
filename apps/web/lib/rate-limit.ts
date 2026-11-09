@@ -42,6 +42,10 @@ export const RATE_LIMITS = {
   voicePreview: { name: 'voice-preview', limit: 10, windowMs: 24 * 60 * 60 * 1000 },
   // Instagram content posting
   instagramPost: { name: 'instagram-post', limit: 10, windowMs: 60_000 },
+  // Pinterest video Pin publishing (register + S3 upload + poll + pin create)
+  pinterestUpload: { name: 'pinterest-upload', limit: 10, windowMs: 60_000 },
+  // Pinterest board listing for the board picker (bounded read, no writes)
+  pinterestBoards: { name: 'pinterest-boards', limit: 60, windowMs: 60_000 },
   // OAuth token endpoint: brute-force / token-farming protection
   oauthToken: { name: 'oauth-token', limit: 30, windowMs: 60_000 },
   // OAuth dynamic client registration: abuse/registration-flood protection

@@ -14,6 +14,7 @@ export const PROVIDER_ACCOUNT_COLUMNS = {
   bluesky: 'bluesky_account_ids',
   threads: 'threads_account_ids',
   facebook: 'facebook_account_ids',
+  pinterest: 'pinterest_account_ids',
   '3speak': 'threespeak_account_ids',
 } as const satisfies Record<Provider, string>;
 
@@ -33,6 +34,7 @@ export function scheduleAccountColumns(
     bluesky_account_ids: accountIds.bluesky ?? [],
     threads_account_ids: accountIds.threads ?? [],
     facebook_account_ids: accountIds.facebook ?? [],
+    pinterest_account_ids: accountIds.pinterest ?? [],
     threespeak_account_ids: accountIds['3speak'] ?? [],
   };
 }

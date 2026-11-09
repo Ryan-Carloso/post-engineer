@@ -63,6 +63,7 @@ const mockQueries = vi.hoisted(() => ({
   linkedin: { data: null as null | { accounts: unknown[] }, isLoading: false },
   threads: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
   facebook: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
+  pinterest: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
   threespeak: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
 }));
 
@@ -74,6 +75,10 @@ vi.mock('@/lib/api', () => ({
   useThreadsAccountsQuery: () => mockQueries.threads,
   useFacebookAccountsQuery: () => mockQueries.facebook,
   useThreespeakAccountsQuery: () => mockQueries.threespeak,
+}));
+
+vi.mock('@/lib/pinterest-accounts', () => ({
+  usePinterestAccountsQuery: () => mockQueries.pinterest,
 }));
 
 vi.mock('@/lib/account-card-telemetry', () => ({
@@ -319,7 +324,7 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], '3speak': ['alice'] },
+            accounts: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': ['alice'] },
           }),
         }),
       );
@@ -480,7 +485,7 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: ['fb-1', 'fb-2'], '3speak': [] },
+            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: ['fb-1', 'fb-2'], pinterest: [], '3speak': [] },
           }),
         }),
       );

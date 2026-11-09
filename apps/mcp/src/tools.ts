@@ -1217,11 +1217,11 @@ export async function handlePublishVideoDirect(
       description: args.description,
       tags: args.tags,
       privacyStatus: args.privacyStatus,
-      caption: args.caption,
+      caption: args.caption, boardId: args.boardId,
     });
     const lines = result.results.map((account) => {
       if (account.success) {
-        const link = account.videoUrl ?? account.postId ?? account.videoId ?? '';
+        const link = account.videoUrl ?? account.permalink ?? account.postId ?? account.videoId ?? '';
         return `- ${account.accountId}: published${link ? ` (${link})` : ''}`;
       }
       return `- ${account.accountId}: FAILED — ${account.error ?? 'unknown error'}`;
