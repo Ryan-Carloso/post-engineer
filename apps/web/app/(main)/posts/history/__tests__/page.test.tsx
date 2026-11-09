@@ -18,9 +18,12 @@ vi.mock('@/lib/api', () => ({
   useLinkedinAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, refetch: vi.fn() })),
   useThreadsAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, refetch: vi.fn() })),
   useFacebookAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, refetch: vi.fn() })),
-  useRumbleAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, refetch: vi.fn() })),
   useBlueskyAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, refetch: vi.fn() })),
   useVideoGenerationsQuery: vi.fn(),
+}));
+
+vi.mock('@/lib/social-accounts-queries', () => ({
+  useRumbleAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() })),
 }));
 
 vi.mock('@/lib/ui', () => ({

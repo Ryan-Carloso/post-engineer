@@ -8,8 +8,8 @@ import {
   useThreadsAccountsQuery,
   useBlueskyAccountsQuery,
   useFacebookAccountsQuery,
-  useRumbleAccountsQuery,
 } from '@/lib/api';
+import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
 import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
 import type { SocialProvider } from '@/lib/providers/registry';
 

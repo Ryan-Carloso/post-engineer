@@ -1,5 +1,4 @@
 import '@testing-library/jest-dom/vitest';
-import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -29,8 +28,11 @@ vi.mock('@/lib/api', () => ({
   useThreadsAccountsQuery: vi.fn(),
   useFacebookAccountsQuery: vi.fn(),
   useThreespeakAccountsQuery: vi.fn(),
-  useRumbleAccountsQuery: vi.fn(),
   useDisconnectAccountMutation: vi.fn(),
+}));
+
+vi.mock('@/lib/social-accounts-queries', () => ({
+  useRumbleAccountsQuery: vi.fn(),
 }));
 
 // Only notifyIfSessionExpired is doubled; the module's redirect behavior is
@@ -147,7 +149,8 @@ vi.mock('@/components/account-card', () => ({
 
 import AccountsPage from '../page';
 import { reportAccountDisconnectFailed, useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
-import { useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery, useThreadsAccountsQuery, useFacebookAccountsQuery, useThreespeakAccountsQuery, useRumbleAccountsQuery, useDisconnectAccountMutation } from '@/lib/api';
+import { useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery, useThreadsAccountsQuery, useFacebookAccountsQuery, useThreespeakAccountsQuery, useDisconnectAccountMutation } from '@/lib/api';
+import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
 import { useYouTubeOAuth } from '@/lib/oauth/google-handler';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { useInstagramOAuth } from '@/lib/oauth/instagram-handler';

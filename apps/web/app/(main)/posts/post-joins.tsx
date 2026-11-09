@@ -10,10 +10,10 @@ import {
   useThreadsAccountsQuery,
   useFacebookAccountsQuery,
   useBlueskyAccountsQuery,
-  useRumbleAccountsQuery,
   type ScheduleConfig,
   type ScheduledSlot,
 } from '@/lib/api';
+import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
 import { useI18n } from '@/lib/i18n/provider';
 import { PROVIDER_LABELS, accountOption, type AccountOption, scheduleAccountIds } from '@/lib/account-options';
 import { PostCard, resolveSlotAccounts } from './post-card';

@@ -76,11 +76,14 @@ vi.mock('@/lib/api', () => ({
   useThreadsAccountsQuery: () => mockQueries.threads,
   useFacebookAccountsQuery: () => mockQueries.facebook,
   useThreespeakAccountsQuery: () => mockQueries.threespeak,
-  useRumbleAccountsQuery: () => mockQueries.rumble,
 }));
 
 vi.mock('@/lib/pinterest-accounts', () => ({
   usePinterestAccountsQuery: () => mockQueries.pinterest,
+}));
+
+vi.mock('@/lib/social-accounts-queries', () => ({
+  useRumbleAccountsQuery: () => mockQueries.rumble,
 }));
 
 vi.mock('@/lib/account-card-telemetry', () => ({

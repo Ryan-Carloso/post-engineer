@@ -14,8 +14,8 @@ import AccountCard from '@/components/account-card';
 import SocialAccountsSection, { KeyConnectDialog } from '@/components/ui/social-accounts-section';
 import {
   useBlueskyAccountsQuery,
-  useRumbleAccountsQuery,
 } from '@/lib/api';
+import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
 import { useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
 import { useI18n } from '@/lib/i18n/provider';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';

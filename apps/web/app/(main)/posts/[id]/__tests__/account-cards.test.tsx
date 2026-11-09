@@ -19,6 +19,9 @@ vi.mock('@/lib/api', () => ({
   useBlueskyAccountsQuery: () => mockQueries.bluesky,
   useThreadsAccountsQuery: () => mockQueries.threads,
   useFacebookAccountsQuery: () => mockQueries.facebook,
+}));
+
+vi.mock('@/lib/social-accounts-queries', () => ({
   useRumbleAccountsQuery: () => mockQueries.rumble,
 }));
 

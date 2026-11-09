@@ -16,8 +16,8 @@ import {
   useThreadsAccountsQuery,
   useFacebookAccountsQuery,
   useThreespeakAccountsQuery,
-  useRumbleAccountsQuery,
 } from '@/lib/api';
+import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
 import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
 import { useI18n } from '@/lib/i18n/provider';
 import { SpinnerIcon } from '@/lib/ui';

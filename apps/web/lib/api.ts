@@ -27,9 +27,8 @@ export type { PersonaRecord };
 // API — typed fetch clients
 //---------------
 
-// Social-account queries live in lib/social-accounts-queries.ts (extracted
-// for the file-size ratchet); re-exported here so existing import sites
-// (`@/lib/api`) keep working.
+// Social-account queries live in lib/social-accounts-queries.ts; re-exported
+// here so existing `@/lib/api` import sites keep working.
 export {
   useBlueskyAccountsQuery,
   useFacebookAccountsQuery,
@@ -38,13 +37,9 @@ export {
   useSocialAccountsQuery,
   useThreadsAccountsQuery,
   useThreespeakAccountsQuery,
-  useRumbleAccountsQuery,
   useYouTubeAccountsQuery,
 } from './social-accounts-queries';
 export type { BlueskyAccountResponse, ProviderAccountsResponse } from './social-accounts-queries';
-//---------------
-// fetchBlueskyAccounts — Bluesky accounts (handle/did) via /api/account
-//---------------
 
 async function createPersona(formData: FormData): Promise<CreatePersonaResult> {
   const response = await fetch('/api/persona', { method: 'POST', body: formData });
