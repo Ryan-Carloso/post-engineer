@@ -36,6 +36,7 @@ from app.services.publish_facebook import (  # noqa: F401 - re-exported for call
     facebook_fields, validate_facebook_metadata,
 )
 from app.services.publish_pinterest import PINTEREST_DESCRIPTION_MAX_LENGTH, PINTEREST_PROVIDER, PINTEREST_TITLE_MAX_LENGTH, PinterestMetadata, pinterest_fields  # noqa: F401 - re-exported for callers
+from app.services.upload_publisher_failure import application_failure_reason
 
 VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
 
@@ -380,29 +381,6 @@ _PART_BUILDERS: _PartBuilders = {
 }
 
 
-def _application_failure_reason(result: dict[str, Any]) -> str | None:
-    """Discord-safe reason when a 2xx body did not publish anything.
-
-    Returns None when the body is a real success (including a provider
-    that posted to at least one account). The reason never includes
-    ``error``, ``errorType``, or per-account text: those fields are
-    remote-controlled and the reason reaches Discord via the task error.
-    """
-    if result.get("success") is False:
-        return "upload API reported failure"
-    accounts = result.get("results")
-    if (
-        isinstance(accounts, list)
-        and len(accounts) > 0
-        and all(
-            isinstance(account, dict) and account.get("success") is False
-            for account in accounts
-        )
-    ):
-        return "upload API reported failure for every account"
-    return None
-
-
 def publish_video(
     base_url: str,
     api_secret: str,
@@ -479,7 +457,7 @@ def publish_video(
             # stays Discord-safe and the body is server logs only.
             # Not retried — the request completed; the post did not.
             if isinstance(result, dict):
-                failure = _application_failure_reason(result)
+                failure = application_failure_reason(result)
                 # Fill-schedule passes surface_application_failure so it can
                 # classify each account. Other callers still get the raise.
                 if failure is not None and not surface_application_failure:
