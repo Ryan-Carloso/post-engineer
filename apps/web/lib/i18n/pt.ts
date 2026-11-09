@@ -204,7 +204,6 @@ export const ptDictionary = {
     toolDescPublishVideoDirect: 'Publicar um vídeo diretamente',
     toolDescConnectAccount: 'Conecte uma conta social',
     toolDescListSocialAccounts: 'Liste contas sociais conectadas',
-    toolDescListPinterestBoards: 'Liste quadros do Pinterest',
     toolDescListSchedules: 'Liste agendamentos automáticos',
     toolDescListPosts: 'Liste posts futuros e passados',
     toolDescCancelSchedule: 'Cancele um agendamento',

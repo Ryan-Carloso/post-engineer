@@ -455,7 +455,7 @@ describe('PersonaPublishingAccountsSection', () => {
     mockQueries.youtube = { data: { accounts: [] }, isLoading: false };
     mockQueries.instagram = { data: { accounts: [] }, isLoading: false };
     mockQueries.bluesky = { data: { accounts: [] }, isLoading: false };
-    mockQueries.facebook = { data: { accounts: [] }, isLoading: false };
+    mockQueries.facebook = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
     mockQueries.pinterest = {
       data: {
         authenticated: true,

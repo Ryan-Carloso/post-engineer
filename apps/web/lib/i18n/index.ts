@@ -32,7 +32,7 @@ import type { Locale } from './types';
 export const ptDictionary = {
   ...basePtDictionary,
   tokens: { ...basePtDictionary.tokens, ...fullLipsyncPriceStrings.pt.tokens },
-  apiKeys: { ...basePtDictionary.apiKeys, ...publishingAccountsStrings.pt.apiKeys },
+  apiKeys: { ...basePtDictionary.apiKeys, ...publishingAccountsStrings.pt.apiKeys, ...pinterestStrings.pt.apiKeys },
   persona: { ...basePtDictionary.persona, ...publishingAccountsStrings.pt.persona, ...voiceFallbackStrings.pt.persona },
   newPost: { ...voiceFallbackStrings.pt.newPost, ...facelessMaterialStrings.pt.newPost },
   nav: { ...basePtDictionary.nav, ...metricsStrings.pt.nav, ...promptsStrings.pt.nav },
@@ -47,7 +47,7 @@ export const ptDictionary = {
 export const enDictionary = {
   ...baseEnDictionary,
   tokens: { ...baseEnDictionary.tokens, ...fullLipsyncPriceStrings.en.tokens },
-  apiKeys: { ...baseEnDictionary.apiKeys, ...publishingAccountsStrings.en.apiKeys },
+  apiKeys: { ...baseEnDictionary.apiKeys, ...publishingAccountsStrings.en.apiKeys, ...pinterestStrings.en.apiKeys },
   persona: { ...baseEnDictionary.persona, ...publishingAccountsStrings.en.persona, ...voiceFallbackStrings.en.persona },
   newPost: { ...voiceFallbackStrings.en.newPost, ...facelessMaterialStrings.en.newPost },
   nav: { ...baseEnDictionary.nav, ...metricsStrings.en.nav, ...promptsStrings.en.nav },

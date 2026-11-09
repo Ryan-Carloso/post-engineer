@@ -203,7 +203,6 @@ export const enDictionary: Dictionary = {
     toolDescPublishVideoDirect: 'Publish a video directly',
     toolDescConnectAccount: 'Connect a social account',
     toolDescListSocialAccounts: 'List connected social accounts',
-    toolDescListPinterestBoards: 'List Pinterest boards',
     toolDescListSchedules: 'List automation schedules',
     toolDescListPosts: 'List upcoming and past posts',
     toolDescCancelSchedule: 'Cancel a schedule',
