@@ -152,6 +152,13 @@ export const COUNTER_FETCHERS: Record<MeasuredProvider, CounterFetcher> = {
     const token = await ownerAccessToken(userId, 'facebook', target.accountId);
     return facebookCounters(await getFacebookVideoInsights(token, target.externalId));
   },
+  // 3Speak's documented Studio API exposes no per-video analytics
+  // endpoint, so there is nothing to count. Null counters record the row
+  // (views/likes/comments/saves all "no data") and close the window
+  // instead of failing the snapshot on every hourly run.
+  async '3speak'() {
+    return { views: null, likes: null, comments: null, saves: null };
+  },
 };
 
 export async function fetchProviderCounters(

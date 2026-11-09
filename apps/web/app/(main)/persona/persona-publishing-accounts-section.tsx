@@ -15,6 +15,7 @@ import {
   useLinkedinAccountsQuery,
   useThreadsAccountsQuery,
   useFacebookAccountsQuery,
+  useThreespeakAccountsQuery,
 } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import { SpinnerIcon } from '@/lib/ui';
@@ -43,6 +44,7 @@ const PROVIDERS: readonly { provider: PublishingProvider; label: string }[] = [
   { provider: 'linkedin', label: 'LinkedIn' },
   { provider: 'threads', label: 'Threads' },
   { provider: 'facebook', label: 'Facebook' },
+  { provider: '3speak', label: '3Speak' },
 ];
 
 const EMPTY_DEFAULTS: PublishingDefaults = emptyPersonaDefaultAccounts();
@@ -132,6 +134,7 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
   const linkedin = useLinkedinAccountsQuery();
   const threads = useThreadsAccountsQuery();
   const facebook = useFacebookAccountsQuery();
+  const threespeak = useThreespeakAccountsQuery();
 
   const [selection, setSelection] = useState<PublishingDefaults>(EMPTY_DEFAULTS);
   const [loading, setLoading] = useState(true);
@@ -266,10 +269,23 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
         />
       ),
     })),
+    '3speak': (threespeak.data?.accounts ?? []).map((account) => ({
+      id: account.providerAccountId,
+      card: (
+        <AccountCard
+          key={`threespeak:${account.providerAccountId}`}
+          type="3speak"
+          name={account.accountName ?? account.providerAccountId}
+          labelOrigin={account.accountName ? 'stored' : 'provider_id'}
+          selected={selection['3speak'].includes(account.providerAccountId)}
+          onSelect={() => toggle('3speak', account.providerAccountId)}
+        />
+      ),
+    })),
   };
 
   const accountsLoading =
-    youtube.isLoading || instagram.isLoading || bluesky.isLoading || linkedin.isLoading || threads.isLoading || facebook.isLoading;
+    youtube.isLoading || instagram.isLoading || bluesky.isLoading || linkedin.isLoading || threads.isLoading || facebook.isLoading || threespeak.isLoading;
 
   return (
     <section>

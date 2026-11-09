@@ -8,7 +8,7 @@ import { resolveScriptLanguage, useUploadStore } from '@/lib/store';
 describe('useUploadStore', () => {
   beforeEach(() => {
     useUploadStore.setState({
-      selectedAccountIds: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [] },
+      selectedAccountIds: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], '3speak': [] },
       mode: 'youtube',
       file: null,
       title: '',
@@ -61,7 +61,8 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
-      });
+        '3speak': [],
+        });
     });
 
     it('does not affect other networks when toggling', () => {
@@ -76,7 +77,8 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
-      });
+        '3speak': [],
+        });
     });
 
     it('toggling on Instagram does not affect YouTube', () => {
@@ -90,7 +92,8 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
-      });
+        '3speak': [],
+        });
     });
   });
 
@@ -122,7 +125,8 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
-      });
+        '3speak': [],
+        });
     });
 
     it('is a no-op for providers without selection (e.g. bluesky)', () => {
@@ -138,7 +142,8 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
-      });
+        '3speak': [],
+        });
     });
   });
 
@@ -239,7 +244,8 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
-      });
+        '3speak': [],
+        });
     });
 
     it('clears only YouTube when passed the youtube provider', () => {
@@ -254,7 +260,8 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
-      });
+        '3speak': [],
+        });
     });
 
     it('clears only Instagram when passed the instagram provider', () => {
@@ -269,7 +276,8 @@ describe('useUploadStore', () => {
         linkedin: [],
         threads: [],
         facebook: [],
-      });
+        '3speak': [],
+        });
     });
   });
 

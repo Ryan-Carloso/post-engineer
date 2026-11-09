@@ -203,3 +203,12 @@ describe('fetchProviderCounters (facebook)', () => {
     expect(getFacebookVideoInsights).not.toHaveBeenCalled();
   });
 });
+
+describe('fetchProviderCounters (3speak)', () => {
+  it('returns null counters without calling any provider: 3Speak has no per-video analytics API', async () => {
+    const counters = await fetchProviderCounters('user-1', { provider: '3speak', accountId: 'alice', externalId: 'vid-7' }, CTX);
+
+    expect(counters).toEqual({ views: null, likes: null, comments: null, saves: null });
+    expect(getSocialAccountTokens).not.toHaveBeenCalled();
+  });
+});

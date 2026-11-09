@@ -122,6 +122,7 @@ describe('GET /api/posts/[id]', () => {
         blueskyAccountIds: [],
         threadsAccountIds: [],
         facebookAccountIds: [],
+        threespeakAccountIds: [],
         timezone: 'UTC',
         publishMode: 'scheduled',
       },
