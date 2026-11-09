@@ -230,7 +230,7 @@ describe('app/(main)/layout — MainLayout', () => {
     expect(panelLink).toHaveTextContent('account.billingLink');
   });
 
-  it('api keys are reachable from the profile panel, not from a tab', () => {
+  it('does not duplicate the API keys row in the sidebar footer when the nav tab already links there', () => {
     vi.mocked(useSessionQuery).mockReturnValue({
       data: {
         id: 'u1',
@@ -240,10 +240,10 @@ describe('app/(main)/layout — MainLayout', () => {
       isLoading: false,
     } as never);
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const panelLink = screen.getByTestId('profile-api-keys-link');
-    expect(panelLink).toHaveAttribute('href', '/recipes');
-    // Same name as the nav tab that opens the same hub.
-    expect(panelLink).toHaveTextContent('nav.prompts');
+    const footer = document.querySelector('[data-sidebar-footer]');
+    expect(footer).not.toBeNull();
+    expect(within(footer as HTMLElement).queryByTestId('profile-api-keys-link')).not.toBeInTheDocument();
+    expect(screen.getAllByTitle('nav.prompts').length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders locale switcher', () => {

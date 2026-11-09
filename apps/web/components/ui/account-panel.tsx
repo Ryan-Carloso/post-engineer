@@ -329,7 +329,13 @@ export function MobileProfileLink() {
 // user block (linking to /account) and sign-out. The user block and
 // sign-out only render when a session user exists.
 //---------------
-export function AccountPanel({ showVersionBadge = false }: { showVersionBadge?: boolean }) {
+export function AccountPanel({
+  showVersionBadge = false,
+  hideSidebarApiKeysRow = false,
+}: {
+  showVersionBadge?: boolean;
+  hideSidebarApiKeysRow?: boolean;
+}) {
   const { t } = useI18n();
   const sessionQuery = useSessionQuery();
   const user = sessionQuery.data;
@@ -349,7 +355,7 @@ export function AccountPanel({ showVersionBadge = false }: { showVersionBadge?: 
         </div>
       )}
       {user && (
-        <div className="space-y-5">
+        <div className="space-y-3 pb-0.5">
           <Link
             href="/account"
             data-testid="profile-user-link"
@@ -363,7 +369,7 @@ export function AccountPanel({ showVersionBadge = false }: { showVersionBadge?: 
               </p>
             </div>
           </Link>
-          <ApiKeysRow />
+          {!hideSidebarApiKeysRow && <ApiKeysRow />}
           <BillingRow />
           <SignOutButton />
           <SignOutAllButton />

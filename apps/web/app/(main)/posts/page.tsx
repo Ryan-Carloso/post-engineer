@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { RANGE_MAX_SLOTS, useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range';
 import { cn } from '@/lib/utils';
-import { CalendarLegend, CalendarView } from './calendar-view';
+import { CalendarView } from './calendar-view';
 import {
   FIRST_WEEKDAY,
   INTL_TAG,
@@ -179,13 +179,14 @@ export default function PostsPage() {
                 muted={isAccountEmpty}
                 filtered={filters.hasActiveFilter}
                 legendClassName="hidden xl:block"
+                showLegend={!isAccountEmpty && monthPostCount > 0}
               />
             </div>
             <section
               ref={daySectionRef}
               aria-live="polite"
               className={cn(
-                'min-w-0 scroll-mt-4 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4',
+                'min-w-0 scroll-mt-4 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:min-h-[22rem] xl:pt-4',
                 isError ? 'order-1 mb-4 xl:order-0 xl:mb-0' : 'order-2 mt-4',
               )}
             >
@@ -195,10 +196,19 @@ export default function PostsPage() {
                 <AccountEmptyState />
               ) : (
                 <>
-                  <h2 className="flex min-h-10 items-center text-base font-bold tracking-[-0.01em] text-primary">
-                    {monthIsEmpty || selectedKey === null
-                      ? t('posts.calendarMonthHeading', { month: monthLabel })
-                      : t('posts.calendarDayHeading', { date: dayFormat.format(dateFromKey(selectedKey)) })}
+                  <h2 className="flex min-h-10 flex-nowrap items-center gap-2 text-base font-bold tracking-[-0.01em] text-primary">
+                    {monthIsEmpty || selectedKey === null ? (
+                      t('posts.calendarMonthHeading', { month: monthLabel })
+                    ) : (
+                      <>
+                        <span className="min-w-0 truncate">{t('posts.calendarDayHeading', { date: dayFormat.format(dateFromKey(selectedKey)) })}</span>
+                        {selectedSlots.length > 0 && (
+                          <span className="shrink-0 text-sm font-semibold text-muted-foreground">
+                            · {t('posts.calendarDayPostCount', { count: selectedSlots.length })}
+                          </span>
+                        )}
+                      </>
+                    )}
                   </h2>
                   {!monthIsEmpty && <DaySummary slots={selectedSlots} />}
                   <div className="mt-3">
@@ -207,7 +217,6 @@ export default function PostsPage() {
                         reason={emptyReason}
                         monthLabel={monthLabel}
                         onClearFilters={filters.clear}
-                        onGoToday={showsTodayMonth ? undefined : () => handleSelect(todayKey)}
                       />
                     ) : (
                       // One column in the side panel; two equal-height columns
@@ -222,7 +231,6 @@ export default function PostsPage() {
                 </>
               )}
             </section>
-            {!isError && <CalendarLegend filtered={filters.hasActiveFilter} className="order-3 mt-4 xl:hidden" />}
           </div>
         )}
       </div>

@@ -94,12 +94,14 @@ const StatusBadge = ({ status, label, style }: { status: string; label: string; 
 
 // Status badge left, when right, on one line: neither side wraps. The
 // chevron says the card opens the post detail.
-const CardHeader = ({ badge, when }: { badge: ReactNode; when: string }) => (
+const CardHeader = ({ badge, when, showChevron = true }: { badge: ReactNode; when: string; showChevron?: boolean }) => (
   <div className="flex items-center justify-between gap-2">
     {badge}
     <p className="flex min-w-0 items-center gap-1 text-[13px] whitespace-nowrap text-ink-soft tabular-nums">
       <span className="truncate">{when}</span>
-      <ChevronRight data-card-chevron className="size-4 shrink-0 text-muted-text transition-transform group-hover/card:translate-x-0.5" aria-hidden />
+      {showChevron && (
+        <ChevronRight data-card-chevron className="size-4 shrink-0 text-muted-text transition-transform group-hover/card:translate-x-0.5" aria-hidden />
+      )}
     </p>
   </div>
 );
@@ -198,6 +200,7 @@ export const PostCard = ({
         <CardHeader
           badge={<StatusBadge status={slot.status} label={t(CALENDAR_GROUP_KEY[group])} style={CALENDAR_GROUP_PILL[group]} />}
           when={when}
+          showChevron={!isFailed}
         />
         <div className="mt-3 flex gap-3">
           <CardTitle title={slot.title ?? t('posts.unknownTitle')} personaName={personaName} />
@@ -233,16 +236,15 @@ export const PostCard = ({
               <AccountChips accounts={accounts} onTint />
             </div>
           )}
-          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          <div className="mt-2.5 flex flex-wrap items-center gap-3">
             <Link href={CREATE_POSTS_HREF} className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5')}>
-              {t('posts.cardReschedule')}
+              {t('posts.cardScheduleAgain')}
             </Link>
             <Link
               href={`/posts/${slot.id}`}
-              className="inline-flex h-8 items-center gap-1 rounded-md border border-input bg-card px-3 text-sm font-semibold text-ink transition-colors hover:bg-sunken focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              className="text-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
               {t('posts.cardDetails')}
-              <ChevronRight className="size-4" aria-hidden />
             </Link>
           </div>
         </FailureBox>

@@ -44,11 +44,17 @@ export function CalendarLoadingSkeleton({ weeks }: { weeks: number }) {
               <div key={`weekday-${i}`} className={`h-4 rounded ${SHAPE}`} />
             ))}
             {Array.from({ length: weeks * 7 }, (_, i) => (
-              <div key={`day-${i}`} data-skeleton-day className={`h-20 rounded-md opacity-60 sm:h-24 ${SHAPE}`} />
+              <div
+                key={`day-${i}`}
+                data-skeleton-day
+                className={`flex h-20 flex-col items-center justify-start gap-1 rounded-md pt-1 opacity-60 sm:h-24 ${SHAPE}`}
+              >
+                <div className={`size-5 rounded-full bg-line/80`} data-skeleton-day-number />
+              </div>
             ))}
           </div>
         </div>
-        <div aria-hidden data-skeleton-panel className="mt-6 min-w-0 xl:mt-0">
+        <div aria-hidden data-skeleton-panel className="mt-6 min-w-0 xl:mt-0 xl:min-h-[22rem]">
           <div className={`h-5 w-64 max-w-full rounded ${SHAPE}`} />
           <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
             {Array.from({ length: 2 }, (_, i) => (

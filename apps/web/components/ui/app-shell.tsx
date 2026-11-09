@@ -115,7 +115,7 @@ const MainSidebar = () => {
       </nav>
 
       <div data-sidebar-footer className="max-h-[50%] min-h-0 shrink space-y-3 overflow-y-auto border-t border-hairline bg-card p-4 lg:p-5">
-        <AccountPanel />
+        <AccountPanel hideSidebarApiKeysRow />
         <SidebarLegalLinks />
       </div>
     </aside>

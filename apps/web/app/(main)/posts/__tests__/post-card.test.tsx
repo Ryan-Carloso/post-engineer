@@ -51,7 +51,7 @@ describe('PostCard failure', () => {
     renderCard(FAILED_SLOT);
 
     expect(screen.queryByText('posts.cardRetry')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'posts.cardReschedule' })).toHaveAttribute('href', '/recipes');
+    expect(screen.getByRole('link', { name: 'posts.cardScheduleAgain' })).toHaveAttribute('href', '/recipes');
     expect(screen.getByRole('link', { name: 'posts.cardDetails' })).toHaveAttribute('href', '/posts/f1');
   });
 
@@ -63,7 +63,7 @@ describe('PostCard failure', () => {
     expect(within(box).getByText('posts.cardFailedFor')).toBeInTheDocument();
     expect(within(box).getByText('Europa Na Estrada')).toBeInTheDocument();
     expect(within(box).getByText('@vivalave')).toBeInTheDocument();
-    expect(within(box).getByRole('link', { name: 'posts.cardReschedule' })).toHaveAttribute('href', '/recipes');
+    expect(within(box).getByRole('link', { name: 'posts.cardScheduleAgain' })).toHaveAttribute('href', '/recipes');
     expect(within(box).getByRole('link', { name: 'posts.cardDetails' })).toBeInTheDocument();
     expect(box.className.split(/\s+/)).toContain('text-ink');
     expect(box.className.split(/\s+/)).not.toContain('text-destructive');
@@ -76,7 +76,7 @@ describe('PostCard failure', () => {
 
     expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
     expect(screen.queryByText('posts.cardFailedRetryable')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'posts.cardReschedule' })).toHaveAttribute('href', '/recipes');
+    expect(screen.getByRole('link', { name: 'posts.cardScheduleAgain' })).toHaveAttribute('href', '/recipes');
     expect(screen.getByRole('link', { name: 'posts.cardDetails' })).toHaveAttribute('href', '/posts/f1');
   });
 
@@ -98,12 +98,12 @@ describe('PostCard failure', () => {
     expect(screen.getByText('Europa Na Estrada')).toBeInTheDocument();
   });
 
-  it('keeps the card itself linked to the post detail, with a chevron that says so', () => {
+  it('keeps the card itself linked to the post detail but hides the header chevron on a failed card', () => {
     renderCard(FAILED_SLOT);
 
     const link = screen.getByRole('link', { name: /Failed topic/ });
     expect(link).toHaveAttribute('href', '/posts/f1');
-    expect(link.querySelector('[data-card-chevron]')).not.toBeNull();
+    expect(link.querySelector('[data-card-chevron]')).toBeNull();
   });
 });
 

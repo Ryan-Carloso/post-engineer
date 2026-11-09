@@ -171,18 +171,18 @@ describe('CalendarView', () => {
     setup({ slotsByDay });
     const busy = dayButton(/June 5, 2030/);
     const markers = [...busy.querySelectorAll('[data-marker]')];
-    expect(markers.map((marker) => marker.getAttribute('data-marker'))).toEqual(['failed', 'published', 'scheduled']);
-    expect(markers.map((marker) => marker.querySelector('[data-count]')?.textContent)).toEqual(['1', '1', '2']);
-    // Several groups: the word lives on the chip title, not in a label that
-    // would overflow the column. A single group still spells the word.
-    expect(markers.map((marker) => marker.textContent)).toEqual(['1', '1', '2']);
-    expect(markers.map((marker) => marker.getAttribute('title'))).toEqual(['Failed: 1', 'Published: 1', 'Scheduled: 2']);
+    expect(markers.map((marker) => marker.getAttribute('data-marker'))).toEqual(['failed', 'published']);
+    expect(markers.map((marker) => marker.querySelector('[data-count]')?.textContent)).toEqual(['1', '1']);
+    expect(busy.querySelector('[data-overflow-count]')).toHaveTextContent('+2');
+    // Several groups: icons and counts only in the cell; a single group spells the word.
+    expect(markers.map((marker) => marker.textContent)).toEqual(['1', '1']);
+    expect(markers.map((marker) => marker.getAttribute('title'))).toEqual(['Failed: 1', 'Published: 1']);
     expect(busy.className.split(/\s+/)).not.toContain('bg-destructive-soft');
     // A published-only day: one chip, and the cell itself stays unpainted.
     const published = dayButton(/June 6, 2030/);
     const publishedMarker = published.querySelector('[data-marker]');
     expect(publishedMarker?.getAttribute('data-marker')).toBe('published');
-    expect(publishedMarker?.textContent).toBe('Published1');
+    expect(publishedMarker?.textContent).toContain('Published');
     expect(published.className.split(/\s+/)).not.toContain('bg-destructive-soft');
   });
 
@@ -218,45 +218,24 @@ describe('CalendarView', () => {
     expect(classes).not.toContain('data-[selected-single=true]:text-primary-foreground');
   });
 
-  it("shows the day's distinct personas, the failed post's first", () => {
+  it('shows at most two status markers and collapses extra groups into one overflow count', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
         [
+          { status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T08:00:00.000Z' },
           { status: 'published', scheduleId: 's2', slotAt: '2030-06-05T10:00:00.000Z' },
-          { status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' },
-          { status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T14:00:00.000Z' },
+          { status: 'generating', scheduleId: 's1', slotAt: '2030-06-05T11:00:00.000Z' },
+          { status: 'awaiting', scheduleId: 's3', slotAt: '2030-06-05T12:00:00.000Z' },
         ],
       ],
     ]);
     setup({ slotsByDay });
     const cell = dayButton(/June 5, 2030/);
-    // The photos are aria-hidden (the day label carries the counts), so the
-    // images are asserted by DOM, not by role.
-    expect(cell.querySelector('[data-personas]')).toHaveAttribute('data-personas', '2');
-    expect([...cell.querySelectorAll('[data-personas] img')].map((img) => img.getAttribute('alt'))).toEqual(['Viva Leve', 'Bicuda']);
-    expect(cell.querySelector('[data-personas] span')?.className).toContain('[&_img]:grayscale');
+    expect(cell.querySelectorAll('[data-marker]')).toHaveLength(2);
+    expect(cell.querySelector('[data-overflow-count]')).toHaveTextContent('+2');
+    expect(cell.querySelector('[data-personas]')).toBeNull();
     expect(cell.querySelector('[data-personas-more]')).toBeNull();
-  });
-
-  it('shows at most two persona photos and names the rest', () => {
-    const slotsByDay = new Map<string, DaySlot[]>([
-      [
-        '2030-06-05',
-        [
-          { status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T10:00:00.000Z' },
-          { status: 'awaiting', scheduleId: 's2', slotAt: '2030-06-05T12:00:00.000Z' },
-          { status: 'awaiting', scheduleId: 's3', slotAt: '2030-06-05T14:00:00.000Z' },
-        ],
-      ],
-    ]);
-    setup({ slotsByDay });
-    const cell = dayButton(/June 5, 2030/);
-    expect(cell.querySelectorAll('[data-personas] img')).toHaveLength(2);
-    const more = cell.querySelector('[data-personas-more]');
-    expect(more).toHaveTextContent('+ Ana Fit');
-    expect(more).toHaveAttribute('title', 'Ana Fit');
-    expect(cell.querySelector('[data-personas]')?.className.split(/\s+/)).not.toContain('hidden');
   });
 
   it('still marks the status of a day whose posts resolve to no persona', () => {
@@ -284,8 +263,10 @@ describe('CalendarView', () => {
   });
 
   it('legends the same markers the cells draw — failed, published, in progress, scheduled — plus today', () => {
-    setup();
-    const legend = screen.getByText('Scheduled').closest('ul');
+    setup({
+      slotsByDay: new Map([['2030-06-05', [{ status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T10:00:00.000Z' }]]]),
+    });
+    const legend = screen.getAllByText('Scheduled')[0].closest('ul');
     if (legend === null) throw new Error('legend not rendered');
     expect([...legend.querySelectorAll('[data-marker]')].map((marker) => marker.getAttribute('data-marker'))).toEqual([
       'failed',
@@ -304,14 +285,17 @@ describe('CalendarView', () => {
   });
 
   it('says in the legend when a filter hides some posts', () => {
-    setup({ filtered: true });
-    expect(screen.getByText('Filtered: only matching posts are shown').closest('[data-filter-hint]')).not.toBeNull();
+    setup({
+      filtered: true,
+      slotsByDay: new Map([['2030-06-05', [{ status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T10:00:00.000Z' }]]]),
+    });
+    expect(screen.getAllByText('Filtered: only matching posts are shown')[0].closest('[data-filter-hint]')).not.toBeNull();
   });
 
   // A failed load must not read as an empty month: disabled days, readable
   // numbers, no selection, no markers, no legend — but the month can still
   // change. There is no "not loaded" pill over the cells.
-  it('draws an unavailable grid when the posts could not be loaded, keeping the month navigation', () => {
+  it('covers an unavailable grid and hides today gold so a failed load does not read empty', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       ['2030-06-05', [{ status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' }]],
     ]);
@@ -324,8 +308,15 @@ describe('CalendarView', () => {
     expect(screen.getByRole('grid').className.split(/\s+/)).not.toContain('opacity-40');
     expect(screen.getByRole('grid').querySelector('[data-selected="true"]')).toBeNull();
     expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-calendar-load-error]')).not.toBeNull();
+    expect(dayButton(/June 15, 2030/).querySelector('[data-today-mark]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
     expect(props.onMonthNavigate).toHaveBeenLastCalledWith(2030, 6);
+  });
+
+  it('hides the legend when the visible month has no posts', () => {
+    setup({ slotsByDay: new Map() });
+    expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
   });
 
   it('selects a day on click', () => {

@@ -1,7 +1,6 @@
 'use client';
 
 import { createContext, useCallback, useContext, useMemo, type MouseEventHandler } from 'react';
-import { Filter } from 'lucide-react';
 import { UI, useDayPicker, type NavProps } from 'react-day-picker';
 import { enUS, ptBR } from 'react-day-picker/locale';
 import type { ScheduleConfig, ScheduledSlot } from '@/lib/api';
@@ -9,13 +8,15 @@ import type { Locale } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/provider';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { INTL_TAG, calendarCounts, dateFromKey, dayKey, dayPersonas, type PersonaPhoto } from './calendar-days';
+import { INTL_TAG, calendarCounts, dateFromKey, dayKey } from './calendar-days';
 import { CALENDAR_GROUP_KEY, CALENDAR_GROUP_ORDER } from './status';
-import { DayCellContext, PostsDayButton, StatusMarker, TODAY_MARK_CLASS } from './calendar-markers';
+import { DayCellContext, PostsDayButton } from './calendar-markers';
+import { CalendarChromeContext, PostsCalendarWeek, PostsCalendarWeeks } from './calendar-week';
+import { CalendarLegend } from './calendar-legend';
 
 // CalendarView — month calendar on the shadcn Calendar (react-day-picker:
 // grid semantics, keyboard navigation, focus). Each day cell shows up to
-// two of the day's personas and one status chip per group, failure first
+// two status icons plus an overflow count per day, failure first
 // (calendar-markers.tsx); the legend draws the same markers. Today is an
 // amber disc behind the day number. The selected day is an outlined cell,
 // so the two never look alike. The grid shows only the weeks the month
@@ -33,7 +34,7 @@ interface CalendarViewProps {
   firstWeekday: 0 | 1;
   slotsByDay: Map<string, Pick<ScheduledSlot, 'status' | 'scheduleId' | 'slotAt'>[]>;
   scheduleById: Map<string, Pick<ScheduleConfig, 'personaId'>>;
-  personaPhotoById: Map<string, PersonaPhoto>;
+  personaPhotoById: Map<string, { name: string }>;
   selectedKey: string | null;
   todayKey: string;
   onSelect: (key: string) => void;
@@ -53,6 +54,8 @@ interface CalendarViewProps {
   // Extra classes on the legend wrapper (the page hides the in-card copy
   // below `xl` and draws one under the day list instead).
   legendClassName?: string;
+  // Hide status chips and the legend when the month has no posts.
+  showLegend?: boolean;
 }
 
 const DAY_PICKER_LOCALE: Record<Locale, typeof enUS> = { pt: ptBR, en: enUS };
@@ -61,7 +64,7 @@ const DAY_PICKER_LOCALE: Record<Locale, typeof enUS> = { pt: ptBR, en: enUS };
 // arrow was easy to miss, and an active fill stayed down after a click).
 // Hover tints; there is no stuck active fill. The target is 40px for touch.
 const NAV_ARROW_CLASS =
-  'inline-flex size-10 items-center justify-center rounded-md p-0 text-ink transition-colors select-none hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-disabled:opacity-50 [&_svg]:size-5 [&_svg]:stroke-[2.5] [&_svg]:text-ink';
+  'inline-flex size-10 items-center justify-center rounded-md p-0 text-ink transition-colors select-none hover:bg-sunken active:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-disabled:opacity-50 [&_svg]:size-5 [&_svg]:stroke-[2.5] [&_svg]:text-ink';
 
 // The Today action lives inside the month navigation (prev / Today / next),
 // so the nav component needs it from context: passing a closure component
@@ -145,39 +148,13 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
   );
 }
 
-// The legend under the grid. The page also renders one copy under the day
-// list on narrow screens, so this stays a separate component.
-export function CalendarLegend({ filtered = false, className }: { filtered?: boolean; className?: string }) {
-  const { t } = useI18n();
-  return (
-    <ul className={cn('flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-text', className)}>
-      {CALENDAR_GROUP_ORDER.map((group) => (
-        <li key={group} className="flex items-center gap-1.5">
-          <StatusMarker group={group} />
-          {t(CALENDAR_GROUP_KEY[group])}
-        </li>
-      ))}
-      <li className="flex items-center gap-1.5">
-        <span aria-hidden className={cn('size-4 rounded-full', TODAY_MARK_CLASS)} />
-        {t('posts.calendarToday')}
-      </li>
-      {filtered && (
-        <li data-filter-hint className="flex items-center gap-1.5 font-semibold text-primary">
-          <Filter className="size-3.5" aria-hidden />
-          {t('posts.filterActive')}
-        </li>
-      )}
-    </ul>
-  );
-}
-
 export function CalendarView({
   year,
   month,
   firstWeekday,
   slotsByDay,
-  scheduleById,
-  personaPhotoById,
+  scheduleById: _scheduleById,
+  personaPhotoById: _personaPhotoById,
   selectedKey,
   todayKey,
   onSelect,
@@ -187,6 +164,7 @@ export function CalendarView({
   muted = false,
   filtered = false,
   legendClassName,
+  showLegend = true,
 }: CalendarViewProps) {
   const { t, locale } = useI18n();
   const dateFormat = useMemo(() => new Intl.DateTimeFormat(INTL_TAG[locale], { dateStyle: 'full' }), [locale]);
@@ -198,16 +176,6 @@ export function CalendarView({
     const weekdayFormat = new Intl.DateTimeFormat(INTL_TAG[locale], { weekday: 'short' });
     return { formatWeekdayName: (date: Date) => weekdayFormat.format(date).replace(/\.$/, '') };
   }, [locale]);
-
-  const personasByDay = useMemo(() => {
-    const personas = new Map<string, PersonaPhoto[]>();
-    for (const [key, slots] of slotsByDay) {
-      // Every distinct persona: the cell shows two and names the rest.
-      const list = dayPersonas(slots, scheduleById, personaPhotoById, Number.POSITIVE_INFINITY);
-      if (list.length > 0) personas.set(key, list);
-    }
-    return personas;
-  }, [slotsByDay, scheduleById, personaPhotoById]);
 
   // Memoized so a data refresh that leaves slotsByDay untouched hands
   // react-day-picker the same label function (and labels object) instead of
@@ -246,15 +214,16 @@ export function CalendarView({
     [goToday, unavailable, muted, selectedKey, todayKey],
   );
   const inert = unavailable || muted;
-  // Unavailable or muted: no markers or photos from whatever part did load.
-  const dayCells = useMemo(
-    () => (inert ? { slotsByDay: new Map(), personasByDay: new Map() } : { slotsByDay, personasByDay }),
-    [inert, slotsByDay, personasByDay],
-  );
+  const monthHasPosts = useMemo(() => [...slotsByDay.values()].some((slots) => slots.length > 0), [slotsByDay]);
+  const legendVisible = showLegend && monthHasPosts && !inert;
+  // Unavailable or muted: no markers from whatever part did load.
+  const dayCells = useMemo(() => ({ slotsByDay: inert ? new Map() : slotsByDay }), [inert, slotsByDay]);
+  const chrome = useMemo(() => ({ filtered, showLegend: legendVisible }), [filtered, legendVisible]);
 
   return (
-    <div className={cn('relative max-w-full min-w-0 rounded-xl border border-line bg-card p-2 sm:p-3', muted && 'pointer-events-none opacity-80')}>
+    <div className={cn('relative max-w-full min-w-0 rounded-xl border border-line bg-card p-2 sm:p-3', muted && 'pointer-events-none')}>
       <DayCellContext.Provider value={dayCells}>
+        <CalendarChromeContext.Provider value={chrome}>
         <NavTodayContext.Provider value={navToday}>
           <Calendar
             mode="single"
@@ -265,7 +234,7 @@ export function CalendarView({
             onMonthChange={(date) => onMonthChange(date.getFullYear(), date.getMonth())}
             onNextClick={(date) => onMonthNavigate(date.getFullYear(), date.getMonth())}
             onPrevClick={(date) => onMonthNavigate(date.getFullYear(), date.getMonth())}
-            today={dateFromKey(todayKey)}
+            today={inert ? undefined : dateFromKey(todayKey)}
             selected={selectedKey === null || inert ? undefined : dateFromKey(selectedKey)}
             disabled={inert}
             onSelect={(date) => onSelect(dayKey(date))}
@@ -300,11 +269,19 @@ export function CalendarView({
               // cell does not, or it would crop the selection outline.
               day: 'group/day relative min-w-0 flex-1 basis-0 p-0 text-center',
             }}
-            components={{ DayButton: PostsDayButton, Nav: CalendarNav }}
+            components={{ DayButton: PostsDayButton, Nav: CalendarNav, Week: PostsCalendarWeek, Weeks: PostsCalendarWeeks }}
           />
+          {unavailable && (
+            <div
+              data-calendar-load-error
+              className="pointer-events-none absolute inset-x-2 bottom-2 top-12 rounded-lg bg-card/92 sm:inset-x-3"
+              aria-hidden
+            />
+          )}
         </NavTodayContext.Provider>
+        </CalendarChromeContext.Provider>
       </DayCellContext.Provider>
-      {!unavailable && (
+      {legendVisible && !unavailable && (
         <div className={cn('mt-3', legendClassName)}>
           <CalendarLegend filtered={filtered} />
         </div>
@@ -312,3 +289,5 @@ export function CalendarView({
     </div>
   );
 }
+
+export { CalendarLegend } from './calendar-legend';

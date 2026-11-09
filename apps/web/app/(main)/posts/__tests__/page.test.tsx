@@ -276,18 +276,16 @@ describe('PostsPage', () => {
     expect(screen.queryByRole('button', { name: 'posts.clearFilters' })).not.toBeInTheDocument();
 
     const selects = screen.getAllByRole('combobox');
-    await user.selectOptions(selects[0], 'linkedin');
+    await user.selectOptions(selects[0], 'youtube');
     expect(selects[0].className.split(/\s+/)).toContain('border-primary');
     expect(selects[1].className.split(/\s+/)).not.toContain('border-primary');
-    // The calendar says it is filtered. The legend is drawn twice (inside
-    // the card from xl up, under the day list below that); jsdom does not
-    // apply the breakpoint, so both copies are in the tree.
+    // The calendar says it is filtered when the month still has posts (desktop
+    // legend in the card and the mobile copy under the weekday row).
     expect(screen.getAllByText('posts.filterActive')).toHaveLength(2);
 
-    // Two clear actions: the filter bar's and the empty panel's.
     const clears = screen.getAllByRole('button', { name: 'posts.clearFilters' });
-    expect(clears).toHaveLength(2);
-    await user.click(clears[1]);
+    expect(clears).toHaveLength(1);
+    await user.click(clears[0]);
     expect(selects[0]).toHaveValue('all');
     expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'posts.clearFilters' })).not.toBeInTheDocument();
@@ -356,8 +354,8 @@ describe('PostsPage', () => {
     // The panel is scoped like its message: it names the month, not a day.
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('posts.calendarMonthHeading');
     expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
-    // Today's month already: no "Go to today".
-    expect(screen.queryByRole('button', { name: 'posts.calendarGoToday' })).not.toBeInTheDocument();
+    // Empty month still shows the header Today control (no duplicate in the panel).
+    expect(screen.getByRole('button', { name: 'posts.calendarToday' })).toBeInTheDocument();
     // The calendar stays, and an empty day shows no zero-count chips.
     expect(screen.getByRole('grid')).toBeInTheDocument();
     expect(screen.queryByText(/posts\.group(Published|Failed|Scheduled):/)).not.toBeInTheDocument();
@@ -404,13 +402,13 @@ describe('PostsPage', () => {
     expect(screen.queryByText('posts.calendarMonthEmptyTitle')).not.toBeInTheDocument();
   });
 
-  it('offers "Go to today" from an empty month that is not today\'s, and it selects today', async () => {
+  it('returns to today from an empty future month using the header Today control', async () => {
     const user = userEvent.setup();
     render(<PostsPage />);
 
     await user.click(screen.getByRole('button', { name: 'posts.calendarNextMonth' }));
     expect(screen.getByText('posts.calendarMonthEmptyTitle')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'posts.calendarGoToday' }));
+    await user.click(screen.getByRole('button', { name: 'posts.calendarToday' }));
     expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('posts.calendarDayHeading');
   });
@@ -768,17 +766,17 @@ describe('PostsPage calendar view', () => {
     expect(cells.some((cell) => cell.querySelector('[data-marker]') !== null)).toBe(false);
   });
 
-  it('shows the persona photo and the scheduled marker on a day whose post is still to publish', () => {
+  it('shows only the scheduled status marker in the cell for a day with one awaiting post', () => {
     mockQueries();
     render(<PostsPage />);
 
-    // June 1 holds the awaiting UPCOMING_SLOT.
     const day1 = within(screen.getByRole('grid'))
       .getAllByRole('button', { name: 'posts.calendarDayLabel' })
       .find((button) => button.querySelector('[data-day-number]')?.textContent === '1');
     expect(day1).toBeDefined();
-    expect((day1 as HTMLElement).querySelector('img[alt="Viva Leve"]')).not.toBeNull();
+    expect((day1 as HTMLElement).querySelector('img')).toBeNull();
     expect((day1 as HTMLElement).querySelector('[data-marker="scheduled"] [data-count]')).toHaveTextContent('1');
+    expect((day1 as HTMLElement).querySelector('[data-personas]')).toBeNull();
   });
 
   it('summarizes only the groups the selected day has — no zero counts', async () => {

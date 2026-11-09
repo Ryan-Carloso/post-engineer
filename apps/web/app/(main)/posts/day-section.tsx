@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { CalendarCheck, CalendarPlus, CalendarX2, Filter, FilterX, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { CalendarPlus, CalendarX2, Filter, FilterX, TriangleAlert, type LucideIcon } from 'lucide-react';
 import type { ScheduledSlot } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
@@ -88,13 +88,10 @@ export function DayEmptyState({
   reason,
   monthLabel,
   onClearFilters,
-  onGoToday,
 }: {
   reason: 'filter' | 'month' | 'day';
   monthLabel: string;
   onClearFilters: () => void;
-  // Omitted when the shown month already holds today.
-  onGoToday?: () => void;
 }) {
   const { t } = useI18n();
   if (reason === 'filter') {
@@ -120,19 +117,7 @@ export function DayEmptyState({
         icon={CalendarX2}
         title={t('posts.calendarMonthEmptyTitle', { month: monthLabel })}
         description={t('posts.calendarMonthEmptyHint')}
-        action={
-          // One row in both languages. The side column is narrow, so the
-          // buttons share it instead of painting past the dashed card.
-          <div className="flex w-full min-w-0 flex-nowrap items-center justify-center gap-1.5">
-            {onGoToday !== undefined && (
-              <Button type="button" size="sm" variant="outline" className="h-8 min-w-0 shrink gap-1 bg-card px-2 text-xs whitespace-nowrap text-primary hover:bg-sunken hover:text-primary" onClick={onGoToday}>
-                <CalendarCheck aria-hidden />
-                {t('posts.calendarGoToday')}
-              </Button>
-            )}
-            <CreatePostsLink labelKey="posts.schedulePostsAction" className="h-8 min-w-0 shrink px-2 text-xs" />
-          </div>
-        }
+        action={<CreatePostsLink labelKey="posts.schedulePostsAction" className="h-8 min-w-0 shrink px-2 text-xs" />}
       />
     );
   }
