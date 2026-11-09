@@ -15,7 +15,6 @@ import {
 } from '@/lib/social-accounts';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { parseMediaUpload } from '@/lib/media/upload-schema';
-import type { SocialProvider } from '@/lib/types';
 import { InstagramService } from '@/lib/instagram';
 import { httpStatusOf, reportAccountUnauthorized } from './account-unauthorized';
 import type { OAuth2Client } from 'google-auth-library';
@@ -27,34 +26,7 @@ import type { OAuth2Client } from 'google-auth-library';
 // A failure on one account does NOT abort the others (aggregated result).
 //---------------
 
-interface ContentUploadAccountResult {
-  accountId: string;
-  success: boolean;
-  videoId?: string;
-  videoUrl?: string;
-  uploadDuration?: string;
-  postId?: string;
-  mediaId?: string;
-  permalink?: string;
-  error?: string;
-}
-
-interface ContentUploadSuccess {
-  success: true;
-  provider: SocialProvider;
-  results: ContentUploadAccountResult[];
-  logId: string;
-}
-
-interface ContentUploadFailure {
-  success: false;
-  error: string;
-  errorType: string;
-  logId: string;
-  suggestions?: string[];
-}
-
-export type ContentUploadResponse = ContentUploadSuccess | ContentUploadFailure;
+import type { ContentUploadAccountResult, ContentUploadResponse } from './content-upload-result';
 
 //---------------
 // getAuthenticatedClient — OAuth client with the account's valid tokens

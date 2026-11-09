@@ -117,8 +117,9 @@ const connectedAccounts = {
   },
   linkedin: { data: { accounts: [] }, isLoading: false },
   threespeak: {
-    data: { accounts: [{ provider: '3speak', recordId: 'r1', providerAccountId: 'alice', accountName: 'Alice', connectedAt: 0, lastUsed: 0 }] },
+    data: { authenticated: true, accounts: [{ provider: '3speak', recordId: 'r1', providerAccountId: 'alice', accountName: 'Alice', connectedAt: 0, lastUsed: 0 }] },
     isLoading: false,
+    error: null,
   },
 };
 
@@ -405,7 +406,7 @@ describe('PersonaPublishingAccountsSection', () => {
     mockQueries.youtube = { data: { accounts: [] }, isLoading: false };
     mockQueries.instagram = { data: { accounts: [] }, isLoading: false };
     mockQueries.bluesky = { data: { accounts: [] }, isLoading: false };
-    mockQueries.threespeak = { data: { accounts: [] }, isLoading: false, error: null };
+    mockQueries.threespeak = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
     mockQueries.facebook = {
       data: {
         authenticated: true,

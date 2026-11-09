@@ -33,6 +33,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.services.caption_text import (  # noqa: F401 - re-exported for callers
+    BLUESKY_CAPTION_MAX_GRAPHEMES, count_graphemes, truncate_bluesky_caption,
+)
 from app.services.publish_facebook import (  # noqa: F401 - re-exported for callers
     FACEBOOK_CAPTION_MAX_LENGTH, FACEBOOK_PROVIDER, FacebookMetadata,
     facebook_fields, validate_facebook_metadata,
@@ -49,7 +52,6 @@ VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
 BASE_URL_ENV: str = "MPT_UPLOAD_API_BASE_URL"
 SERVICE_KEY_ENV: str = "MONEYPRINT_API_SECRET"
 INSTAGRAM_CAPTION_MAX_LENGTH: int = 2200
-BLUESKY_CAPTION_MAX_GRAPHEMES: int = 300
 LINKEDIN_CAPTION_MAX_LENGTH: int = 3000
 THREADS_CAPTION_MAX_LENGTH: int = 500
 
@@ -210,7 +212,7 @@ def validate_publish_metadata(
             raise ValueError("bluesky provider requires bluesky metadata")
         if not bluesky.account_ids:
             raise ValueError("bluesky publish requires at least one account id")
-        if _count_graphemes(bluesky.caption) > BLUESKY_CAPTION_MAX_GRAPHEMES:
+        if count_graphemes(bluesky.caption) > BLUESKY_CAPTION_MAX_GRAPHEMES:
             raise ValueError("bluesky caption exceeds 300 graphemes")
     if LINKEDIN_PROVIDER in providers:
         if linkedin is None:
@@ -305,41 +307,6 @@ def build_threads_parts(metadata: ThreadsMetadata) -> MultipartParts:
             *(("threadsAccountIds", account_id) for account_id in metadata.account_ids),
         ],
     )
-
-
-def _count_graphemes(text: str) -> int:
-    """Count user-perceived characters (emoji ZWJ sequences count as one)."""
-    import unicodedata
-    count = 0
-    previous_combining = False
-    for char in text:
-        if unicodedata.combining(char) or char == "\u200d":
-            previous_combining = True
-            continue
-        if previous_combining:
-            previous_combining = False
-            continue
-        count += 1
-    return count
-
-
-def truncate_bluesky_caption(caption: str) -> str:
-    """Truncate a caption to 300 graphemes with an ellipsis, never breaking emoji."""
-    if _count_graphemes(caption) <= BLUESKY_CAPTION_MAX_GRAPHEMES:
-        return caption
-    result: list[str] = []
-    count = 0
-    import unicodedata
-    for char in caption:
-        if count == BLUESKY_CAPTION_MAX_GRAPHEMES - 1:
-            break
-        if unicodedata.combining(char) or char == "\u200d":
-            if result:
-                result[-1] += char
-            continue
-        result.append(char)
-        count += 1
-    return "".join(result) + "…"
 
 
 def build_video_file_part(
