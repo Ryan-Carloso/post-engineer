@@ -94,7 +94,7 @@ export function buildDirectPublishForm(
       formData.append('igAccountIds', accountId);
     }
   } else {
-    const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds', facebook: 'facebookAccountIds', pinterest: 'pinterestAccountIds', rumble: 'rumbleAccountIds' }[input.provider];
+    const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds', facebook: 'facebookAccountIds', pinterest: 'pinterestAccountIds', '3speak': 'threespeakAccountIds', rumble: 'rumbleAccountIds' }[input.provider];
     formData.append('video', videoBlob, filename);
     // Rumble takes title + description, not a caption.
     if (input.provider === 'rumble') {

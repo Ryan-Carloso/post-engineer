@@ -8,7 +8,7 @@ import { resolveScriptLanguage, useUploadStore } from '@/lib/store';
 describe('useUploadStore', () => {
   beforeEach(() => {
     useUploadStore.setState({
-      selectedAccountIds: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], rumble: [] },
+      selectedAccountIds: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [] },
       mode: 'youtube',
       file: null,
       title: '',
@@ -62,6 +62,7 @@ describe('useUploadStore', () => {
         threads: [],
         facebook: [],
         pinterest: [],
+        '3speak': [],
         rumble: [],
       });
     });
@@ -79,6 +80,7 @@ describe('useUploadStore', () => {
         threads: [],
         facebook: [],
         pinterest: [],
+        '3speak': [],
         rumble: [],
       });
     });
@@ -95,6 +97,7 @@ describe('useUploadStore', () => {
         threads: [],
         facebook: [],
         pinterest: [],
+        '3speak': [],
         rumble: [],
       });
     });
@@ -129,6 +132,7 @@ describe('useUploadStore', () => {
         threads: [],
         facebook: [],
         pinterest: [],
+        '3speak': [],
         rumble: [],
       });
     });
@@ -147,6 +151,7 @@ describe('useUploadStore', () => {
         threads: [],
         facebook: [],
         pinterest: [],
+        '3speak': [],
         rumble: [],
       });
     });
@@ -250,6 +255,7 @@ describe('useUploadStore', () => {
         threads: [],
         facebook: [],
         pinterest: [],
+        '3speak': [],
         rumble: [],
       });
     });
@@ -267,6 +273,7 @@ describe('useUploadStore', () => {
         threads: [],
         facebook: [],
         pinterest: [],
+        '3speak': [],
         rumble: [],
       });
     });
@@ -284,6 +291,7 @@ describe('useUploadStore', () => {
         threads: [],
         facebook: [],
         pinterest: [],
+        '3speak': [],
         rumble: [],
       });
     });

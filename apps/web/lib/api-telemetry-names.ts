@@ -87,6 +87,7 @@ table['POST /api/billing/check-tokens'] = 'tokens_checked';
 table['POST /api/billing/checkout'] = 'checkout_started';
 table['POST /api/billing/webhook'] = 'billing_webhook_received';
 table['POST /api/bluesky-connect'] = 'bluesky_connected';
+table['POST /api/threespeak-connect'] = 'threespeak_connected';
 table['POST /api/rumble-connect'] = 'rumble_connected';
 table['POST /api/experiments'] = 'experiment_created';
 table['POST /api/videos/batch-discount'] = 'batch_discount_requested';

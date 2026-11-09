@@ -771,6 +771,21 @@ describe('generate and schedule video client', () => {
     expect(publishing.pinterestBoardId).toBe('b1');
   });
 
+  it('nests the 3speak account array under its own provider', async () => {
+    await client.generatePersonaVideo({
+      ...baseInput,
+      providers: ['3speak'],
+      threespeakAccountIds: ['alice'],
+    });
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect(publishing.accounts).toEqual({
+      youtube: ['chan-1'],
+      bluesky: ['did:plc:abc'],
+      '3speak': ['alice'],
+    });
+    expect(publishing.providers).toEqual(['3speak']);
+  });
+
   it('nests the rumble channel ids under their own provider', async () => {
     await client.generatePersonaVideo({
       ...baseInput,
@@ -1067,6 +1082,41 @@ describe('generate and schedule video client', () => {
     ).rejects.toThrow(/Failed to connect Bluesky account: 400/);
   });
 
+  it('connects a 3Speak account with username + posting key', async () => {
+    const mockResponse = { success: true, accountId: 'acc-1', providerAccountId: 'alice' };
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockResponse),
+    });
+
+    const result = await client.connectThreespeakAccount('alice', '5Kposting-key-123');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/threespeak-connect`,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({ username: 'alice', postingKey: '5Kposting-key-123' }),
+      })
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it('throws a clear error when the 3Speak connect request fails', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      text: async () => 'Invalid Hive posting key.',
+    });
+
+    await expect(
+      client.connectThreespeakAccount('alice', 'wrong')
+    ).rejects.toThrow(/Failed to connect 3Speak account: 422/);
+  });
+
   it('connects a Rumble account with channelId + accessToken', async () => {
     const mockResponse = { success: true, accountId: 'acc-1', channelId: 'chan-1' };
 
@@ -1200,6 +1250,21 @@ describe('PostEngineerClient configuration', () => {
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).not.toContain(JSON.stringify(password).slice(1, -1));
     expect((error as Error).message).not.toContain(password);
+    expect((error as Error).message).toContain('[redacted]');
+  });
+
+  it('never echoes the 3Speak posting key when the API error body reflects the payload', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      text: async () => `{"error":"invalid postingKey value '5Ksecret-key'"}`,
+    });
+
+    const c = new PostEngineerClient({ apiKey: 'k' });
+    const error = await c.connectThreespeakAccount('alice', '5Ksecret-key').catch((e) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain('5Ksecret-key');
     expect((error as Error).message).toContain('[redacted]');
   });
 
@@ -2023,6 +2088,22 @@ describe('publishVideoDirect', () => {
       postId: '123456789',
       permalink: 'https://www.pinterest.com/pin/123456789/',
     });
+  });
+
+  it('maps account ids to the threespeak field name and sends the caption', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: '3speak',
+      videoPath,
+      accountIds: ['alice'],
+      caption: 'hello 3speak',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('provider')).toBe('3speak');
+    expect(formData.getAll('threespeakAccountIds')).toEqual(['alice']);
+    expect(formData.get('caption')).toBe('hello 3speak');
+    expect(formData.get('video')).toBeInstanceOf(Blob);
   });
 
   it('maps account ids to the rumble field name and sends title + description instead of a caption', async () => {

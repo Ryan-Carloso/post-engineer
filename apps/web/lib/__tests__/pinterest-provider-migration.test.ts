@@ -8,11 +8,15 @@ import { findRepoRoot } from '@/test/repo-root';
 // connect and publish paths depend on. Each provider check is dropped and
 // re-created with the full list (the lesson of 037: a live constraint the
 // chain no longer defines can linger in production, so a plain add would
-// leave the old list in force). The lists are pinned to the seven providers
-// live when 050 shipped — the file is frozen, so it must NOT track
-// SOCIAL_PROVIDERS (052 adds rumble after it). The schedule also carries
-// one board id: a pin cannot exist without a board.
+// leave the old list in force). A shipped migration is never edited, so
+// this test pins the seven providers 050 shipped with; the file is frozen,
+// so it must NOT track SOCIAL_PROVIDERS (053 adds rumble after it). The
+// live pin is the 053 test. The schedule also carries one board id: a pin
+// cannot exist without a board.
 //---------------
+
+// The seven providers 050 shipped with, in the order the migration lists them.
+const PROVIDERS_AT_050 = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest'];
 
 const sql = readFileSync(
   join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '050_pinterest-provider.sql'),
@@ -47,17 +51,9 @@ describe('supabase/migrations/050_pinterest-provider.sql', () => {
   );
 
   it.each(['post_metrics_provider_check', 'social_accounts_provider_check'])(
-    '%s allows exactly the seven providers live when 050 shipped',
+    '%s allows exactly the providers 050 shipped with',
     (constraint) => {
-      expect(checkProviders(constraint).sort()).toEqual([
-        'bluesky',
-        'facebook',
-        'instagram',
-        'linkedin',
-        'pinterest',
-        'threads',
-        'youtube',
-      ]);
+      expect(checkProviders(constraint).sort()).toEqual([...PROVIDERS_AT_050].sort());
     },
   );
 });

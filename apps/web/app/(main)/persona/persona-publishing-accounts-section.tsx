@@ -15,6 +15,7 @@ import {
   useLinkedinAccountsQuery,
   useThreadsAccountsQuery,
   useFacebookAccountsQuery,
+  useThreespeakAccountsQuery,
   useRumbleAccountsQuery,
 } from '@/lib/api';
 import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
@@ -46,6 +47,7 @@ const PROVIDERS: readonly { provider: PublishingProvider; label: string }[] = [
   { provider: 'threads', label: 'Threads' },
   { provider: 'facebook', label: 'Facebook' },
   { provider: 'pinterest', label: 'Pinterest' },
+  { provider: '3speak', label: '3Speak' },
   { provider: 'rumble', label: 'Rumble' },
 ];
 
@@ -137,6 +139,7 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
   const threads = useThreadsAccountsQuery();
   const facebook = useFacebookAccountsQuery();
   const pinterest = usePinterestAccountsQuery();
+  const threespeak = useThreespeakAccountsQuery();
   const rumble = useRumbleAccountsQuery();
 
   const [selection, setSelection] = useState<PublishingDefaults>(EMPTY_DEFAULTS);
@@ -286,6 +289,19 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
         />
       ),
     })),
+    '3speak': (threespeak.data?.accounts ?? []).map((account) => ({
+      id: account.providerAccountId,
+      card: (
+        <AccountCard
+          key={`threespeak:${account.providerAccountId}`}
+          type="3speak"
+          name={account.accountName ?? account.providerAccountId}
+          labelOrigin={account.accountName ? 'stored' : 'provider_id'}
+          selected={selection['3speak'].includes(account.providerAccountId)}
+          onSelect={() => toggle('3speak', account.providerAccountId)}
+        />
+      ),
+    })),
     rumble: (rumble.data?.accounts ?? []).map((account) => ({
       id: account.providerAccountId,
       card: (
@@ -302,7 +318,7 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
   };
 
   const accountsLoading =
-    youtube.isLoading || instagram.isLoading || bluesky.isLoading || linkedin.isLoading || threads.isLoading || facebook.isLoading || pinterest.isLoading || rumble.isLoading;
+    youtube.isLoading || instagram.isLoading || bluesky.isLoading || linkedin.isLoading || threads.isLoading || facebook.isLoading || pinterest.isLoading || threespeak.isLoading || rumble.isLoading;
 
   return (
     <section>

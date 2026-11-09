@@ -14,6 +14,7 @@
 //   facebook  → permalink  ready-made post URL (best-effort; no URL can be derived from the id)
 //   pinterest → permalink  ready-made pin URL; a bare numeric pin id derives
 //              https://www.pinterest.com/pin/<id>/
+//   3speak    → permalink  ready-made watch URL (best-effort; the video id alone builds no URL)
 //   rumble    → permalink  the monetized URL from the upload response (best-effort; no URL can be derived from the id)
 //
 // So three providers arrive with a URL and two need one derived. A provider
@@ -25,7 +26,7 @@
 // and it must stay safe to import from a client component.
 //---------------
 
-export type PublishProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | 'rumble';
+export type PublishProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble';
 
 export interface PublishLink {
   provider: PublishProvider;
@@ -40,7 +41,7 @@ const PROVIDERS: ReadonlySet<string> = new Set<PublishProvider>([
   'threads',
   'facebook',
   'pinterest',
-  'rumble',
+  '3speak', 'rumble',
 ]);
 
 //---------------

@@ -18,6 +18,8 @@ Wire contract (multipart/form-data):
   repeated ``threadsAccountIds`` fields.
 - Facebook: ``provider=facebook``, ``video`` (file), ``caption``,
   repeated ``facebookAccountIds`` fields (see ``publish_facebook``). Pinterest: ``provider=pinterest``, ``video`` (file), ``title``, ``description``, ``boardId``, repeated ``pinterestAccountIds`` fields (see ``publish_pinterest``; validated by ``fill_schedule/metadata.py``).
+- 3Speak: ``provider=3speak``, ``video`` (file), ``caption``,
+  repeated ``threespeakAccountIds`` fields (see ``publish_threespeak``).
   repeated ``facebookAccountIds`` fields (see ``publish_facebook``).
 - Rumble: ``provider=rumble``, ``video`` (file), ``title``,
   ``description``, ``license_type`` (``0`` = Personal Use), repeated
@@ -35,7 +37,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.services.bluesky_caption import (  # noqa: F401 - re-exported for callers
+from app.services.caption_text import (  # noqa: F401 - re-exported for callers
     BLUESKY_CAPTION_MAX_GRAPHEMES, count_graphemes, truncate_bluesky_caption,
 )
 from app.services.publish_facebook import (  # noqa: F401 - re-exported for callers
@@ -43,6 +45,10 @@ from app.services.publish_facebook import (  # noqa: F401 - re-exported for call
     facebook_fields, validate_facebook_metadata,
 )
 from app.services.publish_pinterest import PINTEREST_DESCRIPTION_MAX_LENGTH, PINTEREST_PROVIDER, PINTEREST_TITLE_MAX_LENGTH, PinterestMetadata, pinterest_fields  # noqa: F401 - re-exported for callers
+from app.services.publish_threespeak import (  # noqa: F401 - re-exported for callers
+    THREESPEAK_PROVIDER, ThreespeakMetadata,
+    threespeak_fields, validate_threespeak_metadata,
+)
 from app.services.publish_rumble import (  # noqa: F401 - re-exported for callers
     RUMBLE_PROVIDER, RUMBLE_TITLE_MAX_LENGTH, RumbleMetadata,
     rumble_fields, validate_rumble_metadata,
@@ -72,6 +78,7 @@ VALID_PROVIDERS: tuple[str, ...] = (
     THREADS_PROVIDER,
     FACEBOOK_PROVIDER,
     PINTEREST_PROVIDER,
+    THREESPEAK_PROVIDER,
     RUMBLE_PROVIDER,
 )
 
@@ -146,6 +153,7 @@ class PublishMetadata:
     linkedin: LinkedInMetadata | None = None
     threads: ThreadsMetadata | None = None
     facebook: FacebookMetadata | None = None
+    threespeak: ThreespeakMetadata | None = None
     rumble: RumbleMetadata | None = None
 
 
@@ -170,6 +178,7 @@ def validate_publish_metadata(
     linkedin: LinkedInMetadata | None = None,
     threads: ThreadsMetadata | None = None,
     facebook: FacebookMetadata | None = None,
+    threespeak: ThreespeakMetadata | None = None,
     rumble: RumbleMetadata | None = None,
 ) -> PublishMetadata:
     """Validate provider selection and per-provider metadata.
@@ -241,6 +250,8 @@ def validate_publish_metadata(
             )
     if FACEBOOK_PROVIDER in providers:
         validate_facebook_metadata(facebook)
+    if THREESPEAK_PROVIDER in providers:
+        validate_threespeak_metadata(threespeak)
     if RUMBLE_PROVIDER in providers:
         validate_rumble_metadata(rumble)
 
@@ -252,6 +263,7 @@ def validate_publish_metadata(
         linkedin=linkedin,
         threads=threads,
         facebook=facebook,
+        threespeak=threespeak,
         rumble=rumble,
     )
 
@@ -359,6 +371,7 @@ _PART_BUILDERS: _PartBuilders = {
     THREADS_PROVIDER: (ThreadsMetadata, build_threads_parts),
     FACEBOOK_PROVIDER: (FacebookMetadata, lambda metadata: MultipartParts(fields=facebook_fields(metadata))),
     PINTEREST_PROVIDER: (PinterestMetadata, lambda metadata: MultipartParts(fields=pinterest_fields(metadata))),
+    THREESPEAK_PROVIDER: (ThreespeakMetadata, lambda metadata: MultipartParts(fields=threespeak_fields(metadata))),
     RUMBLE_PROVIDER: (RumbleMetadata, lambda metadata: MultipartParts(fields=rumble_fields(metadata))),
 }
 
@@ -367,7 +380,7 @@ def publish_video(
     base_url: str,
     api_secret: str,
     owner_user_id: str,
-    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | PinterestMetadata | RumbleMetadata,
+    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | PinterestMetadata | ThreespeakMetadata | RumbleMetadata,
     video_path: str,
     video_bytes: bytes,
     content_type: str,
@@ -432,7 +445,7 @@ def publish_video(
                 result: dict[str, Any] = response.json()
             except ValueError as exc:
                 raise PublishError("upload API returned invalid JSON") from exc
-            # HTTP 200 is not success. Bluesky/LinkedIn/Threads/Facebook answer 200 with
+            # HTTP 200 is not success. Bluesky/LinkedIn/Threads/Facebook/3Speak answer 200 with
             # success:false (and often error/errorType). YouTube/Instagram
             # keep success:true and put per-account outcomes in results.
             # Either shape with nothing posted must raise: the message

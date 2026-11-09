@@ -11,6 +11,9 @@
   "POST /api/bluesky-connect": [
     "connect_account"
   ],
+  "POST /api/threespeak-connect": [
+    "connect_account"
+  ],
   "POST /api/rumble-connect": [
     "connect_account"
   ],

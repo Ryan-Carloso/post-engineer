@@ -15,7 +15,6 @@ import {
 } from '@/lib/social-accounts';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { parseMediaUpload } from '@/lib/media/upload-schema';
-import type { SocialProvider } from '@/lib/types';
 import { InstagramService } from '@/lib/instagram';
 import { httpStatusOf, reportAccountUnauthorized } from './account-unauthorized';
 import { classifyUploadAccountError } from '@/lib/upload/account-error';
@@ -23,35 +22,7 @@ import type { OAuth2Client } from 'google-auth-library';
 
 // Upload handlers — one account failing does not abort the others.
 
-interface ContentUploadAccountResult {
-  accountId: string;
-  success: boolean;
-  videoId?: string;
-  videoUrl?: string;
-  uploadDuration?: string;
-  postId?: string;
-  mediaId?: string;
-  permalink?: string;
-  error?: string;
-  errorCode?: string;
-}
-
-interface ContentUploadSuccess {
-  success: true;
-  provider: SocialProvider;
-  results: ContentUploadAccountResult[];
-  logId: string;
-}
-
-interface ContentUploadFailure {
-  success: false;
-  error: string;
-  errorType: string;
-  logId: string;
-  suggestions?: string[];
-}
-
-export type ContentUploadResponse = ContentUploadSuccess | ContentUploadFailure;
+import type { ContentUploadAccountResult, ContentUploadResponse } from './content-upload-result';
 
 //---------------
 // getAuthenticatedClient — OAuth client with the account's valid tokens
@@ -509,6 +480,11 @@ export function buildUploadErrorResponse(
 // /api/upload-content imports every provider from this module.
 export { handleBlueskyUpload } from '@/lib/upload/bluesky-handler';
 export type { BlueskyUploadResponse } from '@/lib/upload/bluesky-handler';
+
+// Reexport of the 3Speak handler (implemented in threespeak-handler.ts) so
+// /api/upload-content imports every provider from this module.
+export { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
+export type { ThreespeakUploadResponse } from '@/lib/upload/threespeak-handler';
 
 // Reexport of the LinkedIn handler (implemented in linkedin-handler.ts) so
 // /api/upload-content imports every provider from this module.

@@ -15,10 +15,15 @@ import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 // its time. A shipped migration is never edited, so this test pins that
 // historical list; the migration file is frozen, so it must NOT track
 // SOCIAL_PROVIDERS as new providers land. The current list is pinned by
-// the latest migration that re-creates the check (052,
+// the latest migration that re-creates the check (053,
 // rumble-provider-migration.test.ts) and by the schema snapshot
 // (migration-check-constraints-sync.test.ts).
+// The provider list is FROZEN at the six providers 049 shipped with.
+// A migration file is append-only history — its list never grows.
 //---------------
+
+// The six providers 049 shipped with, in the order the migration lists them.
+const PROVIDERS_AT_049 = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook'];
 
 const sql = readFileSync(
   join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '049_facebook-provider.sql'),
@@ -49,16 +54,9 @@ describe('supabase/migrations/049_facebook-provider.sql', () => {
   );
 
   it.each(['post_metrics_provider_check', 'social_accounts_provider_check'])(
-    '%s allows exactly the six providers supported when it shipped',
+    '%s allows exactly the providers 049 shipped with',
     (constraint) => {
-      expect(checkProviders(constraint).sort()).toEqual([
-        'bluesky',
-        'facebook',
-        'instagram',
-        'linkedin',
-        'threads',
-        'youtube',
-      ]);
+      expect(checkProviders(constraint).sort()).toEqual([...PROVIDERS_AT_049].sort());
     },
   );
 

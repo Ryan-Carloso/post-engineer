@@ -10,9 +10,11 @@ import { getErrorMessage } from './errors.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
 export const ConnectAccountShape = {
-  provider: z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'rumble']).describe('The social platform to connect'),
+  provider: z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', '3speak', 'rumble']).describe('The social platform to connect'),
   handle: z.string().min(1).optional().describe('Bluesky handle (e.g. user.bsky.social). Required only for bluesky.'),
   appPassword: z.string().min(1).optional().describe('Bluesky app password (Settings > App passwords). Required only for bluesky. Never shared or logged.'),
+  username: z.string().min(1).optional().describe('Hive username (e.g. alice). Required only for 3speak.'),
+  postingKey: z.string().min(1).optional().describe('Hive posting key (the posting key only — never the owner, active, or master password). Required only for 3speak. Never shared or logged.'),
   channelId: z.string().min(1).optional().describe('Rumble channel ID. Required only for rumble.'),
   accessToken: z.string().min(1).optional().describe('Rumble 40-character Simple Upload API access token (issued by emailing bd@rumble.com). Required only for rumble. Never shared or logged.'),
 };
@@ -24,8 +26,9 @@ export async function handleConnectAccount(
   args: z.infer<typeof ConnectAccountSchema>
 ): Promise<McpToolResponse> {
   // Bluesky and Rumble connect directly (app password / access token),
-  // no OAuth URL: both branches share handleLibraryCall, which renders
-  // the same success/error text the hand-built blocks used to.
+  // no OAuth URL. Bluesky projects the upstream response to named fields
+  // (the 3Speak branch does the same); Rumble shares handleLibraryCall,
+  // which renders the same success/error text the hand-built block used to.
   if (args.provider === 'bluesky') {
     if (!args.handle || !args.appPassword) {
       return {
@@ -38,16 +41,69 @@ export async function handleConnectAccount(
         isError: true,
       };
     }
-    // Locals: narrowing on args.handle does not survive into the closure
-    // below, so capture the guarded values first.
-    const handle = args.handle;
-    const appPassword = args.appPassword;
-    return handleLibraryCall(
-      () => client.connectBlueskyAccount(handle, appPassword),
-      'connecting Bluesky account',
-      'Bluesky account connected successfully',
-    );
+    try {
+      const result = await client.connectBlueskyAccount(args.handle, args.appPassword);
+      // Project the upstream response to named fields: stringifying the
+      // whole body would surface any field the route adds later.
+      const { accountId, did } = result as { accountId?: string; did?: string };
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Bluesky account connected successfully: accountId=${accountId} did=${did}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error connecting Bluesky account: ${getErrorMessage(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   }
+  if (args.provider === '3speak') {
+    if (!args.username || !args.postingKey) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'Error: 3Speak requires both username and postingKey.',
+          },
+        ],
+        isError: true,
+      };
+    }
+    try {
+      const result = await client.connectThreespeakAccount(args.username, args.postingKey);
+      // Project the upstream response to named fields: stringifying the
+      // whole body would surface any field the route adds later.
+      const { accountId, username } = result as { accountId?: string; username?: string };
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `3Speak account connected successfully: username=${username} accountId=${accountId}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error connecting 3Speak account: ${getErrorMessage(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
   if (args.provider === 'rumble') {
     if (!args.channelId || !args.accessToken) {
       return {

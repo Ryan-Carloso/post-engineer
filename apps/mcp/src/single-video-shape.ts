@@ -63,7 +63,7 @@ export const GeneratePersonaVideoShape = {
     .optional()
     .describe('Spoken language code — English only for now, e.g. en-US.'),
   providers: z
-    .array(z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'rumble']))
+    .array(z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble']))
     .min(1, 'Provide at least one provider')
     .describe('Where to publish the video.'),
   youtubeAccountIds: z.array(z.string().min(1)).optional().describe('YouTube channel IDs (the channelId field from list_social_accounts).'),
@@ -74,6 +74,7 @@ export const GeneratePersonaVideoShape = {
   facebookAccountIds: z.array(z.string().min(1)).optional().describe('Facebook Page IDs (the providerAccountId field from list_social_accounts).'),
   pinterestAccountIds: z.array(z.string().min(1)).optional().describe('Pinterest account IDs (the providerAccountId field from list_social_accounts).'),
   pinterestBoardId: z.string().min(1).optional().describe('Pinterest only: the board to publish the pin to (the id from list_pinterest_boards). Required when pinterest is selected.'),
+  threespeakAccountIds: z.array(z.string().min(1)).optional().describe('3Speak Hive usernames (the providerAccountId field from list_social_accounts).'),
   rumbleAccountIds: z.array(z.string().min(1)).optional().describe('Rumble channel IDs (the providerAccountId field from list_social_accounts).'),
   mode: z
     .enum(['scheduled', 'asap'])

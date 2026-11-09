@@ -13,9 +13,6 @@ import {
 import {
   BlueskyAccountsSection,
   RumbleAccountsSection,
-  BrandIcon,
-  connectedLabel,
-  useDisconnectFlow,
 } from './credential-accounts-sections';
 import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
 import { useUploadStore } from '@/lib/store';
@@ -29,6 +26,8 @@ import { ProviderIcon } from '@/components/provider-icon';
 import { useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
 import { useI18n } from '@/lib/i18n/provider';
 import { AccountsIcon, GoogleIcon, InstagramIcon } from '@/lib/ui';
+import { BrandIcon, connectedLabel, useDisconnectFlow } from './accounts-section-helpers';
+import { ThreespeakAccountsSection } from './threespeak-accounts-section';
 
 export default function AccountsPage(): React.ReactElement {
   return (
@@ -42,6 +41,7 @@ export default function AccountsPage(): React.ReactElement {
         <ThreadsAccountsSection />
         <FacebookAccountsSection />
         <PinterestAccountsSection />
+        <ThreespeakAccountsSection />
         <RumbleAccountsSection />
       </main>
     </div>

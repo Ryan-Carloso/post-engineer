@@ -9,7 +9,7 @@ import type { AccountData, InstagramAccountData } from '@/lib/types';
 // client guards and the OAuth union all derive from here.
 //---------------
 
-export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', 'rumble'] as const;
+export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'] as const;
 
 export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
 
@@ -78,6 +78,15 @@ export interface PinterestAccountData {
   lastUsed: number;
 }
 
+export interface ThreespeakAccountData {
+  provider: '3speak';
+  recordId: string;
+  providerAccountId: string;
+  accountName: string | null;
+  connectedAt: number;
+  lastUsed: number;
+}
+
 export interface RumbleAccountData {
   provider: 'rumble';
   recordId: string;
@@ -95,6 +104,7 @@ export type PublicAccountItem =
   | ThreadsAccountData
   | FacebookAccountData
   | PinterestAccountData
+  | ThreespeakAccountData
   | RumbleAccountData;
 
 //---------------
@@ -277,6 +287,22 @@ const pinterestDef: ProviderDef<true> = {
   },
 };
 
+// 3Speak has no OAuth: the Hive posting key connects the account (like the
+// Bluesky app password), and the provider_account_id is the Hive username.
+const threespeakDef: ProviderDef<false> = {
+  supportsOAuthCallback: false,
+  toPublicAccount(record) {
+    return {
+      provider: '3speak',
+      recordId: record.id,
+      providerAccountId: record.providerAccountId,
+      accountName: record.accountName,
+      connectedAt: createdAtTimestamp(record),
+      lastUsed: lastUsedTimestamp(record),
+    };
+  },
+};
+
 // Rumble has no OAuth and no profile API: the account is the channel id
 // the user typed at connect, and the card shows that id.
 const rumbleDef: ProviderDef<false> = {
@@ -306,6 +332,7 @@ export const PROVIDER_REGISTRY = {
   threads: threadsDef,
   facebook: facebookDef,
   pinterest: pinterestDef,
+  '3speak': threespeakDef,
   rumble: rumbleDef,
 } satisfies Record<SocialProvider, ProviderDef>;
 

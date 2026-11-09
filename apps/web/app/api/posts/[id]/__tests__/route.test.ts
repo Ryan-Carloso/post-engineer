@@ -126,6 +126,7 @@ describe('GET /api/posts/[id]', () => {
         facebookAccountIds: [],
         pinterestAccountIds: [],
         pinterestBoardId: null,
+        threespeakAccountIds: [],
         rumbleAccountIds: [],
         timezone: 'UTC',
         publishMode: 'scheduled',

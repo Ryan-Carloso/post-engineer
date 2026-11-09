@@ -92,6 +92,7 @@ describe('getPersonaDefaultAccounts', () => {
       threads: [],
       facebook: [],
       pinterest: [],
+      '3speak': [],
       rumble: [],
     });
   });
@@ -215,6 +216,7 @@ describe('emptyPersonaDefaultAccounts', () => {
       threads: [],
       facebook: [],
       pinterest: [],
+      '3speak': [],
       rumble: [],
     });
   });

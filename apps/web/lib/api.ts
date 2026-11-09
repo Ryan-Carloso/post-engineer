@@ -1,24 +1,16 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { UseQueryResult } from '@tanstack/react-query';
 import { createSupabaseClient } from '@/lib/supabase/client';
 import { useUploadStore } from '@/lib/store';
-import type { PublicAccountItem, BlueskyAccountData, LinkedinAccountData, ThreadsAccountData, FacebookAccountData, RumbleAccountData } from '@/lib/providers/registry';
-import { selectProviderAccounts, type ServerAccountPayload } from '@/lib/account-selectors';
 import { mapSchedule, type ScheduleRow } from '@/lib/schedule-row';
 import type {
-  AccountResponse,
-  AccountData,
   CreatePersonaResult,
   GeneratePersonaAvatarResult,
-  InstagramAccountResponse,
-  InstagramAccountData,
   SocialProvider,
   VoiceOption,
 } from '@/lib/types';
 import { isVoiceOption } from './voice-catalog';
-import { logger } from '@/lib/logger';
 import { HttpStatusError } from '@/lib/errors';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import type { PublishLink } from '@/lib/publish-links';
@@ -35,41 +27,21 @@ export type { PersonaRecord };
 // API — typed fetch clients
 //---------------
 
-async function fetchProviderAccounts<T extends PublicAccountItem>(
-  provider: T['provider'],
-): Promise<{ authenticated: boolean; accounts: T[] }> {
-  const payload = await fetchServerAccounts();
-  return selectProviderAccounts<T>(provider)(payload);
-}
-
-async function fetchServerAccounts(): Promise<ServerAccountPayload> {
-  try {
-    const response = await fetch('/api/account');
-    if (!response.ok) {
-      throw new HttpStatusError(`Account request failed with status ${response.status}`, response.status);
-    }
-    const data: ServerAccountPayload = await response.json();
-    return data;
-  } catch (error) {
-    logger.error('[api/account] network request failed', error);
-    throw error;
-  }
-}
-
-//---------------
-// fetchYouTubeAccounts — YouTube accounts (no tokens) from /api/account
-//---------------
-async function fetchYouTubeAccounts(): Promise<AccountResponse> {
-  return fetchProviderAccounts<AccountData>('youtube');
-}
-
-//---------------
-// fetchInstagramAccounts — Instagram accounts (no tokens) via /api/account
-//---------------
-async function fetchInstagramAccounts(): Promise<InstagramAccountResponse> {
-  return fetchProviderAccounts<InstagramAccountData>('instagram');
-}
-
+// Social-account queries live in lib/social-accounts-queries.ts (extracted
+// for the file-size ratchet); re-exported here so existing import sites
+// (`@/lib/api`) keep working.
+export {
+  useBlueskyAccountsQuery,
+  useFacebookAccountsQuery,
+  useInstagramAccountsQuery,
+  useLinkedinAccountsQuery,
+  useSocialAccountsQuery,
+  useThreadsAccountsQuery,
+  useThreespeakAccountsQuery,
+  useRumbleAccountsQuery,
+  useYouTubeAccountsQuery,
+} from './social-accounts-queries';
+export type { BlueskyAccountResponse, ProviderAccountsResponse } from './social-accounts-queries';
 //---------------
 // fetchBlueskyAccounts — Bluesky accounts (handle/did) via /api/account
 //---------------
@@ -536,64 +508,6 @@ async function fetchSession(): Promise<SupabaseSessionUser | null> {
 //---------------
 
 //---------------
-// Social accounts — ONE shared ['social-accounts'] query: one GET /api/account
-// per page, not one per provider; hooks filter via `select`, types unchanged.
-//---------------
-export function useSocialAccountsQuery(): UseQueryResult<ServerAccountPayload, Error>;
-export function useSocialAccountsQuery<TData>(
-  select: (payload: ServerAccountPayload) => TData,
-): UseQueryResult<TData, Error>;
-export function useSocialAccountsQuery<TData>(
-  select?: (payload: ServerAccountPayload) => TData,
-): UseQueryResult<TData, Error> {
-  return useQuery<ServerAccountPayload, Error, TData>({
-    queryKey: ['social-accounts'],
-    queryFn: fetchServerAccounts,
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-    select,
-  });
-}
-
-// Selectors hoisted to module scope: React Query memoizes on the select reference.
-const selectYouTubeAccounts = selectProviderAccounts<AccountData>('youtube');
-const selectInstagramAccounts = selectProviderAccounts<InstagramAccountData>('instagram');
-const selectBlueskyAccounts = selectProviderAccounts<BlueskyAccountData>('bluesky');
-const selectLinkedinAccounts = selectProviderAccounts<LinkedinAccountData>('linkedin');
-const selectThreadsAccounts = selectProviderAccounts<ThreadsAccountData>('threads');
-const selectFacebookAccounts = selectProviderAccounts<FacebookAccountData>('facebook');
-const selectRumbleAccounts = selectProviderAccounts<RumbleAccountData>('rumble');
-export function useYouTubeAccountsQuery(): UseQueryResult<AccountResponse, Error> {
-  return useSocialAccountsQuery(selectYouTubeAccounts);
-}
-
-export function useInstagramAccountsQuery(): UseQueryResult<InstagramAccountResponse, Error> {
-  return useSocialAccountsQuery(selectInstagramAccounts);
-}
-
-export function useBlueskyAccountsQuery(): UseQueryResult<ProviderAccountsResponse<BlueskyAccountData>, Error> {
-  return useSocialAccountsQuery(selectBlueskyAccounts);
-}
-
-export type ProviderAccountsResponse<T extends PublicAccountItem> = { authenticated: boolean; accounts: T[] };
-
-export function useLinkedinAccountsQuery(): UseQueryResult<ProviderAccountsResponse<LinkedinAccountData>, Error> {
-  return useSocialAccountsQuery(selectLinkedinAccounts);
-}
-
-export function useThreadsAccountsQuery(): UseQueryResult<ProviderAccountsResponse<ThreadsAccountData>, Error> {
-  return useSocialAccountsQuery(selectThreadsAccounts);
-}
-
-export function useFacebookAccountsQuery(): UseQueryResult<ProviderAccountsResponse<FacebookAccountData>, Error> {
-  return useSocialAccountsQuery(selectFacebookAccounts);
-}
-
-export function useRumbleAccountsQuery(): UseQueryResult<ProviderAccountsResponse<RumbleAccountData>, Error> {
-  return useSocialAccountsQuery(selectRumbleAccounts);
-}
-
-//---------------
 // disconnectAccount — removes a connected social account (DELETE /api/account).
 //---------------
 
@@ -673,6 +587,7 @@ export interface ScheduleConfig {
   facebookAccountIds: string[];
   pinterestAccountIds: string[];
   pinterestBoardId: string | null;
+  threespeakAccountIds: string[];
   rumbleAccountIds: string[];
   daysOfWeek: number[];
   startHour: number | null;
@@ -940,7 +855,10 @@ export interface SlotDetailPayload {
     linkedinAccountIds: string[];
     blueskyAccountIds: string[];
     threadsAccountIds: string[];
-    facebookAccountIds: string[]; pinterestAccountIds: string[]; pinterestBoardId: string | null;
+    facebookAccountIds: string[];
+    pinterestAccountIds: string[];
+    pinterestBoardId: string | null;
+    threespeakAccountIds: string[];
     // The schedule's IANA timezone — the detail page renders the slot time
     // in this zone so "10:00" is never ambiguous about whose 10:00 it is.
     timezone: string;
@@ -1016,13 +934,12 @@ export function usePostDetailQuery(id: string) {
 
 
 export {
-  fetchYouTubeAccounts,
-  fetchInstagramAccounts,
   fetchSession,
   createPersona,
   generatePersonaAvatar,
   fetchVoices,
   fetchPersonaList,
 };
+export { fetchYouTubeAccounts, fetchInstagramAccounts } from './social-accounts-queries';
 
 export type { SupabaseSessionUser };

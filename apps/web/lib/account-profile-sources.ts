@@ -171,6 +171,18 @@ const pinterest: ProfileSource = {
   },
 };
 
+// 3Speak has no public profile endpoint in the documented Studio API
+// (my-videos returns videos, not a profile), so the resync never applies:
+// the card keeps the Hive username stored at connect time. fetch returns
+// the stored name so a future caller degrades safely instead of throwing.
+const threespeak: ProfileSource = {
+  pictureKey: 'profilePictureUrl',
+  applies: () => false,
+  async fetch(_supabase, _userId, record) {
+    return { accountName: record.accountName, pictureUrl: null, metadata: {} };
+  },
+};
+
 // Rumble has no profile API: the resync never applies, so the stored
 // channel id (written at connect) is never overwritten with a fallback.
 const rumble: ProfileSource = {
@@ -189,5 +201,6 @@ export const PROFILE_SOURCES: Record<SocialProvider, ProfileSource> = {
   linkedin,
   facebook,
   pinterest,
+  '3speak': threespeak,
   rumble,
 };

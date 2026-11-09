@@ -109,6 +109,7 @@ GET    /api/pinterest/boards                                 list pinterest boar
 DELETE /api/account                                           disconnect account
 POST   /api/account/connect-url                               connect account (OAuth URL)
 POST   /api/bluesky-connect                                   connect account (Bluesky)
+POST   /api/threespeak-connect                                connect account (3Speak)
 POST   /api/rumble-connect                                    connect account (Rumble)
 GET    /api/schedule                                          list schedules
 DELETE /api/schedule                                          cancel schedule
@@ -135,9 +136,10 @@ GET /api/version.
 SOCIAL ACCOUNTS
 ================================================================================
 
-Supported: YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky, Rumble.
-Connect via POST /api/account/connect-url (returns an https auth_url to open in
-a browser) or POST /api/bluesky-connect (app password) or POST /api/rumble-connect
+Supported: YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky,
+3Speak, Rumble. Connect via POST /api/account/connect-url (returns an https
+auth_url to open in a browser), POST /api/bluesky-connect (app password),
+POST /api/threespeak-connect (Hive posting key) or POST /api/rumble-connect
 (access token issued by emailing bd@rumble.com). Then map accounts to a
 persona with PUT /api/persona/publishing-accounts.
 

@@ -15,6 +15,7 @@ export const PROVIDER_ACCOUNT_COLUMNS = {
   threads: 'threads_account_ids',
   facebook: 'facebook_account_ids',
   pinterest: 'pinterest_account_ids',
+  '3speak': 'threespeak_account_ids',
   rumble: 'rumble_account_ids',
 } as const satisfies Record<Provider, string>;
 
@@ -35,6 +36,7 @@ export function scheduleAccountColumns(
     threads_account_ids: accountIds.threads ?? [],
     facebook_account_ids: accountIds.facebook ?? [],
     pinterest_account_ids: accountIds.pinterest ?? [],
+    threespeak_account_ids: accountIds['3speak'] ?? [],
     rumble_account_ids: accountIds.rumble ?? [],
   };
 }

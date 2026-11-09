@@ -49,6 +49,17 @@ describe('PROFILE_SOURCES', () => {
     expect(Object.keys(PROFILE_SOURCES).sort()).toEqual([...SOCIAL_PROVIDERS].sort());
   });
 
+  it('3speak never resyncs (no profile endpoint) and keeps the stored name', async () => {
+    const stored = record('3speak', 'alice');
+    expect(PROFILE_SOURCES['3speak'].applies(stored)).toBe(false);
+    await expect(PROFILE_SOURCES['3speak'].fetch(supabase, 'u1', stored)).resolves.toEqual({
+      accountName: 'stored',
+      pictureUrl: null,
+      metadata: {},
+    });
+    expect(getSocialAccountTokens).not.toHaveBeenCalled();
+  });
+
   it('instagram reads with the stored token and drops the fallback username', async () => {
     getProfile.mockResolvedValue({ userdId: 'ig', username: 'instagram_user', name: 'N', profilePictureUrl: 'https://p', followersCount: 1, mediaCount: 2 });
     const fetched = await PROFILE_SOURCES.instagram.fetch(supabase, 'u1', record('instagram', 'ig'));

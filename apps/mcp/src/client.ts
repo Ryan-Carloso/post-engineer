@@ -1,4 +1,5 @@
 import { getErrorMessage, VideoTooLargeError, ApiError, readApiFailure } from './errors.js';
+import { redactSecretFromError } from './secret-redaction.js';
 import {
   MAX_LIBRARY_IMAGE_BYTES,
   MAX_LIBRARY_IMAGE_MB,
@@ -183,16 +184,6 @@ function resolveBaseUrl(override: string | undefined): string {
   // identical: origin drops userinfo, trailing slashes are stripped so
   // `${baseUrl}${path}` never yields `//api/...`.
   return url.origin + url.pathname.replace(/\/+$/, '');
-}
-
-// The upstream error body may echo the request payload: never let a
-// manual credential (Bluesky app password, Rumble access token) surface in
-// agent-visible error text — raw, percent-encoded, or JSON-escaped.
-function redactSecretFromError(error: unknown, secret: string): Error {
-  const message = error instanceof Error ? error.message : String(error);
-  if (secret.length === 0) return new Error(message);
-  const variants = [secret, encodeURIComponent(secret), JSON.stringify(secret).slice(1, -1)];
-  return new Error(variants.reduce((text, variant) => text.replaceAll(variant, '[redacted]'), message));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -414,14 +405,20 @@ export class PostEngineerClient {
   }
 
   async connectBlueskyAccount(handle: string, appPassword: string): Promise<unknown> {
+    const endpoint = '/api/bluesky-connect';
     try {
-      return await this.request(
-        '/api/bluesky-connect',
-        { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ handle, appPassword }) },
-        'connect Bluesky account',
-      );
+      return await this.request(endpoint, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ handle, appPassword }) }, 'connect Bluesky account');
     } catch (error) {
       throw redactSecretFromError(error, appPassword);
+    }
+  }
+
+  async connectThreespeakAccount(username: string, postingKey: string): Promise<unknown> {
+    const endpoint = '/api/threespeak-connect';
+    try {
+      return await this.request(endpoint, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ username, postingKey }) }, 'connect 3Speak account');
+    } catch (error) {
+      throw redactSecretFromError(error, postingKey);
     }
   }
 
@@ -566,7 +563,7 @@ export class PostEngineerClient {
   async disconnectAccount(provider: string, providerAccountId: string): Promise<unknown> {
     // The route 400s INVALID_PROVIDER / INVALID_PARAMS — fail fast with the
     // field named before any fetch goes out.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'rumble'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'];
     if (!validProviders.includes(provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }
@@ -605,7 +602,7 @@ export class PostEngineerClient {
     // record. Only set entries the caller provided: the server enforces
     // which providers need accounts and rejects unknown ones.
     const accounts: Record<string, string[]> = {};
-    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, pinterest: input.pinterestAccountIds, rumble: input.rumbleAccountIds };
+    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, pinterest: input.pinterestAccountIds, '3speak': input.threespeakAccountIds, rumble: input.rumbleAccountIds };
     for (const [provider, ids] of Object.entries(byProvider)) if (ids !== undefined) accounts[provider] = ids;
     // A stray schedule plan in ASAP mode is a caller bug: the server 400s
     // ("publishing.schedule must not be set"), so fail fast with the same
@@ -760,7 +757,7 @@ export class PostEngineerClient {
     // Direct publish of a user-provided video — no generation, no schedule.
     // Mirrors the server-side 400s: provider-specific required fields and
     // per-provider account-id field names fail fast here, before any fetch.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'rumble'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'];
     if (!validProviders.includes(input.provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }

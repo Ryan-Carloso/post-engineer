@@ -166,6 +166,9 @@ const TARGET_EXTRACTORS: Record<MeasuredProvider, (record: Record<string, unknow
   threads: (record) => readString(record, 'postId'),
   facebook: (record) => readString(record, 'postId'),
   pinterest: (record) => readString(record, 'postId'),
+  // The 3Speak publish result stores the video id as postId, like the
+  // other non-YouTube providers (see lib/threespeak.ts).
+  '3speak': (record) => readString(record, 'postId'),
   rumble: (record) => readString(record, 'postId'),
 };
 
