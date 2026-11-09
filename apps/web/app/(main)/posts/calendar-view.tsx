@@ -231,7 +231,7 @@ export function CalendarView({
       className={cn(
         'relative max-w-full min-w-0 rounded-xl border border-line bg-card p-2 sm:p-3',
         muted && 'pointer-events-none',
-        unavailable && '[&_thead]:invisible [&_tbody]:invisible',
+        unavailable && '[&_thead]:hidden [&_tbody]:hidden',
       )}
     >
       <DayCellContext.Provider value={dayCells}>
@@ -273,7 +273,9 @@ export function CalendarView({
               month_grid: 'w-full table-fixed border-collapse',
               // Today is drawn by the day number itself (see PostsDayButton):
               // drop shadcn's accent fill so today never reads as selected.
-              today: 'rounded-md',
+              today: 'rounded-md [&:not([data-selected-single=true])]:bg-transparent',
+              outside:
+                'text-muted-foreground [&_button]:text-muted-foreground [&_button]:hover:bg-transparent [&_button]:active:bg-transparent',
               // Disabled days (a failed load, or an account with no posts)
               // keep readable numbers. shadcn's default fades them to 50%.
               disabled: 'text-primary opacity-100',
@@ -284,13 +286,8 @@ export function CalendarView({
             components={{ DayButton: PostsDayButton, Nav: CalendarNav, Week: PostsCalendarWeek, Weeks: PostsCalendarWeeks }}
           />
           {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined && (
-            <div
-              data-calendar-load-error
-              className="absolute inset-x-2 bottom-2 top-12 z-10 flex items-center justify-center rounded-lg bg-card p-2 sm:inset-x-3 sm:p-3"
-            >
-              <div className="pointer-events-auto w-full max-w-md">
-                <LoadErrorBanner messageKey={loadErrorMessageKey} onRetry={onLoadErrorRetry} />
-              </div>
+            <div data-calendar-load-error className="border-t border-line pt-3">
+              <LoadErrorBanner messageKey={loadErrorMessageKey} onRetry={onLoadErrorRetry} />
             </div>
           )}
         </NavTodayContext.Provider>

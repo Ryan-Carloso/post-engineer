@@ -493,7 +493,7 @@ describe('PostsPage', () => {
     // Without this, a failed account fetch could never clear without a
     // full page reload.
     expect(screen.getByText('posts.loadErrorSupporting')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'posts.refresh' }));
+    await user.click(screen.getByRole('button', { name: 'posts.loadErrorRetry' }));
     expect(youtubeRefetch).toHaveBeenCalledTimes(1);
   });
 
@@ -527,7 +527,7 @@ describe('PostsPage', () => {
     // Without this, a failed personas fetch could never clear without a
     // full page reload.
     expect(screen.getByText('posts.loadErrorSupporting')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'posts.refresh' }));
+    await user.click(screen.getByRole('button', { name: 'posts.loadErrorRetry' }));
     expect(personasRefetch).toHaveBeenCalledTimes(1);
   });
 
@@ -924,7 +924,7 @@ describe('PostsPage calendar view', () => {
     expect(screen.getByRole('button', { name: 'posts.refresh' })).toBeDisabled();
   });
 
-  it('keeps the month navigation on a load error, dims the grid and keeps the one refresh control in the header', async () => {
+  it('keeps the month navigation on a load error with a single in-card retry and no day-selection copy', async () => {
     mockQueries();
     const refetch = vi.fn();
     vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isFetching: false, isError: true, refetch } as never);
@@ -935,11 +935,9 @@ describe('PostsPage calendar view', () => {
     expect(within(alert).getByText('posts.loadErrorCalendar')).toBeInTheDocument();
     expect(within(alert).queryByText('posts.loadErrorRetryHint')).not.toBeInTheDocument();
   expect(alert.closest('[data-calendar-card]')).not.toBeNull();
-    // The retry lives in the calendar error cover. The header Refresh stays one quiet control.
+    expect(screen.queryByText('posts.subtitle')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'posts.refresh' })).not.toBeInTheDocument();
     const retry = within(alert).getByRole('button', { name: 'posts.loadErrorRetry' });
-    const refresh = screen.getByRole('button', { name: 'posts.refresh' });
-    expect(refresh.className.split(/\s+/)).toContain('bg-card');
-    expect(refresh.className.split(/\s+/)).not.toContain('bg-primary');
     await user.click(retry);
     expect(refetch).toHaveBeenCalledTimes(1);
     // Same frame as a loaded month: readable grid, no "not loaded" pill,
@@ -953,14 +951,14 @@ describe('PostsPage calendar view', () => {
     expect(screen.getByRole('button', { name: 'posts.calendarNextMonth' })).toBeEnabled();
   });
 
-  it('keeps the header Refresh in the same place, with the same label, with or without an error', () => {
+  it('hides the header refresh on a load error so only the in-card retry remains', () => {
     const { unmount } = render(<PostsPage />);
-    const normal = screen.getByRole('button', { name: 'posts.refresh' });
-    expect(normal.className.split(/\s+/)).toContain('bg-card');
+    expect(screen.getByRole('button', { name: 'posts.refresh' })).toBeInTheDocument();
     unmount();
     vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isFetching: false, isError: true, refetch: vi.fn() } as never);
     render(<PostsPage />);
-    expect(screen.getAllByRole('button', { name: 'posts.refresh' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'posts.refresh' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'posts.loadErrorRetry' })).toBeInTheDocument();
   });
 });
 

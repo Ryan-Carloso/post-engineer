@@ -62,8 +62,17 @@ export function calendarGroupOf(status: string): CalendarGroup {
 export const CALENDAR_GROUP_MARKER: Record<CalendarGroup, string> = {
   failed: 'bg-destructive text-destructive-foreground',
   published: 'bg-success text-on-ink',
-  inProgress: 'bg-info text-on-ink',
+  // Amber, not navy/info: selection uses outline-primary.
+  inProgress: 'bg-warning text-on-ink',
   scheduled: 'bg-ink-soft text-on-ink',
+};
+
+// Solid dots for a multi-status day cell (one dot per group).
+export const CALENDAR_GROUP_DOT: Record<CalendarGroup, string> = {
+  failed: 'bg-destructive',
+  published: 'bg-success',
+  inProgress: 'bg-warning',
+  scheduled: 'bg-ink-soft',
 };
 
 // The post card pill: the same hue as the marker, as a soft tint (a solid

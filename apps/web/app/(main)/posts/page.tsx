@@ -131,25 +131,23 @@ export default function PostsPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      {/* The header never changes shape. Refresh keeps its label on a phone
-          too, and a load error does not restyle it: the retry lives in the
-          side panel, so the title and the filters do not jump. */}
+      {/* On a load error the header refresh hides; retry lives in the calendar card. */}
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-[-0.02em] text-primary">{t('posts.title')}</h1>
-        <button
-          type="button"
-          onClick={handleRefresh}
-          disabled={rangeQuery.isFetching}
-          aria-label={t('posts.refresh')}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-input bg-card px-4 text-sm font-semibold text-primary hover:bg-sunken disabled:cursor-default"
-        >
-          <RefreshCw className={cn('size-4', rangeQuery.isFetching && 'animate-spin')} aria-hidden />
-          <span>{t('posts.refresh')}</span>
-        </button>
+        {!isError && (
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={rangeQuery.isFetching}
+            aria-label={t('posts.refresh')}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-input bg-card px-4 text-sm font-semibold text-primary hover:bg-sunken disabled:cursor-default"
+          >
+            <RefreshCw className={cn('size-4', rangeQuery.isFetching && 'animate-spin')} aria-hidden />
+            <span>{t('posts.refresh')}</span>
+          </button>
+        )}
       </div>
-      {/* The hint is for wide screens; on a phone the calendar comes first.
-          An account with no posts does not tell the user to select a day. */}
-      <p className="mt-1 text-sm text-muted-foreground">{t('posts.subtitle')}</p>
+      {!isError && <p className="mt-1 text-sm text-muted-foreground">{t('posts.subtitle')}</p>}
 
       <PostFiltersBar filters={filters} disabled={isLoading || isAccountEmpty} />
 
@@ -158,7 +156,13 @@ export default function PostsPage() {
           <CalendarLoadingSkeleton weeks={monthWeeks} />
         ) : (
           <div className={cn('flex flex-col', CALENDAR_LAYOUT_CLASS)}>
-            <div className={cn('min-w-0 xl:col-start-1 xl:row-start-1', isError ? 'order-2 xl:order-0' : 'order-1')}>
+            <div
+              className={cn(
+                'min-w-0 xl:col-start-1 xl:row-start-1',
+                isError ? 'order-2 xl:order-0' : 'order-1',
+                !isError && 'max-xl:max-h-[min(42vh,17.5rem)] max-xl:overflow-y-auto max-xl:overscroll-contain',
+              )}
+            >
               {rangeQuery.data?.truncated === true && (
                 <p className="mb-3 text-xs text-muted-foreground">{t('posts.calendarTruncated', { count: RANGE_MAX_SLOTS })}</p>
               )}
@@ -188,7 +192,7 @@ export default function PostsPage() {
               aria-live="polite"
               className={cn(
                 'min-w-0 scroll-mt-4 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:min-h-[22rem] xl:pt-4',
-                isError ? 'order-1 mb-4 xl:order-0 xl:mb-0' : 'order-2 mt-4',
+                isError ? 'order-1 mb-4 xl:order-0 xl:mb-0' : 'order-2 mt-4 max-xl:pb-24',
               )}
             >
               {isError ? null : isAccountEmpty ? (

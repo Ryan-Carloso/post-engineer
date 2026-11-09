@@ -157,9 +157,8 @@ export function DaySummary({ slots }: { slots: Pick<ScheduledSlot, 'status'>[] }
   );
 }
 
-// The load error, in the same side panel the day's posts use. One retry
-// lives here; the header Refresh stays put and does not turn into a second
-// primary, so the title and the filters do not jump.
+// The load error inside the calendar card. The page header refresh is hidden
+// while the calendar cannot load, so this is the only retry control.
 export function LoadErrorBanner({ messageKey, onRetry }: { messageKey: TranslationKey; onRetry: () => void }) {
   const { t } = useI18n();
   return (

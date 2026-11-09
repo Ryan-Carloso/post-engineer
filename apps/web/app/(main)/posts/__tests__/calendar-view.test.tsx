@@ -131,7 +131,7 @@ describe('CalendarView', () => {
     const outside = within(grid)
       .getAllByRole('button')
       .find((button) => button.textContent === '1' && button.closest('[data-outside]') !== null);
-    expect(outside?.querySelector('[data-day-number]')?.className.split(/\s+/)).toContain('opacity-45');
+    expect(outside?.querySelector('[data-day-number]')?.className.split(/\s+/)).toContain('opacity-50');
     expect(outside?.querySelector('[data-day-number]')?.className.split(/\s+/)).toContain('font-normal');
     const inside = dayButton(/June 20, 2030/);
     expect(inside.className.split(/\s+/)).toContain('[&>span]:opacity-100');
@@ -157,7 +157,7 @@ describe('CalendarView', () => {
     expect(cell).toHaveAccessibleName('Wednesday, June 5, 2030: Failed: 2, Published: 2, In progress: 1, Scheduled: 1');
   });
 
-  it('draws one status chip per group with its word and count, failure first, without painting the cell', () => {
+  it('collapses several status groups into one dot summary with a total count in the cell', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
@@ -172,13 +172,10 @@ describe('CalendarView', () => {
     ]);
     setup({ slotsByDay });
     const busy = dayButton(/June 5, 2030/);
-    const markers = [...busy.querySelectorAll('[data-marker]')];
-    expect(markers.map((marker) => marker.getAttribute('data-marker'))).toEqual(['failed', 'published']);
-    expect(markers.map((marker) => marker.querySelector('[data-count]')?.textContent)).toEqual(['1', '1']);
-    expect(busy.querySelector('[data-overflow-count]')).toHaveTextContent('+2');
-    // Several groups: compact icon-and-count chips only; the legend carries the words.
-    expect(markers.map((marker) => marker.textContent)).toEqual(['1', '1']);
-    expect(markers.map((marker) => marker.getAttribute('title'))).toEqual(['Failed: 1', 'Published: 1']);
+    expect(busy.querySelector('[data-cell-summary]')).not.toBeNull();
+    expect(busy.querySelector('[data-total-count]')).toHaveTextContent('4');
+    expect(busy.querySelectorAll('[data-status-dot]')).toHaveLength(3);
+    expect(busy.querySelector('[data-overflow-count]')).toBeNull();
     expect(busy.className.split(/\s+/)).not.toContain('bg-destructive-soft');
     // A published-only day: one compact chip, and the cell itself stays unpainted.
     const published = dayButton(/June 6, 2030/);
@@ -220,7 +217,7 @@ describe('CalendarView', () => {
     expect(classes).not.toContain('data-[selected-single=true]:text-primary-foreground');
   });
 
-  it('shows at most two status markers and collapses extra groups into one overflow count', () => {
+  it('fits four status groups into one dot summary with the slot total', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
@@ -234,8 +231,9 @@ describe('CalendarView', () => {
     ]);
     setup({ slotsByDay });
     const cell = dayButton(/June 5, 2030/);
-    expect(cell.querySelectorAll('[data-marker]')).toHaveLength(2);
-    expect(cell.querySelector('[data-overflow-count]')).toHaveTextContent('+2');
+    expect(cell.querySelector('[data-cell-summary]')).not.toBeNull();
+    expect(cell.querySelectorAll('[data-status-dot]')).toHaveLength(4);
+    expect(cell.querySelector('[data-total-count]')).toHaveTextContent('4');
     expect(cell.querySelector('[data-personas]')).toBeNull();
     expect(cell.querySelector('[data-personas-more]')).toBeNull();
   });
@@ -317,9 +315,7 @@ describe('CalendarView', () => {
     expect(screen.getByRole('grid').className.split(/\s+/)).not.toContain('opacity-40');
     expect(screen.getByRole('grid').querySelector('[data-selected="true"]')).toBeNull();
     expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
-    const cover = document.querySelector('[data-calendar-load-error]');
-    expect(cover).not.toBeNull();
-    expect(cover?.closest('[data-calendar-card]')).not.toBeNull();
+    expect(document.querySelector('[data-calendar-load-error]')?.closest('[data-calendar-card]')).not.toBeNull();
     expect(screen.getByRole('alert')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onLoadErrorRetry).toHaveBeenCalledTimes(1);
