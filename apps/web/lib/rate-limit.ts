@@ -54,6 +54,10 @@ export const RATE_LIMITS = {
   apiKeyManage: { name: 'api-key-manage', limit: 20, windowMs: 60_000 },
   // Bluesky credential exchange: credential-stuffing protection
   blueskyConnect: { name: 'bluesky-connect', limit: 10, windowMs: 60_000 },
+  // 3Speak credential exchange (Hive posting key): same protection as
+  // the Bluesky app-password exchange — a new route gets its own profile
+  // (never a reused semantic profile).
+  threespeakConnect: { name: 'threespeak-connect', limit: 10, windowMs: 60_000 },
   // Billing checkout session creation: abuse protection
   billingCheckout: { name: 'billing-checkout', limit: 10, windowMs: 60_000 },
   // Video generation job submission: cost protection

@@ -92,6 +92,7 @@ describe('getPersonaDefaultAccounts', () => {
       threads: [],
       facebook: [],
       pinterest: [],
+      '3speak': [],
     });
   });
 
@@ -214,6 +215,7 @@ describe('emptyPersonaDefaultAccounts', () => {
       threads: [],
       facebook: [],
       pinterest: [],
+      '3speak': [],
     });
   });
 });

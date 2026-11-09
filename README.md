@@ -38,7 +38,7 @@ by Modal.
   voiceover (TTS), subtitles, stock footage, and background music, assembled
   into a finished video.
 - **Scheduling & publishing** — queue posts for YouTube, Instagram, LinkedIn,
-  and Bluesky; track upcoming and past posts with per-account status.
+  Bluesky, and 3Speak; track upcoming and past posts with per-account status.
 - **Dashboard** — personas, posts history, connected social accounts, API keys,
   and token billing in one Next.js app.
 - **Agent control** — an MCP server ([`apps/mcp/`](apps/mcp/)) exposes the same
@@ -143,6 +143,9 @@ To connect YouTube, Instagram, or LinkedIn accounts you need OAuth apps whose
   `FACEBOOK_REDIRECT_URI`. Connecting once adds every Page the user manages.
 - **Bluesky** uses an app password entered in the dashboard (encrypted at
   rest) — no OAuth app registration needed.
+- **3Speak** uses a Hive posting key entered in the dashboard (encrypted at
+  rest) — no OAuth app registration needed. The posting key only authorizes
+  posts; never paste an owner, active, or master password.
 
 ### 5. Stripe setup (token billing)
 

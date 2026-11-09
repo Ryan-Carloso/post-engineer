@@ -35,7 +35,7 @@ export const THUMBNAIL_HOST_SUFFIXES = ['.cdninstagram.com', '.fbcdn.net'] as co
 
 const LABEL_CAP = 200;
 
-export type AccountProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest';
+export type AccountProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak';
 
 export type AccountLabelOrigin = 'stored' | 'provider_id';
 

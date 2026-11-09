@@ -89,7 +89,7 @@ describe('metricsTargets', () => {
   });
 
   it('extracts a target for every provider in SOCIAL_PROVIDERS', () => {
-    const fixtures: Record<string, unknown> = { youtube: YT_ENTRY, instagram: IG_ENTRY, bluesky: BSKY_ENTRY, linkedin: LI_ENTRY, threads: { provider: 'threads', status: 'published', accountId: '42', postId: 'p1' }, facebook: { provider: 'facebook', status: 'published', accountId: '111', postId: 'v1' }, pinterest: { provider: 'pinterest', status: 'published', accountId: 'pin-acct', postId: '1234567890123456' } };
+    const fixtures: Record<string, unknown> = { youtube: YT_ENTRY, instagram: IG_ENTRY, bluesky: BSKY_ENTRY, linkedin: LI_ENTRY, threads: { provider: 'threads', status: 'published', accountId: '42', postId: 'p1' }, facebook: { provider: 'facebook', status: 'published', accountId: '111', postId: 'v1' }, pinterest: { provider: 'pinterest', status: 'published', accountId: 'pin-acct', postId: '1234567890123456' }, '3speak': { provider: '3speak', status: 'published', accountId: 'alice', postId: 'vid-7' } };
     for (const provider of SOCIAL_PROVIDERS) {
       const { targets } = metricsTargets([fixtures[provider]]);
       expect(targets.map((target) => target.provider), provider).toEqual([provider]);
@@ -111,9 +111,9 @@ describe('metricsTargets', () => {
 });
 
 // Each migration that re-creates the check must list every provider the
-// app supported at that point; the latest one (050) lists them all.
+// app supported at that point; the latest one (052) lists them all.
 // A shipped migration is never edited, so 049 pins its historical list.
-describe('post_metrics provider check (migrations 034, 049 and 050)', () => {
+describe('post_metrics provider check (migrations 034, 049, 050 and 052)', () => {
   function listedProviders(file: string): string[] {
     const sql = readFileSync(join(findRepoRoot(import.meta.url), 'supabase/migrations', file), 'utf8');
     const line = sql.split('\n').find((candidate) => candidate.includes('check (provider in'));
@@ -128,8 +128,12 @@ describe('post_metrics provider check (migrations 034, 049 and 050)', () => {
     expect(listedProviders('049_facebook-provider.sql').sort()).toEqual(['bluesky', 'facebook', 'instagram', 'linkedin', 'threads', 'youtube']);
   });
 
-  it('050 allows exactly the providers in SOCIAL_PROVIDERS', () => {
-    expect(listedProviders('050_pinterest-provider.sql').sort()).toEqual([...SOCIAL_PROVIDERS].sort());
+  it('050 allows exactly the seven providers it shipped with', () => {
+    expect(listedProviders('050_pinterest-provider.sql').sort()).toEqual(['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'youtube']);
+  });
+
+  it('052 allows exactly the providers in SOCIAL_PROVIDERS', () => {
+    expect(listedProviders('052_threespeak-provider.sql').sort()).toEqual([...SOCIAL_PROVIDERS].sort());
   });
 });
 

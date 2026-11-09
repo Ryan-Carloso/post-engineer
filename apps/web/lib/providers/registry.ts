@@ -9,7 +9,7 @@ import type { AccountData, InstagramAccountData } from '@/lib/types';
 // client guards and the OAuth union all derive from here.
 //---------------
 
-export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest'] as const;
+export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak'] as const;
 
 export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
 
@@ -78,6 +78,15 @@ export interface PinterestAccountData {
   lastUsed: number;
 }
 
+export interface ThreespeakAccountData {
+  provider: '3speak';
+  recordId: string;
+  providerAccountId: string;
+  accountName: string | null;
+  connectedAt: number;
+  lastUsed: number;
+}
+
 export type PublicAccountItem =
   | AccountData
   | InstagramAccountData
@@ -85,7 +94,8 @@ export type PublicAccountItem =
   | LinkedinAccountData
   | ThreadsAccountData
   | FacebookAccountData
-  | PinterestAccountData;
+  | PinterestAccountData
+  | ThreespeakAccountData;
 
 //---------------
 // ProviderDef — contract every provider must implement.
@@ -267,6 +277,22 @@ const pinterestDef: ProviderDef<true> = {
   },
 };
 
+// 3Speak has no OAuth: the Hive posting key connects the account (like the
+// Bluesky app password), and the provider_account_id is the Hive username.
+const threespeakDef: ProviderDef<false> = {
+  supportsOAuthCallback: false,
+  toPublicAccount(record) {
+    return {
+      provider: '3speak',
+      recordId: record.id,
+      providerAccountId: record.providerAccountId,
+      accountName: record.accountName,
+      connectedAt: createdAtTimestamp(record),
+      lastUsed: lastUsedTimestamp(record),
+    };
+  },
+};
+
 //---------------
 // PROVIDER_REGISTRY — exhaustive by construction: a provider in the union without
 // an entry here (or vice versa) = compile error.
@@ -280,6 +306,7 @@ export const PROVIDER_REGISTRY = {
   threads: threadsDef,
   facebook: facebookDef,
   pinterest: pinterestDef,
+  '3speak': threespeakDef,
 } satisfies Record<SocialProvider, ProviderDef>;
 
 // OAuthProvider — derived from the registry: whoever has supportsOAuthCallback: true.

@@ -8,6 +8,7 @@ import {
   type EngineTaskProgress,
 } from './engine-tasks';
 import { resolvePublishLinks, type PublishLink } from './publish-links';
+import { buildScheduleDetail, type ScheduleDetailRow } from './post-detail-schedule';
 import { resolveScriptAngle } from './post-detail-script-angle';
 import { noticesFromOutcomes, type PublishProviderFailure, type PublishUserNotice } from './publish-user-notice';
 import { buildGenerationFacts } from './generation-facts';
@@ -75,6 +76,7 @@ export interface SlotPostDetail {
     facebookAccountIds: string[];
     pinterestAccountIds: string[];
     pinterestBoardId: string | null;
+    threespeakAccountIds: string[];
     timezone: string;
     publishMode: 'scheduled' | 'asap';
   };
@@ -191,31 +193,12 @@ export async function getSlotPost(
 
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
-    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode')
+    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode')
     .eq('id', row.schedule_id)
     .eq('user_id', userId)
     .maybeSingle();
   if (scheduleError) throw scheduleError;
-  const scheduleRow = schedule as {
-    id: string;
-    persona_id: string | null;
-    providers: string[] | null;
-    youtube_account_ids: string[] | null;
-    instagram_account_ids: string[] | null;
-    linkedin_account_ids: string[] | null;
-    bluesky_account_ids: string[] | null;
-    threads_account_ids: string[] | null;
-    facebook_account_ids: string[] | null; pinterest_account_ids: string[] | null; pinterest_board_id: string | null;
-    timezone: string;
-    post_language: string | null;
-    post_voice_id: string | null;
-    post_video_aspect: string | null;
-    post_video_layout: string | null;
-    post_niche: string | null;
-    post_paragraph_number: number | null;
-    post_face_quality: string | null;
-    publish_mode: string | null;
-  } | null;
+  const scheduleRow = schedule as ScheduleDetailRow | null;
   // Ownership re-check: the service client (API-key/OAuth callers)
   // bypasses RLS, so the schedule must belong to the caller.
   if (!scheduleRow) return null;
@@ -326,17 +309,9 @@ export async function getSlotPost(
   const progressOut = enrichment.progress;
   const stageOut = enrichment.stage;
   const retryableOut = enrichment.retryable;
-  const scheduleId2 = scheduleRow.id;
-  const personaIdOut = scheduleRow.persona_id;
-  const providersOut = scheduleRow.providers ?? [];
-  const youtubeAccountIdsOut = scheduleRow.youtube_account_ids ?? [];
-  const instagramAccountIdsOut = scheduleRow.instagram_account_ids ?? [];
-  const linkedinAccountIdsOut = scheduleRow.linkedin_account_ids ?? [];
-  const blueskyAccountIdsOut = scheduleRow.bluesky_account_ids ?? [];
-  const threadsAccountIdsOut = scheduleRow.threads_account_ids ?? [];
-  const facebookAccountIdsOut = scheduleRow.facebook_account_ids ?? []; const pinterestAccountIdsOut = scheduleRow.pinterest_account_ids ?? []; const pinterestBoardIdOut = scheduleRow.pinterest_board_id ?? null;
-  const timezoneOut = scheduleRow.timezone;
-  const publishModeOut = scheduleRow.publish_mode === 'asap' ? 'asap' : 'scheduled';
+  // The schedule's account lists live in buildScheduleDetail (extracted
+  // to post-detail-schedule.ts for the file-size ratchet); only the
+  // per-account publish notices stay inline here.
   const publishNotices = noticesFromOutcomes(row.publish_outcomes);
   const userNoticesOut = publishNotices.userNotices;
   const providerFailuresOut = publishNotices.providerFailures;
@@ -364,19 +339,7 @@ export async function getSlotPost(
       userNotices: userNoticesOut,
       providerFailures: providerFailuresOut,
     },
-    schedule: {
-      id: scheduleId2,
-      personaId: personaIdOut,
-      providers: providersOut,
-      youtubeAccountIds: youtubeAccountIdsOut,
-      instagramAccountIds: instagramAccountIdsOut,
-      linkedinAccountIds: linkedinAccountIdsOut,
-      blueskyAccountIds: blueskyAccountIdsOut,
-      threadsAccountIds: threadsAccountIdsOut,
-      facebookAccountIds: facebookAccountIdsOut, pinterestAccountIds: pinterestAccountIdsOut, pinterestBoardId: pinterestBoardIdOut,
-      timezone: timezoneOut,
-      publishMode: publishModeOut,
-    },
+    schedule: buildScheduleDetail(scheduleRow),
     persona: personaRow,
     generation: buildGenerationFacts(row, scheduleRow),
   };

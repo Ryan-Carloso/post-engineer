@@ -26,4 +26,11 @@ describe('ProviderIcon', () => {
     const svg = screen.getByRole('img', { name: 'youtube' }).querySelector('svg');
     expect(svg).toHaveAttribute('aria-hidden', 'true');
   });
+
+  it('renders the 3Speak play-triangle glyph', () => {
+    render(<ProviderIcon provider="3speak" />);
+    const img = screen.getByRole('img', { name: '3speak' });
+    expect(img).toHaveClass('text-foreground');
+    expect(img.querySelector('svg path')).toHaveAttribute('d', 'M8 5.5v13l11-6.5-11-6.5Z');
+  });
 });

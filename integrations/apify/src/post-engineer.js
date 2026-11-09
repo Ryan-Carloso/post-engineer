@@ -4,7 +4,7 @@
 // only as the Bearer header and is redacted from every message it returns.
 
 export const DEFAULT_API_URL = 'https://post-engineer.com';
-export const PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'];
+export const PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', '3speak'];
 export const MODES = ['asap', 'scheduled'];
 export const FACELESS_MATERIALS = ['broll', 'svg', 'images'];
 // The "images" material renders only the given images. About one image per

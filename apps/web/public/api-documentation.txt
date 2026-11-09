@@ -109,6 +109,7 @@ GET    /api/pinterest/boards                                 list pinterest boar
 DELETE /api/account                                           disconnect account
 POST   /api/account/connect-url                               connect account (OAuth URL)
 POST   /api/bluesky-connect                                   connect account (Bluesky)
+POST   /api/threespeak-connect                                connect account (3Speak)
 GET    /api/schedule                                          list schedules
 DELETE /api/schedule                                          cancel schedule
 GET    /api/schedule/status                                   list posts
@@ -134,9 +135,10 @@ GET /api/version.
 SOCIAL ACCOUNTS
 ================================================================================
 
-Supported: YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky.
-Connect via POST /api/account/connect-url (returns an https auth_url to open in
-a browser) or POST /api/bluesky-connect (app password). Then map accounts to a
+Supported: YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky,
+3Speak. Connect via POST /api/account/connect-url (returns an https auth_url
+to open in a browser), POST /api/bluesky-connect (app password) or POST
+/api/threespeak-connect (Hive posting key). Then map accounts to a
 persona with PUT /api/persona/publishing-accounts.
 
 ================================================================================

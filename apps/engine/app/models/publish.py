@@ -1,4 +1,4 @@
-"""Publish metadata models for task requests (YouTube / Instagram / Bluesky / LinkedIn / Threads / Facebook / Pinterest)."""
+"""Publish metadata models for task requests (YouTube / Instagram / Bluesky / LinkedIn / Threads / Facebook / Pinterest / 3Speak)."""
 
 from typing import Literal, Optional
 
@@ -59,10 +59,23 @@ class PinterestPublish(BaseModel):
     account_ids: list[str] = Field(min_length=1)
 
 
-class PublishParams(BaseModel):
-    """Optional publish selection for a task (YouTube/Instagram/Bluesky/LinkedIn/Threads/Facebook/Pinterest)."""
+class ThreespeakPublish(BaseModel):
+    """3Speak publish fields required by the internal upload API.
 
-    providers: list[Literal["youtube", "instagram", "bluesky", "linkedin", "threads", "facebook", "pinterest"]] = Field(min_length=1)
+    No caption cap: 3Speak has no documented one, so only non-empty is
+    enforced (the web route requires a caption too).
+    """
+
+    caption: str = Field(min_length=1)
+    account_ids: list[str] = Field(min_length=1)
+
+
+class PublishParams(BaseModel):
+    """Optional publish selection for a task (YouTube/Instagram/Bluesky/LinkedIn/Threads/Facebook/Pinterest/3Speak)."""
+
+    providers: list[
+        Literal["youtube", "instagram", "bluesky", "linkedin", "threads", "facebook", "pinterest", "3speak"]
+    ] = Field(min_length=1)
     youtube: Optional[YouTubePublish] = None
     instagram: Optional[InstagramPublish] = None
     bluesky: Optional["BlueskyPublish"] = None
@@ -70,6 +83,7 @@ class PublishParams(BaseModel):
     threads: Optional[ThreadsPublish] = None
     facebook: Optional[FacebookPublish] = None
     pinterest: Optional[PinterestPublish] = None
+    threespeak: Optional[ThreespeakPublish] = None
 
     @model_validator(mode="after")
     def check_provider_metadata(self) -> "PublishParams":
@@ -87,4 +101,6 @@ class PublishParams(BaseModel):
             raise ValueError("facebook provider requires facebook metadata")
         if "pinterest" in self.providers and self.pinterest is None:
             raise ValueError("pinterest provider requires pinterest metadata")
+        if "3speak" in self.providers and self.threespeak is None:
+            raise ValueError("3speak provider requires 3speak metadata")
         return self

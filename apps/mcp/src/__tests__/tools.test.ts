@@ -62,6 +62,7 @@ describe('MCP Tool Handlers', () => {
     getVideoStatus: vi.fn(),
     getOAuthConnectUrl: vi.fn(),
     connectBlueskyAccount: vi.fn(),
+    connectThreespeakAccount: vi.fn(),
     request: vi.fn(),
     getHeaders: vi.fn().mockReturnValue({}),
   } as unknown as PostEngineerClient;
@@ -409,6 +410,10 @@ describe('MCP Tool Handlers', () => {
     expect(response.isError).toBeUndefined();
     const text = textOf(response);
     expect(text).toMatch(/connected/i);
+    // The success text names the fields, it never dumps the raw response.
+    expect(text).toContain('accountId=acc-1');
+    expect(text).toContain('did=did:plc:xyz');
+    expect(text).not.toContain('{');
     expect(text).not.toContain('super-secret-password');
   });
 
@@ -436,6 +441,59 @@ describe('MCP Tool Handlers', () => {
     const text = textOf(response);
     expect(text).toMatch(/Invalid handle or app password/);
     expect(text).not.toContain('super-secret-password');
+  });
+
+  it('handleConnectAccount connects 3Speak directly without echoing the posting key', async () => {
+    vi.mocked(mockClient.connectThreespeakAccount).mockResolvedValue({
+      success: true,
+      accountId: 'acc-1',
+      username: 'alice',
+    });
+
+    const response = await handleConnectAccount(mockClient, {
+      provider: '3speak',
+      username: 'alice',
+      postingKey: '5Ksuper-secret-key',
+    });
+
+    expect(mockClient.connectThreespeakAccount).toHaveBeenCalledWith(
+      'alice',
+      '5Ksuper-secret-key'
+    );
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toMatch(/connected/i);
+    expect(text).not.toContain('5Ksuper-secret-key');
+    // The success text names the fields, it never dumps the raw response.
+    expect(text).toContain('username=alice');
+    expect(text).toContain('accountId=acc-1');
+    expect(text).not.toContain('{');
+  });
+
+  it('handleConnectAccount requires username and postingKey for 3Speak', async () => {
+    vi.clearAllMocks();
+    const response = await handleConnectAccount(mockClient, { provider: '3speak' });
+
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toMatch(/username.*postingKey|postingKey.*username/i);
+    expect(mockClient.connectThreespeakAccount).not.toHaveBeenCalled();
+  });
+
+  it('handleConnectAccount never leaks the posting key on 3Speak errors', async () => {
+    vi.mocked(mockClient.connectThreespeakAccount).mockRejectedValue(
+      new Error('Failed to connect 3Speak account: 422 Invalid Hive posting key.')
+    );
+
+    const response = await handleConnectAccount(mockClient, {
+      provider: '3speak',
+      username: 'alice',
+      postingKey: '5Ksuper-secret-key',
+    });
+
+    expect(response.isError).toBe(true);
+    const text = textOf(response);
+    expect(text).toMatch(/Invalid Hive posting key/);
+    expect(text).not.toContain('5Ksuper-secret-key');
   });
 });
 

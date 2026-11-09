@@ -44,6 +44,13 @@ def metadata_for(provider: str, title: str, schedule: dict[str, Any]):
             board_id=str(schedule.get("pinterest_board_id") or ""),
             account_ids=tuple(str(value) for value in schedule.get("pinterest_account_ids", [])),
         )
+    if provider == upload_publisher.THREESPEAK_PROVIDER:
+        return upload_publisher.ThreespeakMetadata(
+            # No documented caption cap on 3Speak: the whole title is the
+            # caption, and the web route takes the title from its first line.
+            caption=title,
+            account_ids=tuple(str(value) for value in schedule.get("threespeak_account_ids", [])),
+        )
     if provider == upload_publisher.INSTAGRAM_PROVIDER:
         return upload_publisher.InstagramMetadata(
             caption=title[:2200],
@@ -71,6 +78,7 @@ def validate_publish_plan(schedule: dict[str, Any], title: str) -> None:
     linkedin = None
     threads = None
     facebook = None
+    threespeak = None
     for provider in providers:
         metadata = metadata_for(provider, title, schedule)
         if isinstance(metadata, upload_publisher.YouTubeMetadata):
@@ -91,6 +99,15 @@ def validate_publish_plan(schedule: dict[str, Any], title: str) -> None:
             # its validator takes no new provider parameter. The pre-flight
             # is the only production caller, so this is the whole gate.
             validate_pinterest_metadata(metadata)
+        elif isinstance(metadata, upload_publisher.ThreespeakMetadata):
+            threespeak = metadata
     upload_publisher.validate_publish_metadata(
-        providers, youtube, instagram, bluesky=bluesky, linkedin=linkedin, threads=threads, facebook=facebook
+        providers,
+        youtube,
+        instagram,
+        bluesky=bluesky,
+        linkedin=linkedin,
+        threads=threads,
+        facebook=facebook,
+        threespeak=threespeak,
     )

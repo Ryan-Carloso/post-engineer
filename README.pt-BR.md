@@ -27,8 +27,8 @@ seu agente de IA operar pelo servidor MCP — tudo neste único monorepo.
 - **Geração automática de vídeos** — entra um tema, sai um vídeo curto em HD:
   roteiro (LLM), narração (TTS), legendas, vídeos de banco de imagens e música
   de fundo, montados em um vídeo finalizado.
-- **Agendamento e publicação** — agende posts para YouTube, Instagram, LinkedIn
-  e Bluesky; acompanhe posts futuros e passados com status por conta.
+- **Agendamento e publicação** — agende posts para YouTube, Instagram, LinkedIn,
+  Bluesky e 3Speak; acompanhe posts futuros e passados com status por conta.
 - **Painel web** — personas, histórico de posts, contas sociais conectadas,
   chaves de API e cobrança por tokens em um único app Next.js.
 - **Controle por agentes** — um servidor MCP ([`apps/mcp/`](apps/mcp/)) expõe
@@ -137,6 +137,9 @@ OAuth cujos **redirect URIs correspondam exatamente** aos valores em
   usuário gerencia.
 - **Bluesky** usa uma app password inserida no painel (criptografada em repouso)
   — não é necessário registrar app de OAuth.
+- **3Speak** usa uma posting key Hive inserida no painel (criptografada em
+  repouso) — não é necessário registrar app de OAuth. A posting key só
+  autoriza posts; nunca cole a senha owner, active ou master.
 
 ### 5. Configuração do Stripe (cobrança por tokens)
 
