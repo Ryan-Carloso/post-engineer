@@ -1,6 +1,6 @@
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
-import { publishThreespeakVideo } from '@/lib/threespeak';
+import { publishThreespeakVideo, THREESPEAK_VIDEO_MAX_BYTES } from '@/lib/threespeak';
 import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 
@@ -44,6 +44,7 @@ export async function handleThreespeakUpload(
   if (typeof captionRaw !== 'string' || captionRaw.trim() === '') return rejected('Caption is required');
   const caption = captionRaw.trim();
   if (!(rawFile instanceof File)) return rejected('Video file is required');
+  if (rawFile.size > THREESPEAK_VIDEO_MAX_BYTES) return rejected('Video exceeds the 3Speak 2GB limit');
 
   // The bytes are checked rather than the client-declared type: MP4 and
   // MOV both carry `ftyp` at offset 4.

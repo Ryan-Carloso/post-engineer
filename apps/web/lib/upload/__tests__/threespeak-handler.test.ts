@@ -11,7 +11,7 @@ vi.mock('@/lib/threespeak', async (importOriginal) => ({
 }));
 
 import { trackApiEvent } from '@/lib/analytics';
-import { ThreespeakError } from '@/lib/threespeak';
+import { ThreespeakError, THREESPEAK_VIDEO_MAX_BYTES } from '@/lib/threespeak';
 import { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { publishThreespeakVideo } from '@/lib/threespeak';
@@ -105,6 +105,19 @@ describe('handleThreespeakUpload', () => {
       user_id: 'user-1',
       status: 401,
     });
+  });
+
+  it('rejects a video over the 2GB limit before buffering it', async () => {
+    // The size is faked on the instance: allocating a real 2GB file would
+    // OOM the test, and the guard reads only `size` before `arrayBuffer()`.
+    const big = new File([MP4_BYTES], 'clip.mp4', { type: 'video/mp4' });
+    Object.defineProperty(big, 'size', { value: THREESPEAK_VIDEO_MAX_BYTES + 1 });
+    const result = await handleThreespeakUpload(formData({ video: big }), 'user-1');
+    expect(result).toEqual({
+      success: false,
+      results: [{ accountId: '', success: false, error: 'Video exceeds the 3Speak 2GB limit' }],
+    });
+    expect(publishThreespeakVideo).not.toHaveBeenCalled();
   });
 
   it('continues with the remaining accounts after one fails', async () => {

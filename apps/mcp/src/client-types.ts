@@ -140,7 +140,7 @@ export interface PublishVideoDirectInput {
   tags?: string[];
   /** YouTube only: required. */
   privacyStatus?: 'public' | 'private' | 'unlisted';
-  /** Instagram/Bluesky/LinkedIn/Threads/Facebook: required. */
+  /** Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak: required. */
   caption?: string;
 }
 
