@@ -8,7 +8,12 @@ so a helper in its own module needs its own test file.
 
 import unittest
 
-from app.services.bluesky_caption import truncate_bluesky_caption
+from app.services.bluesky_caption import count_graphemes, truncate_bluesky_caption
+
+
+def _family_emoji() -> str:
+    zwj = chr(0x200D)
+    return zwj.join(chr(cp) for cp in (0x1F468, 0x1F469, 0x1F467, 0x1F466))
 
 
 class BlueskyCaptionHelperTest(unittest.TestCase):
@@ -27,11 +32,20 @@ class BlueskyCaptionHelperTest(unittest.TestCase):
         self.assertTrue(result.endswith("…"))
 
     def test_truncate_never_breaks_emoji(self) -> None:
-        zwj = chr(0x200D)
-        family = zwj.join(chr(cp) for cp in (0x1F468, 0x1F469, 0x1F467, 0x1F466))
+        family = _family_emoji()
         caption = "a" * 298 + family * 3
         result = truncate_bluesky_caption(caption)
-        self.assertLessEqual(len(result), 300)
+        # The first family fits the 299-grapheme budget whole; the other two
+        # are dropped, never cut in half.
+        self.assertEqual(result, "a" * 298 + family + "…")
+        self.assertEqual(count_graphemes(result), 300)
+
+    def test_truncate_drops_whole_emoji_when_it_does_not_fit(self) -> None:
+        family = _family_emoji()
+        caption = "a" * 299 + family * 2
+        result = truncate_bluesky_caption(caption)
+        self.assertEqual(result, "a" * 299 + "…")
+        self.assertNotIn(chr(0x1F468), result)
 
 
 if __name__ == "__main__":
