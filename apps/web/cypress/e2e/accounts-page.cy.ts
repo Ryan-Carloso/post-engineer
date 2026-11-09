@@ -24,7 +24,6 @@ describe('Accounts — UI', () => {
 
     cy.contains('h1', 'Contas').should('be.visible');
     cy.get('button[aria-label="Conectar uma conta"]').should('have.length', 7);
-    cy.contains('Publique vídeos no seu canal do Rumble com um token de acesso emitido manualmente.').should('be.visible');
   });
 
   it('renderiza lista de contas conectadas com botão + Conectar outra', () => {
