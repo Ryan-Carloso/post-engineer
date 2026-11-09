@@ -1,6 +1,7 @@
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { uploadRumbleVideo, RUMBLE_TITLE_MAX_LENGTH, RUMBLE_VIDEO_MAX_BYTES } from '@/lib/rumble';
+import { accountFailure } from '@/lib/upload/account-error';
 import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 
@@ -25,6 +26,7 @@ interface RumbleAccountResult {
   postId?: string;
   permalink?: string;
   error?: string;
+  errorCode?: string;
 }
 
 export interface RumbleUploadResponse {
@@ -33,7 +35,7 @@ export interface RumbleUploadResponse {
 }
 
 function rejected(error: string): RumbleUploadResponse {
-  return { success: false, results: [{ accountId: '', success: false, error }] };
+  return { success: false, results: [accountFailure('', error, 'publish_rejected')] };
 }
 
 export async function handleRumbleUpload(
@@ -75,7 +77,7 @@ export async function handleRumbleUpload(
       const accessToken = tokens.access_token;
 
       if (typeof accessToken !== 'string' || accessToken === '') {
-        results.push({ accountId, success: false, error: 'Rumble access token not found' });
+        results.push(accountFailure(accountId, 'Rumble access token not found', 'token_missing'));
         continue;
       }
 
@@ -97,9 +99,10 @@ export async function handleRumbleUpload(
         ...(published.url === null ? {} : { permalink: published.url }),
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
       reportAccountUnauthorized('rumble', accountId, ownerUserId, error);
-      results.push({ accountId, success: false, error: message });
+      // A non-Error throw stays generic: accountFailure would surface a
+      // thrown string as the message.
+      results.push(accountFailure(accountId, error instanceof Error ? error : new Error('Unknown error')));
     }
   }
 

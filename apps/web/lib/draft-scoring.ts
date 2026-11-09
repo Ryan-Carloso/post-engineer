@@ -18,7 +18,7 @@ import { BLUESKY_CAPTION_MAX_GRAPHEMES, countBlueskyGraphemes } from './bluesky'
 
 // The networks Post Engineer publishes to (post_metrics.provider
 // check constraint, re-created with the full list by the latest provider
-// migration, 052). The scorer buckets are universal;
+// migration, 053). The scorer buckets are universal;
 // only the publish check varies by network.
 export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble';
 
