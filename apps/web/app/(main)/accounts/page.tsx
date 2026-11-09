@@ -26,6 +26,7 @@ import { useThreadsOAuth } from '@/lib/oauth/threads-handler';
 import { useFacebookOAuth } from '@/lib/oauth/facebook-handler';
 import { ProviderIcon } from '@/components/provider-icon';
 import { useAccountListErrorTelemetry, reportAccountDisconnectFailed } from '@/lib/account-card-telemetry';
+import { ERROR_CODES } from '@/lib/error-codes';
 import { useI18n } from '@/lib/i18n/provider';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { AccountsIcon, GoogleIcon, InstagramIcon } from '@/lib/ui';
@@ -428,7 +429,18 @@ function ThreespeakAccountsSection(): ReactNode {
         // 401 here means a dead hub session (a rejected Hive posting key
         // is 422), so it triggers the host-wide session-expiry redirect.
         notifyIfSessionExpired(response);
-        setError(t('accounts.threespeakConnectError'));
+        // The route distinguishes a rejected credential (422
+        // THREESPEAK_CREDENTIAL_REJECTED) from other failures: name it so
+        // the user knows the username/key pair is what 3Speak refused.
+        // notifyIfSessionExpired reads only the status, so the body is
+        // still unread here.
+        const body: unknown = await response.json().catch(() => null);
+        const code = (body as { code?: unknown } | null)?.code;
+        setError(
+          code === ERROR_CODES.THREESPEAK_CREDENTIAL_REJECTED
+            ? t('accounts.threespeakCredentialRejected')
+            : t('accounts.threespeakConnectError'),
+        );
         setAppPassword('');
         return;
       }

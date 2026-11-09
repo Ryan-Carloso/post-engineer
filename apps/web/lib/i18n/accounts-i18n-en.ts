@@ -66,6 +66,7 @@ export const accountsI18nEn = {
   threespeakPasswordLabel: 'Hive posting key',
   threespeakConnect: 'Connect with 3Speak',
   threespeakConnectError: 'Could not connect: check the username and the posting key.',
+  threespeakCredentialRejected: '3Speak rejected this username or posting key — check both and try again.',
   threespeakSecurityHint:
       'Your posting key is stored encrypted. Never paste your owner, active, or master password — only the posting key.',
   threespeakDisconnect: 'Disconnect',

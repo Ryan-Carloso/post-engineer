@@ -410,6 +410,10 @@ describe('MCP Tool Handlers', () => {
     expect(response.isError).toBeUndefined();
     const text = textOf(response);
     expect(text).toMatch(/connected/i);
+    // The success text names the fields, it never dumps the raw response.
+    expect(text).toContain('accountId=acc-1');
+    expect(text).toContain('did=did:plc:xyz');
+    expect(text).not.toContain('{');
     expect(text).not.toContain('super-secret-password');
   });
 
@@ -443,7 +447,7 @@ describe('MCP Tool Handlers', () => {
     vi.mocked(mockClient.connectThreespeakAccount).mockResolvedValue({
       success: true,
       accountId: 'acc-1',
-      providerAccountId: 'alice',
+      username: 'alice',
     });
 
     const response = await handleConnectAccount(mockClient, {
@@ -460,6 +464,10 @@ describe('MCP Tool Handlers', () => {
     const text = textOf(response);
     expect(text).toMatch(/connected/i);
     expect(text).not.toContain('5Ksuper-secret-key');
+    // The success text names the fields, it never dumps the raw response.
+    expect(text).toContain('username=alice');
+    expect(text).toContain('accountId=acc-1');
+    expect(text).not.toContain('{');
   });
 
   it('handleConnectAccount requires username and postingKey for 3Speak', async () => {

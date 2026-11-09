@@ -330,11 +330,14 @@ export async function handleConnectAccount(
     }
     try {
       const result = await client.connectBlueskyAccount(args.handle, args.appPassword);
+      // Project the upstream response to named fields: stringifying the
+      // whole body would surface any field the route adds later.
+      const { accountId, did } = result as { accountId?: string; did?: string };
       return {
         content: [
           {
             type: 'text',
-            text: `Bluesky account connected successfully: ${JSON.stringify(result, null, 2)}`,
+            text: `Bluesky account connected successfully: accountId=${accountId} did=${did}`,
           },
         ],
       };
@@ -365,11 +368,14 @@ export async function handleConnectAccount(
     }
     try {
       const result = await client.connectThreespeakAccount(args.username, args.postingKey);
+      // Project the upstream response to named fields: stringifying the
+      // whole body would surface any field the route adds later.
+      const { accountId, username } = result as { accountId?: string; username?: string };
       return {
         content: [
           {
             type: 'text',
-            text: `3Speak account connected successfully: ${JSON.stringify(result, null, 2)}`,
+            text: `3Speak account connected successfully: username=${username} accountId=${accountId}`,
           },
         ],
       };

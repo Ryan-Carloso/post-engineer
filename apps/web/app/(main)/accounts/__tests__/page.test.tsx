@@ -844,6 +844,13 @@ describe('Facebook Pages accounts section', () => {
     const sent = fetchMock.mock.calls[0][1].body as FormData;
     expect(sent.get('username')).toBe('alice');
     expect(sent.get('postingKey')).toBe('5K-posting-key');
+    // A rejected credential names itself instead of the generic error.
+    expect(screen.getByTestId('threespeak-connect-error')).toHaveTextContent('accounts.threespeakCredentialRejected');
+  });
+
+  it('3speak connect dialog shows the generic error when the failure is not a rejected credential', async () => {
+    await submitThreespeakConnect(500, { success: false, error: 'boom' });
+    expect(screen.getByTestId('threespeak-connect-error')).toHaveTextContent('accounts.threespeakConnectError');
   });
 
   it('3speak connect dialog does NOT log the user out when the credential is rejected (422)', async () => {

@@ -39,7 +39,12 @@ class TruncateBlueskyCaptionTest(unittest.TestCase):
         family = zwj.join(chr(cp) for cp in (0x1F468, 0x1F469, 0x1F467, 0x1F466))
         caption = "a" * 298 + family * 3
         result = caption_text.truncate_bluesky_caption(caption)
-        self.assertLessEqual(len(result), 300)
+        # The family starts at grapheme 299 and cannot fit whole: the cut
+        # lands on the grapheme boundary, so the first person survives
+        # intact and no partial ZWJ sequence (nor a dangling joiner) is
+        # left in the result.
+        self.assertEqual(result, "a" * 298 + chr(0x1F468) + "…")
+        self.assertNotIn(zwj, result)
 
 
 if __name__ == "__main__":
