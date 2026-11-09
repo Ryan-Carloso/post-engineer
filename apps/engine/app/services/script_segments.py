@@ -178,7 +178,20 @@ def _check_media_item(media: Any, field: str) -> None:
         _check_overlay(media["overlay"], f"{field}.overlay")
 
 
-def _check_media(media: Any, field: str) -> int:
+def _remember_photo(item: Any, field: str, seen: set[tuple[str, str]]) -> None:
+    if not isinstance(item, dict):
+        return
+    for name in ("mediaId", "url"):
+        value = item.get(name)
+        if isinstance(value, str) and value.strip():
+            token = (name, value.strip())
+            if token in seen:
+                raise SegmentValidationError(field, "the same photo must not repeat", "Use a different photo for each media item.")
+            seen.add(token)
+            return
+
+
+def _check_media(media: Any, field: str, seen: set[tuple[str, str]]) -> int:
     if not isinstance(media, list):
         raise SegmentValidationError(
             field,
@@ -186,7 +199,9 @@ def _check_media(media: Any, field: str) -> int:
             "Send media as a list of { mediaId } or { url }.",
         )
     for index, item in enumerate(media):
-        _check_media_item(item, f"{field}.{index}")
+        item_field = f"{field}.{index}"
+        _check_media_item(item, item_field)
+        _remember_photo(item, item_field, seen)
     return len(media)
 
 
@@ -248,7 +263,7 @@ def validate_segments(segments: Any, material: str = "broll") -> dict[str, Any]:
 
     Rule order is deliberate: shape, then forbidden content, then hook
     punctuation, then repetition, then per-part word counts, then the
-    total, then the segment cap, then media shape, then the media cap.
+    total, then the segment cap, then media shape, then repeated photos, then the media cap.
     A caller that fixes the first reported error and resubmits converges
     without guessing.
 
@@ -392,10 +407,11 @@ def validate_segments(segments: Any, material: str = "broll") -> dict[str, Any]:
     images_mode = material == IMAGES
     media_cap = MAX_IMAGES_MODE_MEDIAS if images_mode else MAX_MEDIAS
     media_count = 0
+    seen_photos: set[tuple[str, str]] = set()
     for index, segment in enumerate(segments):
         counted = 0
         if "media" in segment and segment["media"] is not None:
-            counted = _check_media(segment["media"], f"segments.{index}.media")
+            counted = _check_media(segment["media"], f"segments.{index}.media", seen_photos)
         if images_mode and counted == 0:
             raise SegmentValidationError(
                 f"segments.{index}.media",

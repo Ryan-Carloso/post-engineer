@@ -2,100 +2,45 @@
 
 > MCP: `post-engineer-mcp` (use `npx -y post-engineer-mcp@latest`;
 > `@latest` fetches the newest version instead of a stale cached copy).
-> Status: first prompt entry for this use. Proven mechanically (the script
-> contract below is the same one `validate_script` enforces); a real
-> published video from this prompt is a separate, user-approved step, not
-> part of this file.
+> Status: first prompt entry for this use. A real published video from
+> this prompt is a separate, user-approved step, not part of this file.
 
-## Objective
+## The prompt lives once, in the hub
 
-Turn one GitHub pull request into one short persona video, published to the
-user's connected social accounts. One PR, one video, one call to
-`generate_persona_video`. No batch, no topics list: the agent writes the
-complete script as segments, validates it mechanically, and only then
-generates. The agent never invents PR details — if the title,
-description, or change summary is missing, it asks for it instead of
-guessing.
+The full ordered prompt — which pull request, the script contract, media
+only when it matches the change, and the single `generate_persona_video`
+call — is served from the prompts hub, not repeated here:
 
-## Prerequisites
+**https://post-engineer.com/recipes/github-prs**
 
-- A Post Engineer account with social accounts connected on
-  https://post-engineer.com (OAuth needs a browser; see the MCP README).
-- An API key from https://post-engineer.com/recipes, in the agent's local MCP
-  configuration as `POST_ENGINEER_API_KEY`. The prompts hub can fill a freshly
-  created key into its own setup prompt for you; never paste the key anywhere
-  else — no other chat, prompt, or this repo.
+Its text lives once in `shared/prompt-base/prompt-base.ts` and is imported
+by the hub; the MCP fetches it from the web API. Do not paste the prompt
+steps, rules, or tool calls into this doc: an edit to the prompt must
+reach the hub, the MCP, and this page from that one source, with no
+hand-maintained copy to drift.
+
+In short: one pull request becomes one persona video. The agent asks for
+the title, the description, or the change summary when it cannot read them,
+and it does not invent those details. Validation runs before any token is
+spent.
+
+## Prerequisites (not part of the prompt)
+
+- A Post Engineer account and an API key from
+  https://post-engineer.com/recipes, in the agent's local MCP configuration as
+  `POST_ENGINEER_API_KEY`. The prompts hub can fill a freshly created key into
+  its own setup prompt for you; never paste the key anywhere else — no other
+  chat, prompt, or this repo. Use `npx -y post-engineer-mcp@latest` so the MCP
+  is the newest version instead of a stale cached copy.
 - A persona (`personaId` from `list_personas`), or a faceless setup
   (`options.faceless` plus `options.voiceId` or `options.audioUrl`).
 - A token balance that covers one video: check with `get_token_balance`
-  before generating. Generation costs tokens; `validate_script`,
-  `check_media`, and `upload_media` do not debit tokens.
+  before generating. Generation costs tokens; `validate_script` does not.
 
-## Rules that never change
+## Example
 
-- Language is English only (`language` must be exactly `en`, e.g. `en-US`).
-  The script is spoken text only: no links, hashtags, markdown, emoji, or
-  stage directions in any segment.
-- Validate before generating. `validate_script` runs before any token is
-  debited. If it returns an error, fix the named field with the named fix
-  and validate again. Never send a script to `generate_persona_video` that
-  has not passed `validate_script`.
-- Generation is always tied to publishing. There is no orphan video and no
-  separate schedule step: one `generate_persona_video` call generates and
-  publishes at its slot (`mode: 'scheduled'` with `startAt` + `times`, or
-  `mode: 'asap'` with no `startAt`/`times`). Slots must be 3h-30d ahead.
+**Input:** a pull request titled "Add retry with backoff to video uploads,"
+with a description of transient 5xx failures and a change that retries them.
 
-## Limits (verified against the segments contract)
-
-| Rule | Value |
-| --- | --- |
-| Segments per video | At most 12 |
-| Segment order | First `hook`, then `body`, last `cta`; exactly one hook and one CTA |
-| Total words | 60-200 |
-| Body words | At least 30 |
-| CTA words | 5-20 |
-| Hook words | Aim for 20-30 words, the target for the 8-12 second spoken hook window |
-| Medias per video | At most 6; only if they match the PR (screenshots, diagrams, or repo visuals); otherwise generate without media |
-| Segment media image | JPG/JPEG, PNG, or WebP; at most 8MB (the engine photo limit) |
-
-## Copy-ready prompt
-
-Copy the current prompt from https://post-engineer.com/recipes/github-prs, or run
-`/github-prs` from the Post Engineer MCP server. Its text lives once in
-`shared/prompt-base/prompt-base.ts`, so this page does not repeat it.
-
-## Example input (illustrative, not a real PR)
-
-- Title: Add retry with backoff to video uploads.
-- Description: Uploads failed on transient 5xx errors with no retry, so a
-  single hiccup lost the whole upload.
-- What changed: the upload client now retries 5xx responses with
-  exponential backoff, up to three attempts, and surfaces the last error
-  only after the final attempt.
-
-## Expected output
-
-One video: a hook on the fix, body segments on what changed and why it
-matters, and a CTA to follow the repo. The script is validated with
-`validate_script` before `generate_persona_video` is called, and nothing
-in it is invented beyond the PR input above.
-
-## Tools used
-
-- `list_personas`, `list_social_accounts`,
-  `get_persona_publishing_accounts`, `get_token_balance`
-  (setup and pre-flight, no tokens debited).
-- `validate_script` (mechanical validation, no tokens debited).
-- `check_media`, `upload_media` (media checks/uploads, no tokens debited).
-- `generate_persona_video` (the one call that debits tokens).
-- `get_video_task_progress`, `get_video_status` (polling and final URL).
-
-No new MCP tool is introduced by this prompt. There is no batch tool:
-one PR is one video, one singular call.
-
-## Discovery
-
-This prompt is listed on the web prompts hub at `/recipes` and has its own
-detail page there (`/recipes/github-prs`), with the full prompt and a copy
-button. The detail page is the primary flow; this doc is the source
-content the page is built from.
+**Output:** one validated script about that change, one
+`generate_persona_video` call, and the published video URL in the chat.

@@ -184,6 +184,25 @@ function checkMediaItem(media: unknown, field: string): SegmentsResult | null {
   return null;
 }
 
+// The same photo twice in one video is rejected on the second item.
+// mediaId and url are different identities: the same characters in both
+// fields are not the same photo. Comparison uses the trimmed value.
+function repeatedPhoto(media: unknown, field: string, seen: Set<string>): SegmentsResult | null {
+  if (typeof media !== 'object' || media === null || Array.isArray(media)) return null;
+  const record = media as Record<string, unknown>;
+  for (const key of ['mediaId', 'url']) {
+    const value = record[key];
+    if (typeof value !== 'string' || value.trim().length === 0) continue;
+    const token = `${key}\u0000${value.trim()}`;
+    if (seen.has(token)) {
+      return fail(field, 'the same photo must not repeat', 'Use a different photo for each media item.');
+    }
+    seen.add(token);
+    return null;
+  }
+  return null;
+}
+
 export function countWords(text: string): number {
   return text.trim().split(/\s+/).filter((word) => word.length > 0).length;
 }
@@ -378,6 +397,7 @@ export function validateSegments(input: unknown, material?: string): SegmentsRes
   const imagesMode = material === IMAGES_MATERIAL;
   const mediaCap = imagesMode ? MAX_IMAGES_MODE_MEDIAS : MAX_MEDIAS;
   let mediaCount = 0;
+  const seenPhotos = new Set<string>();
   for (let i = 0; i < segments.length; i += 1) {
     const media = segments[i].media;
     // Null, missing, and an empty array are absent. A blank string on an
@@ -398,8 +418,11 @@ export function validateSegments(input: unknown, material?: string): SegmentsRes
       return fail(`segments.${i}.media`, 'Media must be an array.', 'Send media as a list of { mediaId } or { url }.');
     }
     for (let j = 0; j < media.length; j += 1) {
-      const itemError = checkMediaItem(media[j], `segments.${i}.media.${j}`);
+      const itemField = `segments.${i}.media.${j}`;
+      const itemError = checkMediaItem(media[j], itemField);
       if (itemError !== null) return itemError;
+      const repeat = repeatedPhoto(media[j], itemField, seenPhotos);
+      if (repeat !== null) return repeat;
     }
     if (imagesMode) {
       const density = imageDensityError(countWords(segments[i].text), media.length);
