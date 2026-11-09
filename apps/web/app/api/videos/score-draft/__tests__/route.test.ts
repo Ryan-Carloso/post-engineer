@@ -207,7 +207,11 @@ describe('POST /api/videos/score-draft', () => {
 
     const network = await post({ draft: strongDraft(), network: 'tiktok' });
     expect(network.status).toBe(400);
-    expect(((await network.json()) as Record<string, unknown>).field).toBe('network');
+    const networkBody = (await network.json()) as Record<string, unknown>;
+    expect(networkBody.field).toBe('network');
+    // The rejection message lists the valid networks from PUBLISH_NETWORKS,
+    // so it must include 3speak (it used to name only the six pre-3Speak networks).
+    expect(String(networkBody.error)).toContain('"3speak"');
 
     const persona = await post({ draft: strongDraft(), personaId: 'not-a-uuid' });
     expect(persona.status).toBe(400);
