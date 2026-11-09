@@ -36,6 +36,13 @@ class UserNoticeTests(unittest.TestCase):
             "This is a problem with your account. Only you can fix it: reconnect Facebook.",
         )
 
+    def test_pinterest_notice_names_the_provider(self) -> None:
+        self.assertEqual(
+            user_notice("pinterest", "token_expired"),
+            "Pinterest did not publish because the account needs to be reconnected. "
+            "This is a problem with your account. Only you can fix it: reconnect Pinterest.",
+        )
+
     def test_reconnect_notice_for_every_other_user_code(self) -> None:
         for code in USER_CODES - {"email_not_verified"}:
             self.assertEqual(
@@ -114,6 +121,9 @@ class TargetsFromBodyTests(unittest.TestCase):
 class AccountIdsTests(unittest.TestCase):
     def test_facebook_reads_the_schedule_column_not_the_synthetic_target(self) -> None:
         self.assertEqual(_account_ids("facebook", {"facebook_account_ids": ["123", "456"]}), ["123", "456"])
+
+    def test_pinterest_reads_the_schedule_column_not_the_synthetic_target(self) -> None:
+        self.assertEqual(_account_ids("pinterest", {"pinterest_account_ids": ["123", "456"]}), ["123", "456"])
 
     def test_no_account_list_is_one_synthetic_target(self) -> None:
         self.assertEqual(_account_ids("threads", {}), [""])
