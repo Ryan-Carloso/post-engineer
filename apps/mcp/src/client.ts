@@ -404,21 +404,20 @@ export class PostEngineerClient {
   }
 
   async connectBlueskyAccount(handle: string, appPassword: string): Promise<unknown> {
-    return this.connectKeyAccount('/api/bluesky-connect', { handle, appPassword }, appPassword, 'connect Bluesky account');
+    const endpoint = '/api/bluesky-connect';
+    try {
+      return await this.request(endpoint, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ handle, appPassword }) }, 'connect Bluesky account');
+    } catch (error) {
+      throw redactSecretFromError(error, appPassword);
+    }
   }
 
   async connectThreespeakAccount(username: string, postingKey: string): Promise<unknown> {
-    return this.connectKeyAccount('/api/threespeak-connect', { username, postingKey }, postingKey, 'connect 3Speak account');
-  }
-
-  // Key-based account connect (Bluesky app password, Hive posting key):
-  // one POST plus secret redaction on failure, so neither secret ever
-  // reaches agent-visible error text.
-  private async connectKeyAccount(endpoint: string, payload: Record<string, string>, secret: string, label: string): Promise<unknown> {
+    const endpoint = '/api/threespeak-connect';
     try {
-      return await this.request(endpoint, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify(payload) }, label);
+      return await this.request(endpoint, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ username, postingKey }) }, 'connect 3Speak account');
     } catch (error) {
-      throw redactSecretFromError(error, secret);
+      throw redactSecretFromError(error, postingKey);
     }
   }
 
