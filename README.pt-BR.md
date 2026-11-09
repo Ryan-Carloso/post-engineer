@@ -129,6 +129,12 @@ OAuth cujos **redirect URIs correspondam exatamente** aos valores em
   Instagram. Adicione o produto Threads (permissões `threads_basic`,
   `threads_content_publish` e `threads_manage_insights`) e registre
   `THREADS_REDIRECT_URI`.
+- **Páginas do Facebook** — [Meta for Developers](https://developers.facebook.com):
+  adicione o Facebook Login for Business com as permissões `pages_show_list`,
+  `pages_read_engagement` e `pages_manage_posts`, defina
+  `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` e registre
+  `FACEBOOK_REDIRECT_URI`. Conectar uma vez adiciona todas as Páginas que o
+  usuário gerencia.
 - **Bluesky** usa uma app password inserida no painel (criptografada em repouso)
   — não é necessário registrar app de OAuth.
 

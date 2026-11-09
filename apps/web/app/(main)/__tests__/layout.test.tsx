@@ -383,12 +383,14 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(postsLink?.getAttribute('href')).toBe('/posts');
     });
 
-    it('renders tab links in order: Posts, Personas, Accounts, API Key & MCP', () => {
+    it('renders tab links in order: Posts, Personas, Accounts, API Key', () => {
       render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
       const labels = within(getMobileNav())
         .getAllByRole('link')
         .map((link) => link.textContent);
-      expect(labels).toEqual(['nav.posts', 'nav.persona', 'nav.accounts', 'nav.prompts']);
+      // The mobile tab uses the short label: the full "API Key e MCP"
+      // wraps to two lines in a ~70px tab.
+      expect(labels).toEqual(['nav.posts', 'nav.persona', 'nav.accounts', 'nav.promptsShort']);
     });
 
     it('has no API Keys tab in the mobile nav (moved to the profile area)', () => {

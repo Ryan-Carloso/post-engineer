@@ -8,6 +8,7 @@ import {
   useInstagramAccountsQuery,
   useLinkedinAccountsQuery,
   useThreadsAccountsQuery,
+  useFacebookAccountsQuery,
   useBlueskyAccountsQuery,
   type ScheduleConfig,
   type ScheduledSlot,
@@ -15,6 +16,7 @@ import {
 import { useI18n } from '@/lib/i18n/provider';
 import { PROVIDER_LABELS, accountOption, type AccountOption, scheduleAccountIds } from '@/lib/account-options';
 import { PostCard, resolveSlotAccounts } from './post-card';
+import type { PersonaPhoto } from './calendar-days';
 
 //---------------
 // Shared by the posts calendar (/posts) and the post history
@@ -22,9 +24,9 @@ import { PostCard, resolveSlotAccounts } from './post-card';
 // publishing accounts), the network/account filters and the card itself.
 //---------------
 
-export type ProviderFilter = 'all' | 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads';
+export type ProviderFilter = 'all' | 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook';
 
-const PROVIDERS: Exclude<ProviderFilter, 'all'>[] = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads'];
+const PROVIDERS: Exclude<ProviderFilter, 'all'>[] = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'];
 
 //---------------
 // resolveAccountFilter — a selected account only stays applied when it
@@ -42,6 +44,10 @@ function resolveAccountFilter(accountId: string, provider: ProviderFilter, accou
 export interface PostJoins {
   scheduleById: Map<string, ScheduleConfig>;
   personaNameById: Map<string, string>;
+  // Persona photo per id, same fallback chain as PersonaAvatar (avatar,
+  // then photo, then library) — the calendar cell photo comes from here,
+  // no extra fetch.
+  personaPhotoById: Map<string, PersonaPhoto>;
   accountOptions: AccountOption[];
   isLoading: boolean;
   isError: boolean;
@@ -56,6 +62,7 @@ export function usePostJoins(): PostJoins {
   const linkedinQuery = useLinkedinAccountsQuery();
   const blueskyQuery = useBlueskyAccountsQuery();
   const threadsQuery = useThreadsAccountsQuery();
+  const facebookQuery = useFacebookAccountsQuery();
 
   const scheduleById = useMemo(
     () => new Map((schedulesQuery.data ?? []).map((schedule) => [schedule.id, schedule])),
@@ -65,6 +72,16 @@ export function usePostJoins(): PostJoins {
     () => new Map((personasQuery.data ?? []).map((persona) => [persona.id, persona.name])),
     [personasQuery.data],
   );
+  const personaPhotoById = useMemo(
+    () =>
+      new Map(
+        (personasQuery.data ?? []).map((persona) => [
+          persona.id,
+          { avatarUrl: persona.avatarUrl, photoUrl: persona.photoUrl, libraryUrl: persona.libraryUrl, name: persona.name },
+        ]),
+      ),
+    [personasQuery.data],
+  );
   const accountOptions: AccountOption[] = useMemo(
     () => [
       ...(youtubeQuery.data?.accounts ?? []).map(accountOption),
@@ -72,8 +89,9 @@ export function usePostJoins(): PostJoins {
       ...(linkedinQuery.data?.accounts ?? []).map(accountOption),
       ...(blueskyQuery.data?.accounts ?? []).map(accountOption),
       ...(threadsQuery.data?.accounts ?? []).map(accountOption),
+      ...(facebookQuery.data?.accounts ?? []).map(accountOption),
     ],
-    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data, threadsQuery.data],
+    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data, threadsQuery.data, facebookQuery.data],
   );
   const { refetch: refetchSchedules } = schedulesQuery;
   const { refetch: refetchPersonas } = personasQuery;
@@ -82,6 +100,7 @@ export function usePostJoins(): PostJoins {
   const { refetch: refetchLinkedin } = linkedinQuery;
   const { refetch: refetchBluesky } = blueskyQuery;
   const { refetch: refetchThreads } = threadsQuery;
+  const { refetch: refetchFacebook } = facebookQuery;
   const refetch = useCallback(() => {
     void refetchSchedules();
     void refetchPersonas();
@@ -90,11 +109,13 @@ export function usePostJoins(): PostJoins {
     void refetchLinkedin();
     void refetchBluesky();
     void refetchThreads();
-  }, [refetchSchedules, refetchPersonas, refetchYoutube, refetchInstagram, refetchLinkedin, refetchBluesky, refetchThreads]);
+    void refetchFacebook();
+  }, [refetchSchedules, refetchPersonas, refetchYoutube, refetchInstagram, refetchLinkedin, refetchBluesky, refetchThreads, refetchFacebook]);
 
   return {
     scheduleById,
     personaNameById,
+    personaPhotoById,
     accountOptions,
     // A failed personas fetch must not silently render "Removed persona"
     // labels — callers show the error state for it like any other query.
@@ -109,7 +130,8 @@ export function usePostJoins(): PostJoins {
       instagramQuery.isLoading ||
       linkedinQuery.isLoading ||
       blueskyQuery.isLoading ||
-      threadsQuery.isLoading,
+      threadsQuery.isLoading ||
+      facebookQuery.isLoading,
     isError:
       schedulesQuery.isError ||
       personasQuery.isError ||
@@ -117,7 +139,8 @@ export function usePostJoins(): PostJoins {
       instagramQuery.isError ||
       linkedinQuery.isError ||
       blueskyQuery.isError ||
-      threadsQuery.isError,
+      threadsQuery.isError ||
+      facebookQuery.isError,
     refetch,
   };
 }

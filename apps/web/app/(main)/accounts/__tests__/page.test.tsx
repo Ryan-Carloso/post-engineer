@@ -27,6 +27,7 @@ vi.mock('@/lib/api', () => ({
   useBlueskyAccountsQuery: vi.fn(),
   useLinkedinAccountsQuery: vi.fn(),
   useThreadsAccountsQuery: vi.fn(),
+  useFacebookAccountsQuery: vi.fn(),
   useDisconnectAccountMutation: vi.fn(),
 }));
 
@@ -72,6 +73,9 @@ vi.mock('@/lib/oauth/instagram-handler', () => ({
 
 vi.mock('@/lib/oauth/threads-handler', () => ({
   useThreadsOAuth: vi.fn(),
+}));
+vi.mock('@/lib/oauth/facebook-handler', () => ({
+  useFacebookOAuth: vi.fn(),
 }));
 vi.mock('@/lib/oauth/linkedin-handler', () => ({
   useLinkedInOAuth: vi.fn(() => ({
@@ -135,12 +139,13 @@ vi.mock('@/components/account-card', () => ({
 
 import AccountsPage from '../page';
 import { reportAccountDisconnectFailed, useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
-import { useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery, useThreadsAccountsQuery, useDisconnectAccountMutation } from '@/lib/api';
+import { useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery, useThreadsAccountsQuery, useFacebookAccountsQuery, useDisconnectAccountMutation } from '@/lib/api';
 import { useYouTubeOAuth } from '@/lib/oauth/google-handler';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { useInstagramOAuth } from '@/lib/oauth/instagram-handler';
 import { useLinkedInOAuth } from '@/lib/oauth/linkedin-handler';
 import { useThreadsOAuth } from '@/lib/oauth/threads-handler';
+import { useFacebookOAuth } from '@/lib/oauth/facebook-handler';
 
 function createWrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -181,6 +186,8 @@ beforeEach(() => {
   });
   vi.mocked(useThreadsAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
   vi.mocked(useThreadsOAuth).mockReturnValue(threadsOAuth);
+  vi.mocked(useFacebookAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
+  vi.mocked(useFacebookOAuth).mockReturnValue(facebookOAuth);
   vi.mocked(useLinkedInOAuth).mockReturnValue({
     startOAuth: vi.fn().mockResolvedValue(undefined),
     isLoading: false,
@@ -193,6 +200,7 @@ beforeEach(() => {
 });
 
 const threadsOAuth = { isLoading: false, error: null, startOAuth: vi.fn() } as unknown as ReturnType<typeof useThreadsOAuth>;
+const facebookOAuth = { isLoading: false, error: null, startOAuth: vi.fn() } as unknown as ReturnType<typeof useFacebookOAuth>;
 
 describe('app/(main)/accounts/page — AccountsPage', () => {
   it('renders page header', () => {
@@ -213,12 +221,12 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
 
   it('shows the shared connection slot when YouTube has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(5);
+    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(6);
   });
 
   it('shows the shared connection slot when Instagram has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(5);
+    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(6);
   });
 
   it('shows loading skeletons while loading', () => {
@@ -649,8 +657,8 @@ describe('Threads accounts section', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.getByText('accounts.threadsLabel')).toBeTruthy();
     expect(screen.getByText('accounts.threadsDescription')).toBeTruthy();
-    // Threads is the last section on the page, so its connect button is last.
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    // Threads sits right above Facebook, the last section on the page.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     expect(threadsOAuth.startOAuth).toHaveBeenCalledTimes(1);
   });
 
@@ -699,5 +707,78 @@ describe('Threads accounts section', () => {
     await screen.findByTestId('disconnect-dialog');
     fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
     await waitFor(() => expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('threads', 'threw'));
+  });
+});
+
+describe('Facebook Pages accounts section', () => {
+  beforeEach(() => {
+    vi.mocked(facebookOAuth.startOAuth).mockClear();
+  });
+
+  it('renders the section with its localized copy and starts OAuth from its button', () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(screen.getByText('accounts.facebookLabel')).toBeTruthy();
+    expect(screen.getByText('accounts.facebookDescription')).toBeTruthy();
+    // Facebook is the last section on the page, so its connect button is last.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    expect(facebookOAuth.startOAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists each connected Page, marking a stored name or the Page id', () => {
+    vi.mocked(useFacebookAccountsQuery, { partial: true }).mockReturnValue({
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'facebook', recordId: 'r1', providerAccountId: '111', accountName: 'My Page', connectedAt: 0, lastUsed: 0 },
+          { provider: 'facebook', recordId: 'r2', providerAccountId: '222', accountName: null, connectedAt: 0, lastUsed: 0 },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const cards = screen.getAllByTestId('account-card').filter((el) => el.getAttribute('data-provider') === 'facebook');
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveAttribute('data-label-origin', 'stored');
+    expect(cards[1]).toHaveAttribute('data-label-origin', 'provider_id');
+    expect(screen.getByText('My Page')).toBeTruthy();
+    expect(screen.getByText('222')).toBeTruthy();
+    // With a Page connected the button offers another one.
+    expect(screen.getAllByRole('button', { name: 'accounts.connectAnother' }).length).toBeGreaterThan(0);
+  });
+
+  it('reports a list error for the facebook provider', () => {
+    vi.mocked(useFacebookAccountsQuery, { partial: true }).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error('fb down'),
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(useAccountListErrorTelemetry).toHaveBeenCalledWith('facebook', 'fb down');
+  });
+
+  it('disables the connect button while the OAuth popup is opening', () => {
+    vi.mocked(useFacebookOAuth).mockReturnValue({ ...facebookOAuth, isLoading: true });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const button = screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLButtonElement;
+    expect(button).toBeDisabled();
+  });
+
+  it('reports a Facebook disconnect failure for that provider', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: false });
+    vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.mocked(useFacebookAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [{ provider: 'facebook', recordId: 'r1', providerAccountId: '111', accountName: 'My Page', connectedAt: 0, lastUsed: 0 }] },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByTestId('facebook-disconnect-button'));
+    await screen.findByTestId('disconnect-dialog');
+    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await waitFor(() => expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('facebook', 'rejected'));
   });
 });

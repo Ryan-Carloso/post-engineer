@@ -47,6 +47,15 @@ describe('theme tokens', () => {
     expect(css).not.toMatch(/border-color:\s*#/);
     expect(css).not.toMatch(/outline-color:\s*#/);
   });
+
+  it('keeps the base border color inside @layer base so border-* utilities can override it', () => {
+    // Unlayered author CSS beats layered utilities: a bare `* { border-color }`
+    // would silently defeat every border-* utility (radio-group's
+    // border-primary, the calendar's photo rings, ...). Inside @layer base
+    // the default still applies, but utilities in @layer utilities win.
+    expect(block('@layer base')).toContain('border-color: var(--border)');
+    expect(css.match(/border-color:\s*var\(--border\)/g)).toHaveLength(1);
+  });
 });
 
 function sourceFiles(dir: string): string[] {

@@ -82,7 +82,7 @@ function baseDb() {
 }
 
 describe('getPersonaDefaultAccounts', () => {
-  it('returns all four providers grouped, empty when none stored', async () => {
+  it('returns every provider grouped, empty when none stored', async () => {
     const db = baseDb();
     expect(await getPersonaDefaultAccounts(db as never, PERSONA)).toEqual({
       youtube: [],
@@ -90,6 +90,7 @@ describe('getPersonaDefaultAccounts', () => {
       bluesky: [],
       linkedin: [],
       threads: [],
+      facebook: [],
     });
   });
 
@@ -210,6 +211,7 @@ describe('emptyPersonaDefaultAccounts', () => {
       bluesky: [],
       linkedin: [],
       threads: [],
+      facebook: [],
     });
   });
 });

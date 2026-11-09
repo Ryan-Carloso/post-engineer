@@ -42,6 +42,8 @@ const ANONYMOUS_ROUTES = new Set([
   'linkedin-auth/start/route.ts',
   'threads-auth/callback/route.ts',
   'threads-auth/start/route.ts',
+  'facebook-auth/callback/route.ts',
+  'facebook-auth/start/route.ts',
   // Public version endpoint: no auth required.
   'version/route.ts',
 ]);

@@ -206,7 +206,8 @@
                       "youtube",
                       "instagram",
                       "linkedin",
-                      "threads"
+                      "threads",
+                      "facebook"
                     ]
                   }
                 },
@@ -385,7 +386,8 @@
                 "instagram",
                 "linkedin",
                 "bluesky",
-                "threads"
+                "threads",
+                "facebook"
               ]
             }
           },
@@ -3182,6 +3184,12 @@
                               "type": "string"
                             }
                           },
+                          "facebook_account_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "days_of_week": {
                             "type": "array",
                             "items": {
@@ -4613,7 +4621,8 @@
                       "instagram",
                       "linkedin",
                       "bluesky",
-                      "threads"
+                      "threads",
+                      "facebook"
                     ]
                   },
                   "userId": {
@@ -5491,7 +5500,8 @@
                       "youtube",
                       "instagram",
                       "bluesky",
-                      "threads"
+                      "threads",
+                      "facebook"
                     ]
                   },
                   "personaId": {

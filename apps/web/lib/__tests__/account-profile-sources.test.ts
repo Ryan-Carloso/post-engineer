@@ -9,6 +9,7 @@ vi.mock('@/lib/instagram', () => ({
   }),
 }));
 vi.mock('@/lib/threads', () => ({ fetchThreadsProfile: vi.fn() }));
+vi.mock('@/lib/facebook', () => ({ fetchFacebookPageProfile: vi.fn() }));
 vi.mock('@/lib/linkedin', () => ({ fetchLinkedInMemberProfile: vi.fn() }));
 vi.mock('@/lib/bluesky-profile', () => ({ fetchBlueskyPublicProfile: vi.fn() }));
 vi.mock('@/lib/youtube', () => ({ createGoogleOAuth2Client: vi.fn() }));
@@ -17,6 +18,7 @@ vi.mock('@/lib/youtube-channel', () => ({ fetchYouTubeChannel: vi.fn() }));
 import { PROFILE_SOURCES } from '@/lib/account-profile-sources';
 import { getSocialAccountTokens, type SocialAccountRecord } from '@/lib/social-accounts';
 import { fetchThreadsProfile } from '@/lib/threads';
+import { fetchFacebookPageProfile } from '@/lib/facebook';
 import { fetchLinkedInMemberProfile } from '@/lib/linkedin';
 import { fetchBlueskyPublicProfile } from '@/lib/bluesky-profile';
 import { createGoogleOAuth2Client } from '@/lib/youtube';
@@ -68,6 +70,26 @@ describe('PROFILE_SOURCES', () => {
     const fetched = await PROFILE_SOURCES.threads.fetch(supabase, 'u1', record('threads', 't'));
     expect(fetchThreadsProfile).toHaveBeenCalledWith('tok');
     expect(fetched).toEqual({ accountName: 'th', pictureUrl: 'https://tp', metadata: { profilePictureUrl: 'https://tp' } });
+  });
+
+  it('facebook reads its Page profile by id with the stored Page token', async () => {
+    vi.mocked(fetchFacebookPageProfile).mockResolvedValue({ id: '111', name: 'My Page', category: 'Brand', pictureUrl: 'https://fp', followersCount: 9 });
+    const fetched = await PROFILE_SOURCES.facebook.fetch(supabase, 'u1', record('facebook', '111'));
+    expect(getSocialAccountTokens).toHaveBeenCalledWith(supabase, 'u1', 'facebook', '111');
+    expect(fetchFacebookPageProfile).toHaveBeenCalledWith('111', 'tok');
+    expect(fetched).toEqual({
+      accountName: 'My Page',
+      pictureUrl: 'https://fp',
+      metadata: { name: 'My Page', category: 'Brand', profilePictureUrl: 'https://fp', followersCount: 9 },
+    });
+    expect(PROFILE_SOURCES.facebook.pictureKey).toBe('profilePictureUrl');
+  });
+
+  it('facebook drops an unknown follower count instead of storing null', async () => {
+    vi.mocked(fetchFacebookPageProfile).mockResolvedValue({ id: '111', name: null, category: null, pictureUrl: null, followersCount: null });
+    const fetched = await PROFILE_SOURCES.facebook.fetch(supabase, 'u1', record('facebook', '111'));
+    expect(fetched.accountName).toBeNull();
+    expect(fetched.metadata.followersCount).toBeUndefined();
   });
 
   it('youtube reads its own channel by id with the stored credentials', async () => {

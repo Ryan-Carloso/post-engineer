@@ -1,12 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
-import { SpinnerIcon } from '@/lib/ui';
+import type { TranslationKey } from '@/lib/i18n';
 import { RANGE_MAX_SLOTS, useScheduleRangeQuery } from '@/lib/schedule-range';
 import { CalendarView } from './calendar-view';
-import { GROUP_KEY, GROUP_STYLE, STATUS_GROUP_ORDER } from './status';
-import { FIRST_WEEKDAY, INTL_TAG, bucketByDay, buildMonthGrid, dateFromKey, dayKey, groupCounts, gridRange, monthKey } from './calendar-days';
+import { CALENDAR_GROUP_KEY, CALENDAR_GROUP_ORDER, CALENDAR_GROUP_STYLE } from './status';
+import { FIRST_WEEKDAY, INTL_TAG, bucketByDay, buildMonthGrid, calendarCounts, dateFromKey, dayKey, gridRange, monthKey, sameDayInMonth } from './calendar-days';
+import { CalendarLoadingSkeleton } from './loading-skeleton';
 import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-joins';
 
 //---------------
@@ -45,13 +46,30 @@ export default function PostsPage() {
 
   const isLoading = rangeQuery.isLoading || joins.isLoading;
   const isError = rangeQuery.isError || joins.isError;
+  // The error names what failed: the month's posts, or the supporting
+  // data (schedules, personas, accounts) behind the cards and filters.
+  // No internal detail is exposed — only which part of the page is down.
+  const loadErrorKey: TranslationKey = rangeQuery.isError ? 'posts.loadErrorCalendar' : 'posts.loadErrorSupporting';
+  // Month and selected day stay in sync both ways: picking a day (including
+  // an outside day from the neighbouring month) shows that day's month,
+  // and the month buttons move the selection into the new month instead
+  // of leaving the detail below on a day from the month just left.
+  const handleSelect = useCallback((key: string) => {
+    setSelectedKey(key);
+    const date = dateFromKey(key);
+    setCursor({ year: date.getFullYear(), month: date.getMonth() });
+  }, []);
+  const handleMonthNavigate = useCallback((year: number, month: number) => {
+    setCursor({ year, month });
+    setSelectedKey((current) => sameDayInMonth(current, year, month));
+  }, []);
   // The error state covers every query, so retry refetches all of them.
   const handleRetry = () => {
     void rangeQuery.refetch();
     joins.refetch();
   };
   const dayFormat = new Intl.DateTimeFormat(INTL_TAG[locale], { dateStyle: 'full' });
-  const counts = groupCounts(selectedSlots);
+  const counts = calendarCounts(selectedSlots);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -74,12 +92,10 @@ export default function PostsPage() {
 
       <div className="mt-6">
         {isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-            <SpinnerIcon /> {t('posts.refresh')}…
-          </div>
+          <CalendarLoadingSkeleton />
         ) : isError ? (
           <div className="rounded-xl border border-input bg-card p-8 text-center">
-            <p className="text-sm font-semibold text-primary">{t('posts.loadError')}</p>
+            <p className="text-sm font-semibold text-primary">{t(loadErrorKey)}</p>
             <button
               type="button"
               onClick={handleRetry}
@@ -98,19 +114,22 @@ export default function PostsPage() {
               month={cursor.month}
               firstWeekday={firstWeekday}
               slotsByDay={slotsByDay}
+              scheduleById={joins.scheduleById}
+              personaPhotoById={joins.personaPhotoById}
               selectedKey={selectedKey}
               todayKey={todayKey}
-              onSelect={setSelectedKey}
+              onSelect={handleSelect}
               onMonthChange={(year, month) => setCursor({ year, month })}
+              onMonthNavigate={handleMonthNavigate}
             />
             <section aria-live="polite" className="mt-6">
               <h2 className="text-base font-bold tracking-[-0.01em] text-primary">
                 {t('posts.calendarDayHeading', { date: dayFormat.format(dateFromKey(selectedKey)) })}
               </h2>
               <ul className="mt-2 flex flex-wrap gap-2 text-xs">
-                {STATUS_GROUP_ORDER.map((group) => (
-                  <li key={group} className={`rounded-full px-2 py-0.5 font-semibold ${GROUP_STYLE[group]}`}>
-                    {t(GROUP_KEY[group])}: {counts[group]}
+                {CALENDAR_GROUP_ORDER.map((group) => (
+                  <li key={group} className={`rounded-full px-2 py-0.5 font-semibold ${CALENDAR_GROUP_STYLE[group]}`}>
+                    {t(CALENDAR_GROUP_KEY[group])}: {counts[group]}
                   </li>
                 ))}
               </ul>

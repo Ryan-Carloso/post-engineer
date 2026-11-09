@@ -61,12 +61,13 @@ export interface GeneratePersonaVideoInput {
   title: string;
   /** Paired A/B experiment link (issue #476); checked server-side before the charge. */
   experiment?: { experimentId: string; variantId: string; pair: number };
-  providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads')[];
+  providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook')[];
   youtubeAccountIds?: string[];
   instagramAccountIds?: string[];
   linkedinAccountIds?: string[];
   blueskyAccountIds?: string[];
   threadsAccountIds?: string[];
+  facebookAccountIds?: string[];
   /**
    * Publish mode. 'scheduled' (default) slots the video at startAt + times;
    * 'asap' publishes it the moment generation finishes, with no scheduled
@@ -125,10 +126,10 @@ export interface UpdatePersonaInput {
 
 /** Input for publishing a user-provided video directly, without generation. */
 export interface PublishVideoDirectInput {
-  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads';
+  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook';
   /** Local path to the video file (.mp4 or .mov, max 2GB). */
   videoPath: string;
-  /** Target accounts (channel IDs / IG user IDs / DIDs / LinkedIn member IDs or org URNs / Threads user IDs). */
+  /** Target accounts (channel IDs / IG user IDs / DIDs / LinkedIn member IDs or org URNs / Threads user IDs / Facebook Page IDs). */
   accountIds: string[];
   /** YouTube only: required. */
   title?: string;
@@ -138,7 +139,7 @@ export interface PublishVideoDirectInput {
   tags?: string[];
   /** YouTube only: required. */
   privacyStatus?: 'public' | 'private' | 'unlisted';
-  /** Instagram/Bluesky/LinkedIn/Threads: required. */
+  /** Instagram/Bluesky/LinkedIn/Threads/Facebook: required. */
   caption?: string;
 }
 

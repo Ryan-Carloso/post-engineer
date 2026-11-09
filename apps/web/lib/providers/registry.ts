@@ -9,7 +9,7 @@ import type { AccountData, InstagramAccountData } from '@/lib/types';
 // client guards and the OAuth union all derive from here.
 //---------------
 
-export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads'] as const;
+export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook'] as const;
 
 export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
 
@@ -56,12 +56,25 @@ export interface ThreadsAccountData {
   lastUsed: number;
 }
 
+export interface FacebookAccountData {
+  provider: 'facebook';
+  recordId: string;
+  providerAccountId: string;
+  accountName: string | null;
+  profilePictureUrl?: string;
+  category?: string;
+  followersCount?: number;
+  connectedAt: number;
+  lastUsed: number;
+}
+
 export type PublicAccountItem =
   | AccountData
   | InstagramAccountData
   | BlueskyAccountData
   | LinkedinAccountData
-  | ThreadsAccountData;
+  | ThreadsAccountData
+  | FacebookAccountData;
 
 //---------------
 // ProviderDef — contract every provider must implement.
@@ -211,6 +224,23 @@ const threadsDef: ProviderDef<true> = {
   },
 };
 
+const facebookDef: ProviderDef<true> = {
+  supportsOAuthCallback: true,
+  toPublicAccount(record) {
+    return {
+      provider: 'facebook',
+      recordId: record.id,
+      providerAccountId: record.providerAccountId,
+      accountName: record.accountName,
+      profilePictureUrl: asOptionalString(record.accountMetadata.profilePictureUrl),
+      category: asOptionalString(record.accountMetadata.category),
+      followersCount: asOptionalNumber(record.accountMetadata.followersCount),
+      connectedAt: createdAtTimestamp(record),
+      lastUsed: lastUsedTimestamp(record),
+    };
+  },
+};
+
 //---------------
 // PROVIDER_REGISTRY — exhaustive by construction: a provider in the union without
 // an entry here (or vice versa) = compile error.
@@ -222,6 +252,7 @@ export const PROVIDER_REGISTRY = {
   bluesky: blueskyDef,
   linkedin: linkedinDef,
   threads: threadsDef,
+  facebook: facebookDef,
 } satisfies Record<SocialProvider, ProviderDef>;
 
 // OAuthProvider — derived from the registry: whoever has supportsOAuthCallback: true.

@@ -13,6 +13,7 @@ import { getSocialAccountTokens, type SocialAccountRecord } from './social-accou
 import { INSTAGRAM_USERNAME_FALLBACK, YOUTUBE_PLACEHOLDER_ACCOUNT_ID, type SocialProvider } from './providers/registry';
 import { InstagramService } from './instagram';
 import { fetchThreadsProfile } from './threads';
+import { fetchFacebookPageProfile } from './facebook';
 import { fetchLinkedInMemberProfile } from './linkedin';
 import { fetchBlueskyPublicProfile } from './bluesky-profile';
 import { createGoogleOAuth2Client } from './youtube';
@@ -129,10 +130,32 @@ const linkedin: ProfileSource = {
   },
 };
 
+const facebook: ProfileSource = {
+  pictureKey: 'profilePictureUrl',
+  applies: always,
+  async fetch(supabase, userId, record) {
+    const profile = await fetchFacebookPageProfile(
+      record.providerAccountId,
+      await accessToken(supabase, userId, record),
+    );
+    return {
+      accountName: profile.name,
+      pictureUrl: profile.pictureUrl,
+      metadata: {
+        name: profile.name,
+        category: profile.category,
+        profilePictureUrl: profile.pictureUrl,
+        followersCount: profile.followersCount ?? undefined,
+      },
+    };
+  },
+};
+
 export const PROFILE_SOURCES: Record<SocialProvider, ProfileSource> = {
   instagram,
   threads,
   youtube,
   bluesky,
   linkedin,
+  facebook,
 };

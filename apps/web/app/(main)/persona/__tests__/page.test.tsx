@@ -62,6 +62,7 @@ vi.mock('@/lib/api', () => ({
   useBlueskyAccountsQuery: vi.fn(),
   useLinkedinAccountsQuery: vi.fn(),
   useThreadsAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
+  useFacebookAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
   usePersonaImagesQuery: vi.fn(() => ({ data: [], isPending: false, isError: false })),
   useUploadPersonaImageMutation: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useUpdatePersonaImageMutation: vi.fn(() => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false })),

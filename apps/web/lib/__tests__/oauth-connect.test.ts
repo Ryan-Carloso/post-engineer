@@ -204,6 +204,38 @@ describe('oauth-connect', () => {
   });
 });
 
+describe('buildOAuthConnectUrl — facebook', () => {
+  it('builds the Facebook Pages consent URL with the Facebook app id and a facebook state', async () => {
+    vi.stubEnv('FACEBOOK_CLIENT_ID', 'fb-app-id');
+    vi.stubEnv('FACEBOOK_CLIENT_SECRET', 'fb-app-secret');
+    const { buildOAuthConnectUrl } = await import('@/lib/oauth-connect');
+    const { decodeOAuthState } = await import('@/lib/oauth-utils');
+    const result = await buildOAuthConnectUrl('facebook', 'https://app.example/facebook/callback');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const url = new URL(result.authUrl);
+      expect(url.hostname).toBe('www.facebook.com');
+      expect(url.searchParams.get('client_id')).toBe('fb-app-id');
+      expect(url.searchParams.get('redirect_uri')).toBe('https://app.example/facebook/callback');
+      expect(url.searchParams.get('scope')).toContain('pages_manage_posts');
+      expect(url.searchParams.get('state')).toBe(result.state);
+      expect(decodeOAuthState(result.state)).toMatchObject({ provider: 'facebook', redirectUri: 'https://app.example/facebook/callback' });
+    }
+    vi.unstubAllEnvs();
+  });
+
+  it.each(['FACEBOOK_CLIENT_ID', 'FACEBOOK_CLIENT_SECRET'])('fails naming the credentials when %s is missing', async (name) => {
+    vi.stubEnv('FACEBOOK_CLIENT_ID', 'fb-app-id');
+    vi.stubEnv('FACEBOOK_CLIENT_SECRET', 'fb-app-secret');
+    vi.stubEnv(name, undefined);
+    const { buildOAuthConnectUrl } = await import('@/lib/oauth-connect');
+    const result = await buildOAuthConnectUrl('facebook', 'https://app.example/facebook/callback');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('FACEBOOK_CLIENT_ID / FACEBOOK_CLIENT_SECRET');
+    vi.unstubAllEnvs();
+  });
+});
+
 describe('resolveOAuthCallbackAuth', () => {
   async function webRequest(state: string, nonce: string | null) {
     const { NextRequest } = await import('next/server');

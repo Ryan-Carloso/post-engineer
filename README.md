@@ -136,6 +136,11 @@ To connect YouTube, Instagram, or LinkedIn accounts you need OAuth apps whose
   Instagram's. Add the Threads product (`threads_basic`,
   `threads_content_publish` and `threads_manage_insights` permissions) and
   register `THREADS_REDIRECT_URI`.
+- **Facebook Pages** — [Meta for Developers](https://developers.facebook.com):
+  add Facebook Login for Business with the `pages_show_list`,
+  `pages_read_engagement` and `pages_manage_posts` permissions, set
+  `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` and register
+  `FACEBOOK_REDIRECT_URI`. Connecting once adds every Page the user manages.
 - **Bluesky** uses an app password entered in the dashboard (encrypted at
   rest) — no OAuth app registration needed.
 

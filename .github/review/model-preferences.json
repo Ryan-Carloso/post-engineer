@@ -6,9 +6,9 @@
     "opencode/deepseek-v4.1-flash-free",
     "opencode/beam-free",
     "opencode/nemotron-3.5-lightning-free",
-    "openrouter/thinkingmachines/inkling:free",
     "opencode/mimo-v2.6-flash-free",
     "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+    "openrouter/nvidia/nemotron-3.5-lightning:free",
     "openrouter/cohere/north-mini-code:free"
   ],
   "denylist": {

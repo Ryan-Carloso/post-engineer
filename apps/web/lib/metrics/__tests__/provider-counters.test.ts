@@ -4,6 +4,7 @@ vi.mock('@/lib/youtube', () => ({ getYouTubeVideoInfo: vi.fn() }));
 vi.mock('../youtube-retention', () => ({ youtubeRetention: vi.fn() }));
 vi.mock('@/lib/upload/handlers', () => ({ getAuthenticatedClient: vi.fn() }));
 vi.mock('@/lib/linkedin', () => ({ getLinkedInSocialActions: vi.fn() }));
+vi.mock('@/lib/facebook', () => ({ getFacebookVideoInsights: vi.fn() }));
 vi.mock('@/lib/social-accounts', () => ({ getSocialAccountTokens: vi.fn() }));
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({})) }));
 const { getMediaInsights } = vi.hoisted(() => ({ getMediaInsights: vi.fn() }));
@@ -23,6 +24,7 @@ import {
   youtubeCounters,
 } from '../provider-counters';
 import { getLinkedInSocialActions } from '@/lib/linkedin';
+import { getFacebookVideoInsights } from '@/lib/facebook';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 import { getYouTubeVideoInfo } from '@/lib/youtube';
 import { getAuthenticatedClient } from '@/lib/upload/handlers';
@@ -178,5 +180,26 @@ describe('fetchProviderCounters (bluesky, linkedin)', () => {
       fetchProviderCounters('user-1', { provider: 'linkedin', accountId: 'li', externalId: 'urn:li:share:1' }, CTX),
     ).rejects.toThrow('LinkedIn token expired');
     expect(getLinkedInSocialActions).not.toHaveBeenCalled();
+  });
+});
+
+describe('fetchProviderCounters (facebook)', () => {
+  it("reads the video insights with the owner's Page token", async () => {
+    vi.mocked(getSocialAccountTokens).mockResolvedValue({ tokens: { access_token: 'page-tok' } } as never);
+    vi.mocked(getFacebookVideoInsights).mockResolvedValue({ total_video_views: 40, likes: 6, comments: 1 });
+
+    const counters = await fetchProviderCounters('user-1', { provider: 'facebook', accountId: '111', externalId: 'vid-1' }, CTX);
+
+    expect(getSocialAccountTokens).toHaveBeenCalledWith({}, 'user-1', 'facebook', '111');
+    expect(getFacebookVideoInsights).toHaveBeenCalledWith('page-tok', 'vid-1');
+    expect(counters).toEqual({ views: 40, likes: 6, comments: 1, saves: null });
+  });
+
+  it('throws when the Page has no stored token, without calling Facebook', async () => {
+    vi.mocked(getSocialAccountTokens).mockResolvedValue({ tokens: {} } as never);
+    await expect(
+      fetchProviderCounters('user-1', { provider: 'facebook', accountId: '111', externalId: 'vid-1' }, CTX),
+    ).rejects.toThrow('Facebook');
+    expect(getFacebookVideoInsights).not.toHaveBeenCalled();
   });
 });

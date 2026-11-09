@@ -4,6 +4,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
+vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
+
 vi.mock('@/lib/social-accounts', () => ({
   getSocialAccountTokens: vi.fn(),
   touchSocialAccount: vi.fn(),
@@ -13,6 +15,7 @@ vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(() => ({ __mock: 'service-client' })),
 }));
 
+import { trackApiEvent } from '@/lib/analytics';
 import { handleLinkedinUpload } from '@/lib/upload/linkedin-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 
@@ -148,6 +151,37 @@ describe('handleLinkedinUpload', () => {
     const postCall = mockFetch.mock.calls.find(([url]) => String(url).includes('/rest/posts'));
     const body = JSON.parse((postCall?.[1] as RequestInit).body as string);
     expect(body.author).toBe(ORG_URN);
+  });
+
+  it('emits publish_account_unauthorized when LinkedIn rejects the token with 401', async () => {
+    mockMemberTokens();
+    mockFetch.mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).includes('initializeUpload')) {
+        return new Response(JSON.stringify({ message: 'Unauthorized' }), { status: 401 });
+      }
+      return new Response('{}', { status: 404 });
+    });
+    const res = await handleLinkedinUpload(formData(), USER_ID);
+    const results = (res as { results: Array<{ success: boolean; error?: string }> }).results;
+    expect(results[0]?.success).toBe(false);
+    expect(trackApiEvent).toHaveBeenCalledWith('publish_account_unauthorized', {
+      provider: 'linkedin',
+      account_id: MEMBER_ID,
+      user_id: USER_ID,
+      status: 401,
+    });
+  });
+
+  it('does not emit publish_account_unauthorized when the LinkedIn failure is not a 401', async () => {
+    mockMemberTokens();
+    mockFetch.mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).includes('initializeUpload')) {
+        return new Response(JSON.stringify({ message: 'boom' }), { status: 500 });
+      }
+      return new Response('{}', { status: 404 });
+    });
+    await handleLinkedinUpload(formData(), USER_ID);
+    expect(trackApiEvent).not.toHaveBeenCalled();
   });
 
   it('one account failing does not block the other', async () => {
