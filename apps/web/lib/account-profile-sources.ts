@@ -15,6 +15,7 @@ import { InstagramService } from './instagram';
 import { fetchThreadsProfile } from './threads';
 import { fetchFacebookPageProfile } from './facebook';
 import { fetchPinterestUserProfile } from './pinterest';
+import { getValidPinterestAccessToken } from './pinterest-tokens';
 import { fetchLinkedInMemberProfile } from './linkedin';
 import { fetchBlueskyPublicProfile } from './bluesky-profile';
 import { createGoogleOAuth2Client } from './youtube';
@@ -156,7 +157,9 @@ const pinterest: ProfileSource = {
   pictureKey: 'profilePictureUrl',
   applies: always,
   async fetch(supabase, userId, record) {
-    const profile = await fetchPinterestUserProfile(await accessToken(supabase, userId, record));
+    const profile = await fetchPinterestUserProfile(
+      await getValidPinterestAccessToken(supabase, userId, record.providerAccountId),
+    );
     return {
       accountName: profile.username,
       pictureUrl: profile.profileImage,

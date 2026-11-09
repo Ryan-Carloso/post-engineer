@@ -11,9 +11,9 @@ import { PinterestError } from '@/lib/errors';
 // getValidPinterestAccessToken — the stored access token for one of the
 // user's Pinterest accounts, refreshed first when it expired. The access
 // token lives 30 days; the refresh token rotates on every use, so the
-// new pair is persisted before the caller publishes or lists boards.
-// Shared by the upload handler and the boards route so the refresh lives
-// in exactly one place. Throws PinterestError (401) when there is no
+// new pair is persisted before the caller publishes, lists boards, or
+// resyncs the profile. Shared by the upload handler, the boards route,
+// and the profile resync so the refresh lives in exactly one place. Throws PinterestError (401) when there is no
 // usable token: the caller turns it into a reconnect prompt, never a
 // silent skip.
 //---------------
