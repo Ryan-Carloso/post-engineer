@@ -86,7 +86,8 @@ describe('prompts hub data', () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(text).toContain('one generate_persona_video call');
     expect(text).toContain('only on ok');
-    expect(text).toContain('at most 6 photos; for images, follow the density');
+    expect(text).toContain('broll or svg, attach at most 6 photos; fewer, chosen well');
+    expect(text).toContain('For images, follow the density rule above.');
     expect(text).toContain('60 characters');
     expect(text).toContain('80');
     expect(text).toContain('30');
@@ -147,7 +148,8 @@ describe('prompts hub data', () => {
     expect(text).toContain('a price without a source is a');
     expect(text).toContain('never a different generation, a render, or a rebadged');
     expect(text).toContain('only on ok');
-    expect(text).toContain('6 photos; for images, follow the density rule above');
+    expect(text).toContain('6 photos; fewer, chosen well, beats every photo you found. For');
+    expect(text).toContain('images, follow the density rule above.');
     expect(text).toContain('60 characters');
     expect(text).toContain('drop the badge: a');
     expect(text).toContain('Never send a fake User-Agent or');
@@ -232,7 +234,7 @@ describe('prompts hub data', () => {
     expect(baseText).toContain('own real photos, a place, a product, or a person');
     expect(baseText).toContain('broll is the default');
     expect(baseText).toContain('svg for an abstract explainer');
-    expect(baseText).toContain('facelessMaterial on generate_persona_video');
+    expect(baseText).toContain('facelessMaterial on validate_script and as options.facelessMaterial on generate_persona_video');
     expect(baseText).toContain('one photo per idea in its segment');
     expect(baseText).toContain('while it is spoken');
     expect(baseText).toContain('each segment idea, not once for the whole topic');
