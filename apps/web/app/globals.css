@@ -162,14 +162,17 @@ body {
 
 @layer base {
   button, a, input, select { min-height: 2.75rem; }
+
+  /* Default border color. This MUST live inside @layer base: unlayered
+     author CSS beats layered utilities, so a bare `* { border-color }`
+     silently defeats every border-* utility (border-primary on a selected
+     radio, border-success/destructive on the calendar photo rings, ...).
+     In this layer the default still applies, but utilities win. */
+  * { border-color: var(--border); }
 }
 
 @media (max-width: 767px) {
   body { padding-bottom: calc(4.75rem + env(safe-area-inset-bottom)); }
-}
-
-* {
-  border-color: var(--border);
 }
 
 button,

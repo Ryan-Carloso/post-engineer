@@ -16,6 +16,7 @@ import {
 import { useI18n } from '@/lib/i18n/provider';
 import { PROVIDER_LABELS, accountOption, type AccountOption, scheduleAccountIds } from '@/lib/account-options';
 import { PostCard, resolveSlotAccounts } from './post-card';
+import type { PersonaPhoto } from './calendar-days';
 
 //---------------
 // Shared by the posts calendar (/posts) and the post history
@@ -43,6 +44,10 @@ function resolveAccountFilter(accountId: string, provider: ProviderFilter, accou
 export interface PostJoins {
   scheduleById: Map<string, ScheduleConfig>;
   personaNameById: Map<string, string>;
+  // Persona photo per id, same fallback chain as PersonaAvatar (avatar,
+  // then photo, then library) — the calendar cell photo comes from here,
+  // no extra fetch.
+  personaPhotoById: Map<string, PersonaPhoto>;
   accountOptions: AccountOption[];
   isLoading: boolean;
   isError: boolean;
@@ -65,6 +70,16 @@ export function usePostJoins(): PostJoins {
   );
   const personaNameById = useMemo(
     () => new Map((personasQuery.data ?? []).map((persona) => [persona.id, persona.name])),
+    [personasQuery.data],
+  );
+  const personaPhotoById = useMemo(
+    () =>
+      new Map(
+        (personasQuery.data ?? []).map((persona) => [
+          persona.id,
+          { avatarUrl: persona.avatarUrl, photoUrl: persona.photoUrl, libraryUrl: persona.libraryUrl, name: persona.name },
+        ]),
+      ),
     [personasQuery.data],
   );
   const accountOptions: AccountOption[] = useMemo(
@@ -100,6 +115,7 @@ export function usePostJoins(): PostJoins {
   return {
     scheduleById,
     personaNameById,
+    personaPhotoById,
     accountOptions,
     // A failed personas fetch must not silently render "Removed persona"
     // labels — callers show the error state for it like any other query.

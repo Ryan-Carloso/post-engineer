@@ -3,8 +3,9 @@
 import { useMemo } from 'react';
 import { useScheduleStatusQuery, useVideoGenerationsQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
-import { SpinnerIcon } from '@/lib/ui';
+import type { TranslationKey } from '@/lib/i18n';
 import { GenerationCard } from '../post-card';
+import { CardsLoadingSkeleton } from '../loading-skeleton';
 import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from '../post-joins';
 
 //---------------
@@ -33,6 +34,13 @@ export default function PostHistoryPage() {
 
   const isLoading = statusQuery.isLoading || generationsQuery.isLoading || joins.isLoading;
   const isError = statusQuery.isError || generationsQuery.isError || joins.isError;
+  // The error names what failed — the history list, the generations, or
+  // the supporting data behind the cards — never an internal detail.
+  const loadErrorKey: TranslationKey = statusQuery.isError
+    ? 'posts.loadErrorHistory'
+    : generationsQuery.isError
+      ? 'posts.loadErrorGenerations'
+      : 'posts.loadErrorSupporting';
   // The error state covers every query, so retry refetches all of them — a
   // failed query would otherwise never clear without a full page reload.
   const handleRetry = () => {
@@ -69,12 +77,10 @@ export default function PostHistoryPage() {
 
       <div className="mt-6">
         {isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-            <SpinnerIcon /> {t('posts.refresh')}…
-          </div>
+          <CardsLoadingSkeleton />
         ) : isError ? (
           <div className="rounded-xl border border-input bg-card p-8 text-center">
-            <p className="text-sm font-semibold text-primary">{t('posts.loadError')}</p>
+            <p className="text-sm font-semibold text-primary">{t(loadErrorKey)}</p>
             <button
               type="button"
               onClick={handleRetry}
@@ -97,17 +103,20 @@ export default function PostHistoryPage() {
                 </div>
               )}
             </section>
-            {visibleSlots.length === 0 ? (
-              <div className="rounded-xl border border-input bg-card p-8 text-center text-sm text-muted-foreground">
-                {filters.hasActiveFilter ? t('posts.noResultsForFilter') : t('posts.noHistory')}
-              </div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {visibleSlots.map((slot) => (
-                  <SlotCard key={slot.id} slot={slot} joins={joins} />
-                ))}
-              </div>
-            )}
+            <section aria-label={t('posts.historyPostsTitle')}>
+              <h2 className="text-base font-bold tracking-[-0.01em] text-primary">{t('posts.historyPostsTitle')}</h2>
+              {visibleSlots.length === 0 ? (
+                <div className="mt-3 rounded-xl border border-input bg-card p-8 text-center text-sm text-muted-foreground">
+                  {filters.hasActiveFilter ? t('posts.noResultsForFilter') : t('posts.noHistory')}
+                </div>
+              ) : (
+                <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {visibleSlots.map((slot) => (
+                    <SlotCard key={slot.id} slot={slot} joins={joins} />
+                  ))}
+                </div>
+              )}
+            </section>
           </>
         )}
       </div>
