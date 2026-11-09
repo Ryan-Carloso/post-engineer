@@ -1871,6 +1871,35 @@ describe('publishVideoDirect', () => {
     expect(formData.get('description')).toBe('explicit description');
   });
 
+  it('publishes to pinterest with a description and no caption', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'pinterest',
+      videoPath,
+      accountIds: ['user-9'],
+      description: 'description only',
+      boardId: 'b1',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('description')).toBe('description only');
+    expect(formData.get('caption')).toBe('');
+    expect(formData.get('boardId')).toBe('b1');
+  });
+
+  it('fails fast for pinterest with neither description nor caption', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await expect(
+      client.publishVideoDirect({
+        provider: 'pinterest',
+        videoPath,
+        accountIds: ['user-9'],
+        boardId: 'b1',
+      }),
+    ).rejects.toThrow('description or caption is required for pinterest.');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('fails fast for pinterest without a boardId', async () => {
     const videoPath = await writeTempVideo('clip.mp4');
     await expect(

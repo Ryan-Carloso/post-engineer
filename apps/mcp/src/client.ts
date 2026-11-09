@@ -779,12 +779,12 @@ export class PostEngineerClient {
       description = input.description.trim();
       tags = input.tags;
       privacyStatus = input.privacyStatus;
-    } else {
-      if (input.caption === undefined || input.caption.trim().length === 0) {
-        throw new Error(`caption is required for ${input.provider}.`);
-      }
-      caption = input.caption.trim(); if (input.provider === 'pinterest') { if (input.boardId === undefined || input.boardId.trim().length === 0) throw new Error('boardId is required for pinterest.'); title = input.title?.trim() ?? ''; description = input.description?.trim() ?? caption; }
-    }
+    } else if (input.provider === 'pinterest') {
+      if (input.boardId === undefined || input.boardId.trim().length === 0) throw new Error('boardId is required for pinterest.');
+      description = input.description?.trim() ?? input.caption?.trim() ?? '';
+      if (description.length === 0) throw new Error('description or caption is required for pinterest.');
+      caption = input.caption?.trim() ?? ''; title = input.title?.trim() ?? '';
+    } else { if (input.caption === undefined || input.caption.trim().length === 0) throw new Error(`caption is required for ${input.provider}.`); caption = input.caption.trim(); }
 
     const formData = new FormData();
     formData.append('provider', input.provider);
