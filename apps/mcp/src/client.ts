@@ -781,9 +781,9 @@ export class PostEngineerClient {
       privacyStatus = input.privacyStatus;
     } else if (input.provider === 'pinterest') {
       if (input.boardId === undefined || input.boardId.trim().length === 0) throw new Error('boardId is required for pinterest.');
-      description = input.description?.trim() ?? input.caption?.trim() ?? '';
-      if (description.length === 0) throw new Error('description or caption is required for pinterest.');
-      caption = input.caption?.trim() ?? ''; title = input.title?.trim() ?? '';
+      const explicitDescription = input.description?.trim() ?? '';
+      description = explicitDescription !== '' ? explicitDescription : input.caption?.trim() ?? '';
+      if (description.length === 0) throw new Error('description or caption is required for pinterest.'); caption = input.caption?.trim() ?? ''; title = input.title?.trim() ?? '';
     } else { if (input.caption === undefined || input.caption.trim().length === 0) throw new Error(`caption is required for ${input.provider}.`); caption = input.caption.trim(); }
 
     const formData = new FormData();

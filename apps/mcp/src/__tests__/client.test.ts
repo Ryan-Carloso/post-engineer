@@ -1887,6 +1887,21 @@ describe('publishVideoDirect', () => {
     expect(formData.get('boardId')).toBe('b1');
   });
 
+  it('falls back to the caption for pinterest when the description is blank', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'pinterest',
+      videoPath,
+      accountIds: ['user-9'],
+      description: '   ',
+      caption: 'caption fallback',
+      boardId: 'b1',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('description')).toBe('caption fallback');
+  });
+
   it('fails fast for pinterest with neither description nor caption', async () => {
     const videoPath = await writeTempVideo('clip.mp4');
     await expect(
