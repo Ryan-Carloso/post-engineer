@@ -184,6 +184,31 @@ describe('PostsPage', () => {
     expect(screen.queryByText('Past topic')).not.toBeInTheDocument();
   });
 
+  it('shows the account notice on a publishing card before the slot is finished', () => {
+    mockQueries({
+      upcoming: [
+        {
+          ...UPCOMING_SLOT,
+          status: 'publishing',
+          title: 'Publishing topic',
+          userNotices: [
+            {
+              provider: 'bluesky',
+              accountId: 'b1',
+              code: 'email_not_verified',
+              requiresUser: true,
+              notice: 'raw upstream must not render',
+            },
+          ],
+        },
+      ],
+    });
+    render(<PostsPage />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('posts.userNoticeEmail');
+    expect(screen.queryByText('raw upstream must not render')).not.toBeInTheDocument();
+  });
+
   it('labels a slot from a persona-less schedule as "no persona", not a removed persona', () => {
     // A post created without a persona (migration 012) never had one:
     // saying "persona removed" would be a lie about it.

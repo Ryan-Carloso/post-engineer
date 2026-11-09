@@ -17,11 +17,11 @@ SLOT_FAILED = "failed"
 # retry forever waiting on a human to cancel the slot.
 MAX_PUBLISH_ATTEMPTS = 3
 
-# Backoff between publish attempts (seconds, keyed by the attempt that just
-# failed — attempt 1 waits 30s, attempt 2 waits 2min). The slot goes back to
-# 'ready' with a `publish_not_before` timestamp so `ready_due_slots` skips it
-# until the delay passes: without it every tick re-attempted immediately,
-# hammering a failing upload endpoint beyond its recovery window.
+# Backoff after a transient account failure (seconds, keyed by the attempt
+# that just failed — attempt 1 waits 30s, attempt 2 waits 2min). The third
+# try is terminal, so the 600s value is never scheduled. The slot stays
+# `publishing` and `publish_not_before` is the next wake-up. It does not
+# return to `ready` between tries.
 PUBLISH_RETRY_DELAY_SECONDS = (30, 120, 600)
 
 # Unified generate+schedule batches (POST /api/videos/generate-and-schedule):

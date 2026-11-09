@@ -111,6 +111,8 @@ describe('GET /api/posts/[id]', () => {
         progressHistory: [],
         queuePosition: null,
         queueTotal: null,
+        userNotices: [],
+        providerFailures: [],
       },
       schedule: {
         id: 'sched-1',

@@ -56,6 +56,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 048 | `migrations/048_scheduled-posts-music-mood.sql` | `scheduled_posts` gains nullable `music_mood` (issue #489): the requested BGM mood rides the slot row so a tick-dispatched or requeued slot renders with the requested mood instead of the engine default; pre-migration rows render the default |
 | 049 | `migrations/049_facebook-provider.sql` | Facebook Pages as a publishing provider: `schedules.facebook_account_ids` (default empty) and `facebook` in both the `post_metrics.provider` and `social_accounts.provider` checks (each dropped and re-created with the full list, so a live constraint the chain no longer defines cannot survive) |
 | 050 | `migrations/050_pinterest-provider.sql` | Pinterest as a publishing provider: `schedules.pinterest_account_ids` (default empty) and nullable `schedules.pinterest_board_id` (the board a schedule publishes its pins to), and `pinterest` in both the `post_metrics.provider` and `social_accounts.provider` checks (each dropped and re-created with the full list, so a live constraint the chain no longer defines cannot survive) |
+| 051 | `migrations/051_scheduled_posts_publish_outcomes.sql` | `scheduled_posts.publish_outcomes` (jsonb, default `[]`): one row per provider, account, and video so a restart keeps accounts that already published and retries only the rest (issue #500) |
 
 ## Schema snapshot
 

@@ -112,6 +112,7 @@ describe('handlePinterestUpload', () => {
     const result = await handlePinterestUpload(formData(overrides), 'user-1');
     expect(result.success).toBe(false);
     expect(result.results[0].error).toContain(message);
+    expect(result.results[0].errorCode).toBe('publish_rejected');
     expect(publishPinterestVideo).not.toHaveBeenCalled();
   });
 
@@ -128,7 +129,7 @@ describe('handlePinterestUpload', () => {
       new PinterestError('PINTEREST_PUBLISH_FAILED: Invalid access token', 401),
     );
     const result = await handlePinterestUpload(formData(), 'user-1');
-    expect(result.results[0]).toEqual({ accountId: 'user-9', success: false, error: 'PINTEREST_PUBLISH_FAILED: Invalid access token' });
+    expect(result.results[0]).toEqual({ accountId: 'user-9', success: false, error: 'PINTEREST_PUBLISH_FAILED: Invalid access token', errorCode: 'token_expired' });
     expect(trackApiEvent).toHaveBeenCalledWith('publish_account_unauthorized', {
       provider: 'pinterest',
       account_id: 'user-9',
@@ -149,12 +150,13 @@ describe('handlePinterestUpload', () => {
     expect(result.success).toBe(true);
     expect(result.results.map((entry) => entry.success)).toEqual([false, true]);
     expect(result.results[0].error).toBe('PINTEREST_PUBLISH_FAILED: boom');
+    expect(result.results[0].errorCode).toBe('transient');
     expect(touchSocialAccount).toHaveBeenCalledTimes(1);
   });
 
   it('fails as a whole when every account fails, and a non-Error throw stays generic', async () => {
     vi.mocked(getValidPinterestAccessToken).mockRejectedValue('not an error');
     const result = await handlePinterestUpload(formData(), 'user-1');
-    expect(result).toEqual({ success: false, results: [{ accountId: 'user-9', success: false, error: 'Unknown error' }] });
+    expect(result).toEqual({ success: false, results: [{ accountId: 'user-9', success: false, error: 'Unknown error', errorCode: 'transient' }] });
   });
 });
