@@ -1705,4 +1705,33 @@ describe('publish video direct tool', () => {
     expect(response.isError).toBe(true);
     expect(textOf(response)).toContain('"code":"UPLOAD_ERROR"');
   });
+
+  it('handlePublishVideoDirect forwards the pinterest boardId and shows the pin link', async () => {
+    const { handlePublishVideoDirect } = await import('../tools.js');
+    vi.mocked(mockClient.publishVideoDirect).mockResolvedValue({
+      success: true,
+      provider: 'pinterest',
+      results: [
+        { accountId: 'user-9', success: true, postId: '123456789', permalink: 'https://www.pinterest.com/pin/123456789/' },
+      ],
+      successCount: 1,
+      logId: 'log-1',
+    });
+
+    const response = await handlePublishVideoDirect(mockClient, {
+      provider: 'pinterest',
+      videoPath: '/tmp/clip.mp4',
+      accountIds: ['user-9'],
+      caption: 'the pin description',
+      title: 'My pin',
+      boardId: 'b1',
+    });
+    expect(response.isError).toBeUndefined();
+    expect(vi.mocked(mockClient.publishVideoDirect).mock.calls[0][0]).toMatchObject({
+      provider: 'pinterest',
+      boardId: 'b1',
+      title: 'My pin',
+    });
+    expect(textOf(response)).toContain('https://www.pinterest.com/pin/123456789/');
+  });
 });

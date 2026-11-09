@@ -17,7 +17,7 @@ Wire contract (multipart/form-data):
 - Threads: ``provider=threads``, ``video`` (file), ``caption``,
   repeated ``threadsAccountIds`` fields.
 - Facebook: ``provider=facebook``, ``video`` (file), ``caption``,
-  repeated ``facebookAccountIds`` fields (see ``publish_facebook``).
+  repeated ``facebookAccountIds`` fields (see ``publish_facebook``). Pinterest: ``provider=pinterest``, ``video`` (file), ``title``, ``description``, ``boardId``, repeated ``pinterestAccountIds`` fields (see ``publish_pinterest``; validated by ``fill_schedule/metadata.py``).
 
 This module owns only types, validation and multipart part builders; the HTTP
 transport lives in the client function of the same module.
@@ -35,6 +35,7 @@ from app.services.publish_facebook import (  # noqa: F401 - re-exported for call
     FACEBOOK_CAPTION_MAX_LENGTH, FACEBOOK_PROVIDER, FacebookMetadata,
     facebook_fields, validate_facebook_metadata,
 )
+from app.services.publish_pinterest import PINTEREST_DESCRIPTION_MAX_LENGTH, PINTEREST_PROVIDER, PINTEREST_TITLE_MAX_LENGTH, PinterestMetadata, pinterest_fields  # noqa: F401 - re-exported for callers
 
 VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
 
@@ -59,6 +60,7 @@ VALID_PROVIDERS: tuple[str, ...] = (
     LINKEDIN_PROVIDER,
     THREADS_PROVIDER,
     FACEBOOK_PROVIDER,
+    PINTEREST_PROVIDER,
 )
 
 
@@ -374,6 +376,7 @@ _PART_BUILDERS: _PartBuilders = {
     LINKEDIN_PROVIDER: (LinkedInMetadata, build_linkedin_parts),
     THREADS_PROVIDER: (ThreadsMetadata, build_threads_parts),
     FACEBOOK_PROVIDER: (FacebookMetadata, lambda metadata: MultipartParts(fields=facebook_fields(metadata))),
+    PINTEREST_PROVIDER: (PinterestMetadata, lambda metadata: MultipartParts(fields=pinterest_fields(metadata))),
 }
 
 
@@ -404,7 +407,7 @@ def publish_video(
     base_url: str,
     api_secret: str,
     owner_user_id: str,
-    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata,
+    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | PinterestMetadata,
     video_path: str,
     video_bytes: bytes,
     content_type: str,

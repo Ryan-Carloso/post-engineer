@@ -63,6 +63,7 @@ const mockQueries = vi.hoisted(() => ({
   linkedin: { data: null as null | { accounts: unknown[] }, isLoading: false },
   threads: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
   facebook: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
+  pinterest: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -72,6 +73,10 @@ vi.mock('@/lib/api', () => ({
   useLinkedinAccountsQuery: () => mockQueries.linkedin,
   useThreadsAccountsQuery: () => mockQueries.threads,
   useFacebookAccountsQuery: () => mockQueries.facebook,
+}));
+
+vi.mock('@/lib/pinterest-accounts', () => ({
+  usePinterestAccountsQuery: () => mockQueries.pinterest,
 }));
 
 vi.mock('@/lib/account-card-telemetry', () => ({

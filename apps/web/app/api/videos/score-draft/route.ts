@@ -76,7 +76,7 @@ function parseBody(body: unknown): ScoreDraftBody | NextResponse {
     network !== undefined
     && (typeof network !== 'string' || !(PUBLISH_NETWORKS as string[]).includes(network))
   ) {
-    return apiErrorResponse(400, 'network must be one of "linkedin", "youtube", "instagram", "bluesky", "threads", "facebook" when given.', {
+    return apiErrorResponse(400, 'network must be one of "linkedin", "youtube", "instagram", "bluesky", "threads", "facebook", "pinterest" when given.', {
       code: ERROR_CODES.VALIDATION_FAILED,
       field: 'network',
       route: ROUTE,

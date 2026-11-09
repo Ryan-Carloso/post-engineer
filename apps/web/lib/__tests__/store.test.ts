@@ -8,7 +8,7 @@ import { resolveScriptLanguage, useUploadStore } from '@/lib/store';
 describe('useUploadStore', () => {
   beforeEach(() => {
     useUploadStore.setState({
-      selectedAccountIds: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [] },
+      selectedAccountIds: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [] },
       mode: 'youtube',
       file: null,
       title: '',

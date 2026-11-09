@@ -14,6 +14,7 @@ import { INSTAGRAM_USERNAME_FALLBACK, YOUTUBE_PLACEHOLDER_ACCOUNT_ID, type Socia
 import { InstagramService } from './instagram';
 import { fetchThreadsProfile } from './threads';
 import { fetchFacebookPageProfile } from './facebook';
+import { fetchPinterestUserProfile } from './pinterest';
 import { fetchLinkedInMemberProfile } from './linkedin';
 import { fetchBlueskyPublicProfile } from './bluesky-profile';
 import { createGoogleOAuth2Client } from './youtube';
@@ -151,6 +152,22 @@ const facebook: ProfileSource = {
   },
 };
 
+const pinterest: ProfileSource = {
+  pictureKey: 'profilePictureUrl',
+  applies: always,
+  async fetch(supabase, userId, record) {
+    const profile = await fetchPinterestUserProfile(await accessToken(supabase, userId, record));
+    return {
+      accountName: profile.username,
+      pictureUrl: profile.profileImage,
+      metadata: {
+        name: profile.username,
+        profilePictureUrl: profile.profileImage,
+      },
+    };
+  },
+};
+
 export const PROFILE_SOURCES: Record<SocialProvider, ProfileSource> = {
   instagram,
   threads,
@@ -158,4 +175,5 @@ export const PROFILE_SOURCES: Record<SocialProvider, ProfileSource> = {
   bluesky,
   linkedin,
   facebook,
+  pinterest,
 };
