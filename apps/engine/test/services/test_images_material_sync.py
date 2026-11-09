@@ -43,3 +43,18 @@ def test_image_density_constants_match_the_shared_validator():
 
 def test_other_materials_media_cap_matches_the_shared_validator():
     assert _export_line("MAX_MEDIAS") == f"export const MAX_MEDIAS = {script_segments.MAX_MEDIAS};"
+
+
+def test_repeated_photo_rule_matches_the_shared_validator():
+    # Web and MCP run generated copies of the shared file. This pins the
+    # engine and that source to the same rule and fix text only: it does
+    # not prove the comparison semantics agree (token format, trimmed
+    # identity, mediaId-vs-url distinctness, rule precedence). Those are
+    # pinned per validator by the repeat tests (test_repeated_photo.py
+    # and script-segments-repeat.test.ts), not by this string check.
+    rule = "the same photo must not repeat"
+    fix = "Use a different photo for each media item."
+    engine = Path(script_segments.__file__).read_text(encoding="utf-8")
+    shared = _shared_text()
+    assert rule in engine and rule in shared
+    assert fix in engine and fix in shared
