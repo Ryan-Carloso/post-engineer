@@ -2,16 +2,22 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
-import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 
 //---------------
 // supabase/migrations/049_facebook-provider.sql — the schema the Facebook
 // Pages connect and publish paths depend on. Each provider check is
 // dropped and re-created with the full list (the lesson of 037: a live
 // constraint the chain no longer defines can linger in production, so a
-// plain add would leave the old list in force), and both lists are pinned
-// to SOCIAL_PROVIDERS.
+// plain add would leave the old list in force).
+//
+// The provider list is FROZEN at the six providers 049 shipped with:
+// 051 added 3Speak, so the live pin is now the 051 test plus the
+// migration-check-constraints-sync test (which reads the snapshot). A
+// migration file is append-only history — its list never grows.
 //---------------
+
+// The six providers 049 shipped with, in the order the migration lists them.
+const PROVIDERS_AT_049 = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook'];
 
 const sql = readFileSync(
   join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '049_facebook-provider.sql'),
@@ -42,9 +48,9 @@ describe('supabase/migrations/049_facebook-provider.sql', () => {
   );
 
   it.each(['post_metrics_provider_check', 'social_accounts_provider_check'])(
-    '%s allows exactly the providers the app supports',
+    '%s allows exactly the providers 049 shipped with',
     (constraint) => {
-      expect(checkProviders(constraint).sort()).toEqual([...SOCIAL_PROVIDERS].sort());
+      expect(checkProviders(constraint).sort()).toEqual([...PROVIDERS_AT_049].sort());
     },
   );
 });
