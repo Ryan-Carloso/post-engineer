@@ -60,6 +60,12 @@
     "GET /api/facebook-auth/start": {
       "kind": "oauth-redirect"
     },
+    "GET /api/pinterest-auth/callback": {
+      "kind": "oauth-redirect"
+    },
+    "GET /api/pinterest-auth/start": {
+      "kind": "oauth-redirect"
+    },
     "POST /api/logout": {
       "kind": "session-only"
     },
