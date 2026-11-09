@@ -63,6 +63,7 @@ const mockQueries = vi.hoisted(() => ({
   linkedin: { data: null as null | { accounts: unknown[] }, isLoading: false },
   threads: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
   facebook: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
+  pinterest: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -72,6 +73,10 @@ vi.mock('@/lib/api', () => ({
   useLinkedinAccountsQuery: () => mockQueries.linkedin,
   useThreadsAccountsQuery: () => mockQueries.threads,
   useFacebookAccountsQuery: () => mockQueries.facebook,
+}));
+
+vi.mock('@/lib/pinterest-accounts', () => ({
+  usePinterestAccountsQuery: () => mockQueries.pinterest,
 }));
 
 vi.mock('@/lib/account-card-telemetry', () => ({
@@ -275,7 +280,7 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [] },
+            accounts: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [] },
           }),
         }),
       );
@@ -435,7 +440,61 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: ['fb-1', 'fb-2'] },
+            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: ['fb-1', 'fb-2'], pinterest: [] },
+          }),
+        }),
+      );
+    });
+  });
+
+  it('renders pinterest accounts, preselects saved ones and saves the toggled selection', async () => {
+    const fetchMock = mockFetchOnce({
+      success: true,
+      defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: ['pin-1'] },
+    });
+    mockQueries.youtube = { data: { accounts: [] }, isLoading: false };
+    mockQueries.instagram = { data: { accounts: [] }, isLoading: false };
+    mockQueries.bluesky = { data: { accounts: [] }, isLoading: false };
+    mockQueries.facebook = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
+    mockQueries.pinterest = {
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'pinterest', providerAccountId: 'pin-1', accountName: 'Maker' },
+          { provider: 'pinterest', providerAccountId: 'pin-2' },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    };
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    await screen.findByTestId('publishing-accounts-save');
+
+    const checkboxes = () => screen.getAllByTestId('account-card-select') as HTMLInputElement[];
+    expect(checkboxes()).toHaveLength(2);
+    expect(checkboxes()[0].checked).toBe(true);
+    expect(checkboxes()[1].checked).toBe(false);
+    expect(screen.getByText('Maker')).toBeInTheDocument();
+    expect(reportAccountCardDisplay).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'pinterest',
+      shownLabel: 'pin-2',
+      labelOrigin: 'provider_id',
+    }));
+
+    fireEvent.click(checkboxes()[1]);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ success: true, defaults: { pinterest: ['pin-1', 'pin-2'] } }),
+    });
+    fireEvent.click(screen.getByTestId('publishing-accounts-save'));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        DEFAULTS_URL,
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({
+            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: ['pin-1', 'pin-2'] },
           }),
         }),
       );

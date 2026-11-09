@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Post Engineer API",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "description": "Generate and schedule short videos for social accounts. Authenticate with an API key created in the dashboard: Authorization: Bearer <key>."
   },
   "servers": [
@@ -87,14 +87,18 @@
             "type": "string"
           },
           "media": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "mediaId": {
-                "type": "string"
-              },
-              "url": {
-                "type": "string"
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "mediaId": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -2216,6 +2220,115 @@
           },
           {
             "name": "video",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/pinterest/boards": {
+      "get": {
+        "operationId": "get_list_pinterest_boards",
+        "summary": "list pinterest boards",
+        "tags": [
+          "pinterest"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "boards": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "description": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "accountId",
             "in": "query",
             "required": true,
             "schema": {
@@ -4877,7 +4990,7 @@
                           "svg",
                           "images"
                         ],
-                        "description": "'images' renders only the segment images: media on every segment, up to 12."
+                        "description": "'images' renders only the segment images: a media list on every segment, about one image per ~3s, at most 30."
                       },
                       "fullLipsync": {
                         "type": "boolean",
@@ -5279,7 +5392,7 @@
                       "svg",
                       "images"
                     ],
-                    "description": "Optional. 'images' needs media on every segment (up to 12)."
+                    "description": "Optional. 'images' needs a media list on every segment: about one image per ~3s, at most 30."
                   }
                 },
                 "required": [

@@ -1,4 +1,4 @@
-"""Publish metadata models for task requests (YouTube / Instagram / Bluesky / LinkedIn / Threads / Facebook)."""
+"""Publish metadata models for task requests (YouTube / Instagram / Bluesky / LinkedIn / Threads / Facebook / Pinterest)."""
 
 from typing import Literal, Optional
 
@@ -50,16 +50,26 @@ class FacebookPublish(BaseModel):
     account_ids: list[str] = Field(min_length=1)
 
 
-class PublishParams(BaseModel):
-    """Optional publish selection for a task (YouTube/Instagram/Bluesky/LinkedIn/Threads/Facebook)."""
+class PinterestPublish(BaseModel):
+    """Pinterest publish fields required by the internal upload API."""
 
-    providers: list[Literal["youtube", "instagram", "bluesky", "linkedin", "threads", "facebook"]] = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1, max_length=800)
+    board_id: str = Field(min_length=1)
+    account_ids: list[str] = Field(min_length=1)
+
+
+class PublishParams(BaseModel):
+    """Optional publish selection for a task (YouTube/Instagram/Bluesky/LinkedIn/Threads/Facebook/Pinterest)."""
+
+    providers: list[Literal["youtube", "instagram", "bluesky", "linkedin", "threads", "facebook", "pinterest"]] = Field(min_length=1)
     youtube: Optional[YouTubePublish] = None
     instagram: Optional[InstagramPublish] = None
     bluesky: Optional["BlueskyPublish"] = None
     linkedin: Optional[LinkedInPublish] = None
     threads: Optional[ThreadsPublish] = None
     facebook: Optional[FacebookPublish] = None
+    pinterest: Optional[PinterestPublish] = None
 
     @model_validator(mode="after")
     def check_provider_metadata(self) -> "PublishParams":
@@ -75,4 +85,6 @@ class PublishParams(BaseModel):
             raise ValueError("threads provider requires threads metadata")
         if "facebook" in self.providers and self.facebook is None:
             raise ValueError("facebook provider requires facebook metadata")
+        if "pinterest" in self.providers and self.pinterest is None:
+            raise ValueError("pinterest provider requires pinterest metadata")
         return self

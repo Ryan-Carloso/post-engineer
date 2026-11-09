@@ -9,7 +9,7 @@ import type { AccountData, InstagramAccountData } from '@/lib/types';
 // client guards and the OAuth union all derive from here.
 //---------------
 
-export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook'] as const;
+export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest'] as const;
 
 export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
 
@@ -68,13 +68,24 @@ export interface FacebookAccountData {
   lastUsed: number;
 }
 
+export interface PinterestAccountData {
+  provider: 'pinterest';
+  recordId: string;
+  providerAccountId: string;
+  accountName: string | null;
+  profilePictureUrl?: string;
+  connectedAt: number;
+  lastUsed: number;
+}
+
 export type PublicAccountItem =
   | AccountData
   | InstagramAccountData
   | BlueskyAccountData
   | LinkedinAccountData
   | ThreadsAccountData
-  | FacebookAccountData;
+  | FacebookAccountData
+  | PinterestAccountData;
 
 //---------------
 // ProviderDef — contract every provider must implement.
@@ -241,6 +252,21 @@ const facebookDef: ProviderDef<true> = {
   },
 };
 
+const pinterestDef: ProviderDef<true> = {
+  supportsOAuthCallback: true,
+  toPublicAccount(record) {
+    return {
+      provider: 'pinterest',
+      recordId: record.id,
+      providerAccountId: record.providerAccountId,
+      accountName: record.accountName,
+      profilePictureUrl: asOptionalString(record.accountMetadata.profilePictureUrl),
+      connectedAt: createdAtTimestamp(record),
+      lastUsed: lastUsedTimestamp(record),
+    };
+  },
+};
+
 //---------------
 // PROVIDER_REGISTRY — exhaustive by construction: a provider in the union without
 // an entry here (or vice versa) = compile error.
@@ -253,6 +279,7 @@ export const PROVIDER_REGISTRY = {
   linkedin: linkedinDef,
   threads: threadsDef,
   facebook: facebookDef,
+  pinterest: pinterestDef,
 } satisfies Record<SocialProvider, ProviderDef>;
 
 // OAuthProvider — derived from the registry: whoever has supportsOAuthCallback: true.

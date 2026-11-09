@@ -18,7 +18,7 @@ import {
 // not exist — only for a browser signed in as that same owner.
 //---------------
 
-export const OAUTH_CONNECT_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'threads', 'facebook'] as const;
+export const OAUTH_CONNECT_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'threads', 'facebook', 'pinterest'] as const;
 export type OAuthConnectProvider = (typeof OAUTH_CONNECT_PROVIDERS)[number];
 
 export function isOAuthConnectProvider(value: unknown): value is OAuthConnectProvider {
@@ -230,6 +230,19 @@ export async function buildOAuthConnectUrl(
       const { buildFacebookAuthorizationUrl } = await import('./facebook');
       const { state, nonce } = createOAuthState({ provider: 'facebook', redirectUri });
       const authUrl = buildFacebookAuthorizationUrl(state, redirectUri);
+      return { ok: true, authUrl, state, nonce };
+    }
+    if (provider === 'pinterest') {
+      if (!process.env.PINTEREST_CLIENT_ID || !process.env.PINTEREST_CLIENT_SECRET) {
+        return {
+          ok: false,
+          error:
+            'Pinterest credentials are not configured (PINTEREST_CLIENT_ID / PINTEREST_CLIENT_SECRET).',
+        };
+      }
+      const { buildPinterestAuthorizationUrl } = await import('./pinterest');
+      const { state, nonce } = createOAuthState({ provider: 'pinterest', redirectUri });
+      const authUrl = buildPinterestAuthorizationUrl(state, redirectUri);
       return { ok: true, authUrl, state, nonce };
     }
     // linkedin

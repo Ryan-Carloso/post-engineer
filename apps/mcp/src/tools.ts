@@ -117,7 +117,7 @@ export const ListSocialAccountsShape = {};
 export const ListSocialAccountsSchema = z.object(ListSocialAccountsShape);
 
 export const ConnectAccountShape = {
-  provider: z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook']).describe('The social platform to connect'),
+  provider: z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest']).describe('The social platform to connect'),
   handle: z.string().min(1).optional().describe('Bluesky handle (e.g. user.bsky.social). Required only for bluesky.'),
   appPassword: z.string().min(1).optional().describe('Bluesky app password (Settings > App passwords). Required only for bluesky. Never shared or logged.'),
 };
@@ -185,7 +185,7 @@ export const DeletePersonaSchema = z.object(DeletePersonaShape);
 
 export const DisconnectAccountShape = {
   provider: z
-    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'])
+    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest'])
     .describe('The social platform of the account to disconnect.'),
   providerAccountId: z
     .string()
@@ -1174,7 +1174,7 @@ export async function handleGetVideoTaskProgress(
 
 export const PublishVideoDirectShape = {
   provider: z
-    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'])
+    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest'])
     .describe('The social platform to publish the video to.'),
   videoPath: z
     .string()
@@ -1186,16 +1186,16 @@ export const PublishVideoDirectShape = {
     .array(z.string().min(1))
     .min(1, 'At least one account ID is required')
     .describe(
-      'Target accounts: the IDs from list_social_accounts (channel IDs for YouTube, IG user IDs for Instagram, DIDs for Bluesky, member IDs or org URNs for LinkedIn, user IDs for Threads, Page IDs for Facebook).',
+      'Target accounts: the IDs from list_social_accounts (channel IDs for YouTube, IG user IDs for Instagram, DIDs for Bluesky, member IDs or org URNs for LinkedIn, user IDs for Threads, Page IDs for Facebook, user IDs for Pinterest).',
     ),
   title: z
     .string()
     .optional()
-    .describe('YouTube only: required video title.'),
+    .describe('YouTube only: required video title. Pinterest: pin title (optional).'),
   description: z
     .string()
     .optional()
-    .describe('YouTube only: required video description.'),
+    .describe('YouTube only: required video description. Pinterest: pin description (optional; caption is used when omitted).'),
   tags: z
     .array(z.string())
     .optional()
@@ -1207,7 +1207,7 @@ export const PublishVideoDirectShape = {
   caption: z
     .string()
     .optional()
-    .describe('Instagram/Bluesky/LinkedIn/Threads/Facebook: required caption.'),
+    .describe('Instagram/Bluesky/LinkedIn/Threads/Facebook: required caption. Pinterest: used as the pin description when description is omitted.'), boardId: z.string().optional().describe('Pinterest only: the board to publish the pin to (the id from list_pinterest_boards). Required for pinterest.'),
 };
 
 export const PublishVideoDirectSchema = z.object(PublishVideoDirectShape);
@@ -1225,11 +1225,11 @@ export async function handlePublishVideoDirect(
       description: args.description,
       tags: args.tags,
       privacyStatus: args.privacyStatus,
-      caption: args.caption,
+      caption: args.caption, boardId: args.boardId,
     });
     const lines = result.results.map((account) => {
       if (account.success) {
-        const link = account.videoUrl ?? account.postId ?? account.videoId ?? '';
+        const link = account.videoUrl ?? account.permalink ?? account.postId ?? account.videoId ?? '';
         return `- ${account.accountId}: published${link ? ` (${link})` : ''}`;
       }
       return `- ${account.accountId}: FAILED — ${account.error ?? 'unknown error'}`;

@@ -58,12 +58,12 @@ describe('validateSegments (shared module)', () => {
   it('rejects media with an unknown key, like the generation route does', () => {
     const result = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: { mediaId: 'abc', alt: 'kitchen' } },
+      { kind: 'body', text: body, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
       { kind: 'cta', text: cta },
     ]);
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error.field).toBe('segments.1.media');
+    expect(result.error.field).toBe('segments.1.media.0');
   });
 
   it('does not treat double-space or underscore differences as repeats, like the engine does', () => {
@@ -102,18 +102,18 @@ describe('validateSegments (shared module)', () => {
   it('mirrors the engine media shape: blank values count as present, null is skipped', () => {
     const blankUrl = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: { mediaId: 'abc', url: '' } },
+      { kind: 'body', text: body, media: [{ mediaId: 'abc', url: '' }] },
       { kind: 'cta', text: cta },
     ]);
     expect(blankUrl.ok).toBe(false);
-    if (!blankUrl.ok) expect(blankUrl.error.field).toBe('segments.1.media');
+    if (!blankUrl.ok) expect(blankUrl.error.field).toBe('segments.1.media.0');
     const blankId = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: { mediaId: '   ' } },
+      { kind: 'body', text: body, media: [{ mediaId: '   ' }] },
       { kind: 'cta', text: cta },
     ]);
     expect(blankId.ok).toBe(false);
-    if (!blankId.ok) expect(blankId.error.field).toBe('segments.1.media');
+    if (!blankId.ok) expect(blankId.error.field).toBe('segments.1.media.0');
     const nullMedia = validateSegments([
       { kind: 'hook', text: hook },
       { kind: 'body', text: body, media: null },
@@ -151,12 +151,12 @@ describe('validateSegments (shared module)', () => {
     expect(many.ok).toBe(false);
     if (!many.ok) expect(many.error.rule).toBe('at most 12 segments are allowed');
     // 20 + 7*14 + 5 = 123 words and 9 segments: only the media cap fires.
-    const mediaSegments: Array<{ kind: string; text: string; media?: { url: string } }> = [{ kind: 'hook', text: hook20 }];
+    const mediaSegments: Array<{ kind: string; text: string; media?: Array<{ url: string }> }> = [{ kind: 'hook', text: hook20 }];
     for (let i = 0; i < 7; i += 1) {
       mediaSegments.push({
         kind: 'body',
         text: Array.from({ length: 12 }, () => 'body').join(' ') + ` number ${i}.`,
-        media: { url: `https://example.com/${i}.jpg` },
+        media: [{ url: `https://example.com/${i}.jpg` }],
       });
     }
     mediaSegments.push({ kind: 'cta', text: 'Save this video now please.' });
@@ -249,11 +249,11 @@ describe('validateSegments (fail paths reformatted by the shared copy)', () => {
   it('rejects media with neither mediaId nor url', () => {
     const result = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: {} },
+      { kind: 'body', text: body, media: [{}] },
       { kind: 'cta', text: cta },
     ]);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.field).toBe('segments.1.media');
+    if (!result.ok) expect(result.error.field).toBe('segments.1.media.0');
   });
 });
 
@@ -284,7 +284,7 @@ describe('tool schemas (strict segment objects)', () => {
         ...valid,
         segments: [
           { kind: 'hook', text: hook },
-          { kind: 'body', text: body, media: { mediaId: 'abc', alt: 'kitchen' } },
+          { kind: 'body', text: body, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
           { kind: 'cta', text: cta },
         ],
       }),

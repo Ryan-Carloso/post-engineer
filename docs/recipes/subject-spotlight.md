@@ -78,7 +78,7 @@ mechanically, and only then generates.
 | CTA words | 5-20 |
 | Hook words | 15-40 before TTS; aim for 20-30 words, the target for the 8-12 second spoken hook window |
 | Hook ending | Terminal punctuation |
-| Medias per video | At most 6; a segment's `media` is a strict object with exactly one of `mediaId` (from `upload_media`) or `url` (a public image URL) |
+| Medias per video | At most 6; a segment's `media` is an array of objects, each with exactly one of `mediaId` (from `upload_media`) or `url` (a public image URL) |
 | Segment media image | JPG/JPEG, PNG, or WebP; at most 8MB (the engine photo limit) |
 | Overlay card | `title` (the name) at most 60 characters, `subtitle` (the exact version) at most 80, `badge` (the real price) at most 30 |
 | Uploaded media lifetime | Temporary engine asset, 1 hour TTL: upload shortly before generating |
@@ -138,7 +138,7 @@ hatchback" beats the model name alone).
   code usually means a person is in the frame: pick another angle of the
   subject, not a portrait of a reviewer.
 - Local file: call `upload_media` with the local path and use the returned
-  `mediaId` in the segment's `media` field. Upload shortly before
+  `mediaId` in one item of the segment's `media` list. Upload shortly before
   generating: the asset lives 1 hour.
 - Attach at most 6 photos to at most 6 distinct segments. Fewer, chosen
   well (front three-quarter, the interior, the exact detail the script
@@ -146,7 +146,7 @@ hatchback" beats the model name alone).
 - A segment without media is fine. A video with no usable photo is still a
   video; a video with a wrong-subject photo is not.
 
-Give each photo its card in that segment's `media.overlay`: `title` is the
+Give each photo its card in that photo's `overlay`: `title` is the
 subject's name (at most 60 characters), `subtitle` the exact version or the
 fact that locates it (80), `badge` the real price with its currency (30).
 Drop the badge when the price is not confirmed by the results. Skip a field
@@ -208,10 +208,10 @@ Segments (hook 22 words, body 53 words, CTA 16 words, total 91 words,
 {
   "segments": [
     { "kind": "hook", "text": "The Volt 400 hatch just landed at 29,990 euros with a 400 kilometre battery, and that price is the whole launch story.",
-      "media": { "url": "https://example.photo/volt400/front.jpg", "overlay": { "title": "Volt 400", "subtitle": "GT-Line, model year 2026", "badge": "29,990 euros" } } },
+      "media": [{ "url": "https://example.photo/volt400/front.jpg", "overlay": { "title": "Volt 400", "subtitle": "GT-Line, model year 2026", "badge": "29,990 euros" } }] },
     { "kind": "body", "text": "The launch trim is the GT-Line, and it ships with the 400 kilometre pack as standard, so the headline range is not a top-trim promise." },
     { "kind": "body", "text": "Every trim listed this week carries the heat pump, which is the detail that keeps the winter range near the summer number, and the badge price includes it.",
-      "media": { "url": "https://example.photo/volt400/interior.jpg", "overlay": { "title": "Volt 400", "subtitle": "Heat pump on every trim", "badge": "From 29,990" } } },
+      "media": [{ "url": "https://example.photo/volt400/interior.jpg", "overlay": { "title": "Volt 400", "subtitle": "Heat pump on every trim", "badge": "From 29,990" } }] },
     { "kind": "cta", "text": "Save this one for your shortlist and tell me which launch price I should chase next." }
   ]
 }

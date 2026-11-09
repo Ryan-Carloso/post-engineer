@@ -129,6 +129,35 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         self.assertFalse(claimed)
         state.update_task.assert_not_called()
 
+    def test_legacy_single_object_media_params_are_claimed(self):
+        # A payload persisted before the media-list contract carries one
+        # object per segment; triage normalizes it instead of dropping
+        # the prepaid orphan as unvalidatable.
+        params = {
+            "video_subject": "myth busting",
+            "generation_id": "g1",
+            "segments": [
+                {
+                    "kind": "hook",
+                    "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time.",
+                },
+                {
+                    "kind": "body",
+                    "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold at sunset before heading home through the old town streets.",
+                    "media": {"mediaId": "abc123def456abc123def456abc12345.jpg"},
+                },
+                {"kind": "cta", "text": "Follow for more Porto walks every week."},
+            ],
+        }
+        state = _state_with_rows([_row(params=params)])
+        claimed = self._claimed(state, "t-1", _direct_data())
+        self.assertTrue(claimed)
+        job = direct_redispatch._pending_direct_redispatches[0]
+        self.assertEqual(
+            job.request.segments[1].media[0].mediaId,
+            "abc123def456abc123def456abc12345.jpg",
+        )
+
     def test_cap_reached_not_claimed(self):
         state = _state_with_rows([_row()])
         with patch.object(orphan_requeue.logger, "warning"):

@@ -43,3 +43,27 @@ export function validateProviders(rawProviders: string[]): Checked<Provider[]> {
   if (issues.length > 0) return { ok: false, issues };
   return { ok: true, value: providers as Provider[] };
 }
+
+// A Pinterest publish needs exactly one board for the batch (a pin
+// cannot exist without one, and the schedule carries one board id).
+// The board id is a numeric Pinterest id; anything longer than the
+// column the route writes is a caller bug, not a board.
+export function validatePinterestBoard(
+  providers: string[],
+  boardId: string | undefined,
+): Checked<string | null> {
+  if (!providers.includes('pinterest')) return { ok: true, value: null };
+  if (boardId === undefined || boardId.trim() === '') {
+    return {
+      ok: false,
+      issues: [invalid('Pinterest publishing needs a board: set publishing.pinterestBoardId.', 'publishing.pinterestBoardId')],
+    };
+  }
+  if (boardId.trim().length > 100) {
+    return {
+      ok: false,
+      issues: [invalid('Pinterest board id is too long.', 'publishing.pinterestBoardId')],
+    };
+  }
+  return { ok: true, value: boardId.trim() };
+}

@@ -1,4 +1,4 @@
--- 050: per-account publish outcomes (issue #500).
+-- 051: per-account publish outcomes (issue #500).
 --
 -- One row per (provider, account, video) so a kill mid-publish keeps the
 -- accounts that already went live, and a later tick retries only the rest.

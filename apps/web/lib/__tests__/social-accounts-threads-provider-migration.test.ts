@@ -22,7 +22,7 @@ import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 // This migration re-created the constraint with the five providers of
 // its time. A shipped migration is never edited, so this test pins that
 // historical list; the current list is pinned by the latest migration
-// that re-creates the check (049, facebook-provider-migration.test.ts)
+// that re-creates the check (050, pinterest-provider-migration.test.ts)
 // and by the schema snapshot (migration-check-constraints-sync.test.ts).
 //---------------
 

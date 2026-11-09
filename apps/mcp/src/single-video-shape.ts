@@ -9,6 +9,7 @@ import { GeneratePersonaVideoOptionsShape } from './schedule-shapes.js';
 import { RECIPE_SLUG_PATTERN } from './recipe-session.js';
 import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from './limits.js';
 import {
+  MAX_IMAGES_MODE_MEDIAS,
   MAX_OVERLAY_BADGE_CHARS,
   MAX_OVERLAY_SUBTITLE_CHARS,
   MAX_OVERLAY_TITLE_CHARS,
@@ -26,10 +27,10 @@ export const ScriptSegmentShape = {
   kind: z.enum(['hook', 'body', 'cta']).describe('Segment role: hook first, body in the middle, CTA last. Exactly one hook and one CTA.'),
   text: z.string().min(1, 'Each segment text must be non-empty').describe('Spoken text only: no placeholders, links, markdown, emoji or stage directions.'),
   media: z
-    .object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), overlay: SegmentOverlayShape.optional() })
-    .strict()
+    .array(z.object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), overlay: SegmentOverlayShape.optional() }).strict())
+    .max(MAX_IMAGES_MODE_MEDIAS)
     .optional()
-    .describe('Phase 2: media reference, exactly one of mediaId (from upload_media) or url (a public image URL). Required on every segment with facelessMaterial "images". The photo is shown over the video while its segment is spoken: full frame on faceless videos and over b-roll, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional overlay: an info card (title, subtitle, badge) on the photo, e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
+    .describe('Photos for this segment, as a list. Each item is exactly one of mediaId (from upload_media) or url (a public image URL). With "images": one image per ~3s of speech (about 8 words), e.g. a 60s video needs about 20 images; split them across segments (at most 30). Other materials allow at most 6 images in total. Each photo is shown while its share of the segment is spoken: full frame on faceless videos and over b-roll, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional overlay on an item: an info card (title, subtitle, badge), e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
   terms: z.array(z.string().min(1)).max(10).optional().describe('Stock terms for this segment, chosen by the agent. At most 10.'),
 };
 
@@ -62,7 +63,7 @@ export const GeneratePersonaVideoShape = {
     .optional()
     .describe('Spoken language code — English only for now, e.g. en-US.'),
   providers: z
-    .array(z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook']))
+    .array(z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest']))
     .min(1, 'Provide at least one provider')
     .describe('Where to publish the video.'),
   youtubeAccountIds: z.array(z.string().min(1)).optional().describe('YouTube channel IDs (the channelId field from list_social_accounts).'),
@@ -71,6 +72,8 @@ export const GeneratePersonaVideoShape = {
   blueskyAccountIds: z.array(z.string().min(1)).optional().describe('Bluesky DIDs (the did field from list_social_accounts).'),
   threadsAccountIds: z.array(z.string().min(1)).optional().describe('Threads account IDs (the providerAccountId field from list_social_accounts).'),
   facebookAccountIds: z.array(z.string().min(1)).optional().describe('Facebook Page IDs (the providerAccountId field from list_social_accounts).'),
+  pinterestAccountIds: z.array(z.string().min(1)).optional().describe('Pinterest account IDs (the providerAccountId field from list_social_accounts).'),
+  pinterestBoardId: z.string().min(1).optional().describe('Pinterest only: the board to publish the pin to (the id from list_pinterest_boards). Required when pinterest is selected.'),
   mode: z
     .enum(['scheduled', 'asap'])
     .default('scheduled')
@@ -112,7 +115,7 @@ export const ValidateScriptShape = {
   facelessMaterial: z
     .enum(FACELESS_MATERIALS)
     .optional()
-    .describe('The material the video will use (as in generate_persona_video options). "images" also checks that every segment carries media, up to 12.'),
+    .describe('The material the video will use (as in generate_persona_video options). "images" checks that every segment carries a media list, about one image per ~3s of speech (a 60s video needs about 20 images, at most 30).'),
 };
 
 export const ValidateScriptSchema = z.object(ValidateScriptShape);

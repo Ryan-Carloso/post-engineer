@@ -84,6 +84,13 @@ export class FacebookError extends Error {
   }
 }
 
+export class PinterestError extends Error {
+  constructor(message: string, public statusCode: number) {
+    super(message);
+    this.name = 'PinterestError';
+  }
+}
+
 export class NetworkError extends Error {
   constructor(message: string, public networkDetails?: Record<string, unknown>) {
     super(message);
