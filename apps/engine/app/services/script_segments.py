@@ -389,10 +389,16 @@ def validate_segments(segments: Any, material: str = "broll") -> dict[str, Any]:
                 raise SegmentValidationError(f"segments.{index}.media", rule, fix)
         media_count += counted
     if media_count > media_cap:
+        fix = f"Remove medias until there are at most {media_cap}."
+        if images_mode:
+            fix = (
+                f"Remove medias until there are at most {media_cap}, or merge "
+                f"segments so the per-segment minimums fit under {media_cap}."
+            )
         raise SegmentValidationError(
             "segments",
             f"At most {media_cap} medias are allowed.",
-            f"Remove medias until there are at most {media_cap}.",
+            fix,
         )
     body_texts = [texts[i] for i in body_indices]
     return {

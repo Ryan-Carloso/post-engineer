@@ -189,6 +189,11 @@ export function assignImages(urls, texts) {
   const low = lows.reduce((sum, count) => sum + count, 0);
   const high = Math.min(MAX_IMAGES, highs.reduce((sum, count) => sum + count, 0));
   if (urls.length < low || urls.length > high) {
+    if (low > MAX_IMAGES) {
+      throw new ActorInputError(
+        `images need at least ${low} URLs for this script (about one image per 3 seconds), but at most ${MAX_IMAGES} are allowed: merge body paragraphs so the per-segment minimums fit under ${MAX_IMAGES}.`,
+      );
+    }
     throw new ActorInputError(
       `images need between ${low} and ${high} URLs for this script (about one image per 3 seconds, each image at least about 1 second); got ${urls.length}.`,
     );

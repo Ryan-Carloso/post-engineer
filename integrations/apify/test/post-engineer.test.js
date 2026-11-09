@@ -463,6 +463,18 @@ describe('images material', () => {
     ['an empty image list', imagesInput([]), /needs images/],
     ['too few images for the segments', imagesInput(urls(3)), /between 4 and 4 URLs/],
     ['too many images for the segments', imagesInput(urls(5)), /between 4 and 4 URLs/],
+    [
+      'per-segment minimums above the 30-image cap',
+      {
+        ...baseInput(),
+        hook: `${Array(25).fill('hook').join(' ')}.`,
+        body: Array.from({ length: 6 }, (_, i) => Array(25).fill(`body${i}`).join(' ')).join('\n\n'),
+        cta: Array(20).fill('cta').join(' '),
+        facelessMaterial: 'images',
+        images: urls(31),
+      },
+      /merge body paragraphs/,
+    ],
     ['an http image', imagesInput(['http://e.com/0.jpg', ...urls(3).slice(1)]), /images\[0\] must be an https URL/],
     ['a non-URL image', imagesInput(['https://e.com/0.jpg', 'not a url', ...urls(2)]), /images\[1\] must be an absolute https URL/],
     ['a non-string image', imagesInput([42, ...urls(3)]), /images\[0\] must be an absolute https URL/],

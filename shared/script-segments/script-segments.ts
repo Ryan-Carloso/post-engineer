@@ -411,7 +411,9 @@ export function validateSegments(input: unknown, material?: string): SegmentsRes
     return fail(
       'segments',
       `at most ${mediaCap} medias are allowed per video`,
-      `Remove medias until at most ${mediaCap} remain.`,
+      imagesMode
+        ? `Remove medias until at most ${mediaCap} remain, or merge segments so the per-segment minimums fit under ${mediaCap}.`
+        : `Remove medias until at most ${mediaCap} remain.`,
     );
   }
   return {

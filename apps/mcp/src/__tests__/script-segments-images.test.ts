@@ -101,6 +101,28 @@ describe('validateSegments with the images material', () => {
     if (!result.ok) expect(result.error.rule).toBe('at most 30 medias are allowed per video');
   });
 
+  it('names the merge escape when the per-segment minimums exceed the 30-photo cap', () => {
+    // Hook 25 words + six 25-word body segments + a 20-word CTA = 195 words.
+    // Every segment meets its density minimum (4, 4x6, 3 = 31 photos) yet the
+    // 30-photo cap fires, and removing any photo re-triggers density — so the
+    // cap fix must name merging segments as the way out.
+    const segments = [
+      { kind: 'hook', text: `${Array(25).fill('hook').join(' ')}.`, media: photos(4, 'h') },
+      ...Array.from({ length: 6 }, (_, i) => ({
+        kind: 'body',
+        text: Array(25).fill(`body${i}`).join(' '),
+        media: photos(4, `b${i}-`),
+      })),
+      { kind: 'cta', text: Array(20).fill('cta').join(' '), media: photos(3, 'c') },
+    ];
+    const result = validateSegments(segments, 'images');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.rule).toBe('at most 30 medias are allowed per video');
+      expect(result.error.fix).toContain('merge segments');
+    }
+  });
+
   it('rejects a missing media on the segment that lacks it', () => {
     const segments = withMedia();
     delete segments[1].media;
