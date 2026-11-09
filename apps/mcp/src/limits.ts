@@ -94,7 +94,7 @@ export const METRICS_WINDOWS = ['24h', '7d', '28d'] as const;
  * `apps/web/lib/youtube-analytics.ts` (pinned by `metrics-query-sync.test.ts`).
  */
 export const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{1,64}$/;
-export const METRICS_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'rumble'] as const;
+export const METRICS_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', 'rumble'] as const;
 
 /**
  * What fills a video (`facelessMaterial`), mirroring the web's

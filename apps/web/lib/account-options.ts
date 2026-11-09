@@ -15,6 +15,7 @@ export const PROVIDER_LABELS: Record<SocialProvider, string> = {
   bluesky: 'Bluesky',
   threads: 'Threads',
   facebook: 'Facebook',
+  pinterest: 'Pinterest',
   rumble: 'Rumble',
 };
 
@@ -26,6 +27,7 @@ export function scheduleAccountIds(schedule: {
   blueskyAccountIds?: string[];
   threadsAccountIds?: string[];
   facebookAccountIds?: string[];
+  pinterestAccountIds?: string[];
   rumbleAccountIds?: string[];
 }): string[] {
   return [
@@ -35,6 +37,7 @@ export function scheduleAccountIds(schedule: {
     ...(schedule.blueskyAccountIds ?? []),
     ...(schedule.threadsAccountIds ?? []),
     ...(schedule.facebookAccountIds ?? []),
+    ...(schedule.pinterestAccountIds ?? []),
     ...(schedule.rumbleAccountIds ?? []),
   ];
 }
@@ -55,6 +58,9 @@ export function accountOption(account: PublicAccountItem): AccountOption {
   }
   if (account.provider === 'facebook') {
     return { id: account.providerAccountId, provider: 'facebook', label: account.accountName ?? account.providerAccountId };
+  }
+  if (account.provider === 'pinterest') {
+    return { id: account.providerAccountId, provider: 'pinterest', label: account.accountName ?? account.providerAccountId };
   }
   if (account.provider === 'rumble') {
     return { id: account.providerAccountId, provider: 'rumble', label: account.accountName ?? account.providerAccountId };

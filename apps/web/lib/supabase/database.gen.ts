@@ -365,7 +365,7 @@ export interface Database {
         id: string;
         post_id: string;
         user_id: string;
-        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'rumble';
+        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | 'rumble';
         account_id: string;
         external_id: string;
         metrics_window: '24h' | '7d' | '28d';
@@ -392,7 +392,7 @@ export interface Database {
         id?: string;
         post_id: string;
         user_id: string;
-        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'rumble';
+        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | 'rumble';
         account_id: string;
         external_id: string;
         metrics_window: '24h' | '7d' | '28d';
@@ -419,7 +419,7 @@ export interface Database {
         id?: string;
         post_id?: string;
         user_id?: string;
-        provider?: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'rumble';
+        provider?: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | 'rumble';
         account_id?: string;
         external_id?: string;
         metrics_window?: '24h' | '7d' | '28d';
@@ -623,6 +623,8 @@ export interface Database {
         post_cta_text: string | null;
         threads_account_ids: string[];
         facebook_account_ids: string[];
+        pinterest_account_ids: string[];
+        pinterest_board_id: string | null;
         rumble_account_ids: string[];
         };
         Insert: {
@@ -656,6 +658,8 @@ export interface Database {
         post_cta_text?: string | null;
         threads_account_ids?: string[];
         facebook_account_ids?: string[];
+        pinterest_account_ids?: string[];
+        pinterest_board_id?: string | null;
         rumble_account_ids?: string[];
         };
         Update: {
@@ -689,6 +693,8 @@ export interface Database {
         post_cta_text?: string | null;
         threads_account_ids?: string[];
         facebook_account_ids?: string[];
+        pinterest_account_ids?: string[];
+        pinterest_board_id?: string | null;
         rumble_account_ids?: string[];
         };
         Relationships: [];
@@ -697,7 +703,7 @@ export interface Database {
         Row: {
         id: string;
         user_id: string;
-        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'rumble';
+        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | 'rumble';
         provider_account_id: string;
         account_name: string | null;
         account_metadata: Json;
@@ -710,7 +716,7 @@ export interface Database {
         Insert: {
         id?: string;
         user_id: string;
-        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'rumble';
+        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | 'rumble';
         provider_account_id: string;
         account_name?: string | null;
         account_metadata: Json;
@@ -723,7 +729,7 @@ export interface Database {
         Update: {
         id?: string;
         user_id?: string;
-        provider?: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'rumble';
+        provider?: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | 'rumble';
         provider_account_id?: string;
         account_name?: string | null;
         account_metadata?: Json;

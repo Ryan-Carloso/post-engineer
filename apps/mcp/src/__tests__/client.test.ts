@@ -754,6 +754,23 @@ describe('generate and schedule video client', () => {
     expect(publishing.providers).toEqual(['threads', 'facebook']);
   });
 
+  it('nests the pinterest account array and board id under publishing', async () => {
+    await client.generatePersonaVideo({
+      ...baseInput,
+      providers: ['pinterest'],
+      pinterestAccountIds: ['user-9'],
+      pinterestBoardId: 'b1',
+    });
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect(publishing.accounts).toEqual({
+      youtube: ['chan-1'],
+      bluesky: ['did:plc:abc'],
+      pinterest: ['user-9'],
+    });
+    expect(publishing.providers).toEqual(['pinterest']);
+    expect(publishing.pinterestBoardId).toBe('b1');
+  });
+
   it('nests the rumble channel ids under their own provider', async () => {
     await client.generatePersonaVideo({
       ...baseInput,
@@ -1882,6 +1899,130 @@ describe('publishVideoDirect', () => {
     expect(formData.getAll('facebookAccountIds')).toEqual(['page-1', 'page-2']);
     expect(formData.get('caption')).toBe('hello facebook');
     expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('maps account ids to the pinterest field name and sends title, description and boardId', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'pinterest',
+      videoPath,
+      accountIds: ['user-9'],
+      caption: 'the pin description',
+      title: 'My pin',
+      boardId: 'b1',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('provider')).toBe('pinterest');
+    expect(formData.getAll('pinterestAccountIds')).toEqual(['user-9']);
+    expect(formData.get('caption')).toBe('the pin description');
+    expect(formData.get('title')).toBe('My pin');
+    expect(formData.get('description')).toBe('the pin description');
+    expect(formData.get('boardId')).toBe('b1');
+    expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('uses the description when given for pinterest instead of the caption', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'pinterest',
+      videoPath,
+      accountIds: ['user-9'],
+      caption: 'caption text',
+      description: 'explicit description',
+      boardId: 'b1',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('description')).toBe('explicit description');
+  });
+
+  it('publishes to pinterest with a description and no caption', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'pinterest',
+      videoPath,
+      accountIds: ['user-9'],
+      description: 'description only',
+      boardId: 'b1',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('description')).toBe('description only');
+    expect(formData.get('caption')).toBe('');
+    expect(formData.get('boardId')).toBe('b1');
+  });
+
+  it('falls back to the caption for pinterest when the description is blank', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'pinterest',
+      videoPath,
+      accountIds: ['user-9'],
+      description: '   ',
+      caption: 'caption fallback',
+      boardId: 'b1',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('description')).toBe('caption fallback');
+  });
+
+  it('fails fast for pinterest with neither description nor caption', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await expect(
+      client.publishVideoDirect({
+        provider: 'pinterest',
+        videoPath,
+        accountIds: ['user-9'],
+        boardId: 'b1',
+      }),
+    ).rejects.toThrow('description or caption is required for pinterest.');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast for pinterest without a boardId', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await expect(
+      client.publishVideoDirect({
+        provider: 'pinterest',
+        videoPath,
+        accountIds: ['user-9'],
+        caption: 'hello pinterest',
+      }),
+    ).rejects.toThrow('boardId is required for pinterest.');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('narrows the pin permalink from a direct-publish response', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          provider: 'pinterest',
+          results: [
+            { accountId: 'user-9', success: true, postId: '123456789', permalink: 'https://www.pinterest.com/pin/123456789/' },
+          ],
+          successCount: 1,
+          logId: 'log-1',
+        }),
+    });
+    const videoPath = await writeTempVideo('clip.mp4');
+    const result = await client.publishVideoDirect({
+      provider: 'pinterest',
+      videoPath,
+      accountIds: ['user-9'],
+      caption: 'hello pinterest',
+      boardId: 'b1',
+    });
+    expect(result.results[0]).toEqual({
+      accountId: 'user-9',
+      success: true,
+      postId: '123456789',
+      permalink: 'https://www.pinterest.com/pin/123456789/',
+    });
   });
 
   it('maps account ids to the rumble field name and sends title + description instead of a caption', async () => {

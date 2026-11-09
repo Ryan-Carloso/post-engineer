@@ -2,16 +2,22 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
+import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 
 //---------------
 // supabase/migrations/049_facebook-provider.sql — the schema the Facebook
 // Pages connect and publish paths depend on. Each provider check is
 // dropped and re-created with the full list (the lesson of 037: a live
 // constraint the chain no longer defines can linger in production, so a
-// plain add would leave the old list in force). The lists are pinned to the
-// six providers live when 049 shipped — the migration file is frozen, so it
-// must NOT track SOCIAL_PROVIDERS as new providers land (the current list
-// is pinned by the 052 rumble migration test).
+// plain add would leave the old list in force).
+//
+// This migration re-created the constraint with the six providers of
+// its time. A shipped migration is never edited, so this test pins that
+// historical list; the migration file is frozen, so it must NOT track
+// SOCIAL_PROVIDERS as new providers land. The current list is pinned by
+// the latest migration that re-creates the check (052,
+// rumble-provider-migration.test.ts) and by the schema snapshot
+// (migration-check-constraints-sync.test.ts).
 //---------------
 
 const sql = readFileSync(
@@ -43,7 +49,7 @@ describe('supabase/migrations/049_facebook-provider.sql', () => {
   );
 
   it.each(['post_metrics_provider_check', 'social_accounts_provider_check'])(
-    '%s allows exactly the six providers live when 049 shipped',
+    '%s allows exactly the six providers supported when it shipped',
     (constraint) => {
       expect(checkProviders(constraint).sort()).toEqual([
         'bluesky',
@@ -53,6 +59,13 @@ describe('supabase/migrations/049_facebook-provider.sql', () => {
         'threads',
         'youtube',
       ]);
+    },
+  );
+
+  it.each(['post_metrics_provider_check', 'social_accounts_provider_check'])(
+    '%s lists only providers the app still supports',
+    (constraint) => {
+      for (const provider of checkProviders(constraint)) expect(SOCIAL_PROVIDERS).toContain(provider);
     },
   );
 });

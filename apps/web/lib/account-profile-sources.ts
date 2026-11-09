@@ -14,6 +14,8 @@ import { INSTAGRAM_USERNAME_FALLBACK, YOUTUBE_PLACEHOLDER_ACCOUNT_ID, type Socia
 import { InstagramService } from './instagram';
 import { fetchThreadsProfile } from './threads';
 import { fetchFacebookPageProfile } from './facebook';
+import { fetchPinterestUserProfile } from './pinterest';
+import { getValidPinterestAccessToken } from './pinterest-tokens';
 import { fetchLinkedInMemberProfile } from './linkedin';
 import { fetchBlueskyPublicProfile } from './bluesky-profile';
 import { createGoogleOAuth2Client } from './youtube';
@@ -151,6 +153,24 @@ const facebook: ProfileSource = {
   },
 };
 
+const pinterest: ProfileSource = {
+  pictureKey: 'profilePictureUrl',
+  applies: always,
+  async fetch(supabase, userId, record) {
+    const profile = await fetchPinterestUserProfile(
+      await getValidPinterestAccessToken(supabase, userId, record.providerAccountId),
+    );
+    return {
+      accountName: profile.username,
+      pictureUrl: profile.profileImage,
+      metadata: {
+        name: profile.username,
+        profilePictureUrl: profile.profileImage,
+      },
+    };
+  },
+};
+
 // Rumble has no profile API: the resync never applies, so the stored
 // channel id (written at connect) is never overwritten with a fallback.
 const rumble: ProfileSource = {
@@ -168,5 +188,6 @@ export const PROFILE_SOURCES: Record<SocialProvider, ProfileSource> = {
   bluesky,
   linkedin,
   facebook,
+  pinterest,
   rumble,
 };

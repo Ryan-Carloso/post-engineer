@@ -8,6 +8,7 @@ import { publishingAccountsStrings } from './publishing-accounts';
 import { metricsStrings } from './metrics-i18n';
 import { threadsStrings } from './threads-i18n';
 import { facebookStrings } from './facebook-i18n';
+import { pinterestStrings } from './pinterest-i18n';
 import { rumbleStrings } from './rumble-i18n';
 import { promptsStrings } from './nav-prompts-i18n';
 import { voiceFallbackStrings } from './voice-fallback-i18n';
@@ -32,12 +33,12 @@ import type { Locale } from './types';
 export const ptDictionary = {
   ...basePtDictionary,
   tokens: { ...basePtDictionary.tokens, ...fullLipsyncPriceStrings.pt.tokens },
-  apiKeys: { ...basePtDictionary.apiKeys, ...publishingAccountsStrings.pt.apiKeys },
+  apiKeys: { ...basePtDictionary.apiKeys, ...publishingAccountsStrings.pt.apiKeys, ...pinterestStrings.pt.apiKeys },
   persona: { ...basePtDictionary.persona, ...publishingAccountsStrings.pt.persona, ...voiceFallbackStrings.pt.persona },
   newPost: { ...voiceFallbackStrings.pt.newPost, ...facelessMaterialStrings.pt.newPost },
   nav: { ...basePtDictionary.nav, ...metricsStrings.pt.nav, ...promptsStrings.pt.nav },
   metrics: metricsStrings.pt.metrics,
-  accounts: { ...basePtDictionary.accounts, ...threadsStrings.pt.accounts, ...facebookStrings.pt.accounts, ...rumbleStrings.pt.accounts },
+  accounts: { ...basePtDictionary.accounts, ...threadsStrings.pt.accounts, ...facebookStrings.pt.accounts, ...pinterestStrings.pt.accounts, ...rumbleStrings.pt.accounts },
   posts: { ...basePtDictionary.posts, ...facelessMaterialStrings.pt.posts, ...postsCalendarStrings.pt.posts },
   personas: { ...basePtDictionary.personas, ...facelessMaterialStrings.pt.personas },
   landing: { ...basePtDictionary.landing, ...pricingContactStrings.pt.landing },
@@ -47,12 +48,12 @@ export const ptDictionary = {
 export const enDictionary = {
   ...baseEnDictionary,
   tokens: { ...baseEnDictionary.tokens, ...fullLipsyncPriceStrings.en.tokens },
-  apiKeys: { ...baseEnDictionary.apiKeys, ...publishingAccountsStrings.en.apiKeys },
+  apiKeys: { ...baseEnDictionary.apiKeys, ...publishingAccountsStrings.en.apiKeys, ...pinterestStrings.en.apiKeys },
   persona: { ...baseEnDictionary.persona, ...publishingAccountsStrings.en.persona, ...voiceFallbackStrings.en.persona },
   newPost: { ...voiceFallbackStrings.en.newPost, ...facelessMaterialStrings.en.newPost },
   nav: { ...baseEnDictionary.nav, ...metricsStrings.en.nav, ...promptsStrings.en.nav },
   metrics: metricsStrings.en.metrics,
-  accounts: { ...baseEnDictionary.accounts, ...threadsStrings.en.accounts, ...facebookStrings.en.accounts, ...rumbleStrings.en.accounts },
+  accounts: { ...baseEnDictionary.accounts, ...threadsStrings.en.accounts, ...facebookStrings.en.accounts, ...pinterestStrings.en.accounts, ...rumbleStrings.en.accounts },
   posts: { ...baseEnDictionary.posts, ...facelessMaterialStrings.en.posts, ...postsCalendarStrings.en.posts },
   personas: { ...baseEnDictionary.personas, ...facelessMaterialStrings.en.personas },
   landing: { ...baseEnDictionary.landing, ...pricingContactStrings.en.landing },
@@ -61,7 +62,7 @@ export const enDictionary = {
 
 type PublishingAccountsKeys = typeof publishingAccountsStrings.en;
 type MetricsKeys = typeof metricsStrings.en;
-type ThreadsKeys = typeof threadsStrings.en & typeof facebookStrings.en & typeof rumbleStrings.en;
+type ThreadsKeys = typeof threadsStrings.en & typeof facebookStrings.en & typeof pinterestStrings.en & typeof rumbleStrings.en;
 type PromptsKeys = typeof promptsStrings.en;
 type VoiceFallbackKeys = typeof voiceFallbackStrings.en;
 type FacelessMaterialKeys = typeof facelessMaterialStrings.en;

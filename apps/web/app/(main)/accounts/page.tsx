@@ -18,12 +18,14 @@ import {
   type DisconnectableProvider,
   type DisconnectAccountResult,
 } from '@/lib/api';
+import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
 import { useUploadStore } from '@/lib/store';
 import { useYouTubeOAuth } from '@/lib/oauth/google-handler';
 import { useInstagramOAuth } from '@/lib/oauth/instagram-handler';
 import { useLinkedInOAuth } from '@/lib/oauth/linkedin-handler';
 import { useThreadsOAuth } from '@/lib/oauth/threads-handler';
 import { useFacebookOAuth } from '@/lib/oauth/facebook-handler';
+import { usePinterestOAuth } from '@/lib/oauth/pinterest-handler';
 import { ProviderIcon } from '@/components/provider-icon';
 import { useAccountListErrorTelemetry, reportAccountDisconnectFailed } from '@/lib/account-card-telemetry';
 import { useI18n } from '@/lib/i18n/provider';
@@ -41,6 +43,7 @@ export default function AccountsPage(): React.ReactElement {
         <LinkedinAccountsSection />
         <ThreadsAccountsSection />
         <FacebookAccountsSection />
+        <PinterestAccountsSection />
         <RumbleAccountsSection />
       </main>
     </div>
@@ -456,6 +459,41 @@ function FacebookAccountsSection(): ReactNode {
       connectedLabel={connectedLabel(t, accounts.length)}
       count={accounts.length}
       accounts={accounts.map((account) => <AccountCard key={account.recordId} type="facebook" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
+      isLoading={query.isLoading}
+      loadError={query.error?.message ?? null}
+      connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
+      connectError={oauth.error}
+      disconnectError={flow.disconnectError}
+      connectDisabled={oauth.isLoading}
+      retryLabel={t('accounts.tryAgain')}
+      onConnect={() => void oauth.startOAuth()}
+      onRetry={() => void query.refetch()}
+      dialog={flow.dialog}
+    />
+  );
+}
+
+//---------------
+// Pinterest: one query and one OAuth flow. Connecting once adds the
+// Pinterest account; the boards its pins go to come from
+// GET /api/pinterest/boards at schedule time.
+//---------------
+
+function PinterestAccountsSection(): ReactNode {
+  const { t } = useI18n();
+  const query = usePinterestAccountsQuery();
+  const oauth = usePinterestOAuth();
+  const flow = useDisconnectFlow('pinterest');
+  const accounts = query.data?.accounts ?? [];
+  useAccountListErrorTelemetry('pinterest', query.error?.message ?? null);
+  return (
+    <SocialAccountsSection
+      icon={<BrandIcon className="bg-muted"><ProviderIcon provider="pinterest" /></BrandIcon>}
+      label={t('accounts.pinterestLabel')}
+      description={t('accounts.pinterestDescription')}
+      connectedLabel={connectedLabel(t, accounts.length)}
+      count={accounts.length}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="pinterest" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}

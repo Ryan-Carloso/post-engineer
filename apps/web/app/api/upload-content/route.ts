@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { handleFacebookUpload } from '@/lib/upload/facebook-handler';
+import { handlePinterestUpload } from '@/lib/upload/pinterest-handler';
 import { handleRumbleUpload } from '@/lib/upload/rumble-handler';
 import { logger } from '@/lib/logger';
 import { ValidationError } from '@/lib/errors';
@@ -20,13 +21,14 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 //---------------
 // Unified content upload — POST /api/upload-content
 // FormData:
-//   provider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'rumble'
+//   provider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | 'rumble'
 //   youtube:    video, title, description, tags, privacyStatus, accountIds (repeatable)
 //   instagram:  file, caption, igAccountIds (repeatable)
 //   bluesky:    video, caption, did (repeatable)
 //   linkedin:   video, caption, linkedinAccountIds (repeatable; member id or org URN)
 //   threads:    video, caption, threadsAccountIds (repeatable)
 //   facebook:   video, caption, facebookAccountIds (repeatable; Page ids)
+//   pinterest:  video, title, description, boardId, pinterestAccountIds (repeatable; user ids)
 //   rumble:     video, title, description, rumbleAccountIds (repeatable; channel ids)
 //   engine:     userId (MONEYPRINT_API_SECRET only — internal publish-back)
 // Auth = Supabase session (UI), personal API key (pe_live_...), or
@@ -97,10 +99,14 @@ async function postHandler(request: NextRequest) {
     // Per-user rate limit — uses the per-operation profile for the provider.
     // The multi-account loop counts as ONE request (the per-account ceiling
     // is the destination platform's quota, not the local rate limit).
-    // Only YouTube has a dedicated profile; every other provider shares the
-    // instagram-post profile.
+    // Only YouTube and Pinterest have dedicated profiles; every other
+    // provider shares the instagram-post profile.
     const rateProfile =
-      provider === 'youtube' ? RATE_LIMITS.youtubeUpload : RATE_LIMITS.instagramPost;
+      provider === 'youtube'
+        ? RATE_LIMITS.youtubeUpload
+        : provider === 'pinterest'
+          ? RATE_LIMITS.pinterestUpload
+          : RATE_LIMITS.instagramPost;
     const limited = await applyRateLimit(request, rateProfile, userId);
     if (limited) return limited;
 
@@ -130,6 +136,8 @@ async function postHandler(request: NextRequest) {
               ? await handleThreadsUpload(formData, userId)
               : provider === 'facebook'
                 ? await handleFacebookUpload(formData, userId)
+                : provider === 'pinterest'
+                  ? await handlePinterestUpload(formData, userId)
                 : provider === 'rumble'
                   ? await handleRumbleUpload(formData, userId)
                   : await handleInstagramUpload(formData, userId, logId, startTime);

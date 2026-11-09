@@ -209,7 +209,7 @@ function narrowDirectPublishAccountResult(value: unknown): DirectPublishAccountR
   };
   if (typeof value.videoId === 'string') result.videoId = value.videoId;
   if (typeof value.videoUrl === 'string') result.videoUrl = value.videoUrl;
-  if (typeof value.postId === 'string') result.postId = value.postId;
+  if (typeof value.postId === 'string') result.postId = value.postId; if (typeof value.permalink === 'string') result.permalink = value.permalink;
   if (typeof value.error === 'string') result.error = value.error;
   return result;
 }
@@ -566,7 +566,7 @@ export class PostEngineerClient {
   async disconnectAccount(provider: string, providerAccountId: string): Promise<unknown> {
     // The route 400s INVALID_PROVIDER / INVALID_PARAMS — fail fast with the
     // field named before any fetch goes out.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'rumble'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'rumble'];
     if (!validProviders.includes(provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }
@@ -605,7 +605,7 @@ export class PostEngineerClient {
     // record. Only set entries the caller provided: the server enforces
     // which providers need accounts and rejects unknown ones.
     const accounts: Record<string, string[]> = {};
-    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, rumble: input.rumbleAccountIds };
+    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, pinterest: input.pinterestAccountIds, rumble: input.rumbleAccountIds };
     for (const [provider, ids] of Object.entries(byProvider)) if (ids !== undefined) accounts[provider] = ids;
     // A stray schedule plan in ASAP mode is a caller bug: the server 400s
     // ("publishing.schedule must not be set"), so fail fast with the same
@@ -631,7 +631,7 @@ export class PostEngineerClient {
           title,
           publishing: {
             mode,
-            providers: input.providers,
+            providers: input.providers, ...(input.pinterestBoardId ? { pinterestBoardId: input.pinterestBoardId } : {}),
             accounts,
             // ASAP mode carries no schedule plan: the timezone is kept for
             // display, matching the API contract.
@@ -760,7 +760,7 @@ export class PostEngineerClient {
     // Direct publish of a user-provided video — no generation, no schedule.
     // Mirrors the server-side 400s: provider-specific required fields and
     // per-provider account-id field names fail fast here, before any fetch.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'rumble'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'rumble'];
     if (!validProviders.includes(input.provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }

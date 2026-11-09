@@ -82,7 +82,7 @@ const PublishingSchema = z.object({
   // video the moment generation finishes, with no scheduled time.
   mode: z.enum(['scheduled', 'asap']).optional(),
   providers: z.array(z.string()).max(MAX_REPORTED_ISSUES),
-  accounts: z.record(z.string(), z.array(z.string())).optional(),
+  accounts: z.record(z.string(), z.array(z.string())).optional(), pinterestBoardId: z.string().max(100).optional(),
   // Required in scheduled mode, forbidden in asap mode (a stray plan would
   // be silently ignored, so it is a 400 instead).
   schedule: PublishingScheduleSchema.optional(),
@@ -354,12 +354,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
     segments: options?.segments,
     providers: publishing.providers,
     options: options ?? {},
-    personaId,
+    personaId, pinterestBoardId: publishing.pinterestBoardId,
   });
   if (rawIssues.length > 0 || !checked.ok) {
     return rejectInvalidRequest([...rawIssues, ...(checked.ok ? [] : checked.issues)]);
   }
-  const { title, script: segmentsScript, providers, options: validatedOptions } = checked.value;
+  const { title, script: segmentsScript, providers, options: validatedOptions, pinterestBoardId } = checked.value;
 
   // Publish mode: scheduled (default) distributes slots across the plan's
   // times; asap skips the schedule entirely and lands every slot at the
@@ -473,7 +473,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // Idempotency anchor, resolved once: the experiment check below needs the
   // same schedule id step 7 uses to tell a replay from a duplicate.
   const idem = resolveIdempotency(userId, idempotencyKey, request);
-  const pairFacts = buildPairFacts({ providers, accountIds, prep, title, segments: options?.segments, fullLipsync: validatedOptions.fullLipsync, facelessMaterial: validatedOptions.facelessMaterial, audioUrl: validatedOptions.audioUrl });
+  const pairFacts = buildPairFacts({ providers, accountIds, pinterestBoardId, prep, title, segments: options?.segments, fullLipsync: validatedOptions.fullLipsync, facelessMaterial: validatedOptions.facelessMaterial, audioUrl: validatedOptions.audioUrl });
   if (experiment !== undefined) {
     const link = await checkExperimentLink(supabase, { link: experiment, userId, personaId, replayScheduleId: idem.scheduleId, facts: pairFacts });
     if (!link.ok && link.status === 500) return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
@@ -642,7 +642,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     // NULL for a post created without one (migration 012).
     persona_id: personaId,
     providers,
-    ...scheduleAccountColumns(accountIds),
+    ...scheduleAccountColumns(accountIds), pinterest_board_id: pinterestBoardId,
     days_of_week: null, start_hour: null, end_hour: null,
     posts_per_day: 1,
     times: sortedTimes,

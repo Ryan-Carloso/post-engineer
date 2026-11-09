@@ -20,7 +20,7 @@ import { BLUESKY_CAPTION_MAX_GRAPHEMES, countBlueskyGraphemes } from './bluesky'
 // check constraint, re-created with the full list by the latest provider
 // migration, 052). The scorer buckets are universal;
 // only the publish check varies by network.
-export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky' | 'threads' | 'facebook' | 'rumble';
+export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | 'rumble';
 
 // What the text is: a post body, or a video script (segments joined by
 // newlines, hook first, CTA last). A script is spoken, so hashtags do not
@@ -36,7 +36,7 @@ const SCORE_PROFILES = {
   script: { hook: 25, hookWords: [15, 40], length: 20, words: [60, 200], nearWords: [40, 250], slop: 25 },
 } as const;
 
-export const PUBLISH_NETWORKS: PublishNetwork[] = ['linkedin', 'youtube', 'instagram', 'bluesky', 'threads', 'facebook', 'rumble'];
+export const PUBLISH_NETWORKS: PublishNetwork[] = ['linkedin', 'youtube', 'instagram', 'bluesky', 'threads', 'facebook', 'pinterest', 'rumble'];
 
 // LinkedIn's documented standard-post ceiling (LinkedIn Help, via its
 // public limits pages): a standard feed post holds at most 3000
@@ -47,6 +47,8 @@ export const LINKEDIN_POST_MAX_CHARS = 3000;
 export const THREADS_POST_MAX_CHARS = 500;
 // Facebook's documented feed-post ceiling; lib/facebook.ts and the engine pin the same value.
 export const FACEBOOK_POST_MAX_CHARS = 63206;
+// Pinterest PinCreate description ceiling; lib/pinterest.ts and the engine pin the same value.
+export const PINTEREST_DESCRIPTION_MAX_CHARS = 800;
 // Rumble has no documented description ceiling, so the publish check has
 // no failure branch for it — the 100-character title ceiling lives at the
 // publish boundary instead (lib/rumble.ts, publish_rumble.py).
@@ -58,7 +60,7 @@ export const LINKEDIN_SEE_MORE_FOLD_CHARS = 210;
 // code, so their ceilings below are the platforms' documented limits
 // (YouTube video descriptions, Instagram captions) and are warnings
 // only — never invented blocks. Only caps with in-repo evidence
-// (LinkedIn, Bluesky, Threads, Facebook) fail the check.
+// (LinkedIn, Bluesky, Threads, Facebook, Pinterest) fail the check.
 export const YOUTUBE_DESCRIPTION_MAX_CHARS = 5000;
 export const INSTAGRAM_CAPTION_MAX_CHARS = 2200;
 // The route rejects drafts over this input cap with a 400 instead of
@@ -359,6 +361,9 @@ export function checkPublish(draft: string, network: PublishNetwork): PublishChe
     failures.push(
       `Draft is ${chars} characters, over the Facebook ${FACEBOOK_POST_MAX_CHARS}-character post limit.`,
     );
+  }
+  if (network === 'pinterest' && chars > PINTEREST_DESCRIPTION_MAX_CHARS) {
+    failures.push(`Draft is ${chars} characters, over the Pinterest ${PINTEREST_DESCRIPTION_MAX_CHARS}-character description limit.`);
   }
   if (network === 'youtube' && chars > YOUTUBE_DESCRIPTION_MAX_CHARS) {
     warnings.push(

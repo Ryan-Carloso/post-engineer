@@ -165,6 +165,7 @@ describe('buildAccountCardDisplayReport', () => {
     const url = `https://scontent.cdninstagram.com/pic.jpg?oe=${future.toString(16)}`;
     expect(pictureUrlExpired(url)).toBe(false);
     expect(thumbnailHostAllowed('scontent.cdninstagram.com')).toBe(true);
+    expect(thumbnailHostAllowed('i.pinimg.com')).toBe(true);
     expect(pictureUrlExpired('https://yt3.ggpht.com/a.jpg')).toBe(false);
     expect(pictureUrlExpired('not a url')).toBe(false);
   });

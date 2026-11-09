@@ -23,7 +23,7 @@ describe('Accounts — UI', () => {
     cy.wait('@getAccounts');
 
     cy.contains('h1', 'Contas').should('be.visible');
-    cy.get('button[aria-label="Conectar uma conta"]').should('have.length', 7);
+    cy.get('button[aria-label="Conectar uma conta"]').should('have.length', 8);
   });
 
   it('renderiza lista de contas conectadas com botão + Conectar outra', () => {

@@ -37,6 +37,7 @@ describe('account-columns', () => {
       rumble_account_ids: [],
       threads_account_ids: [],
       facebook_account_ids: ['111', '222'],
+      pinterest_account_ids: [],
     });
   });
 

@@ -8,6 +8,7 @@ const mockQueries = vi.hoisted(() => ({
   bluesky: { data: undefined as undefined | { accounts: unknown[] } },
   threads: { data: undefined as undefined | { accounts: unknown[] } },
   facebook: { data: undefined as undefined | { accounts: unknown[] } },
+  pinterest: { data: undefined as undefined | { accounts: unknown[] } },
   rumble: { data: undefined as undefined | { accounts: unknown[] } },
 }));
 
@@ -19,6 +20,10 @@ vi.mock('@/lib/api', () => ({
   useThreadsAccountsQuery: () => mockQueries.threads,
   useFacebookAccountsQuery: () => mockQueries.facebook,
   useRumbleAccountsQuery: () => mockQueries.rumble,
+}));
+
+vi.mock('@/lib/pinterest-accounts', () => ({
+  usePinterestAccountsQuery: () => mockQueries.pinterest,
 }));
 
 import { usePostAccountCards } from '../account-cards';
@@ -49,6 +54,7 @@ describe('usePostAccountCards', () => {
         ],
       },
     };
+    mockQueries.pinterest = { data: { accounts: [{ providerAccountId: 'pin-1', accountName: 'Maker', profilePictureUrl: 'https://pin/p.png' }] } };
     mockQueries.rumble = {
       data: {
         accounts: [
@@ -68,6 +74,7 @@ describe('usePostAccountCards', () => {
       { id: 'th-1', type: 'threads', name: 'thr', thumbnail: 'https://th/p.png' },
       { id: 'fb-1', type: 'facebook', name: 'My Page', thumbnail: 'https://fb/p.png' },
       { id: 'fb-2', type: 'facebook', name: 'fb-2', thumbnail: undefined },
+      { id: 'pin-1', type: 'pinterest', name: 'Maker', thumbnail: 'https://pin/p.png' },
       { id: 'chan-1', type: 'rumble', name: 'My Channel' },
       { id: 'chan-2', type: 'rumble', name: 'chan-2' },
     ]);

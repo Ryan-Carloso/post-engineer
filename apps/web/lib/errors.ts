@@ -76,6 +76,13 @@ export class FacebookError extends Error {
   }
 }
 
+export class PinterestError extends Error {
+  constructor(message: string, public statusCode: number) {
+    super(message);
+    this.name = 'PinterestError';
+  }
+}
+
 export class RumbleError extends Error {
   readonly code: 'invalid_token' | 'upload_failed' | 'unknown';
 

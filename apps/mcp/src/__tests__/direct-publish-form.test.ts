@@ -15,7 +15,7 @@ describe('requireDirectPublishFields', () => {
         tags: ['tech'],
         privacyStatus: 'public',
       }),
-    ).toEqual({ title: 'T', description: 'D', tags: ['tech'], privacyStatus: 'public', caption: '' });
+    ).toEqual({ title: 'T', description: 'D', tags: ['tech'], privacyStatus: 'public', caption: '', boardId: '' });
     expect(
       requireDirectPublishFields({
         provider: 'rumble',
@@ -24,7 +24,7 @@ describe('requireDirectPublishFields', () => {
         title: 'T',
         description: 'D',
       }),
-    ).toEqual({ title: 'T', description: 'D', tags: [], privacyStatus: '', caption: '' });
+    ).toEqual({ title: 'T', description: 'D', tags: [], privacyStatus: '', caption: '', boardId: '' });
     expect(() =>
       requireDirectPublishFields({ provider: 'youtube', videoPath: 'clip.mp4', accountIds: ['c'], title: 'T', description: 'D' }),
     ).toThrow(/tags is required for youtube/);
@@ -46,7 +46,26 @@ describe('requireDirectPublishFields', () => {
     ).toThrow(/caption is required for facebook/);
     expect(
       requireDirectPublishFields({ provider: 'facebook', videoPath: 'clip.mp4', accountIds: ['p'], caption: ' hi ' }),
-    ).toEqual({ title: '', description: '', tags: [], privacyStatus: '', caption: 'hi' });
+    ).toEqual({ title: '', description: '', tags: [], privacyStatus: '', caption: 'hi', boardId: '' });
+  });
+
+  it('requires a boardId for pinterest and falls back from description to caption', () => {
+    const base = { provider: 'pinterest' as const, videoPath: 'clip.mp4', accountIds: ['user-9'] };
+    expect(() => requireDirectPublishFields({ ...base, caption: 'c' })).toThrow(/boardId is required for pinterest/);
+    expect(() => requireDirectPublishFields({ ...base, boardId: 'b1' })).toThrow(
+      /description or caption is required for pinterest/,
+    );
+    expect(requireDirectPublishFields({ ...base, boardId: 'b1', caption: 'pin text' })).toEqual({
+      title: '',
+      description: 'pin text',
+      tags: [],
+      privacyStatus: '',
+      caption: 'pin text',
+      boardId: 'b1',
+    });
+    expect(
+      requireDirectPublishFields({ ...base, boardId: 'b1', title: 'T', description: 'explicit', caption: 'c' }),
+    ).toEqual({ title: 'T', description: 'explicit', tags: [], privacyStatus: '', caption: 'c', boardId: 'b1' });
   });
 });
 
@@ -70,6 +89,28 @@ describe('buildDirectPublishForm', () => {
     expect(form.get('title')).toBe('T');
     expect(form.get('description')).toBe('D');
     expect(form.get('caption')).toBeNull();
+    expect(form.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('sends title, description and boardId to pinterestAccountIds for pinterest', () => {
+    const fields = requireDirectPublishFields({
+      provider: 'pinterest',
+      videoPath: 'clip.mp4',
+      accountIds: ['user-9'],
+      caption: 'pin text',
+      boardId: 'b1',
+    });
+    const form = buildDirectPublishForm(
+      { provider: 'pinterest', videoPath: 'clip.mp4', accountIds: ['user-9'], caption: 'pin text', boardId: 'b1' },
+      fields,
+      video,
+      'clip.mp4',
+    );
+    expect(form.get('provider')).toBe('pinterest');
+    expect(form.getAll('pinterestAccountIds')).toEqual(['user-9']);
+    expect(form.get('caption')).toBe('pin text');
+    expect(form.get('description')).toBe('pin text');
+    expect(form.get('boardId')).toBe('b1');
     expect(form.get('video')).toBeInstanceOf(Blob);
   });
 

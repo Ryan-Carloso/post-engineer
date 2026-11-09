@@ -81,6 +81,7 @@ import {
 } from './video-task-tools.js';
 import { GeneratePersonaVideoShape, ValidateScriptShape, ValidateScriptDescription, ScoreDraftShape, ScoreDraftDescription, handleGeneratePersonaVideo, handleValidateScript, handleScoreDraft } from './tools-single-video.js';
 import { CheckMediaDescription, CheckMediaShape, UploadMediaDescription, UploadMediaShape, handleCheckMedia, handleUploadMedia } from './tools-user-media.js';
+import { ListPinterestBoardsDescription, ListPinterestBoardsShape, handleListPinterestBoards } from './tools-pinterest.js';
 import { GeneratePersonaVideoBatchDescription, GeneratePersonaVideoBatchShape, handleGeneratePersonaVideoBatch } from './tools-batch.js';
 import { AddExperimentPairShape, CreateExperimentShape, GetExperimentResultsShape, ListExperimentsShape, handleAddExperimentPair, handleCreateExperiment, handleGetExperimentResults, handleListExperiments } from './tools-experiments.js';
 import { withTracking } from './analytics.js';
@@ -164,11 +165,20 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'list_social_accounts',
-    'List connected social accounts (YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky, Rumble) with the account IDs needed for posting.',
+    'List connected social accounts (YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky, Pinterest, Rumble) with the account IDs needed for posting.',
     ListSocialAccountsShape,
     withTracking('list_social_accounts', withRecipeNudge(recipeSession, 'list_social_accounts', async () => {
       return handleListSocialAccounts(apiClient);
     }))
+  );
+
+  server.tool(
+    'list_pinterest_boards',
+    ListPinterestBoardsDescription,
+    ListPinterestBoardsShape,
+    withTracking('list_pinterest_boards', async (args) => {
+      return handleListPinterestBoards(apiClient, args);
+    })
   );
 
   server.tool(
@@ -191,7 +201,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'connect_account',
-    'Connect a social account. For youtube/instagram/linkedin/threads/facebook: returns an authorization URL — the user must open it in a browser where they are signed in to Post Engineer with the same account, and authorize; the account then connects automatically (verify with list_social_accounts). A browser that is not signed in, or signed in as another user, is rejected. For bluesky: connects directly with handle + appPassword (app password, not the main account password). For rumble: connects directly with channelId + accessToken (40-character Simple Upload API token, issued by emailing bd@rumble.com — no OAuth).',
+    'Connect a social account. For youtube/instagram/linkedin/threads/facebook/pinterest: returns an authorization URL — the user must open it in a browser where they are signed in to Post Engineer with the same account, and authorize; the account then connects automatically (verify with list_social_accounts). A browser that is not signed in, or signed in as another user, is rejected. For bluesky: connects directly with handle + appPassword (app password, not the main account password). For rumble: connects directly with channelId + accessToken (40-character Simple Upload API token, issued by emailing bd@rumble.com — no OAuth).',
     ConnectAccountShape,
     withTracking('connect_account', async (args) => {
       return handleConnectAccount(apiClient, args);

@@ -18,7 +18,7 @@ import { trackApiEvent } from '@/lib/analytics';
 import { coded } from './prepare-persona';
 import { resolveTitle } from './request-title';
 import { validateSegmentsRequest } from './segments-validation';
-import { validateProviders, type Provider } from './providers-validation';
+import { validateProviders, validatePinterestBoard, type Provider } from './providers-validation';
 import { validateOptions, type OptionsInput, type ValidatedOptions } from './options-validation';
 import { MAX_REPORTED_ISSUES, type Checked, type ValidationIssue } from './validation-issues';
 
@@ -41,6 +41,8 @@ export interface SemanticInput {
   options: OptionsInput;
   /** Null for a post without a persona (see route.ts). */
   personaId: string | null;
+  /** The board Pinterest pins go to (required when pinterest is selected). */
+  pinterestBoardId?: string;
 }
 
 export interface CheckedRequest {
@@ -48,6 +50,7 @@ export interface CheckedRequest {
   script: string;
   providers: Provider[];
   options: ValidatedOptions;
+  pinterestBoardId: string | null;
 }
 
 /** A post without a persona has no face and no voice: both are required. */
@@ -78,15 +81,17 @@ export function checkSemantics(input: SemanticInput): Checked<CheckedRequest> {
   if (!segments.ok) issues.push(...segments.issues);
   const providers = validateProviders(input.providers);
   if (!providers.ok) issues.push(...providers.issues);
+  const pinterestBoardId = validatePinterestBoard(providers.ok ? providers.value : input.providers, input.pinterestBoardId);
+  if (!pinterestBoardId.ok) issues.push(...pinterestBoardId.issues);
   const options = validateOptions(input.options);
   if (!options.ok) issues.push(...options.issues);
   if (options.ok && input.personaId === null) issues.push(...personaLessIssues(options.value));
-  if (issues.length > 0 || !title.ok || !segments.ok || !providers.ok || !options.ok) {
+  if (issues.length > 0 || !title.ok || !segments.ok || !providers.ok || !pinterestBoardId.ok || !options.ok) {
     return { ok: false, issues };
   }
   return {
     ok: true,
-    value: { title: title.value, script: segments.value, providers: providers.value, options: options.value },
+    value: { title: title.value, script: segments.value, providers: providers.value, options: options.value, pinterestBoardId: pinterestBoardId.value },
   };
 }
 

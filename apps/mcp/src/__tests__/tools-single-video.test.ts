@@ -82,8 +82,44 @@ describe('generate_persona_video tool', () => {
     expect(textOf(response)).toContain('Porto trip');
   });
 
-  it('lets options.language win over the top-level language', async () => {
+  it('passes the pinterest account ids and board id through to the client', async () => {
     const client = mockClient();
+    const response = await handleGeneratePersonaVideo(client, {
+      personaId: 'persona-1',
+      segments,
+      title: 'Porto trip',
+      language: 'en-US',
+      providers: ['pinterest'],
+      pinterestAccountIds: ['user-9'],
+      pinterestBoardId: 'b1',
+      mode: 'scheduled',
+      startAt: '2026-10-30T18:00:00',
+      times: ['18:00'],
+      timezone: 'Europe/Lisbon',
+    });
+    expect(response.isError).toBeUndefined();
+    const input = vi.mocked(client.generatePersonaVideo).mock.calls[0][0];
+    expect(input.pinterestAccountIds).toEqual(['user-9']);
+    expect(input.pinterestBoardId).toBe('b1');
+  });
+
+  it('fails fast for pinterest without a board id without calling the client (no token debit)', async () => {
+    const client = mockClient();
+    const response = await handleGeneratePersonaVideo(client, {
+      personaId: 'persona-1',
+      segments,
+      title: 'Porto trip',
+      providers: ['pinterest'],
+      pinterestAccountIds: ['user-9'],
+      mode: 'asap',
+      timezone: 'Europe/Lisbon',
+    });
+    expect(response.isError).toBe(true);
+    expect(vi.mocked(client.generatePersonaVideo)).not.toHaveBeenCalled();
+    expect(textOf(response)).toContain('pinterestBoardId is required');
+  });
+
+  it('lets options.language win over the top-level language', async () => {    const client = mockClient();
     const response = await handleGeneratePersonaVideo(client, {
       personaId: 'persona-1',
       segments,

@@ -3,8 +3,9 @@
 //
 // Extracted from client.ts so client.ts stays under the file-size ratchet.
 // Rumble takes title + description (like YouTube, minus tags and
-// privacyStatus); Instagram takes a file + caption; the rest take a video
-// + caption.
+// privacyStatus); Pinterest takes a boardId plus a description that falls
+// back to the caption; Instagram takes a file + caption; the rest take a
+// video + caption.
 import type { PublishVideoDirectInput } from './client-types.js';
 
 export interface DirectPublishFields {
@@ -13,6 +14,7 @@ export interface DirectPublishFields {
   tags: string[];
   privacyStatus: string;
   caption: string;
+  boardId: string;
 }
 
 function requireTitleAndDescription(input: PublishVideoDirectInput): { title: string; description: string } {
@@ -33,6 +35,7 @@ export function requireDirectPublishFields(input: PublishVideoDirectInput): Dire
   let tags: string[] = [];
   let privacyStatus = '';
   let caption = '';
+  let boardId = '';
   if (input.provider === 'youtube' || input.provider === 'rumble') {
     ({ title, description } = requireTitleAndDescription(input));
     if (input.provider === 'youtube') {
@@ -46,13 +49,25 @@ export function requireDirectPublishFields(input: PublishVideoDirectInput): Dire
       tags = input.tags;
       privacyStatus = input.privacyStatus;
     }
+  } else if (input.provider === 'pinterest') {
+    if (input.boardId === undefined || input.boardId.trim().length === 0) {
+      throw new Error('boardId is required for pinterest.');
+    }
+    boardId = input.boardId.trim();
+    const explicitDescription = input.description?.trim() ?? '';
+    description = explicitDescription !== '' ? explicitDescription : (input.caption?.trim() ?? '');
+    if (description.length === 0) {
+      throw new Error('description or caption is required for pinterest.');
+    }
+    caption = input.caption?.trim() ?? '';
+    title = input.title?.trim() ?? '';
   } else {
     if (input.caption === undefined || input.caption.trim().length === 0) {
       throw new Error(`caption is required for ${input.provider}.`);
     }
     caption = input.caption.trim();
   }
-  return { title, description, tags, privacyStatus, caption };
+  return { title, description, tags, privacyStatus, caption, boardId };
 }
 
 export function buildDirectPublishForm(
@@ -79,7 +94,7 @@ export function buildDirectPublishForm(
       formData.append('igAccountIds', accountId);
     }
   } else {
-    const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds', facebook: 'facebookAccountIds', rumble: 'rumbleAccountIds' }[input.provider];
+    const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds', facebook: 'facebookAccountIds', pinterest: 'pinterestAccountIds', rumble: 'rumbleAccountIds' }[input.provider];
     formData.append('video', videoBlob, filename);
     // Rumble takes title + description, not a caption.
     if (input.provider === 'rumble') {
@@ -87,6 +102,12 @@ export function buildDirectPublishForm(
       formData.append('description', fields.description);
     } else {
       formData.append('caption', fields.caption);
+      // Pinterest also carries the pin title, description and board.
+      if (input.provider === 'pinterest') {
+        formData.append('title', fields.title);
+        formData.append('description', fields.description);
+        formData.append('boardId', fields.boardId);
+      }
     }
     for (const accountId of input.accountIds) {
       formData.append(accountField, accountId);

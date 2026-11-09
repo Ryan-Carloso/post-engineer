@@ -70,6 +70,8 @@ export interface SlotPostDetail {
     blueskyAccountIds: string[];
     threadsAccountIds: string[];
     facebookAccountIds: string[];
+    pinterestAccountIds: string[];
+    pinterestBoardId: string | null;
     rumbleAccountIds: string[];
     timezone: string;
     publishMode: 'scheduled' | 'asap';
@@ -204,7 +206,7 @@ export async function getSlotPost(
 
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
-    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, rumble_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode')
+    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, rumble_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode')
     .eq('id', row.schedule_id)
     .eq('user_id', userId)
     .maybeSingle();
@@ -219,6 +221,8 @@ export async function getSlotPost(
     bluesky_account_ids: string[] | null;
     threads_account_ids: string[] | null;
     facebook_account_ids: string[] | null;
+    pinterest_account_ids: string[] | null;
+    pinterest_board_id: string | null;
     rumble_account_ids: string[] | null;
     timezone: string;
     post_language: string | null;
@@ -351,6 +355,8 @@ export async function getSlotPost(
   const blueskyAccountIdsOut = scheduleRow.bluesky_account_ids ?? [];
   const threadsAccountIdsOut = scheduleRow.threads_account_ids ?? [];
   const facebookAccountIdsOut = scheduleRow.facebook_account_ids ?? [];
+  const pinterestAccountIdsOut = scheduleRow.pinterest_account_ids ?? [];
+  const pinterestBoardIdOut = scheduleRow.pinterest_board_id ?? null;
   const rumbleAccountIdsOut = scheduleRow.rumble_account_ids ?? [];
   const timezoneOut = scheduleRow.timezone;
   const publishModeOut = scheduleRow.publish_mode === 'asap' ? 'asap' : 'scheduled';
@@ -386,6 +392,8 @@ export async function getSlotPost(
       blueskyAccountIds: blueskyAccountIdsOut,
       threadsAccountIds: threadsAccountIdsOut,
       facebookAccountIds: facebookAccountIdsOut,
+      pinterestAccountIds: pinterestAccountIdsOut,
+      pinterestBoardId: pinterestBoardIdOut,
       rumbleAccountIds: rumbleAccountIdsOut,
       timezone: timezoneOut,
       publishMode: publishModeOut,

@@ -105,6 +105,7 @@ POST   /api/persona/voices/{voiceId}/preview                  preview house voic
 GET    /api/persona/publishing-accounts                       get persona publishing accounts
 PUT    /api/persona/publishing-accounts                       set persona publishing accounts
 GET    /api/account                                           list social accounts
+GET    /api/pinterest/boards                                 list pinterest boards
 DELETE /api/account                                           disconnect account
 POST   /api/account/connect-url                               connect account (OAuth URL)
 POST   /api/bluesky-connect                                   connect account (Bluesky)

@@ -44,6 +44,8 @@ const ANONYMOUS_ROUTES = new Set([
   'threads-auth/start/route.ts',
   'facebook-auth/callback/route.ts',
   'facebook-auth/start/route.ts',
+  'pinterest-auth/callback/route.ts',
+  'pinterest-auth/start/route.ts',
   // Public version endpoint: no auth required.
   'version/route.ts',
 ]);

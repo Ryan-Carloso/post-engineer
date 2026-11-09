@@ -18,8 +18,8 @@ describe('social providers — single source', () => {
     expect(socialProvidersFromTypes).toBe(socialProvidersFromRegistry);
   });
 
-  it('covers youtube, instagram, bluesky, linkedin, threads, facebook and rumble', () => {
-    expect([...socialProvidersFromTypes]).toEqual(['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'rumble']);
+  it('covers youtube, instagram, bluesky, linkedin, threads, facebook, pinterest and rumble', () => {
+    expect([...socialProvidersFromTypes]).toEqual(['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', 'rumble']);
   });
 
   it('the SocialProvider types are interchangeable', () => {
