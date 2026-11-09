@@ -87,7 +87,7 @@ def validate_publish_plan(schedule: dict[str, Any], title: str) -> None:
             facebook = metadata
         elif isinstance(metadata, upload_publisher.PinterestMetadata):
             # Pinterest is validated here, not in validate_publish_metadata:
-            # upload_publisher.py sits 3 lines under the file-size cap, so
+            # upload_publisher.py is at the 500-line file-size cap, so
             # its validator takes no new provider parameter. The pre-flight
             # is the only production caller, so this is the whole gate.
             validate_pinterest_metadata(metadata)
