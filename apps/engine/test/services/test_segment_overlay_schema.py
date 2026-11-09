@@ -23,10 +23,10 @@ def test_segment_media_carries_an_overlay_through_a_request_dump():
     segment = ScriptSegment(
         kind="body",
         text="Where the river meets the sea.",
-        media={"url": "https://example.com/x.jpg", "overlay": {"title": "Sushi", "badge": "EUR 35"}},
+        media=[{"url": "https://example.com/x.jpg", "overlay": {"title": "Sushi", "badge": "EUR 35"}}],
     )
     dumped = segment.model_dump(exclude_none=True)
-    assert dumped["media"]["overlay"] == {"title": "Sushi", "badge": "EUR 35"}
+    assert dumped["media"][0]["overlay"] == {"title": "Sushi", "badge": "EUR 35"}
 
 
 @pytest.mark.parametrize(
@@ -57,7 +57,11 @@ def _request_segments(with_media):
     cta = "Save this video before your next trip to Porto."
     segments = [{"kind": "hook", "text": hook}, {"kind": "body", "text": body}, {"kind": "cta", "text": cta}]
     if with_media:
-        segments = [{**segment, "media": {"url": f"https://example.com/{i}.jpg"}} for i, segment in enumerate(segments)]
+        counts = (3, 6, 2)
+        segments = [
+            {**segment, "media": [{"url": f"https://example.com/{i}-{n}.jpg"} for n in range(counts[i])]}
+            for i, segment in enumerate(segments)
+        ]
     return segments
 
 

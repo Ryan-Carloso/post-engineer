@@ -9,6 +9,7 @@ import { GeneratePersonaVideoOptionsShape } from './schedule-shapes.js';
 import { RECIPE_SLUG_PATTERN } from './recipe-session.js';
 import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from './limits.js';
 import {
+  MAX_IMAGES_MODE_MEDIAS,
   MAX_OVERLAY_BADGE_CHARS,
   MAX_OVERLAY_SUBTITLE_CHARS,
   MAX_OVERLAY_TITLE_CHARS,
@@ -26,10 +27,10 @@ export const ScriptSegmentShape = {
   kind: z.enum(['hook', 'body', 'cta']).describe('Segment role: hook first, body in the middle, CTA last. Exactly one hook and one CTA.'),
   text: z.string().min(1, 'Each segment text must be non-empty').describe('Spoken text only: no placeholders, links, markdown, emoji or stage directions.'),
   media: z
-    .object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), overlay: SegmentOverlayShape.optional() })
-    .strict()
+    .array(z.object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), overlay: SegmentOverlayShape.optional() }).strict())
+    .max(MAX_IMAGES_MODE_MEDIAS)
     .optional()
-    .describe('Phase 2: media reference, exactly one of mediaId (from upload_media) or url (a public image URL). Required on every segment with facelessMaterial "images". The photo is shown over the video while its segment is spoken: full frame on faceless videos and over b-roll, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional overlay: an info card (title, subtitle, badge) on the photo, e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
+    .describe('Photos for this segment, as a list. Each item is exactly one of mediaId (from upload_media) or url (a public image URL). With "images": one image per ~3s of speech (about 8 words), e.g. a 60s video needs about 20 images; split them across segments (at most 30). Other materials allow at most 6 images in total. Each photo is shown while its share of the segment is spoken: full frame on faceless videos and over b-roll, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional overlay on an item: an info card (title, subtitle, badge), e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
   terms: z.array(z.string().min(1)).max(10).optional().describe('Stock terms for this segment, chosen by the agent. At most 10.'),
 };
 
@@ -113,7 +114,7 @@ export const ValidateScriptShape = {
   facelessMaterial: z
     .enum(FACELESS_MATERIALS)
     .optional()
-    .describe('The material the video will use (as in generate_persona_video options). "images" also checks that every segment carries media, up to 12.'),
+    .describe('The material the video will use (as in generate_persona_video options). "images" checks that every segment carries a media list, about one image per ~3s of speech (a 60s video needs about 20 images, at most 30).'),
 };
 
 export const ValidateScriptSchema = z.object(ValidateScriptShape);

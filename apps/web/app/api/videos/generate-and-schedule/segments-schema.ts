@@ -7,7 +7,7 @@
 // grow (file-size ratchet).
 import { z } from 'zod';
 
-import { MAX_SEGMENTS } from '@/lib/generation/script-segments';
+import { MAX_IMAGES_MODE_MEDIAS, MAX_SEGMENTS } from '@/lib/generation/script-segments';
 
 export const segmentOverlaySchema = z
   .object({
@@ -23,12 +23,16 @@ export const segmentsRequestSchema = z.array(
       kind: z.enum(['hook', 'body', 'cta']),
       text: z.string(),
       media: z
-        .object({
-          mediaId: z.string().optional(),
-          url: z.string().optional(),
-          overlay: segmentOverlaySchema.optional(),
-        })
-        .strict()
+        .array(
+          z
+            .object({
+              mediaId: z.string().optional(),
+              url: z.string().optional(),
+              overlay: segmentOverlaySchema.optional(),
+            })
+            .strict(),
+        )
+        .max(MAX_IMAGES_MODE_MEDIAS)
         .optional(),
       terms: z.array(z.string()).optional(),
     })

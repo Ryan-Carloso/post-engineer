@@ -16,7 +16,7 @@ const cta = 'Save this video before your next trip to Porto.';
 function withOverlay(overlay: unknown) {
   return [
     { kind: 'hook', text: hook },
-    { kind: 'body', text: body, media: { url: 'https://example.com/x.jpg', overlay } },
+    { kind: 'body', text: body, media: [{ url: 'https://example.com/x.jpg', overlay }] },
     { kind: 'cta', text: cta },
   ];
 }
@@ -47,7 +47,7 @@ describe('segment media overlay', () => {
   ])('rejects %s on the overlay field', (_name, overlay) => {
     const result = validateSegments(withOverlay(overlay));
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.field).toBe('segments.1.media.overlay');
+    if (!result.ok) expect(result.error.field).toBe('segments.1.media.0.overlay');
   });
 
   it.each([
@@ -59,7 +59,7 @@ describe('segment media overlay', () => {
     const over = validateSegments(withOverlay({ title: 'Sushi', [key]: 'x'.repeat(limit + 1) }));
     expect(over.ok).toBe(false);
     if (!over.ok) {
-      expect(over.error.field).toBe('segments.1.media.overlay');
+      expect(over.error.field).toBe('segments.1.media.0.overlay');
       expect(over.error.rule).toContain(String(limit));
     }
   });
@@ -67,18 +67,18 @@ describe('segment media overlay', () => {
   it('needs a photo to sit on', () => {
     const result = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: { overlay: { title: 'Sushi' } } },
+      { kind: 'body', text: body, media: [{ overlay: { title: 'Sushi' } }] },
       { kind: 'cta', text: cta },
     ]);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.field).toBe('segments.1.media');
+    if (!result.ok) expect(result.error.field).toBe('segments.1.media.0');
   });
 });
 
 describe('overlay in the tool schema', () => {
   const segmentsWith = (overlay: unknown) => [
     { kind: 'hook', text: hook },
-    { kind: 'body', text: body, media: { url: 'https://example.com/x.jpg', overlay } },
+    { kind: 'body', text: body, media: [{ url: 'https://example.com/x.jpg', overlay }] },
     { kind: 'cta', text: cta },
   ];
   const base = { title: 'Porto food', providers: ['youtube'] };
@@ -88,7 +88,7 @@ describe('overlay in the tool schema', () => {
       ...base,
       segments: segmentsWith({ title: 'Sushi', subtitle: 'Rua das Flores', badge: '35 EUR' }),
     });
-    expect(parsed.segments[1].media?.overlay).toEqual({ title: 'Sushi', subtitle: 'Rua das Flores', badge: '35 EUR' });
+    expect(parsed.segments[1].media?.[0]?.overlay).toEqual({ title: 'Sushi', subtitle: 'Rua das Flores', badge: '35 EUR' });
   });
 
   it.each([

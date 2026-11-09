@@ -46,6 +46,7 @@ export const SHARED_PROMPT_BASE: string[] = [
   'Spoken English only, language "en": no links, hashtags, markdown, emoji, or stage directions in any segment.',
   'Propose a title; it is mandatory with every generate_persona_video call.',
   'Call validate_script with the segments and fix any named error until it passes. Validate before any token is spent; never generate from an unvalidated script.',
+  'Material "images": each segment\'s media is a list of photos, about one image per 3 seconds of speech (about 8 words). A 60 second video needs about 20 images, split across the segments, at most 30. Other materials still allow at most 6 images in total, and media is still a list.',
   'Then call score_draft with kind "script", the segments joined by newlines, the persona, and the network; it spends no tokens. Show me the score and every reason, fix what it names, re-validate, and score again. The score is advice checked by rules, not proof the script is good: never bend facts to gain points, and ask me to decide if it stays low.',
   '',
   'Generation is always tied to publishing:',

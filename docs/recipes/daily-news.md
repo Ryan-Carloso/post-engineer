@@ -63,7 +63,7 @@ mechanically, and only then generates.
 | CTA words | 5-20 |
 | Hook words | 15-40 before TTS; aim for 20-30 words, the target for the 8-12 second spoken hook window |
 | Hook ending | Terminal punctuation |
-| Medias per video | At most 6; a segment's `media` is a strict object with exactly one of `mediaId` (from `upload_media`) or `url` (a public image URL) |
+| Medias per video | At most 6; a segment's `media` is an array of objects, each with exactly one of `mediaId` (from `upload_media`) or `url` (a public image URL) |
 | Segment media image | JPG/JPEG, PNG, or WebP; at most 8MB (the engine photo limit) |
 | Uploaded media lifetime | Temporary engine asset, 1 hour TTL: upload shortly before generating |
 
@@ -119,7 +119,7 @@ the story, not a generic stock image of the country:
   URL that failed the check, and never send a fake User-Agent or Referer
   to bypass a hotlink block.
 - Local file: call `upload_media` with the local path and use the returned
-  `mediaId` in the segment's `media` field. Upload shortly before
+  `mediaId` in one item of the segment's `media` list. Upload shortly before
   generating: the asset lives 1 hour, so a slot far in the future may
   outlive it and the segment then renders without it.
 

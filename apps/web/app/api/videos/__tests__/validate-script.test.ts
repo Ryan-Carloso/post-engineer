@@ -87,14 +87,14 @@ describe('POST /api/videos/validate-script', () => {
   it('rejects media with an unknown key, like the generation route does', async () => {
     const withAlt = [
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: { mediaId: 'abc', alt: 'kitchen' } },
+      { kind: 'body', text: body, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
       { kind: 'cta', text: cta },
     ];
     const response = await POST(authRequest({ segments: withAlt }));
     expect(response.status).toBe(400);
     const payload = (await response.json()) as Record<string, unknown>;
     expect(payload.success).toBe(false);
-    expect(payload.field).toBe('segments.1.media');
+    expect(payload.field).toBe('segments.1.media.0');
   });
 
   it('rejects unauthenticated callers before validating', async () => {
@@ -119,12 +119,16 @@ describe('POST /api/videos/validate-script', () => {
   });
 
   describe('facelessMaterial', () => {
-    const withMedia = segments.map((segment, index) => ({ ...segment, media: { url: `https://e.com/${index}.jpg` } }));
+    const counts = [3, 6, 2];
+    const withMedia = segments.map((segment, index) => ({
+      ...segment,
+      media: Array.from({ length: counts[index] }, (_, photo) => ({ url: `https://e.com/${index}-${photo}.jpg` })),
+    }));
 
     it('accepts the images material when every segment carries media', async () => {
       const response = await POST(authRequest({ segments: withMedia, facelessMaterial: 'images' }));
       expect(response.status).toBe(200);
-      expect(((await response.json()) as { mediaCount: number }).mediaCount).toBe(3);
+      expect(((await response.json()) as { mediaCount: number }).mediaCount).toBe(11);
     });
 
     it('rejects the images material when a segment has no media, naming that segment', async () => {
