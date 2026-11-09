@@ -9,12 +9,12 @@
     "source": "github",
     "subfolder": "apps/mcp"
   },
-  "version": "1.47.0",
+  "version": "1.48.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "post-engineer-mcp",
-      "version": "1.47.0",
+      "version": "1.48.0",
       "transport": {
         "type": "stdio"
       },
