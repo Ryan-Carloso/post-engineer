@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ChevronRight, ImageOff, Play, TriangleAlert } from 'lucide-react';
+import { ChevronRight, Play, TriangleAlert } from 'lucide-react';
 import type { ScheduledSlot, ScheduleConfig, VideoGeneration } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
@@ -40,6 +40,7 @@ const SLOT_VIDEO_STATUSES = new Set<ScheduledSlot['status']>(['ready', 'publishi
 // Progress is shown only while work is running: an awaiting post at 0%
 // looks stuck, and a ready video has nothing left to fill.
 const SLOT_PROGRESS_STATUSES = new Set<ScheduledSlot['status']>(['generating', 'publishing']);
+const NO_PREVIEW_CLASS = 'mt-1 text-xs italic text-muted-foreground/90';
 
 const GENERATION_STATUS_KEY: Record<string, TranslationKey> = {
   pending: 'posts.statusPending',
@@ -97,11 +98,7 @@ const PostCardMedia = ({ src, noPreviewLabel }: { src: string | null; noPreviewL
           onLoadedData={() => setPreviewReady(true)}
           onError={() => setPreviewReady(false)}
         />
-        <p
-          data-card-no-preview
-          className="mt-1.5 flex items-center gap-1.5 border-l-2 border-warning/50 pl-2 text-xs font-semibold text-warning"
-        >
-          <ImageOff className="size-3.5 shrink-0 opacity-90" aria-hidden />
+        <p data-card-no-preview className={NO_PREVIEW_CLASS}>
           {noPreviewLabel}
         </p>
       </>
@@ -115,11 +112,7 @@ const PostCardMedia = ({ src, noPreviewLabel }: { src: string | null; noPreviewL
     );
   }
   return (
-    <p
-      data-card-no-preview
-      className="mt-1.5 flex items-center gap-1.5 border-l-2 border-warning/50 pl-2 text-xs font-semibold text-warning"
-    >
-      <ImageOff className="size-3.5 shrink-0 opacity-90" aria-hidden />
+    <p data-card-no-preview className={NO_PREVIEW_CLASS}>
       {noPreviewLabel}
     </p>
   );

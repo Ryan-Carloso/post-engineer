@@ -980,6 +980,8 @@ describe('PostsPage calendar view', () => {
     const sideNote = document.querySelector('[data-day-unavailable-note]');
     expect(sideNote?.className).toMatch(/bg-destructive-soft/);
     expect(sideNote?.querySelector('[data-load-side-warning]')).not.toBeNull();
+    expect(sideNote?.className.split(/\s+/)).toContain('xl:self-start');
+    expect(sideNote?.className.split(/\s+/)).not.toContain('xl:self-stretch');
   });
 
   it('hides the header refresh on a load error so only the in-card retry remains', () => {

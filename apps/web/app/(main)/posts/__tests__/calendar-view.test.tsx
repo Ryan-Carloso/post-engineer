@@ -101,22 +101,21 @@ describe('CalendarView', () => {
     expect(dayButton(/June 21, 2030/).closest('[data-selected="true"]')).toBeNull();
   });
 
-  it('marks today with a top bar, gold wash on the numeral, and an in-cell dot, not a ring', () => {
+  it('marks today with a top bar, gold wash on the numeral, and an underline mark, not a ring', () => {
     setup({ selectedKey: '2030-06-20' });
     const today = dayButton(/June 15, 2030/);
     const number = today.querySelector('[data-day-number]');
     expect(number).toHaveTextContent('15');
-    expect(number?.className.split(/\s+/)).toContain('bg-warning/30');
+    expect(number?.className.split(/\s+/)).toContain('bg-warning/35');
     expect(today.querySelector('[data-today-bar="true"]')).not.toBeNull();
-    const mark = today.querySelector('[data-today-mark="true"]');
+    const mark = number?.querySelector('[data-today-mark="true"]');
     expect(mark?.className.split(/\s+/)).toContain('bg-warning');
-    expect(mark?.className.split(/\s+/)).toContain('absolute');
-    expect(mark?.className.split(/\s+/)).toContain('left-1');
+    expect(mark?.className.split(/\s+/)).not.toContain('absolute');
     expect(number?.className.split(/\s+/)).not.toContain('ring-warning');
     expect(dayButton(/June 20, 2030/).querySelector('[data-today-mark]')).toBeNull();
   });
 
-  it('keeps the today dot and post total as separate marks when today is selected', () => {
+  it('keeps the today underline and post total as separate marks when today is selected', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       ['2030-06-15', [{ status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-15T10:00:00.000Z' }]],
     ]);
@@ -295,12 +294,15 @@ describe('CalendarView', () => {
     expect(countSwatch).toBeTruthy();
     expect(countSwatch).toBeEmptyDOMElement();
     expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/40');
+    expect(countSwatch?.className.split(/\s+/)).toContain('rounded-full');
+    expect(countSwatch?.className.split(/\s+/)).toContain('bg-primary/12');
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
     expect(selectedSwatch).toBeEmptyDOMElement();
     const todaySwatch = legend.querySelector('[data-legend-today-mark]');
     expect(todaySwatch?.querySelector('[data-legend-today-bar]')).not.toBeNull();
     expect(todaySwatch?.querySelector('[data-legend-today-wash]')).not.toBeNull();
-    expect(todaySwatch?.querySelector('[data-legend-today-dot]')).not.toBeNull();
+    expect(todaySwatch?.querySelector('[data-legend-today-inmark]')).not.toBeNull();
+    expect(todaySwatch?.className.split(/\s+/)).toContain('rounded-md');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-primary');
     expect(legend.querySelector('[data-filter-hint]')).toBeNull();
   });

@@ -194,7 +194,7 @@ export default function PostsPage() {
               <section
                 data-day-unavailable-note
                 aria-live="polite"
-                className="order-2 mt-4 hidden min-w-0 scroll-mt-4 rounded-xl border border-destructive/30 bg-destructive-soft p-4 text-sm text-ink xl:col-start-2 xl:row-start-1 xl:mt-0 xl:block xl:self-stretch"
+                className="order-2 mt-4 hidden min-w-0 scroll-mt-4 rounded-xl border border-destructive/30 bg-destructive-soft/70 px-3 py-2.5 text-sm text-ink xl:col-start-2 xl:row-start-1 xl:mt-0 xl:block xl:max-w-md xl:self-start"
               >
                 <p className="flex items-start gap-2 font-medium">
                   <TriangleAlert data-load-side-warning className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />

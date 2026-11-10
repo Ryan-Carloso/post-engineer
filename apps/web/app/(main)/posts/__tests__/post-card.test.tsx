@@ -193,6 +193,9 @@ describe('PostCard header and media', () => {
     const placeholder = document.querySelector('[data-status="awaiting"]')?.closest('a')?.querySelector('[data-card-no-preview]');
     expect(placeholder).not.toBeNull();
     expect(placeholder).toHaveTextContent('posts.cardNoPreview');
+    expect(placeholder?.className).toMatch(/text-muted-foreground/);
+    expect(placeholder?.className).not.toMatch(/text-warning/);
+    expect(placeholder?.querySelector('svg')).toBeNull();
   });
 
   it('names the card link with the post title for screen readers', () => {
