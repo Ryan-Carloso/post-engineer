@@ -127,9 +127,9 @@ export function SignOutButton() {
       type="button"
       onClick={handleSignOut}
       title={t('nav.signOut')}
-      className="flex w-full items-center gap-3.5 rounded-[18px] bg-surface px-4 py-3 text-left text-[15px] text-muted-text transition-colors hover:bg-sunken hover:text-ink lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
+      className="flex w-full items-center gap-3.5 rounded-[18px] bg-surface px-4 py-3 text-left text-[15px] font-semibold leading-snug text-ink transition-colors hover:bg-sunken"
     >
-      <svg className="size-5 lg:size-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7} aria-hidden="true">
+      <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7} aria-hidden="true">
         <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0-4-4m4 4H7m6 4v1a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v1" />
       </svg>
       {t('nav.signOut')}
@@ -231,9 +231,9 @@ export function SignOutAllButton() {
         }}
         title={t('account.signOutAllDevices')}
         data-testid="sign-out-all-button"
-        className="flex w-full items-center gap-3.5 rounded-[18px] bg-surface px-4 py-3 text-left text-[15px] text-muted-text transition-colors hover:bg-sunken hover:text-ink lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
+        className="w-full px-4 py-1 text-left text-sm font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-ink hover:underline"
       >
-        <svg className="size-5 lg:size-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7} aria-hidden="true">
+        <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7} aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.36 6.36-.7-.7M6.34 6.34l-.7-.7m12.72 0-.7.7M6.34 17.66l-.7.7M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
         </svg>
         {t('account.signOutAllDevices')}
@@ -329,7 +329,13 @@ export function MobileProfileLink() {
 // user block (linking to /account) and sign-out. The user block and
 // sign-out only render when a session user exists.
 //---------------
-export function AccountPanel({ showVersionBadge = false }: { showVersionBadge?: boolean }) {
+export function AccountPanel({
+  showVersionBadge = false,
+  hideSidebarApiKeysRow = false,
+}: {
+  showVersionBadge?: boolean;
+  hideSidebarApiKeysRow?: boolean;
+}) {
   const { t } = useI18n();
   const sessionQuery = useSessionQuery();
   const user = sessionQuery.data;
@@ -349,7 +355,7 @@ export function AccountPanel({ showVersionBadge = false }: { showVersionBadge?: 
         </div>
       )}
       {user && (
-        <div className="space-y-5">
+        <div className="space-y-3 pb-0.5">
           <Link
             href="/account"
             data-testid="profile-user-link"
@@ -363,7 +369,7 @@ export function AccountPanel({ showVersionBadge = false }: { showVersionBadge?: 
               </p>
             </div>
           </Link>
-          <ApiKeysRow />
+          {!hideSidebarApiKeysRow && <ApiKeysRow />}
           <BillingRow />
           <SignOutButton />
           <SignOutAllButton />
@@ -384,12 +390,12 @@ export function ApiKeysRow() {
     <Link
       href="/recipes"
       data-testid="profile-api-keys-link"
-      className="flex w-full items-center gap-3.5 rounded-[18px] bg-surface px-4 py-3 text-left text-[15px] text-muted-text transition-colors hover:bg-sunken hover:text-ink lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
+      className="flex w-full items-center gap-3.5 rounded-[18px] bg-surface px-4 py-3 text-left text-[15px] leading-snug text-muted-text transition-colors hover:bg-sunken hover:text-ink"
     >
-      <span className="[&>svg]:size-5 lg:[&>svg]:size-7">
+      <span className="shrink-0 [&>svg]:size-5">
         <KeyIcon />
       </span>
-      {t('nav.apiKeys')}
+      {t('nav.prompts')}
     </Link>
   );
 }
@@ -406,9 +412,9 @@ export function BillingRow() {
     <Link
       href="/billing"
       data-testid="profile-billing-link"
-      className="flex w-full items-center gap-3.5 rounded-[18px] bg-surface px-4 py-3 text-left text-[15px] text-muted-text transition-colors hover:bg-sunken hover:text-ink lg:gap-5 lg:rounded-[22px] lg:px-8 lg:py-4 lg:text-[18px]"
+      className="flex w-full items-center gap-3.5 rounded-[18px] bg-surface px-4 py-3 text-left text-[15px] leading-snug text-muted-text transition-colors hover:bg-sunken hover:text-ink"
     >
-      <span className="[&>svg]:size-5 lg:[&>svg]:size-7">
+      <span className="shrink-0 [&>svg]:size-5">
         <CoinsIcon />
       </span>
       {t('account.billingLink')}

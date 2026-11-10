@@ -1,8 +1,10 @@
 import { Check, Clock, TriangleAlert } from 'lucide-react';
 import type { TranslationKey } from '@/lib/i18n';
+import { CalendarProgressIcon } from './calendar-progress-icon';
 
-// Shared by the posts list and the post detail page. Colors are semantic
-// tokens (see globals.css), so both light and dark themes stay readable.
+// Per-status badges of the post detail page and the video generation cards
+// (post cards use the calendar groups below). Colors are semantic tokens
+// (see globals.css), so both light and dark themes stay readable.
 // `awaiting` is what the API reports for a DB `pending` slot.
 export const STATUS_STYLE: Record<string, string> = {
   pending: 'bg-sunken text-muted-text',
@@ -18,7 +20,10 @@ export const STATUS_STYLE: Record<string, string> = {
 
 export const STATUS_KEY: Record<string, TranslationKey> = {
   pending: 'posts.statusPending',
-  awaiting: 'posts.statusPending',
+  // An awaiting slot is a scheduled post whose work has not started: it
+  // carries the calendar's own word (legend, day summary), so the card and
+  // the calendar never name the same post differently.
+  awaiting: 'posts.groupScheduled',
   generating: 'posts.statusGenerating',
   running: 'posts.statusRunning',
   ready: 'posts.statusReady',
@@ -28,57 +33,48 @@ export const STATUS_KEY: Record<string, TranslationKey> = {
   failed: 'posts.statusFailed',
 };
 
-// Grouping of the real slot and generation statuses. `STATUS_STYLE` stays
-// the per-status badge; the group is what the post card icon encodes (so
-// status never relies on color alone) and what shows the progress bar.
-export type StatusGroup = 'inProgress' | 'published' | 'failed';
+// Calendar groups — ONE vocabulary for a post's state, shared by the day
+// cell markers, the legend, the day summary and the post card pill, so a
+// post is never named one way on the card and another on the calendar.
+// In progress = work running right now (the video is generating or being
+// published); scheduled = waiting for its time (not started yet, or its
+// video is ready and waits for the publish slot). The card adds the exact
+// stage (e.g. "Generating video 45%") under the pill.
+export type CalendarGroup = 'published' | 'failed' | 'inProgress' | 'scheduled';
 
-const GROUP_BY_STATUS: Record<string, StatusGroup> = {
-  pending: 'inProgress',
-  awaiting: 'inProgress',
-  generating: 'inProgress',
-  ready: 'inProgress',
-  publishing: 'inProgress',
-  published: 'published',
-  completed: 'published',
-  failed: 'failed',
-};
+// Failure first: day markers, the legend, the day summary and the day's
+// accessible name all list a failure before anything else.
+export const CALENDAR_GROUP_ORDER: readonly CalendarGroup[] = ['failed', 'published', 'inProgress', 'scheduled'];
 
-export function statusGroupOf(status: string): StatusGroup {
-  // An unknown status is still pending work, never silently "published".
-  return GROUP_BY_STATUS[status] ?? 'inProgress';
-}
-
-export const GROUP_ICON: Record<StatusGroup, typeof Check> = { inProgress: Clock, published: Check, failed: TriangleAlert };
-
-// Calendar groups — the calendar shows only outcomes (published / failed);
-// anything not yet published is scheduled, with no status color of its own.
-// Post cards and the detail page keep their per-status badges above.
-export type CalendarGroup = 'published' | 'failed' | 'scheduled';
-
-export const CALENDAR_GROUP_ORDER: readonly CalendarGroup[] = ['published', 'failed', 'scheduled'];
+const IN_PROGRESS_STATUSES = new Set(['generating', 'publishing', 'running']);
 
 export function calendarGroupOf(status: string): CalendarGroup {
   if (status === 'published' || status === 'completed') return 'published';
   if (status === 'failed') return 'failed';
+  if (IN_PROGRESS_STATUSES.has(status)) return 'inProgress';
   // An unknown status is still unpublished work, never silently "published".
   return 'scheduled';
 }
 
-export const CALENDAR_GROUP_STYLE: Record<CalendarGroup, string> = {
-  published: 'bg-success-soft text-success',
+// The post card pill: a soft tint of the status hue (a solid chip on every
+// card would shout over the title).
+export const CALENDAR_GROUP_PILL: Record<CalendarGroup, string> = {
   failed: 'bg-destructive-soft text-destructive',
-  scheduled: 'bg-sunken text-muted-text',
+  published: 'bg-success-soft text-success',
+  inProgress: 'bg-info-soft text-info',
+  scheduled: 'bg-line text-ink-soft',
 };
 
 export const CALENDAR_GROUP_KEY: Record<CalendarGroup, TranslationKey> = {
   published: 'posts.groupPublished',
   failed: 'posts.groupFailed',
+  inProgress: 'posts.groupInProgress',
   scheduled: 'posts.groupScheduled',
 };
 
 export const CALENDAR_GROUP_ICON: Record<CalendarGroup, typeof Check> = {
   published: Check,
   failed: TriangleAlert,
+  inProgress: CalendarProgressIcon,
   scheduled: Clock,
 };

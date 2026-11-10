@@ -90,32 +90,32 @@ const MainSidebar = () => {
   ];
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-[clamp(300px,30vw,400px)] shrink-0 flex-col border-r border-hairline bg-card shadow-[8px_0_28px_rgba(20,32,51,0.03)] md:flex">
+    <aside className="sticky top-0 hidden h-dvh w-[clamp(260px,22vw,320px)] shrink-0 flex-col overflow-hidden border-r border-hairline bg-card shadow-[8px_0_28px_rgba(20,32,51,0.03)] md:flex">
       <div
         data-testid="nav-brand"
         aria-label={t('nav.brand')}
-        className="group flex items-center gap-3 px-5 pt-8 pb-6 text-left transition-colors hover:bg-brand-soft lg:gap-4 lg:px-10 lg:pt-10 lg:pb-8"
+        className="group flex shrink-0 items-center gap-3 px-5 pt-8 pb-6 text-left transition-colors hover:bg-brand-soft lg:gap-3 lg:px-6 lg:pt-8 lg:pb-6"
       >
         <span className="shrink-0 transition-transform group-hover:rotate-3">
-          <AppLogo size={48} className="shadow-[0_10px_24px_rgba(20,32,51,0.18)] lg:size-[68px]" />
+          <AppLogo size={48} className="shadow-[0_10px_24px_rgba(20,32,51,0.18)] lg:size-[56px]" />
         </span>
         <div className="hidden min-w-0 md:block">
           <p className="text-[19px] leading-tight font-bold tracking-[-0.03em] text-ink">
             {t('nav.brand')}
             <VersionBadge />
           </p>
-          <p className="text-[15px] leading-snug text-muted-text lg:text-[16px]">{t('nav.brandSubtitle')}</p>
+          <p className="text-[13px] leading-snug text-muted-text lg:text-[14px]">{t('nav.brandSubtitle')}</p>
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1.5 px-3.5 py-6 lg:space-y-2 lg:px-7 lg:py-8">
+      <nav className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3.5 py-4 lg:px-4 lg:py-6">
         {navItems.map((item) => (
           <SidebarTab key={item.href} item={item} isActive={isNavActive(item.href, pathname)} />
         ))}
       </nav>
 
-      <div className="space-y-3 border-t border-hairline bg-card p-4 lg:p-6">
-        <AccountPanel />
+      <div data-sidebar-footer className="max-h-[50%] min-h-0 shrink space-y-3 overflow-y-auto border-t border-hairline bg-card p-4 lg:p-5">
+        <AccountPanel hideSidebarApiKeysRow />
         <SidebarLegalLinks />
       </div>
     </aside>
@@ -132,16 +132,16 @@ const SidebarTab = ({ item, isActive }: { item: NavItem; isActive: boolean }) =>
     <Link
       href={item.href}
       title={t(item.labelKey)}
-      className={`group relative flex items-center gap-3 rounded-[20px] px-4 py-3.5 transition-colors lg:gap-5 lg:rounded-[24px] lg:px-8 lg:py-5 ${
+      className={`group relative flex items-center gap-3 rounded-[20px] px-4 py-3.5 transition-colors lg:gap-4 lg:rounded-[20px] lg:px-5 lg:py-3.5 ${
         isActive
           ? 'bg-brand-soft text-ink'
           : 'text-muted-text hover:bg-surface hover:text-ink'
       }`}
     >
-      <span className={`shrink-0 [&>svg]:size-6 lg:[&>svg]:size-8 ${isActive ? 'text-brand' : 'text-muted-text group-hover:text-ink'}`}>
+      <span className={`shrink-0 [&>svg]:size-6 lg:[&>svg]:size-7 ${isActive ? 'text-brand' : 'text-muted-text group-hover:text-ink'}`}>
         <Icon />
       </span>
-      <span className="hidden min-w-0 text-[16px] leading-snug font-medium tracking-[-0.02em] md:block lg:text-[20px]">{t(item.labelKey)}</span>
+      <span className="hidden min-w-0 text-[16px] leading-snug font-medium tracking-[-0.02em] md:block lg:text-[18px]">{t(item.labelKey)}</span>
     </Link>
   );
 };
@@ -181,8 +181,8 @@ const MobileNavigation = () => {
   const tabs: Array<{
     href: string;
     labelKey: NavItem['labelKey'];
-    // Short label for tabs whose full label wraps in a ~70px tab
-    // ("API Key e MCP" breaks to two lines). The sidebar keeps the full label.
+    // Short label for tabs whose full label wraps in a ~70px tab.
+    // The sidebar keeps the full label.
     shortLabelKey?: 'nav.promptsShort';
     icon: () => React.JSX.Element;
   }> = [

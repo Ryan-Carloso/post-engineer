@@ -51,12 +51,13 @@ describe('i18n — troca de idioma via UI', () => {
 
     // PT -> EN
     cy.contains('button', 'EN').click();
-    // The only sidebar labels that differ between locales are Accounts
-    // (Contas→Accounts) and Sign out (Sair→Sign out); API Keys is
-    // identical in both — its check just proves the localized footer link
-    // (profile area) rendered.
+    // Accounts (Contas→Accounts) and Sign out (Sair→Sign out) differ.
+    // The prompts tab differs too (Chave de API e MCP→API key and MCP).
+    // The footer link check proves the localized profile area rendered.
+    // (The API-keys footer row is hidden in the sidebar now — the billing
+    // row is the footer link that still renders.)
     cy.contains('a', 'Accounts').should('be.visible');
-    cy.get('[data-testid=profile-api-keys-link]').should('exist');
+    cy.get('[data-testid=profile-billing-link]').should('exist');
     // The sign-out button sits at the bottom of the sticky (non-scrolling)
     // sidebar and falls below the fold at short viewport heights — assert
     // the translated label exists rather than its visibility. Finding

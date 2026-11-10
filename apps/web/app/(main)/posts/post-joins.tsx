@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import { FilterX } from 'lucide-react';
 import {
   useSchedulesQuery,
   usePersonaListQuery,
@@ -16,6 +17,8 @@ import {
 import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
 import { useI18n } from '@/lib/i18n/provider';
 import { PROVIDER_LABELS, accountOption, type AccountOption, scheduleAccountIds } from '@/lib/account-options';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { PostCard, resolveSlotAccounts } from './post-card';
 import type { PersonaPhoto } from './calendar-days';
 
@@ -159,6 +162,7 @@ export interface PostFilters {
   hasActiveFilter: boolean;
   setProvider: (next: ProviderFilter) => void;
   setAccount: (next: string) => void;
+  clear: () => void;
   passes: (slot: ScheduledSlot) => boolean;
 }
 
@@ -196,25 +200,62 @@ export function usePostFilters(joins: PostJoins): PostFilters {
     },
     [scheduleById, provider, account],
   );
-  return { provider, account, visibleAccounts, hasActiveFilter: provider !== 'all' || account !== 'all', setProvider, setAccount, passes };
+  const clear = useCallback(() => {
+    setProviderState('all');
+    setAccount('all');
+  }, []);
+  const hasActiveFilter = provider !== 'all' || account !== 'all';
+  return { provider, account, visibleAccounts, hasActiveFilter, setProvider, setAccount, clear, passes };
 }
 
-const SELECT_CLASS = 'rounded-xl border border-input bg-card px-3 py-2 text-sm font-medium text-primary';
-const LABEL_CLASS = 'flex flex-col gap-1 text-xs font-semibold text-muted-foreground';
+// One fixed width on wide screens, so the selects do not change size with
+// the locale or the chosen option; an applied filter is outlined in navy.
+const SELECT_CLASS =
+  'h-10 w-full appearance-none truncate rounded-xl border border-input bg-card bg-no-repeat px-3 text-sm font-medium text-primary sm:w-48';
+const SELECT_CHEVRON_CLASS =
+  "bg-[length:1rem_1rem] bg-[position:right_0.65rem_center] pr-9 bg-[image:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%231a4d74%22%20stroke-width%3D%222.25%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')]";
+const SELECT_DISABLED_CLASS =
+  'cursor-not-allowed border-line bg-sunken/90 pr-3 text-muted-foreground opacity-55 saturate-50';
+const SELECT_ACTIVE_CLASS = 'border-primary bg-info-soft ring-1 ring-primary';
+const LABEL_CLASS = 'flex min-w-0 flex-col gap-1 text-xs font-semibold text-muted-foreground';
 
-export function PostFiltersBar({ filters }: { filters: PostFilters }) {
+export function PostFiltersBar({
+  filters,
+  disabled = false,
+  unavailable = false,
+}: {
+  filters: PostFilters;
+  disabled?: boolean;
+  unavailable?: boolean;
+}) {
   const { t } = useI18n();
+  const inert = disabled || unavailable;
   return (
-    <div className="mt-4 flex flex-wrap gap-3">
+    // Side by side on a phone too (two columns), so the filters take one
+    // row above the calendar instead of two. "Clear filters" shows only
+    // while a filter is applied.
+    <div
+      className={cn(
+        'mt-3 grid grid-cols-2 gap-3 sm:mt-4 sm:flex sm:flex-wrap sm:items-end',
+        unavailable && 'pointer-events-none',
+      )}
+      aria-disabled={unavailable ? true : undefined}
+    >
       <label className={LABEL_CLASS}>
         {t('posts.filterProvider')}
         <select
           value={filters.provider}
+          disabled={inert}
           onChange={(event) => {
             const next = PROVIDERS.find((item) => item === event.target.value) ?? 'all';
             filters.setProvider(next);
           }}
-          className={SELECT_CLASS}
+          className={cn(
+            SELECT_CLASS,
+            !inert && SELECT_CHEVRON_CLASS,
+            filters.provider !== 'all' && !unavailable && SELECT_ACTIVE_CLASS,
+            inert && SELECT_DISABLED_CLASS,
+          )}
         >
           <option value="all">{t('posts.allProviders')}</option>
           {PROVIDERS.map((item) => (
@@ -226,7 +267,17 @@ export function PostFiltersBar({ filters }: { filters: PostFilters }) {
       </label>
       <label className={LABEL_CLASS}>
         {t('posts.filterAccount')}
-        <select value={filters.account} onChange={(event) => filters.setAccount(event.target.value)} className={SELECT_CLASS}>
+        <select
+          value={filters.account}
+          disabled={inert}
+          onChange={(event) => filters.setAccount(event.target.value)}
+          className={cn(
+            SELECT_CLASS,
+            !inert && SELECT_CHEVRON_CLASS,
+            filters.account !== 'all' && !unavailable && SELECT_ACTIVE_CLASS,
+            inert && SELECT_DISABLED_CLASS,
+          )}
+        >
           <option value="all">{t('posts.allAccounts')}</option>
           {filters.visibleAccounts.map((item) => (
             <option key={`${item.provider}:${item.id}`} value={item.id}>
@@ -235,11 +286,19 @@ export function PostFiltersBar({ filters }: { filters: PostFilters }) {
           ))}
         </select>
       </label>
+      {filters.hasActiveFilter && (
+        <Button type="button" variant="ghost" className="col-span-2 h-10 gap-1.5 justify-self-start text-primary hover:bg-sunken hover:text-primary" onClick={filters.clear}>
+          <FilterX aria-hidden />
+          {t('posts.clearFilters')}
+        </Button>
+      )}
     </div>
   );
 }
 
-export function SlotCard({ slot, joins }: { slot: ScheduledSlot; joins: PostJoins }) {
+// timeOnly: the calendar's day list already names the day in its heading,
+// so its cards show only the time; the history list keeps the full date.
+export function SlotCard({ slot, joins, timeOnly = false }: { slot: ScheduledSlot; joins: PostJoins; timeOnly?: boolean }) {
   const { t, locale } = useI18n();
   const schedule = joins.scheduleById.get(slot.scheduleId);
   // A post created without a persona (migration 012) has none to look up —
@@ -253,6 +312,7 @@ export function SlotCard({ slot, joins }: { slot: ScheduledSlot; joins: PostJoin
       personaName={personaName}
       accounts={resolveSlotAccounts(schedule, joins.accountOptions)}
       locale={locale}
+      timeOnly={timeOnly}
     />
   );
 }

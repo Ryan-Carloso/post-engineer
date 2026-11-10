@@ -164,7 +164,7 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     if (scheduleIds.length === 0) {
       return range.kind === 'range'
         ? NextResponse.json({ success: true, slots: [], truncated: false })
-        : NextResponse.json({ success: true, upcoming: [], recent: [] });
+        : NextResponse.json({ success: true, upcoming: [], recent: [], hasAnyPost: false });
     }
   }
 
@@ -235,10 +235,17 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     .in('status', ['publishing'])
     .contains('publish_outcomes', USER_NOTICE_OUTCOME_FILTER)
     .order('slot_at', { ascending: true });
+  // Whether the account has any post at all, in any month: the split above
+  // cannot answer it — a past pending/ready slot (or a publishing slot
+  // without a user notice) is in neither list, so a stale-only account
+  // would read as never-posted. One cheap existence row, unfiltered by
+  // status or time.
+  let anyPostQuery = supabase.from('scheduled_posts').select('id').eq('user_id', userId);
   if (scheduleIds) {
     upcomingQuery = upcomingQuery.in('schedule_id', scheduleIds);
     recentQuery = recentQuery.in('schedule_id', scheduleIds);
     publishingQuery = publishingQuery.in('schedule_id', scheduleIds);
+    anyPostQuery = anyPostQuery.in('schedule_id', scheduleIds);
   }
 
   // Queue positions come from a dedicated un-limited query: the paginated
@@ -254,18 +261,20 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     queueQuery = queueQuery.in('schedule_id', scheduleIds);
   }
 
-  const [upcoming, recent, publishing, queueResult] = await Promise.all([
+  const [upcoming, recent, publishing, queueResult, anyPost] = await Promise.all([
     upcomingQuery.limit(limit),
     recentQuery.limit(limit),
     publishingQuery.limit(limit),
     queueQuery,
+    anyPostQuery.limit(1),
   ]);
 
-  if (upcoming.error || recent.error || publishing.error) {
+  if (upcoming.error || recent.error || publishing.error || anyPost.error) {
     logger.error('[api/schedule/status] query failed', undefined, {
       upcoming: upcoming.error,
       recent: recent.error,
       publishing: publishing.error,
+      anyPost: anyPost.error,
     });
     return NextResponse.json(
       { success: false, error: 'Failed to load schedule status.' },
@@ -309,6 +318,7 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     success: true,
     upcoming: upcomingEnriched,
     recent: recentEnriched,
+    hasAnyPost: (anyPost.data?.length ?? 0) > 0,
   });
 }
 

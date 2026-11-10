@@ -100,7 +100,10 @@ describe('metrics dashboard', () => {
     // Group by network: the chart and stats re-render with provider labels.
     cy.contains('label', 'Comparar por').scrollIntoView().find('select').select('provider');
     cy.contains('Melhor rede').scrollIntoView().should('be.visible');
-    cy.contains('YouTube').should('be.visible');
+    // Scope to the best-network tile: a bare contains('YouTube') matches
+    // the first element in DOM order with that text — the provider filter
+    // label — which sits above the scroll position and reads as clipped.
+    cy.contains('Melhor rede').parent().should('contain.text', 'YouTube');
   });
 
   it('shows YouTube retention on a row and the reconnect prompt for an old token', () => {

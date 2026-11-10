@@ -196,13 +196,6 @@ describe('app/(main)/layout — MainLayout', () => {
     expect(firstTab).toHaveAttribute('href', '/posts');
   });
 
-  it('does not render an API Keys tab in the sidebar nav (moved to the profile area)', () => {
-    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const sidebar = screen.getByTestId('nav-brand').closest('aside');
-    const nav = within(sidebar as HTMLElement).getByRole('navigation');
-    expect(within(nav).queryByText('nav.apiKeys')).toBeNull();
-  });
-
   it('posts tab links to /posts', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const postsLink = screen.getAllByText('nav.posts')[0].closest('a');
@@ -237,7 +230,7 @@ describe('app/(main)/layout — MainLayout', () => {
     expect(panelLink).toHaveTextContent('account.billingLink');
   });
 
-  it('api keys are reachable from the profile panel, not from a tab', () => {
+  it('does not duplicate the API keys row in the sidebar footer when the nav tab already links there', () => {
     vi.mocked(useSessionQuery).mockReturnValue({
       data: {
         id: 'u1',
@@ -247,9 +240,10 @@ describe('app/(main)/layout — MainLayout', () => {
       isLoading: false,
     } as never);
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const panelLink = screen.getByTestId('profile-api-keys-link');
-    expect(panelLink).toHaveAttribute('href', '/recipes');
-    expect(panelLink).toHaveTextContent('nav.apiKeys');
+    const footer = document.querySelector('[data-sidebar-footer]');
+    expect(footer).not.toBeNull();
+    expect(within(footer as HTMLElement).queryByTestId('profile-api-keys-link')).not.toBeInTheDocument();
+    expect(screen.getAllByTitle('nav.prompts').length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders locale switcher', () => {
@@ -310,6 +304,20 @@ describe('app/(main)/layout — MainLayout', () => {
     expect(sidebarImg).toHaveAttribute('src', 'https://example.com/avatar.png');
     const headerImg = within(screen.getByTestId('mobile-profile-link')).getByRole('img', { name: 'A' });
     expect(headerImg).toHaveAttribute('src', 'https://example.com/avatar.png');
+  });
+
+  it('scrolls the sidebar footer so sign out stays reachable', () => {
+    vi.mocked(useSessionQuery).mockReturnValue({
+      data: { id: 'u1', email: 'test@example.com', user_metadata: { name: 'User' } },
+      isLoading: false,
+    } as never);
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const footer = document.querySelector('[data-sidebar-footer]');
+    expect(footer).not.toBeNull();
+    expect(footer?.className.split(/\s+/)).toContain('overflow-y-auto');
+    expect(within(footer as HTMLElement).getByTitle('nav.signOut')).toBeInTheDocument();
+    const aside = screen.getByTestId('nav-brand').closest('aside');
+    expect(aside?.className.split(/\s+/)).toContain('overflow-hidden');
   });
 
   it('sign out button calls signOut and navigates to /login', async () => {
@@ -388,14 +396,9 @@ describe('app/(main)/layout — MainLayout', () => {
       const labels = within(getMobileNav())
         .getAllByRole('link')
         .map((link) => link.textContent);
-      // The mobile tab uses the short label: the full "API Key e MCP"
+      // The mobile tab uses the short label. The full prompts label
       // wraps to two lines in a ~70px tab.
       expect(labels).toEqual(['nav.posts', 'nav.persona', 'nav.accounts', 'nav.promptsShort']);
-    });
-
-    it('has no API Keys tab in the mobile nav (moved to the profile area)', () => {
-      render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-      expect(within(getMobileNav()).queryByText('nav.apiKeys')).toBeNull();
     });
 
     it('has no Billing tab in the mobile nav (moved to the profile area)', () => {

@@ -51,13 +51,22 @@ export interface AccountOption {
   label: string;
 }
 
+export function formatSocialHandle(handle: string): string {
+  const trimmed = handle.trim().replace(/^@+/, '');
+  return `@${trimmed}`;
+}
+
 export function accountOption(account: PublicAccountItem): AccountOption {
-  if (account.provider === 'bluesky') return { id: account.did, provider: 'bluesky', label: `@${account.handle}` };
+  if (account.provider === 'bluesky') return { id: account.did, provider: 'bluesky', label: formatSocialHandle(account.handle) };
   if (account.provider === 'linkedin') {
     return { id: account.providerAccountId, provider: 'linkedin', label: account.accountName ?? account.providerAccountId };
   }
   if (account.provider === 'threads') {
-    return { id: account.providerAccountId, provider: 'threads', label: account.accountName === null ? account.providerAccountId : `@${account.accountName}` };
+    return {
+      id: account.providerAccountId,
+      provider: 'threads',
+      label: account.accountName === null ? account.providerAccountId : formatSocialHandle(account.accountName),
+    };
   }
   if (account.provider === 'facebook') {
     return { id: account.providerAccountId, provider: 'facebook', label: account.accountName ?? account.providerAccountId };
@@ -71,6 +80,6 @@ export function accountOption(account: PublicAccountItem): AccountOption {
   if (account.provider === 'rumble') {
     return { id: account.providerAccountId, provider: 'rumble', label: account.accountName ?? account.providerAccountId };
   }
-  if (account.provider === 'instagram') return { id: account.igUserId, provider: 'instagram', label: `@${account.username}` };
+  if (account.provider === 'instagram') return { id: account.igUserId, provider: 'instagram', label: formatSocialHandle(account.username) };
   return { id: account.channelId, provider: 'youtube', label: account.channelName };
 }
