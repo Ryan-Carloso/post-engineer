@@ -404,7 +404,7 @@ def test_check_media_code_reports_wrong_aspect_for_a_landscape_photo(tmp_path):
             handle.write(_jpeg(1920, 1080))
         return dest_path
 
-    with patch.object(place_photos, "download_image", side_effect=download), patch(
+    with patch.object(image_fetch, "download_image", side_effect=download), patch(
         "app.services.user_media.face_detect.image_contains_face", return_value=False
     ):
         assert (

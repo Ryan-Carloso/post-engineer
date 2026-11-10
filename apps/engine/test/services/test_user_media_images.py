@@ -119,7 +119,7 @@ def test_images_material_landscape_photos_fail_the_video(task_dir):
         return _download(url, dest_path, session, width=1920, height=1080)
 
     with pytest.raises(image_coverage.ImagesDoNotCoverAudio):
-        _run(task_dir, _params("images"), download=landscape)
+        _run(task_dir, _params(), download=landscape)
     assert segment_panels._read_manifest("task-1") == ([], [])
 
 
@@ -129,7 +129,7 @@ def test_a_wrong_ratio_photo_is_skipped_and_the_neighbour_covers_it(task_dir):
             return _download(url, dest_path, session, width=1920, height=1080)
         return _download(url, dest_path, session)
 
-    warnings = _run(task_dir, _params("images"), download=mixed)
+    warnings = _run(task_dir, _params(), download=mixed)
     panels, _ = segment_panels._read_manifest("task-1")
     assert [(p.index, p.start, p.end) for p in panels] == [(1, 0.0, 6.0)]
     assert warnings[0] == (
@@ -159,7 +159,7 @@ def test_a_landscape_hook_photo_stays_a_panel_when_the_face_shows(task_dir):
             return _download(url, dest_path, session)
         return _download(url, dest_path, session, width=1920, height=1080)
 
-    params = _params("images", segments=segments)
+    params = _params(segments=segments)
     with patch.object(user_media, "_face_mode", return_value=segment_panels.FACE_HOOK), patch.object(
         user_media, "_hook_end", return_value=1.5
     ):

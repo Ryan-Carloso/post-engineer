@@ -476,6 +476,23 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(applyRateLimit).mockResolvedValue(null);
   setup(DEFAULT_CFG);
+  // The merged route runs the segment-media aspect preflight before
+  // charging (#538): every full-frame photo asks the engine media/check.
+  // Answer it as fitting (9:16) so the request reaches the dispatch the
+  // test is about; the preflight itself is pinned in its own test file.
+  vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+  vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) =>
+      String(url).includes('/api/v1/media/check')
+        ? new Response(JSON.stringify({ status: 200, body: { code: 'ok', width: 1080, height: 1920 } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        : new Response('{}', { status: 200 }),
+    ),
+  );
 });
 
 describe('POST /api/videos/generate-and-schedule', () => {
@@ -3056,12 +3073,26 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
     expect(payload.full_lipsync).toBe(true);
   });
 
-  it('skips the preflight entirely for non-full videos', async () => {
-    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }));
-    vi.stubGlobal('fetch', fetchSpy);
+  it('skips the narration preflight for non-full videos but still checks segment ratios', async () => {
+    // The narration check (audio/preflight-duration) is full-lip-sync
+    // only; the aspect check (media/check) still runs for the segments'
+    // full-frame photos — the default persona has no face, so all 11 do.
+    const calls: Array<string> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push(String(url));
+        return new Response(
+          JSON.stringify({ status: 200, body: { code: 'ok', width: 1080, height: 1920 } }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }),
+    );
     const res = await post(baseBody());
     expect(res.status).toBe(200);
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(11);
+    expect(calls.every((url) => url.includes('/api/v1/media/check'))).toBe(true);
+    expect(calls.some((url) => url.includes('preflight-duration'))).toBe(false);
     expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
   });
 });
