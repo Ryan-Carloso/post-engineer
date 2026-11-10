@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { distinctAngles, fetchMetrics, groupMetrics, isGroupKey, isMetricKey } from '../metrics-dashboard';
+import { fetchMetrics, sortByViews, summarize } from '../metrics-dashboard';
 import {
   METRICS_FILTER_MAX_LENGTH, METRICS_NONE, isProvisional, metricsSearchParams, numericOrNull, parseMetricsQuery, stayedToWatchPct,
   type MetricsRowView,
@@ -21,51 +21,45 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('groupMetrics', () => {
-  it('averages a metric per group, highest first, rounding', () => {
+describe('summarize', () => {
+  it('sums views and engagement over the visible rows (screenshot fixture: 248 views)', () => {
+    const rows = [3, 0, 134, 1, 0, 0, 110, 0].map((views, i) =>
+      view({ postId: `p${i}`, views, likes: 1, comments: 1, saves: 1 }),
+    );
+    // 3 + 0 + 134 + 1 + 0 + 0 + 110 + 0 = 248 views; engagement is
+    // 3 per row (1 like + 1 comment + 1 save) across 8 rows = 24.
+    expect(summarize(rows)).toEqual({ videos: 8, views: 248, engagement: 24 });
+  });
+
+  it('skips null values instead of counting them as 0', () => {
     const rows = [
-      view({ scriptAngle: 'myth', views: 100 }),
-      view({ scriptAngle: 'myth', views: 201 }),
-      view({ scriptAngle: 'tutorial', views: 400 }),
-      view({ scriptAngle: null, views: 50 }),
+      view({ views: null, likes: null, comments: null, saves: null }),
+      view({ views: 10, likes: 5, comments: null, saves: 2 }),
     ];
-    expect(groupMetrics(rows, 'angle', 'views')).toEqual([
-      { key: 'tutorial', average: 400, count: 1 },
-      { key: 'myth', average: 151, count: 2 },
-      { key: METRICS_NONE, average: 50, count: 1 },
-    ]);
+    expect(summarize(rows)).toEqual({ videos: 2, views: 10, engagement: 7 });
   });
 
-  it('leaves null values out of the average instead of counting them as 0', () => {
-    const rows = [view({ provider: 'bluesky', views: null }), view({ provider: 'youtube', views: 10 })];
-    expect(groupMetrics(rows, 'provider', 'views')).toEqual([{ key: 'youtube', average: 10, count: 1 }]);
-  });
-
-  it('returns an empty array for empty rows or all-null metric values', () => {
-    expect(groupMetrics([], 'angle', 'views')).toEqual([]);
-    expect(groupMetrics([view({ views: null }), view({ views: null })], 'angle', 'views')).toEqual([]);
-  });
-
-  it('groups by persona and account', () => {
-    const rows = [view({ personaId: null, accountId: 'a' }), view({ personaId: 'x', accountId: 'b', comments: 9 })];
-    expect(groupMetrics(rows, 'persona', 'comments').map((g) => g.key)).toEqual(['x', METRICS_NONE]);
-    expect(groupMetrics(rows, 'account', 'comments').map((g) => g.key)).toEqual(['b', 'a']);
+  it('returns zeros for empty rows', () => {
+    expect(summarize([])).toEqual({ videos: 0, views: 0, engagement: 0 });
   });
 });
 
-describe('distinctAngles', () => {
-  it('lists each non-null angle once, sorted', () => {
-    expect(distinctAngles([view({ scriptAngle: 'b' }), view({ scriptAngle: 'a' }), view({ scriptAngle: 'b' }), view({ scriptAngle: null })]))
-      .toEqual(['a', 'b']);
+describe('sortByViews', () => {
+  it('orders highest first, nulls last, ties broken by newest collectedAt', () => {
+    const rows = [
+      view({ postId: 'd', views: 10, collectedAt: '2026-10-18T12:00:00Z' }),
+      view({ postId: 'b', views: null, collectedAt: '2026-10-20T12:00:00Z' }),
+      view({ postId: 'c', views: 300, collectedAt: '2026-10-19T12:00:00Z' }),
+      view({ postId: 'a', views: 10, collectedAt: '2026-10-21T12:00:00Z' }),
+    ];
+    expect(sortByViews(rows).map((row) => row.postId)).toEqual(['c', 'a', 'd', 'b']);
   });
-});
 
-describe('isMetricKey / isGroupKey', () => {
-  it('accept only the known keys', () => {
-    expect(isMetricKey('saves')).toBe(true);
-    expect(isMetricKey('shares')).toBe(false);
-    expect(isGroupKey('angle')).toBe(true);
-    expect(isGroupKey('date')).toBe(false);
+  it('does not mutate the input array', () => {
+    const rows = [view({ views: 1 }), view({ views: 2 })];
+    const sorted = sortByViews(rows);
+    expect(rows[0].views).toBe(1);
+    expect(sorted[0].views).toBe(2);
   });
 });
 

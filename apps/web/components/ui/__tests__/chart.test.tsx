@@ -1,14 +1,14 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import * as React from 'react';
 import type { ReactNode } from 'react';
 
 //---------------
-// Tests for the vendored shadcn chart primitives (components/ui/chart)
-// and the metrics bar chart built on them. Recharts' ResponsiveContainer
-// never gets a size in jsdom, so it is stubbed with a fixed-size clone;
-// everything else (container, style, tooltip, legend) is the real code.
+// Tests for the vendored shadcn chart primitives (components/ui/chart).
+// Recharts' ResponsiveContainer never gets a size in jsdom, so it is
+// stubbed with a fixed-size clone; everything else (container, style,
+// tooltip, legend) is the real code.
 //---------------
 
 vi.mock('recharts', async (importOriginal) => {
@@ -34,7 +34,6 @@ import {
   ChartLegendContent,
   type ChartConfig,
 } from '../chart';
-import { MetricsBarChart, type MetricsBarDatum } from '../metrics-bar-chart';
 
 const CONFIG: ChartConfig = {
   average: { label: 'Views', color: '#c9d2dc' },
@@ -244,39 +243,5 @@ describe('useChart consumers outside a container', () => {
     } finally {
       spy.mockRestore();
     }
-  });
-});
-
-describe('MetricsBarChart', () => {
-  const data: MetricsBarDatum[] = [
-    { key: 'a', label: 'Alpha', average: 300, countLabel: '2 videos' },
-    { key: 'b', label: 'Alpha', average: 100, countLabel: '1 video' },
-    { key: 'long', label: 'a very long angle label that overflows', average: 50, countLabel: '4 videos' },
-  ];
-
-  it('renders the chart with one bar per group and truncated long axis labels', () => {
-    render(<MetricsBarChart data={data} metricLabel="Views" formatValue={(v) => `${v}`} />);
-    const styles = [...document.querySelectorAll('style')].map((el) => el.textContent ?? '');
-    expect(styles.some((css) => css.includes('--color-average: #c9d2dc;'))).toBe(true);
-    // Bars render as SVG paths once the container has a size (stubbed).
-    expect(document.querySelectorAll('.recharts-bar-rectangle, .recharts-rectangle').length).toBeGreaterThan(0);
-    expect(screen.getByText(/a very long angle lab…/)).toBeInTheDocument();
-  });
-
-  it('shows the group count in the tooltip label on hover', () => {
-    const { container } = render(<MetricsBarChart data={data} metricLabel="Views" formatValue={(v) => `${v}`} />);
-    const wrapper = container.querySelector('.recharts-wrapper') as HTMLElement;
-    fireEvent.mouseOver(wrapper);
-    // Plot area starts after the 140px category axis; aim at the first bar.
-    fireEvent.mouseMove(wrapper, { clientX: 300, clientY: 30 });
-    // The tooltip label resolves the hovered datum by identity, so the
-    // two 'Alpha' groups keep their own counts.
-    expect(document.body.textContent).toContain('·');
-  });
-
-  it('sizes the chart by group count with a floor for empty data', () => {
-    const { container } = render(<MetricsBarChart data={[]} metricLabel="Views" formatValue={(v) => `${v}`} />);
-    const sized = container.querySelector<HTMLElement>('[style]');
-    expect(sized?.style.height).toBe('120px');
   });
 });

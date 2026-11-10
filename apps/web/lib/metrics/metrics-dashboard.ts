@@ -1,6 +1,5 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
-  METRICS_NONE,
   isCoverageReason,
   metricsSearchParams,
   type CoverageItem,
@@ -13,33 +12,17 @@ import { notifyIfSessionExpired } from '@/lib/session-expiry';
 
 //---------------
 // metrics-dashboard — client-side data for the metrics page: the React
-// Query hook over GET /api/metrics, the account labels, and the pure
-// grouping that feeds the chart.
+// Query hook over GET /api/metrics, and the pure totals and sort that
+// feed the video list.
 //---------------
 
-export const METRIC_KEYS = ['views', 'engagedViews', 'stayedToWatchPct', 'likes', 'comments', 'saves'] as const;
-// Percent metrics average to one decimal; counts average to whole numbers.
-export const PERCENT_METRICS: ReadonlySet<MetricKey> = new Set(['stayedToWatchPct']);
-export const GROUP_KEYS = ['angle', 'persona', 'account', 'provider'] as const;
-export type MetricKey = (typeof METRIC_KEYS)[number];
-export type GroupKey = (typeof GROUP_KEYS)[number];
-
-export function isMetricKey(value: string): value is MetricKey {
-  return (METRIC_KEYS as readonly string[]).includes(value);
-}
-
-export function isGroupKey(value: string): value is GroupKey {
-  return (GROUP_KEYS as readonly string[]).includes(value);
-}
-
-export interface MetricsGroup {
-  // Raw group value (persona id, account id, provider, angle) or
-  // METRICS_NONE for rows without one.
-  key: string;
-  average: number;
-  // Videos that reported the metric (rows with a null value are left out
-  // of the average, never counted as 0).
-  count: number;
+export interface MetricsSummary {
+  // Rows in the list, whatever they reported.
+  videos: number;
+  // Sum of reported views; null values are skipped, never counted as 0.
+  views: number;
+  // Sum of reported likes + comments + saves; null values are skipped.
+  engagement: number;
 }
 
 export type MetricsFetchResult =
@@ -138,45 +121,36 @@ export function useMetricsQuery(query: MetricsQuery): UseQueryResult<MetricsFetc
   });
 }
 
-export function roundAverage(value: number, metric: MetricKey): number {
-  return PERCENT_METRICS.has(metric) ? Math.round(value * 10) / 10 : Math.round(value);
-}
-
-function groupValue(row: MetricsRowView, group: GroupKey): string {
-  if (group === 'persona') return row.personaId ?? METRICS_NONE;
-  if (group === 'account') return row.accountId;
-  if (group === 'provider') return row.provider;
-  return row.scriptAngle ?? METRICS_NONE;
-}
-
 //---------------
-// groupMetrics — average of one metric per group, highest first. Groups
-// where no video reported the metric are omitted. Returns [] when rows
-// is empty or no row has a non-null value for the metric.
+// summarize — totals over the visible rows, no averages: a total can
+// never read as a bug the way an average did (HabitLoom's 31 was the
+// average of 248 views over 8 videos). Null values are skipped, never
+// counted as 0.
 //---------------
-export function groupMetrics(rows: MetricsRowView[], group: GroupKey, metric: MetricKey): MetricsGroup[] {
-  const sums = new Map<string, { total: number; count: number }>();
+export function summarize(rows: MetricsRowView[]): MetricsSummary {
+  let views = 0;
+  let engagement = 0;
   for (const row of rows) {
-    const value = row[metric];
-    if (value === null) continue;
-    const key = groupValue(row, group);
-    const entry = sums.get(key) ?? { total: 0, count: 0 };
-    entry.total += value;
-    entry.count += 1;
-    sums.set(key, entry);
+    if (row.views !== null) views += row.views;
+    if (row.likes !== null) engagement += row.likes;
+    if (row.comments !== null) engagement += row.comments;
+    if (row.saves !== null) engagement += row.saves;
   }
-  return [...sums.entries()]
-    .map(([key, { total, count }]) => ({ key, average: roundAverage(total / count, metric), count }))
-    .sort((a, b) => b.average - a.average || a.key.localeCompare(b.key));
+  return { videos: rows.length, views, engagement };
 }
 
 //---------------
-// distinctAngles — the angle filter's options, from the loaded rows.
+// sortByViews — highest first for "which videos did best". Rows with no
+// reported views go last; ties break on the newest collectedAt, so the
+// order is deterministic. Returns a new array; the input is untouched.
 //---------------
-export function distinctAngles(rows: MetricsRowView[]): string[] {
-  const angles = new Set<string>();
-  for (const row of rows) if (row.scriptAngle !== null) angles.add(row.scriptAngle);
-  return [...angles].sort((a, b) => a.localeCompare(b));
+export function sortByViews(rows: MetricsRowView[]): MetricsRowView[] {
+  return [...rows].sort((a, b) => {
+    if (a.views === null && b.views === null) return b.collectedAt.localeCompare(a.collectedAt);
+    if (a.views === null) return 1;
+    if (b.views === null) return -1;
+    return b.views - a.views || b.collectedAt.localeCompare(a.collectedAt);
+  });
 }
 
 //---------------

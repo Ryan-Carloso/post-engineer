@@ -7,11 +7,17 @@ import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { AlertIcon, ChartIcon, SpinnerIcon } from '@/lib/ui';
 import { cn } from '@/lib/utils';
-import { MetricsBarChart } from '@/components/ui/metrics-bar-chart';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MetricsRow } from './metrics-row';
 import { MetricsCoverageCard } from './metrics-coverage-card';
+import {
+  ActiveFilterChips,
+  EMPTY_FILTERS,
+  MetricsFilterSheet,
+  type MetricsFilterPatch,
+} from './metrics-filters';
 import { PROVIDER_LABELS, accountOption } from '@/lib/account-options';
-import { SOCIAL_PROVIDERS, isSocialProvider } from '@/lib/providers/registry';
+import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 import {
   METRICS_NONE,
   METRICS_ROW_LIMIT,
@@ -20,33 +26,15 @@ import {
   type MetricsQuery,
   type MetricsRowView,
 } from '@/lib/metrics/metrics-query';
-import {
-  GROUP_KEYS,
-  METRIC_KEYS,
-  PERCENT_METRICS,
-  distinctAngles,
-  groupMetrics,
-  isGroupKey,
-  roundAverage,
-  useMetricsQuery,
-  type GroupKey,
-  type MetricKey,
-} from '@/lib/metrics/metrics-dashboard';
+import { sortByViews, summarize, useMetricsQuery } from '@/lib/metrics/metrics-dashboard';
 
 //---------------
-// MetricsPage — per-video performance at the same age (24h, 7d or 28d
-// after publishing), filtered by persona, account, network and script angle and
-// compared as averages per group.
+// MetricsPage — how are my videos doing? Totals over the visible rows
+// (no averages, no per-group comparison — that lives on /experiments):
+// videos measured, total views, total engagement. One filter bar: the
+// window Tabs plus a Filters Sheet with Persona and Network only. The
+// list is sorted by views, highest first.
 //---------------
-
-const METRIC_LABEL_KEYS: Record<MetricKey, TranslationKey> = {
-  views: 'metrics.metricViews',
-  engagedViews: 'metrics.metricEngagedViews',
-  stayedToWatchPct: 'metrics.metricStayedToWatch',
-  likes: 'metrics.metricLikes',
-  comments: 'metrics.metricComments',
-  saves: 'metrics.metricSaves',
-};
 
 const WINDOW_LABEL_KEYS: Record<MetricsQuery['window'], TranslationKey> = {
   '24h': 'metrics.window24h',
@@ -54,26 +42,12 @@ const WINDOW_LABEL_KEYS: Record<MetricsQuery['window'], TranslationKey> = {
   '28d': 'metrics.window28d',
 };
 
-const GROUP_LABEL_KEYS: Record<GroupKey, TranslationKey> = {
-  persona: 'metrics.groupPersona',
-  account: 'metrics.groupAccount',
-  provider: 'metrics.groupProvider',
-  angle: 'metrics.groupAngle',
-};
-
 const CARD_CLASS = 'rounded-2xl border border-hairline bg-card shadow-[0_8px_24px_rgba(20,32,51,0.04)]';
-// appearance-none + inline chevron: the native arrow renders differently on
-// every browser and squeezes the label.
-const SELECT_CLASS =
-  "w-full appearance-none rounded-xl border border-line bg-card bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23718096'%3E%3Cpath d='M5.5 7.5 10 12l4.5-4.5'/%3E%3C/svg%3E\")] bg-[length:16px] bg-[right_10px_center] bg-no-repeat py-2.5 pr-9 pl-3 text-sm font-medium text-ink transition-colors hover:border-line focus:border-ink focus:ring-2 focus:ring-ink/10 focus:outline-none";
-const ALL = 'all';
-const EMPTY_QUERY: Omit<MetricsQuery, 'window'> = { personaId: null, accountId: null, provider: null, angle: null };
+const EMPTY_QUERY: MetricsQuery = { window: '24h', personaId: null, accountId: null, provider: null, angle: null };
 
 export default function MetricsPage(): React.ReactElement {
   const { t, locale } = useI18n();
-  const [query, setQuery] = useState<MetricsQuery>({ window: '24h', ...EMPTY_QUERY });
-  const [metric, setMetric] = useState<MetricKey>('views');
-  const [group, setGroup] = useState<GroupKey>('angle');
+  const [query, setQuery] = useState<MetricsQuery>(EMPTY_QUERY);
 
   const metricsQuery = useMetricsQuery(query);
   const personasQuery = usePersonasQuery();
@@ -88,55 +62,50 @@ export default function MetricsPage(): React.ReactElement {
 
   const result = metricsQuery.data;
   const failed = metricsQuery.isError || (result !== undefined && !result.success);
-  const rows: MetricsRowView[] = result !== undefined && result.success ? result.rows : [];
+  const rows: MetricsRowView[] = useMemo(
+    () => (result !== undefined && result.success ? result.rows : []),
+    [result],
+  );
   // Coverage (issue #525): the published videos with no snapshot for this
   // window, and the newest collection time. Empty until the first load.
   const coverage: CoverageItem[] = result !== undefined && result.success ? result.coverage : [];
   const coverageTruncated = result !== undefined && result.success ? result.coverageTruncated : false;
   const asOf = result !== undefined && result.success ? result.asOf : null;
-  const angles = useMemo(() => {
-    const loaded = distinctAngles(rows);
-    // Keep the selected angle listed even when the filtered rows hide others.
-    return query.angle !== null && query.angle !== METRICS_NONE && !loaded.includes(query.angle)
-      ? [query.angle, ...loaded]
-      : loaded;
-  }, [rows, query.angle]);
+  const summary = summarize(rows);
+  const sorted = useMemo(() => sortByViews(rows), [rows]);
 
   const personaLabel = (id: string | null): string =>
     id === null || id === METRICS_NONE ? t('metrics.noPersona') : personaNames.get(id) ?? t('metrics.unknownPersona');
-  const labelFor = (key: string): string => {
-    if (group === 'provider') return isSocialProvider(key) ? PROVIDER_LABELS[key] : key;
-    if (group === 'account') return accountLabels.get(key) ?? key;
-    if (group === 'persona') return personaLabel(key);
-    return key === METRICS_NONE ? t('metrics.noAngle') : key;
-  };
-  const groups = groupMetrics(rows, group, metric);
-  const chartData = groups.map((entry) => ({
-    key: entry.key,
-    label: labelFor(entry.key),
-    average: entry.average,
-    countLabel: t('metrics.videosCount', { count: entry.count }),
-  }));
+  const personaOptions = useMemo(
+    () => [
+      ...(personasQuery.data ?? []).map((persona) => ({ value: persona.id, label: persona.name })),
+      { value: METRICS_NONE, label: t('metrics.noPersona') },
+    ],
+    [personasQuery.data, t],
+  );
+  const providerOptions = useMemo(
+    () => SOCIAL_PROVIDERS.map((provider) => ({ value: provider, label: PROVIDER_LABELS[provider] })),
+    [],
+  );
+  const activeFilters = [
+    ...(query.personaId === null ? [] : [{ key: 'personaId' as const, label: personaLabel(query.personaId) }]),
+    ...(query.provider === null ? [] : [{ key: 'provider' as const, label: PROVIDER_LABELS[query.provider] }]),
+  ];
 
   const update = (patch: Partial<MetricsQuery>): void => setQuery((current) => ({ ...current, ...patch }));
-  const filtered = query.personaId !== null || query.accountId !== null || query.provider !== null || query.angle !== null;
-  const metricLabel = t(METRIC_LABEL_KEYS[metric]);
-  const groupLabel = t(GROUP_LABEL_KEYS[group]);
+  const applyFilters = (filters: MetricsFilterPatch): void =>
+    update({ ...filters, accountId: null, angle: null });
+  const filtered = query.personaId !== null || query.provider !== null;
   const formatNumber = (value: number): string => value.toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US');
   const formatDate = (iso: string): string =>
     new Date(iso).toLocaleDateString(locale === 'pt' ? 'pt-BR' : 'en-US', { dateStyle: 'medium' });
   const formatDateTime = (iso: string): string =>
     new Date(iso).toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' });
-  const formatMetric = (value: number, key: MetricKey): string =>
-    PERCENT_METRICS.has(key) ? `${formatNumber(value)}%` : formatNumber(value);
-  const formatSelected = (value: number): string => formatMetric(value, metric);
-  const reported = rows.flatMap((row) => (row[metric] === null ? [] : [row[metric]]));
-  const overallAverage = reported.length === 0
-    ? null
-    : roundAverage(reported.reduce((sum, value) => sum + value, 0) / reported.length, metric);
   // Tokens granted before yt-analytics.readonly: one prompt for the page,
   // never zeros in the rows.
   const needsReconnect = rows.some((row) => row.analyticsStatus === 'scope_missing');
+  const fallbackTitle = (row: MetricsRowView): string =>
+    row.scriptAngle ?? `${PROVIDER_LABELS[row.provider]} · ${formatDate(row.collectedAt)}`;
 
   return (
     <div className="mx-auto flex w-full max-w-375 flex-col gap-5 lg:gap-6">
@@ -159,48 +128,34 @@ export default function MetricsPage(): React.ReactElement {
       </Link>
 
       <section className={cn(CARD_CLASS, 'flex flex-col gap-4 p-4 lg:p-5')}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Segmented
-            options={METRICS_WINDOWS.map((value) => ({ value, label: t(WINDOW_LABEL_KEYS[value]) }))}
+        <div className="flex flex-wrap items-center gap-3">
+          <Tabs
             value={query.window}
-            onChange={(value) => update({ window: value })}
+            onValueChange={(value) => {
+              if (value === '24h' || value === '7d' || value === '28d') update({ window: value });
+            }}
+          >
+            <TabsList>
+              {METRICS_WINDOWS.map((value) => (
+                <TabsTrigger key={value} value={value}>{t(WINDOW_LABEL_KEYS[value])}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <MetricsFilterSheet
+            filters={{ personaId: query.personaId, provider: query.provider }}
+            onApply={applyFilters}
+            personaOptions={personaOptions}
+            providerOptions={providerOptions}
           />
-          {filtered && (
-            <button
-              type="button"
-              onClick={() => update(EMPTY_QUERY)}
-              className="text-sm font-semibold text-muted-text underline-offset-4 hover:text-ink hover:underline"
-            >
-              {t('metrics.clearFilters')}
-            </button>
-          )}
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <FilterSelect label={t('metrics.filterPersona')} value={query.personaId ?? ALL}
-            onChange={(value) => update({ personaId: value === ALL ? null : value })}>
-            <option value={ALL}>{t('metrics.filterAll')}</option>
-            {(personasQuery.data ?? []).map((persona) => <option key={persona.id} value={persona.id}>{persona.name}</option>)}
-            <option value={METRICS_NONE}>{t('metrics.noPersona')}</option>
-          </FilterSelect>
-          <FilterSelect label={t('metrics.filterProvider')} value={query.provider ?? ALL}
-            onChange={(value) => update({ provider: isSocialProvider(value) ? value : null, accountId: null })}>
-            <option value={ALL}>{t('metrics.filterAll')}</option>
-            {SOCIAL_PROVIDERS.map((provider) => <option key={provider} value={provider}>{PROVIDER_LABELS[provider]}</option>)}
-          </FilterSelect>
-          <FilterSelect label={t('metrics.filterAccount')} value={query.accountId ?? ALL}
-            onChange={(value) => update({ accountId: value === ALL ? null : value })}>
-            <option value={ALL}>{t('metrics.filterAll')}</option>
-            {accounts.filter((account) => query.provider === null || account.provider === query.provider).map((account) => (
-              <option key={`${account.provider}:${account.id}`} value={account.id}>{account.label}</option>
-            ))}
-          </FilterSelect>
-          <FilterSelect label={t('metrics.filterAngle')} value={query.angle ?? ALL}
-            onChange={(value) => update({ angle: value === ALL ? null : value })}>
-            <option value={ALL}>{t('metrics.filterAll')}</option>
-            {angles.map((angle) => <option key={angle} value={angle}>{angle}</option>)}
-            <option value={METRICS_NONE}>{t('metrics.noAngle')}</option>
-          </FilterSelect>
-        </div>
+        <p className="text-xs text-muted-text">{t('metrics.windowCaption')}</p>
+        {activeFilters.length > 0 && (
+          <ActiveFilterChips
+            filters={activeFilters}
+            onRemove={(key) => update(key === 'personaId' ? { personaId: null } : { provider: null })}
+            onClearAll={() => applyFilters(EMPTY_FILTERS)}
+          />
+        )}
       </section>
 
       {needsReconnect && (
@@ -215,51 +170,23 @@ export default function MetricsPage(): React.ReactElement {
         </section>
       )}
 
-      {coverage.length > 0 && (
-        <MetricsCoverageCard
-          items={coverage}
-          truncated={coverageTruncated}
-          window={query.window}
-          personaLabel={personaLabel}
-          accountLabel={(id) => accountLabels.get(id) ?? id}
-          formatDateTime={formatDateTime}
-        />
-      )}
-
       {rows.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatTile label={t('metrics.statVideos')} value={formatNumber(rows.length)} />
+          <StatTile label={t('metrics.statVideos')} value={formatNumber(summary.videos)} />
+          <StatTile label={t('metrics.statTotalViews')} value={formatNumber(summary.views)} />
           <StatTile
-            label={t('metrics.statAverage', { metric: metricLabel.toLowerCase() })}
-            value={overallAverage === null ? t('metrics.notReported') : formatSelected(overallAverage)}
-          />
-          <StatTile
-            label={t('metrics.statBest', { group: groupLabel.toLowerCase() })}
-            value={groups.length === 0 ? t('metrics.notReported') : labelFor(groups[0].key)}
-            hint={groups.length === 0 ? undefined : formatSelected(groups[0].average)}
+            label={t('metrics.statEngagement')}
+            value={formatNumber(summary.engagement)}
+            hint={t('metrics.statEngagementHint')}
           />
         </div>
       )}
 
       <section className={cn(CARD_CLASS, 'p-4 lg:p-6')}>
-        <div className="mb-5 flex flex-col gap-4">
-          <h2 className="text-lg font-semibold tracking-[-0.02em] text-ink">
-            {t('metrics.chartTitle', { metric: metricLabel.toLowerCase(), group: groupLabel.toLowerCase() })}
-          </h2>
-          <div className="flex min-w-0 flex-wrap items-end gap-3">
-            <Segmented
-              options={METRIC_KEYS.map((key) => ({ value: key, label: t(METRIC_LABEL_KEYS[key]) }))}
-              value={metric}
-              onChange={setMetric}
-            />
-            <div className="w-full sm:w-52">
-              <FilterSelect label={t('metrics.groupLabel')} value={group}
-                onChange={(value) => { if (isGroupKey(value)) setGroup(value); }}>
-                {GROUP_KEYS.map((key) => <option key={key} value={key}>{t(GROUP_LABEL_KEYS[key])}</option>)}
-              </FilterSelect>
-            </div>
-          </div>
-        </div>
+        <h2 className="mb-2 text-lg font-semibold tracking-[-0.02em] text-ink">{t('metrics.tableTitle')}</h2>
+        {asOf !== null && (
+          <p className="mb-2 text-xs text-muted-text">{t('metrics.asOf', { date: formatDateTime(asOf) })}</p>
+        )}
         {metricsQuery.isLoading ? (
           <div className="flex items-center justify-center py-20 text-muted-text"><SpinnerIcon /></div>
         ) : failed ? (
@@ -271,81 +198,35 @@ export default function MetricsPage(): React.ReactElement {
         ) : rows.length === 0 ? (
           <StatePanel tone="empty" message={t(filtered ? 'metrics.emptyFiltered' : 'metrics.empty')} />
         ) : (
-          <MetricsBarChart data={chartData} metricLabel={metricLabel} formatValue={formatSelected} />
+          <ul className="divide-y divide-hairline">
+            {sorted.map((row) => (
+              <MetricsRow
+                key={`${row.postId}:${row.provider}:${row.externalId}`}
+                row={row}
+                title={fallbackTitle(row)}
+                subtitle={`${personaLabel(row.personaId)} · ${accountLabels.get(row.accountId) ?? row.accountId}`}
+                formatNumber={formatNumber}
+                formatDate={formatDate}
+              />
+            ))}
+          </ul>
         )}
         {result !== undefined && result.success && result.truncated && (
           <p className="mt-3 text-xs text-muted-text">{t('metrics.truncated', { limit: METRICS_ROW_LIMIT })}</p>
         )}
       </section>
 
-      {rows.length > 0 && (
-        <section className={cn(CARD_CLASS, 'p-4 lg:p-6')}>
-          <h2 className="mb-2 text-lg font-semibold tracking-[-0.02em] text-ink">{t('metrics.tableTitle')}</h2>
-          {asOf !== null && (
-            <p className="mb-2 text-xs text-muted-text">{t('metrics.asOf', { date: formatDateTime(asOf) })}</p>
-          )}
-          <ul className="divide-y divide-hairline">
-            {rows.map((row) => (
-              <MetricsRow
-                key={`${row.postId}:${row.provider}:${row.externalId}`}
-                row={row}
-                metric={metric}
-                metricLabel={metricLabel}
-                title={row.scriptAngle ?? t('metrics.noAngle')}
-                subtitle={`${personaLabel(row.personaId)} · ${accountLabels.get(row.accountId) ?? row.accountId}`}
-                formatMetric={formatMetric}
-                formatDate={formatDate}
-              />
-            ))}
-          </ul>
-        </section>
+      {coverage.length > 0 && (
+        <MetricsCoverageCard
+          items={coverage}
+          truncated={coverageTruncated}
+          window={query.window}
+          personaLabel={personaLabel}
+          accountLabel={(id) => accountLabels.get(id) ?? id}
+          formatDateTime={formatDateTime}
+        />
       )}
     </div>
-  );
-}
-
-interface SegmentedProps<T extends string> {
-  options: Array<{ value: T; label: string }>;
-  value: T;
-  onChange: (value: T) => void;
-}
-
-function Segmented<T extends string>({ options, value, onChange }: SegmentedProps<T>): React.ReactElement {
-  return (
-    <div className="inline-flex max-w-full overflow-x-auto rounded-xl bg-sunken p-1">
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-          aria-pressed={value === option.value}
-          className={cn(
-            'shrink-0 rounded-lg px-4 py-2 text-sm font-semibold whitespace-nowrap transition-colors',
-            value === option.value ? 'bg-card text-ink shadow-sm' : 'text-muted-text hover:text-ink',
-          )}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-interface FilterSelectProps {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  children: React.ReactNode;
-}
-
-function FilterSelect({ label, value, onChange, children }: FilterSelectProps): React.ReactElement {
-  return (
-    <label className="flex min-w-0 flex-col gap-1.5 text-xs font-semibold text-muted-text">
-      {label}
-      <select value={value} onChange={(event) => onChange(event.target.value)} className={SELECT_CLASS}>
-        {children}
-      </select>
-    </label>
   );
 }
 

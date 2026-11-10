@@ -7,30 +7,33 @@ import { cn } from '@/lib/utils';
 import { ProviderIcon } from '@/components/provider-icon';
 import { RetentionCurveChart } from '@/components/ui/retention-curve-chart';
 import type { MetricsRowView } from '@/lib/metrics/metrics-query';
-import { useRetentionCurveQuery, type MetricKey } from '@/lib/metrics/metrics-dashboard';
+import { useRetentionCurveQuery } from '@/lib/metrics/metrics-dashboard';
 
 //---------------
-// MetricsRow — one measured video in the metrics list: the selected metric
-// on the right and, for YouTube, the Analytics retention line (engaged
-// views, derived Stayed to watch, provisional chip) plus an on-demand
-// retention curve for long-form videos.
+// MetricsRow — one measured video in the metrics list: views as the
+// main number, likes/comments/saves inline as small numbers, and, for
+// YouTube, the Analytics retention line (engaged views, derived Stayed
+// to watch, provisional chip) plus an on-demand retention curve for
+// long-form videos.
 //---------------
 
 const AMBER_CHIP = 'rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning';
 
 interface MetricsRowProps {
   row: MetricsRowView;
-  metric: MetricKey;
-  metricLabel: string;
   title: string;
   subtitle: string;
-  formatMetric: (value: number, metric: MetricKey) => string;
+  formatNumber: (value: number) => string;
   formatDate: (iso: string) => string;
 }
 
-export function MetricsRow({ row, metric, metricLabel, title, subtitle, formatMetric, formatDate }: MetricsRowProps): React.ReactElement {
+export function MetricsRow({ row, title, subtitle, formatNumber, formatDate }: MetricsRowProps): React.ReactElement {
   const { t } = useI18n();
-  const value = row[metric];
+  const engagement = [
+    row.likes === null ? null : t('metrics.likesValue', { count: formatNumber(row.likes) }),
+    row.comments === null ? null : t('metrics.commentsValue', { count: formatNumber(row.comments) }),
+    row.saves === null ? null : t('metrics.savesValue', { count: formatNumber(row.saves) }),
+  ].filter((value): value is string => value !== null);
   return (
     <li className="flex flex-col gap-2 py-3">
       <div className="flex items-center gap-3">
@@ -46,17 +49,20 @@ export function MetricsRow({ row, metric, metricLabel, title, subtitle, formatMe
         </div>
         <div className="shrink-0 text-right">
           <p className="text-base font-bold text-ink tabular-nums">
-            {value === null ? t('metrics.notReported') : formatMetric(value, metric)}
+            {row.views === null ? t('metrics.notReported') : formatNumber(row.views)}
           </p>
-          <p className="text-[11px] font-medium tracking-wide text-muted-text uppercase">{metricLabel}</p>
+          <p className="text-[11px] font-medium tracking-wide text-muted-text uppercase">{t('metrics.viewsLabel')}</p>
+          {engagement.length > 0 && (
+            <p className="mt-0.5 text-[11px] text-muted-text tabular-nums">{engagement.join(' · ')}</p>
+          )}
         </div>
       </div>
-      {row.provider === 'youtube' && row.analyticsStatus !== null && <RetentionLine row={row} formatMetric={formatMetric} />}
+      {row.provider === 'youtube' && row.analyticsStatus !== null && <RetentionLine row={row} formatNumber={formatNumber} />}
     </li>
   );
 }
 
-function RetentionLine({ row, formatMetric }: Pick<MetricsRowProps, 'row' | 'formatMetric'>): React.ReactElement {
+function RetentionLine({ row, formatNumber }: Pick<MetricsRowProps, 'row' | 'formatNumber'>): React.ReactElement {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   if (row.analyticsStatus === 'scope_missing') {
@@ -75,12 +81,12 @@ function RetentionLine({ row, formatMetric }: Pick<MetricsRowProps, 'row' | 'for
     <div className="flex flex-col gap-2 pl-13">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-soft">
         {row.engagedViews !== null && (
-          <span className="tabular-nums">{t('metrics.engagedViewsValue', { count: formatMetric(row.engagedViews, 'engagedViews') })}</span>
+          <span className="tabular-nums">{t('metrics.engagedViewsValue', { count: formatNumber(row.engagedViews) })}</span>
         )}
         <span className="tabular-nums">
           {t('metrics.stayedToWatchDerived')}:{' '}
           <strong className="font-semibold text-ink">
-            {row.stayedToWatchPct === null ? t('metrics.notReported') : formatMetric(row.stayedToWatchPct, 'stayedToWatchPct')}
+            {row.stayedToWatchPct === null ? t('metrics.notReported') : `${formatNumber(row.stayedToWatchPct)}%`}
           </strong>
         </span>
         {row.provisional && <span className={AMBER_CHIP} title={t('metrics.provisionalHint')}>{t('metrics.provisional')}</span>}

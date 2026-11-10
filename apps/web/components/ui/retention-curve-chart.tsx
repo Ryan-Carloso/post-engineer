@@ -9,8 +9,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 // starting audience; can pass 100% when viewers rewatch a part) and, when
 // YouTube reports it, the relative retention vs. similar-length videos
 // (0-100%). Presentational: the page fetches the points and the labels.
-// A line chart is new here: MetricsBarChart compares groups, this one
-// follows one value along the video.
+// A line chart: it follows one value along the video.
 //---------------
 
 export interface RetentionCurveDatum {
