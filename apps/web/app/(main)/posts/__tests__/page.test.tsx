@@ -811,7 +811,8 @@ describe('PostsPage calendar view', () => {
     render(<PostsPage />);
 
     // The error names the calendar posts, not the supporting data.
-    expect(screen.getAllByText('posts.loadErrorCalendar')).toHaveLength(2);
+    expect(screen.getByRole('alert')).toHaveTextContent('posts.loadErrorCalendar');
+    expect(screen.getAllByRole('status').some((node) => node.textContent?.includes('posts.loadErrorSideHint'))).toBe(true);
   });
 
   it('clicking an outside day selects it and moves the shown month to it', async () => {
@@ -932,9 +933,7 @@ describe('PostsPage calendar view', () => {
     const user = userEvent.setup();
     render(<PostsPage />);
 
-    const alerts = screen.getAllByRole('alert');
-    expect(alerts).toHaveLength(2);
-    const alert = alerts[0];
+    const alert = screen.getByRole('alert');
     expect(within(alert).getByText('posts.loadErrorCalendar')).toBeInTheDocument();
     expect(within(alert).queryByText('posts.loadErrorRetryHint')).not.toBeInTheDocument();
   expect(alert.closest('[data-calendar-card]')).not.toBeNull();
@@ -963,7 +962,7 @@ describe('PostsPage calendar view', () => {
     vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isFetching: false, isError: true, refetch: vi.fn() } as never);
     render(<PostsPage />);
     expect(screen.queryByRole('button', { name: 'posts.refresh' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'posts.loadErrorRetry' })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'posts.loadErrorRetry' })).toBeInTheDocument();
   });
 });
 

@@ -237,12 +237,12 @@ export function CalendarView({
       <DayCellContext.Provider value={dayCells}>
         <CalendarChromeContext.Provider value={chrome}>
         <NavTodayContext.Provider value={navToday}>
-          <div
-            className={cn(
-              !unavailable &&
-                'max-xl:max-h-[min(40vh,17rem)] max-xl:overflow-x-hidden max-xl:overflow-y-auto max-xl:overscroll-contain max-xl:pb-2',
-            )}
-          >
+          <div className={cn(!unavailable && 'max-xl:overflow-x-hidden max-xl:overflow-visible')}>
+          {legendVisible && !unavailable && (
+            <div className={cn('mb-2 hidden border-b border-line pb-2 xl:block', legendClassName)}>
+              <CalendarLegend filtered={filtered} showSelection />
+            </div>
+          )}
           <Calendar
             mode="single"
             required
@@ -300,11 +300,6 @@ export function CalendarView({
         </NavTodayContext.Provider>
         </CalendarChromeContext.Provider>
       </DayCellContext.Provider>
-      {legendVisible && !unavailable && (
-        <div className={cn('mt-3 hidden xl:block', legendClassName)}>
-          <CalendarLegend filtered={filtered} />
-        </div>
-      )}
     </div>
   );
 }

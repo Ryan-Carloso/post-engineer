@@ -77,16 +77,18 @@ const PostThumb = ({ src }: { src: string }) => (
     <AspectRatio ratio={1} className="w-18 overflow-hidden rounded-[9px] bg-sunken">
       <video src={`${src}#t=0.1`} preload="metadata" muted playsInline className="size-full object-cover" />
     </AspectRatio>
-    <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-      <Play className="size-4 fill-white text-white drop-shadow" />
+    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-ink/10">
+      <Play className="size-4 fill-primary text-primary drop-shadow-md" />
     </span>
   </div>
 );
 
-const PostMediaTile = ({ src }: { src: string | null }) => {
+const PostMediaTile = ({ src, noPreviewLabel }: { src: string | null; noPreviewLabel: string }) => {
   if (src !== null) return <PostThumb src={src} />;
   return (
-    <AspectRatio ratio={1} className="w-18 rounded-[9px] border border-dashed border-line bg-sunken/60" />
+    <AspectRatio ratio={1} className="flex w-18 items-center justify-center rounded-[9px] border border-dashed border-line bg-sunken/60">
+      <span className="px-1 text-center text-[10px] leading-tight font-medium text-muted-foreground">{noPreviewLabel}</span>
+    </AspectRatio>
   );
 };
 
@@ -115,10 +117,24 @@ const CardHeader = ({ badge, when, showChevron = true }: { badge: ReactNode; whe
 );
 
 // The title is the card's main line; the persona sits under it.
-const CardTitle = ({ title, personaName }: { title: string; personaName: string }) => (
+const CardTitle = ({
+  title,
+  personaName,
+  personaLabel,
+}: {
+  title: string;
+  personaName: string;
+  personaLabel: string;
+}) => (
   <div className="min-w-0 flex-1">
     <p className="line-clamp-2 text-sm leading-snug font-semibold text-primary">{title}</p>
-    <p className="mt-1 truncate text-[13px] text-ink-soft">{personaName}</p>
+    <p className="mt-1 truncate text-[13px] text-ink-soft">
+      <span className="sr-only">{personaLabel}: </span>
+      <span aria-hidden className="font-medium text-muted-foreground">
+        {personaLabel}:{' '}
+      </span>
+      {personaName}
+    </p>
   </div>
 );
 
@@ -216,10 +232,10 @@ export const PostCard = ({
           showChevron={!isFailed}
         />
         <div className="mt-3 flex gap-3">
-          <CardTitle title={displayTitle} personaName={personaName} />
+          <CardTitle title={displayTitle} personaName={personaName} personaLabel={t('posts.cardPersonaLabel')} />
           {!isFailed && (
             <span aria-hidden className="w-18 shrink-0">
-              <PostMediaTile src={thumbSrc} />
+              <PostMediaTile src={thumbSrc} noPreviewLabel={t('posts.cardNoPreview')} />
             </span>
           )}
         </div>
@@ -298,6 +314,7 @@ export const GenerationCard = ({ generation, locale }: { generation: VideoGenera
           <CardTitle
             title={generation.videoSubject ?? t('posts.unknownTitle')}
             personaName={generation.personaName ?? t('posts.personaFallback')}
+            personaLabel={t('posts.cardPersonaLabel')}
           />
           {thumbSrc !== null && <PostThumb src={thumbSrc} />}
         </div>

@@ -17,7 +17,7 @@ export function PostsCalendarWeek({ week, className, ...props }: WeekProps) {
     <tr
       {...props}
       data-week-has-posts={hasPosts ? 'true' : 'false'}
-      className={cn(className, !hasPosts && '[&_[data-day-button]]:h-14 [&_[data-day-button]]:sm:h-16')}
+      className={cn(className, !hasPosts && 'xl:[&_[data-day-button]]:h-14 xl:[&_[data-day-button]]:sm:h-16')}
     />
   );
 }

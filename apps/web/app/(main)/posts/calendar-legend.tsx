@@ -6,7 +6,15 @@ import { cn } from '@/lib/utils';
 import { StatusMarker, TODAY_MARK_CLASS } from './calendar-markers';
 import { CALENDAR_GROUP_KEY, CALENDAR_GROUP_ORDER } from './status';
 
-export function CalendarLegend({ filtered = false, className }: { filtered?: boolean; className?: string }) {
+export function CalendarLegend({
+  filtered = false,
+  showSelection = false,
+  className,
+}: {
+  filtered?: boolean;
+  showSelection?: boolean;
+  className?: string;
+}) {
   const { t } = useI18n();
   return (
     <ul className={cn('flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-text', className)}>
@@ -20,6 +28,15 @@ export function CalendarLegend({ filtered = false, className }: { filtered?: boo
         <span aria-hidden className={cn('size-4 rounded-full', TODAY_MARK_CLASS)} />
         {t('posts.calendarToday')}
       </li>
+      {showSelection && (
+        <li className="flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="inline-flex size-4 items-center justify-center rounded-sm font-bold text-primary outline-2 -outline-offset-2 outline-primary"
+          />
+          {t('posts.calendarLegendSelected')}
+        </li>
+      )}
       {filtered && (
         <li data-filter-hint className="flex items-center gap-1.5 font-semibold text-primary">
           <Filter className="size-3.5" aria-hidden />

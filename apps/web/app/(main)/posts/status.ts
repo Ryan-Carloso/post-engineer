@@ -1,5 +1,6 @@
-import { Check, Clock, LoaderCircle, TriangleAlert } from 'lucide-react';
+import { Check, Clock, TriangleAlert } from 'lucide-react';
 import type { TranslationKey } from '@/lib/i18n';
+import { CalendarProgressIcon } from './calendar-progress-icon';
 
 // Per-status badges of the post detail page and the video generation cards
 // (post cards use the calendar groups below). Colors are semantic tokens
@@ -94,6 +95,6 @@ export const CALENDAR_GROUP_KEY: Record<CalendarGroup, TranslationKey> = {
 export const CALENDAR_GROUP_ICON: Record<CalendarGroup, typeof Check> = {
   published: Check,
   failed: TriangleAlert,
-  inProgress: LoaderCircle,
+  inProgress: CalendarProgressIcon,
   scheduled: Clock,
 };

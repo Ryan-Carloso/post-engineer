@@ -19,7 +19,7 @@ import {
   gridRange,
   monthKey,
 } from './calendar-days';
-import { AccountEmptyState, DayEmptyState, DaySummary, LoadErrorBanner } from './day-section';
+import { AccountEmptyState, DayEmptyState, DaySummary, LoadErrorSidePanel } from './day-section';
 import { CALENDAR_LAYOUT_CLASS, CalendarLoadingSkeleton } from './loading-skeleton';
 import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-joins';
 
@@ -195,9 +195,7 @@ export default function PostsPage() {
               )}
             >
               {isError ? (
-                <div className="rounded-xl border border-line bg-card p-4 xl:min-h-[22rem]">
-                  <LoadErrorBanner compact messageKey={loadErrorKey} onRetry={handleRefresh} />
-                </div>
+                <LoadErrorSidePanel messageKey={loadErrorKey} />
               ) : isAccountEmpty ? (
                 <>
                   <h2 className="text-base font-bold tracking-[-0.01em] text-primary">

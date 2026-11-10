@@ -154,7 +154,9 @@ describe('PostCard header and media', () => {
   it('draws a quiet media placeholder when the post has no video yet', () => {
     renderCard({ ...FAILED_SLOT, status: 'awaiting', taskId: null });
     expect(document.querySelector('video')).toBeNull();
-    expect(document.querySelector('[data-status="awaiting"]')?.closest('a')?.querySelector('.border-dashed')).not.toBeNull();
+    const placeholder = document.querySelector('[data-status="awaiting"]')?.closest('a')?.querySelector('.border-dashed');
+    expect(placeholder).not.toBeNull();
+    expect(placeholder).toHaveTextContent('posts.cardNoPreview');
   });
 
   it('names the card link with the post title for screen readers', () => {

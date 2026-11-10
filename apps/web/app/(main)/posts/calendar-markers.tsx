@@ -35,12 +35,12 @@ export function StatusMarker({ group, count, labeled = false }: { group: Calenda
       data-marker={group}
       title={showCount ? `${label}: ${count}` : label}
       className={cn(
-        'inline-flex h-[18px] items-center justify-center gap-0.5 overflow-hidden rounded-full text-[10px] leading-none font-bold',
+        'inline-flex h-4 max-xl:h-[15px] items-center justify-center gap-0.5 overflow-hidden rounded-full text-[10px] max-xl:text-[9px] leading-none font-bold',
         CALENDAR_GROUP_MARKER[group],
-        labeled || showCount ? 'max-w-full min-w-0 shrink px-1' : 'w-[18px] shrink-0',
+        labeled || showCount ? 'max-w-full min-w-0 shrink px-1' : 'w-4 max-xl:w-[15px] shrink-0',
       )}
     >
-      <Icon className="size-2.5 shrink-0" strokeWidth={3} aria-hidden />
+      <Icon className="size-2.5 max-xl:size-2 shrink-0" strokeWidth={3} aria-hidden />
       {labeled && <span className="min-w-0 truncate">{label}</span>}
       {showCount && (
         <span data-count className="shrink-0 tabular-nums">
@@ -66,7 +66,7 @@ function DayCellStatusSummary({ groups, counts }: { groups: CalendarGroup[]; cou
       {overflowCount > 0 && (
         <span
           data-overflow-count
-          className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-sunken px-1 text-[10px] font-bold text-ink-soft tabular-nums"
+          className="inline-flex h-4 max-xl:h-[15px] min-w-4 max-xl:min-w-[15px] shrink-0 items-center justify-center rounded-full bg-sunken px-1 text-[10px] max-xl:text-[9px] font-bold text-ink-soft tabular-nums"
         >
           +{overflowCount}
         </span>
@@ -120,7 +120,7 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       data-selected-single={selectedSingle ? true : undefined}
       data-day-button
       className={cn(
-        'aspect-auto h-[5.25rem] w-full max-w-full min-w-0 flex-col items-center justify-start gap-1 overflow-visible px-0.5 pb-1 pt-1 sm:h-24 sm:min-h-24',
+        'aspect-auto h-[4.25rem] w-full max-w-full min-w-0 flex-col items-center justify-start gap-0.5 overflow-visible px-0.5 pb-0.5 pt-0.5 max-xl:h-[4.25rem] sm:h-24 sm:min-h-24 sm:gap-1 sm:pb-1 sm:pt-1',
         !isOutside && '[&>span]:opacity-100',
         isOutside &&
           'text-muted-foreground hover:bg-transparent hover:text-muted-foreground active:bg-transparent data-[selected-single=true]:text-muted-foreground',
