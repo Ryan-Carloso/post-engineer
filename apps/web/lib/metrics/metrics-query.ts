@@ -23,6 +23,31 @@ export function isMetricsWindow(value: unknown): value is MetricsWindow {
   return typeof value === 'string' && (METRICS_WINDOWS as readonly string[]).includes(value);
 }
 
+// Window start hours after publish (migrations 025/039: the due SQL's
+// `values ('24h', 24), ('7d', 168), ('28d', 672)` — pinned against the SQL
+// by the sync test in lib/metrics/__tests__/metrics-coverage.test.ts).
+export const METRICS_WINDOW_START_HOURS: Record<MetricsWindow, number> = { '24h': 24, '7d': 168, '28d': 672 };
+// Every window is 24h wide (migration 025: start_hours + 24).
+export const METRICS_WINDOW_WIDTH_HOURS = 24;
+// The oldest publish a coverage/re-open scan can still act on: the 28d
+// window closes 672 + 24 hours after publish.
+export const METRICS_WINDOW_LOOKBACK_HOURS =
+  Math.max(...Object.values(METRICS_WINDOW_START_HOURS)) + METRICS_WINDOW_WIDTH_HOURS;
+
+//---------------
+// metricsWindowRange — [opensAt, closesAt) for one window of a post
+// published at publishedAt. Mirrors the due SQL's bounds exactly:
+// published_at <= now - start_hours and published_at > now - (start_hours + 24).
+//---------------
+export function metricsWindowRange(
+  window: MetricsWindow,
+  publishedAt: Date,
+): { opensAt: Date; closesAt: Date } {
+  const opensAt = new Date(publishedAt.getTime() + METRICS_WINDOW_START_HOURS[window] * 60 * 60 * 1000);
+  const closesAt = new Date(opensAt.getTime() + METRICS_WINDOW_WIDTH_HOURS * 60 * 60 * 1000);
+  return { opensAt, closesAt };
+}
+
 // post_metrics.analytics_status (migration 039 check, pinned by a sync test).
 export const ANALYTICS_STATUSES = ['ok', 'scope_missing', 'not_owned', 'no_data'] as const;
 export type AnalyticsStatus = (typeof ANALYTICS_STATUSES)[number];
@@ -98,10 +123,43 @@ export interface MetricsRowView {
   collectedAt: string;
 }
 
+// Coverage — published videos with no snapshot for the selected window
+// (issue #525): why each one is missing, so the dashboard never silently
+// understates reality. pending = the window has not opened yet; retrying =
+// the window is open and the collector keeps trying; missed = the window
+// closed while collection kept failing; no-target = the window closed and
+// the collector finished the post without ever seeing this video (it was
+// published late, after the post was marked done); publish-failed = the
+// publish outcome is 'failed', so there is no video id to measure.
+export const COVERAGE_REASONS = ['pending', 'retrying', 'missed', 'no-target', 'publish-failed'] as const;
+export type CoverageReason = (typeof COVERAGE_REASONS)[number];
+
+export function isCoverageReason(value: unknown): value is CoverageReason {
+  return typeof value === 'string' && (COVERAGE_REASONS as readonly string[]).includes(value);
+}
+
+export interface CoverageItem {
+  postId: string;
+  personaId: string | null;
+  provider: SocialProvider;
+  accountId: string;
+  // Null for publish-failed items: a failed publish records no video id.
+  externalId: string | null;
+  scriptAngle: string | null;
+  reason: CoverageReason;
+  publishedAt: string;
+  windowOpensAt: string;
+  windowClosesAt: string;
+}
+
 export interface MetricsResponse {
   success: true;
   rows: MetricsRowView[];
   truncated: boolean;
+  coverage: CoverageItem[];
+  coverageTruncated: boolean;
+  // Newest collected_at across the returned rows; null when no rows.
+  asOf: string | null;
 }
 
 // Exported for the metrics route, which validates stored API-key

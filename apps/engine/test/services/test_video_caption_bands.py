@@ -121,3 +121,35 @@ def test_a_cue_that_starts_before_the_panel_is_still_lifted(tmp_path, monkeypatc
     output = _render(tmp_path, bands, "band-late.mp4")
     _top, bottom = _text_rows(output, tmp_path)
     assert bottom <= panel_top - segment_panels.CAPTION_GAP, "the captions stay above the panel"
+
+
+def test_captions_use_the_frame_scaled_font_size_and_leave_the_callers_params_alone(tmp_path, monkeypatch):
+    _stub_bundled_font(tmp_path, monkeypatch)
+    sizes = []
+    real_text_clip = vd.TextClip
+
+    def recording_text_clip(*args, **kwargs):
+        sizes.append(kwargs["font_size"])
+        return real_text_clip(*args, **kwargs)
+
+    scaled_calls = []
+
+    def fake_scaled(font_size, width, height):
+        scaled_calls.append((font_size, width, height))
+        return 33
+
+    monkeypatch.setattr(vd, "TextClip", recording_text_clip)
+    monkeypatch.setattr(vd.subtitle_sizing, "scaled_font_size", fake_scaled)
+    base, audio, subtitle = _media(tmp_path)
+    params = VideoParams(video_subject="x", video_aspect="9:16", font_size=50)
+    vd.generate_video(
+        video_path=base,
+        audio_path=audio,
+        subtitle_path=subtitle,
+        output_file=str(tmp_path / "out.mp4"),
+        params=params,
+        music_mood="",
+    )
+    assert scaled_calls == [(50, 1080, 1920)]
+    assert sizes and set(sizes) == {33}, "every caption clip uses the scaled size"
+    assert params.font_size == 50, "scaling must not compound across videos"

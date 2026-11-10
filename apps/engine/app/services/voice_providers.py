@@ -16,6 +16,7 @@ from loguru import logger
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 
 from app.config import config
+from app.services import subtitle_cues
 from app.services.analytics import scrub_error_text, scrub_secret_values
 from app.utils import utils
 
@@ -31,8 +32,9 @@ class SubMaker:
     ``subs`` holds the spoken fragments and ``offset`` their (start, end)
     positions in 100-nanosecond units, index-aligned. Chatterbox has no
     word-level boundaries, so the fragments are filled by
-    ``populate_legacy_submaker_with_full_text``: one fragment per sentence,
-    timed proportionally across the audio duration.
+    ``populate_legacy_submaker_with_full_text``: one fragment per capped
+    cue (``subtitle_cues.MAX_CUE_WORDS``), each sentence's span shared by
+    character count.
     """
 
     def __init__(self) -> None:
@@ -145,9 +147,10 @@ def populate_legacy_submaker_with_full_text(
 
     Chatterbox returns no word-level boundaries, so the subtitle timeline
     has to be estimated: split the script into sentences and distribute
-    the duration proportionally by character count. That lets
-    `create_subtitle` match script sentences line by line instead of
-    falling back to Whisper because the full text never matches.
+    the duration proportionally by character count, then cut each sentence
+    into cues of at most MAX_CUE_WORDS words. That lets `create_subtitle`
+    match the capped script lines one by one instead of falling back to
+    Whisper because the full text never matches.
 
     Args:
         sub_maker: object to write the subtitle data into
@@ -200,8 +203,12 @@ def populate_legacy_submaker_with_full_text(
             )
             sentence_end = min(current_offset + sentence_duration, audio_duration_100ns)
 
-        sub_maker.subs.append(cleaned_sentence)
-        sub_maker.offset.append((current_offset, sentence_end))
+        # One fragment per capped cue, so create_subtitle matches the script lines.
+        for cue, cue_start, cue_end in subtitle_cues.split_timed(
+            cleaned_sentence, current_offset, sentence_end
+        ):
+            sub_maker.subs.append(cue)
+            sub_maker.offset.append((cue_start, cue_end))
         current_offset = sentence_end
 
     return sub_maker

@@ -113,7 +113,7 @@ class TestSchemaBounds(unittest.TestCase):
         self.assertEqual(self._params(font_size=8).font_size, 8)
         self.assertEqual(self._params(font_size=300).font_size, 300)
         # Default comes from config [ui] (production default), not the fallback.
-        self.assertEqual(self._params().font_size, config.ui.get("font_size", 60))
+        self.assertEqual(self._params().font_size, config.ui.get("font_size", 50))
 
     def test_stroke_width_bounds(self):
         for bad in (-0.1, -5, 20.1, 100):

@@ -25,9 +25,10 @@ interface MetricsRowProps {
   title: string;
   subtitle: string;
   formatMetric: (value: number, metric: MetricKey) => string;
+  formatDate: (iso: string) => string;
 }
 
-export function MetricsRow({ row, metric, metricLabel, title, subtitle, formatMetric }: MetricsRowProps): React.ReactElement {
+export function MetricsRow({ row, metric, metricLabel, title, subtitle, formatMetric, formatDate }: MetricsRowProps): React.ReactElement {
   const { t } = useI18n();
   const value = row[metric];
   return (
@@ -39,6 +40,9 @@ export function MetricsRow({ row, metric, metricLabel, title, subtitle, formatMe
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ink">{title}</p>
           <p className="truncate text-xs text-muted-text">{subtitle}</p>
+          <p className="text-[11px] text-muted-text">
+            {t('metrics.tableCollected')} {formatDate(row.collectedAt)}
+          </p>
         </div>
         <div className="shrink-0 text-right">
           <p className="text-base font-bold text-ink tabular-nums">

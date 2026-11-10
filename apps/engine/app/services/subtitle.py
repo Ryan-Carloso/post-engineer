@@ -10,6 +10,7 @@ except ImportError:
 from loguru import logger
 
 from app.config import config
+from app.services import subtitle_cues, subtitle_words
 from app.utils import utils
 
 model_size = config.whisper.get("model_size", "large-v3")
@@ -264,25 +265,42 @@ def correct(subtitle_file, video_script):
     """Make the subtitle text match the script, keeping the speech timing.
 
     A file whose cues already match the script line for line is left as
-    is. Otherwise every script line is retimed by its character share of
-    the spoken timeline (see _retime_by_character_share) — the old
-    line-to-cue pairing ran out of cues on coarse Whisper output and wrote
-    the remaining lines at 00:00:00.
+    is. Otherwise every script line is retimed from Whisper's word
+    boundaries when they are usable (see subtitle_words.retime_by_words),
+    or by its character share of the spoken timeline otherwise (see
+    _retime_by_character_share) — the old line-to-cue pairing ran out of
+    cues on coarse Whisper output and wrote the remaining lines at 00:00:00.
     """
     subtitle_items = file_to_subtitles(subtitle_file)
     normalized_script = utils.normalize_script_for_subtitle_matching(video_script)
-    script_lines = [line.strip() for line in utils.split_string_by_punctuations(normalized_script) if line.strip()]
+    script_lines = [line.strip() for line in subtitle_cues.split_script_lines(normalized_script) if line.strip()]
 
     if [item[2].strip() for item in subtitle_items] == script_lines:
         logger.success("Subtitle is correct")
         return
 
-    retimed = _retime_by_character_share(subtitle_items, script_lines)
+    # Whisper's word boundaries place each cue on the word it starts with;
+    # without usable ones the cues are spread by character share instead.
+    timed = subtitle_words.retime_by_words(script_lines, file_to_words(subtitle_file))
+    if timed:
+        method = "spoken word boundaries"
+        retimed = [
+            (
+                number,
+                f"{utils.time_convert_seconds_to_hmsm(start)} --> "
+                f"{utils.time_convert_seconds_to_hmsm(end)}",
+                text,
+            )
+            for number, (text, start, end) in enumerate(timed, 1)
+        ]
+    else:
+        method = "character share"
+        retimed = _retime_by_character_share(subtitle_items, script_lines)
     if not retimed:
         logger.warning("subtitle has no timed speech to retime; leaving it as is")
         return
     with open(subtitle_file, "w", encoding="utf-8") as fd:
         for i, item in enumerate(retimed):
             fd.write(f"{i + 1}\n{item[1]}\n{item[2]}\n\n")
-    logger.info(f"Subtitle corrected: {len(retimed)} script lines retimed by character share")
+    logger.info(f"Subtitle corrected: {len(retimed)} script lines retimed by {method}")
 
