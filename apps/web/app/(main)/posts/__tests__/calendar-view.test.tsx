@@ -110,10 +110,28 @@ describe('CalendarView', () => {
     expect(today.className.split(/\s+/)).toContain('overflow-hidden');
     const bar = today.querySelector('[data-today-bar="true"]');
     expect(bar).not.toBeNull();
-    expect(bar?.className).toMatch(/max-w-full/);
+    expect(bar?.className.split(/\s+/)).not.toContain('absolute');
+    expect(bar?.parentElement?.getAttribute('data-day-number')).not.toBeNull();
+    expect(bar?.nextElementSibling?.getAttribute('data-day-numeral')).not.toBeNull();
     expect(number?.querySelector('[data-today-mark]')).toBeNull();
     expect(number?.className.split(/\s+/)).not.toContain('ring-warning');
     expect(dayButton(/June 20, 2030/).querySelector('[data-today-bar]')).toBeNull();
+  });
+
+  it('insets the count pill inside the selected-day outline', () => {
+    setup({
+      selectedKey: '2030-06-05',
+      slotsByDay: new Map([
+        ['2030-06-05', [
+          { status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T10:00:00.000Z' },
+          { status: 'published', scheduleId: 's2', slotAt: '2030-06-05T15:00:00.000Z' },
+        ]],
+      ]),
+    });
+    const selected = dayButton(/June 5, 2030/);
+    expect(selected.className).toMatch(/data-\[selected-single=true\]:pb-2\.5/);
+    const pillWrapper = selected.querySelector('[data-day-post-total]')?.parentElement;
+    expect(pillWrapper?.className.split(/\s+/)).toContain('mb-0.5');
   });
 
   it('keeps the today bar and post total as separate marks when today is selected', () => {
@@ -305,9 +323,9 @@ describe('CalendarView', () => {
     const todaySwatch = legend.querySelector('[data-legend-today-bar]');
     expect(todaySwatch?.className).toMatch(/bg-warning/);
     expect(legend.querySelector('[data-legend-today-mark]')).toBeNull();
-    expect(selectedSwatch?.className.split(/\s+/)).toContain('ring-primary');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-primary');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('rounded-md');
-    expect(selectedSwatch?.className.split(/\s+/)).not.toContain('outline-primary');
+    expect(selectedSwatch?.className.split(/\s+/)).not.toContain('ring-primary');
     expect(legend.querySelector('[data-filter-hint]')).toBeNull();
   });
 

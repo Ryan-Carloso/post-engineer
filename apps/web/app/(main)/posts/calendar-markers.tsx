@@ -62,16 +62,17 @@ export const LEGEND_POST_TOTAL_SWATCH_CLASS = cn(
 
 export const TODAY_TOP_BAR_CLASS = 'h-1 w-full shrink-0 rounded-full bg-warning';
 
-export const TODAY_CELL_TOP_BAR_CLASS =
-  'pointer-events-none absolute top-1 z-[1] h-1 w-[calc(100%-0.5rem)] max-w-full rounded-full bg-warning left-1/2 -translate-x-1/2';
+// Inline above the today numeral — not pinned to the cell top edge.
+export const TODAY_CELL_BAR_CLASS =
+  'pointer-events-none mb-0.5 h-1 w-9 max-w-[calc(100%-0.35rem)] shrink-0 rounded-full bg-warning';
 
 // Legend today: the same gold top bar as the grid — not a miniature scene.
 export const LEGEND_TODAY_BAR_SWATCH_CLASS =
   'inline-block h-1 w-10 shrink-0 rounded-full bg-warning align-middle';
 
-// Miniature selected day cell: blue rounded outline like the grid — not a dark square.
+// Miniature selected day cell: same blue rounded outline as the grid.
 export const SELECTED_DAY_LEGEND_SWATCH_CLASS =
-  'pointer-events-none inline-flex aspect-[4/5] h-[2.35rem] w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent shadow-none ring-2 ring-inset ring-primary';
+  'pointer-events-none inline-flex aspect-[4/5] h-[2.35rem] w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent shadow-none outline outline-2 -outline-offset-[4px] outline-primary';
 
 function DayCellPostTotal({
   total,
@@ -115,8 +116,8 @@ export const DayCellContext = createContext<DayContextValue>({ slotsByDay: new M
 // PostsDayButton — one day cell. One post total (per-status breakdown is
 // only in the accessible name and on the day's cards). No persona names in
 // the cell (the list below names them). Today is a gold top bar, wash on the
-// numeral wash; counts stay in the bottom pill. Selection
-// on an overflow-visible cell so the ring does not clip the markers.
+// numeral; counts sit under the numeral. Selection uses a visible outline;
+// counts stay inset so they do not sit on the ring.
 //---------------
 export function PostsDayButton({ children, day, modifiers, className, ...props }: ComponentProps<typeof DayButton>) {
   const { slotsByDay } = useContext(DayCellContext);
@@ -142,12 +143,12 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       data-day-button
       className={cn(
         'relative aspect-auto h-[4.5rem] w-full max-w-full min-w-0 flex-col items-center justify-start px-0.5 pb-1 max-xl:h-[4.75rem] sm:h-24 sm:min-h-24 sm:pb-1 sm:pt-1 xl:h-[4.25rem] xl:min-h-[4.25rem] xl:gap-0.5 xl:pb-0.5',
-        isToday ? 'gap-0 overflow-hidden pt-1.5' : 'gap-0.5 overflow-visible pt-0.5',
+        isToday ? 'gap-0 overflow-hidden pt-1' : 'gap-0.5 overflow-visible pt-0.5',
         !isOutside && '[&>span]:opacity-100',
         isOutside &&
           'text-muted-foreground hover:bg-transparent hover:text-muted-foreground active:bg-transparent data-[selected-single=true]:text-muted-foreground',
         !isOutside && 'hover:bg-sunken hover:text-primary',
-        'data-[selected-single=true]:rounded-md data-[selected-single=true]:bg-transparent data-[selected-single=true]:outline-2 data-[selected-single=true]:-outline-offset-[4px] data-[selected-single=true]:outline-primary data-[selected-single=true]:hover:bg-transparent data-[selected-single=true]:pb-1.5',
+        'data-[selected-single=true]:rounded-md data-[selected-single=true]:bg-transparent data-[selected-single=true]:outline-2 data-[selected-single=true]:-outline-offset-[4px] data-[selected-single=true]:outline-primary data-[selected-single=true]:hover:bg-transparent data-[selected-single=true]:px-0.5 data-[selected-single=true]:pb-2.5 data-[selected-single=true]:pt-1',
         !isOutside && 'data-[selected-single=true]:text-primary',
         'focus-visible:ring-[3px] focus-visible:ring-ring/50',
         'group-data-[focused=true]/day:bg-transparent group-data-[focused=true]/day:ring-0 group-data-[focused=true]/day:shadow-none',
@@ -155,15 +156,16 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       )}
       {...props}
     >
-      {isToday && <span aria-hidden data-today-bar="true" className={TODAY_CELL_TOP_BAR_CLASS} />}
       <span
         data-day-number
         className={cn(
           'z-[2] flex min-h-0 w-full min-w-0 flex-1 flex-col items-center justify-center gap-1 px-0.5 tabular-nums',
-          isToday ? 'pt-2.5' : 'pt-1',
+          isToday ? 'pt-0.5' : 'pt-1',
           isToday && slots.length > 0 && 'gap-1.5',
+          selectedSingle && slots.length > 0 && 'gap-1.5 pb-0.5',
         )}
       >
+        {isToday && <span aria-hidden data-today-bar="true" className={TODAY_CELL_BAR_CLASS} />}
         <span
           data-day-numeral
           className={cn(
@@ -175,7 +177,10 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
           {children}
         </span>
         {slots.length > 0 && (
-          <span aria-hidden className="flex shrink-0 items-center justify-center">
+          <span
+            aria-hidden
+            className={cn('flex shrink-0 items-center justify-center', selectedSingle && 'mb-0.5')}
+          >
             <DayCellPostTotal total={slots.length} groups={groups} counts={counts} selected={selectedSingle} />
           </span>
         )}

@@ -1000,7 +1000,8 @@ describe('PostsPage calendar view', () => {
     expect(screen.queryAllByRole('button', { name: 'posts.loadErrorRetry' })).toHaveLength(1);
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
     const loadError = document.querySelector('[data-calendar-load-error]');
-    expect(loadError?.className).toMatch(/min-h-\[(15|17|19)rem\]/);
+    expect(loadError?.className.split(/\s+/)).toContain('flex-1');
+    expect(loadError?.closest('[data-calendar-card]')?.className).toMatch(/xl:min-h-\[22rem\]/);
     expect(loadError?.className.split(/\s+/)).toContain('justify-center');
     expect(loadError?.className).toMatch(/bg-warning/);
     expect(alert.closest('.xl\\:col-span-2')).not.toBeNull();

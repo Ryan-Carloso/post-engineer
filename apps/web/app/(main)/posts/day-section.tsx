@@ -148,7 +148,8 @@ export function LoadErrorBanner({
     <div
       role="alert"
       className={cn(
-        'flex flex-col gap-3 text-ink',
+        'flex flex-col text-ink',
+        compact ? 'gap-2.5' : 'gap-3',
         !bare && 'rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3',
         bare && 'max-w-md border-0 bg-transparent px-0 py-0',
         compact ? 'mx-auto w-full items-center text-center' : 'items-start',
