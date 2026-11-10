@@ -24,8 +24,8 @@ export function isMetricsWindow(value: unknown): value is MetricsWindow {
 }
 
 // Window start hours after publish (migrations 025/039: the due SQL's
-// `values ('24h', 24), ('7d', 168), ('28d', 672)` — pinned by a sync test
-// in lib/metrics/__tests__/post-metrics.test.ts).
+// `values ('24h', 24), ('7d', 168), ('28d', 672)` — pinned against the SQL
+// by the sync test in lib/metrics/__tests__/metrics-coverage.test.ts).
 export const METRICS_WINDOW_START_HOURS: Record<MetricsWindow, number> = { '24h': 24, '7d': 168, '28d': 672 };
 // Every window is 24h wide (migration 025: start_hours + 24).
 export const METRICS_WINDOW_WIDTH_HOURS = 24;
