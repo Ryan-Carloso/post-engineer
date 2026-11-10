@@ -200,8 +200,8 @@ export function CalendarView({
   loadErrorNoteKey,
   onLoadErrorRetry,
   onGoToToday,
-  onRefresh,
-  refreshing = false,
+  onRefresh: _onRefresh,
+  refreshing: _refreshing = false,
 }: CalendarViewProps) {
   const { t, locale } = useI18n();
   const dateFormat = useMemo(() => new Intl.DateTimeFormat(INTL_TAG[locale], { dateStyle: 'full' }), [locale]);
@@ -277,80 +277,80 @@ export function CalendarView({
     >
       <DayCellContext.Provider value={dayCells}>
         <CalendarChromeContext.Provider value={chrome}>
-        <NavTodayContext.Provider value={navToday}>
-          {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined ? (
-            <div
-              data-calendar-load-error
-              className="flex w-full min-h-[20rem] flex-col items-center justify-center rounded-lg border border-warning/35 bg-warning/12 px-4 py-10 sm:min-h-[22rem] sm:px-6 xl:min-h-[26rem]"
-            >
-              <LoadErrorBanner
-                compact
-                fill
-                bare
-                messageKey={loadErrorMessageKey}
-                noteKey={loadErrorNoteKey}
-                onRetry={onLoadErrorRetry}
-              />
-            </div>
-          ) : (
-          <div className="max-xl:overflow-x-hidden max-xl:overflow-visible">
-          {legendVisible && (
-            <div className={cn('mb-2 border-b border-line pb-2', legendClassName)}>
-              <CalendarLegend filtered={filtered} />
-            </div>
-          )}
-          <Calendar
-            mode="single"
-            required
-            locale={DAY_PICKER_LOCALE[locale]}
-            weekStartsOn={firstWeekday}
-            month={new Date(year, month, 1)}
-            onMonthChange={(date) => onMonthChange(date.getFullYear(), date.getMonth())}
-            onNextClick={(date) => onMonthNavigate(date.getFullYear(), date.getMonth())}
-            onPrevClick={(date) => onMonthNavigate(date.getFullYear(), date.getMonth())}
-            today={inert ? undefined : dateFromKey(todayKey)}
-            selected={selectedKey === null || inert ? undefined : dateFromKey(selectedKey)}
-            disabled={inert}
-            onSelect={(date) => onSelect(dayKey(date))}
-            labels={labels}
-            formatters={formatters}
-            className="w-full bg-transparent p-0 [--cell-size:--spacing(10)]"
-            classNames={{
-              root: 'w-full',
-              caption_label: 'text-base font-bold capitalize text-primary',
-              // The nav clusters right (prev / Today / next) and the caption
-              // title left-aligns with room to its right, so the title
-              // never runs under the navigation.
-              nav: 'absolute right-0 top-0 flex shrink-0 items-center gap-0.5 pr-0.5 max-xl:gap-1',
-              button_previous: NAV_ARROW_CLASS,
-              button_next: NAV_ARROW_CLASS,
-              month_caption:
-                'flex min-h-(--cell-size) w-full items-center justify-start pr-[10.75rem] max-xl:pr-[10.25rem] sm:pr-44',
-              weekdays: 'table-row',
-              // Equal table cells so seven columns stay aligned on narrow screens.
-              weekday:
-                'table-cell min-w-0 w-[14.2857%] select-none px-0.5 pb-1 text-center text-xs font-medium capitalize text-muted-foreground max-xl:sticky max-xl:top-0 max-xl:z-[1] max-xl:bg-card',
-              week: 'table-row',
-              // table-fixed: a table sizes columns from cell content, so a
-              // busy day's chips were widening the month past the screen.
-              month_grid: 'w-full table-fixed border-collapse',
-              // Today is drawn by the day number itself (see PostsDayButton):
-              // drop shadcn's accent fill so today never reads as selected.
-              today: 'rounded-md [&:not([data-selected-single=true])]:bg-transparent',
-              outside:
-                'text-muted-foreground [&_button]:text-muted-foreground [&_button]:hover:bg-transparent [&_button]:active:bg-transparent',
-              // Disabled days (a failed load, or an account with no posts)
-              // keep readable numbers. shadcn's default fades them to 50%.
-              disabled: 'text-primary opacity-100',
-              // Equal share of the fixed table. The chip row clips itself; the
-              // cell does not, or it would crop the selection outline.
-              day: 'group/day relative min-w-0 w-[14.2857%] table-cell p-0 text-center align-top',
-            }}
-            components={{ DayButton: PostsDayButton, Nav: CalendarNav, Week: PostsCalendarWeek, Weeks: PostsCalendarWeeks }}
-          />
-          </div>
-          )}
-        </NavTodayContext.Provider>
+          <NavTodayContext.Provider value={navToday}>
+            {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined ? (
+              <div
+                data-calendar-load-error
+                className="flex w-full min-h-[20rem] flex-col items-center justify-center rounded-lg border border-warning/35 bg-warning/12 px-4 py-10 sm:min-h-[22rem] sm:px-6 xl:min-h-[26rem]"
+              >
+                <LoadErrorBanner
+                  compact
+                  fill
+                  bare
+                  messageKey={loadErrorMessageKey}
+                  noteKey={loadErrorNoteKey}
+                  onRetry={onLoadErrorRetry}
+                />
+              </div>
+            ) : (
+              <div className="max-xl:overflow-x-hidden max-xl:overflow-visible">
+                {legendVisible && (
+                  <div className={cn('mb-2 border-b border-line pb-2', legendClassName)}>
+                    <CalendarLegend filtered={filtered} />
+                  </div>
+                )}
+                <Calendar
+                  mode="single"
+                  required
+                  locale={DAY_PICKER_LOCALE[locale]}
+                  weekStartsOn={firstWeekday}
+                  month={new Date(year, month, 1)}
+                  onMonthChange={(date) => onMonthChange(date.getFullYear(), date.getMonth())}
+                  onNextClick={(date) => onMonthNavigate(date.getFullYear(), date.getMonth())}
+                  onPrevClick={(date) => onMonthNavigate(date.getFullYear(), date.getMonth())}
+                  today={inert ? undefined : dateFromKey(todayKey)}
+                  selected={selectedKey === null || inert ? undefined : dateFromKey(selectedKey)}
+                  disabled={inert}
+                  onSelect={(date) => onSelect(dayKey(date))}
+                  labels={labels}
+                  formatters={formatters}
+                  className="w-full bg-transparent p-0 [--cell-size:--spacing(10)]"
+                  classNames={{
+                    root: 'w-full',
+                    caption_label: 'text-base font-bold capitalize text-primary',
+                    // The nav clusters right (prev / Today / next) and the caption
+                    // title left-aligns with room to its right, so the title
+                    // never runs under the navigation.
+                    nav: 'absolute right-0 top-0 flex shrink-0 items-center gap-0.5 pr-0.5 max-xl:gap-1',
+                    button_previous: NAV_ARROW_CLASS,
+                    button_next: NAV_ARROW_CLASS,
+                    month_caption:
+                      'flex min-h-(--cell-size) w-full items-center justify-start pr-[10.75rem] max-xl:pr-[10.25rem] sm:pr-44',
+                    weekdays: 'table-row',
+                    // Equal table cells so seven columns stay aligned on narrow screens.
+                    weekday:
+                      'table-cell min-w-0 w-[14.2857%] select-none px-0.5 pb-1 text-center text-xs font-medium capitalize text-muted-foreground max-xl:sticky max-xl:top-0 max-xl:z-[1] max-xl:bg-card',
+                    week: 'table-row',
+                    // table-fixed: a table sizes columns from cell content, so a
+                    // busy day's chips were widening the month past the screen.
+                    month_grid: 'w-full table-fixed border-collapse',
+                    // Today is drawn by the day number itself (see PostsDayButton):
+                    // drop shadcn's accent fill so today never reads as selected.
+                    today: 'rounded-md [&:not([data-selected-single=true])]:bg-transparent',
+                    outside:
+                      'text-muted-foreground [&_button]:text-muted-foreground [&_button]:hover:bg-transparent [&_button]:active:bg-transparent',
+                    // Disabled days (a failed load, or an account with no posts)
+                    // keep readable numbers. shadcn's default fades them to 50%.
+                    disabled: 'text-primary opacity-100',
+                    // Equal share of the fixed table. The chip row clips itself; the
+                    // cell does not, or it would crop the selection outline.
+                    day: 'group/day relative min-w-0 w-[14.2857%] table-cell p-0 text-center align-top',
+                  }}
+                  components={{ DayButton: PostsDayButton, Nav: CalendarNav, Week: PostsCalendarWeek, Weeks: PostsCalendarWeeks }}
+                />
+              </div>
+            )}
+          </NavTodayContext.Provider>
         </CalendarChromeContext.Provider>
       </DayCellContext.Provider>
     </div>
