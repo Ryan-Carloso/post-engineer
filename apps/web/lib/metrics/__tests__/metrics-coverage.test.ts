@@ -38,6 +38,7 @@ function post(overrides: Partial<CoveragePostInput> = {}): CoveragePostInput {
     personaId: PERSONA,
     publishedAt: '2026-10-21T12:00:00.000Z',
     outcomes: [YT_OUTCOME],
+    faceless: false,
     ...overrides,
   };
 }
@@ -179,7 +180,7 @@ describe('computeCoverage', () => {
     const posts = [
       post({ id: 'post-own', personaId: PERSONA }),
       post({ id: 'post-other', personaId: 'other-persona' }),
-      post({ id: 'post-faceless', personaId: null }),
+      post({ id: 'post-faceless', personaId: null, faceless: true }),
     ];
     const { items } = compute({ posts, personaIds: [PERSONA] });
     expect(items.map((item) => item.postId).sort()).toEqual(['post-faceless', 'post-own']);
@@ -188,10 +189,28 @@ describe('computeCoverage', () => {
   it('keeps only persona-less posts when the scope is empty', () => {
     const posts = [
       post({ id: 'post-own', personaId: PERSONA }),
-      post({ id: 'post-faceless', personaId: null }),
+      post({ id: 'post-faceless', personaId: null, faceless: true }),
     ];
     const { items } = compute({ posts, personaIds: [] });
     expect(items.map((item) => item.postId)).toEqual(['post-faceless']);
+  });
+
+  it('hides an orphaned post (deleted schedule, not faceless) from a scoped caller', () => {
+    const posts = [
+      post({ id: 'post-own', personaId: PERSONA }),
+      // No persona because the schedule is gone, but faceless is false:
+      // the post may belong to a persona outside the scope (its
+      // post_metrics rows still carry the persona), so it stays hidden.
+      post({ id: 'post-orphan', personaId: null, faceless: false }),
+      post({ id: 'post-faceless', personaId: null, faceless: true }),
+    ];
+    const { items } = compute({ posts, personaIds: [PERSONA] });
+    expect(items.map((item) => item.postId).sort()).toEqual(['post-faceless', 'post-own']);
+  });
+
+  it('keeps an orphaned post for an unrestricted caller', () => {
+    const posts = [post({ id: 'post-orphan', personaId: null, faceless: false })];
+    expect(compute({ posts }).items.map((item) => item.postId)).toEqual(['post-orphan']);
   });
 
   it('is unrestricted without a scope', () => {
@@ -439,6 +458,33 @@ describe('fetchCoverage', () => {
     });
     const { items } = await fetchCoverage(client, 'user-1', query(), NOW, { personaIds: [PERSONA] });
     expect(items.map((item) => item.postId)).toEqual(['post-own']);
+  });
+
+  it('hides an orphaned post from a scoped caller but keeps a faceless one', async () => {
+    const { client } = fakeClient({
+      scheduled_posts: {
+        data: [
+          {
+            id: 'post-own', schedule_id: 'sched-own', user_id: 'user-1', status: 'published',
+            published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME], faceless: false,
+          },
+          {
+            id: 'post-orphan', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published',
+            published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME], faceless: false,
+          },
+          {
+            id: 'post-faceless', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published',
+            published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME], faceless: true,
+          },
+        ],
+        error: null,
+      },
+      schedules: { data: [{ id: 'sched-own', persona_id: PERSONA }], error: null },
+      post_metrics_done: { data: [], error: null },
+      post_metrics: { data: [], error: null },
+    });
+    const { items } = await fetchCoverage(client, 'user-1', query(), NOW, { personaIds: [PERSONA] });
+    expect(items.map((item) => item.postId).sort()).toEqual(['post-faceless', 'post-own']);
   });
 
   it('reads only the schedules the posts reference, so a scoped key cannot leak a post past a cap', async () => {
