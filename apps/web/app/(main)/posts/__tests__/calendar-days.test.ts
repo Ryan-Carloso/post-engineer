@@ -4,10 +4,12 @@ import {
   bucketByDay,
   buildMonthGrid,
   calendarCounts,
+  calendarWeekdayShortLabels,
   countMonthPosts,
   dayKey,
   dayPersonas,
   defaultDayForMonth,
+  formatCalendarMonthCaption,
   gridRange,
 } from '../calendar-days';
 import {
@@ -47,6 +49,22 @@ describe('day bucketing timezone (viewer browser timezone)', () => {
     const date = new Date(2026, 0, 5, 12);
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     expect(dayKey(date)).toBe(dayKey(date, zone));
+  });
+});
+
+describe('formatCalendarMonthCaption', () => {
+  it('matches the loaded calendar month title without a connecting preposition', () => {
+    expect(formatCalendarMonthCaption(2030, 5, 'en')).toBe('June 2030');
+    expect(formatCalendarMonthCaption(2030, 5, 'pt')).toBe('junho 2030');
+    expect(formatCalendarMonthCaption(2030, 5, 'pt')).not.toMatch(/\bde\b/i);
+  });
+});
+
+describe('calendarWeekdayShortLabels', () => {
+  it('returns seven short weekday names starting on the locale first weekday', () => {
+    expect(calendarWeekdayShortLabels('en', 0)).toHaveLength(7);
+    expect(calendarWeekdayShortLabels('en', 0)[0]).toMatch(/Sun/i);
+    expect(calendarWeekdayShortLabels('en', 1)[0]).toMatch(/Mon/i);
   });
 });
 

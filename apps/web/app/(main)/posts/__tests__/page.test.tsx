@@ -1002,7 +1002,13 @@ describe('PostsPage calendar view', () => {
     expect(errorNav).not.toBeNull();
     for (const button of within(errorNav as HTMLElement).getAllByRole('button')) {
       expect(button).toBeDisabled();
+      expect(button.className.split(/\s+/)).toContain('saturate-50');
+      expect(button.className.split(/\s+/)).toContain('opacity-55');
     }
+    expect(document.querySelector('[data-calendar-error-chrome]')).not.toBeNull();
+    expect(document.querySelector('[data-calendar-grid-footprint]')?.className.split(/\s+/)).toContain(
+      'justify-center',
+    );
     const loadError = document.querySelector('[data-calendar-load-error]');
     const footprint = document.querySelector('[data-calendar-grid-footprint]');
     expect(loadError?.className.split(/\s+/)).not.toContain('flex-1');

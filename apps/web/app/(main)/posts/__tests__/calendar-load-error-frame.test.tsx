@@ -3,17 +3,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { CalendarUnavailableFrame } from '../calendar-load-error-frame';
 
+const enT = (key: string) =>
+  (
+    {
+      'posts.calendarPrevMonth': 'Previous month',
+      'posts.calendarNextMonth': 'Next month',
+      'posts.calendarGoToToday': 'Go to today',
+    } as Record<string, string>
+  )[key] ?? key;
+
 vi.mock('@/lib/i18n/provider', () => ({
   useI18n: () => ({
     locale: 'en',
-    t: (key: string) =>
-      (
-        {
-          'posts.calendarPrevMonth': 'Previous month',
-          'posts.calendarNextMonth': 'Next month',
-          'posts.calendarGoToToday': 'Go to today',
-        } as Record<string, string>
-      )[key] ?? key,
+    t: enT,
   }),
 }));
 
@@ -24,17 +26,23 @@ describe('CalendarUnavailableFrame', () => {
         <p role="alert">Load failed</p>
       </CalendarUnavailableFrame>,
     );
-    expect(screen.getByText(/June 2030/)).toBeInTheDocument();
-    expect(document.querySelectorAll('[data-calendar-unavailable-frame] th')).toHaveLength(7);
+    const title = screen.getByText(/June 2030/);
+    expect(title.textContent).not.toMatch(/\bof\b/i);
+    expect(document.querySelector('[data-calendar-error-chrome]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-calendar-error-weekdays] th')).toHaveLength(7);
     expect(screen.queryByRole('grid')).not.toBeInTheDocument();
     const nav = document.querySelector('[data-calendar-error-nav]');
     expect(nav).not.toBeNull();
     for (const button of within(nav as HTMLElement).getAllByRole('button')) {
       expect(button).toBeDisabled();
+      expect(button.className.split(/\s+/)).toContain('saturate-50');
+      expect(button.className.split(/\s+/)).toContain('opacity-55');
     }
     const strip = document.querySelector('[data-calendar-load-error]');
     expect(strip?.className).toMatch(/bg-warning/);
-    expect(document.querySelector('[data-calendar-grid-footprint]')?.className).toMatch(/min-h-/);
+    const footprint = document.querySelector('[data-calendar-grid-footprint]');
+    expect(footprint?.className).toMatch(/min-h-/);
+    expect(footprint?.className.split(/\s+/)).toContain('justify-center');
     expect(screen.getByRole('alert')).toHaveTextContent('Load failed');
   });
 });

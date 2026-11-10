@@ -158,3 +158,21 @@ export function dayPersonas(
   }
   return personas;
 }
+
+// Month caption shown above the grid (react-day-picker uses month + year, not
+// Intl's "month de year" phrasing for pt-BR).
+export function formatCalendarMonthCaption(year: number, month: number, locale: Locale): string {
+  const anchor = new Date(year, month, 1);
+  const monthName = new Intl.DateTimeFormat(INTL_TAG[locale], { month: 'long' }).format(anchor);
+  const yearLabel = new Intl.DateTimeFormat(INTL_TAG[locale], { year: 'numeric' }).format(anchor);
+  return `${monthName} ${yearLabel}`;
+}
+
+export function calendarWeekdayShortLabels(locale: Locale, firstWeekday: 0 | 1): string[] {
+  const weekdayFormat = new Intl.DateTimeFormat(INTL_TAG[locale], { weekday: 'short' });
+  return Array.from({ length: 7 }, (_, index) => {
+    const dayOffset = (firstWeekday + index) % 7;
+    const date = new Date(2024, 0, 7 + dayOffset);
+    return weekdayFormat.format(date).replace(/\.$/, '');
+  });
+}
