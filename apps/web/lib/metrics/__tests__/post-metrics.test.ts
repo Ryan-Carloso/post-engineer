@@ -513,7 +513,7 @@ describe('createPostMetricsStore', () => {
         post_metrics: {
           data: [
             { post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h', analytics_status: 'ok' },
-            { post_id: 'post-1', provider: 'instagram', external_id: 'media-9', metrics_window: '24h' },
+            { post_id: 'post-1', provider: 'instagram', external_id: 'media-9', metrics_window: '24h', analytics_status: null },
           ],
           error: null,
         },
