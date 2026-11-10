@@ -14,7 +14,14 @@ import type { Locale, TranslationKey } from '@/lib/i18n';
 import { scheduleAccountIds, type AccountOption } from '@/lib/account-options';
 import { categorizeGenerationError, GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 import { cn } from '@/lib/utils';
-import { CALENDAR_GROUP_ICON, CALENDAR_GROUP_KEY, CALENDAR_GROUP_PILL, STATUS_KEY, STATUS_STYLE, calendarGroupOf } from './status';
+import {
+  CALENDAR_GROUP_ICON,
+  CALENDAR_GROUP_KEY,
+  CALENDAR_GROUP_PILL,
+  STATUS_KEY,
+  STATUS_STYLE,
+  calendarGroupOf,
+} from './status';
 import { CREATE_POSTS_HREF } from './day-section';
 import { PublishAccountNotices } from './publish-user-notice';
 
@@ -281,7 +288,10 @@ export const PostCard = ({
       >
         {generatingCue ? (
           <div data-card-header className="flex w-full items-start gap-2">
-            <p className="text-sm font-semibold text-info">{t(STATUS_KEY.generating)}</p>
+            <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-info">
+              <CALENDAR_GROUP_ICON.inProgress className="size-3.5 shrink-0" strokeWidth={3} aria-hidden />
+              {t(STATUS_KEY.generating)}
+            </p>
             <p className="ml-auto text-right text-xs text-muted-foreground tabular-nums">
               <span className="sr-only">{t(timeKindKey)} </span>
               <span data-card-when>{when}</span>

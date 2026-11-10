@@ -133,6 +133,7 @@ describe('PostCard status pill — the calendar vocabulary', () => {
     renderCard({ ...FAILED_SLOT, status: 'generating', progress: 45, slotAt: '2030-06-01T10:00:00.000Z' }, true);
 
     expect(screen.getAllByText('posts.statusGenerating')).toHaveLength(1);
+    expect(document.querySelector('[data-card-header] svg')).not.toBeNull();
     expect(screen.queryByText('posts.groupInProgress')).not.toBeInTheDocument();
     expect(screen.getByText('45%')).toBeInTheDocument();
     expect(screen.getByText('posts.cardProgressCaption')).toBeInTheDocument();

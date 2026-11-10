@@ -57,23 +57,23 @@ export const DAY_POST_TOTAL_CLASS =
 // Legend count sample: empty day-total pill (same chrome as the grid badges).
 export const LEGEND_POST_TOTAL_SWATCH_CLASS = cn(
   DAY_POST_TOTAL_CLASS,
-  'pointer-events-none box-border h-5 min-h-5 w-8 min-w-8 max-w-8 shrink-0 px-0 shadow-[0_1px_0_rgba(13,43,69,0.1)]',
+  'pointer-events-none box-border h-5 min-h-5 w-5 min-w-5 max-w-5 shrink-0 px-1 shadow-[0_1px_0_rgba(13,43,69,0.1)]',
 );
 
-// Subtle wash behind today's date numeral (selection outline stays stronger).
-export const TODAY_NUMERAL_WASH_CLASS = 'rounded-sm bg-warning/15 px-0.5';
+// Gold wash behind today's date numeral (selection outline stays stronger).
+export const TODAY_NUMERAL_WASH_CLASS = 'rounded-sm bg-warning/25 px-0.5';
 
-export const TODAY_TOP_BAR_CLASS = 'h-1 w-full shrink-0 rounded-full bg-warning/90';
+export const TODAY_TOP_BAR_CLASS = 'h-1 w-full shrink-0 rounded-full bg-warning';
 
-export const TODAY_CELL_TOP_BAR_CLASS = 'absolute inset-x-1 top-0.5 z-[1] h-1 rounded-full bg-warning/90';
+export const TODAY_CELL_TOP_BAR_CLASS = 'absolute inset-x-1 top-0.5 z-[1] h-1 rounded-full bg-warning';
 
 // Legend today: the same gold top bar as the grid — not a miniature scene.
 export const LEGEND_TODAY_BAR_SWATCH_CLASS =
-  'inline-block h-1 w-10 shrink-0 rounded-full bg-warning/90 align-middle';
+  'inline-block h-1 w-10 shrink-0 rounded-full bg-warning align-middle';
 
 // Miniature selected day cell: blue outline like the grid, not a form checkbox.
 export const SELECTED_DAY_LEGEND_SWATCH_CLASS =
-  'pointer-events-none inline-flex h-[2.75rem] w-10 shrink-0 items-center justify-center rounded-md bg-transparent outline-2 -outline-offset-[4px] outline-primary';
+  'pointer-events-none inline-flex aspect-[4/5] h-[2.35rem] w-9 shrink-0 items-center justify-center rounded-md bg-transparent outline-2 -outline-offset-[4px] outline-primary shadow-none border-0';
 
 function DayCellPostTotal({
   total,
@@ -161,26 +161,28 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       <span
         data-day-number
         className={cn(
-          'z-[2] inline-flex min-h-6 shrink-0 flex-col items-center justify-center tabular-nums',
-          isToday && slots.length > 0 ? 'mt-0.5' : 'mt-1',
-          isOutside ? 'font-normal text-muted-foreground opacity-50' : 'font-semibold text-primary',
-          isToday && TODAY_NUMERAL_WASH_CLASS,
-          isToday && isOutside && 'opacity-100',
+          'z-[2] flex min-h-0 w-full min-w-0 flex-1 flex-col items-center justify-center gap-1 px-0.5 tabular-nums',
+          isToday ? 'pt-2.5' : 'pt-1',
+          isToday && slots.length > 0 && 'gap-1.5',
         )}
       >
-        <span className="leading-none">{children}</span>
-      </span>
-      {slots.length > 0 && (
         <span
-          aria-hidden
+          data-day-numeral
           className={cn(
-            'z-[2] mt-auto flex w-full min-w-0 items-center justify-center px-0.5 pb-0.5',
-            isToday ? 'pt-2' : 'pt-1',
+            'inline-flex min-h-6 shrink-0 items-center justify-center leading-none',
+            isOutside ? 'font-normal text-muted-foreground opacity-50' : 'font-semibold text-primary',
+            isToday && TODAY_NUMERAL_WASH_CLASS,
+            isToday && isOutside && 'opacity-100',
           )}
         >
-          <DayCellPostTotal total={slots.length} groups={groups} counts={counts} selected={selectedSingle} />
+          {children}
         </span>
-      )}
+        {slots.length > 0 && (
+          <span aria-hidden className="flex shrink-0 items-center justify-center">
+            <DayCellPostTotal total={slots.length} groups={groups} counts={counts} selected={selectedSingle} />
+          </span>
+        )}
+      </span>
     </Button>
   );
 }

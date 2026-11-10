@@ -104,9 +104,9 @@ describe('CalendarView', () => {
   it('marks today with a top bar and a light gold wash on the numeral, not a ring', () => {
     setup({ selectedKey: '2030-06-20' });
     const today = dayButton(/June 15, 2030/);
-    const number = today.querySelector('[data-day-number]');
+    const number = today.querySelector('[data-day-numeral]');
     expect(number).toHaveTextContent('15');
-    expect(number?.className.split(/\s+/)).toContain('bg-warning/15');
+    expect(number?.className).toMatch(/bg-warning\/25/);
     expect(today.querySelector('[data-today-bar="true"]')).not.toBeNull();
     expect(number?.querySelector('[data-today-mark]')).toBeNull();
     expect(number?.className.split(/\s+/)).not.toContain('ring-warning');
@@ -141,11 +141,11 @@ describe('CalendarView', () => {
     const outside = within(grid)
       .getAllByRole('button')
       .find((button) => button.textContent === '1' && button.closest('[data-outside]') !== null);
-    expect(outside?.querySelector('[data-day-number]')?.className.split(/\s+/)).toContain('opacity-50');
-    expect(outside?.querySelector('[data-day-number]')?.className.split(/\s+/)).toContain('font-normal');
+    expect(outside?.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('opacity-50');
+    expect(outside?.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('font-normal');
     const inside = dayButton(/June 20, 2030/);
     expect(inside.className.split(/\s+/)).toContain('[&>span]:opacity-100');
-    expect(inside.querySelector('[data-day-number]')?.className.split(/\s+/)).toContain('font-semibold');
+    expect(inside.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('font-semibold');
   });
 
   it('describes per-group counts in the accessible name, failure first, in the legend order', () => {
@@ -294,7 +294,8 @@ describe('CalendarView', () => {
     expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/40');
     expect(countSwatch?.className.split(/\s+/)).toContain('rounded-full');
     expect(countSwatch?.className.split(/\s+/)).toContain('bg-primary/12');
-    expect(countSwatch?.className.split(/\s+/)).toContain('w-8');
+    expect(countSwatch?.className.split(/\s+/)).toContain('min-w-5');
+    expect(countSwatch?.className.split(/\s+/)).not.toContain('w-8');
     expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/40');
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
     expect(selectedSwatch).toBeEmptyDOMElement();

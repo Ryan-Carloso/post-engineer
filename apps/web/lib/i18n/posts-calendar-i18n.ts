@@ -6,7 +6,7 @@ export const postsCalendarStrings = {
     posts: {
       subtitle:
         'Calendário de publicações de todas as contas. Selecione um dia para ver as publicações.',
-      subtitleLoadError: 'Não foi possível carregar o calendário de publicações.',
+      subtitleLoadError: 'Calendário indisponível. Os filtros estão desativados.',
       historyTitle: 'Histórico',
       historySubtitle: 'Publicações passadas e gerações de vídeo de todas as contas.',
       calendarPrevMonth: 'Mês anterior',
@@ -69,7 +69,7 @@ export const postsCalendarStrings = {
   en: {
     posts: {
       subtitle: 'Calendar of posts across all accounts. Select a day to see its posts.',
-      subtitleLoadError: 'Could not load the posts calendar.',
+      subtitleLoadError: 'Calendar unavailable. Filters are disabled.',
       historyTitle: 'History',
       historySubtitle: 'Past posts and video generations from all accounts.',
       calendarPrevMonth: 'Previous month',

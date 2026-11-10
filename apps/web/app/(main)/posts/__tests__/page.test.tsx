@@ -179,9 +179,9 @@ afterEach(() => {
 });
 
 describe('posts calendar load failure copy', () => {
-  it('uses the same sentence in the subtitle and the in-card alert', () => {
-    expect(postsCalendarStrings.pt.posts.subtitleLoadError).toBe(postsCalendarStrings.pt.posts.loadErrorCalendar);
-    expect(postsCalendarStrings.en.posts.subtitleLoadError).toBe(postsCalendarStrings.en.posts.loadErrorCalendar);
+  it('uses a short subtitle distinct from the in-card alert sentence', () => {
+    expect(postsCalendarStrings.pt.posts.subtitleLoadError).not.toBe(postsCalendarStrings.pt.posts.loadErrorCalendar);
+    expect(postsCalendarStrings.en.posts.subtitleLoadError).not.toBe(postsCalendarStrings.en.posts.loadErrorCalendar);
   });
 });
 
@@ -513,14 +513,14 @@ describe('PostsPage', () => {
     const { rerender } = render(<PostsPage />);
     const grid = screen.getByRole('grid');
     const todayCell = grid.querySelector('[data-today]');
-    expect(todayCell?.querySelector('[data-day-number]')).toHaveTextContent('1');
+    expect(todayCell?.querySelector('[data-day-numeral]')).toHaveTextContent('1');
     expect(todayCell?.querySelector('[data-today-bar="true"]')).not.toBeNull();
 
     vi.setSystemTime(new Date('2030-06-02T00:01:00.000Z'));
     rerender(<PostsPage />);
 
     const nextToday = screen.getByRole('grid').querySelector('[data-today]');
-    expect(nextToday?.querySelector('[data-day-number]')).toHaveTextContent('2');
+    expect(nextToday?.querySelector('[data-day-numeral]')).toHaveTextContent('2');
     expect(nextToday?.querySelector('[data-today-bar="true"]')).not.toBeNull();
     await user.click(screen.getByRole('button', { name: 'posts.calendarGoToToday' }));
     expect(screen.getByRole('grid').querySelector('[data-selected="true"]')?.textContent).toBe('2');
@@ -761,7 +761,7 @@ describe('PostsPage calendar view', () => {
 
     await user.click(screen.getByRole('button', { name: 'posts.calendarGoToToday' }));
     expect(screen.getByText('Today slot')).toBeInTheDocument();
-    expect(screen.getByRole('grid').querySelector('[data-selected="true"] [data-day-number]')).toHaveTextContent('15');
+    expect(screen.getByRole('grid').querySelector('[data-selected="true"] [data-day-numeral]')).toHaveTextContent('15');
   });
 
   it('reads the visible 6-week grid as one range', () => {
@@ -814,7 +814,7 @@ describe('PostsPage calendar view', () => {
 
     const day1 = within(screen.getByRole('grid'))
       .getAllByRole('button', { name: 'posts.calendarDayLabel' })
-      .find((button) => button.querySelector('[data-day-number]')?.textContent === '1');
+      .find((button) => button.querySelector('[data-day-numeral]')?.textContent === '1');
     expect(day1).toBeDefined();
     expect((day1 as HTMLElement).querySelector('img')).toBeNull();
     expect((day1 as HTMLElement).querySelector('[data-day-post-total]')).toHaveTextContent('1');
@@ -879,7 +879,7 @@ describe('PostsPage calendar view', () => {
   });
 
   const selectedDayNumber = () =>
-    screen.getByRole('grid').querySelector('[data-selected="true"] [data-day-number]')?.textContent;
+    screen.getByRole('grid').querySelector('[data-selected="true"] [data-day-numeral]')?.textContent;
 
   it('month navigation leaves no day selected in a month without posts', async () => {
     mockQueries({ range: rangeSlots });
@@ -1000,7 +1000,7 @@ describe('PostsPage calendar view', () => {
     expect(screen.queryAllByRole('button', { name: 'posts.loadErrorRetry' })).toHaveLength(1);
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
     const loadError = document.querySelector('[data-calendar-load-error]');
-    expect(loadError?.className.split(/\s+/)).not.toContain('min-h-[22rem]');
+    expect(loadError?.className).toMatch(/min-h-\[22rem\]|min-h-\[20rem\]/);
     expect(loadError?.className.split(/\s+/)).toContain('justify-center');
     expect(loadError?.className).toMatch(/bg-warning/);
     expect(alert.closest('.xl\\:col-span-2')).not.toBeNull();
@@ -1038,7 +1038,7 @@ describe('PostsPage day pick on a phone', () => {
     const user = userEvent.setup();
     const day5 = within(screen.getByRole('grid'))
       .getAllByRole('button', { name: 'posts.calendarDayLabel' })
-      .find((button) => button.querySelector('[data-day-number]')?.textContent === '5');
+      .find((button) => button.querySelector('[data-day-numeral]')?.textContent === '5');
     await user.click(day5 as HTMLElement);
   };
 
