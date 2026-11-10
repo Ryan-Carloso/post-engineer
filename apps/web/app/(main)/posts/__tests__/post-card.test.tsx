@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import type { ScheduledSlot } from '@/lib/api';
 
 //---------------
@@ -41,6 +41,7 @@ const ACCOUNTS = [
 ];
 
 function renderCard(slot: ScheduledSlot, timeOnly = false, accounts: typeof ACCOUNTS = []) {
+  cleanup();
   render(<PostCard slot={slot} personaName="Viva Leve" accounts={accounts} locale="en" timeOnly={timeOnly} />);
 }
 
@@ -153,10 +154,17 @@ describe('PostCard header and media', () => {
       { ...FAILED_SLOT, status: 'published', publishedAt: '2030-06-01T10:05:00.000Z', slotAt: '2030-06-01T10:00:00.000Z' },
       true,
     );
-    expect(screen.getByText('posts.cardTimePublished')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'posts.cardOpenDetail' }).querySelector('[data-card-when-kind]')).toBeNull();
 
-    renderCard({ ...FAILED_SLOT, status: 'generating', slotAt: '2030-06-01T10:00:00.000Z' }, true);
+    renderCard({ ...FAILED_SLOT, status: 'awaiting', slotAt: '2030-06-01T10:00:00.000Z' }, true);
     expect(screen.getByText('posts.cardTimeScheduled')).toBeInTheDocument();
+
+    renderCard(
+      { ...FAILED_SLOT, status: 'generating', title: 'Generating only time', slotAt: '2030-06-01T10:00:00.000Z' },
+      true,
+    );
+    const generatingCard = screen.getByRole('link', { name: 'posts.cardOpenDetail' });
+    expect(generatingCard.querySelector('[data-card-when-kind]')).toBeNull();
   });
 
   it('shows only the time when the day list already names the date', () => {

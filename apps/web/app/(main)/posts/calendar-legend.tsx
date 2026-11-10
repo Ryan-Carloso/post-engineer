@@ -8,6 +8,7 @@ import {
   SELECTED_DAY_LEGEND_SWATCH_CLASS,
   TODAY_MARK_DOT_CLASS,
   TODAY_NUMERAL_WASH_CLASS,
+  TODAY_TOP_BAR_CLASS,
 } from './calendar-markers';
 
 export function CalendarLegend({
@@ -35,10 +36,13 @@ export function CalendarLegend({
         <span
           aria-hidden
           data-legend-today-mark
-          className="pointer-events-none inline-flex h-9 w-8 flex-col items-center justify-center gap-0.5"
+          className="pointer-events-none inline-flex h-9 w-8 flex-col items-stretch overflow-hidden rounded-md border border-line/40 bg-card"
         >
-          <span data-legend-today-wash className={cn(TODAY_NUMERAL_WASH_CLASS, 'size-5')} />
-          <span data-legend-today-dot className={TODAY_MARK_DOT_CLASS} />
+          <span data-legend-today-bar className={TODAY_TOP_BAR_CLASS} />
+          <span className="flex flex-1 flex-col items-center justify-center gap-0.5 pb-0.5 pt-0.5">
+            <span data-legend-today-wash className={cn(TODAY_NUMERAL_WASH_CLASS, 'size-4')} />
+            <span data-legend-today-dot className={TODAY_MARK_DOT_CLASS} />
+          </span>
         </span>
         {t('posts.calendarToday')}
       </li>

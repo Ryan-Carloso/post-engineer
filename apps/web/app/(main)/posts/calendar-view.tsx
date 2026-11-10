@@ -154,7 +154,7 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
               : 'border border-input bg-card text-primary hover:bg-sunken'),
         )}
       >
-        {t('posts.calendarToday')}
+        {t('posts.calendarGoToToday')}
       </button>
       <components.NextMonthButton
         type="button"
@@ -271,10 +271,14 @@ export function CalendarView({
         <CalendarChromeContext.Provider value={chrome}>
         <NavTodayContext.Provider value={navToday}>
           {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined ? (
-            <div data-calendar-load-error className="flex min-h-[22rem] flex-col justify-start xl:min-h-[24rem]">
+            <div
+              data-calendar-load-error
+              className="flex min-h-[22rem] flex-col items-center justify-center rounded-lg border border-destructive/30 bg-destructive-soft/50 p-4 sm:p-6 xl:min-h-[24rem]"
+            >
               <LoadErrorBanner
                 compact
                 fill
+                bare
                 messageKey={loadErrorMessageKey}
                 noteKey={loadErrorNoteKey}
                 onRetry={onLoadErrorRetry}

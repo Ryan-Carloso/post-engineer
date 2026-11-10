@@ -134,21 +134,25 @@ export function LoadErrorBanner({
   onRetry,
   compact = false,
   fill = false,
+  bare = false,
 }: {
   messageKey: TranslationKey;
   noteKey?: TranslationKey;
   onRetry: () => void;
   compact?: boolean;
   fill?: boolean;
+  bare?: boolean;
 }) {
   const { t } = useI18n();
   return (
     <div
       role="alert"
       className={cn(
-        'flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 text-ink',
+        'flex flex-col gap-3 text-ink',
+        !bare && 'rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3',
+        bare && 'max-w-md border-0 bg-transparent px-0 py-0',
         compact ? 'mx-auto w-full items-center text-center' : 'items-start',
-        compact && !fill && 'max-w-md',
+        compact && !fill && !bare && 'max-w-md',
         fill && 'max-w-none',
       )}
     >

@@ -12,6 +12,7 @@ export const postsCalendarStrings = {
       calendarPrevMonth: 'Mês anterior',
       calendarNextMonth: 'Próximo mês',
       calendarToday: 'Hoje',
+      calendarGoToToday: 'Ir para hoje',
       calendarDayLabel: '{date}: {summary}',
       calendarDayEmpty: '{date}: sem publicações',
       calendarTruncated:
@@ -73,6 +74,7 @@ export const postsCalendarStrings = {
       calendarPrevMonth: 'Previous month',
       calendarNextMonth: 'Next month',
       calendarToday: 'Today',
+      calendarGoToToday: 'Go to today',
       calendarDayLabel: '{date}: {summary}',
       calendarDayEmpty: '{date}: no posts',
       calendarTruncated: 'This month has more posts than the {count} limit; some are not shown.',

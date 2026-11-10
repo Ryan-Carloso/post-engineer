@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, TriangleAlert } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { RANGE_MAX_SLOTS, useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range';
@@ -194,9 +194,12 @@ export default function PostsPage() {
               <section
                 data-day-unavailable-note
                 aria-live="polite"
-                className="order-2 mt-4 hidden min-w-0 scroll-mt-4 rounded-xl border border-line bg-card p-4 text-sm text-muted-foreground xl:col-start-2 xl:row-start-1 xl:mt-0 xl:block xl:self-start"
+                className="order-2 mt-4 hidden min-w-0 scroll-mt-4 rounded-xl border border-destructive/30 bg-destructive-soft p-4 text-sm text-ink xl:col-start-2 xl:row-start-1 xl:mt-0 xl:block xl:self-stretch"
               >
-                <p>{t('posts.loadErrorSideQuiet')}</p>
+                <p className="flex items-start gap-2 font-medium">
+                  <TriangleAlert data-load-side-warning className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
+                  <span>{t('posts.loadErrorSideQuiet')}</span>
+                </p>
               </section>
             ) : !isError ? (
             <section

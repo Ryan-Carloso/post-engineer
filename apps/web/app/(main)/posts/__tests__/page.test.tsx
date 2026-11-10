@@ -355,7 +355,7 @@ describe('PostsPage', () => {
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('posts.calendarMonthHeading');
     expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
     // Empty month still shows the header Today control (no duplicate in the panel).
-    expect(screen.getByRole('button', { name: 'posts.calendarToday' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'posts.calendarGoToToday' })).toBeInTheDocument();
     // The calendar stays, and an empty day shows no zero-count chips.
     expect(screen.getByRole('grid')).toBeInTheDocument();
     expect(screen.queryByText(/posts\.group(Published|Failed|Scheduled):/)).not.toBeInTheDocument();
@@ -409,7 +409,7 @@ describe('PostsPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'posts.calendarNextMonth' }));
     expect(screen.getByText('posts.calendarMonthEmptyTitle')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'posts.calendarToday' }));
+    await user.click(screen.getByRole('button', { name: 'posts.calendarGoToToday' }));
     expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('posts.calendarDayHeading');
   });
@@ -514,7 +514,7 @@ describe('PostsPage', () => {
     const nextToday = screen.getByRole('grid').querySelector('[data-today]');
     expect(nextToday?.querySelector('[data-day-number]')).toHaveTextContent('2');
     expect(nextToday?.querySelector('[data-today-mark="true"]')).not.toBeNull();
-    await user.click(screen.getByRole('button', { name: 'posts.calendarToday' }));
+    await user.click(screen.getByRole('button', { name: 'posts.calendarGoToToday' }));
     expect(screen.getByRole('grid').querySelector('[data-selected="true"]')?.textContent).toBe('2');
   });
 
@@ -975,7 +975,11 @@ describe('PostsPage calendar view', () => {
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
     const loadError = document.querySelector('[data-calendar-load-error]');
     expect(loadError?.className.split(/\s+/)).toContain('min-h-[22rem]');
-    expect(document.querySelector('[data-day-unavailable-note]')?.className.split(/\s+/)).toContain('border');
+    expect(loadError?.className.split(/\s+/)).toContain('justify-center');
+    expect(loadError?.className).toMatch(/bg-destructive-soft/);
+    const sideNote = document.querySelector('[data-day-unavailable-note]');
+    expect(sideNote?.className).toMatch(/bg-destructive-soft/);
+    expect(sideNote?.querySelector('[data-load-side-warning]')).not.toBeNull();
   });
 
   it('hides the header refresh on a load error so only the in-card retry remains', () => {

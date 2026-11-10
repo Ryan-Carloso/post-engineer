@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Play, TriangleAlert } from 'lucide-react';
+import { ChevronRight, ImageOff, Play, TriangleAlert } from 'lucide-react';
 import type { ScheduledSlot, ScheduleConfig, VideoGeneration } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
@@ -97,7 +97,11 @@ const PostCardMedia = ({ src, noPreviewLabel }: { src: string | null; noPreviewL
           onLoadedData={() => setPreviewReady(true)}
           onError={() => setPreviewReady(false)}
         />
-        <p data-card-no-preview className="mt-1.5 border-l-2 border-warning/35 pl-2 text-xs font-medium text-warning/90">
+        <p
+          data-card-no-preview
+          className="mt-1.5 flex items-center gap-1.5 border-l-2 border-warning/50 pl-2 text-xs font-semibold text-warning"
+        >
+          <ImageOff className="size-3.5 shrink-0 opacity-90" aria-hidden />
           {noPreviewLabel}
         </p>
       </>
@@ -111,7 +115,11 @@ const PostCardMedia = ({ src, noPreviewLabel }: { src: string | null; noPreviewL
     );
   }
   return (
-    <p data-card-no-preview className="mt-1.5 border-l-2 border-warning/35 pl-2 text-xs font-medium text-warning/90">
+    <p
+      data-card-no-preview
+      className="mt-1.5 flex items-center gap-1.5 border-l-2 border-warning/50 pl-2 text-xs font-semibold text-warning"
+    >
+      <ImageOff className="size-3.5 shrink-0 opacity-90" aria-hidden />
       {noPreviewLabel}
     </p>
   );
@@ -290,7 +298,7 @@ export const PostCard = ({
           <CardHeader
             badge={<StatusBadge status={slot.status} label={t(CALENDAR_GROUP_KEY[group])} style={CALENDAR_GROUP_PILL[group]} />}
             when={when}
-            whenHint={timeOnly ? t(timeKindKey) : undefined}
+            whenHint={timeOnly && !generatingCue && slot.status !== 'published' ? t(timeKindKey) : undefined}
           />
         )}
         <div className="mt-3">

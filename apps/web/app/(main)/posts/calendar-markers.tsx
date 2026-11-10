@@ -55,10 +55,17 @@ export const DAY_POST_TOTAL_CLASS =
   'inline-flex h-5 min-w-5 max-xl:h-6 max-xl:min-w-6 items-center justify-center rounded-full border border-primary/40 bg-primary/12 text-xs max-xl:text-sm font-bold leading-none text-primary tabular-nums shadow-[0_1px_0_rgba(13,43,69,0.1)]';
 
 // Legend count sample: empty day-total pill (same chrome as the grid badges).
-export const LEGEND_POST_TOTAL_SWATCH_CLASS = cn(DAY_POST_TOTAL_CLASS, 'pointer-events-none px-1.5 shadow-none');
+export const LEGEND_POST_TOTAL_SWATCH_CLASS = cn(
+  DAY_POST_TOTAL_CLASS,
+  'pointer-events-none min-h-6 min-w-[1.625rem] px-2 shadow-none',
+);
 
 // Gold wash behind today's date numeral (not a count ring).
-export const TODAY_NUMERAL_WASH_CLASS = 'rounded-sm bg-warning/20 px-0.5';
+export const TODAY_NUMERAL_WASH_CLASS = 'rounded-sm bg-warning/30 px-0.5';
+
+export const TODAY_TOP_BAR_CLASS = 'h-1 w-full shrink-0 rounded-full bg-warning';
+
+export const TODAY_CELL_TOP_BAR_CLASS = 'absolute inset-x-1 top-0.5 z-[1] h-1 rounded-full bg-warning';
 
 // Miniature selected day cell: blue outline like the grid, not a form checkbox.
 export const SELECTED_DAY_LEGEND_SWATCH_CLASS =
@@ -92,9 +99,9 @@ function DayCellPostTotal({
   );
 }
 
-// Corner dot: separate from the count pill and from the numeral wash.
+// In-cell dot: separate from the count pill and from the numeral wash.
 export const TODAY_MARK_DOT_CLASS =
-  'size-2.5 max-xl:size-3 shrink-0 rounded-full bg-warning ring-1 ring-warning/50';
+  'size-2.5 max-xl:size-3 shrink-0 rounded-full bg-warning ring-2 ring-warning/40';
 
 // The DayButton component is passed to react-day-picker once; the per-day
 // slots reach it through context so a data refresh never remounts the grid.
@@ -150,7 +157,10 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       {...props}
     >
       {isToday && (
-        <span aria-hidden data-today-mark="true" className={cn(TODAY_MARK_DOT_CLASS, 'absolute right-0.5 top-0.5 z-[1]')} />
+        <span aria-hidden data-today-bar="true" className={TODAY_CELL_TOP_BAR_CLASS} />
+      )}
+      {isToday && (
+        <span aria-hidden data-today-mark="true" className={cn(TODAY_MARK_DOT_CLASS, 'absolute left-1 top-2 z-[1]')} />
       )}
       <span
         data-day-number

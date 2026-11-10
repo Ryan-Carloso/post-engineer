@@ -8,6 +8,7 @@ const EN: Record<string, string> = {
   'posts.calendarPrevMonth': 'Previous month',
   'posts.calendarNextMonth': 'Next month',
   'posts.calendarToday': 'Today',
+  'posts.calendarGoToToday': 'Go to today',
   'posts.groupPublished': 'Published',
   'posts.groupFailed': 'Failed',
   'posts.groupScheduled': 'Scheduled',
@@ -100,15 +101,17 @@ describe('CalendarView', () => {
     expect(dayButton(/June 21, 2030/).closest('[data-selected="true"]')).toBeNull();
   });
 
-  it('marks today with a gold wash on the numeral and a corner dot, not a ring around it', () => {
+  it('marks today with a top bar, gold wash on the numeral, and an in-cell dot, not a ring', () => {
     setup({ selectedKey: '2030-06-20' });
     const today = dayButton(/June 15, 2030/);
     const number = today.querySelector('[data-day-number]');
     expect(number).toHaveTextContent('15');
-    expect(number?.className.split(/\s+/)).toContain('bg-warning/20');
+    expect(number?.className.split(/\s+/)).toContain('bg-warning/30');
+    expect(today.querySelector('[data-today-bar="true"]')).not.toBeNull();
     const mark = today.querySelector('[data-today-mark="true"]');
     expect(mark?.className.split(/\s+/)).toContain('bg-warning');
     expect(mark?.className.split(/\s+/)).toContain('absolute');
+    expect(mark?.className.split(/\s+/)).toContain('left-1');
     expect(number?.className.split(/\s+/)).not.toContain('ring-warning');
     expect(dayButton(/June 20, 2030/).querySelector('[data-today-mark]')).toBeNull();
   });
@@ -295,6 +298,7 @@ describe('CalendarView', () => {
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
     expect(selectedSwatch).toBeEmptyDOMElement();
     const todaySwatch = legend.querySelector('[data-legend-today-mark]');
+    expect(todaySwatch?.querySelector('[data-legend-today-bar]')).not.toBeNull();
     expect(todaySwatch?.querySelector('[data-legend-today-wash]')).not.toBeNull();
     expect(todaySwatch?.querySelector('[data-legend-today-dot]')).not.toBeNull();
     expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-primary');
@@ -366,18 +370,18 @@ describe('CalendarView', () => {
 
   it('jumps to today and selects it', () => {
     const props = setup({ year: 2031, month: 0 });
-    fireEvent.click(screen.getByRole('button', { name: 'Today' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Go to today' }));
     expect(props.onMonthChange).toHaveBeenLastCalledWith(2030, 5);
     expect(props.onSelect).toHaveBeenLastCalledWith('2030-06-15');
   });
 
-  it('places the Today button inside the month navigation, between the previous and next buttons', () => {
+  it('places the go-to-today button inside the month navigation, between the previous and next buttons', () => {
     setup();
     const nav = screen.getByRole('navigation');
     const buttons = within(nav).getAllByRole('button');
     expect(buttons).toHaveLength(3);
     expect(buttons[0]).toHaveAccessibleName('Previous month');
-    expect(buttons[1]).toHaveAccessibleName('Today');
+    expect(buttons[1]).toHaveAccessibleName('Go to today');
     expect(buttons[2]).toHaveAccessibleName('Next month');
   });
 
@@ -428,9 +432,9 @@ describe('CalendarView', () => {
 
   // Pressed when today is the selected day: a solid fill of the same size,
   // never a disabled-looking label, so the arrows around it never shift.
-  it('marks Today pressed when today is selected, and keeps it enabled', () => {
+  it('marks go-to-today pressed when today is selected, and keeps it enabled', () => {
     setup({ selectedKey: '2030-06-15' });
-    const onToday = screen.getByRole('button', { name: 'Today' });
+    const onToday = screen.getByRole('button', { name: 'Go to today' });
     expect(onToday).toBeEnabled();
     expect(onToday).toHaveAttribute('aria-pressed', 'true');
     const onTodayClasses = onToday.className.split(/\s+/);
@@ -438,9 +442,9 @@ describe('CalendarView', () => {
     expect(onTodayClasses).not.toContain('opacity-50');
   });
 
-  it('leaves Today unpressed, at the same size, when another day is selected', () => {
+  it('leaves go-to-today unpressed, at the same size, when another day is selected', () => {
     setup({ selectedKey: '2030-06-20' });
-    const today = screen.getByRole('button', { name: 'Today' });
+    const today = screen.getByRole('button', { name: 'Go to today' });
     expect(today).toBeEnabled();
     expect(today).toHaveAttribute('aria-pressed', 'false');
     expect(today.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-10', 'px-3', 'border', 'border-input', 'bg-card']));
