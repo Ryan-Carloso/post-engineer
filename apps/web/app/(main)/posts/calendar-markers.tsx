@@ -70,9 +70,15 @@ export const TODAY_CELL_BAR_CLASS =
 export const LEGEND_TODAY_BAR_SWATCH_CLASS =
   'inline-block h-1 w-10 shrink-0 rounded-full bg-warning align-middle';
 
-// Miniature selected day cell: explicit primary border (outline can read neutral).
-export const SELECTED_DAY_LEGEND_SWATCH_CLASS =
-  'pointer-events-none inline-flex aspect-[4/5] h-[2.35rem] w-9 shrink-0 items-center justify-center rounded-md border-2 border-primary bg-transparent shadow-none';
+// Shared with the selected day cell — outline, not border (border reads neutral at this size).
+export const SELECTED_DAY_CELL_OUTLINE_CLASS =
+  'rounded-md bg-transparent outline outline-2 -outline-offset-[4px] outline-primary';
+
+export const SELECTED_DAY_LEGEND_SWATCH_CLASS = cn(
+  'pointer-events-none inline-flex aspect-[4/5] h-[2.35rem] w-9 shrink-0 items-center justify-center border-0 shadow-none',
+  SELECTED_DAY_CELL_OUTLINE_CLASS,
+  'bg-info-soft/45',
+);
 
 function DayCellPostTotal({
   total,

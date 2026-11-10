@@ -1000,13 +1000,14 @@ describe('PostsPage calendar view', () => {
     expect(screen.queryAllByRole('button', { name: 'posts.loadErrorRetry' })).toHaveLength(1);
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
     const loadError = document.querySelector('[data-calendar-load-error]');
-    expect(loadError?.className.split(/\s+/)).toContain('flex-1');
-    expect(loadError?.closest('[data-calendar-card]')?.className).toMatch(/xl:min-h-\[22rem\]/);
-    expect(loadError?.className.split(/\s+/)).toContain('justify-center');
+    expect(loadError?.className.split(/\s+/)).not.toContain('flex-1');
+    expect(loadError?.closest('[data-calendar-card]')?.className).not.toMatch(/xl:min-h-\[22rem\]/);
+    expect(loadError?.className.split(/\s+/)).not.toContain('justify-center');
     expect(loadError?.className).toMatch(/bg-warning/);
+    expect(document.querySelector('[data-load-error-banner="true"]')?.className).toMatch(/sm:flex-row/);
     expect(alert.closest('.xl\\:col-span-2')).not.toBeNull();
     expect(retry.className).toMatch(/border-input/);
-    expect(retry.className.split(/\s+/)).toContain('min-h-11');
+    expect(retry.className).toMatch(/min-h-10|min-h-11/);
   });
 
   it('mutes disabled filters on a load error without a chevron affordance', () => {

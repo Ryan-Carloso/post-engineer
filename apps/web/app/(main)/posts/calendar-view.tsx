@@ -272,7 +272,7 @@ export function CalendarView({
       className={cn(
         'relative max-w-full min-w-0 rounded-xl border border-line bg-card p-2 sm:p-3',
         muted && 'pointer-events-none',
-        unavailable && 'flex min-h-[12rem] flex-col border-warning/30 xl:min-h-[22rem]',
+        unavailable && 'border-warning/30',
       )}
     >
       <DayCellContext.Provider value={dayCells}>
@@ -281,12 +281,13 @@ export function CalendarView({
             {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined ? (
               <div
                 data-calendar-load-error
-                className="flex w-full min-h-0 flex-1 flex-col items-center justify-center rounded-lg border border-warning/35 bg-warning/12 px-4 py-5 sm:px-6"
+                className="w-full rounded-lg border border-warning/35 bg-warning/12 px-4 py-3 sm:px-5 sm:py-3.5"
               >
                 <LoadErrorBanner
                   compact
                   fill
                   bare
+                  banner
                   messageKey={loadErrorMessageKey}
                   noteKey={loadErrorNoteKey}
                   onRetry={onLoadErrorRetry}

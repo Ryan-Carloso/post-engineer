@@ -135,6 +135,7 @@ export function LoadErrorBanner({
   compact = false,
   fill = false,
   bare = false,
+  banner = false,
 }: {
   messageKey: TranslationKey;
   noteKey?: TranslationKey;
@@ -142,36 +143,48 @@ export function LoadErrorBanner({
   compact?: boolean;
   fill?: boolean;
   bare?: boolean;
+  banner?: boolean;
 }) {
   const { t } = useI18n();
   return (
     <div
       role="alert"
+      data-load-error-banner={banner ? true : undefined}
       className={cn(
-        'flex flex-col text-ink',
-        compact ? 'gap-2.5' : 'gap-3',
+        'flex text-ink',
+        banner ? 'w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-2' : 'flex-col',
+        !banner && compact ? 'gap-2.5' : !banner ? 'gap-3' : undefined,
         !bare && 'rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3',
-        bare && 'max-w-md border-0 bg-transparent px-0 py-0',
-        compact ? 'mx-auto w-full items-center text-center' : 'items-start',
-        compact && !fill && !bare && 'max-w-md',
+        bare && 'border-0 bg-transparent px-0 py-0',
+        banner ? 'items-stretch text-left' : compact ? 'mx-auto w-full items-center text-center' : 'items-start',
+        compact && !fill && !bare && !banner && 'max-w-md',
         fill && 'max-w-none',
       )}
     >
-      <p className={cn('flex gap-3 text-sm', compact ? 'items-center' : 'items-start')}>
-        <TriangleAlert className={cn('size-5 shrink-0 text-warning', compact ? '' : 'mt-px')} aria-hidden />
+      <p
+        className={cn(
+          'flex min-w-0 gap-3 text-sm',
+          banner || !compact ? 'items-start sm:items-center' : 'items-center',
+          banner && 'flex-1',
+        )}
+      >
+        <TriangleAlert
+          className={cn('size-5 shrink-0 text-warning', banner || compact ? '' : 'mt-px')}
+          aria-hidden
+        />
         <span className="font-semibold">{t(messageKey)}</span>
       </p>
       {noteKey !== undefined && (
-        <p className={cn('text-sm text-muted-foreground', compact ? 'max-w-sm' : 'text-left')}>{t(noteKey)}</p>
+        <p className={cn('text-sm text-muted-foreground', compact && !banner ? 'max-w-sm' : 'text-left')}>{t(noteKey)}</p>
       )}
       <Button
         type="button"
         variant="outline"
-        size={compact ? 'default' : 'sm'}
-        data-load-error-retry={compact ? true : undefined}
+        size={banner ? 'default' : compact ? 'default' : 'sm'}
+        data-load-error-retry={compact || banner ? true : undefined}
         className={cn(
           'rounded-lg border-input bg-card font-semibold text-primary hover:bg-sunken',
-          compact ? 'min-h-11 self-center px-6' : 'min-h-10',
+          banner ? 'w-full shrink-0 sm:w-auto sm:min-h-10 sm:px-5' : compact ? 'min-h-11 self-center px-6' : 'min-h-10',
         )}
         onClick={onRetry}
       >
