@@ -412,7 +412,7 @@ describe('createPostMetricsStore', () => {
       from: fakeFrom({
         scheduled_posts: { data: [scannedPost()], error: null },
         post_metrics: {
-          data: [{ post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h' }],
+          data: [{ post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h', analytics_status: 'ok' }],
           error: null,
         },
       }),
@@ -512,7 +512,7 @@ describe('createPostMetricsStore', () => {
         scheduled_posts: { data: [scannedPost()], error: null },
         post_metrics: {
           data: [
-            { post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h' },
+            { post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h', analytics_status: 'ok' },
             { post_id: 'post-1', provider: 'instagram', external_id: 'media-9', metrics_window: '24h' },
           ],
           error: null,
@@ -588,7 +588,7 @@ describe('createPostMetricsStore', () => {
         scheduled_posts: { data: [scannedPost()], error: null },
         post_metrics: {
           data: Array.from({ length: REOPEN_ROWS_LIMIT }, (_, index) => ({
-            post_id: `post-${index}`, provider: 'youtube', external_id: `v${index}`, metrics_window: '24h',
+            post_id: `post-${index}`, provider: 'youtube', external_id: `v${index}`, metrics_window: '24h', analytics_status: 'ok',
           })),
           error: null,
         },
@@ -690,7 +690,7 @@ describe('createPostMetricsStore', () => {
         },
         post_metrics: {
           data: [
-            { post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h' },
+            { post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h', analytics_status: 'ok' },
             { post_id: 'post-1', provider: 'youtube', external_id: null, metrics_window: '24h' },
             { post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '30d' },
           ],
