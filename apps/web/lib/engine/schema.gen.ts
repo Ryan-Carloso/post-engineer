@@ -930,7 +930,7 @@ export interface components {
         TaskVideoRequest: {
             /**
              * Bgm Volume
-             * @default 0.2
+             * @default 0.09
              */
             bgm_volume?: number | null;
             /** Custom Audio File */

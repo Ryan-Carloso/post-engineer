@@ -981,7 +981,7 @@
                 "type": "null"
               }
             ],
-            "default": 0.2,
+            "default": 0.09,
             "title": "Bgm Volume"
           },
           "custom_audio_file": {

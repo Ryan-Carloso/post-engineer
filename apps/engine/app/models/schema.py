@@ -178,7 +178,7 @@ class VideoParams(BaseModel):
     voice_name: Optional[str] = Field(default="", max_length=200)
     voice_volume: Optional[float] = Field(default=1.0, ge=0, le=5.0)
     voice_rate: Optional[float] = Field(default=1.0, ge=0.1, le=5.0)
-    bgm_volume: Optional[float] = Field(default=0.2, ge=0, le=2.0)
+    bgm_volume: Optional[float] = Field(default=0.09, ge=0, le=2.0)
     # Background-music mood for this video, agent-supplied (issue #489).
     # Per-request only, never config.toml (like video_layout): None (the
     # default) lets the pipeline pick the first catalogued mood, "none"
