@@ -133,11 +133,13 @@ export function LoadErrorBanner({
   noteKey,
   onRetry,
   compact = false,
+  fill = false,
 }: {
   messageKey: TranslationKey;
   noteKey?: TranslationKey;
   onRetry: () => void;
   compact?: boolean;
+  fill?: boolean;
 }) {
   const { t } = useI18n();
   return (
@@ -145,7 +147,9 @@ export function LoadErrorBanner({
       role="alert"
       className={cn(
         'flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 text-ink',
-        compact ? 'mx-auto w-full max-w-md items-center text-center' : 'items-start',
+        compact ? 'mx-auto w-full items-center text-center' : 'items-start',
+        compact && !fill && 'max-w-md',
+        fill && 'max-w-none',
       )}
     >
       <p className={cn('flex gap-3 text-sm', compact ? 'items-center' : 'items-start')}>

@@ -144,7 +144,6 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
         aria-pressed={today.unavailable ? undefined : today.pressed}
         className={cn(
           'h-10 rounded-md px-3 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-          today.unavailable && 'opacity-70',
           !today.unavailable &&
             (today.pressed
               ? 'bg-primary text-on-ink hover:bg-accent-hover'
@@ -339,10 +338,11 @@ export function CalendarView({
           {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined && (
             <div
               data-calendar-load-error
-              className="mt-2 rounded-lg border border-dashed border-line bg-sunken/40 px-2 py-6 sm:px-4"
+              className="mt-2 flex min-h-[12rem] flex-col justify-center rounded-xl bg-sunken/25 p-3 sm:min-h-[14rem] sm:p-4"
             >
               <LoadErrorBanner
                 compact
+                fill
                 messageKey={loadErrorMessageKey}
                 noteKey="posts.loadErrorSideQuiet"
                 onRetry={onLoadErrorRetry}

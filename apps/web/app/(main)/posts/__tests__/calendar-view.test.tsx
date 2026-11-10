@@ -159,7 +159,7 @@ describe('CalendarView', () => {
     expect(cell).toHaveAccessibleName('Wednesday, June 5, 2030: Failed: 2, Published: 2, In progress: 1, Scheduled: 1');
   });
 
-  it('draws two legend-colored status chips when a day has two groups', () => {
+  it('shows one post total in the cell when several statuses share a day', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
@@ -171,12 +171,11 @@ describe('CalendarView', () => {
     ]);
     setup({ slotsByDay, selectedKey: '2030-06-05' });
     const cell = dayButton(/June 5, 2030/);
-    const markers = [...cell.querySelectorAll('[data-marker]')];
-    expect(markers.map((m) => m.getAttribute('data-marker'))).toEqual(['published', 'scheduled']);
-    expect(cell.querySelector('[data-status-dot]')).toBeNull();
+    expect(cell.querySelector('[data-day-post-total]')).toHaveTextContent('2');
+    expect(cell.querySelectorAll('[data-marker]')).toHaveLength(0);
   });
 
-  it('draws two status chips plus overflow when more than two groups share a day', () => {
+  it('shows one total even when more than two groups share a day', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
@@ -190,16 +189,9 @@ describe('CalendarView', () => {
       ['2030-06-06', [{ status: 'published', scheduleId: 's2', slotAt: '2030-06-06T10:00:00.000Z' }]],
     ]);
     setup({ slotsByDay });
-    const busy = dayButton(/June 5, 2030/);
-    expect(busy.querySelectorAll('[data-marker]')).toHaveLength(2);
-    expect(busy.querySelector('[data-overflow-count]')).toHaveTextContent('+2');
-    expect(busy.className.split(/\s+/)).not.toContain('bg-destructive-soft');
-    // A published-only day: one compact chip, and the cell itself stays unpainted.
-    const published = dayButton(/June 6, 2030/);
-    const publishedMarker = published.querySelector('[data-marker]');
-    expect(publishedMarker?.getAttribute('data-marker')).toBe('published');
-    expect(publishedMarker?.textContent).toBe('1');
-    expect(published.className.split(/\s+/)).not.toContain('bg-destructive-soft');
+    expect(dayButton(/June 5, 2030/).querySelector('[data-day-post-total]')).toHaveTextContent('4');
+    expect(dayButton(/June 6, 2030/).querySelector('[data-day-post-total]')).toHaveTextContent('1');
+    expect(dayButton(/June 5, 2030/).className.split(/\s+/)).not.toContain('bg-destructive-soft');
   });
 
   // Selection is a navy outline on a clear cell. A failure stays on the
@@ -220,7 +212,7 @@ describe('CalendarView', () => {
     );
     expect(classes).not.toContain('bg-destructive-soft');
     expect(classes).not.toContain('data-[selected-single=true]:bg-primary');
-    expect(dayButton(/June 5, 2030/).querySelector('[data-marker="failed"]')).not.toBeNull();
+    expect(dayButton(/June 5, 2030/).querySelector('[data-day-post-total]')).toHaveTextContent('1');
   });
 
   it('draws a selected day as the same outline, not a navy or blue block', () => {
@@ -234,7 +226,7 @@ describe('CalendarView', () => {
     expect(classes).not.toContain('data-[selected-single=true]:text-primary-foreground');
   });
 
-  it('fits four status groups into two chips plus overflow', () => {
+  it('shows one total for four posts across every status group', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
@@ -247,11 +239,9 @@ describe('CalendarView', () => {
       ],
     ]);
     setup({ slotsByDay });
-    const cell = dayButton(/June 5, 2030/);
-    expect(cell.querySelectorAll('[data-marker]')).toHaveLength(2);
-    expect(cell.querySelector('[data-overflow-count]')).toHaveTextContent('+2');
+  const cell = dayButton(/June 5, 2030/);
+    expect(cell.querySelector('[data-day-post-total]')).toHaveTextContent('4');
     expect(cell.querySelector('[data-personas]')).toBeNull();
-    expect(cell.querySelector('[data-personas-more]')).toBeNull();
   });
 
   it('still marks the status of a day whose posts resolve to no persona', () => {
@@ -267,7 +257,7 @@ describe('CalendarView', () => {
     setup({ slotsByDay });
     const cell = dayButton(/June 9, 2030/);
     expect(cell.querySelector('[data-personas]')).toBeNull();
-    expect(cell.querySelector('[data-marker="scheduled"] [data-count]')).toHaveTextContent('2');
+    expect(cell.querySelector('[data-day-post-total]')).toHaveTextContent('2');
   });
 
   it('names empty days explicitly and draws no marker or persona', () => {

@@ -151,10 +151,10 @@ describe('PostCard header and media', () => {
     const probe = document.querySelector('video');
     expect(probe).toHaveAttribute('src', '/api/persona/video-download/task-1/final-1.mp4#t=0.1');
     const link = screen.getByRole('link', { name: 'posts.cardOpenDetail' });
-    expect(link.querySelector('.border-dashed')).not.toBeNull();
+    expect(link.querySelector('[data-card-no-preview]')).not.toBeNull();
     probe?.dispatchEvent(new Event('loadeddata'));
     await waitFor(() => {
-      expect(link.querySelector('.border-dashed')).toBeNull();
+      expect(link.querySelector('[data-card-no-preview]')).toBeNull();
     });
     expect(link.querySelector('[data-card-chevron]')).not.toBeNull();
   });
@@ -162,7 +162,7 @@ describe('PostCard header and media', () => {
   it('draws a quiet media placeholder when the post has no video yet', () => {
     renderCard({ ...FAILED_SLOT, status: 'awaiting', taskId: null });
     expect(document.querySelector('video')).toBeNull();
-    const placeholder = document.querySelector('[data-status="awaiting"]')?.closest('a')?.querySelector('.border-dashed');
+    const placeholder = document.querySelector('[data-status="awaiting"]')?.closest('a')?.querySelector('[data-card-no-preview]');
     expect(placeholder).not.toBeNull();
     expect(placeholder).toHaveTextContent('posts.cardNoPreview');
   });

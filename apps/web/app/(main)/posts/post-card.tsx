@@ -83,16 +83,9 @@ const PostThumb = ({ src }: { src: string }) => (
   </div>
 );
 
-const PostNoPreviewTile = ({ noPreviewLabel }: { noPreviewLabel: string }) => (
-  <AspectRatio ratio={1} className="flex w-18 items-center justify-center rounded-[9px] border border-dashed border-line bg-sunken/60">
-    <span className="px-1 text-center text-[10px] leading-tight font-medium text-muted-foreground">{noPreviewLabel}</span>
-  </AspectRatio>
-);
-
-const PostMediaTile = ({ src, noPreviewLabel }: { src: string | null; noPreviewLabel: string }) => {
+const PostCardMedia = ({ src, noPreviewLabel }: { src: string | null; noPreviewLabel: string }) => {
   const [previewReady, setPreviewReady] = useState(false);
-  if (src === null) return <PostNoPreviewTile noPreviewLabel={noPreviewLabel} />;
-  if (!previewReady) {
+  if (src !== null && !previewReady) {
     return (
       <>
         <video
@@ -104,11 +97,24 @@ const PostMediaTile = ({ src, noPreviewLabel }: { src: string | null; noPreviewL
           onLoadedData={() => setPreviewReady(true)}
           onError={() => setPreviewReady(false)}
         />
-        <PostNoPreviewTile noPreviewLabel={noPreviewLabel} />
+        <p data-card-no-preview className="mt-1 text-xs text-muted-foreground">
+          {noPreviewLabel}
+        </p>
       </>
     );
   }
-  return <PostThumb src={src} />;
+  if (src !== null && previewReady) {
+    return (
+      <div className="mt-2">
+        <PostThumb src={src} />
+      </div>
+    );
+  }
+  return (
+    <p data-card-no-preview className="mt-1 text-xs text-muted-foreground">
+      {noPreviewLabel}
+    </p>
+  );
 };
 
 const StatusBadge = ({ status, label, style }: { status: string; label: string; style: string }) => {
@@ -253,13 +259,9 @@ export const PostCard = ({
           when={when}
           showChevron={!isFailed}
         />
-        <div className="mt-3 flex gap-3">
+        <div className="mt-3">
           <CardTitle title={displayTitle} personaName={personaName} personaLabel={t('posts.cardPersonaLabel')} />
-          {!isFailed && (
-            <span aria-hidden className="w-18 shrink-0">
-              <PostMediaTile src={thumbSrc} noPreviewLabel={t('posts.cardNoPreview')} />
-            </span>
-          )}
+          {!isFailed && <PostCardMedia src={thumbSrc} noPreviewLabel={t('posts.cardNoPreview')} />}
         </div>
         {showProgress && (
           // The exact stage under the group pill ("In progress"), e.g.

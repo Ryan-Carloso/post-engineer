@@ -775,7 +775,7 @@ describe('PostsPage calendar view', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'linkedin');
 
     const cells = screen.getAllByRole('gridcell');
-    expect(cells.some((cell) => cell.querySelector('[data-marker]') !== null)).toBe(false);
+    expect(cells.some((cell) => cell.querySelector('[data-day-post-total]') !== null)).toBe(false);
   });
 
   it('shows only the scheduled status marker in the cell for a day with one awaiting post', () => {
@@ -787,7 +787,7 @@ describe('PostsPage calendar view', () => {
       .find((button) => button.querySelector('[data-day-number]')?.textContent === '1');
     expect(day1).toBeDefined();
     expect((day1 as HTMLElement).querySelector('img')).toBeNull();
-    expect((day1 as HTMLElement).querySelector('[data-marker="scheduled"] [data-count]')).toHaveTextContent('1');
+    expect((day1 as HTMLElement).querySelector('[data-day-post-total]')).toHaveTextContent('1');
     expect((day1 as HTMLElement).querySelector('[data-personas]')).toBeNull();
   });
 
@@ -823,6 +823,8 @@ describe('PostsPage calendar view', () => {
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('posts.loadErrorCalendar');
     expect(within(alert).getByText('posts.loadErrorSideQuiet')).toBeInTheDocument();
+    expect(screen.getByText('posts.subtitleLoadError')).toBeInTheDocument();
+    expect(screen.queryByText('posts.subtitle')).not.toBeInTheDocument();
     expect(screen.queryByTestId('load-error-side-panel')).not.toBeInTheDocument();
   });
 
@@ -950,7 +952,7 @@ describe('PostsPage calendar view', () => {
     expect(within(alert).getByText('posts.loadErrorCalendar')).toBeInTheDocument();
     expect(within(alert).queryByText('posts.loadErrorRetryHint')).not.toBeInTheDocument();
   expect(alert.closest('[data-calendar-card]')).not.toBeNull();
-    expect(screen.getByText('posts.subtitle')).toBeInTheDocument();
+    expect(screen.getByText('posts.subtitleLoadError')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'posts.refresh' })).not.toBeInTheDocument();
     const retry = within(alert).getByRole('button', { name: 'posts.loadErrorRetry' });
     await user.click(retry);

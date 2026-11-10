@@ -6,6 +6,8 @@ export const postsCalendarStrings = {
     posts: {
       subtitle:
         'Calendário de publicações de todas as contas. Selecione um dia para ver as publicações.',
+      subtitleLoadError:
+        'O calendário não carregou. Tente de novo para ver e selecionar um dia.',
       historyTitle: 'Histórico',
       historySubtitle: 'Publicações passadas e gerações de vídeo de todas as contas.',
       calendarPrevMonth: 'Mês anterior',
@@ -62,6 +64,7 @@ export const postsCalendarStrings = {
   en: {
     posts: {
       subtitle: 'Calendar of posts across all accounts. Select a day to see its posts.',
+      subtitleLoadError: 'The calendar did not load. Try again to view and select a day.',
       historyTitle: 'History',
       historySubtitle: 'Past posts and video generations from all accounts.',
       calendarPrevMonth: 'Previous month',

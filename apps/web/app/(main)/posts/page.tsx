@@ -147,7 +147,9 @@ export default function PostsPage() {
           </button>
         )}
       </div>
-      <p className="mt-1 text-sm text-muted-foreground">{t('posts.subtitle')}</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {t(isError ? 'posts.subtitleLoadError' : 'posts.subtitle')}
+      </p>
 
       <PostFiltersBar
         filters={filters}

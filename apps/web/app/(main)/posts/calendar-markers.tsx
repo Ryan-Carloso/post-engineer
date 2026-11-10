@@ -51,26 +51,24 @@ export function StatusMarker({ group, count, labeled = false }: { group: Calenda
   );
 }
 
-function DayCellStatusSummary({ groups, counts }: { groups: CalendarGroup[]; counts: Record<CalendarGroup, number> }) {
-  if (groups.length === 1) {
-    const group = groups[0];
-    return <StatusMarker group={group} count={counts[group]} />;
-  }
-  const visible = groups.slice(0, 2);
-  const overflowCount = groups.slice(2).reduce((sum, group) => sum + counts[group], 0);
+function DayCellPostTotal({
+  total,
+  groups,
+  counts,
+}: {
+  total: number;
+  groups: CalendarGroup[];
+  counts: Record<CalendarGroup, number>;
+}) {
+  const { t } = useI18n();
+  const breakdown = groups.map((group) => `${t(CALENDAR_GROUP_KEY[group])}: ${counts[group]}`).join(', ');
   return (
-    <span data-cell-summary className="inline-flex max-w-full min-w-0 flex-nowrap items-center justify-center gap-0.5">
-      {visible.map((group) => (
-        <StatusMarker key={group} group={group} count={counts[group]} />
-      ))}
-      {overflowCount > 0 && (
-        <span
-          data-overflow-count
-          className="inline-flex h-4 max-xl:h-5 min-w-4 max-xl:min-w-5 shrink-0 items-center justify-center rounded-full bg-sunken px-1 text-[10px] max-xl:text-[11px] font-bold text-ink-soft tabular-nums"
-        >
-          +{overflowCount}
-        </span>
-      )}
+    <span
+      data-day-post-total
+      title={breakdown}
+      className="inline-flex h-5 min-w-5 max-xl:h-6 max-xl:min-w-6 max-xl:px-2 items-center justify-center rounded-full border border-line bg-card px-1.5 text-xs max-xl:text-sm font-bold leading-none text-primary tabular-nums shadow-[0_1px_0_rgba(13,43,69,0.06)]"
+    >
+      {total}
     </span>
   );
 }
@@ -92,8 +90,8 @@ interface DayContextValue {
 export const DayCellContext = createContext<DayContextValue>({ slotsByDay: new Map() });
 
 //---------------
-// PostsDayButton — one day cell. One compact marker, or status dots with a
-// total when several groups share the day. No persona names or avatars in
+// PostsDayButton — one day cell. One post total (per-status breakdown is
+// only in the accessible name and on the day's cards). No persona names in
 // the cell (the list below names them). Today is an amber disc on the
 // number only (gold ring). Selection is a navy outline on an overflow-visible cell so
 // the ring does not clip the markers.
@@ -130,7 +128,6 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
         !isOutside && 'data-[selected-single=true]:text-primary',
         'focus-visible:ring-[3px] focus-visible:ring-ring/50',
         'group-data-[focused=true]/day:bg-transparent group-data-[focused=true]/day:ring-0 group-data-[focused=true]/day:shadow-none',
-        '[&_[data-marker]_svg]:size-2.5',
         className,
       )}
       {...props}
@@ -148,8 +145,8 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
         {children}
       </span>
       {slots.length > 0 && (
-        <span aria-hidden className="flex w-full min-w-0 flex-nowrap items-center justify-center gap-0.5 overflow-visible">
-          <DayCellStatusSummary groups={groups} counts={counts} />
+        <span aria-hidden className="flex w-full min-w-0 items-center justify-center overflow-visible px-0.5 pt-0.5">
+          <DayCellPostTotal total={slots.length} groups={groups} counts={counts} />
         </span>
       )}
     </Button>
