@@ -54,10 +54,11 @@ export function StatusMarker({ group, count, labeled = false }: { group: Calenda
 export const DAY_POST_TOTAL_CLASS =
   'inline-flex h-6 min-w-6 max-xl:h-[1.625rem] max-xl:min-w-[1.625rem] items-center justify-center rounded-full border border-primary/55 bg-primary/22 px-1.5 text-xs font-bold leading-none text-primary tabular-nums shadow-[0_1px_0_rgba(13,43,69,0.14)]';
 
-// Legend count sample: empty day-total pill (same chrome as the grid badges).
+// Legend count sample: empty day-total dot (phone matches selected swatch scale).
 export const LEGEND_POST_TOTAL_SWATCH_CLASS = cn(
-  DAY_POST_TOTAL_CLASS,
-  'pointer-events-none box-border h-6 min-h-6 w-6 min-w-6 max-w-6 shrink-0 px-0',
+  'pointer-events-none box-border inline-flex shrink-0 items-center justify-center rounded-full border border-primary/55 bg-primary/22 px-0 shadow-[0_1px_0_rgba(13,43,69,0.14)]',
+  'h-4 min-h-4 w-4 min-w-4 max-w-4 max-xl:h-4 max-xl:min-h-4 max-xl:w-4 max-xl:min-w-4 max-xl:max-w-4',
+  'xl:h-6 xl:min-h-6 xl:w-6 xl:min-w-6 xl:max-w-6',
 );
 
 export const TODAY_TOP_BAR_CLASS = 'h-1 w-full shrink-0 rounded-full bg-warning';

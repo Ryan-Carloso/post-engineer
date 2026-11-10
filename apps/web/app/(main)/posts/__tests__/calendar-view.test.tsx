@@ -169,14 +169,14 @@ describe('CalendarView', () => {
     expect(today.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('outline-ring');
   });
 
-  it('keeps the phone legend on one row with tight gaps and compact swatches', () => {
+  it('keeps the phone legend on one row with even gaps and matching swatch scale', () => {
     setup({
       slotsByDay: new Map([['2030-06-05', [{ status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T10:00:00.000Z' }]]]),
     });
     const legend = screen.getByText('posts.calendarLegendPostCount').closest('ul');
     if (legend === null) throw new Error('legend not rendered');
     expect(legend.className.split(/\s+/)).toContain('max-xl:flex-nowrap');
-    expect(legend.className.split(/\s+/)).toContain('max-xl:gap-x-1');
+    expect(legend.className.split(/\s+/)).toContain('max-xl:gap-x-3');
     expect(legend.className.split(/\s+/)).toContain('w-full');
     for (const item of within(legend).getAllByRole('listitem')) {
       expect(item.className.split(/\s+/)).toContain('shrink-0');
@@ -184,6 +184,8 @@ describe('CalendarView', () => {
     }
     const todaySwatch = legend.querySelector('[data-legend-today-bar]');
     expect(todaySwatch?.className.split(/\s+/)).toContain('max-xl:w-4');
+    const countSwatch = legend.querySelector('[data-legend-post-total]');
+    expect(countSwatch?.className.split(/\s+/)).toContain('max-xl:w-4');
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('max-xl:size-4');
     expect(legend.closest('[data-calendar-card]')).not.toBeNull();
@@ -347,7 +349,7 @@ describe('CalendarView', () => {
     expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/55');
     expect(countSwatch?.className.split(/\s+/)).toContain('rounded-full');
     expect(countSwatch?.className.split(/\s+/)).toContain('bg-primary/22');
-    expect(countSwatch?.className.split(/\s+/)).toContain('min-w-6');
+    expect(countSwatch?.className.split(/\s+/)).toContain('xl:min-w-6');
     expect(countSwatch?.className.split(/\s+/)).not.toContain('w-8');
     expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/55');
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');

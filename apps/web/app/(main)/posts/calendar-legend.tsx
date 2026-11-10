@@ -22,7 +22,7 @@ export function CalendarLegend({
   return (
     <ul
       className={cn(
-        'flex w-full items-center text-xs text-muted-text max-xl:flex-nowrap max-xl:gap-x-1 max-xl:gap-y-0 xl:flex-wrap xl:gap-x-4 xl:gap-y-1.5',
+        'flex w-full items-center text-xs text-muted-text max-xl:flex-nowrap max-xl:gap-x-3 max-xl:gap-y-0 xl:flex-wrap xl:gap-x-4 xl:gap-y-1.5',
         className,
       )}
     >
