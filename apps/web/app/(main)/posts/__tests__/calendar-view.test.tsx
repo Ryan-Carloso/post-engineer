@@ -278,8 +278,11 @@ describe('CalendarView', () => {
     expect(within(legend).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       '1posts.calendarLegendPostCount',
       'Today',
-      'posts.calendarLegendSelected',
+      '5posts.calendarLegendSelected',
     ]);
+    const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('border-primary');
+    expect(selectedSwatch).toHaveTextContent('5');
     expect(legend.querySelector('[data-filter-hint]')).toBeNull();
   });
 

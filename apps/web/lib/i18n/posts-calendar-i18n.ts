@@ -46,7 +46,7 @@ export const postsCalendarStrings = {
       cardNoPreview: 'Sem prévia',
       cardPersonaLabel: 'Persona',
       calendarLegendSelected: 'Dia selecionado',
-      calendarLegendPostCount: 'Total de publicações no dia',
+      calendarLegendPostCount: 'Publicações',
       cardOpen: 'Abrir',
       loadErrorSideQuiet: 'O detalhe do dia fica indisponível enquanto o calendário não carregar.',
       userNoticeEmail:

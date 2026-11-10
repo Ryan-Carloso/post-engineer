@@ -54,8 +54,9 @@ export function StatusMarker({ group, count, labeled = false }: { group: Calenda
 export const DAY_POST_TOTAL_CLASS =
   'inline-flex h-5 min-w-5 max-xl:h-6 max-xl:min-w-6 items-center justify-center rounded-full border border-line bg-card text-xs max-xl:text-sm font-bold leading-none text-primary tabular-nums shadow-[0_1px_0_rgba(13,43,69,0.06)]';
 
-export const SELECTED_DAY_LEGEND_CLASS =
-  'inline-flex size-6 shrink-0 items-center justify-center rounded-md outline-2 -outline-offset-2 outline-primary bg-transparent';
+// Miniature of a selected day cell: blue rounded frame + numeral (not an empty checkbox).
+export const SELECTED_DAY_LEGEND_SWATCH_CLASS =
+  'inline-flex h-8 w-[1.75rem] shrink-0 flex-col items-center justify-center rounded-md border-2 border-primary bg-card pt-0.5 text-[10px] font-semibold leading-none tabular-nums text-primary';
 
 function DayCellPostTotal({
   total,
