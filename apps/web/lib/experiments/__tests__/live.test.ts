@@ -222,4 +222,103 @@ describe('loadLiveExperimentResults', () => {
     expect(result).toEqual({ ok: false, status: 404 });
     expect(fetchCounters).not.toHaveBeenCalled();
   });
+
+  it('returns a 500 when the task-id read fails, without touching any provider', async () => {
+    const cause = new Error('db down');
+    const { deps, fetchCounters } = depsFixture({ loadTaskIds: async () => ({ error: cause }) });
+    const result = await loadLiveExperimentResults(deps, INPUT);
+    expect(result).toEqual({ ok: false, status: 500, cause });
+    expect(fetchCounters).not.toHaveBeenCalled();
+  });
+
+  it('reports a video whose task id is missing from the map as an unknown failure', async () => {
+    const facts = factsFixture();
+    const { deps, fetchTaskSource, fetchCounters } = depsFixture(
+      {
+        loadTaskIds: async () =>
+          new Map(facts.videos.filter((item) => item.postId !== 'calm-1').map((item) => [item.postId, `task-${item.postId}`] as const)),
+      },
+      facts,
+    );
+    const result = await loadLiveExperimentResults(deps, INPUT);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.source).toBe('partial');
+    expect(result.value.liveFailures).toEqual([{ postId: 'calm-1', provider: 'unknown' }]);
+    expect(fetchTaskSource).toHaveBeenCalledTimes(5);
+    expect(fetchCounters).toHaveBeenCalledTimes(5);
+  });
+
+  it('freezes exactly at publish + 7d and stops the 24h read exactly at its horizon', async () => {
+    const frozenAt = new Date(NOW.getTime() - 7 * 24 * HOUR_MS).toISOString();
+    const facts = factsFixture({
+      videos: factsFixture().videos.map((item) => ({ ...item, publishedAt: frozenAt })),
+    });
+    const frozenRun = depsFixture({}, facts);
+    const frozenResult = await loadLiveExperimentResults(frozenRun.deps, INPUT);
+    expect(frozenResult.ok).toBe(true);
+    if (!frozenResult.ok) return;
+    expect(frozenResult.value.frozen).toBe(true);
+    expect(frozenRun.fetchCounters).not.toHaveBeenCalled();
+
+    const horizonAt = new Date(NOW.getTime() - 24 * HOUR_MS).toISOString();
+    const horizonFacts = factsFixture({
+      videos: factsFixture().videos.map((item) => ({ ...item, publishedAt: horizonAt })),
+    });
+    const horizonRun = depsFixture({}, horizonFacts);
+    const horizonResult = await loadLiveExperimentResults(horizonRun.deps, { ...INPUT, window: '24h' });
+    expect(horizonResult.ok).toBe(true);
+    if (!horizonResult.ok) return;
+    expect(horizonResult.value.source).toBe('snapshot');
+    expect(horizonRun.fetchCounters).not.toHaveBeenCalled();
+  });
+
+  it('is not frozen and reads nothing when no video is published', async () => {
+    const facts = factsFixture({
+      videos: factsFixture().videos.map((item) => ({ ...item, status: 'generating', publishedAt: null })),
+    });
+    const { deps, fetchCounters } = depsFixture({}, facts);
+    const result = await loadLiveExperimentResults(deps, INPUT);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.source).toBe('snapshot');
+    expect(result.value.frozen).toBe(false);
+    expect(fetchCounters).not.toHaveBeenCalled();
+  });
+
+  it('keeps a zero average view duration instead of turning it into null', async () => {
+    const { deps } = depsFixture({
+      fetchCounters: vi.fn(async () => ({
+        views: 10,
+        likes: 0,
+        comments: 0,
+        saves: null,
+        retention: {
+          status: 'ok' as const,
+          analyticsViews: null,
+          engagedViews: null,
+          averageViewDurationSeconds: 0,
+          averageViewPercentage: null,
+          contentType: null,
+          startDate: null,
+          endDate: null,
+        },
+      })),
+    });
+    const result = await loadLiveExperimentResults(deps, INPUT);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const youtube = result.value.results.providers[0];
+    expect(youtube.comparisons[0].values['hook-calm'].averageViewDurationSeconds).toBe(0);
+  });
+
+  it('refetches exactly when the 5-minute cache expires', async () => {
+    let now = NOW;
+    const { deps, fetchCounters } = depsFixture({}, factsFixture());
+    deps.now = () => now;
+    await loadLiveExperimentResults(deps, INPUT);
+    now = new Date(NOW.getTime() + 5 * 60 * 1000);
+    await loadLiveExperimentResults(deps, INPUT);
+    expect(fetchCounters).toHaveBeenCalledTimes(12);
+  });
 });

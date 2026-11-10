@@ -328,6 +328,74 @@ describe('GET /api/experiments/[id] ?live=1', () => {
     expect(fetchProviderCounters).not.toHaveBeenCalled();
   });
 
+  it('400 for an unknown query parameter, a blank live value and a bad window with live=1', async () => {
+    mockLiveDb();
+    const unknown = await detail(EXPERIMENT_ID, '?live=1&x=1');
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toEqual({ success: false, error: 'Unknown query parameter.', code: 'VALIDATION_FAILED' });
+    const blank = await detail(EXPERIMENT_ID, '?live=');
+    expect(blank.status).toBe(400);
+    expect(await blank.json()).toEqual({ success: false, error: 'live must be 0 or 1.', code: 'VALIDATION_FAILED' });
+    const badWindow = await detail(EXPERIMENT_ID, '?live=1&window=1y');
+    expect(badWindow.status).toBe(400);
+    expect(await badWindow.json()).toEqual({ success: false, error: 'window must be one of 24h, 7d, 28d.', code: 'VALIDATION_FAILED' });
+  });
+
+  it('200 for live=0 on the 28d window and for live=1 with an explicit 7d window', async () => {
+    mockLive();
+    mockLiveDb();
+    expect((await detail(EXPERIMENT_ID, '?live=0&window=28d')).status).toBe(200);
+    const live = await detail(EXPERIMENT_ID, '?window=7d&live=1');
+    expect(live.status).toBe(200);
+    expect((await live.json()).source).toBe('live');
+  });
+
+  it('404 for a live read of an unknown experiment', async () => {
+    mockDb({ experiments: { data: null, error: null } });
+    const response = await detail(EXPERIMENT_ID, '?live=1');
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ success: false, error: 'Experiment not found.' });
+  });
+
+  it('500 (logged) when the task-id read fails after the facts loaded', async () => {
+    // The facts read and the task-id read both query scheduled_posts, so
+    // the mock fails only the second limit() on that table.
+    const answers: Record<string, Answer> = {
+      experiments: { data: EXPERIMENT_ROW, error: null },
+      experiment_variants: { data: VARIANT_ROWS, error: null },
+      scheduled_posts: { data: recentSlots, error: null },
+      post_metrics: { data: metrics, error: null },
+    };
+    let scheduledPostsLimits = 0;
+    const from = vi.fn((table: string) => {
+      const builder: Record<string, unknown> = {};
+      for (const method of ['select', 'eq', 'is', 'in', 'or', 'order']) {
+        builder[method] = (..._args: unknown[]) => builder;
+      }
+      builder.limit = async () => {
+        if (table === 'scheduled_posts') {
+          scheduledPostsLimits += 1;
+          if (scheduledPostsLimits === 2) return { data: null, error: { message: 'task ids down' } };
+        }
+        return answers[table] ?? { data: null, error: null };
+      };
+      builder.maybeSingle = async () => answers[table] ?? { data: null, error: null };
+      builder.then = (resolve: (value: Answer) => unknown) =>
+        Promise.resolve(answers[table] ?? { data: null, error: null }).then(resolve);
+      return builder;
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue({ from, rpc: vi.fn(async () => ({ data: EXPERIMENT_ID, error: null })) } as never);
+    const response = await detail(EXPERIMENT_ID, '?live=1');
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ success: false, error: 'Failed to load the experiment.' });
+    expect(logger.error).toHaveBeenCalledWith(
+      '[api/experiments] live results read failed',
+      { message: 'task ids down' },
+      { experimentId: EXPERIMENT_ID },
+    );
+    expect(fetchProviderCounters).not.toHaveBeenCalled();
+  });
+
   it('a failed engine read keeps the snapshot and reports the failures', async () => {
     mockLiveDb();
     vi.mocked(fetchEnginePostMetricsSource).mockRejectedValue(new Error('engine down'));
