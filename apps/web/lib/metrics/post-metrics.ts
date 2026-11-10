@@ -3,7 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import type { SocialProvider } from '@/lib/providers/registry';
-import { isMetricsWindow, type AnalyticsStatus, type MetricsWindow } from './metrics-query';
+import { isMetricsWindow, METRICS_WINDOWS, METRICS_WINDOW_LOOKBACK_HOURS, metricsWindowRange, type AnalyticsStatus, type MetricsWindow } from './metrics-query';
 
 //---------------
 // post-metrics — per-video performance snapshots for A/B content tests.
@@ -32,6 +32,12 @@ export type MeasuredProvider = SocialProvider;
 // windows) is decided in SQL: public.find_post_metrics_due (migration 039).
 export const MAX_POSTS_PER_RUN = 50;
 export const RUN_TIME_BUDGET_MS = 45_000;
+// How many published posts the re-open scan reads per run (newest first).
+const REOPEN_SCAN_LIMIT = 200;
+// Worst case rows for those posts: 9 providers x 3 windows each. Hitting
+// the cap aborts the re-open for the run (a truncated rows read could
+// mistake a collected target for missing and snapshot it twice).
+export const REOPEN_ROWS_LIMIT = 6000;
 
 export interface MetricsCounters {
   views: number | null;
@@ -310,6 +316,106 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
 }
 
 //---------------
+// findReopenedPosts — the late-target re-read (issue #525 item 4). The
+// due SQL never re-reads a post marked done, so a target that lands in
+// publish_outcomes after the post was marked done — a retry, or a publish
+// that only finished after the first collection — would miss its window
+// silently. Re-check published posts while their windows are still open:
+// a post is due again for a window when it has a measurable target with
+// no snapshot row for that window. Best-effort: any read failure logs
+// and returns nothing, never failing the run. The (post, window) pairs
+// the RPC already returned are excluded, so a post is never collected
+// twice in one run.
+//---------------
+async function findReopenedPosts(
+  supabase: SupabaseClient,
+  now: Date,
+  seen: ReadonlySet<string>,
+  budget: number,
+): Promise<DuePost[]> {
+  if (budget <= 0) return [];
+  const cutoff = new Date(now.getTime() - METRICS_WINDOW_LOOKBACK_HOURS * 60 * 60 * 1000);
+  const { data: postData, error: postError } = await supabase
+    .from('scheduled_posts')
+    .select('id, user_id, task_id, status, published_at, publish_outcomes')
+    .eq('status', 'published')
+    .gte('published_at', cutoff.toISOString())
+    .order('published_at', { ascending: false })
+    .order('id', { ascending: true })
+    .limit(REOPEN_SCAN_LIMIT);
+  if (postError) {
+    logger.warn('[post-metrics] reopen scan failed', { error: postError.message });
+    return [];
+  }
+  const records = Array.isArray(postData) ? postData : [];
+  const postIds = records
+    .map((record) => (typeof record.id === 'string' ? record.id : null))
+    .filter((id): id is string => id !== null);
+  if (postIds.length === 0) return [];
+
+  const { data: rowData, error: rowError } = await supabase
+    .from('post_metrics')
+    .select('post_id, provider, external_id, metrics_window')
+    .in('post_id', postIds)
+    .order('collected_at', { ascending: false })
+    .limit(REOPEN_ROWS_LIMIT);
+  if (rowError) {
+    logger.warn('[post-metrics] reopen rows lookup failed', { error: rowError.message });
+    return [];
+  }
+  const rows = Array.isArray(rowData) ? rowData : [];
+  if (rows.length >= REOPEN_ROWS_LIMIT) {
+    // The cap drops the oldest rows first: a collected target could read
+    // as missing and be snapshotted twice (the upsert is idempotent, but
+    // the PostHog event would fire twice). Skip the re-open this run.
+    logger.warn('[post-metrics] reopen rows read hit its cap; skipping the re-open this run');
+    return [];
+  }
+  const collectedByPostWindow = new Map<string, Set<string>>();
+  for (const record of rows) {
+    if (
+      typeof record.post_id !== 'string'
+      || typeof record.provider !== 'string'
+      || typeof record.external_id !== 'string'
+      || !isMetricsWindow(record.metrics_window)
+    ) {
+      continue;
+    }
+    const key = `${record.post_id}:${record.metrics_window}`;
+    const keys = collectedByPostWindow.get(key) ?? new Set<string>();
+    keys.add(`${record.provider}:${record.external_id}`);
+    collectedByPostWindow.set(key, keys);
+  }
+
+  const reopened: DuePost[] = [];
+  for (const record of records) {
+    if (
+      typeof record.id !== 'string'
+      || typeof record.user_id !== 'string'
+      || typeof record.task_id !== 'string'
+      || typeof record.published_at !== 'string'
+    ) {
+      continue;
+    }
+    const published = Date.parse(record.published_at);
+    if (Number.isNaN(published)) continue;
+    const outcomes = Array.isArray(record.publish_outcomes) ? record.publish_outcomes : [];
+    const found = metricsTargets(outcomes);
+    if (found.targets.length === 0) continue;
+    for (const window of METRICS_WINDOWS) {
+      if (seen.has(`${record.id}:${window}`)) continue;
+      const { opensAt, closesAt } = metricsWindowRange(window, new Date(published));
+      if (now.getTime() < opensAt.getTime() || now.getTime() >= closesAt.getTime()) continue;
+      const collectedKeys = collectedByPostWindow.get(`${record.id}:${window}`) ?? new Set<string>();
+      if (!found.targets.some((target) => !collectedKeys.has(targetKey(target)))) continue;
+      reopened.push({ id: record.id, userId: record.user_id, taskId: record.task_id, window, collectedKeys });
+      if (reopened.length >= budget) return reopened;
+    }
+  }
+  return reopened;
+}
+
+//---------------
 // createPostMetricsStore — Supabase-backed store (service role: the cron
 // has no user session; every row carries the post owner's user_id).
 //---------------
@@ -325,6 +431,7 @@ export function createPostMetricsStore(
       });
       if (error) throw new Error(`due posts lookup failed: ${error.message}`);
       const posts: DuePost[] = [];
+      const seen = new Set<string>();
       for (const row of (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>) {
         const window = row.metrics_window;
         if (
@@ -345,8 +452,10 @@ export function createPostMetricsStore(
           window,
           collectedKeys: new Set(keys),
         });
+        seen.add(`${row.post_id}:${window}`);
       }
-      return posts;
+      const reopened = await findReopenedPosts(supabase, now, seen, Math.max(0, limit - posts.length));
+      return [...posts, ...reopened];
     },
     async saveMetrics(row) {
       const { data, error } = await supabase.from('post_metrics').upsert(
