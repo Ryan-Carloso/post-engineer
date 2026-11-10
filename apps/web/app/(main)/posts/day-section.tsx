@@ -166,8 +166,12 @@ export function LoadErrorBanner({
       <Button
         type="button"
         variant="outline"
-        size="sm"
-        className={cn('min-h-10 rounded-lg border-input bg-card font-semibold text-primary hover:bg-sunken', compact ? 'self-center' : undefined)}
+        size={compact ? 'default' : 'sm'}
+        data-load-error-retry={compact ? true : undefined}
+        className={cn(
+          'rounded-lg border-input bg-card font-semibold text-primary hover:bg-sunken',
+          compact ? 'min-h-11 self-center px-6' : 'min-h-10',
+        )}
         onClick={onRetry}
       >
         {t('posts.loadErrorRetry')}

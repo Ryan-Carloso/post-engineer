@@ -52,28 +52,26 @@ export function StatusMarker({ group, count, labeled = false }: { group: Calenda
 }
 
 export const DAY_POST_TOTAL_CLASS =
-  'inline-flex h-5 min-w-5 max-xl:h-6 max-xl:min-w-6 items-center justify-center rounded-full border border-primary/40 bg-primary/12 text-xs max-xl:text-sm font-bold leading-none text-primary tabular-nums shadow-[0_1px_0_rgba(13,43,69,0.1)]';
+  'inline-flex h-6 min-w-6 max-xl:h-[1.625rem] max-xl:min-w-[1.625rem] items-center justify-center rounded-full border border-primary/55 bg-primary/22 px-1.5 text-xs font-bold leading-none text-primary tabular-nums shadow-[0_1px_0_rgba(13,43,69,0.14)]';
 
 // Legend count sample: empty day-total pill (same chrome as the grid badges).
 export const LEGEND_POST_TOTAL_SWATCH_CLASS = cn(
   DAY_POST_TOTAL_CLASS,
-  'pointer-events-none box-border h-5 min-h-5 w-5 min-w-5 max-w-5 shrink-0 px-1 shadow-[0_1px_0_rgba(13,43,69,0.1)]',
+  'pointer-events-none box-border h-6 min-h-6 w-6 min-w-6 max-w-6 shrink-0 px-0',
 );
-
-// Gold wash behind today's date numeral (selection outline stays stronger).
-export const TODAY_NUMERAL_WASH_CLASS = 'rounded-sm bg-warning/25 px-0.5';
 
 export const TODAY_TOP_BAR_CLASS = 'h-1 w-full shrink-0 rounded-full bg-warning';
 
-export const TODAY_CELL_TOP_BAR_CLASS = 'absolute inset-x-1 top-0.5 z-[1] h-1 rounded-full bg-warning';
+export const TODAY_CELL_TOP_BAR_CLASS =
+  'pointer-events-none absolute top-1 z-[1] h-1 w-[calc(100%-0.5rem)] max-w-full rounded-full bg-warning left-1/2 -translate-x-1/2';
 
 // Legend today: the same gold top bar as the grid — not a miniature scene.
 export const LEGEND_TODAY_BAR_SWATCH_CLASS =
   'inline-block h-1 w-10 shrink-0 rounded-full bg-warning align-middle';
 
-// Miniature selected day cell: blue outline like the grid, not a form checkbox.
+// Miniature selected day cell: blue rounded outline like the grid — not a dark square.
 export const SELECTED_DAY_LEGEND_SWATCH_CLASS =
-  'pointer-events-none inline-flex aspect-[4/5] h-[2.35rem] w-9 shrink-0 items-center justify-center rounded-md bg-transparent outline-2 -outline-offset-[4px] outline-primary shadow-none border-0';
+  'pointer-events-none inline-flex aspect-[4/5] h-[2.35rem] w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent shadow-none ring-2 ring-inset ring-primary';
 
 function DayCellPostTotal({
   total,
@@ -143,8 +141,8 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       data-selected-single={selectedSingle ? true : undefined}
       data-day-button
       className={cn(
-        'aspect-auto h-[4.5rem] w-full max-w-full min-w-0 flex-col items-center justify-start overflow-visible px-0.5 pb-1 max-xl:h-[4.75rem] sm:h-24 sm:min-h-24 sm:pb-1 sm:pt-1 xl:h-[4.25rem] xl:min-h-[4.25rem] xl:gap-0.5 xl:pb-0.5',
-        isToday ? 'gap-0 pt-1.5' : 'gap-0.5 pt-0.5',
+        'relative aspect-auto h-[4.5rem] w-full max-w-full min-w-0 flex-col items-center justify-start px-0.5 pb-1 max-xl:h-[4.75rem] sm:h-24 sm:min-h-24 sm:pb-1 sm:pt-1 xl:h-[4.25rem] xl:min-h-[4.25rem] xl:gap-0.5 xl:pb-0.5',
+        isToday ? 'gap-0 overflow-hidden pt-1.5' : 'gap-0.5 overflow-visible pt-0.5',
         !isOutside && '[&>span]:opacity-100',
         isOutside &&
           'text-muted-foreground hover:bg-transparent hover:text-muted-foreground active:bg-transparent data-[selected-single=true]:text-muted-foreground',
@@ -171,7 +169,6 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
           className={cn(
             'inline-flex min-h-6 shrink-0 items-center justify-center leading-none',
             isOutside ? 'font-normal text-muted-foreground opacity-50' : 'font-semibold text-primary',
-            isToday && TODAY_NUMERAL_WASH_CLASS,
             isToday && isOutside && 'opacity-100',
           )}
         >

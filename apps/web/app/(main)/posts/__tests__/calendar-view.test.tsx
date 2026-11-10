@@ -101,13 +101,16 @@ describe('CalendarView', () => {
     expect(dayButton(/June 21, 2030/).closest('[data-selected="true"]')).toBeNull();
   });
 
-  it('marks today with a top bar and a light gold wash on the numeral, not a ring', () => {
+  it('marks today with a clipped top bar only, not a numeral wash or ring', () => {
     setup({ selectedKey: '2030-06-20' });
     const today = dayButton(/June 15, 2030/);
     const number = today.querySelector('[data-day-numeral]');
     expect(number).toHaveTextContent('15');
-    expect(number?.className).toMatch(/bg-warning\/25/);
-    expect(today.querySelector('[data-today-bar="true"]')).not.toBeNull();
+    expect(number?.className).not.toMatch(/bg-warning/);
+    expect(today.className.split(/\s+/)).toContain('overflow-hidden');
+    const bar = today.querySelector('[data-today-bar="true"]');
+    expect(bar).not.toBeNull();
+    expect(bar?.className).toMatch(/max-w-full/);
     expect(number?.querySelector('[data-today-mark]')).toBeNull();
     expect(number?.className.split(/\s+/)).not.toContain('ring-warning');
     expect(dayButton(/June 20, 2030/).querySelector('[data-today-bar]')).toBeNull();
@@ -291,20 +294,20 @@ describe('CalendarView', () => {
     const countSwatch = legend.querySelector('[data-legend-post-total]');
     expect(countSwatch).toBeTruthy();
     expect(countSwatch).toBeEmptyDOMElement();
-    expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/40');
+    expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/55');
     expect(countSwatch?.className.split(/\s+/)).toContain('rounded-full');
-    expect(countSwatch?.className.split(/\s+/)).toContain('bg-primary/12');
-    expect(countSwatch?.className.split(/\s+/)).toContain('min-w-5');
+    expect(countSwatch?.className.split(/\s+/)).toContain('bg-primary/22');
+    expect(countSwatch?.className.split(/\s+/)).toContain('min-w-6');
     expect(countSwatch?.className.split(/\s+/)).not.toContain('w-8');
-    expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/40');
+    expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/55');
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
     expect(selectedSwatch).toBeEmptyDOMElement();
     const todaySwatch = legend.querySelector('[data-legend-today-bar]');
     expect(todaySwatch?.className).toMatch(/bg-warning/);
     expect(legend.querySelector('[data-legend-today-mark]')).toBeNull();
-    expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-primary');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('ring-primary');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('rounded-md');
-    expect(selectedSwatch?.className.split(/\s+/)).toContain('-outline-offset-[4px]');
+    expect(selectedSwatch?.className.split(/\s+/)).not.toContain('outline-primary');
     expect(legend.querySelector('[data-filter-hint]')).toBeNull();
   });
 
@@ -417,9 +420,21 @@ describe('CalendarView', () => {
       ]),
     });
     const grid = screen.getByRole('grid');
-    const emptyWeek = grid.querySelector('tr[data-week-has-posts="false"]');
+    const emptyWeek = grid.querySelector('tr[data-week-has-posts="false"]:not([data-week-outside-padding])');
     expect(emptyWeek).not.toBeNull();
     expect(emptyWeek?.className.split(/\s+/)).toContain('max-xl:[&_[data-day-button]]:h-11');
+  });
+
+  it('keeps full-height rows for weeks that show neighbouring-month days', () => {
+    setup({
+      slotsByDay: new Map([
+        ['2030-06-05', [{ status: 'published', scheduleId: 's2', slotAt: '2030-06-05T10:00:00.000Z' }]],
+      ]),
+    });
+    const paddedWeek = screen.getByRole('grid').querySelector('tr[data-week-outside-padding="true"]');
+    expect(paddedWeek).not.toBeNull();
+    expect(paddedWeek?.className.split(/\s+/)).not.toContain('max-xl:[&_[data-day-button]]:h-11');
+    expect(screen.getByRole('button', { name: /May 26, 2030/ }).querySelector('[data-day-numeral]')).toHaveTextContent('26');
   });
 
   it('shows only the weeks the month spans — no all-next-month row', () => {

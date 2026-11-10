@@ -281,7 +281,7 @@ export function CalendarView({
             {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined ? (
               <div
                 data-calendar-load-error
-                className="flex w-full min-h-[20rem] flex-col items-center justify-center rounded-lg border border-warning/35 bg-warning/12 px-4 py-10 sm:min-h-[22rem] sm:px-6 xl:min-h-[26rem]"
+                className="flex w-full min-h-[15rem] flex-col items-center justify-center gap-1 rounded-lg border border-warning/35 bg-warning/12 px-4 py-6 sm:min-h-[17rem] sm:px-6 sm:py-7 xl:min-h-[19rem]"
               >
                 <LoadErrorBanner
                   compact

@@ -210,7 +210,12 @@ export function usePostFilters(joins: PostJoins): PostFilters {
 
 // One fixed width on wide screens, so the selects do not change size with
 // the locale or the chosen option; an applied filter is outlined in navy.
-const SELECT_CLASS = 'h-10 w-full truncate rounded-xl border border-input bg-card px-3 text-sm font-medium text-primary sm:w-48';
+const SELECT_CLASS =
+  'h-10 w-full appearance-none truncate rounded-xl border border-input bg-card bg-no-repeat px-3 text-sm font-medium text-primary sm:w-48';
+const SELECT_CHEVRON_CLASS =
+  "bg-[length:1rem_1rem] bg-[position:right_0.65rem_center] pr-9 bg-[image:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%231a4d74%22%20stroke-width%3D%222.25%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')]";
+const SELECT_DISABLED_CLASS =
+  'cursor-not-allowed border-line bg-sunken/90 pr-3 text-muted-foreground opacity-55 saturate-50';
 const SELECT_ACTIVE_CLASS = 'border-primary bg-info-soft ring-1 ring-primary';
 const LABEL_CLASS = 'flex min-w-0 flex-col gap-1 text-xs font-semibold text-muted-foreground';
 
@@ -247,8 +252,9 @@ export function PostFiltersBar({
           }}
           className={cn(
             SELECT_CLASS,
+            !inert && SELECT_CHEVRON_CLASS,
             filters.provider !== 'all' && !unavailable && SELECT_ACTIVE_CLASS,
-            inert && 'cursor-not-allowed border-line bg-sunken/80 text-muted-foreground opacity-70',
+            inert && SELECT_DISABLED_CLASS,
           )}
         >
           <option value="all">{t('posts.allProviders')}</option>
@@ -267,8 +273,9 @@ export function PostFiltersBar({
           onChange={(event) => filters.setAccount(event.target.value)}
           className={cn(
             SELECT_CLASS,
+            !inert && SELECT_CHEVRON_CLASS,
             filters.account !== 'all' && !unavailable && SELECT_ACTIVE_CLASS,
-            inert && 'cursor-not-allowed border-line bg-sunken/80 text-muted-foreground opacity-70',
+            inert && SELECT_DISABLED_CLASS,
           )}
         >
           <option value="all">{t('posts.allAccounts')}</option>

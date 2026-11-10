@@ -14,13 +14,22 @@ export const CalendarChromeContext = createContext({ filtered: false, showLegend
 export function PostsCalendarWeek({ week, className, ...props }: WeekProps) {
   const { slotsByDay } = useContext(DayCellContext);
   const hasPosts = week.days.some((day) => (slotsByDay.get(dayKey(day.date))?.length ?? 0) > 0);
+  const displayMonth = week.days[0]?.displayMonth ?? week.days[0]?.date;
+  const hasOutside =
+    displayMonth !== undefined &&
+    week.days.some(
+      (day) =>
+        day.date.getMonth() !== displayMonth.getMonth() || day.date.getFullYear() !== displayMonth.getFullYear(),
+    );
+  const compact = !hasPosts && !hasOutside;
   return (
     <tr
       {...props}
       data-week-has-posts={hasPosts ? 'true' : 'false'}
+      data-week-outside-padding={hasOutside ? 'true' : undefined}
       className={cn(
         className,
-        !hasPosts &&
+        compact &&
           'max-xl:[&_[data-day-button]]:h-11 max-xl:[&_[data-day-button]]:min-h-11 max-xl:[&_[data-day-button]]:gap-0 xl:[&_[data-day-button]]:h-14 xl:[&_[data-day-button]]:sm:h-16',
       )}
     />

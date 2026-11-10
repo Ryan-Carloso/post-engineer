@@ -1000,11 +1000,29 @@ describe('PostsPage calendar view', () => {
     expect(screen.queryAllByRole('button', { name: 'posts.loadErrorRetry' })).toHaveLength(1);
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
     const loadError = document.querySelector('[data-calendar-load-error]');
-    expect(loadError?.className).toMatch(/min-h-\[22rem\]|min-h-\[20rem\]/);
+    expect(loadError?.className).toMatch(/min-h-\[(15|17|19)rem\]/);
     expect(loadError?.className.split(/\s+/)).toContain('justify-center');
     expect(loadError?.className).toMatch(/bg-warning/);
     expect(alert.closest('.xl\\:col-span-2')).not.toBeNull();
     expect(retry.className).toMatch(/border-input/);
+    expect(retry.className.split(/\s+/)).toContain('min-h-11');
+  });
+
+  it('mutes disabled filters on a load error without a chevron affordance', () => {
+    vi.mocked(useScheduleRangeQuery).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isFetching: false,
+      isError: true,
+      refetch: vi.fn(),
+    } as never);
+    render(<PostsPage />);
+    for (const select of [screen.getByLabelText('posts.filterProvider'), screen.getByLabelText('posts.filterAccount')]) {
+      expect(select).toBeDisabled();
+      expect(select.className.split(/\s+/)).toContain('appearance-none');
+      expect(select.className.split(/\s+/)).toContain('saturate-50');
+      expect(select.className).not.toMatch(/bg-\[image:/);
+    }
   });
 
   it('hides the header refresh on a load error so only the in-card retry remains', () => {
