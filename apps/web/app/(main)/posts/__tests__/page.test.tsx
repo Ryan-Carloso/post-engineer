@@ -974,7 +974,7 @@ describe('PostsPage calendar view', () => {
     expect(screen.queryAllByRole('button', { name: 'posts.loadErrorRetry' })).toHaveLength(1);
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
     const loadError = document.querySelector('[data-calendar-load-error]');
-    expect(loadError?.className.split(/\s+/)).not.toContain('min-h-[18rem]');
+    expect(loadError?.className.split(/\s+/)).toContain('min-h-[22rem]');
     expect(document.querySelector('[data-day-unavailable-note]')?.className.split(/\s+/)).toContain('border');
   });
 

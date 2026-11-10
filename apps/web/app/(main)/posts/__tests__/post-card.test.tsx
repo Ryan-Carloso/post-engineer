@@ -121,10 +121,18 @@ describe('PostCard status pill — the calendar vocabulary', () => {
     expect(document.querySelector(`[data-status="${status}"]`)).toHaveTextContent(label);
   });
 
-  it('names the exact stage with the percent under the In progress pill', () => {
-    renderCard({ ...FAILED_SLOT, status: 'generating', progress: 45 });
+  it('surfaces generating as the stage label instead of the in-progress group pill in the day list', () => {
+    renderCard({ ...FAILED_SLOT, status: 'generating' }, true);
 
     expect(screen.getByText('posts.statusGenerating')).toBeInTheDocument();
+    expect(document.querySelector('[data-status="generating"]')).toBeNull();
+  });
+
+  it('names the exact stage with the percent under the In progress pill', () => {
+    renderCard({ ...FAILED_SLOT, status: 'generating', progress: 45 }, true);
+
+    expect(screen.getByText('posts.statusGenerating')).toBeInTheDocument();
+    expect(screen.queryByText('posts.groupInProgress')).not.toBeInTheDocument();
     expect(screen.getByText('45%')).toBeInTheDocument();
     const bar = screen.getByRole('progressbar');
     expect(bar).toHaveAttribute('aria-valuenow', '45');

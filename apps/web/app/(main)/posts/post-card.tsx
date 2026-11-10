@@ -97,7 +97,7 @@ const PostCardMedia = ({ src, noPreviewLabel }: { src: string | null; noPreviewL
           onLoadedData={() => setPreviewReady(true)}
           onError={() => setPreviewReady(false)}
         />
-        <p data-card-no-preview className="mt-1 text-xs text-muted-foreground">
+        <p data-card-no-preview className="mt-1.5 border-l-2 border-warning/35 pl-2 text-xs font-medium text-warning/90">
           {noPreviewLabel}
         </p>
       </>
@@ -111,7 +111,7 @@ const PostCardMedia = ({ src, noPreviewLabel }: { src: string | null; noPreviewL
     );
   }
   return (
-    <p data-card-no-preview className="mt-1 text-xs text-muted-foreground">
+    <p data-card-no-preview className="mt-1.5 border-l-2 border-warning/35 pl-2 text-xs font-medium text-warning/90">
       {noPreviewLabel}
     </p>
   );
@@ -152,10 +152,10 @@ const CardHeader = ({
 );
 
 const CardOpenAction = ({ label }: { label: string }) => (
-  <div className="mt-3 flex justify-end border-t border-line pt-3">
+  <div className="mt-3 border-t border-line pt-3">
     <span
       data-card-open
-      className="inline-flex min-h-10 w-full items-center justify-center gap-1 rounded-lg border border-line bg-card px-3 py-2 text-sm font-semibold text-primary shadow-[0_1px_0_rgba(13,43,69,0.06)] max-xl:max-w-none sm:w-auto sm:min-w-[10.5rem]"
+      className="flex min-h-10 w-full items-center justify-center gap-1 rounded-lg border border-line bg-card px-3 py-2 text-sm font-semibold text-primary shadow-[0_1px_0_rgba(13,43,69,0.06)]"
     >
       <span className="whitespace-nowrap">{label}</span>
       <ChevronRight
@@ -259,6 +259,7 @@ export const PostCard = ({
       ? t(slot.retryable === true ? 'posts.cardFailedRetryable' : 'posts.cardFailedPermanent')
       : t(GENERATION_ERROR_KEY[failureCode]);
   const group = calendarGroupOf(slot.status);
+  const generatingCue = timeOnly && slot.status === 'generating';
   const displayTitle = slot.title ?? t('posts.unknownTitle');
   // The card is not a single link: the failure box carries its own actions,
   // and a link cannot nest another link. The main content links to the post
@@ -277,19 +278,31 @@ export const PostCard = ({
         aria-label={t('posts.cardOpenDetail', { title: displayTitle })}
         className="block rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
-        <CardHeader
-          badge={<StatusBadge status={slot.status} label={t(CALENDAR_GROUP_KEY[group])} style={CALENDAR_GROUP_PILL[group]} />}
-          when={when}
-          whenHint={timeOnly ? t(timeKindKey) : undefined}
-        />
+        {generatingCue ? (
+          <div data-card-header className="flex w-full items-start gap-2">
+            <p className="text-sm font-semibold text-info">{t(STATUS_KEY.generating)}</p>
+            <p className="ml-auto text-right text-xs text-muted-foreground tabular-nums">
+              <span className="sr-only">{t(timeKindKey)} </span>
+              <span data-card-when>{when}</span>
+            </p>
+          </div>
+        ) : (
+          <CardHeader
+            badge={<StatusBadge status={slot.status} label={t(CALENDAR_GROUP_KEY[group])} style={CALENDAR_GROUP_PILL[group]} />}
+            when={when}
+            whenHint={timeOnly ? t(timeKindKey) : undefined}
+          />
+        )}
         <div className="mt-3">
           <CardTitle title={displayTitle} personaName={personaName} personaLabel={t('posts.cardPersonaLabel')} />
           {!isFailed && <PostCardMedia src={thumbSrc} noPreviewLabel={t('posts.cardNoPreview')} />}
         </div>
         {showProgress && (
-          <div className="mt-3">
-            <p className="text-xs font-semibold text-info">{t(STATUS_KEY[slot.status] ?? 'posts.groupInProgress')}</p>
-            <div className="mt-1.5 flex w-full items-center gap-2">
+          <div className={cn('mt-3', generatingCue && 'rounded-lg border border-info/25 bg-info-soft/40 p-2.5')}>
+            {!generatingCue && (
+              <p className="text-xs font-semibold text-info">{t(STATUS_KEY[slot.status] ?? 'posts.groupInProgress')}</p>
+            )}
+            <div className={cn('flex w-full items-center gap-2', generatingCue ? 'mt-0' : 'mt-1.5')}>
               <div
                 role="progressbar"
                 aria-label={t('posts.progressLabel')}

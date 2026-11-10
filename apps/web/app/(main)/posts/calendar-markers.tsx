@@ -54,13 +54,15 @@ export function StatusMarker({ group, count, labeled = false }: { group: Calenda
 export const DAY_POST_TOTAL_CLASS =
   'inline-flex h-5 min-w-5 max-xl:h-6 max-xl:min-w-6 items-center justify-center rounded-full border border-primary/40 bg-primary/12 text-xs max-xl:text-sm font-bold leading-none text-primary tabular-nums shadow-[0_1px_0_rgba(13,43,69,0.1)]';
 
-// Legend sample: same pill shape, no numeral (not a live count).
-export const LEGEND_POST_TOTAL_SWATCH_CLASS =
-  'inline-flex h-5 min-w-5 max-xl:h-6 max-xl:min-w-6 shrink-0 rounded-full border border-primary/40 bg-primary/12 shadow-[0_1px_0_rgba(13,43,69,0.1)]';
+// Legend count sample: empty day-total pill (same chrome as the grid badges).
+export const LEGEND_POST_TOTAL_SWATCH_CLASS = cn(DAY_POST_TOTAL_CLASS, 'pointer-events-none px-1.5 shadow-none');
 
-// Miniature selected day cell: same blue rounded frame as the grid, no date numeral.
+// Gold wash behind today's date numeral (not a count ring).
+export const TODAY_NUMERAL_WASH_CLASS = 'rounded-sm bg-warning/20 px-0.5';
+
+// Miniature selected day cell: blue outline like the grid, not a form checkbox.
 export const SELECTED_DAY_LEGEND_SWATCH_CLASS =
-  'inline-flex h-7 w-[1.75rem] shrink-0 items-center justify-center rounded-md border-2 border-primary bg-card';
+  'pointer-events-none inline-flex h-9 w-8 shrink-0 items-center justify-center rounded-md bg-card outline-2 -outline-offset-2 outline-primary';
 
 function DayCellPostTotal({
   total,
@@ -90,7 +92,7 @@ function DayCellPostTotal({
   );
 }
 
-// Today mark: gold dot under the date numeral (legend uses the same dot).
+// Corner dot: separate from the count pill and from the numeral wash.
 export const TODAY_MARK_DOT_CLASS =
   'size-2.5 max-xl:size-3 shrink-0 rounded-full bg-warning ring-1 ring-warning/50';
 
@@ -107,10 +109,9 @@ export const DayCellContext = createContext<DayContextValue>({ slotsByDay: new M
 //---------------
 // PostsDayButton — one day cell. One post total (per-status breakdown is
 // only in the accessible name and on the day's cards). No persona names in
-// the cell (the list below names them). Today is a gold dot under the
-// date numeral (counts stay in the gray pill). Selection is a navy outline on an
-// overflow-visible cell so
-// the ring does not clip the markers.
+// the cell (the list below names them). Today is a gold wash on the numeral
+// plus a corner dot; counts stay in the bottom pill. Selection is a navy outline
+// on an overflow-visible cell so the ring does not clip the markers.
 //---------------
 export function PostsDayButton({ children, day, modifiers, className, ...props }: ComponentProps<typeof DayButton>) {
   const { slotsByDay } = useContext(DayCellContext);
@@ -148,23 +149,25 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       )}
       {...props}
     >
+      {isToday && (
+        <span aria-hidden data-today-mark="true" className={cn(TODAY_MARK_DOT_CLASS, 'absolute right-0.5 top-0.5 z-[1]')} />
+      )}
       <span
         data-day-number
         className={cn(
-          'inline-flex min-h-6 shrink-0 flex-col items-center justify-center gap-0.5 tabular-nums',
+          'inline-flex min-h-6 shrink-0 items-center justify-center tabular-nums',
           isOutside ? 'font-normal text-muted-foreground opacity-50' : 'font-semibold text-primary',
+          isToday && TODAY_NUMERAL_WASH_CLASS,
           isToday && isOutside && 'opacity-100',
         )}
       >
         <span className="leading-none">{children}</span>
-        {isToday ? (
-          <span aria-hidden data-today-mark="true" className={TODAY_MARK_DOT_CLASS} />
-        ) : (
-          <span aria-hidden className="size-2.5 max-xl:size-3 shrink-0" />
-        )}
       </span>
       {slots.length > 0 && (
-        <span aria-hidden className="flex w-full min-w-0 items-center justify-center overflow-visible px-0.5 pt-0.5">
+        <span
+          aria-hidden
+          className="mt-auto flex w-full min-w-0 items-center justify-center overflow-visible px-0.5 pb-0.5 pt-0.5"
+        >
           <DayCellPostTotal total={slots.length} groups={groups} counts={counts} selected={selectedSingle} />
         </span>
       )}

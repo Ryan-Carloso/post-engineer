@@ -100,16 +100,16 @@ describe('CalendarView', () => {
     expect(dayButton(/June 21, 2030/).closest('[data-selected="true"]')).toBeNull();
   });
 
-  it('marks today with a gold dot under the date numeral, not a ring around it', () => {
+  it('marks today with a gold wash on the numeral and a corner dot, not a ring around it', () => {
     setup({ selectedKey: '2030-06-20' });
     const today = dayButton(/June 15, 2030/);
     const number = today.querySelector('[data-day-number]');
     expect(number).toHaveTextContent('15');
+    expect(number?.className.split(/\s+/)).toContain('bg-warning/20');
     const mark = today.querySelector('[data-today-mark="true"]');
     expect(mark?.className.split(/\s+/)).toContain('bg-warning');
-    expect(mark).toBeEmptyDOMElement();
+    expect(mark?.className.split(/\s+/)).toContain('absolute');
     expect(number?.className.split(/\s+/)).not.toContain('ring-warning');
-    expect(today.className.split(/\s+/)).not.toContain('border-2');
     expect(dayButton(/June 20, 2030/).querySelector('[data-today-mark]')).toBeNull();
   });
 
@@ -293,11 +293,11 @@ describe('CalendarView', () => {
     expect(countSwatch).toBeEmptyDOMElement();
     expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/40');
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
-    expect(selectedSwatch?.className.split(/\s+/)).toContain('border-primary');
     expect(selectedSwatch).toBeEmptyDOMElement();
     const todaySwatch = legend.querySelector('[data-legend-today-mark]');
-    expect(todaySwatch?.className.split(/\s+/)).toContain('bg-warning');
-    expect(todaySwatch?.className.split(/\s+/)).not.toContain('ring-2');
+    expect(todaySwatch?.querySelector('[data-legend-today-wash]')).not.toBeNull();
+    expect(todaySwatch?.querySelector('[data-legend-today-dot]')).not.toBeNull();
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-primary');
     expect(legend.querySelector('[data-filter-hint]')).toBeNull();
   });
 

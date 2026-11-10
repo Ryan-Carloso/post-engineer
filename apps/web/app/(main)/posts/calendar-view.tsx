@@ -271,7 +271,7 @@ export function CalendarView({
         <CalendarChromeContext.Provider value={chrome}>
         <NavTodayContext.Provider value={navToday}>
           {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined ? (
-            <div data-calendar-load-error>
+            <div data-calendar-load-error className="flex min-h-[22rem] flex-col justify-start xl:min-h-[24rem]">
               <LoadErrorBanner
                 compact
                 fill
@@ -309,10 +309,11 @@ export function CalendarView({
               // The nav clusters right (prev / Today / next) and the caption
               // title left-aligns with room to its right, so the title
               // never runs under the navigation.
-              nav: 'absolute right-0 top-0 flex items-center gap-1',
+              nav: 'absolute right-0 top-0 flex shrink-0 items-center gap-0.5 pr-0.5 max-xl:gap-1',
               button_previous: NAV_ARROW_CLASS,
               button_next: NAV_ARROW_CLASS,
-              month_caption: 'flex min-h-(--cell-size) w-full items-center justify-start pr-44',
+              month_caption:
+                'flex min-h-(--cell-size) w-full items-center justify-start pr-[10.75rem] max-xl:pr-[10.25rem] sm:pr-44',
               weekdays: 'table-row',
               // Equal table cells so seven columns stay aligned on narrow screens.
               weekday:

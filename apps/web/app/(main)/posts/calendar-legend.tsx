@@ -3,7 +3,12 @@
 import { Filter } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/provider';
 import { cn } from '@/lib/utils';
-import { LEGEND_POST_TOTAL_SWATCH_CLASS, SELECTED_DAY_LEGEND_SWATCH_CLASS, TODAY_MARK_DOT_CLASS } from './calendar-markers';
+import {
+  LEGEND_POST_TOTAL_SWATCH_CLASS,
+  SELECTED_DAY_LEGEND_SWATCH_CLASS,
+  TODAY_MARK_DOT_CLASS,
+  TODAY_NUMERAL_WASH_CLASS,
+} from './calendar-markers';
 
 export function CalendarLegend({
   filtered = false,
@@ -27,7 +32,14 @@ export function CalendarLegend({
         {t('posts.calendarLegendPostCount')}
       </li>
       <li className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
-        <span aria-hidden data-legend-today-mark className={TODAY_MARK_DOT_CLASS} />
+        <span
+          aria-hidden
+          data-legend-today-mark
+          className="pointer-events-none inline-flex h-9 w-8 flex-col items-center justify-center gap-0.5"
+        >
+          <span data-legend-today-wash className={cn(TODAY_NUMERAL_WASH_CLASS, 'size-5')} />
+          <span data-legend-today-dot className={TODAY_MARK_DOT_CLASS} />
+        </span>
         {t('posts.calendarToday')}
       </li>
       {showSelection && (
