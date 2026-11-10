@@ -5,19 +5,15 @@ import { TriangleAlert } from 'lucide-react';
 import type { TranslationKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/provider';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 
 export function CalendarUnavailableFrame({ children }: { children: ReactNode }) {
   return (
-    <div data-calendar-unavailable-frame className="w-full">
-      <div
-        data-calendar-load-error
-        className={cn(
-          'flex w-full flex-col items-center rounded-xl border border-dashed border-line bg-card px-6 py-10 text-center sm:px-8',
-        )}
-      >
-        {children}
-      </div>
+    <div
+      data-calendar-unavailable-frame
+      data-calendar-load-error
+      className="flex w-full flex-col items-center justify-center px-4 py-10 text-center sm:px-6"
+    >
+      {children}
     </div>
   );
 }

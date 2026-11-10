@@ -24,8 +24,7 @@ describe('CalendarUnavailableFrame', () => {
     expect(document.querySelector('[data-calendar-error-weekdays]')).toBeNull();
     expect(document.querySelector('[data-calendar-grid-footprint]')).toBeNull();
     const panel = document.querySelector('[data-calendar-load-error]');
-    expect(panel?.className).toMatch(/border-dashed/);
-    expect(panel?.className).toMatch(/bg-card/);
+    expect(panel?.className).not.toMatch(/border-dashed/);
     expect(panel?.className).not.toMatch(/bg-warning/);
     expect(screen.getByRole('alert')).toHaveTextContent('posts.loadErrorCalendar');
     fireEvent.click(screen.getByRole('button', { name: 'posts.loadErrorRetry' }));

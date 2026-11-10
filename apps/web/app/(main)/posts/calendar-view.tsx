@@ -88,9 +88,8 @@ interface NavTodayValue {
 
 const NavTodayContext = createContext<NavTodayValue>({ go: () => {}, pressed: false, unavailable: false });
 
-// The month navigation: previous month, Today, next month. Mirrors
-// react-day-picker's default Nav (same buttons, labels and disabled
-// behaviour) with the Today action between the arrows.
+// Month navigation: previous and next chevrons as a pair, then Today beside
+// them (not between the arrows). Same labels and disabled behaviour as rdp.
 function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, ...navProps }: NavProps) {
   const { components, classNames, styles, labels } = useDayPicker();
   const { t } = useI18n();
@@ -121,27 +120,47 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
       {...navProps}
       className={cn(
         navProps.className,
+        'flex items-center gap-1',
         navInert && '[&_button]:pointer-events-none',
       )}
       aria-disabled={navInert ? true : undefined}
     >
-      <components.PreviousMonthButton
-        type="button"
-        className={cn(classNames[UI.PreviousMonthButton], navInert && navDisabledClass)}
-        style={styles?.[UI.PreviousMonthButton]}
-        tabIndex={navInert || !previousMonth ? -1 : undefined}
-        aria-disabled={navInert || !previousMonth ? true : undefined}
-        aria-label={labels.labelPrevious(previousMonth)}
-        onClick={handlePreviousClick}
-        disabled={navInert}
-      >
-        <components.Chevron
-          disabled={previousMonth ? undefined : true}
-          className={classNames[UI.Chevron]}
-          style={styles?.[UI.Chevron]}
-          orientation="left"
-        />
-      </components.PreviousMonthButton>
+      <div data-calendar-nav-arrows className="flex items-center gap-0.5">
+        <components.PreviousMonthButton
+          type="button"
+          className={cn(classNames[UI.PreviousMonthButton], navInert && navDisabledClass)}
+          style={styles?.[UI.PreviousMonthButton]}
+          tabIndex={navInert || !previousMonth ? -1 : undefined}
+          aria-disabled={navInert || !previousMonth ? true : undefined}
+          aria-label={labels.labelPrevious(previousMonth)}
+          onClick={handlePreviousClick}
+          disabled={navInert}
+        >
+          <components.Chevron
+            disabled={previousMonth ? undefined : true}
+            className={classNames[UI.Chevron]}
+            style={styles?.[UI.Chevron]}
+            orientation="left"
+          />
+        </components.PreviousMonthButton>
+        <components.NextMonthButton
+          type="button"
+          className={cn(classNames[UI.NextMonthButton], navInert && navDisabledClass)}
+          style={styles?.[UI.NextMonthButton]}
+          tabIndex={navInert || !nextMonth ? -1 : undefined}
+          aria-disabled={navInert || !nextMonth ? true : undefined}
+          aria-label={labels.labelNext(nextMonth)}
+          onClick={handleNextClick}
+          disabled={navInert}
+        >
+          <components.Chevron
+            disabled={nextMonth ? undefined : true}
+            className={classNames[UI.Chevron]}
+            style={styles?.[UI.Chevron]}
+            orientation="right"
+          />
+        </components.NextMonthButton>
+      </div>
       <button
         type="button"
         onClick={handleTodayClick}
@@ -158,23 +177,6 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
       >
         {t('posts.calendarGoToToday')}
       </button>
-      <components.NextMonthButton
-        type="button"
-        className={cn(classNames[UI.NextMonthButton], navInert && navDisabledClass)}
-        style={styles?.[UI.NextMonthButton]}
-        tabIndex={navInert || !nextMonth ? -1 : undefined}
-        aria-disabled={navInert || !nextMonth ? true : undefined}
-        aria-label={labels.labelNext(nextMonth)}
-        onClick={handleNextClick}
-        disabled={navInert}
-      >
-        <components.Chevron
-          disabled={nextMonth ? undefined : true}
-          className={classNames[UI.Chevron]}
-          style={styles?.[UI.Chevron]}
-          orientation="right"
-        />
-      </components.NextMonthButton>
     </nav>
   );
 }

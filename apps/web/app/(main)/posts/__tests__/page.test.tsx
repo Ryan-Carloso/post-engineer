@@ -1009,8 +1009,9 @@ describe('PostsPage calendar view', () => {
     expect(document.querySelector('[data-calendar-error-weekdays]')).toBeNull();
     expect(document.querySelector('[data-calendar-grid-footprint]')).toBeNull();
     const loadError = document.querySelector('[data-calendar-load-error]');
-    expect(loadError?.className).toMatch(/border-dashed/);
+    expect(loadError?.className).not.toMatch(/border-dashed/);
     expect(loadError?.className).not.toMatch(/bg-warning\/12/);
+    expect(loadError?.closest('[data-calendar-card]')?.className).toMatch(/border-line/);
     expect(document.querySelector('[data-load-error-banner="true"]')).toBeNull();
     expect(alert.closest('.xl\\:col-span-2')).not.toBeNull();
     expect(retry.className).toMatch(/border-input/);

@@ -436,14 +436,16 @@ describe('CalendarView', () => {
     expect(onGoToToday).toHaveBeenCalledTimes(1);
   });
 
-  it('places the go-to-today button inside the month navigation, between the previous and next buttons', () => {
+  it('groups month arrows together with go-to-today beside the pair', () => {
     setup();
     const nav = screen.getByRole('navigation');
     const buttons = within(nav).getAllByRole('button');
     expect(buttons).toHaveLength(3);
     expect(buttons[0]).toHaveAccessibleName('Previous month');
-    expect(buttons[1]).toHaveAccessibleName('Go to today');
-    expect(buttons[2]).toHaveAccessibleName('Next month');
+    expect(buttons[1]).toHaveAccessibleName('Next month');
+    expect(buttons[2]).toHaveAccessibleName('Go to today');
+    const arrows = nav.querySelector('[data-calendar-nav-arrows]');
+    expect(arrows?.querySelectorAll('button')).toHaveLength(2);
   });
 
   it('gives every day cell the same fixed height, so rows with markers do not grow', () => {
