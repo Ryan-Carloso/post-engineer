@@ -16,17 +16,17 @@ import { CalendarLegend } from './calendar-legend';
 import { CalendarLoadErrorEmptyState, CalendarUnavailableFrame } from './calendar-load-error-frame';
 
 // CalendarView — month calendar on the shadcn Calendar (react-day-picker:
-// grid semantics, keyboard navigation, focus). Each day cell shows up to
-// two status icons plus an overflow count per day, failure first
-// (calendar-markers.tsx); the legend draws the same markers. Today is an
-// amber disc behind the day number. The selected day is a light ring on the
-// numeral only; the count pill stays below it like unselected days.
-// so the two never look alike. The grid shows only the weeks the month
-// spans (no all-next-month sixth row). Day buckets use the viewer's
-// browser timezone (calendar-days.ts). Data and the selected day's posts
-// live in the page. `unavailable` (the posts failed to load) disables the
-// days for a recovery frame (legend when enabled, month label, disabled
-// nav, weekday headers) so a failed load never reads as an empty month.
+// grid semantics, keyboard navigation, focus). Each day cell shows one
+// post total (calendar-markers.tsx: DayCellPostTotal, breakdown in the
+// accessible name); the legend draws the same total as a swatch, plus the
+// today bar and the selected-day swatch. Today is a gold bar under the
+// numeral. The selected day is a light ring on the numeral only; the count
+// pill stays below it like unselected days, so the two never look alike.
+// The grid shows only the weeks the month spans (no all-next-month sixth
+// row). Day buckets use the viewer's browser timezone (calendar-days.ts).
+// Data and the selected day's posts live in the page. `unavailable` (the
+// posts failed to load) replaces the grid with a bare recovery frame
+// (alert + retry only) so a failed load never reads as an empty month.
 // `muted` is the account-empty calendar: the same readable grid, not interactive.
 
 interface CalendarViewProps {
@@ -58,7 +58,6 @@ interface CalendarViewProps {
   // Hide status chips and the legend when the month has no posts.
   showLegend?: boolean;
   loadErrorMessageKey?: TranslationKey;
-  loadErrorNoteKey?: TranslationKey;
   onLoadErrorRetry?: () => void;
   // Page-owned: select today and sync the month (including when today is already visible).
   onGoToToday?: () => void;
@@ -199,7 +198,6 @@ export function CalendarView({
   legendClassName,
   showLegend = true,
   loadErrorMessageKey,
-  loadErrorNoteKey,
   onLoadErrorRetry,
   onGoToToday,
   onRefresh: _onRefresh,

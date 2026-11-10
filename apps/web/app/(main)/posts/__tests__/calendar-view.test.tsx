@@ -304,7 +304,7 @@ describe('CalendarView', () => {
       ],
     ]);
     setup({ slotsByDay });
-  const cell = dayButton(/June 5, 2030/);
+    const cell = dayButton(/June 5, 2030/);
     expect(cell.querySelector('[data-day-post-total]')).toHaveTextContent('4');
     expect(cell.querySelector('[data-personas]')).toBeNull();
   });

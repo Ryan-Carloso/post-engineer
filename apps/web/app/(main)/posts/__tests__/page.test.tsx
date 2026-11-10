@@ -987,7 +987,7 @@ describe('PostsPage calendar view', () => {
     }
   });
 
-  it('keeps month chrome on a load error with a single in-card retry and no day-selection copy', async () => {
+  it('shows a bare recovery frame on a load error with a single in-card retry and no day-selection copy', async () => {
     mockQueries();
     const refetch = vi.fn();
     vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isFetching: false, isError: true, refetch } as never);
@@ -1004,7 +1004,7 @@ describe('PostsPage calendar view', () => {
     const retry = within(alert).getByRole('button', { name: 'posts.loadErrorRetry' });
     await user.click(retry);
     expect(refetch).toHaveBeenCalledTimes(1);
-    // Recovery frame: month chrome without legend, no day grid, no day list.
+    // Recovery frame: alert + retry only — no legend, no day grid, no month chrome, no day list.
     expect(screen.queryByText('posts.calendarLegendPostCount')).not.toBeInTheDocument();
     expect(screen.queryByText('posts.calendarLegendSelected')).not.toBeInTheDocument();
     expect(document.querySelector('[data-calendar-unavailable-side-note]')).toBeNull();

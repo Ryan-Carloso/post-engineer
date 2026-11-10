@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import type { ScheduledSlot } from '@/lib/api';
 import {
   bucketByDay,
   buildMonthGrid,
@@ -7,7 +6,6 @@ import {
   calendarWeekdayShortLabels,
   countMonthPosts,
   dayKey,
-  dayPersonas,
   defaultDayForMonth,
   formatCalendarMonthCaption,
   gridRange,
@@ -158,78 +156,6 @@ describe('calendar vocabulary', () => {
     expect(STATUS_KEY.awaiting).toBe('posts.groupScheduled');
     // A standalone generation that has not started is still "pending".
     expect(STATUS_KEY.pending).toBe('posts.statusPending');
-  });
-});
-
-describe('dayPersonas — the personas a calendar day shows', () => {
-  const schedules = new Map([
-    ['s1', { personaId: 'p1' }],
-    ['s2', { personaId: 'p2' }],
-    ['s3', { personaId: 'p3' }],
-    ['s4', { personaId: null }],
-  ]);
-  const VIVA = { name: 'Viva Leve', avatarUrl: 'https://example.test/viva.jpg' };
-  const BICUDA = { name: 'Bicuda', photoUrl: 'https://example.test/bicuda.jpg' };
-  // p3 has a name but no photo URL: the avatar falls back to initials, so
-  // the day still resolves to that persona.
-  const NO_PHOTO = { name: 'No Photo' };
-  const photos = new Map([
-    ['p1', VIVA],
-    ['p2', BICUDA],
-    ['p3', NO_PHOTO],
-  ]);
-  const slot = (status: ScheduledSlot['status'], scheduleId: string, slotAt: string) => ({ status, scheduleId, slotAt });
-
-  it('returns no persona with no slots', () => {
-    expect(dayPersonas([], schedules, photos, 3)).toEqual([]);
-  });
-
-  it('skips slots whose schedule is gone or has no persona', () => {
-    expect(
-      dayPersonas(
-        [slot('published', 's-gone', '2030-06-05T10:00:00.000Z'), slot('published', 's4', '2030-06-05T11:00:00.000Z')],
-        schedules,
-        photos,
-        3,
-      ),
-    ).toEqual([]);
-  });
-
-  it('puts the failed post persona first, then published, then scheduled', () => {
-    expect(
-      dayPersonas(
-        [
-          slot('awaiting', 's3', '2030-06-05T08:00:00.000Z'),
-          slot('published', 's2', '2030-06-05T09:00:00.000Z'),
-          slot('failed', 's1', '2030-06-05T12:00:00.000Z'),
-        ],
-        schedules,
-        photos,
-        3,
-      ),
-    ).toEqual([VIVA, BICUDA, NO_PHOTO]);
-  });
-
-  it('orders by time inside a tier, whatever the input order', () => {
-    expect(
-      dayPersonas(
-        [slot('failed', 's1', '2030-06-05T12:00:00.000Z'), slot('failed', 's2', '2030-06-05T09:00:00.000Z')],
-        schedules,
-        photos,
-        3,
-      ),
-    ).toEqual([BICUDA, VIVA]);
-  });
-
-  it('lists each persona once and stops at the cap', () => {
-    const day = [
-      slot('awaiting', 's1', '2030-06-05T08:00:00.000Z'),
-      slot('awaiting', 's1', '2030-06-05T09:00:00.000Z'),
-      slot('awaiting', 's2', '2030-06-05T10:00:00.000Z'),
-      slot('awaiting', 's3', '2030-06-05T11:00:00.000Z'),
-    ];
-    expect(dayPersonas(day, schedules, photos, 3)).toEqual([VIVA, BICUDA, NO_PHOTO]);
-    expect(dayPersonas(day, schedules, photos, 2)).toEqual([VIVA, BICUDA]);
   });
 });
 

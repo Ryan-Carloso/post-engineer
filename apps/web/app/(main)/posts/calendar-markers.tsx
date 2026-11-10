@@ -8,48 +8,18 @@ import { useI18n } from '@/lib/i18n/provider';
 import { cn } from '@/lib/utils';
 import { calendarCounts, dayKey } from './calendar-days';
 import {
-  CALENDAR_GROUP_ICON,
   CALENDAR_GROUP_KEY,
-  CALENDAR_GROUP_MARKER,
   CALENDAR_GROUP_ORDER,
   type CalendarGroup,
 } from './status';
 
 //---------------
-// The posts calendar's status vocabulary drawn as markers, and the day cell
-// that carries them. One marker per status group (icon + color, so status
-// never relies on color alone) is shared by the day cells, the legend and
-// the day summary under the calendar, so the legend always matches what a
-// cell shows. Extracted from calendar-view.tsx to keep it small.
+// The posts calendar's day cell: one post-total pill per day (the status
+// breakdown lives in the accessible name), the gold today bar, and the
+// selected-day ring — plus the legend swatches that sample the same marks
+// so the legend always matches what a cell shows. Extracted from
+// calendar-view.tsx to keep it small.
 //---------------
-
-// `labeled` draws the group word inside the chip (a day cell). The legend
-// and the day summary keep the icon and put the word beside it.
-export function StatusMarker({ group, count, labeled = false }: { group: CalendarGroup; count?: number; labeled?: boolean }) {
-  const { t } = useI18n();
-  const Icon = CALENDAR_GROUP_ICON[group];
-  const label = t(CALENDAR_GROUP_KEY[group]);
-  const showCount = count !== undefined;
-  return (
-    <span
-      data-marker={group}
-      title={showCount ? `${label}: ${count}` : label}
-      className={cn(
-        'inline-flex h-4 max-xl:h-5 items-center justify-center gap-0.5 overflow-hidden rounded-full text-[10px] max-xl:text-[11px] leading-none font-bold',
-        CALENDAR_GROUP_MARKER[group],
-        labeled || showCount ? 'max-w-full min-w-0 shrink px-1 max-xl:px-1.5' : 'w-4 max-xl:w-5 shrink-0',
-      )}
-    >
-      <Icon className="size-2.5 max-xl:size-3 shrink-0" strokeWidth={3} aria-hidden />
-      {labeled && <span className="min-w-0 truncate">{label}</span>}
-      {showCount && (
-        <span data-count className="shrink-0 tabular-nums">
-          {count}
-        </span>
-      )}
-    </span>
-  );
-}
 
 export const DAY_POST_TOTAL_CLASS =
   'inline-flex h-6 min-w-6 max-xl:h-[1.625rem] max-xl:min-w-[1.625rem] items-center justify-center rounded-full border border-primary/55 bg-primary/22 px-1.5 text-xs font-bold leading-none text-primary tabular-nums shadow-[0_1px_0_rgba(13,43,69,0.14)]';

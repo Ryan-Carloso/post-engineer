@@ -1,4 +1,4 @@
-import type { ScheduledSlot, ScheduleConfig } from '@/lib/api';
+import type { ScheduledSlot } from '@/lib/api';
 import type { Locale } from '@/lib/i18n';
 import { calendarGroupOf, type CalendarGroup } from './status';
 
@@ -54,7 +54,9 @@ export function monthKey(year: number, month: number): string {
   return `${year}-${pad(month + 1)}`;
 }
 
-// Always 6 weeks, so the grid height does not jump between months.
+// Six weeks of days starting at the first weekday on/before the 1st; the
+// page trims to only the weeks holding an in-month day, so the rendered
+// grid height follows the month (4-6 weeks).
 export function buildMonthGrid(year: number, month: number, firstWeekday: 0 | 1): CalendarDay[][] {
   const first = new Date(year, month, 1);
   const offset = (first.getDay() - firstWeekday + 7) % 7;
@@ -117,46 +119,11 @@ export function countMonthPosts(slotsByDay: Map<string, unknown[]>, year: number
   return count;
 }
 
-//---------------
-// The personas a day cell shows, resolved from the joins the page already
-// loads (schedule -> persona -> photo URLs). The avatar renders the photo
-// when it has one and the persona initials otherwise, so a persona without
-// a photo URL still resolves.
-//---------------
-
 export interface PersonaPhoto {
   avatarUrl?: string;
   photoUrl?: string;
   libraryUrl?: string;
   name: string;
-}
-
-// The distinct personas of a day, most relevant first — the persona of a
-// failed post (it needs attention), then of a published one, then of the
-// in-progress and scheduled ones, each tier by time — capped at `max`. Slots whose schedule
-// or persona is gone are skipped: the status markers still count them.
-export function dayPersonas(
-  slots: Pick<ScheduledSlot, 'status' | 'scheduleId' | 'slotAt'>[],
-  scheduleById: Map<string, Pick<ScheduleConfig, 'personaId'>>,
-  personaPhotoById: Map<string, PersonaPhoto>,
-  max: number,
-): PersonaPhoto[] {
-  const tier: Record<CalendarGroup, number> = { failed: 0, published: 1, inProgress: 2, scheduled: 3 };
-  const ordered = [...slots].sort(
-    (a, b) => tier[calendarGroupOf(a.status)] - tier[calendarGroupOf(b.status)] || a.slotAt.localeCompare(b.slotAt),
-  );
-  const seen = new Set<string>();
-  const personas: PersonaPhoto[] = [];
-  for (const slot of ordered) {
-    const personaId = scheduleById.get(slot.scheduleId)?.personaId ?? null;
-    if (personaId === null || seen.has(personaId)) continue;
-    const persona = personaPhotoById.get(personaId);
-    if (persona === undefined) continue;
-    seen.add(personaId);
-    personas.push(persona);
-    if (personas.length === max) break;
-  }
-  return personas;
 }
 
 // Month caption shown above the grid (react-day-picker uses month + year, not

@@ -341,8 +341,15 @@ describe('PostHistoryPage', () => {
     mockQueries({ generations: [COMPLETED_GENERATION] });
     render(<PostHistoryPage />);
 
-    expect(screen.getByRole('link', { name: /Past topic/ })).toHaveAttribute('href', '/posts/r1');
-    expect(screen.getByRole('link', { name: /Failed topic/ })).toHaveAttribute('href', '/posts/r2');
+    // The card link's accessible name is its aria-label ("Open post:
+    // <title>"), not the title text, so find the card by its visible
+    // title and check the enclosing link.
+    const pastCard = screen.getByText('Past topic').closest('a');
+    expect(pastCard).not.toBeNull();
+    expect(pastCard).toHaveAttribute('href', '/posts/r1');
+    const failedCard = screen.getByText('Failed topic').closest('a');
+    expect(failedCard).not.toBeNull();
+    expect(failedCard).toHaveAttribute('href', '/posts/r2');
     // Generation cards link by generationId (the business id the detail
     // endpoint resolves via .eq('generation_id', ...)), NOT the DB row PK.
     expect(screen.getByRole('link', { name: /Launch recap/ })).toHaveAttribute('href', '/posts/gen-3');

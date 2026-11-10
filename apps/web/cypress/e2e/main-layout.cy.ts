@@ -112,9 +112,12 @@ describe('Main Layout — Sidebar', () => {
     cy.contains('a', 'Métricas').should('be.visible');
     cy.contains('a', 'Chave de API e MCP').should('be.visible');
     // Billing is no longer a nav tab — it lives in the profile area
-    // (sidebar footer), reachable from every page, like API Keys.
+    // (sidebar footer), reachable from every page. API Keys is not a
+    // footer row anymore: the sidebar hides it (hideSidebarApiKeysRow),
+    // the nav tab above is the way in.
     cy.contains('a', 'Tokens').should('not.exist');
-    cy.get('[data-testid=profile-api-keys-link]').should('be.visible');
+    cy.get('[data-testid=profile-api-keys-link]').should('not.exist');
+    cy.contains('a', 'Chave de API e MCP').should('have.attr', 'href', '/recipes');
     cy.get('[data-testid=profile-billing-link]').should('be.visible');
   });
 

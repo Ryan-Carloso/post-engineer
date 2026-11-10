@@ -222,7 +222,7 @@ describe('PostCard header and media', () => {
       taskId: 'task-1',
       publishedAt: '2030-06-01T10:05:00.000Z',
     });
-  const title = screen.getByText('Calendar published');
+    const title = screen.getByText('Calendar published');
     expect(title.className.split(/\s+/)).not.toContain('underline');
     expect(document.querySelector('[data-card-chevron]')).not.toBeNull();
   });

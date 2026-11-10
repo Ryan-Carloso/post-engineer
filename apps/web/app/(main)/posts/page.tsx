@@ -171,7 +171,7 @@ export default function PostsPage() {
               {rangeQuery.data?.truncated === true && (
                 <p className="mb-3 text-xs text-muted-foreground">{t('posts.calendarTruncated', { count: RANGE_MAX_SLOTS })}</p>
               )}
-              {/* On error the calendar keeps month chrome and an in-card retry. */}
+              {/* On error the calendar card becomes a recovery frame: alert + in-card retry, no grid. */}
               <CalendarView
                 year={cursor.year}
                 month={cursor.month}
@@ -190,7 +190,6 @@ export default function PostsPage() {
                 filtered={filters.hasActiveFilter}
                 showLegend={!isAccountEmpty && monthPostCount > 0}
                 loadErrorMessageKey={isError ? loadErrorKey : undefined}
-                loadErrorNoteKey={isError && loadErrorKey !== 'posts.loadErrorCalendar' ? 'posts.loadErrorSideQuiet' : undefined}
                 onLoadErrorRetry={isError ? handleRefresh : undefined}
                 onRefresh={!isError ? handleRefresh : undefined}
                 refreshing={rangeQuery.isFetching}
@@ -208,58 +207,58 @@ export default function PostsPage() {
                 </p>
               </section>
             ) : !isError ? (
-            <section
-              ref={daySectionRef}
-              aria-live="polite"
-              className="order-2 mt-4 min-w-0 scroll-mt-4 max-xl:pb-24 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4"
-            >
-              {isAccountEmpty ? (
-                <>
-                  <h2 className="text-base font-bold tracking-[-0.01em] text-primary">
-                    {t('posts.calendarMonthHeading', { month: monthLabel })}
-                  </h2>
-                  <div className="mt-3">
-                    <AccountEmptyState />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <h2 className="flex min-h-10 flex-col justify-center gap-0.5 text-base font-bold tracking-[-0.01em] text-primary">
-                    {monthIsEmpty || selectedKey === null ? (
-                      t('posts.calendarMonthHeading', { month: monthLabel })
-                    ) : (
-                      <>
-                        <span>{t('posts.calendarDayHeading', { date: dayFormat.format(dateFromKey(selectedKey)) })}</span>
-                        {selectedSlots.length > 0 && (
-                          <span className="text-sm font-semibold text-muted-foreground">
-                            {selectedSlots.length === 1
-                              ? t('posts.calendarDayPostCountOne')
-                              : t('posts.calendarDayPostCountMany', { count: selectedSlots.length })}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </h2>
-                  <div className="mt-3">
-                    {selectedSlots.length === 0 ? (
-                      <DayEmptyState
-                        reason={emptyReason}
-                        monthLabel={monthLabel}
-                        onClearFilters={filters.clear}
-                      />
-                    ) : (
+              <section
+                ref={daySectionRef}
+                aria-live="polite"
+                className="order-2 mt-4 min-w-0 scroll-mt-4 max-xl:pb-24 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4"
+              >
+                {isAccountEmpty ? (
+                  <>
+                    <h2 className="text-base font-bold tracking-[-0.01em] text-primary">
+                      {t('posts.calendarMonthHeading', { month: monthLabel })}
+                    </h2>
+                    <div className="mt-3">
+                      <AccountEmptyState />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="flex min-h-10 flex-col justify-center gap-0.5 text-base font-bold tracking-[-0.01em] text-primary">
+                      {monthIsEmpty || selectedKey === null ? (
+                        t('posts.calendarMonthHeading', { month: monthLabel })
+                      ) : (
+                        <>
+                          <span>{t('posts.calendarDayHeading', { date: dayFormat.format(dateFromKey(selectedKey)) })}</span>
+                          {selectedSlots.length > 0 && (
+                            <span className="text-sm font-semibold text-muted-foreground">
+                              {selectedSlots.length === 1
+                                ? t('posts.calendarDayPostCountOne')
+                                : t('posts.calendarDayPostCountMany', { count: selectedSlots.length })}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </h2>
+                    <div className="mt-3">
+                      {selectedSlots.length === 0 ? (
+                        <DayEmptyState
+                          reason={emptyReason}
+                          monthLabel={monthLabel}
+                          onClearFilters={filters.clear}
+                        />
+                      ) : (
                       // One column in the side panel; two equal-height columns
                       // in between; one on a phone.
-                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
-                        {selectedSlots.map((slot) => (
-                          <SlotCard key={slot.id} slot={slot} joins={joins} timeOnly />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </section>
+                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+                          {selectedSlots.map((slot) => (
+                            <SlotCard key={slot.id} slot={slot} joins={joins} timeOnly />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </section>
             ) : null}
           </div>
         )}
