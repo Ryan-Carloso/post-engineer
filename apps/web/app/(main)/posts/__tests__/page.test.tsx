@@ -858,6 +858,12 @@ describe('PostsPage calendar view', () => {
     expect(sideNoteLoad).not.toBeNull();
     expect(sideNoteLoad?.className).toMatch(/border/);
     expect(sideNoteLoad?.className).toMatch(/bg-card/);
+    expect(sideNoteLoad?.className).toMatch(/self-start/);
+    expect(sideNoteLoad?.querySelector('svg')).not.toBeNull();
+    expect(sideNoteLoad?.textContent).toBe('posts.loadErrorCalendarSideQuiet');
+    const sideCopy = within(sideNoteLoad as HTMLElement).getByText('posts.loadErrorCalendarSideQuiet');
+    expect(sideCopy.className).toMatch(/text-primary/);
+    expect(sideCopy.className).toMatch(/font-medium/);
     expect(screen.getByText('posts.subtitleLoadError')).toBeInTheDocument();
     expect(screen.queryByText('posts.subtitle')).not.toBeInTheDocument();
     expect(screen.queryByTestId('load-error-side-panel')).not.toBeInTheDocument();
@@ -1001,6 +1007,9 @@ describe('PostsPage calendar view', () => {
     expect(sideNote).not.toBeNull();
     expect(sideNote?.className).toMatch(/border/);
     expect(sideNote?.className).toMatch(/bg-card/);
+    expect(sideNote?.className).toMatch(/self-start/);
+    expect(sideNote?.querySelector('svg')).not.toBeNull();
+    expect(within(sideNote as HTMLElement).getByText('posts.loadErrorCalendarSideQuiet').className).toMatch(/text-primary/);
     expect(screen.queryByText('posts.calendarNotLoaded')).not.toBeInTheDocument();
     expect(document.querySelector('[data-calendar-grid-outline]')).not.toBeInTheDocument();
     expect(screen.queryByRole('grid')).not.toBeInTheDocument();

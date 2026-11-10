@@ -19,7 +19,7 @@ import {
   gridRange,
   monthKey,
 } from './calendar-days';
-import { AccountEmptyState, DayEmptyState } from './day-section';
+import { AccountEmptyState, CalendarLoadErrorSideNote, DayEmptyState } from './day-section';
 import { CALENDAR_LAYOUT_CLASS, CalendarLoadingSkeleton } from './loading-skeleton';
 import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-joins';
 
@@ -192,12 +192,7 @@ export default function PostsPage() {
               />
             </div>
             {isError && loadErrorKey === 'posts.loadErrorCalendar' ? (
-              <div
-                data-calendar-unavailable-side-note
-                className="order-2 mt-4 min-w-0 rounded-xl border border-dashed border-line bg-card px-4 py-6 text-center text-sm text-muted-foreground xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4 xl:self-start"
-              >
-                {t('posts.loadErrorCalendarSideQuiet')}
-              </div>
+              <CalendarLoadErrorSideNote className="order-2 mt-4 min-w-0 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:self-start" />
             ) : isError && loadErrorKey !== 'posts.loadErrorCalendar' ? (
               <section
                 data-day-unavailable-note
