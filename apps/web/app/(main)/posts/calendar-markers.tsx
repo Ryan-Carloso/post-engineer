@@ -70,14 +70,13 @@ export const TODAY_CELL_BAR_CLASS =
 export const LEGEND_TODAY_BAR_SWATCH_CLASS =
   'inline-block h-1 w-10 shrink-0 rounded-full bg-warning align-middle';
 
-// Legend is a span, not a button: globals set button outline-color to --ring (sky blue).
-// outline-primary on the swatch alone reads navy; outline-ring matches the live cell stroke.
+// Fixed square frame so the ring never grows with the cell stack (outline-offset was
+// collapsing the digit). Legend uses the same empty box — not a tall faux cell.
 export const SELECTED_DAY_NUMERAL_OUTLINE_CLASS =
-  'rounded-md outline outline-2 -outline-offset-[4px] outline-ring';
+  'box-border inline-flex size-7 min-h-7 min-w-7 shrink-0 items-center justify-center overflow-visible rounded-md bg-transparent p-0 outline outline-2 outline-offset-0 outline-ring';
 
 export const SELECTED_DAY_LEGEND_SWATCH_CLASS = cn(
-  'pointer-events-none inline-flex aspect-[4/5] h-[2.35rem] w-9 shrink-0 items-center justify-center rounded-md border-0 bg-info-soft/55 shadow-none',
-  SELECTED_DAY_NUMERAL_OUTLINE_CLASS,
+  'pointer-events-none inline-block size-7 shrink-0 rounded-md outline outline-2 outline-offset-0 outline-ring',
 );
 
 function DayCellPostTotal({
@@ -153,7 +152,7 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
         !isOutside && 'hover:bg-sunken hover:text-primary',
         'data-[selected-single=true]:bg-transparent data-[selected-single=true]:hover:bg-transparent',
         !isOutside && 'data-[selected-single=true]:text-primary',
-        'focus-visible:ring-[3px] focus-visible:ring-ring/50',
+        'outline-none focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
         'group-data-[focused=true]/day:bg-transparent group-data-[focused=true]/day:ring-0 group-data-[focused=true]/day:shadow-none',
         className,
       )}
@@ -162,34 +161,30 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       <span
         data-day-number
         className={cn(
-          'z-[2] flex min-h-0 w-full min-w-0 flex-1 flex-col items-center gap-1 px-0.5 tabular-nums',
+          'z-[2] flex w-full min-w-0 shrink-0 flex-col items-center gap-1 px-0.5 tabular-nums',
           isToday ? 'justify-center pt-0.5' : 'justify-start pt-2 sm:pt-2.5',
           isToday && slots.length > 0 && 'gap-1',
-          selectedSingle && slots.length > 0 && !isToday && 'gap-1.5 pb-0.5',
-          selectedSingle && isToday && slots.length > 0 && 'gap-1 pb-0.5',
         )}
       >
         <span
           data-day-numeral
           className={cn(
-            'inline-flex min-h-6 shrink-0 items-center justify-center leading-none',
+            'inline-flex shrink-0 items-center justify-center text-base leading-none',
             isOutside ? 'font-normal text-muted-foreground opacity-50' : 'font-semibold text-primary',
             isToday && isOutside && 'opacity-100',
             selectedSingle && !isOutside && SELECTED_DAY_NUMERAL_OUTLINE_CLASS,
+            !(selectedSingle && !isOutside) && 'min-h-6',
           )}
         >
           {children}
         </span>
         {isToday && <span aria-hidden data-today-bar="true" className={TODAY_CELL_BAR_CLASS} />}
-        {slots.length > 0 && (
-          <span
-            aria-hidden
-            className={cn('flex shrink-0 items-center justify-center', selectedSingle && 'mb-0.5')}
-          >
-            <DayCellPostTotal total={slots.length} groups={groups} counts={counts} />
-          </span>
-        )}
       </span>
+      {slots.length > 0 && (
+        <span aria-hidden className="flex shrink-0 items-center justify-center">
+          <DayCellPostTotal total={slots.length} groups={groups} counts={counts} />
+        </span>
+      )}
     </Button>
   );
 }

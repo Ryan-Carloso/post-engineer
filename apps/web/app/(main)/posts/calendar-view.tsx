@@ -20,7 +20,8 @@ import { LoadErrorBanner } from './day-section';
 // grid semantics, keyboard navigation, focus). Each day cell shows up to
 // two status icons plus an overflow count per day, failure first
 // (calendar-markers.tsx); the legend draws the same markers. Today is an
-// amber disc behind the day number. The selected day is an outlined cell,
+// amber disc behind the day number. The selected day is a light ring on the
+// numeral only; the count pill stays below it like unselected days.
 // so the two never look alike. The grid shows only the weeks the month
 // spans (no all-next-month sixth row). Day buckets use the viewer's
 // browser timezone (calendar-days.ts). Data and the selected day's posts
@@ -347,9 +348,9 @@ export function CalendarView({
                     // Disabled days (a failed load, or an account with no posts)
                     // keep readable numbers. shadcn's default fades them to 50%.
                     disabled: 'text-primary opacity-100',
-                    // Equal share of the fixed table. The chip row clips itself; the
-                    // cell does not, or it would crop the selection outline.
+                    // Equal share of the fixed table. Selection is drawn on the numeral only.
                     day: 'group/day relative min-w-0 w-[14.2857%] table-cell p-0 text-center align-top',
+                    selected: 'bg-transparent',
                   }}
                   components={{ DayButton: PostsDayButton, Nav: CalendarNav, Week: PostsCalendarWeek, Weeks: PostsCalendarWeeks }}
                 />

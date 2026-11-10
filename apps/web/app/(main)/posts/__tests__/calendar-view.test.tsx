@@ -134,9 +134,12 @@ describe('CalendarView', () => {
     });
     const selected = dayButton(/June 5, 2030/);
     const numeral = selected.querySelector('[data-day-numeral]');
+    expect(numeral).toHaveTextContent('5');
     expect(numeral?.className.split(/\s+/)).toContain('outline-ring');
     expect(selected.className.split(/\s+/)).not.toContain('data-[selected-single=true]:outline-primary');
-    expect(numeral?.contains(selected.querySelector('[data-day-post-total]'))).toBe(false);
+    const total = selected.querySelector('[data-day-post-total]');
+    expect(numeral?.contains(total)).toBe(false);
+    expect(selected.querySelector('[data-day-number]')?.contains(total)).toBe(false);
   });
 
   it('keeps the today bar and post total as separate marks when today is selected', () => {
@@ -330,9 +333,10 @@ describe('CalendarView', () => {
     expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-ring');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-2');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('rounded-md');
-    expect(selectedSwatch?.className).toMatch(/bg-info-soft/);
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('size-7');
     expect(selectedSwatch?.className.split(/\s+/)).not.toContain('outline-primary');
     expect(selectedSwatch?.className.split(/\s+/)).not.toContain('border-primary');
+    expect(selectedSwatch?.className).not.toMatch(/bg-info-soft/);
     expect(legend.querySelector('[data-filter-hint]')).toBeNull();
   });
 
