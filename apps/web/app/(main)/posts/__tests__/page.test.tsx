@@ -854,6 +854,7 @@ describe('PostsPage calendar view', () => {
     expect(alert).toHaveTextContent('posts.loadErrorCalendar');
     expect(within(alert).queryByText('posts.loadErrorSideQuiet')).not.toBeInTheDocument();
     expect(document.querySelector('[data-day-unavailable-note]')).toBeNull();
+    expect(document.querySelector('[data-calendar-unavailable-side-note]')).not.toBeNull();
     expect(screen.getByText('posts.subtitleLoadError')).toBeInTheDocument();
     expect(screen.queryByText('posts.subtitle')).not.toBeInTheDocument();
     expect(screen.queryByTestId('load-error-side-panel')).not.toBeInTheDocument();
@@ -992,6 +993,8 @@ describe('PostsPage calendar view', () => {
     // Recovery frame: month chrome without legend, no day grid, no day list.
     expect(screen.queryByText('posts.calendarLegendPostCount')).not.toBeInTheDocument();
     expect(screen.queryByText('posts.calendarLegendSelected')).not.toBeInTheDocument();
+    expect(screen.getByText('posts.loadErrorCalendarSideQuiet')).toBeInTheDocument();
+    expect(document.querySelector('[data-calendar-unavailable-side-note]')).not.toBeNull();
     expect(screen.queryByText('posts.calendarNotLoaded')).not.toBeInTheDocument();
     expect(document.querySelector('[data-calendar-grid-outline]')).not.toBeInTheDocument();
     expect(screen.queryByRole('grid')).not.toBeInTheDocument();
@@ -1000,29 +1003,13 @@ describe('PostsPage calendar view', () => {
     expect(document.querySelector('[data-day-unavailable-note]')).toBeNull();
     expect(screen.queryAllByRole('button', { name: 'posts.loadErrorRetry' })).toHaveLength(1);
     expect(document.querySelector('[data-calendar-unavailable-frame]')).not.toBeNull();
-    const errorNav = document.querySelector('[data-calendar-error-nav]');
-    expect(errorNav).not.toBeNull();
-    for (const button of within(errorNav as HTMLElement).getAllByRole('button')) {
-      expect(button).toBeDisabled();
-      expect(button.className.split(/\s+/)).toContain('saturate-50');
-      expect(button.className.split(/\s+/)).toContain('opacity-55');
-    }
-    expect(document.querySelector('[data-calendar-error-chrome]')).not.toBeNull();
-    expect(document.querySelector('[data-calendar-error-month-row]')).not.toBeNull();
-    expect(document.querySelector('[data-calendar-grid-footprint]')?.className.split(/\s+/)).toContain(
-      'justify-center',
-    );
+    expect(document.querySelector('[data-calendar-error-nav]')).toBeNull();
+    expect(document.querySelector('[data-calendar-error-weekdays]')).toBeNull();
+    expect(document.querySelector('[data-calendar-grid-footprint]')).toBeNull();
     const loadError = document.querySelector('[data-calendar-load-error]');
-    const footprint = document.querySelector('[data-calendar-grid-footprint]');
-    expect(loadError?.className.split(/\s+/)).not.toContain('flex-1');
-    expect(loadError?.closest('[data-calendar-card]')?.className).not.toMatch(/xl:min-h-\[22rem\]/);
-    expect(loadError?.className.split(/\s+/)).not.toContain('justify-center');
     expect(loadError?.className).toMatch(/bg-warning/);
-    expect(footprint?.className).toMatch(/min-h-/);
-    expect(footprint?.className).not.toMatch(/xl:min-h-\[20rem\]/);
-    expect(footprint?.className).not.toMatch(/min-h-\[14rem\]/);
     expect(document.querySelector('[data-load-error-banner="true"]')?.className).toMatch(/sm:flex-row/);
-    expect(alert.closest('.xl\\:col-span-2')).not.toBeNull();
+    expect(alert.closest('.xl\\:col-span-2')).toBeNull();
     expect(retry.className).toMatch(/border-input/);
     expect(retry.className).toMatch(/min-h-10|min-h-11/);
   });

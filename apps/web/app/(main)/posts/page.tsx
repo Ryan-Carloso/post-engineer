@@ -162,12 +162,7 @@ export default function PostsPage() {
           <CalendarLoadingSkeleton weeks={monthWeeks} />
         ) : (
           <div className={cn('flex flex-col', CALENDAR_LAYOUT_CLASS)}>
-            <div
-              className={cn(
-                'min-w-0 xl:col-start-1 xl:row-start-1',
-                isError && loadErrorKey === 'posts.loadErrorCalendar' && 'xl:col-span-2',
-              )}
-            >
+            <div className="min-w-0 xl:col-start-1 xl:row-start-1">
               {rangeQuery.data?.truncated === true && (
                 <p className="mb-3 text-xs text-muted-foreground">{t('posts.calendarTruncated', { count: RANGE_MAX_SLOTS })}</p>
               )}
@@ -196,7 +191,14 @@ export default function PostsPage() {
                 refreshing={rangeQuery.isFetching}
               />
             </div>
-            {isError && loadErrorKey !== 'posts.loadErrorCalendar' ? (
+            {isError && loadErrorKey === 'posts.loadErrorCalendar' ? (
+              <p
+                data-calendar-unavailable-side-note
+                className="order-2 mt-4 min-w-0 text-sm text-muted-foreground xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4"
+              >
+                {t('posts.loadErrorCalendarSideQuiet')}
+              </p>
+            ) : isError && loadErrorKey !== 'posts.loadErrorCalendar' ? (
               <section
                 data-day-unavailable-note
                 aria-live="polite"

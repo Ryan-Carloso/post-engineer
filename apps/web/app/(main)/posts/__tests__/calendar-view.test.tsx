@@ -344,8 +344,8 @@ describe('CalendarView', () => {
     expect(screen.getAllByText('Filtered: only matching posts are shown')[0].closest('[data-filter-hint]')).not.toBeNull();
   });
 
-  // A failed load must not read as an empty month: no day grid or pills, no
-  // legend, but month caption, disabled nav, and weekday headers stay.
+  // A failed load must not read as an empty month: month caption and recovery
+  // only — no legend, nav, or weekday row pretending a grid exists.
   it('covers an unavailable grid and hides today gold so a failed load does not read empty', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       ['2030-06-05', [{ status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' }]],
@@ -364,15 +364,8 @@ describe('CalendarView', () => {
     expect(document.querySelector('[data-calendar-unavailable-frame]')).not.toBeNull();
     expect(screen.queryByText('posts.calendarLegendPostCount')).not.toBeInTheDocument();
     expect(screen.getByText(/June 2030/)).toBeInTheDocument();
-    expect(document.querySelector('[data-calendar-error-nav]')).not.toBeNull();
-    const navButtons = within(document.querySelector('[data-calendar-error-nav]') as HTMLElement).getAllByRole(
-      'button',
-    );
-    for (const button of navButtons) {
-      expect(button).toBeDisabled();
-    }
-    expect(document.querySelectorAll('[data-calendar-unavailable-frame] th')).toHaveLength(7);
-    expect(document.querySelector('[data-calendar-grid-footprint]')?.className).toMatch(/min-h-/);
+    expect(document.querySelector('[data-calendar-error-nav]')).toBeNull();
+    expect(document.querySelector('[data-calendar-error-weekdays]')).toBeNull();
     expect(document.querySelector('[data-calendar-load-error]')?.closest('[data-calendar-card]')).not.toBeNull();
     expect(screen.getByRole('alert')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
