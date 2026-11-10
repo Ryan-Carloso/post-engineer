@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import type { SocialProvider } from '@/lib/providers/registry';
 import { isMetricsWindow, type AnalyticsStatus, type MetricsWindow } from './metrics-query';
+import { findReopenedPosts } from './post-metrics-reopen';
 
 //---------------
 // post-metrics — per-video performance snapshots for A/B content tests.
@@ -325,6 +326,7 @@ export function createPostMetricsStore(
       });
       if (error) throw new Error(`due posts lookup failed: ${error.message}`);
       const posts: DuePost[] = [];
+      const seen = new Set<string>();
       for (const row of (Array.isArray(data) ? data : []) as Array<Record<string, unknown>>) {
         const window = row.metrics_window;
         if (
@@ -345,8 +347,20 @@ export function createPostMetricsStore(
           window,
           collectedKeys: new Set(keys),
         });
+        seen.add(`${row.post_id}:${window}`);
       }
-      return posts;
+      // The re-open budget counts against what this run processes
+      // (MAX_POSTS_PER_RUN), not the +1 probe limit: a re-opened post
+      // appended past MAX would be dropped by collectPostMetrics' slice.
+      const reopened = await findReopenedPosts(
+        supabase,
+        now,
+        seen,
+        Math.max(0, MAX_POSTS_PER_RUN - posts.length),
+        metricsTargets,
+        targetKey,
+      );
+      return [...posts, ...reopened];
     },
     async saveMetrics(row) {
       const { data, error } = await supabase.from('post_metrics').upsert(

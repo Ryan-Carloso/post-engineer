@@ -18,6 +18,7 @@ import {
   type DuePost,
   type PostMetricsDeps,
 } from '../post-metrics';
+import { REOPEN_ROWS_LIMIT } from '../post-metrics-reopen';
 import { logger } from '@/lib/logger';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 import { ANALYTICS_STATUSES } from '../metrics-query';
@@ -343,6 +344,30 @@ describe('collectPostMetrics', () => {
 });
 
 describe('createPostMetricsStore', () => {
+  // Chainable per-table mock for the re-open scan; `limit` resolves the query.
+  function fakeFrom(tables: Record<string, { data: unknown; error: unknown }>) {
+    return vi.fn((table: string) => {
+      const builder: Record<string, unknown> = {};
+      for (const method of ['select', 'eq', 'gte', 'in', 'order']) {
+        builder[method] = vi.fn((..._args: unknown[]) => builder);
+      }
+      builder.limit = vi.fn(async () => tables[table] ?? { data: [], error: null });
+      return builder;
+    });
+  }
+
+  function scannedPost(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: 'post-1',
+      user_id: 'user-1',
+      task_id: 'task-1',
+      status: 'published',
+      published_at: '2026-10-20T12:00:00.000Z',
+      publish_outcomes: [YT_ENTRY, IG_ENTRY],
+      ...overrides,
+    };
+  }
+
   it('reads due posts through find_post_metrics_due and maps collected keys', async () => {
     const rpc = vi.fn(async () => ({
       data: [
@@ -359,7 +384,7 @@ describe('createPostMetricsStore', () => {
       ],
       error: null,
     }));
-    const store = createPostMetricsStore({ rpc } as unknown as SupabaseClient);
+    const store = createPostMetricsStore({ rpc, from: fakeFrom({}) } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
 
     expect(rpc).toHaveBeenCalledWith('find_post_metrics_due', {
@@ -376,6 +401,358 @@ describe('createPostMetricsStore', () => {
     const rpc = vi.fn(async () => ({ data: null, error: { message: 'boom' } }));
     const store = createPostMetricsStore({ rpc } as unknown as SupabaseClient);
     await expect(store.listDuePosts(new Date(), 51)).rejects.toThrow('due posts lookup failed: boom');
+  });
+
+  // The late-target re-read (issue #525 item 4): a post marked done can
+  // still gain a target, and the due SQL never re-reads done posts.
+  it('re-opens a done post when a target appears after it was marked done', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: {
+          data: [{ post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h', analytics_status: 'ok' }],
+          error: null,
+        },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+
+    // The YouTube snapshot is in; the Instagram target is not.
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      collectedKeys: new Set(['youtube:abc123']),
+    }]);
+  });
+
+  it('does not count a scope_missing YouTube snapshot as collected', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: {
+          data: [{ post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h', analytics_status: 'scope_missing' }],
+          error: null,
+        },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    // Mirror the due SQL (migration 039): the run retries the target
+    // until the token is reconnected or the window closes.
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      collectedKeys: new Set(),
+    }]);
+  });
+
+  it('does not count a YouTube snapshot with a null Analytics status as collected', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: {
+          data: [{ post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h', analytics_status: null }],
+          error: null,
+        },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      collectedKeys: new Set(),
+    }]);
+  });
+
+  it('counts a YouTube snapshot with an ok Analytics status as collected', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: {
+          data: [{ post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h', analytics_status: 'ok' }],
+          error: null,
+        },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      collectedKeys: new Set(['youtube:abc123']),
+    }]);
+  });
+
+  it('counts a non-YouTube row with a null Analytics status as collected', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: {
+          data: [{ post_id: 'post-1', provider: 'instagram', external_id: 'media-9', metrics_window: '24h', analytics_status: null }],
+          error: null,
+        },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      collectedKeys: new Set(['instagram:media-9']),
+    }]);
+  });
+
+  it('does not re-open a post whose targets are all collected', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: {
+          data: [
+            { post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h', analytics_status: 'ok' },
+            { post_id: 'post-1', provider: 'instagram', external_id: 'media-9', metrics_window: '24h', analytics_status: null },
+          ],
+          error: null,
+        },
+      }),
+    } as unknown as SupabaseClient);
+    await expect(store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51)).resolves.toEqual([]);
+  });
+
+  it('re-opens for the 7d window when that window is open and the 24h one is closed', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost({ published_at: '2026-10-14T12:00:00.000Z' })], error: null },
+        post_metrics: { data: [], error: null },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '7d', collectedKeys: new Set(),
+    }]);
+  });
+
+  it('does not re-open a post outside every open window', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost({ published_at: '2026-10-19T12:00:00.000Z' })], error: null },
+        post_metrics: { data: [], error: null },
+      }),
+    } as unknown as SupabaseClient);
+    await expect(store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51)).resolves.toEqual([]);
+  });
+
+  it('never collects the same post and window twice in one run', async () => {
+    const rpc = vi.fn(async () => ({
+      data: [{ post_id: 'post-1', user_id: 'user-1', task_id: 'task-1', metrics_window: '24h', collected_keys: [] }],
+      error: null,
+    }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: { data: [], error: null },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({ id: 'post-1', window: '24h' });
+  });
+
+  it('keeps the RPC posts when the re-open scan fails', async () => {
+    const rpc = vi.fn(async () => ({
+      data: [{ post_id: 'post-1', user_id: 'user-1', task_id: 'task-1', metrics_window: '24h', collected_keys: [] }],
+      error: null,
+    }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({ scheduled_posts: { data: null, error: { message: 'boom' } } }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts).toHaveLength(1);
+    expect(logger.warn).toHaveBeenCalledWith('[post-metrics] reopen scan failed', { error: 'boom' });
+  });
+
+  it('skips the re-open when the rows read hits its cap', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: {
+          data: Array.from({ length: REOPEN_ROWS_LIMIT }, (_, index) => ({
+            post_id: `post-${index}`, provider: 'youtube', external_id: `v${index}`, metrics_window: '24h', analytics_status: 'ok',
+          })),
+          error: null,
+        },
+      }),
+    } as unknown as SupabaseClient);
+    await expect(store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51)).resolves.toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[post-metrics] reopen rows read hit its cap; skipping the re-open this run',
+    );
+  });
+
+  it('caps the re-opened posts at the remaining run budget', async () => {
+    const rpc = vi.fn(async () => ({
+      data: Array.from({ length: 49 }, (_, index) => ({
+        post_id: `post-${index}`, user_id: 'user-1', task_id: `task-${index}`, metrics_window: '24h', collected_keys: [],
+      })),
+      error: null,
+    }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: {
+          data: [
+            scannedPost({ id: 'post-99', task_id: 'task-99' }),
+            scannedPost({ id: 'post-98', task_id: 'task-98' }),
+          ],
+          error: null,
+        },
+        post_metrics: { data: [], error: null },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    // Budget is 1 (49 RPC posts of a 50-post run): only the first
+    // re-openable candidate fits, so the second one proves the cap.
+    expect(posts).toHaveLength(50);
+    expect(posts[49]).toMatchObject({ id: 'post-99', window: '24h' });
+  });
+
+  it('skips the re-open scan when the RPC already filled the run budget', async () => {
+    const rpc = vi.fn(async () => ({
+      data: Array.from({ length: 51 }, (_, index) => ({
+        post_id: `post-${index}`, user_id: 'user-1', task_id: `task-${index}`, metrics_window: '24h', collected_keys: [],
+      })),
+      error: null,
+    }));
+    const from = fakeFrom({ scheduled_posts: { data: [scannedPost()], error: null } });
+    const store = createPostMetricsStore({ rpc, from } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts).toHaveLength(51);
+    expect(from).not.toHaveBeenCalled();
+
+    // The boundary is the 50-post processing cap, not the 51-post probe
+    // limit: with exactly 50 RPC posts the re-open budget is already 0.
+    const rpc50 = vi.fn(async () => ({
+      data: Array.from({ length: 50 }, (_, index) => ({
+        post_id: `post-${index}`, user_id: 'user-1', task_id: `task-${index}`, metrics_window: '24h', collected_keys: [],
+      })),
+      error: null,
+    }));
+    const from50 = fakeFrom({ scheduled_posts: { data: [scannedPost()], error: null } });
+    const store50 = createPostMetricsStore({ rpc: rpc50, from: from50 } as unknown as SupabaseClient);
+    const posts50 = await store50.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts50).toHaveLength(50);
+    expect(from50).not.toHaveBeenCalled();
+  });
+
+  it('keeps the RPC posts when the re-open rows lookup fails', async () => {
+    const rpc = vi.fn(async () => ({
+      data: [{ post_id: 'post-1', user_id: 'user-1', task_id: 'task-1', metrics_window: '24h', collected_keys: [] }],
+      error: null,
+    }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: { data: null, error: { message: 'boom' } },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts).toHaveLength(1);
+    expect(logger.warn).toHaveBeenCalledWith('[post-metrics] reopen rows lookup failed', { error: 'boom' });
+  });
+
+  it('treats non-array re-open reads as empty', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const noPosts = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({ scheduled_posts: { data: 'junk', error: null } }),
+    } as unknown as SupabaseClient);
+    await expect(noPosts.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51)).resolves.toEqual([]);
+
+    const noRows = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: { data: 'junk', error: null },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await noRows.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      collectedKeys: new Set(),
+    }]);
+  });
+
+  it('skips malformed scanned posts and rows instead of failing the re-open', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: {
+          data: [
+            scannedPost({ id: 123 }),
+            scannedPost({ id: 'post-bad-date', published_at: 'not-a-date' }),
+            scannedPost({ id: 'post-no-outcomes', publish_outcomes: 'junk' }),
+            scannedPost({ id: 'post-no-targets', publish_outcomes: [{ provider: 'instagram', accountId: 'ig1', status: 'failed' }] }),
+            scannedPost({ id: 'post-no-task', task_id: 123 }),
+            scannedPost(),
+          ],
+          error: null,
+        },
+        post_metrics: {
+          data: [
+            { post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h', analytics_status: 'ok' },
+            { post_id: 'post-1', provider: 'youtube', external_id: null, metrics_window: '24h' },
+            { post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '30d' },
+          ],
+          error: null,
+        },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    // Only the well-formed post re-opens (its Instagram target is uncollected).
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      collectedKeys: new Set(['youtube:abc123']),
+    }]);
+  });
+
+  it('warns about unknown providers in re-opened publish outcomes and still re-opens the known targets', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: {
+          data: [
+            scannedPost({ publish_outcomes: [IG_ENTRY, { provider: 'tiktok', status: 'published', accountId: 'tt1', postId: 'v9' }] }),
+            scannedPost({ id: 'post-2', task_id: 'task-2', publish_outcomes: [{ provider: 'tiktok', status: 'published', accountId: 'tt1', postId: 'v9' }] }),
+          ],
+          error: null,
+        },
+        post_metrics: { data: [], error: null },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    // The post with only an unknown provider is skipped; the post with a
+    // known target re-opens. Both unknown providers are reported, never
+    // silently skipped.
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      collectedKeys: new Set(),
+    }]);
+    expect(logger.warn).toHaveBeenCalledWith('[post-metrics] unknown provider in re-opened publish outcomes', { postId: 'post-1', provider: 'tiktok' });
+    expect(logger.warn).toHaveBeenCalledWith('[post-metrics] unknown provider in re-opened publish outcomes', { postId: 'post-2', provider: 'tiktok' });
   });
 
   it('upserts one row per post/video/window, returns its experiment link and throws on a write error', async () => {
