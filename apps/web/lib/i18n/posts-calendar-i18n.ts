@@ -40,6 +40,7 @@ export const postsCalendarStrings = {
       cardFailedFor: 'Falhou para',
       cardScheduleAgain: 'Agendar de novo',
       cardDetails: 'Ver detalhes',
+      cardOpenDetail: 'Abrir publicação: {title}',
       userNoticeEmail:
         '{provider} não publicou porque o e-mail desta conta não está verificado. Isto é um problema da sua conta. Só você pode resolver: verifique o e-mail no {provider}.',
       userNoticeReconnect:
@@ -90,6 +91,7 @@ export const postsCalendarStrings = {
       cardFailedFor: 'Failed for',
       cardScheduleAgain: 'Schedule again',
       cardDetails: 'See details',
+      cardOpenDetail: 'Open post: {title}',
       userNoticeEmail:
         '{provider} did not publish because the email on this account is not verified. This is a problem with your account. Only you can fix it: verify the email on {provider}.',
       userNoticeReconnect:

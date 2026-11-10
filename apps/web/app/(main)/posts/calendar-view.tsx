@@ -15,20 +15,6 @@ import { CalendarChromeContext, PostsCalendarWeek, PostsCalendarWeeks } from './
 import { CalendarLegend } from './calendar-legend';
 import { LoadErrorBanner } from './day-section';
 
-function CalendarGridOutline() {
-  return (
-    <div
-      aria-hidden
-      data-calendar-grid-outline
-      className="mx-auto grid max-w-lg grid-cols-7 gap-1.5 px-1 py-3"
-    >
-      {Array.from({ length: 21 }, (_, index) => (
-        <div key={index} className="mx-auto h-9 w-full max-w-[2.5rem] rounded-md border border-dashed border-line/80" />
-      ))}
-    </div>
-  );
-}
-
 // CalendarView — month calendar on the shadcn Calendar (react-day-picker:
 // grid semantics, keyboard navigation, focus). Each day cell shows up to
 // two status icons plus an overflow count per day, failure first
@@ -253,7 +239,8 @@ export function CalendarView({
         <NavTodayContext.Provider value={navToday}>
           <div
             className={cn(
-              !unavailable && 'max-xl:max-h-[min(40vh,17rem)] max-xl:overflow-y-auto max-xl:overscroll-contain',
+              !unavailable &&
+                'max-xl:max-h-[min(40vh,17rem)] max-xl:overflow-x-hidden max-xl:overflow-y-auto max-xl:overscroll-contain max-xl:pb-2',
             )}
           >
           <Calendar
@@ -305,9 +292,8 @@ export function CalendarView({
             components={{ DayButton: PostsDayButton, Nav: CalendarNav, Week: PostsCalendarWeek, Weeks: PostsCalendarWeeks }}
           />
           </div>
-          {unavailable && <CalendarGridOutline />}
           {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined && (
-            <div data-calendar-load-error className="px-1 pt-1">
+            <div data-calendar-load-error className="px-1 pt-2">
               <LoadErrorBanner compact messageKey={loadErrorMessageKey} onRetry={onLoadErrorRetry} />
             </div>
           )}

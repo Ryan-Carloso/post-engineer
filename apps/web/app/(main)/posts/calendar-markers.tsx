@@ -8,7 +8,6 @@ import { useI18n } from '@/lib/i18n/provider';
 import { cn } from '@/lib/utils';
 import { calendarCounts, dayKey } from './calendar-days';
 import {
-  CALENDAR_GROUP_DOT,
   CALENDAR_GROUP_ICON,
   CALENDAR_GROUP_KEY,
   CALENDAR_GROUP_MARKER,
@@ -52,24 +51,26 @@ export function StatusMarker({ group, count, labeled = false }: { group: Calenda
   );
 }
 
-function DayCellStatusSummary({ groups, counts, total }: { groups: CalendarGroup[]; counts: Record<CalendarGroup, number>; total: number }) {
+function DayCellStatusSummary({ groups, counts }: { groups: CalendarGroup[]; counts: Record<CalendarGroup, number> }) {
   if (groups.length === 1) {
     const group = groups[0];
     return <StatusMarker group={group} count={counts[group]} />;
   }
+  const visible = groups.slice(0, 2);
+  const overflowCount = groups.slice(2).reduce((sum, group) => sum + counts[group], 0);
   return (
-    <span
-      data-cell-summary
-      className="inline-flex h-[18px] max-w-full min-w-0 items-center gap-0.5 overflow-hidden rounded-full bg-sunken px-1 text-[10px] leading-none font-bold text-ink-soft tabular-nums"
-    >
-      <span className="flex shrink-0 items-center gap-px" aria-hidden>
-        {groups.map((group) => (
-          <span key={group} data-status-dot={group} className={cn('size-1.5 rounded-full', CALENDAR_GROUP_DOT[group])} />
-        ))}
-      </span>
-      <span data-total-count className="shrink-0">
-        {total}
-      </span>
+    <span data-cell-summary className="inline-flex max-w-full min-w-0 flex-nowrap items-center justify-center gap-0.5">
+      {visible.map((group) => (
+        <StatusMarker key={group} group={group} count={counts[group]} />
+      ))}
+      {overflowCount > 0 && (
+        <span
+          data-overflow-count
+          className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-sunken px-1 text-[10px] font-bold text-ink-soft tabular-nums"
+        >
+          +{overflowCount}
+        </span>
+      )}
     </span>
   );
 }
@@ -119,7 +120,7 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       data-selected-single={selectedSingle ? true : undefined}
       data-day-button
       className={cn(
-        'aspect-auto h-20 w-full max-w-full min-w-0 flex-col items-center justify-start gap-1 overflow-visible px-0.5 pt-1 sm:h-24 [&>span]:text-sm',
+        'aspect-auto h-[5.25rem] w-full max-w-full min-w-0 flex-col items-center justify-start gap-1 overflow-visible px-0.5 pb-1 pt-1 sm:h-24 sm:min-h-24',
         !isOutside && '[&>span]:opacity-100',
         isOutside &&
           'text-muted-foreground hover:bg-transparent hover:text-muted-foreground active:bg-transparent data-[selected-single=true]:text-muted-foreground',
@@ -146,8 +147,8 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
         {children}
       </span>
       {slots.length > 0 && (
-        <span aria-hidden className="flex w-full min-w-0 flex-nowrap items-center justify-center overflow-hidden">
-          <DayCellStatusSummary groups={groups} counts={counts} total={slots.length} />
+        <span aria-hidden className="flex w-full min-w-0 flex-nowrap items-center justify-center gap-0.5 overflow-visible">
+          <DayCellStatusSummary groups={groups} counts={counts} />
         </span>
       )}
     </Button>

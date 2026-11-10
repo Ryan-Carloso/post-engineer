@@ -462,7 +462,7 @@ describe('PostsPage', () => {
 
     render(<PostsPage />);
     // The error names the supporting data, not the calendar posts.
-    expect(screen.getByText('posts.loadErrorSupporting')).toBeInTheDocument();
+    expect(screen.getAllByText('posts.loadErrorSupporting')).toHaveLength(2);
   });
 
   it('shows the error state when an account query fails', () => {
@@ -476,7 +476,7 @@ describe('PostsPage', () => {
     } as never);
 
     render(<PostsPage />);
-    expect(screen.getByText('posts.loadErrorSupporting')).toBeInTheDocument();
+    expect(screen.getAllByText('posts.loadErrorSupporting')).toHaveLength(2);
   });
 
   it('retry refetches the account queries as well', async () => {
@@ -492,8 +492,8 @@ describe('PostsPage', () => {
 
     // Without this, a failed account fetch could never clear without a
     // full page reload.
-    expect(screen.getByText('posts.loadErrorSupporting')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'posts.loadErrorRetry' }));
+    expect(screen.getAllByText('posts.loadErrorSupporting')).toHaveLength(2);
+    await user.click(screen.getAllByRole('button', { name: 'posts.loadErrorRetry' })[0]);
     expect(youtubeRefetch).toHaveBeenCalledTimes(1);
   });
 
@@ -526,8 +526,8 @@ describe('PostsPage', () => {
 
     // Without this, a failed personas fetch could never clear without a
     // full page reload.
-    expect(screen.getByText('posts.loadErrorSupporting')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'posts.loadErrorRetry' }));
+    expect(screen.getAllByText('posts.loadErrorSupporting')).toHaveLength(2);
+    await user.click(screen.getAllByRole('button', { name: 'posts.loadErrorRetry' })[0]);
     expect(personasRefetch).toHaveBeenCalledTimes(1);
   });
 
@@ -561,7 +561,8 @@ describe('PostsPage card links', () => {
   it("links today's calendar cards to their detail page", () => {
     render(<PostsPage />);
 
-    expect(screen.getByRole('link', { name: /Upcoming topic/ })).toHaveAttribute('href', '/posts/u1');
+    const detailLink = screen.getAllByRole('link', { name: 'posts.cardOpenDetail' }).find((link) => link.getAttribute('href') === '/posts/u1');
+    expect(detailLink).toBeDefined();
   });
 
 });
@@ -810,7 +811,7 @@ describe('PostsPage calendar view', () => {
     render(<PostsPage />);
 
     // The error names the calendar posts, not the supporting data.
-    expect(screen.getByText('posts.loadErrorCalendar')).toBeInTheDocument();
+    expect(screen.getAllByText('posts.loadErrorCalendar')).toHaveLength(2);
   });
 
   it('clicking an outside day selects it and moves the shown month to it', async () => {
@@ -931,7 +932,9 @@ describe('PostsPage calendar view', () => {
     const user = userEvent.setup();
     render(<PostsPage />);
 
-    const alert = screen.getByRole('alert');
+    const alerts = screen.getAllByRole('alert');
+    expect(alerts).toHaveLength(2);
+    const alert = alerts[0];
     expect(within(alert).getByText('posts.loadErrorCalendar')).toBeInTheDocument();
     expect(within(alert).queryByText('posts.loadErrorRetryHint')).not.toBeInTheDocument();
   expect(alert.closest('[data-calendar-card]')).not.toBeNull();
@@ -943,7 +946,7 @@ describe('PostsPage calendar view', () => {
     // Same frame as a loaded month: readable grid, no "not loaded" pill,
     // no selection, no day list.
     expect(screen.queryByText('posts.calendarNotLoaded')).not.toBeInTheDocument();
-    expect(document.querySelector('[data-calendar-grid-outline]')).toBeInTheDocument();
+    expect(document.querySelector('[data-calendar-grid-outline]')).not.toBeInTheDocument();
     const grid = screen.queryByRole('grid', { hidden: true });
     expect(grid).not.toBeNull();
     expect(grid?.className.split(/\s+/)).toContain('hidden');
@@ -960,7 +963,7 @@ describe('PostsPage calendar view', () => {
     vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isFetching: false, isError: true, refetch: vi.fn() } as never);
     render(<PostsPage />);
     expect(screen.queryByRole('button', { name: 'posts.refresh' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'posts.loadErrorRetry' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'posts.loadErrorRetry' })).toHaveLength(2);
   });
 });
 

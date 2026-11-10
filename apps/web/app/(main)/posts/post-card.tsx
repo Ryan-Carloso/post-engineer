@@ -68,11 +68,12 @@ function videoUrlFor(taskId: string | null | undefined): string | null {
   return taskId ? `/api/persona/video-download/${encodeURIComponent(taskId)}/final-1.mp4` : null;
 }
 
-// 72×72 video thumbnail, only for a post that has a video: a placeholder
-// tile on every other card was noise. The #t=0.1 fragment makes Chrome
-// paint a frame; preload="metadata" alone renders an empty box.
+// 72×72 media tile: real preview when a video exists; a dashed quiet
+// placeholder otherwise so every non-failed card shares one layout. The
+// #t=0.1 fragment makes Chrome paint a frame; preload="metadata" alone
+// renders an empty box.
 const PostThumb = ({ src }: { src: string }) => (
-  <div className="relative w-18 shrink-0">
+  <div className="relative w-18">
     <AspectRatio ratio={1} className="w-18 overflow-hidden rounded-[9px] bg-sunken">
       <video src={`${src}#t=0.1`} preload="metadata" muted playsInline className="size-full object-cover" />
     </AspectRatio>
@@ -81,6 +82,13 @@ const PostThumb = ({ src }: { src: string }) => (
     </span>
   </div>
 );
+
+const PostMediaTile = ({ src }: { src: string | null }) => {
+  if (src !== null) return <PostThumb src={src} />;
+  return (
+    <AspectRatio ratio={1} className="w-18 rounded-[9px] border border-dashed border-line bg-sunken/60" />
+  );
+};
 
 const StatusBadge = ({ status, label, style }: { status: string; label: string; style: string }) => {
   const Icon = CALENDAR_GROUP_ICON[calendarGroupOf(status)];
@@ -184,6 +192,7 @@ export const PostCard = ({
       ? t(slot.retryable === true ? 'posts.cardFailedRetryable' : 'posts.cardFailedPermanent')
       : t(GENERATION_ERROR_KEY[failureCode]);
   const group = calendarGroupOf(slot.status);
+  const displayTitle = slot.title ?? t('posts.unknownTitle');
   // The card is not a single link: the failure box carries its own actions,
   // and a link cannot nest another link. The main content links to the post
   // detail (the chevron says so). There is no retry endpoint, so the primary
@@ -196,17 +205,21 @@ export const PostCard = ({
         isFailed && 'border-destructive/40 hover:border-destructive/60',
       )}
     >
-      <Link href={`/posts/${slot.id}`} className="block rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+      <Link
+        href={`/posts/${slot.id}`}
+        aria-label={t('posts.cardOpenDetail', { title: displayTitle })}
+        className="block rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
         <CardHeader
           badge={<StatusBadge status={slot.status} label={t(CALENDAR_GROUP_KEY[group])} style={CALENDAR_GROUP_PILL[group]} />}
           when={when}
           showChevron={!isFailed}
         />
         <div className="mt-3 flex gap-3">
-          <CardTitle title={slot.title ?? t('posts.unknownTitle')} personaName={personaName} />
-          {thumbSrc !== null && (
-            <span aria-hidden className="shrink-0">
-              <PostThumb src={thumbSrc} />
+          <CardTitle title={displayTitle} personaName={personaName} />
+          {!isFailed && (
+            <span aria-hidden className="w-18 shrink-0">
+              <PostMediaTile src={thumbSrc} />
             </span>
           )}
         </div>

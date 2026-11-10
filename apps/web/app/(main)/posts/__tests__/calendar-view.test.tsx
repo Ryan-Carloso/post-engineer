@@ -157,7 +157,24 @@ describe('CalendarView', () => {
     expect(cell).toHaveAccessibleName('Wednesday, June 5, 2030: Failed: 2, Published: 2, In progress: 1, Scheduled: 1');
   });
 
-  it('collapses several status groups into one dot summary with a total count in the cell', () => {
+  it('draws two legend-colored status chips when a day has two groups', () => {
+    const slotsByDay = new Map<string, DaySlot[]>([
+      [
+        '2030-06-05',
+        [
+          { status: 'published', scheduleId: 's2', slotAt: '2030-06-05T10:00:00.000Z' },
+          { status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' },
+        ],
+      ],
+    ]);
+    setup({ slotsByDay, selectedKey: '2030-06-05' });
+    const cell = dayButton(/June 5, 2030/);
+    const markers = [...cell.querySelectorAll('[data-marker]')];
+    expect(markers.map((m) => m.getAttribute('data-marker'))).toEqual(['published', 'scheduled']);
+    expect(cell.querySelector('[data-status-dot]')).toBeNull();
+  });
+
+  it('draws two status chips plus overflow when more than two groups share a day', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
@@ -172,13 +189,8 @@ describe('CalendarView', () => {
     ]);
     setup({ slotsByDay });
     const busy = dayButton(/June 5, 2030/);
-    expect(busy.querySelector('[data-cell-summary]')).not.toBeNull();
-    expect(busy.querySelector('[data-total-count]')).toHaveTextContent('4');
-    expect(busy.querySelectorAll('[data-status-dot]')).toHaveLength(3);
-    const dots = [...busy.querySelectorAll('[data-status-dot]')];
-    expect(dots.find((dot) => dot.getAttribute('data-status-dot') === 'published')?.className).toContain('bg-success');
-    expect(dots.find((dot) => dot.getAttribute('data-status-dot') === 'scheduled')?.className).toContain('bg-muted-foreground');
-    expect(busy.querySelector('[data-overflow-count]')).toBeNull();
+    expect(busy.querySelectorAll('[data-marker]')).toHaveLength(2);
+    expect(busy.querySelector('[data-overflow-count]')).toHaveTextContent('+2');
     expect(busy.className.split(/\s+/)).not.toContain('bg-destructive-soft');
     // A published-only day: one compact chip, and the cell itself stays unpainted.
     const published = dayButton(/June 6, 2030/);
@@ -220,7 +232,7 @@ describe('CalendarView', () => {
     expect(classes).not.toContain('data-[selected-single=true]:text-primary-foreground');
   });
 
-  it('fits four status groups into one dot summary with the slot total', () => {
+  it('fits four status groups into two chips plus overflow', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
@@ -234,9 +246,8 @@ describe('CalendarView', () => {
     ]);
     setup({ slotsByDay });
     const cell = dayButton(/June 5, 2030/);
-    expect(cell.querySelector('[data-cell-summary]')).not.toBeNull();
-    expect(cell.querySelectorAll('[data-status-dot]')).toHaveLength(4);
-    expect(cell.querySelector('[data-total-count]')).toHaveTextContent('4');
+    expect(cell.querySelectorAll('[data-marker]')).toHaveLength(2);
+    expect(cell.querySelector('[data-overflow-count]')).toHaveTextContent('+2');
     expect(cell.querySelector('[data-personas]')).toBeNull();
     expect(cell.querySelector('[data-personas-more]')).toBeNull();
   });
@@ -313,7 +324,7 @@ describe('CalendarView', () => {
     expect(screen.queryByText('Posts not loaded')).not.toBeInTheDocument();
     const grid = screen.getByRole('grid', { hidden: true });
     expect(grid.className.split(/\s+/)).toContain('hidden');
-    expect(document.querySelector('[data-calendar-grid-outline]')).not.toBeNull();
+    expect(document.querySelector('[data-calendar-grid-outline]')).toBeNull();
     expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
     expect(document.querySelector('[data-calendar-load-error]')?.closest('[data-calendar-card]')).not.toBeNull();
     expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -375,7 +386,7 @@ describe('CalendarView', () => {
     ]);
     setup({ slotsByDay });
     for (const day of [dayButton(/June 5, 2030/), dayButton(/June 15, 2030/)]) {
-      expect(day.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-20', 'sm:h-24']));
+      expect(day.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-[5.25rem]', 'sm:h-24']));
       expect(day.className.split(/\s+/)).not.toContain('h-auto');
       // The month table, not the chip text, owns the column width.
       const cell = day.parentElement;

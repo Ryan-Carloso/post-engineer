@@ -101,7 +101,7 @@ describe('PostCard failure', () => {
   it('keeps the card itself linked to the post detail but hides the header chevron on a failed card', () => {
     renderCard(FAILED_SLOT);
 
-    const link = screen.getByRole('link', { name: /Failed topic/ });
+    const link = screen.getByRole('link', { name: 'posts.cardOpenDetail' });
     expect(link).toHaveAttribute('href', '/posts/f1');
     expect(link.querySelector('[data-card-chevron]')).toBeNull();
   });
@@ -151,9 +151,21 @@ describe('PostCard header and media', () => {
     expect(document.querySelector('video')).toHaveAttribute('src', '/api/persona/video-download/task-1/final-1.mp4#t=0.1');
   });
 
-  it('draws no thumbnail tile for a post without a video', () => {
+  it('draws a quiet media placeholder when the post has no video yet', () => {
     renderCard({ ...FAILED_SLOT, status: 'awaiting', taskId: null });
     expect(document.querySelector('video')).toBeNull();
+    expect(document.querySelector('[data-status="awaiting"]')?.closest('a')?.querySelector('.border-dashed')).not.toBeNull();
+  });
+
+  it('names the card link with the post title for screen readers', () => {
+    renderCard({
+      ...FAILED_SLOT,
+      status: 'published',
+      title: 'Calendar published',
+      taskId: 'task-1',
+      publishedAt: '2030-06-01T10:05:00.000Z',
+    });
+    expect(screen.getByRole('link', { name: 'posts.cardOpenDetail' })).toHaveAttribute('href', '/posts/f1');
   });
 
   it('does not underline the title as a second link affordance on a published card', () => {
