@@ -16,8 +16,10 @@ import {
   numericOrNull,
   parseMetricsQuery,
   stayedToWatchPct,
+  type CoverageItem,
   type MetricsRowView,
 } from '@/lib/metrics/metrics-query';
+import { fetchCoverage } from '@/lib/metrics/metrics-coverage';
 
 //---------------
 // GET /api/metrics — the caller's per-video snapshots (post_metrics) for
@@ -118,7 +120,38 @@ async function getHandler(request: Request): Promise<NextResponse> {
       collectedAt: record.collected_at,
     });
   }
-  return NextResponse.json({ success: true, rows, truncated: records.length > METRICS_ROW_LIMIT });
+  // Coverage is additive visibility over the rows, never a reason to fail
+  // the dashboard: a failed coverage read logs loudly and serves the
+  // rows without it (issue #525).
+  let coverage: CoverageItem[] = [];
+  let coverageTruncated = false;
+  try {
+    const found = await fetchCoverage(supabase, auth.userId, query, new Date(), {
+      // Same persona scope as the rows query above, with one deliberate
+      // exception: a persona-less post is visible only when it is really
+      // faceless. A deleted schedule leaves the persona unknown, and that
+      // post may belong to a persona outside the scope — see the scope
+      // guard in computeCoverage.
+      personaIds: isScopedApiKey(auth) ? (auth.personaIds ?? []).filter((id) => UUID.test(id)) : null,
+    });
+    coverage = found.items;
+    coverageTruncated = found.truncated;
+  } catch (error) {
+    logger.error('[api/metrics] coverage lookup failed', error);
+  }
+
+  return NextResponse.json({
+    success: true,
+    rows,
+    truncated: records.length > METRICS_ROW_LIMIT,
+    coverage,
+    coverageTruncated,
+    // The newest snapshot in the response: the page dates its data by it.
+    asOf: rows.reduce<string | null>(
+      (max, row) => (max === null || row.collectedAt > max ? row.collectedAt : max),
+      null,
+    ),
+  });
 }
 
 //---------------

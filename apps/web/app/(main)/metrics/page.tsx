@@ -9,12 +9,14 @@ import { AlertIcon, ChartIcon, SpinnerIcon } from '@/lib/ui';
 import { cn } from '@/lib/utils';
 import { MetricsBarChart } from '@/components/ui/metrics-bar-chart';
 import { MetricsRow } from './metrics-row';
+import { MetricsCoverageCard } from './metrics-coverage-card';
 import { PROVIDER_LABELS, accountOption } from '@/lib/account-options';
 import { SOCIAL_PROVIDERS, isSocialProvider } from '@/lib/providers/registry';
 import {
   METRICS_NONE,
   METRICS_ROW_LIMIT,
   METRICS_WINDOWS,
+  type CoverageItem,
   type MetricsQuery,
   type MetricsRowView,
 } from '@/lib/metrics/metrics-query';
@@ -87,6 +89,11 @@ export default function MetricsPage(): React.ReactElement {
   const result = metricsQuery.data;
   const failed = metricsQuery.isError || (result !== undefined && !result.success);
   const rows: MetricsRowView[] = result !== undefined && result.success ? result.rows : [];
+  // Coverage (issue #525): the published videos with no snapshot for this
+  // window, and the newest collection time. Empty until the first load.
+  const coverage: CoverageItem[] = result !== undefined && result.success ? result.coverage : [];
+  const coverageTruncated = result !== undefined && result.success ? result.coverageTruncated : false;
+  const asOf = result !== undefined && result.success ? result.asOf : null;
   const angles = useMemo(() => {
     const loaded = distinctAngles(rows);
     // Keep the selected angle listed even when the filtered rows hide others.
@@ -116,6 +123,10 @@ export default function MetricsPage(): React.ReactElement {
   const metricLabel = t(METRIC_LABEL_KEYS[metric]);
   const groupLabel = t(GROUP_LABEL_KEYS[group]);
   const formatNumber = (value: number): string => value.toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US');
+  const formatDate = (iso: string): string =>
+    new Date(iso).toLocaleDateString(locale === 'pt' ? 'pt-BR' : 'en-US', { dateStyle: 'medium' });
+  const formatDateTime = (iso: string): string =>
+    new Date(iso).toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' });
   const formatMetric = (value: number, key: MetricKey): string =>
     PERCENT_METRICS.has(key) ? `${formatNumber(value)}%` : formatNumber(value);
   const formatSelected = (value: number): string => formatMetric(value, metric);
@@ -196,6 +207,17 @@ export default function MetricsPage(): React.ReactElement {
         </section>
       )}
 
+      {coverage.length > 0 && (
+        <MetricsCoverageCard
+          items={coverage}
+          truncated={coverageTruncated}
+          window={query.window}
+          personaLabel={personaLabel}
+          accountLabel={(id) => accountLabels.get(id) ?? id}
+          formatDateTime={formatDateTime}
+        />
+      )}
+
       {rows.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <StatTile label={t('metrics.statVideos')} value={formatNumber(rows.length)} />
@@ -251,6 +273,9 @@ export default function MetricsPage(): React.ReactElement {
       {rows.length > 0 && (
         <section className={cn(CARD_CLASS, 'p-4 lg:p-6')}>
           <h2 className="mb-2 text-lg font-semibold tracking-[-0.02em] text-ink">{t('metrics.tableTitle')}</h2>
+          {asOf !== null && (
+            <p className="mb-2 text-xs text-muted-text">{t('metrics.asOf', { date: formatDateTime(asOf) })}</p>
+          )}
           <ul className="divide-y divide-hairline">
             {rows.map((row) => (
               <MetricsRow
@@ -261,6 +286,7 @@ export default function MetricsPage(): React.ReactElement {
                 title={row.scriptAngle ?? t('metrics.noAngle')}
                 subtitle={`${personaLabel(row.personaId)} · ${accountLabels.get(row.accountId) ?? row.accountId}`}
                 formatMetric={formatMetric}
+                formatDate={formatDate}
               />
             ))}
           </ul>

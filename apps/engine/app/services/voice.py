@@ -11,6 +11,7 @@ from loguru import logger
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.tools import subtitles
 
+from app.services import subtitle_cues
 from app.services.openrouter_tts import dispatch_openrouter_tts
 from app.services.voice_providers import (
     SubMaker,
@@ -279,33 +280,6 @@ def _format_text(text: str) -> str:
     return utils.normalize_script_for_subtitle_matching(text)
 
 
-def _split_subtitle_line(text: str, max_words: int = 10) -> list[str]:
-    """Split a long subtitle line into smaller readable chunks."""
-    words = [word for word in text.split() if word]
-    if len(words) <= max_words:
-        return [text.strip()] if text.strip() else []
-
-    chunks: list[str] = []
-    current: list[str] = []
-    for word in words:
-        current.append(word)
-        if len(current) >= max_words:
-            chunks.append(" ".join(current).strip())
-            current = []
-    if current:
-        chunks.append(" ".join(current).strip())
-    return chunks
-
-
-def _split_subtitle_lines(text: str) -> list[str]:
-    """Split script text by punctuation and cap each subtitle chunk length."""
-    raw_lines = utils.split_string_by_punctuations(text)
-    split_lines: list[str] = []
-    for line in raw_lines:
-        split_lines.extend(_split_subtitle_line(line, max_words=10))
-    return split_lines
-
-
 def _build_subtitle_formatter():
     """Return the shared SRT line formatter.
 
@@ -462,7 +436,7 @@ def create_subtitle(sub_maker: SubMaker, text: str, subtitle_file: str):
     3. Write the new subtitle file.
     """
     text = _format_text(text)
-    script_lines = _split_subtitle_lines(text)
+    script_lines = subtitle_cues.split_script_lines(text)
     try:
         sub_items = _build_subtitle_items_from_legacy_submaker(
             sub_maker, script_lines

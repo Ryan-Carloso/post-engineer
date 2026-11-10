@@ -75,8 +75,40 @@ describe('fetchMetrics', () => {
   it('returns rows on success and sends the filters', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ success: true, rows: [view()], truncated: false })));
     vi.stubGlobal('fetch', fetchMock);
-    await expect(fetchMetrics(query)).resolves.toEqual({ success: true, rows: [view()], truncated: false });
+    await expect(fetchMetrics(query)).resolves.toEqual({
+      success: true, rows: [view()], truncated: false, coverage: [], coverageTruncated: false, asOf: null,
+    });
     expect(fetchMock).toHaveBeenCalledWith('/api/metrics?window=24h&account=yt');
+  });
+
+  it('returns coverage and the as-of timestamp when the response carries them', async () => {
+    const item = {
+      postId: 'p', personaId: null, provider: 'youtube', accountId: 'yt', externalId: 'v',
+      scriptAngle: null, reason: 'retrying', publishedAt: '2026-10-21T12:00:00.000Z',
+      windowOpensAt: '2026-10-22T12:00:00.000Z', windowClosesAt: '2026-10-23T12:00:00.000Z',
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      success: true, rows: [view()], truncated: false, coverage: [item], coverageTruncated: false, asOf: '2026-10-21T12:00:00Z',
+    }))));
+    await expect(fetchMetrics(query)).resolves.toEqual({
+      success: true, rows: [view()], truncated: false, coverage: [item], coverageTruncated: false, asOf: '2026-10-21T12:00:00Z',
+    });
+  });
+
+  it('drops malformed coverage items instead of losing the rows', async () => {
+    const item = {
+      postId: 'p', personaId: null, provider: 'youtube', accountId: 'yt', externalId: 'v',
+      scriptAngle: null, reason: 'retrying', publishedAt: '2026-10-21T12:00:00.000Z',
+      windowOpensAt: '2026-10-22T12:00:00.000Z', windowClosesAt: '2026-10-23T12:00:00.000Z',
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      success: true, rows: [view()], truncated: false,
+      coverage: [item, { postId: 'bad', reason: 'nonsense' }, 'nope'],
+      coverageTruncated: 'yes', asOf: 42,
+    }))));
+    await expect(fetchMetrics(query)).resolves.toEqual({
+      success: true, rows: [view()], truncated: false, coverage: [item], coverageTruncated: false, asOf: null,
+    });
   });
 
   it('never throws: non-2xx, HTML bodies and network errors become failures', async () => {
