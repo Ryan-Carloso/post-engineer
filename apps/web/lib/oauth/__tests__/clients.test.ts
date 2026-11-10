@@ -175,6 +175,35 @@ describe('fetchCimdDocument SSRF guards', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it('rejects credentials, fragments and non-default ports without fetching', async () => {
+    for (const url of [
+      'https://user:pass@public.example/client.json',
+      'https://public.example/client.json#frag',
+      'https://public.example:8443/client.json',
+    ]) {
+      const fetchImpl = okFetch({ redirect_uris: ['https://x/callback'] });
+      const result = await fetchCimdDocument(
+        url,
+        fetchImpl,
+        lookupReturning('93.184.216.34'),
+      );
+      expect(result).toBeNull();
+      expect(fetchImpl).not.toHaveBeenCalled();
+    }
+  });
+
+  it('fetches the normalized URL without a default port', async () => {
+    const fetchImpl = okFetch({ redirect_uris: ['https://x/callback'] });
+    const result = await fetchCimdDocument(
+      'https://public.example:443/client.json',
+      fetchImpl,
+      lookupReturning('93.184.216.34'),
+    );
+    expect(result).toEqual({ redirect_uris: ['https://x/callback'] });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://public.example/client.json');
+  });
+
   it('returns null when the response is not ok', async () => {
     const fetchImpl = vi.fn(
       async (): Promise<Response> => ({ ok: false }) as Response,
