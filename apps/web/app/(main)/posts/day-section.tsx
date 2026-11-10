@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { CalendarPlus, CalendarX2, Filter, FilterX, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { CalendarPlus, CalendarX2, Filter, FilterX, type LucideIcon } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -10,11 +10,11 @@ import { cn } from '@/lib/utils';
 
 //---------------
 // The posts calendar's states around the grid: the summary of the selected
-// day, the empty states (account, month, day, filter) and the load error.
-// Presentational — the page decides which one shows. Posts are created by
-// the user's AI agent over MCP (there is no create form in the web app), so
-// every "next step" action leads to /recipes, where the API key and the
-// ready-to-copy prompts live.
+// day and the empty states (account, month, day, filter). Presentational —
+// the page decides which one shows. Posts are created by the user's AI
+// agent over MCP (there is no create form in the web app), so every "next
+// step" action leads to /recipes, where the API key and the ready-to-copy
+// prompts live.
 //---------------
 
 export const CREATE_POSTS_HREF = '/recipes';
@@ -125,71 +125,5 @@ export function DayEmptyState({
       description={t('posts.calendarDayNoneHint')}
       action={<CreatePostsLink labelKey="posts.schedulePostsAction" />}
     />
-  );
-}
-
-export function LoadErrorBanner({
-  messageKey,
-  noteKey,
-  onRetry,
-  compact = false,
-  fill = false,
-  bare = false,
-  banner = false,
-}: {
-  messageKey: TranslationKey;
-  noteKey?: TranslationKey;
-  onRetry: () => void;
-  compact?: boolean;
-  fill?: boolean;
-  bare?: boolean;
-  banner?: boolean;
-}) {
-  const { t } = useI18n();
-  return (
-    <div
-      role="alert"
-      data-load-error-banner={banner ? true : undefined}
-      className={cn(
-        'flex text-ink',
-        banner ? 'w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-2' : 'flex-col',
-        !banner && compact ? 'gap-2.5' : !banner ? 'gap-3' : undefined,
-        !bare && 'rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3',
-        bare && 'border-0 bg-transparent px-0 py-0',
-        banner ? 'items-stretch text-left' : compact ? 'mx-auto w-full items-center text-center' : 'items-start',
-        compact && !fill && !bare && !banner && 'max-w-md',
-        fill && 'max-w-none',
-      )}
-    >
-      <p
-        className={cn(
-          'flex min-w-0 gap-3 text-sm',
-          banner || !compact ? 'items-start sm:items-center' : 'items-center',
-          banner && 'flex-1',
-        )}
-      >
-        <TriangleAlert
-          className={cn('size-5 shrink-0 text-warning', banner || compact ? '' : 'mt-px')}
-          aria-hidden
-        />
-        <span className="font-semibold">{t(messageKey)}</span>
-      </p>
-      {noteKey !== undefined && (
-        <p className={cn('text-sm text-muted-foreground', compact && !banner ? 'max-w-sm' : 'text-left')}>{t(noteKey)}</p>
-      )}
-      <Button
-        type="button"
-        variant="outline"
-        size={banner ? 'default' : compact ? 'default' : 'sm'}
-        data-load-error-retry={compact || banner ? true : undefined}
-        className={cn(
-          'rounded-lg border-input bg-card font-semibold text-primary hover:bg-sunken',
-          banner ? 'w-full shrink-0 sm:w-auto sm:min-h-10 sm:px-5' : compact ? 'min-h-11 self-center px-6' : 'min-h-10',
-        )}
-        onClick={onRetry}
-      >
-        {t('posts.loadErrorRetry')}
-      </Button>
-    </div>
   );
 }
