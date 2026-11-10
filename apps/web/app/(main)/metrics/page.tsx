@@ -150,6 +150,14 @@ export default function MetricsPage(): React.ReactElement {
         </div>
       </header>
 
+      <Link href="/experiments" className={cn(CARD_CLASS, 'flex items-center justify-between gap-3 p-4 hover:border-ink/30 lg:p-5')}>
+        <span>
+          <span className="block text-sm font-semibold text-ink">{t('experiments.entryTitle')}</span>
+          <span className="mt-0.5 block text-xs text-muted-text">{t('experiments.entryBody')}</span>
+        </span>
+        <span className="shrink-0 rounded-xl bg-sunken px-3 py-2 text-sm font-semibold text-ink">{t('experiments.entryAction')}</span>
+      </Link>
+
       <section className={cn(CARD_CLASS, 'flex flex-col gap-4 p-4 lg:p-5')}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Segmented

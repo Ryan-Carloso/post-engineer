@@ -168,14 +168,14 @@ describe('app/(main)/layout — MainLayout', () => {
     }
   });
 
-  it('renders the sidebar tabs in order: Posts, History, Accounts, Personas, Metrics, API Key & MCP', () => {
+  it('renders the sidebar tabs in order: Posts, History, Accounts, Personas, Metrics, A/B Tests, API Key & MCP', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const sidebar = screen.getByTestId('nav-brand').closest('aside');
     const nav = within(sidebar as HTMLElement).getByRole('navigation');
     const titles = within(nav)
       .getAllByRole('link')
       .map((link) => link.getAttribute('title'));
-    expect(titles).toEqual(['nav.posts', 'nav.history', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.prompts']);
+    expect(titles).toEqual(['nav.posts', 'nav.history', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.experiments', 'nav.prompts']);
   });
 
   it('support link uses the shared support email, not a hardcoded copy', () => {
@@ -512,12 +512,13 @@ describe('mobile header profile area', () => {
     expect(within(link).getByText('H')).toBeInTheDocument();
   });
 
-  it('More opens a sheet linking History, Metrics and Tokens (not the profile)', async () => {
+  it('More opens a sheet linking History, Metrics, A/B Tests and Tokens (not the profile)', async () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     fireEvent.click(screen.getByRole('button', { name: 'nav.more' }));
     const sheet = await screen.findByRole('dialog', { name: 'nav.moreTitle' });
     expect(within(sheet).getByText('nav.history').closest('a')).toHaveAttribute('href', '/posts/history');
     expect(within(sheet).getByText('nav.metrics').closest('a')).toHaveAttribute('href', '/metrics');
+    expect(within(sheet).getByText('nav.experiments').closest('a')).toHaveAttribute('href', '/experiments');
     expect(within(sheet).queryByText('nav.profile')).toBeNull();
     expect(within(sheet).getByText('nav.billing').closest('a')).toHaveAttribute('href', '/billing');
   });
