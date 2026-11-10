@@ -58,8 +58,6 @@ export const postsCalendarStrings = {
       cardRetry: 'Tentar de novo',
       historyPostsTitle: 'Publicações passadas',
       loadErrorCalendar: 'Não foi possível carregar o calendário de publicações.',
-      loadErrorCalendarSideQuiet:
-        'Não é possível mostrar publicações por dia até o calendário carregar.',
       cardProgressCaption: 'Progresso',
       loadErrorHistory: 'Não foi possível carregar o histórico de publicações.',
       loadErrorGenerations: 'Não foi possível carregar as gerações de vídeo.',
@@ -122,7 +120,6 @@ export const postsCalendarStrings = {
       cardRetry: 'Try again',
       historyPostsTitle: 'Past posts',
       loadErrorCalendar: 'Could not load the posts calendar.',
-      loadErrorCalendarSideQuiet: 'Day posts cannot be shown until the calendar loads.',
       cardProgressCaption: 'Progress',
       loadErrorHistory: 'Could not load the post history.',
       loadErrorGenerations: 'Could not load the video generations.',

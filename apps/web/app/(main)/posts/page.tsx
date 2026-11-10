@@ -19,7 +19,7 @@ import {
   gridRange,
   monthKey,
 } from './calendar-days';
-import { AccountEmptyState, CalendarLoadErrorSideNote, DayEmptyState } from './day-section';
+import { AccountEmptyState, DayEmptyState } from './day-section';
 import { CALENDAR_LAYOUT_CLASS, CalendarLoadingSkeleton } from './loading-skeleton';
 import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-joins';
 
@@ -191,9 +191,7 @@ export default function PostsPage() {
                 refreshing={rangeQuery.isFetching}
               />
             </div>
-            {isError && loadErrorKey === 'posts.loadErrorCalendar' ? (
-              <CalendarLoadErrorSideNote className="order-2 mt-4 min-w-0 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:self-start" />
-            ) : isError && loadErrorKey !== 'posts.loadErrorCalendar' ? (
+            {isError && loadErrorKey !== 'posts.loadErrorCalendar' ? (
               <section
                 data-day-unavailable-note
                 aria-live="polite"

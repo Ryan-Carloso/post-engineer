@@ -128,25 +128,6 @@ export function DayEmptyState({
   );
 }
 
-// Calendar range load failed: the day list cannot render — quiet side card only.
-export function CalendarLoadErrorSideNote({ className }: { className?: string }) {
-  const { t } = useI18n();
-  return (
-    <div
-      data-calendar-unavailable-side-note
-      className={cn(
-        'flex flex-col items-center gap-2 rounded-xl border border-dashed border-line bg-card px-4 py-5 text-center',
-        className,
-      )}
-    >
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-sunken text-muted-text">
-        <CalendarX2 className="size-5" aria-hidden />
-      </span>
-      <p className="max-w-md text-sm font-medium leading-snug text-primary">{t('posts.loadErrorCalendarSideQuiet')}</p>
-    </div>
-  );
-}
-
 export function LoadErrorBanner({
   messageKey,
   noteKey,
