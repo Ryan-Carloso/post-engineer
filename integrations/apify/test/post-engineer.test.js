@@ -4,7 +4,6 @@ import { describe, it } from 'node:test';
 import {
   ActorInputError,
   DEFAULT_API_URL,
-  FACELESS_MATERIALS,
   POLL_INTERVAL_MS,
   PostEngineerApiError,
   PROVIDERS,
@@ -16,6 +15,8 @@ import {
 
 const API_KEY = 'pe_live_testkey123';
 
+const urls = (count) => Array.from({ length: count }, (_, index) => `https://e.com/${index}.jpg`);
+
 const baseInput = () => ({
   apiKey: API_KEY,
   title: 'Why short videos win',
@@ -24,6 +25,8 @@ const baseInput = () => ({
   cta: 'Follow for more.',
   providers: ['youtube'],
   voiceId: 'chatterbox:kokoro_af_heart',
+  // One image per segment: the density rule needs exactly 3 here.
+  images: urls(3),
 });
 
 const jsonResponse = (status, body) => new Response(JSON.stringify(body), { status });
@@ -100,7 +103,7 @@ describe('parseInput', () => {
     ['no persona and no voice', { ...baseInput(), voiceId: undefined }, /without a persona needs a voice/],
     ['full lip-sync without a persona', { ...baseInput(), fullLipsync: true }, /fullLipsync needs a persona/],
     ['full lip-sync with faceless', { ...baseInput(), personaId: 'p1', faceless: true, fullLipsync: true }, /fullLipsync needs a persona/],
-    ['an unknown faceless material', { ...baseInput(), facelessMaterial: 'video' }, /facelessMaterial must be one of/],
+    ['images with full lip-sync', { ...baseInput(), personaId: 'p1', fullLipsync: true }, /not used with fullLipsync/],
     ['a timeout above the cap', { ...baseInput(), timeoutMinutes: 61 }, /timeoutMinutes must be an integer from 1 to 60/],
   ];
   for (const [name, raw, pattern] of rejects) {
@@ -138,16 +141,16 @@ describe('buildGenerateBody', () => {
 
 describe('buildGenerateBody look options', () => {
   it('sends a persona video with full lip-sync and no faceless flag', () => {
-    const body = buildGenerateBody(parseInput({ ...baseInput(), voiceId: undefined, personaId: 'p1', fullLipsync: true }));
+    const body = buildGenerateBody(parseInput({ ...baseInput(), voiceId: undefined, personaId: 'p1', fullLipsync: true, images: undefined }));
     assert.equal(body.personaId, 'p1');
     assert.equal(body.options.fullLipsync, true);
     assert.equal('faceless' in body.options, false);
     assert.equal('voiceId' in body.options, false);
   });
 
-  it('sends the faceless material when chosen', () => {
-    const body = buildGenerateBody(parseInput({ ...baseInput(), facelessMaterial: 'svg' }));
-    assert.equal(body.options.facelessMaterial, 'svg');
+  it('sends no material: images is the only material', () => {
+    const body = buildGenerateBody(parseInput(baseInput()));
+    assert.equal('facelessMaterial' in body.options, false);
   });
 });
 
@@ -393,16 +396,8 @@ describe('Actor definition files', () => {
     assert.ok(fallback.includes(`DEFAULT_VOICE_FEMALE = '${schema.properties.voiceId.prefill}'`));
   });
 
-  it('documents every faceless material the code accepts', () => {
-    assert.deepEqual(schema.properties.facelessMaterial.enum, FACELESS_MATERIALS);
-  });
-
-  // The Actor posts facelessMaterial to generate-and-schedule, which accepts
-  // exactly the web's FACELESS_MATERIALS.
-  it('accepts the same faceless materials as the web route', () => {
-    const web = readFileSync(new URL('../../../apps/web/lib/generation/faceless-materials.ts', import.meta.url), 'utf8');
-    const list = FACELESS_MATERIALS.map((material) => `'${material}'`).join(', ');
-    assert.ok(web.includes(`export const FACELESS_MATERIALS = [${list}] as const;`));
+  it('has no faceless material input: images is the only material', () => {
+    assert.equal('facelessMaterial' in schema.properties, false);
   });
 
   it('documents every provider and mode the code accepts', () => {
@@ -435,14 +430,11 @@ describe('images material', () => {
   const imagesInput = (images, body = 'Short videos keep attention.\n\nThey show a face early.') => ({
     ...baseInput(),
     body,
-    facelessMaterial: 'images',
     images,
   });
-  const urls = (count) => Array.from({ length: count }, (_, index) => `https://e.com/${index}.jpg`);
 
   it('splits the body into paragraphs and puts one image on each segment, in order', () => {
     const body = buildGenerateBody(parseInput(imagesInput(urls(4))));
-    assert.equal(body.options.facelessMaterial, 'images');
     assert.deepEqual(body.options.segments, [
       { kind: 'hook', text: 'Stop scrolling.', media: [{ url: 'https://e.com/0.jpg' }] },
       { kind: 'body', text: 'Short videos keep attention.', media: [{ url: 'https://e.com/1.jpg' }] },
@@ -451,16 +443,15 @@ describe('images material', () => {
     ]);
   });
 
-  it('keeps the body as one segment without images', () => {
-    const body = buildGenerateBody(parseInput({ ...baseInput(), body: 'One.\n\nTwo.' }));
+  it('keeps the body as one segment without images for full lip sync', () => {
+    const body = buildGenerateBody(parseInput({ ...baseInput(), personaId: 'p1', fullLipsync: true, images: undefined, body: 'One.\n\nTwo.' }));
     assert.deepEqual(body.options.segments.map((s) => s.kind), ['hook', 'body', 'cta']);
     assert.equal(body.options.segments.some((s) => 'media' in s), false);
   });
 
   const rejects = [
-    ['images without the images material', { ...baseInput(), images: urls(3) }, /only be used with facelessMaterial "images"/],
-    ['the images material without images', { ...baseInput(), facelessMaterial: 'images' }, /needs images/],
-    ['an empty image list', imagesInput([]), /needs images/],
+    ['no images without full lip-sync', { ...baseInput(), images: undefined }, /images are required/],
+    ['an empty image list', imagesInput([]), /images are required/],
     ['too few images for the segments', imagesInput(urls(3)), /between 4 and 4 URLs/],
     ['too many images for the segments', imagesInput(urls(5)), /between 4 and 4 URLs/],
     [
@@ -470,7 +461,6 @@ describe('images material', () => {
         hook: `${Array(25).fill('hook').join(' ')}.`,
         body: Array.from({ length: 6 }, (_, i) => Array(25).fill(`body${i}`).join(' ')).join('\n\n'),
         cta: Array(20).fill('cta').join(' '),
-        facelessMaterial: 'images',
         images: urls(31),
       },
       /merge body paragraphs/,
@@ -489,27 +479,30 @@ describe('images material', () => {
     assert.equal(buildGenerateBody(input).options.segments.length, 12);
   });
 
-  it('sends the material to validate-script so a missing image costs nothing', async () => {
+  it('sends fullLipsync to validate-script so a missing image costs nothing', async () => {
     const { promise, calls } = runWith(
       {
-        'POST /api/videos/validate-script': jsonResponse(400, { success: false, error: 'the images material needs media on every segment' }),
+        'POST /api/videos/validate-script': jsonResponse(400, { success: false, error: 'images need media on every segment' }),
       },
       imagesInput(urls(4)),
     );
     await assert.rejects(promise);
     assert.equal(calls.length, 1);
     const sent = JSON.parse(calls[0].init.body);
-    assert.equal(sent.facelessMaterial, 'images');
+    assert.equal(sent.fullLipsync, false);
+    assert.equal('facelessMaterial' in sent, false);
     assert.equal(sent.segments.length, 4);
   });
 
-  it('does not add a material to validate-script when none is chosen', async () => {
+  it('sends fullLipsync false to validate-script for an images video', async () => {
     const { promise, calls } = runWith(
       { 'POST /api/videos/validate-script': jsonResponse(400, { success: false, error: 'Script too short.' }) },
       baseInput(),
     );
     await assert.rejects(promise);
-    assert.equal('facelessMaterial' in JSON.parse(calls[0].init.body), false);
+    const sent = JSON.parse(calls[0].init.body);
+    assert.equal(sent.fullLipsync, false);
+    assert.equal('facelessMaterial' in sent, false);
   });
 
   it('documents the images input in the input schema', () => {

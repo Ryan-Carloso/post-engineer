@@ -4,7 +4,6 @@
 // calls using the handlers in tools-single-video.ts.
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
-import { FACELESS_MATERIALS } from './limits.js';
 import { GeneratePersonaVideoOptionsShape } from './schedule-shapes.js';
 import { RECIPE_SLUG_PATTERN } from './recipe-session.js';
 import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from './limits.js';
@@ -30,8 +29,7 @@ export const ScriptSegmentShape = {
     .array(z.object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), overlay: SegmentOverlayShape.optional() }).strict())
     .max(MAX_IMAGES_MODE_MEDIAS)
     .optional()
-    .describe('Photos for this segment, as a list. Each item is exactly one of mediaId (from upload_media) or url (a public image URL). With "images": one image per ~3s of speech (about 8 words), e.g. a 60s video needs about 20 images; split them across segments (at most 30). Other materials allow at most 6 images in total. Each photo is shown while its share of the segment is spoken: full frame on faceless videos and over b-roll, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional overlay on an item: an info card (title, subtitle, badge), e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
-  terms: z.array(z.string().min(1)).max(10).optional().describe('Stock terms for this segment, chosen by the agent. At most 10.'),
+    .describe('Photos for this segment, as a list. Each item is exactly one of mediaId (from upload_media) or url (a public image URL). One image per ~3s of speech (about 8 words), e.g. a 60s video needs about 20 images; split them across segments (at most 30). Full lip sync allows at most 6 images in total. Each photo is shown while its share of the segment is spoken: full frame on faceless videos, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional overlay on an item: an info card (title, subtitle, badge), e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
 };
 
 /** Paired A/B experiment link (issue #476): one variant of one pair. */
@@ -114,10 +112,10 @@ export const ValidateScriptShape = {
     .min(1, 'Provide at least one segment')
     .max(12, 'At most 12 segments per video')
     .describe('The complete script as segments to validate mechanically, without spending tokens.'),
-  facelessMaterial: z
-    .enum(FACELESS_MATERIALS)
+  fullLipsync: z
+    .boolean()
     .optional()
-    .describe('The material the video will use (as in generate_persona_video options). "images" checks that every segment carries a media list, about one image per ~3s of speech (a 60s video needs about 20 images, at most 30).'),
+    .describe('Set when the video will be full lip sync: media is optional there (at most 6 images in total). Omitted means images mode, which checks that every segment carries a media list, about one image per ~3s of speech (a 60s video needs about 20 images, at most 30).'),
 };
 
 export const ValidateScriptSchema = z.object(ValidateScriptShape);

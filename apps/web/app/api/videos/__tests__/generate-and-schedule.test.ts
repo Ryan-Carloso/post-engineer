@@ -418,17 +418,29 @@ function setup(cfg: DbConfig = {}): void {
   });
 }
 
+// Images mode needs media on every segment (one photo per ~3s): hook 24
+// words -> 3, body 42 -> 6, CTA 9 -> 2.
 const DEFAULT_SEGMENTS = [
   {
     kind: 'hook',
     text: 'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.',
+    media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })),
   },
   {
     kind: 'body',
     text: 'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.',
+    media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
   },
-  { kind: 'cta', text: 'Save this video before your next trip to Porto.' },
+  {
+    kind: 'cta',
+    text: 'Save this video before your next trip to Porto.',
+    media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })),
+  },
 ];
+
+// Full lip sync caps media at 6 photos for the whole video, so its requests
+// carry no media at all.
+const NO_MEDIA_SEGMENTS = DEFAULT_SEGMENTS.map(({ kind, text }) => ({ kind, text }));
 
 function baseBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const { options: optionsOverrides, ...rest } = overrides;
@@ -584,12 +596,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // scheduled_posts.faceless is where the per-post choice lives: the
       // engine's batch pipeline reads it when it refunds a failed slot. A
       // slot created without it would be re-priced as a faced video.
-      const res = await post(baseBody({ options: { faceless: true, facelessMaterial: 'svg' } }));
+      const res = await post(baseBody({ options: { faceless: true } }));
       expect(res.status).toBe(200);
       const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
       expect(slotRows).toHaveLength(1);
       for (const row of slotRows) {
-        expect(row).toMatchObject({ faceless: true, faceless_material: 'svg' });
+        expect(row).toMatchObject({ faceless: true, faceless_material: 'images' });
       }
     });
 
@@ -607,12 +619,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
       }
     });
 
-    it('stores faceless: false and the default broll material for a post with the persona face', async () => {
+    it('stores faceless: false and the default images material for a post with the persona face', async () => {
       const res = await post(baseBody());
       expect(res.status).toBe(200);
       const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
       for (const row of slotRows) {
-        expect(row).toMatchObject({ faceless: false, faceless_material: 'broll' });
+        expect(row).toMatchObject({ faceless: false, faceless_material: 'images' });
       }
     });
 
@@ -676,25 +688,18 @@ describe('POST /api/videos/generate-and-schedule', () => {
       });
     });
 
-    it('sends faceless_material svg to the engine for an illustration-only faceless post', async () => {
-      const res = await post(baseBody({ options: { faceless: true, facelessMaterial: 'svg' } }));
-      expect(res.status).toBe(200);
-      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      expect(payload.faceless_material).toBe('svg');
-    });
-
-    it('defaults a faceless post without a material choice to broll', async () => {
+    it('sends faceless_material images to the engine for a faceless post', async () => {
       const res = await post(baseBody({ options: { faceless: true } }));
       expect(res.status).toBe(200);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      expect(payload.faceless_material).toBe('broll');
+      expect(payload.faceless_material).toBe('images');
     });
 
-    it('defaults a with-face post without a material choice to broll', async () => {
+    it('defaults a with-face post to images', async () => {
       const res = await post(baseBody());
       expect(res.status).toBe(200);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      expect(payload.faceless_material).toBe('broll');
+      expect(payload.faceless_material).toBe('images');
     });
 
     it('sends lipsync: false and no persona quality for a faceless post', async () => {
@@ -839,7 +844,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         ),
       );
       try {
-        const res = await post(baseBody({ options: { fullLipsync: true } }));
+        const res = await post(baseBody({ options: { fullLipsync: true, segments: NO_MEDIA_SEGMENTS } }));
         expect(res.status).toBe(200);
         const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
         expect(payload.full_lipsync).toBe(true);
@@ -858,7 +863,9 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('rejects fullLipsync on faceless requests', async () => {
-      const res = await post(baseBody({ options: { faceless: true, fullLipsync: true } }));
+      // No media: full lip sync leaves it optional, so the request reaches
+      // the faceless/fullLipsync semantic check instead of failing on media.
+      const res = await post(baseBody({ options: { faceless: true, fullLipsync: true, segments: NO_MEDIA_SEGMENTS } }));
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.field).toBe('options.fullLipsync');
@@ -871,16 +878,11 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.field).toBe('options.imageId');
     });
 
-    it('accepts facelessMaterial svg on a with-face request and sends it with lipsync', async () => {
-      const res = await post(baseBody({ options: { facelessMaterial: 'svg' } }));
+    it('sends faceless_material images on a with-face request with lipsync', async () => {
+      const res = await post(baseBody());
       expect(res.status).toBe(200);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      expect(payload).toMatchObject({ faceless_material: 'svg', lipsync_enabled: true });
-    });
-
-    it('rejects an unknown facelessMaterial value', async () => {
-      const res = await post(baseBody({ options: { faceless: true, facelessMaterial: 'stock' } }));
-      expect(res.status).toBe(400);
+      expect(payload).toMatchObject({ faceless_material: 'images', lipsync_enabled: true });
     });
 
     it('rejects scriptPrompts with more than one entry (scripts come from segments only)', async () => {
@@ -896,9 +898,13 @@ describe('POST /api/videos/generate-and-schedule', () => {
       'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
     const segmentsCta = 'Save this video before your next trip to Porto.';
     const validSegments = [
-      { kind: 'hook', text: segmentsHook },
-      { kind: 'body', text: segmentsBody },
-      { kind: 'cta', text: segmentsCta },
+      { kind: 'hook', text: segmentsHook, media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
+      {
+        kind: 'body',
+        text: segmentsBody,
+        media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
+      },
+      { kind: 'cta', text: segmentsCta, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
     ];
 
     it('rejects invalid segments before any charge', async () => {
@@ -2926,9 +2932,13 @@ describe('segments-only contract (Phase 4)', () => {
     'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
   const cta = 'Save this video before your next trip to Porto.';
   const segments = [
-    { kind: 'hook', text: hook },
-    { kind: 'body', text: bodyText },
-    { kind: 'cta', text: cta },
+    { kind: 'hook', text: hook, media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
+    {
+      kind: 'body',
+      text: bodyText,
+      media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
+    },
+    { kind: 'cta', text: cta, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
   ];
   function singleBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     const base: Record<string, unknown> = {
@@ -3022,7 +3032,7 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
 
   it('rejects a 61s full-mode narration with 400 and charges nothing', async () => {
     stubPreflight(61);
-    const res = await post(baseBody({ options: { fullLipsync: true } }));
+    const res = await post(baseBody({ options: { fullLipsync: true, segments: NO_MEDIA_SEGMENTS } }));
     const json = await res.json();
     expect(res.status).toBe(400);
     expect(String(json.field)).toContain('options.fullLipsync');
@@ -3036,7 +3046,7 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
 
   it('charges and dispatches a full-mode narration at exactly 60s', async () => {
     stubPreflight(60);
-    const res = await post(baseBody({ options: { fullLipsync: true } }));
+    const res = await post(baseBody({ options: { fullLipsync: true, segments: NO_MEDIA_SEGMENTS } }));
     const json = await res.json();
     expect(res.status).toBe(200);
     expect(json.success).toBe(true);

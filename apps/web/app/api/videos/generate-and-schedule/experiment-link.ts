@@ -50,7 +50,7 @@ export interface PairFacts {
   fullLipsync: boolean;
   segments: unknown;
   title: string;
-  /** null = column default (`broll`, migration 029). */
+  /** null = column default (`images`, migration 054). */
   facelessMaterial: string | null;
   voiceAudioUrl: string | null;
   videoAspect: string | null;
@@ -62,8 +62,8 @@ export interface PairFacts {
   ctaText: string | null;
 }
 
-/** scheduled_posts.faceless_material default (migration 029). */
-const DEFAULT_FACELESS_MATERIAL = 'broll';
+/** scheduled_posts.faceless_material default (migration 054). */
+const DEFAULT_FACELESS_MATERIAL = 'images';
 
 /** Scalar settings a pair must share, in check order, with their request field. */
 const SCALAR_SETTINGS: ReadonlyArray<{ field: string; label: string; read: (facts: PairFacts) => string | number | null }> = [
@@ -88,7 +88,6 @@ export function buildPairFacts(input: {
   title: string;
   segments: unknown;
   fullLipsync: boolean | undefined;
-  facelessMaterial: string | undefined;
   audioUrl: string | undefined;
 }): PairFacts {
   const { prep } = input;
@@ -101,7 +100,7 @@ export function buildPairFacts(input: {
     fullLipsync: input.fullLipsync === true,
     segments: input.segments,
     title: input.title,
-    facelessMaterial: input.facelessMaterial ?? null,
+    facelessMaterial: 'images',
     voiceAudioUrl: input.audioUrl ?? null,
     videoAspect: prep.videoAspect,
     videoLayout: prep.videoLayout,

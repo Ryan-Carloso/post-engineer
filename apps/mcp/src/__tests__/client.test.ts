@@ -719,6 +719,7 @@ describe('generate and schedule video client', () => {
       })
     );
     expect(lastRequestBody().segments).toEqual(segments);
+    expect(lastRequestBody().fullLipsync).toBe(false);
     expect(result).toEqual({ success: true });
   });
 

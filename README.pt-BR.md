@@ -101,7 +101,7 @@ cp apps/engine/config.example.toml apps/engine/config.toml
 |---|---|---|
 | `apps/web/.env` | App web + rotas de API | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (somente servidor), `TOKEN_ENCRYPTION_KEY` (gere com: `openssl rand -base64 32`), `MONEYPRINT_API_SECRET`, `MONEYPRINT_API_URL`, client ids/secrets de OAuth + redirect URIs, chaves do Stripe, `MCP_OAUTH_PRIVATE_KEY_PEM` |
 | `apps/engine/.env` | Runtime do motor | `MONEYPRINT_API_SECRET` (deve ser **idêntico** ao valor do web), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (para o agendador de preenchimento in-process), obrigatórios `R2_ACCOUNT_ID` + `R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY` (arquivo dos vídeos finais), opcionais `DISCORD_WEBHOOK_URL`, `POSTHOG_API_KEY` (rastreamento de erros, funil de analytics e traces de AI observability) |
-| `apps/engine/config.toml` | Configuração de comportamento do motor | Chaves de provedores de LLM/TTS/vídeos de banco (OpenAI-compatible, Pexels, Pixabay, …), `listen_port` (padrão `8080`) |
+| `apps/engine/config.toml` | Configuração de comportamento do motor | Chaves de provedores de LLM/TTS (OpenAI-compatible), `listen_port` (padrão `8080`) |
 
 O app falha rapidamente em caso de variáveis ausentes (sem fallbacks silenciosos)
 — veja `apps/web/.env.example` para a lista completa documentada.
@@ -230,7 +230,6 @@ lista completa de tools, dicas de timeout no OpenCode e desenvolvimento local).
 | App LinkedIn | Para publicar no LinkedIn | OAuth client id/secret | developer.linkedin.com |
 | Stripe | Para cobrança por tokens | Chaves secretas/públicas, price IDs, webhook secret | stripe.com |
 | Chave de provedor LLM **ou** Ollama | Para geração de roteiros | Chave OpenAI-compatible, ou rode Ollama localmente | Seu provedor / ollama.com |
-| Pexels / Pixabay / Coverr / TwelveLabs | Para vídeos de banco de imagens | Chaves de API | Portais de desenvolvedor respectivos |
 | `MONEYPRINT_API_SECRET` | **Sim** | Autenticação web ↔ motor | Gere você mesmo (`openssl rand -hex 32`) |
 | `TOKEN_ENCRYPTION_KEY` | **Sim** | Criptografa tokens OAuth em repouso | Gere você mesmo (`openssl rand -base64 32`) |
 | `MCP_OAUTH_PRIVATE_KEY_PEM` | Para OAuth do servidor MCP | Assina tokens MCP | Gere você mesmo (chave EC, veja acima) |

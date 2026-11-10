@@ -3,7 +3,6 @@
 // the route stays under the file-size ratchet.
 //---------------
 
-import type { FacelessMaterial } from '@/lib/generation/faceless-materials';
 import type { DistributedSlot } from '@/lib/schedule/slot-distribution';
 import type { ScriptSegment } from '@/lib/generation/script-segments';
 import type { ExperimentLink } from './experiment-link';
@@ -14,7 +13,6 @@ export interface SlotRowInput {
   scheduleId: string;
   userId: string;
   faceless: boolean;
-  facelessMaterial: FacelessMaterial | undefined;
   fullLipsync?: boolean;
   /** Requested BGM mood (issue #489); null means the engine default. */
   musicMood?: string;
@@ -34,7 +32,7 @@ export interface SlotRowInput {
 // the same row so the batch pipeline can forward it (migration 030), and
 // `title` is the slot label (migration 031). `fullLipsync` rides the same
 // row (migration 035) so a tick-dispatched or requeued slot keeps full
-// lip-sync instead of silently falling back to intro-only b-roll.
+// lip-sync instead of silently falling back to intro-only images.
 // `musicMood` rides the same row (migration 048) so a tick-dispatched or
 // requeued slot keeps the requested BGM mood instead of silently falling
 // back to the engine's default mood.
@@ -46,7 +44,7 @@ export function buildSlotRows(input: SlotRowInput) {
     status: 'pending',
     title: input.title,
     faceless: input.faceless,
-    faceless_material: input.facelessMaterial,
+    faceless_material: 'images',
     full_lipsync: input.fullLipsync ?? false,
     music_mood: input.musicMood ?? null,
     charged_tokens: input.chargedTokens,

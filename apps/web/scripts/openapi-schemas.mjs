@@ -45,7 +45,6 @@ export const componentSchemas = {
       kind: { type: 'string', enum: ['hook', 'body', 'cta'] },
       text: str,
       media: { type: 'array', maxItems: 30, items: { type: 'object', additionalProperties: false, properties: { mediaId: str, url: str } } },
-      terms: strArray,
     },
   },
 };
@@ -57,10 +56,9 @@ const segmentsBody = object(
       description: 'Hook first, body, CTA last. 60-200 words in total.',
       items: { $ref: '#/components/schemas/Segment' },
     },
-    facelessMaterial: {
-      type: 'string',
-      enum: ['broll', 'svg', 'images'],
-      description: "Optional. 'images' needs a media list on every segment: about one image per ~3s, at most 30.",
+    fullLipsync: {
+      type: 'boolean',
+      description: 'Optional. Media is optional when true (full lip sync); otherwise every segment needs a media list, about one image per ~3s, at most 30.',
     },
   },
   ['segments'],
@@ -97,11 +95,6 @@ const generateBody = object(
     ),
     options: object({
       faceless: { type: 'boolean' },
-      facelessMaterial: {
-        type: 'string',
-        enum: ['broll', 'svg', 'images'],
-        description: "'images' renders only the segment images: a media list on every segment, about one image per ~3s, at most 30.",
-      },
       fullLipsync: { type: 'boolean', description: 'Persona talks for the whole video, not only the hook. Not with faceless.' },
       audioUrl: str,
       imageId: str,

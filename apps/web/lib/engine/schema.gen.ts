@@ -646,7 +646,7 @@ export interface components {
             duration?: number;
             /**
              * Provider
-             * @default pexels
+             * @default local
              */
             provider?: string;
             /**
@@ -738,8 +738,6 @@ export interface components {
             kind: "hook" | "body" | "cta";
             /** Media */
             media?: components["schemas"]["SegmentMedia"][] | null;
-            /** Terms */
-            terms?: string[] | null;
             /** Text */
             text: string;
         };
@@ -942,10 +940,10 @@ export interface components {
             custom_position?: number;
             /**
              * Faceless Material
-             * @default broll
-             * @enum {string}
+             * @default images
+             * @constant
              */
-            faceless_material?: "broll" | "svg" | "images";
+            faceless_material?: "images";
             /**
              * Font Name
              * @default BeVietnamPro-Medium.ttf
@@ -968,11 +966,6 @@ export interface components {
              * @default true
              */
             lipsync_enabled?: boolean;
-            /**
-             * Match Materials To Script
-             * @default true
-             */
-            match_materials_to_script?: boolean;
             /** Music Mood */
             music_mood?: string | null;
             /**
@@ -1056,8 +1049,6 @@ export interface components {
             video_script?: string;
             /** Video Subject */
             video_subject: string;
-            /** Video Terms */
-            video_terms?: string | unknown[] | null;
             video_transition_mode?: components["schemas"]["VideoTransitionMode"] | null;
             /**
              * Voice Name

@@ -17,7 +17,6 @@ describe('buildSlotRows', () => {
       scheduleId: 'sched-1',
       userId: 'user-1',
       faceless: true,
-      facelessMaterial: 'svg',
       fullLipsync: true,
       musicMood: 'calm',
       chargedTokens: 1,
@@ -35,7 +34,7 @@ describe('buildSlotRows', () => {
       status: 'pending',
       title: 'Porto walks',
       faceless: true,
-      faceless_material: 'svg',
+      faceless_material: 'images',
       full_lipsync: true,
       music_mood: 'calm',
       charged_tokens: 1,
@@ -57,12 +56,11 @@ describe('buildSlotRows', () => {
       scheduleId: 'sched-1',
       userId: 'user-1',
       faceless: false,
-      facelessMaterial: undefined,
       chargedTokens: 2,
       segments: undefined,
     });
     expect(rows[0]?.segments).toBeNull();
-    expect(rows[0]?.faceless_material).toBeUndefined();
+    expect(rows[0]?.faceless_material).toBe('images');
     expect(rows[0]?.full_lipsync).toBe(false);
     expect(rows[0]?.music_mood).toBeNull();
   });
@@ -74,7 +72,6 @@ describe('buildSlotRows', () => {
       scheduleId: 'sched-1',
       userId: 'user-1',
       faceless: false,
-      facelessMaterial: undefined,
       chargedTokens: 2,
       segments: undefined,
       experiment: { experimentId: '7b0e6c1e-0000-4000-8000-000000000001', variantId: 'hook-aggressive', pair: 2 },
@@ -96,7 +93,6 @@ describe('buildSlotRows', () => {
       scheduleId: 'sched-1',
       userId: 'user-1',
       faceless: false,
-      facelessMaterial: undefined,
       chargedTokens: 0,
       segments: undefined,
     });

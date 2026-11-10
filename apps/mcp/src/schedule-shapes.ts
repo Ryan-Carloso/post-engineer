@@ -7,7 +7,7 @@
 import { z } from 'zod';
 
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
-import { FACELESS_MATERIALS, VIDEO_LAYOUTS } from './limits.js';
+import { VIDEO_LAYOUTS } from './limits.js';
 import { personaVoiceField } from './voice-filters.js';
 
 export const ListSchedulesShape = {};
@@ -100,14 +100,10 @@ function httpsUrlField(fieldName: string) {
 
 export const GeneratePersonaVideoOptionsShape = {
   faceless: z.boolean().optional().describe('Generate faceless (no face). With a persona this drops only the face — the persona voice and niche still apply. Without a persona it is REQUIRED.'),
-  facelessMaterial: z
-    .enum(FACELESS_MATERIALS)
-    .optional()
-    .describe('What fills the video, with or without a face: "broll" = real stock footage only, "svg" = drawn illustrations only, "images" = only the images you send on the segments (no stock, no drawings): every segment\'s media is a list, about one image per ~3s of speech (about 8 words; a 60s video needs about 20 images, split across segments, at most 30), each shown full frame with a slow zoom for its share of the segment. Use images you have the rights to. The materials never mix. Defaults to "broll".'),
   fullLipsync: z
     .boolean()
     .optional()
-    .describe('Render the whole video as the persona talking, with no b-roll stock footage: every narration window is lip-synced to the persona face. Requires a persona with a photo and lip-sync enabled, so it cannot be combined with faceless (there is no face to render). Narration over 60 seconds is rejected by the engine before any GPU spend. Full lip-sync costs 8 tokens per video at face quality ok and 15 tokens at very_good, instead of the hook-only 2 and 3 tokens.'),
+    .describe('Render the whole video as the persona talking: every narration window is lip-synced to the persona face. Requires a persona with a photo and lip-sync enabled, so it cannot be combined with faceless (there is no face to render). Narration over 60 seconds is rejected by the engine before any GPU spend. Full lip-sync costs 8 tokens per video at face quality ok and 15 tokens at very_good, instead of the hook-only 2 and 3 tokens.'),
   musicMood: z
     .string()
     .min(1)
@@ -122,7 +118,7 @@ export const GeneratePersonaVideoOptionsShape = {
   videoLayout: z
     .enum(VIDEO_LAYOUTS)
     .optional()
-    .describe('How the persona hook is composed with the video material (facelessMaterial: real clips, drawings or your images). Overrides the persona when one is given; a post without a persona defaults to "standard". Same render cost either way.'),
+    .describe('How the persona hook is composed with the video material (the agent images). Overrides the persona when one is given; a post without a persona defaults to "standard". Same render cost either way.'),
   paragraphNumber: z.number().int().min(1).max(10).optional().describe('Paragraph count (1-10). Overrides the persona when one is given.'),
   language: z
     .string()

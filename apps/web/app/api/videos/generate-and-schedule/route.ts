@@ -55,7 +55,6 @@ import {
   type JobPersona,
 } from '@/lib/generation/video-job-payload';
 import { recordGenerationStart, recordGenerationUpdate, startEngineVideoTask } from '@/lib/generation/video-generation';
-import { FACELESS_MATERIALS } from '@/lib/generation/faceless-materials';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
 import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { resolveIdempotency } from '@/lib/idempotency';
@@ -94,9 +93,8 @@ const PublishingSchema = z.object({
 const OptionsSchema = z
   .object({
     faceless: z.boolean().optional(),
-    facelessMaterial: z.enum(FACELESS_MATERIALS).optional(),
-    // Opt-in full lip-sync: the whole video is the persona talking, no
-    // b-roll. False (default) keeps intro-only lip-sync over stock; rejected with faceless (no face to render).
+    // Opt-in full lip-sync: the whole video is the persona talking. False
+    // (default) keeps intro-only lip-sync over the agent's images; rejected with faceless (no face to render).
     fullLipsync: z.boolean().optional(),
     // BGM mood (issue #489): a catalogued mood, or "none" for no music; omitted = engine default.
     musicMood: z.string().min(1).max(64).optional(),
@@ -473,7 +471,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // Idempotency anchor, resolved once: the experiment check below needs the
   // same schedule id step 7 uses to tell a replay from a duplicate.
   const idem = resolveIdempotency(userId, idempotencyKey, request);
-  const pairFacts = buildPairFacts({ providers, accountIds, pinterestBoardId, prep, title, segments: options?.segments, fullLipsync: validatedOptions.fullLipsync, facelessMaterial: validatedOptions.facelessMaterial, audioUrl: validatedOptions.audioUrl });
+  const pairFacts = buildPairFacts({ providers, accountIds, pinterestBoardId, prep, title, segments: options?.segments, fullLipsync: validatedOptions.fullLipsync, audioUrl: validatedOptions.audioUrl });
   if (experiment !== undefined) {
     const link = await checkExperimentLink(supabase, { link: experiment, userId, personaId, replayScheduleId: idem.scheduleId, facts: pairFacts });
     if (!link.ok && link.status === 500) return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
@@ -782,7 +780,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
         scheduleId: idem.scheduleId,
         userId,
         faceless: prep.faceless,
-        facelessMaterial: validatedOptions.facelessMaterial,
         fullLipsync: validatedOptions.fullLipsync,
         musicMood: validatedOptions.musicMood,
         chargedTokens: perVideoCost,
@@ -912,7 +909,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         // attached, and a faceless job carries no photo_url.
         lipsync: !prep.faceless,
         // The material choice rides the payload under its snake_case name on every post, face or not.
-        faceless_material: validatedOptions.facelessMaterial,
+        faceless_material: 'images',
         // Opt-in full lip-sync rides the same way; omitted when unset, existing posts keep intro-only.
         full_lipsync: validatedOptions.fullLipsync,
         music_mood: validatedOptions.musicMood,

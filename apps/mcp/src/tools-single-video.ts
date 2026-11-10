@@ -72,7 +72,7 @@ export async function handleValidateScript(
 ): Promise<McpToolResponse> {
   // Mechanical pre-check first: a rejected script never reaches the web
   // route and never debits tokens.
-  const result = validateSegments(args.segments, args.facelessMaterial);
+  const result = validateSegments(args.segments, args.fullLipsync === true);
   if (!result.ok) {
     return errorResponse(
       `Script validation failed: ${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`,
@@ -80,7 +80,7 @@ export async function handleValidateScript(
   }
   let payload: ValidatedScriptPayload | string | null;
   try {
-    payload = narrowValidateScriptPayload(await client.validateScript(args.segments, args.facelessMaterial));
+    payload = narrowValidateScriptPayload(await client.validateScript(args.segments, args.fullLipsync === true));
   } catch (error) {
     return errorResponse(`Error validating the script: ${sanitizeEngineError(getErrorMessage(error))}`);
   }
@@ -129,8 +129,8 @@ export async function generatePersonaVideoOutcome(
     }
     // Mechanical validation before the client call: a rejected script
     // never debits tokens and never reaches Modal.
-    const material = args.options?.facelessMaterial;
-    const result = validateSegments(args.segments, material);
+    const fullLipsync = args.options?.fullLipsync === true;
+    const result = validateSegments(args.segments, fullLipsync);
     if (!result.ok) {
       throw new Error(`${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`);
     }
@@ -144,7 +144,7 @@ export async function generatePersonaVideoOutcome(
     if (args.options?.fullLipsync === true && args.personaId === undefined) {
       throw new Error('options.fullLipsync requires a persona with a photo and lip-sync enabled.');
     }
-    const script = joinSegments(args.segments, material);
+    const script = joinSegments(args.segments, fullLipsync);
     // Pinterest needs exactly one board for the batch (a pin cannot exist
     // without one); the web route 400s without it, so fail fast here.
     if (args.providers.includes('pinterest') && (args.pinterestBoardId === undefined || args.pinterestBoardId.trim() === '')) {

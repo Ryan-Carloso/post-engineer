@@ -43,11 +43,6 @@ dependencies = [
     "python-dotenv>=1.0.0",
 ]
 
-[project.optional-dependencies]
-g4f = [
-    "g4f==0.5.2.2",
-]
-
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 
@@ -96,7 +91,6 @@ disable_error_code = [
 # green instead of going red on an unrelated dependency bump.
 [[tool.mypy.overrides]]
 module = [
-    "g4f.*",
     "moviepy.*",
     "pydub.*",
     "faster_whisper.*",

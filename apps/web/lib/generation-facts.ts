@@ -42,9 +42,9 @@ export function buildGenerationFacts(
   // report object-literal property lines, so this keeps every fact visible
   // to the coverage gate.
   const faceless = row.faceless === true;
-  // Only an exact 'svg' or 'images' counts — mirrors the engine's
-  // slot_material rule, so a row predating migration 029 reads as the stock
-  // it rendered with.
+  // Only an exact 'images' counts — mirrors the engine's slot_material
+  // rule; every stored row reads as the images material since migration
+  // 054 backfilled them.
   const material = toFacelessMaterial(row.faceless_material);
   const language = scheduleRow.post_language ?? null;
   const voiceId = scheduleRow.post_voice_id ?? null;
