@@ -90,8 +90,9 @@ function DayCellPostTotal({
   );
 }
 
-// Legend swatch for today: empty gold ring (the grid uses a dot under the numeral).
-export const TODAY_LEGEND_CLASS = 'size-4 shrink-0 rounded-full ring-2 ring-warning bg-transparent';
+// Today mark: gold dot under the date numeral (legend uses the same dot).
+export const TODAY_MARK_DOT_CLASS =
+  'size-2.5 max-xl:size-3 shrink-0 rounded-full bg-warning ring-1 ring-warning/50';
 
 // The DayButton component is passed to react-day-picker once; the per-day
 // slots reach it through context so a data refresh never remounts the grid.
@@ -157,9 +158,9 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       >
         <span className="leading-none">{children}</span>
         {isToday ? (
-          <span aria-hidden data-today-mark="true" className="size-1.5 shrink-0 rounded-full bg-warning" />
+          <span aria-hidden data-today-mark="true" className={TODAY_MARK_DOT_CLASS} />
         ) : (
-          <span aria-hidden className="size-1.5 shrink-0" />
+          <span aria-hidden className="size-2.5 max-xl:size-3 shrink-0" />
         )}
       </span>
       {slots.length > 0 && (

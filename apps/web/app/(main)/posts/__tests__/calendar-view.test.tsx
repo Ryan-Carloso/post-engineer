@@ -294,6 +294,9 @@ describe('CalendarView', () => {
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-primary');
     expect(selectedSwatch).toBeEmptyDOMElement();
+    const todaySwatch = legend.querySelector('[data-legend-today-mark]');
+    expect(todaySwatch?.className.split(/\s+/)).toContain('bg-warning');
+    expect(todaySwatch?.className.split(/\s+/)).not.toContain('ring-2');
     expect(legend.querySelector('[data-filter-hint]')).toBeNull();
   });
 

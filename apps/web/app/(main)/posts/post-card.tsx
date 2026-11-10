@@ -142,22 +142,23 @@ const CardHeader = ({
   showChevron?: boolean;
   openLabel?: string;
 }) => (
-  <div data-card-header className={cn('relative flex w-full items-center gap-2', showChevron && openLabel !== undefined && 'pr-[7.5rem] max-xl:pr-[8.5rem]')}>
-    {badge}
-    <p className="min-w-0 flex-1 text-right text-[13px] text-ink-soft tabular-nums">
-      <span data-card-when className="inline-flex max-w-full flex-col items-end gap-0.5 leading-tight">
-        {whenHint !== undefined && (
-          <span data-card-when-kind className="text-[10px] font-medium text-muted-foreground">
-            {whenHint}
-          </span>
-        )}
-        <span className="truncate whitespace-nowrap">{when}</span>
-      </span>
-    </p>
-    {showChevron && openLabel !== undefined && (
+  <div data-card-header className="flex w-full items-start gap-2">
+    <div className="shrink-0">{badge}</div>
+    <div className="ml-auto flex min-w-0 flex-col items-end gap-1.5">
+      <p className="w-full text-right text-[13px] text-ink-soft tabular-nums">
+        <span data-card-when className="inline-flex max-w-full flex-col items-end gap-0.5 leading-tight">
+          {whenHint !== undefined && (
+            <span data-card-when-kind className="text-[10px] font-medium text-muted-foreground">
+              {whenHint}
+            </span>
+          )}
+          <span className="whitespace-nowrap">{when}</span>
+        </span>
+      </p>
+      {showChevron && openLabel !== undefined && (
       <span
         data-card-open
-        className="absolute top-1/2 right-0 flex min-h-9 -translate-y-1/2 items-center gap-0.5 rounded-lg border border-primary/30 bg-info-soft px-3 py-2 text-sm font-semibold text-primary shadow-[0_1px_0_rgba(13,43,69,0.06)]"
+        className="flex min-h-9 shrink-0 items-center gap-0.5 rounded-lg border border-primary/30 bg-info-soft px-3 py-2 text-sm font-semibold text-primary shadow-[0_1px_0_rgba(13,43,69,0.06)]"
       >
         <span className="whitespace-nowrap">{openLabel}</span>
         <ChevronRight
@@ -166,7 +167,8 @@ const CardHeader = ({
           aria-hidden
         />
       </span>
-    )}
+      )}
+    </div>
   </div>
 );
 
