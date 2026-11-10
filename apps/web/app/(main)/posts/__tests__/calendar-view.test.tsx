@@ -122,7 +122,7 @@ describe('CalendarView', () => {
     expect(dayButton(/June 20, 2030/).querySelector('[data-today-bar]')).toBeNull();
   });
 
-  it('insets the count pill inside the selected-day outline', () => {
+  it('outlines only the numeral and leaves the count pill outside the ring', () => {
     setup({
       selectedKey: '2030-06-05',
       slotsByDay: new Map([
@@ -133,9 +133,10 @@ describe('CalendarView', () => {
       ]),
     });
     const selected = dayButton(/June 5, 2030/);
-    expect(selected.className).toMatch(/data-\[selected-single=true\]:pb-2\.5/);
-    const pillWrapper = selected.querySelector('[data-day-post-total]')?.parentElement;
-    expect(pillWrapper?.className.split(/\s+/)).toContain('mb-0.5');
+    const numeral = selected.querySelector('[data-day-numeral]');
+    expect(numeral?.className.split(/\s+/)).toContain('outline-ring');
+    expect(selected.className.split(/\s+/)).not.toContain('data-[selected-single=true]:outline-primary');
+    expect(numeral?.contains(selected.querySelector('[data-day-post-total]'))).toBe(false);
   });
 
   it('keeps the today bar and post total as separate marks when today is selected', () => {
@@ -146,7 +147,7 @@ describe('CalendarView', () => {
     const today = dayButton(/June 15, 2030/);
     expect(today.querySelector('[data-today-bar="true"]')).not.toBeNull();
     expect(today.querySelector('[data-day-post-total]')).toHaveTextContent('1');
-    expect(today.className.split(/\s+/)).toContain('data-[selected-single=true]:outline-primary');
+    expect(today.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('outline-ring');
   });
 
   it('lays the legend out in one wrapping row inside the calendar card', () => {
@@ -235,25 +236,24 @@ describe('CalendarView', () => {
       ['2030-06-05', [{ status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' }]],
     ]);
     setup({ slotsByDay, selectedKey: '2030-06-05' });
-    const classes = dayButton(/June 5, 2030/).className.split(/\s+/);
-    expect(classes).toEqual(
-      expect.arrayContaining([
-        'data-[selected-single=true]:bg-transparent',
-        'data-[selected-single=true]:outline-primary',
-        'data-[selected-single=true]:text-primary',
-      ]),
+    const cell = dayButton(/June 5, 2030/);
+    expect(cell.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('outline-ring');
+    expect(cell.className.split(/\s+/)).toEqual(
+      expect.arrayContaining(['data-[selected-single=true]:bg-transparent', 'data-[selected-single=true]:text-primary']),
     );
-    expect(classes).not.toContain('bg-destructive-soft');
-    expect(classes).not.toContain('data-[selected-single=true]:bg-primary');
-    expect(dayButton(/June 5, 2030/).querySelector('[data-day-post-total]')).toHaveTextContent('1');
+    expect(cell.className.split(/\s+/)).not.toContain('data-[selected-single=true]:outline-primary');
+    expect(cell.className.split(/\s+/)).not.toContain('bg-destructive-soft');
+    expect(cell.className.split(/\s+/)).not.toContain('data-[selected-single=true]:bg-primary');
+    expect(cell.querySelector('[data-day-post-total]')).toHaveTextContent('1');
   });
 
   it('draws a selected day as the same outline, not a navy or blue block', () => {
     setup({ selectedKey: '2030-06-20' });
-    const classes = dayButton(/June 20, 2030/).className.split(/\s+/);
-    expect(classes).toEqual(
-      expect.arrayContaining(['data-[selected-single=true]:bg-transparent', 'data-[selected-single=true]:outline-primary']),
-    );
+    const cell = dayButton(/June 20, 2030/);
+    expect(cell.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('outline-ring');
+    const classes = cell.className.split(/\s+/);
+    expect(classes).toEqual(expect.arrayContaining(['data-[selected-single=true]:bg-transparent']));
+    expect(classes).not.toContain('data-[selected-single=true]:outline-primary');
     expect(classes).not.toContain('data-[selected-single=true]:bg-info-soft');
     expect(classes).not.toContain('data-[selected-single=true]:bg-primary');
     expect(classes).not.toContain('data-[selected-single=true]:text-primary-foreground');
@@ -363,7 +363,7 @@ describe('CalendarView', () => {
     expect(document.querySelector('[data-calendar-grid-outline]')).toBeNull();
     expect(document.querySelector('[data-calendar-unavailable-frame]')).not.toBeNull();
     expect(screen.queryByText('posts.calendarLegendPostCount')).not.toBeInTheDocument();
-    expect(screen.getByText(/June 2030/)).toBeInTheDocument();
+    expect(screen.queryByText(/June 2030/)).not.toBeInTheDocument();
     expect(document.querySelector('[data-calendar-error-nav]')).toBeNull();
     expect(document.querySelector('[data-calendar-error-weekdays]')).toBeNull();
     expect(document.querySelector('[data-calendar-load-error]')?.closest('[data-calendar-card]')).not.toBeNull();

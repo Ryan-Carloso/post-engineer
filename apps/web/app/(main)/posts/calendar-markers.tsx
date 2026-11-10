@@ -72,21 +72,22 @@ export const LEGEND_TODAY_BAR_SWATCH_CLASS =
 
 // Legend is a span, not a button: globals set button outline-color to --ring (sky blue).
 // outline-primary on the swatch alone reads navy; outline-ring matches the live cell stroke.
+export const SELECTED_DAY_NUMERAL_OUTLINE_CLASS =
+  'rounded-md outline outline-2 -outline-offset-[4px] outline-ring';
+
 export const SELECTED_DAY_LEGEND_SWATCH_CLASS = cn(
   'pointer-events-none inline-flex aspect-[4/5] h-[2.35rem] w-9 shrink-0 items-center justify-center rounded-md border-0 bg-info-soft/55 shadow-none',
-  'outline outline-2 -outline-offset-[4px] outline-ring',
+  SELECTED_DAY_NUMERAL_OUTLINE_CLASS,
 );
 
 function DayCellPostTotal({
   total,
   groups,
   counts,
-  selected = false,
 }: {
   total: number;
   groups: CalendarGroup[];
   counts: Record<CalendarGroup, number>;
-  selected?: boolean;
 }) {
   const { t } = useI18n();
   const breakdown = groups.map((group) => `${t(CALENDAR_GROUP_KEY[group])}: ${counts[group]}`).join(', ');
@@ -97,7 +98,6 @@ function DayCellPostTotal({
       className={cn(
         DAY_POST_TOTAL_CLASS,
         'max-xl:px-2 px-1.5',
-        selected && 'border-primary/50 bg-primary/15',
       )}
     >
       {total}
@@ -119,8 +119,8 @@ export const DayCellContext = createContext<DayContextValue>({ slotsByDay: new M
 // PostsDayButton — one day cell. One post total (per-status breakdown is
 // only in the accessible name and on the day's cards). No persona names in
 // the cell (the list below names them). Today is a gold bar under the
-// numeral, then the count pill. Selection uses a visible outline;
-// counts stay inset so they do not sit on the ring.
+// numeral, then the count pill. Selection outlines only the numeral;
+// the count pill stays below it like unselected days.
 //---------------
 export function PostsDayButton({ children, day, modifiers, className, ...props }: ComponentProps<typeof DayButton>) {
   const { slotsByDay } = useContext(DayCellContext);
@@ -151,7 +151,7 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
         isOutside &&
           'text-muted-foreground hover:bg-transparent hover:text-muted-foreground active:bg-transparent data-[selected-single=true]:text-muted-foreground',
         !isOutside && 'hover:bg-sunken hover:text-primary',
-        'data-[selected-single=true]:rounded-md data-[selected-single=true]:bg-transparent data-[selected-single=true]:outline-2 data-[selected-single=true]:-outline-offset-[4px] data-[selected-single=true]:outline-primary data-[selected-single=true]:hover:bg-transparent data-[selected-single=true]:px-0.5 data-[selected-single=true]:pb-2.5 data-[selected-single=true]:pt-1',
+        'data-[selected-single=true]:bg-transparent data-[selected-single=true]:hover:bg-transparent',
         !isOutside && 'data-[selected-single=true]:text-primary',
         'focus-visible:ring-[3px] focus-visible:ring-ring/50',
         'group-data-[focused=true]/day:bg-transparent group-data-[focused=true]/day:ring-0 group-data-[focused=true]/day:shadow-none',
@@ -175,6 +175,7 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
             'inline-flex min-h-6 shrink-0 items-center justify-center leading-none',
             isOutside ? 'font-normal text-muted-foreground opacity-50' : 'font-semibold text-primary',
             isToday && isOutside && 'opacity-100',
+            selectedSingle && !isOutside && SELECTED_DAY_NUMERAL_OUTLINE_CLASS,
           )}
         >
           {children}
@@ -185,7 +186,7 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
             aria-hidden
             className={cn('flex shrink-0 items-center justify-center', selectedSingle && 'mb-0.5')}
           >
-            <DayCellPostTotal total={slots.length} groups={groups} counts={counts} selected={selectedSingle} />
+            <DayCellPostTotal total={slots.length} groups={groups} counts={counts} />
           </span>
         )}
       </span>

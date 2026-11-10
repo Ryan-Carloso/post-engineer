@@ -854,7 +854,10 @@ describe('PostsPage calendar view', () => {
     expect(alert).toHaveTextContent('posts.loadErrorCalendar');
     expect(within(alert).queryByText('posts.loadErrorSideQuiet')).not.toBeInTheDocument();
     expect(document.querySelector('[data-day-unavailable-note]')).toBeNull();
-    expect(document.querySelector('[data-calendar-unavailable-side-note]')).not.toBeNull();
+    const sideNoteLoad = document.querySelector('[data-calendar-unavailable-side-note]');
+    expect(sideNoteLoad).not.toBeNull();
+    expect(sideNoteLoad?.className).toMatch(/border/);
+    expect(sideNoteLoad?.className).toMatch(/bg-card/);
     expect(screen.getByText('posts.subtitleLoadError')).toBeInTheDocument();
     expect(screen.queryByText('posts.subtitle')).not.toBeInTheDocument();
     expect(screen.queryByTestId('load-error-side-panel')).not.toBeInTheDocument();
@@ -994,7 +997,10 @@ describe('PostsPage calendar view', () => {
     expect(screen.queryByText('posts.calendarLegendPostCount')).not.toBeInTheDocument();
     expect(screen.queryByText('posts.calendarLegendSelected')).not.toBeInTheDocument();
     expect(screen.getByText('posts.loadErrorCalendarSideQuiet')).toBeInTheDocument();
-    expect(document.querySelector('[data-calendar-unavailable-side-note]')).not.toBeNull();
+    const sideNote = document.querySelector('[data-calendar-unavailable-side-note]');
+    expect(sideNote).not.toBeNull();
+    expect(sideNote?.className).toMatch(/border/);
+    expect(sideNote?.className).toMatch(/bg-card/);
     expect(screen.queryByText('posts.calendarNotLoaded')).not.toBeInTheDocument();
     expect(document.querySelector('[data-calendar-grid-outline]')).not.toBeInTheDocument();
     expect(screen.queryByRole('grid')).not.toBeInTheDocument();

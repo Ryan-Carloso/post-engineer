@@ -192,12 +192,12 @@ export default function PostsPage() {
               />
             </div>
             {isError && loadErrorKey === 'posts.loadErrorCalendar' ? (
-              <p
+              <div
                 data-calendar-unavailable-side-note
-                className="order-2 mt-4 min-w-0 text-sm text-muted-foreground xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4"
+                className="order-2 mt-4 min-w-0 rounded-xl border border-dashed border-line bg-card px-4 py-6 text-center text-sm text-muted-foreground xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4 xl:self-start"
               >
                 {t('posts.loadErrorCalendarSideQuiet')}
-              </p>
+              </div>
             ) : isError && loadErrorKey !== 'posts.loadErrorCalendar' ? (
               <section
                 data-day-unavailable-note

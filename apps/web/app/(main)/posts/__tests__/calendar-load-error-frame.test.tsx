@@ -17,8 +17,7 @@ describe('CalendarUnavailableFrame', () => {
         <p role="alert">Load failed</p>
       </CalendarUnavailableFrame>,
     );
-    const title = screen.getByText(/June 2030/);
-    expect(title.textContent).not.toMatch(/\bof\b/i);
+    expect(screen.queryByText(/June 2030/)).not.toBeInTheDocument();
     expect(document.querySelector('[data-calendar-unavailable-frame] ul')).toBeNull();
     expect(document.querySelector('[data-calendar-error-nav]')).toBeNull();
     expect(document.querySelector('[data-calendar-error-weekdays]')).toBeNull();
