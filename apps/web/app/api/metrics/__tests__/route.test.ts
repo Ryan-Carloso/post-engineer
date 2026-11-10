@@ -170,9 +170,13 @@ describe('GET /api/metrics', () => {
       {
         scheduled_posts: {
           data: [
-            { id: 'post-own', schedule_id: 'sched-own', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube] },
-            { id: 'post-other', schedule_id: 'sched-other', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube] },
-            { id: 'post-faceless', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube] },
+            { id: 'post-own', schedule_id: 'sched-own', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], faceless: false },
+            { id: 'post-other', schedule_id: 'sched-other', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], faceless: false },
+            // Schedule gone and not faceless: an orphaned persona post.
+            // Its post_metrics rows still carry the persona, so the rows
+            // query hides it — coverage must hide it too.
+            { id: 'post-orphan', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], faceless: false },
+            { id: 'post-faceless', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], faceless: true },
           ],
           error: null,
         },

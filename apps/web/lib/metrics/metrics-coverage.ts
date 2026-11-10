@@ -30,6 +30,11 @@ export interface CoveragePostInput {
   personaId: string | null;
   publishedAt: string;
   outcomes: unknown[];
+  // True only for a faceless post: a persona post whose schedule was
+  // deleted also reads personaId null, but it is NOT faceless — its
+  // post_metrics rows still carry the persona, so the scope guard below
+  // must hide it from scoped callers instead of showing it as faceless.
+  faceless: boolean;
 }
 
 export interface CoverageRowInput {
@@ -95,10 +100,17 @@ export function computeCoverage(input: {
     } else if (query.personaId !== null && post.personaId !== query.personaId) {
       continue;
     }
-    // A scoped caller only sees its personas' items; a persona-less
-    // (faceless) post belongs to no scope, so it stays visible.
-    if (scope !== null && post.personaId !== null && !scope.includes(post.personaId)) {
-      continue;
+    // A scoped caller only sees its personas' items. A persona-less post
+    // is visible only when it is really faceless: a deleted schedule
+    // leaves the persona unknown, and that post may belong to a persona
+    // outside the scope (its post_metrics rows still carry the persona,
+    // so the rows query hides it) — it stays hidden from scoped callers.
+    if (scope !== null) {
+      if (post.personaId === null) {
+        if (post.faceless !== true) continue;
+      } else if (!scope.includes(post.personaId)) {
+        continue;
+      }
     }
     const angleKnown = postsWithRows.has(post.id);
     const angle = angleKnown ? (postAngles.get(post.id) ?? null) : null;
@@ -190,7 +202,7 @@ export async function fetchCoverage(
   const cutoff = new Date(now.getTime() - METRICS_WINDOW_LOOKBACK_HOURS * 60 * 60 * 1000);
   const { data: postData, error: postError } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, user_id, status, published_at, publish_outcomes')
+    .select('id, schedule_id, user_id, status, published_at, publish_outcomes, faceless')
     .eq('user_id', userId)
     .eq('status', 'published')
     .gte('published_at', cutoff.toISOString())
@@ -238,11 +250,13 @@ export async function fetchCoverage(
     posts.push({
       id: record.id,
       // No FK from scheduled_posts.schedule_id to schedules: a deleted
-      // schedule leaves the persona unknown, which the null filter
-      // treats as "no persona" (same as the rows query).
+      // schedule leaves the persona unknown. Whether that reads as
+      // "faceless" is decided by the post's own faceless flag (see the
+      // scope guard in computeCoverage), not by the missing schedule.
       personaId: typeof record.schedule_id === 'string' ? (personaBySchedule.get(record.schedule_id) ?? null) : null,
       publishedAt: record.published_at,
       outcomes: Array.isArray(record.publish_outcomes) ? record.publish_outcomes : [],
+      faceless: record.faceless === true,
     });
     postIds.push(record.id);
   }
