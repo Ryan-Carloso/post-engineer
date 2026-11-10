@@ -128,6 +128,7 @@ describe('PostCard status pill — the calendar vocabulary', () => {
     expect(screen.getByText('45%')).toBeInTheDocument();
     const bar = screen.getByRole('progressbar');
     expect(bar).toHaveAttribute('aria-valuenow', '45');
+    expect(bar.className.split(/\s+/)).toContain('flex-1');
     expect(bar.querySelector('div')?.className.split(/\s+/)).toContain('bg-info');
   });
 });
@@ -137,6 +138,17 @@ describe('PostCard header and media', () => {
     renderCard({ ...FAILED_SLOT, status: 'awaiting', slotAt: '2030-06-01T10:00:00.000Z' });
 
     expect(screen.getByText(/2030 · \d{1,2}:\d{2}/)).toBeInTheDocument();
+  });
+
+  it('labels scheduled vs published time in the day list', () => {
+    renderCard(
+      { ...FAILED_SLOT, status: 'published', publishedAt: '2030-06-01T10:05:00.000Z', slotAt: '2030-06-01T10:00:00.000Z' },
+      true,
+    );
+    expect(screen.getByText('posts.cardTimePublished')).toBeInTheDocument();
+
+    renderCard({ ...FAILED_SLOT, status: 'generating', slotAt: '2030-06-01T10:00:00.000Z' }, true);
+    expect(screen.getByText('posts.cardTimeScheduled')).toBeInTheDocument();
   });
 
   it('shows only the time when the day list already names the date', () => {

@@ -18,20 +18,20 @@ export function CalendarLegend({
   return (
     <ul
       className={cn(
-        'grid grid-cols-1 gap-y-1.5 text-xs text-muted-text max-xl:grid-cols-1 xl:grid-cols-none xl:flex xl:flex-wrap xl:gap-x-4 xl:gap-y-1',
+        'flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-text xl:gap-x-4',
         className,
       )}
     >
-      <li className="flex min-w-0 items-center gap-1.5 max-xl:whitespace-normal xl:whitespace-nowrap">
+      <li className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
         <span aria-hidden data-legend-post-total className={LEGEND_POST_TOTAL_SWATCH_CLASS} />
         {t('posts.calendarLegendPostCount')}
       </li>
-      <li className="flex min-w-0 items-center gap-1.5 max-xl:whitespace-normal xl:whitespace-nowrap">
+      <li className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
         <span aria-hidden className={TODAY_LEGEND_CLASS} />
         {t('posts.calendarToday')}
       </li>
       {showSelection && (
-        <li className="flex min-w-0 items-center gap-1.5 max-xl:whitespace-normal xl:whitespace-nowrap">
+        <li className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
           <span aria-hidden data-legend-selected-day className={SELECTED_DAY_LEGEND_SWATCH_CLASS} />
           {t('posts.calendarLegendSelected')}
         </li>

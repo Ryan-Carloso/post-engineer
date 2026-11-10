@@ -132,25 +132,32 @@ const StatusBadge = ({ status, label, style }: { status: string; label: string; 
 const CardHeader = ({
   badge,
   when,
+  whenHint,
   showChevron = true,
   openLabel,
 }: {
   badge: ReactNode;
   when: string;
+  whenHint?: string;
   showChevron?: boolean;
   openLabel?: string;
 }) => (
-  <div data-card-header className={cn('relative flex w-full items-center gap-2', showChevron && openLabel !== undefined && 'pr-[4.5rem] max-xl:pr-[5.25rem]')}>
+  <div data-card-header className={cn('relative flex w-full items-center gap-2', showChevron && openLabel !== undefined && 'pr-[7.5rem] max-xl:pr-[8.5rem]')}>
     {badge}
-    <p className="min-w-0 flex-1 text-right text-[13px] whitespace-nowrap text-ink-soft tabular-nums">
-      <span data-card-when className="truncate">
-        {when}
+    <p className="min-w-0 flex-1 text-right text-[13px] text-ink-soft tabular-nums">
+      <span data-card-when className="inline-flex max-w-full flex-col items-end gap-0.5 leading-tight">
+        {whenHint !== undefined && (
+          <span data-card-when-kind className="text-[10px] font-medium text-muted-foreground">
+            {whenHint}
+          </span>
+        )}
+        <span className="truncate whitespace-nowrap">{when}</span>
       </span>
     </p>
     {showChevron && openLabel !== undefined && (
       <span
         data-card-open
-        className="absolute top-1/2 right-0 flex -translate-y-1/2 items-center gap-0.5 rounded-md border border-line bg-card px-2 py-1 text-xs font-semibold text-primary shadow-[0_1px_0_rgba(13,43,69,0.06)] max-xl:border-primary/30 max-xl:bg-info-soft max-xl:px-2.5 max-xl:py-1"
+        className="absolute top-1/2 right-0 flex min-h-9 -translate-y-1/2 items-center gap-0.5 rounded-lg border border-primary/30 bg-info-soft px-3 py-2 text-sm font-semibold text-primary shadow-[0_1px_0_rgba(13,43,69,0.06)]"
       >
         <span className="whitespace-nowrap">{openLabel}</span>
         <ChevronRight
@@ -235,7 +242,10 @@ export const PostCard = ({
   const { t } = useI18n();
   const isHistory = slot.status === 'published' || slot.status === 'failed';
   const shownAt = isHistory && slot.publishedAt ? slot.publishedAt : slot.slotAt;
-  const when = timeOnly ? formatTime(shownAt, locale) : `${formatDate(shownAt, locale)} · ${formatTime(shownAt, locale)}`;
+  const timeKindKey = isHistory && slot.publishedAt ? 'posts.cardTimePublished' : 'posts.cardTimeScheduled';
+  const when = timeOnly
+    ? formatTime(shownAt, locale)
+    : `${formatDate(shownAt, locale)} · ${formatTime(shownAt, locale)}`;
   const videoUrl = videoUrlFor(slot.taskId);
   const thumbSrc = SLOT_VIDEO_STATUSES.has(slot.status) ? videoUrl : null;
   // Progress is live data on the list card too: the minute poll fills in
@@ -273,6 +283,7 @@ export const PostCard = ({
         <CardHeader
           badge={<StatusBadge status={slot.status} label={t(CALENDAR_GROUP_KEY[group])} style={CALENDAR_GROUP_PILL[group]} />}
           when={when}
+          whenHint={timeOnly ? t(timeKindKey) : undefined}
           showChevron={!isFailed}
           openLabel={!isFailed ? t('posts.cardOpen') : undefined}
         />
@@ -281,22 +292,20 @@ export const PostCard = ({
           {!isFailed && <PostCardMedia src={thumbSrc} noPreviewLabel={t('posts.cardNoPreview')} />}
         </div>
         {showProgress && (
-          // The exact stage under the group pill ("In progress"), e.g.
-          // "Generating video 45%".
           <div className="mt-3">
-            <div className="flex items-center justify-between gap-2 text-xs font-semibold text-info">
-              <span>{t(STATUS_KEY[slot.status] ?? 'posts.groupInProgress')}</span>
-              <span className="tabular-nums">{slot.progress}%</span>
-            </div>
-            <div
-              role="progressbar"
-              aria-label={t('posts.progressLabel')}
-              aria-valuenow={slot.progress}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-sunken"
-            >
-              <div className="h-full rounded-full bg-info transition-all" style={{ width: `${slot.progress}%` }} />
+            <p className="text-xs font-semibold text-info">{t(STATUS_KEY[slot.status] ?? 'posts.groupInProgress')}</p>
+            <div className="mt-1.5 flex w-full items-center gap-2">
+              <div
+                role="progressbar"
+                aria-label={t('posts.progressLabel')}
+                aria-valuenow={slot.progress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-sunken"
+              >
+                <div className="h-full rounded-full bg-info transition-all" style={{ width: `${slot.progress}%` }} />
+              </div>
+              <span className="shrink-0 text-xs font-semibold tabular-nums text-info">{slot.progress}%</span>
             </div>
           </div>
         )}

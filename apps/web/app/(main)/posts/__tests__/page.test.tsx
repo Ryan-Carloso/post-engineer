@@ -504,12 +504,16 @@ describe('PostsPage', () => {
     const user = userEvent.setup();
     const { rerender } = render(<PostsPage />);
     const grid = screen.getByRole('grid');
-    expect(grid.querySelector('[data-today] [data-today-mark]')?.textContent).toBe('1');
+    const todayCell = grid.querySelector('[data-today]');
+    expect(todayCell?.querySelector('[data-day-number]')).toHaveTextContent('1');
+    expect(todayCell?.querySelector('[data-today-mark="true"]')).not.toBeNull();
 
     vi.setSystemTime(new Date('2030-06-02T00:01:00.000Z'));
     rerender(<PostsPage />);
 
-    expect(screen.getByRole('grid').querySelector('[data-today] [data-today-mark]')?.textContent).toBe('2');
+    const nextToday = screen.getByRole('grid').querySelector('[data-today]');
+    expect(nextToday?.querySelector('[data-day-number]')).toHaveTextContent('2');
+    expect(nextToday?.querySelector('[data-today-mark="true"]')).not.toBeNull();
     await user.click(screen.getByRole('button', { name: 'posts.calendarToday' }));
     expect(screen.getByRole('grid').querySelector('[data-selected="true"]')?.textContent).toBe('2');
   });
@@ -975,6 +979,7 @@ describe('PostsPage calendar view', () => {
     expect(screen.getByRole('button', { name: 'posts.calendarNextMonth' })).toBeDisabled();
     const loadError = document.querySelector('[data-calendar-load-error]');
     expect(loadError?.className.split(/\s+/)).not.toContain('min-h-[18rem]');
+    expect(document.querySelector('[data-day-unavailable-note]')?.className.split(/\s+/)).toContain('border');
   });
 
   it('hides the header refresh on a load error so only the in-card retry remains', () => {

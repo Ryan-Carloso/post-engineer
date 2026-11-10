@@ -114,14 +114,13 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
   }, [today]);
   const navInert = today.unavailable;
   const navDisabledClass =
-    'cursor-not-allowed border-line bg-sunken/80 text-muted-foreground opacity-70 shadow-none hover:bg-sunken/80 hover:text-muted-foreground active:bg-sunken/80';
+    'pointer-events-none cursor-not-allowed border border-line bg-sunken/80 text-muted-foreground opacity-70 shadow-none hover:bg-sunken/80 hover:text-muted-foreground active:bg-sunken/80 [&_svg]:text-muted-foreground';
   return (
     <nav
       {...navProps}
       className={cn(
         navProps.className,
-        navInert &&
-          'pointer-events-none [&_button]:cursor-not-allowed [&_button]:border-line [&_button]:bg-sunken/80 [&_button]:text-muted-foreground [&_button]:opacity-70 [&_svg]:text-muted-foreground',
+        navInert && '[&_button]:pointer-events-none',
       )}
       aria-disabled={navInert ? true : undefined}
     >
@@ -310,7 +309,10 @@ export function CalendarView({
             className="w-full bg-transparent p-0 [--cell-size:--spacing(10)]"
             classNames={{
               root: 'w-full',
-              caption_label: 'text-base font-bold capitalize text-primary',
+              caption_label: cn(
+                'text-base font-bold capitalize',
+                unavailable ? 'text-muted-foreground' : 'text-primary',
+              ),
               // The nav clusters right (prev / Today / next) and the caption
               // title left-aligns with room to its right, so the title
               // never runs under the navigation.

@@ -90,11 +90,8 @@ function DayCellPostTotal({
   );
 }
 
-// Today: gold numeral + thin ring — not a filled disc that reads as selection.
-export const TODAY_CELL_CLASS = 'font-bold text-warning ring-2 ring-warning bg-transparent';
-
-// Legend swatch beside the Today word (same ring, no fill).
-export const TODAY_LEGEND_CLASS = 'size-4 rounded-full ring-2 ring-warning bg-transparent';
+// Legend swatch for today: empty gold ring (the grid uses a dot under the numeral).
+export const TODAY_LEGEND_CLASS = 'size-4 shrink-0 rounded-full ring-2 ring-warning bg-transparent';
 
 // The DayButton component is passed to react-day-picker once; the per-day
 // slots reach it through context so a data refresh never remounts the grid.
@@ -109,8 +106,9 @@ export const DayCellContext = createContext<DayContextValue>({ slotsByDay: new M
 //---------------
 // PostsDayButton — one day cell. One post total (per-status breakdown is
 // only in the accessible name and on the day's cards). No persona names in
-// the cell (the list below names them). Today is an amber disc on the
-// number only (gold ring). Selection is a navy outline on an overflow-visible cell so
+// the cell (the list below names them). Today is a gold dot under the
+// date numeral (counts stay in the gray pill). Selection is a navy outline on an
+// overflow-visible cell so
 // the ring does not clip the markers.
 //---------------
 export function PostsDayButton({ children, day, modifiers, className, ...props }: ComponentProps<typeof DayButton>) {
@@ -151,15 +149,18 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
     >
       <span
         data-day-number
-        data-today-mark={isToday ? 'true' : undefined}
         className={cn(
-          'inline-flex size-6 shrink-0 items-center justify-center rounded-full tabular-nums',
+          'inline-flex min-h-6 shrink-0 flex-col items-center justify-center gap-0.5 tabular-nums',
           isOutside ? 'font-normal text-muted-foreground opacity-50' : 'font-semibold text-primary',
-          isToday && TODAY_CELL_CLASS,
           isToday && isOutside && 'opacity-100',
         )}
       >
-        {children}
+        <span className="leading-none">{children}</span>
+        {isToday ? (
+          <span aria-hidden data-today-mark="true" className="size-1.5 shrink-0 rounded-full bg-warning" />
+        ) : (
+          <span aria-hidden className="size-1.5 shrink-0" />
+        )}
       </span>
       {slots.length > 0 && (
         <span aria-hidden className="flex w-full min-w-0 items-center justify-center overflow-visible px-0.5 pt-0.5">

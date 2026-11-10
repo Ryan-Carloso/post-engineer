@@ -194,9 +194,9 @@ export default function PostsPage() {
               <section
                 data-day-unavailable-note
                 aria-live="polite"
-                className="order-2 mt-4 hidden min-w-0 scroll-mt-4 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:block xl:pt-4"
+                className="order-2 mt-4 hidden min-w-0 scroll-mt-4 rounded-xl border border-line bg-card p-4 text-sm text-muted-foreground xl:col-start-2 xl:row-start-1 xl:mt-0 xl:block xl:self-start"
               >
-                <p className="text-sm text-muted-foreground">{t('posts.loadErrorSideQuiet')}</p>
+                <p>{t('posts.loadErrorSideQuiet')}</p>
               </section>
             ) : !isError ? (
             <section

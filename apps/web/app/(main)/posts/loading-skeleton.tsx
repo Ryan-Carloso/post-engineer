@@ -18,7 +18,7 @@ const SHAPE = 'animate-pulse bg-line';
 // Calendar + day panel side by side on wide screens (so the selected day's
 // posts show without scrolling); shared by the page and its skeleton.
 export const CALENDAR_LAYOUT_CLASS =
-  'xl:grid xl:grid-cols-[minmax(0,1fr)_16.5rem] xl:items-start xl:gap-6';
+  'xl:grid xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start xl:gap-6';
 
 function LoadingLabel() {
   const { t } = useI18n();

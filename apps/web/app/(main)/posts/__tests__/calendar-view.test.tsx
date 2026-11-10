@@ -100,31 +100,39 @@ describe('CalendarView', () => {
     expect(dayButton(/June 21, 2030/).closest('[data-selected="true"]')).toBeNull();
   });
 
-  it('draws today as an amber disc behind the day number, never as a cell border that reads like focus', () => {
+  it('marks today with a gold dot under the date numeral, not a ring around it', () => {
     setup({ selectedKey: '2030-06-20' });
     const today = dayButton(/June 15, 2030/);
+    const number = today.querySelector('[data-day-number]');
+    expect(number).toHaveTextContent('15');
     const mark = today.querySelector('[data-today-mark="true"]');
-    expect(mark).toHaveTextContent('15');
-    expect(mark?.className.split(/\s+/)).toContain('ring-warning');
-    expect(mark?.className.split(/\s+/)).not.toContain('bg-warning');
-    expect(mark?.className.split(/\s+/)).not.toContain('bg-info');
-    // No border frame on the cell and no accent fill that could read as selected.
+    expect(mark?.className.split(/\s+/)).toContain('bg-warning');
+    expect(mark).toBeEmptyDOMElement();
+    expect(number?.className.split(/\s+/)).not.toContain('ring-warning');
     expect(today.className.split(/\s+/)).not.toContain('border-2');
-    expect(today.className.split(/\s+/)).not.toContain('bg-accent');
-    expect(today.closest('[data-today]')?.className.split(/\s+/)).not.toContain('bg-accent');
-    // Only today carries the disc, and it stays while another day is selected.
     expect(dayButton(/June 20, 2030/).querySelector('[data-today-mark]')).toBeNull();
   });
 
-  it('keeps the today disc when today itself is selected, separate from the selection outline', () => {
-    setup({ selectedKey: '2030-06-15' });
+  it('keeps the today dot and post total as separate marks when today is selected', () => {
+    const slotsByDay = new Map<string, DaySlot[]>([
+      ['2030-06-15', [{ status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-15T10:00:00.000Z' }]],
+    ]);
+    setup({ selectedKey: '2030-06-15', slotsByDay });
     const today = dayButton(/June 15, 2030/);
-    const mark = today.querySelector('[data-today-mark="true"]');
-    expect(mark?.className.split(/\s+/)).toContain('ring-warning');
-    expect(mark?.className.split(/\s+/)).not.toContain('bg-warning');
-    expect(mark?.className.split(/\s+/)).not.toContain('border-2');
+    expect(today.querySelector('[data-today-mark="true"]')).not.toBeNull();
+    expect(today.querySelector('[data-day-post-total]')).toHaveTextContent('1');
     expect(today.className.split(/\s+/)).toContain('data-[selected-single=true]:outline-primary');
-    expect(today.className.split(/\s+/)).not.toContain('data-[selected-single=true]:bg-primary');
+  });
+
+  it('lays the legend out in one wrapping row inside the calendar card', () => {
+    setup({
+      slotsByDay: new Map([['2030-06-05', [{ status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T10:00:00.000Z' }]]]),
+    });
+    const legend = screen.getByText('posts.calendarLegendPostCount').closest('ul');
+    if (legend === null) throw new Error('legend not rendered');
+    expect(legend.className.split(/\s+/)).toContain('flex-wrap');
+    expect(legend.className.split(/\s+/)).not.toContain('grid-cols-1');
+    expect(legend.closest('[data-calendar-card]')).not.toBeNull();
   });
 
   it('dims the days outside the shown month', () => {
