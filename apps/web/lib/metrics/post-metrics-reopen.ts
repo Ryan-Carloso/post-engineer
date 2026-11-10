@@ -33,7 +33,9 @@ export const REOPEN_ROWS_LIMIT = 6000;
 // that only finished after the first collection — would miss its window
 // silently. Re-check published posts while their windows are still open:
 // a post is due again for a window when it has a measurable target with
-// no snapshot row for that window. Best-effort: any read failure logs
+// no collected snapshot row for that window (a YouTube snapshot without
+// the Analytics scope is not collected — see the mirror below).
+// Best-effort: any read failure logs
 // and returns nothing, never failing the run. The (post, window) pairs
 // the RPC already returned are excluded, so a post is never collected
 // twice in one run.

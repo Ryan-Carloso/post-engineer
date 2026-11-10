@@ -610,11 +610,19 @@ describe('createPostMetricsStore', () => {
     const store = createPostMetricsStore({
       rpc,
       from: fakeFrom({
-        scheduled_posts: { data: [scannedPost({ id: 'post-99', task_id: 'task-99' })], error: null },
+        scheduled_posts: {
+          data: [
+            scannedPost({ id: 'post-99', task_id: 'task-99' }),
+            scannedPost({ id: 'post-98', task_id: 'task-98' }),
+          ],
+          error: null,
+        },
         post_metrics: { data: [], error: null },
       }),
     } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    // Budget is 1 (50 RPC posts of a 51-post run): only the first
+    // re-openable candidate fits, so the second one proves the cap.
     expect(posts).toHaveLength(51);
     expect(posts[50]).toMatchObject({ id: 'post-99', window: '24h' });
   });
