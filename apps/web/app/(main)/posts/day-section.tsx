@@ -164,7 +164,7 @@ export function LoadErrorSidePanel({ messageKey }: { messageKey: TranslationKey 
   const { t } = useI18n();
   return (
     <div className="flex min-h-[12rem] flex-col justify-start gap-2 rounded-xl border border-line bg-card p-4 xl:min-h-[22rem]">
-      <div role="status" className="flex items-start gap-2 text-left text-sm text-ink">
+      <div role="status" className="flex max-w-md items-start gap-2 text-left text-sm text-ink">
         <TriangleAlert className="mt-px size-5 shrink-0 text-destructive" aria-hidden />
         <div>
           <p className="font-semibold">{t(messageKey)}</p>
