@@ -29,14 +29,24 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
 }
 
 // Records every chained filter; `limit` resolves the query like supabase-js.
-function mockQuery(result: { data: unknown; error: unknown }) {
+// Pass per-table results to give each table its own rows.
+function mockQuery(
+  result: { data: unknown; error: unknown },
+  tables?: Record<string, { data: unknown; error: unknown }>,
+) {
   const calls: Array<[string, ...unknown[]]> = [];
-  const builder: Record<string, unknown> = {};
-  for (const method of ['select', 'eq', 'is', 'in', 'or', 'order']) {
-    builder[method] = vi.fn((...args: unknown[]) => { calls.push([method, ...args]); return builder; });
-  }
-  builder.limit = vi.fn(async (...args: unknown[]) => { calls.push(['limit', ...args]); return result; });
-  const from = vi.fn(() => builder);
+  const from = vi.fn((table: string) => {
+    // A per-table result overrides the shared one for that table only.
+    const tableBuilder: Record<string, unknown> = {};
+    for (const method of ['select', 'eq', 'is', 'in', 'or', 'order', 'gte']) {
+      tableBuilder[method] = vi.fn((...args: unknown[]) => { calls.push([method, ...args]); return tableBuilder; });
+    }
+    tableBuilder.limit = vi.fn(async (...args: unknown[]) => {
+      calls.push(['limit', ...args]);
+      return tables?.[table] ?? result;
+    });
+    return tableBuilder;
+  });
   vi.mocked(createSupabaseServiceClient).mockReturnValue({ from } as never);
   return { calls, from };
 }
@@ -64,6 +74,9 @@ describe('GET /api/metrics', () => {
     await expect(response.json()).resolves.toEqual({
       success: true,
       truncated: false,
+      coverage: [],
+      coverageTruncated: false,
+      asOf: '2026-10-21T12:00:00Z',
       rows: [{
         postId: 'post-1', personaId: PERSONA, provider: 'youtube', accountId: 'yt', externalId: 'v1',
         scriptAngle: 'myth', views: 10, likes: 2, comments: 1, saves: null, collectedAt: '2026-10-21T12:00:00Z',
@@ -212,6 +225,51 @@ describe('GET /api/metrics', () => {
     const response = await get('?window=24h');
     expect(response.status).toBe(500);
     expect(logger.error).toHaveBeenCalledWith('[api/metrics] query failed', { message: 'boom' });
+  });
+
+  it('returns coverage for a published video with no snapshot, and asOf as the newest collected_at', async () => {
+    // Published 25h ago: the 24h window opened an hour ago, so the
+    // missing YouTube target is retrying, not pending or missed.
+    const publishedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    mockQuery(
+      { data: [row(), row({ post_id: 'post-2', collected_at: '2026-10-22T08:00:00Z' })], error: null },
+      {
+        scheduled_posts: {
+          data: [{
+            id: 'post-2', schedule_id: 'sched-1', user_id: 'user-1', status: 'published',
+            published_at: publishedAt,
+            publish_outcomes: [{ provider: 'youtube', accountId: 'yt', status: 'published', videoUrl: 'https://youtu.be/v2' }],
+          }],
+          error: null,
+        },
+        schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
+        post_metrics_done: { data: [], error: null },
+        // The coverage rows read shares the table with the dashboard rows:
+        // same rows here, so the target (external id v2) is still missing.
+        post_metrics: { data: [row(), row({ post_id: 'post-2', collected_at: '2026-10-22T08:00:00Z' })], error: null },
+      },
+    );
+    const body = await (await get('?window=24h')).json();
+    expect(body.asOf).toBe('2026-10-22T08:00:00Z');
+    expect(body.coverageTruncated).toBe(false);
+    expect(body.coverage).toEqual([expect.objectContaining({
+      postId: 'post-2', provider: 'youtube', accountId: 'yt', externalId: 'v2',
+      reason: 'retrying', personaId: PERSONA, publishedAt,
+    })]);
+  });
+
+  it('serves the rows with empty coverage when the coverage read fails', async () => {
+    mockQuery(
+      { data: [row()], error: null },
+      { scheduled_posts: { data: null, error: { message: 'boom' } } },
+    );
+    const response = await get('?window=24h');
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.rows).toHaveLength(1);
+    expect(body.coverage).toEqual([]);
+    expect(body.coverageTruncated).toBe(false);
+    expect(logger.error).toHaveBeenCalledWith('[api/metrics] coverage lookup failed', expect.any(Error));
   });
 
   it('returns the auth error without querying', async () => {

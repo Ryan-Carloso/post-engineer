@@ -46,7 +46,7 @@ vi.mock('@/components/provider-icon', () => ({
 import MetricsPage from '../page';
 import { usePersonasQuery, useSocialAccountsQuery } from '@/lib/api';
 import { METRICS_NONE } from '@/lib/metrics/metrics-query';
-import type { MetricsRowView } from '@/lib/metrics/metrics-query';
+import type { CoverageItem, MetricsRowView } from '@/lib/metrics/metrics-query';
 
 const PERSONA_A = '11111111-2222-4333-8444-555555555555';
 const PERSONA_B = '22222222-3333-4444-8555-666666666666';
@@ -57,6 +57,16 @@ function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
     scriptAngle: 'myth', views: 100, likes: 10, comments: 3, saves: 1, collectedAt: '2026-10-21T12:00:00Z',
     analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
     averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
+    ...overrides,
+  };
+}
+
+function coverageItem(overrides: Partial<CoverageItem> = {}): CoverageItem {
+  return {
+    postId: 'post-9', personaId: PERSONA_A, provider: 'youtube', accountId: 'UC1', externalId: 'v9',
+    scriptAngle: 'myth', reason: 'retrying',
+    publishedAt: '2026-10-21T12:00:00.000Z',
+    windowOpensAt: '2026-10-22T12:00:00.000Z', windowClosesAt: '2026-10-23T12:00:00.000Z',
     ...overrides,
   };
 }
@@ -144,6 +154,45 @@ describe('MetricsPage', () => {
     // The chart container rendered the config colors into a style tag.
     const styles = [...document.querySelectorAll('style')].map((el) => el.textContent ?? '');
     expect(styles.some((css) => css.includes('--color-average: #c9d2dc;'))).toBe(true);
+  });
+
+  it('shows the coverage card with attention and waiting groups, and the as-of line', async () => {
+    stubMetricsFetch({
+      success: true, rows: [row()], truncated: false,
+      coverage: [
+        coverageItem({ reason: 'retrying' }),
+        coverageItem({
+          postId: 'post-10', provider: 'instagram', accountId: 'ig1', externalId: null,
+          reason: 'publish-failed', scriptAngle: null,
+        }),
+        coverageItem({ postId: 'post-11', reason: 'pending' }),
+      ],
+      coverageTruncated: false, asOf: '2026-10-21T12:00:00Z',
+    });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('metrics.coverageTitle')).toBeInTheDocument());
+    expect(screen.getByText('metrics.coverageSummary {"count":3,"window":"24h"}')).toBeInTheDocument();
+    expect(screen.getByText('metrics.coverageAttentionTitle')).toBeInTheDocument();
+    expect(screen.getByText('metrics.coverageWaitingTitle')).toBeInTheDocument();
+    expect(screen.getByText('metrics.coverageReasonRetrying')).toBeInTheDocument();
+    expect(screen.getByText('metrics.coverageReasonPublishFailed')).toBeInTheDocument();
+    expect(screen.getByText('metrics.coverageReasonPending')).toBeInTheDocument();
+    // The YouTube retrying item links the gap to the Analytics connection.
+    expect(screen.getByText('metrics.coverageYoutubeHint')).toBeInTheDocument();
+    // The failed publish warns the video may be live anyway.
+    expect(screen.getByText('metrics.coveragePublishFailedHint')).toBeInTheDocument();
+    // As-of line above the table, and the collected date on each row.
+    expect(screen.getByText(/metrics\.asOf/)).toBeInTheDocument();
+    expect(screen.getAllByText(/metrics\.tableCollected/).length).toBeGreaterThan(0);
+  });
+
+  it('hides the coverage card when nothing is missing, but still dates the data', async () => {
+    stubMetricsFetch({ success: true, rows: [row()], truncated: false, coverage: [], coverageTruncated: false, asOf: '2026-10-21T12:00:00Z' });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    expect(screen.queryByText('metrics.coverageTitle')).toBeNull();
+    expect(screen.getByText(/metrics\.asOf/)).toBeInTheDocument();
   });
 
   it('notes when the row cap truncated the result', async () => {
