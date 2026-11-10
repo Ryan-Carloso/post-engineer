@@ -35,12 +35,12 @@ export function StatusMarker({ group, count, labeled = false }: { group: Calenda
       data-marker={group}
       title={showCount ? `${label}: ${count}` : label}
       className={cn(
-        'inline-flex h-4 max-xl:h-[15px] items-center justify-center gap-0.5 overflow-hidden rounded-full text-[10px] max-xl:text-[9px] leading-none font-bold',
+        'inline-flex h-4 max-xl:h-[17px] items-center justify-center gap-0.5 overflow-hidden rounded-full text-[10px] leading-none font-bold',
         CALENDAR_GROUP_MARKER[group],
-        labeled || showCount ? 'max-w-full min-w-0 shrink px-1' : 'w-4 max-xl:w-[15px] shrink-0',
+        labeled || showCount ? 'max-w-full min-w-0 shrink px-1' : 'w-4 max-xl:w-[17px] shrink-0',
       )}
     >
-      <Icon className="size-2.5 max-xl:size-2 shrink-0" strokeWidth={3} aria-hidden />
+      <Icon className="size-2.5 shrink-0" strokeWidth={3} aria-hidden />
       {labeled && <span className="min-w-0 truncate">{label}</span>}
       {showCount && (
         <span data-count className="shrink-0 tabular-nums">
@@ -66,7 +66,7 @@ function DayCellStatusSummary({ groups, counts }: { groups: CalendarGroup[]; cou
       {overflowCount > 0 && (
         <span
           data-overflow-count
-          className="inline-flex h-4 max-xl:h-[15px] min-w-4 max-xl:min-w-[15px] shrink-0 items-center justify-center rounded-full bg-sunken px-1 text-[10px] max-xl:text-[9px] font-bold text-ink-soft tabular-nums"
+          className="inline-flex h-4 max-xl:h-[17px] min-w-4 max-xl:min-w-[17px] shrink-0 items-center justify-center rounded-full bg-sunken px-1 text-[10px] font-bold text-ink-soft tabular-nums"
         >
           +{overflowCount}
         </span>
@@ -75,10 +75,11 @@ function DayCellStatusSummary({ groups, counts }: { groups: CalendarGroup[]; cou
   );
 }
 
-// Today, on the day number. Amber, so it is neither the navy selection
-// outline nor a status or avatar color, and it stays when another day is
-// selected. `text-on-ink` flips with the theme.
-export const TODAY_MARK_CLASS = 'bg-warning text-on-ink';
+// Today: gold numeral + thin ring — not a filled disc that reads as selection.
+export const TODAY_CELL_CLASS = 'font-bold text-warning ring-2 ring-warning bg-transparent';
+
+// Legend swatch beside the Today word (same ring, no fill).
+export const TODAY_LEGEND_CLASS = 'size-4 rounded-full ring-2 ring-warning bg-transparent';
 
 // The DayButton component is passed to react-day-picker once; the per-day
 // slots reach it through context so a data refresh never remounts the grid.
@@ -94,7 +95,7 @@ export const DayCellContext = createContext<DayContextValue>({ slotsByDay: new M
 // PostsDayButton — one day cell. One compact marker, or status dots with a
 // total when several groups share the day. No persona names or avatars in
 // the cell (the list below names them). Today is an amber disc on the
-// number only. Selection is a navy outline on an overflow-visible cell so
+// number only (gold ring). Selection is a navy outline on an overflow-visible cell so
 // the ring does not clip the markers.
 //---------------
 export function PostsDayButton({ children, day, modifiers, className, ...props }: ComponentProps<typeof DayButton>) {
@@ -140,7 +141,7 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
         className={cn(
           'inline-flex size-6 shrink-0 items-center justify-center rounded-full tabular-nums',
           isOutside ? 'font-normal text-muted-foreground opacity-50' : 'font-semibold text-primary',
-          isToday && TODAY_MARK_CLASS,
+          isToday && TODAY_CELL_CLASS,
           isToday && isOutside && 'opacity-100',
         )}
       >

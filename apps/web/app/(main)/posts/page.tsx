@@ -140,7 +140,7 @@ export default function PostsPage() {
             onClick={handleRefresh}
             disabled={rangeQuery.isFetching}
             aria-label={t('posts.refresh')}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-input bg-card px-4 text-sm font-semibold text-primary hover:bg-sunken disabled:cursor-default"
+            className="hidden h-10 items-center justify-center gap-2 rounded-xl border border-input bg-card px-4 text-sm font-semibold text-primary hover:bg-sunken disabled:cursor-default sm:inline-flex"
           >
             <RefreshCw className={cn('size-4', rangeQuery.isFetching && 'animate-spin')} aria-hidden />
             <span>{t('posts.refresh')}</span>
@@ -149,7 +149,7 @@ export default function PostsPage() {
       </div>
       <p className="mt-1 text-sm text-muted-foreground">{t('posts.subtitle')}</p>
 
-      <PostFiltersBar filters={filters} disabled={isLoading || isAccountEmpty} />
+      <PostFiltersBar filters={filters} disabled={isLoading || isAccountEmpty || isError} />
 
       <div className="mt-4 sm:mt-6">
         {isLoading ? (
@@ -184,18 +184,20 @@ export default function PostsPage() {
                 showLegend={!isAccountEmpty && monthPostCount > 0}
                 loadErrorMessageKey={isError ? loadErrorKey : undefined}
                 onLoadErrorRetry={isError ? handleRefresh : undefined}
+                onRefresh={!isError ? handleRefresh : undefined}
+                refreshing={rangeQuery.isFetching}
               />
             </div>
             <section
               ref={daySectionRef}
               aria-live="polite"
               className={cn(
-                'min-w-0 scroll-mt-4 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:min-h-[22rem] xl:pt-4',
+                'min-w-0 scroll-mt-4 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4',
                 isError ? 'order-1 mb-4 xl:order-0 xl:mb-0' : 'order-2 mt-4 max-xl:pb-24',
               )}
             >
               {isError ? (
-                <LoadErrorSidePanel messageKey={loadErrorKey} />
+                <LoadErrorSidePanel />
               ) : isAccountEmpty ? (
                 <>
                   <h2 className="text-base font-bold tracking-[-0.01em] text-primary">
@@ -209,7 +211,7 @@ export default function PostsPage() {
                 <>
                   {monthPostCount > 0 && (
                     <div className="mb-2 xl:hidden">
-                      <CalendarLegend filtered={filters.hasActiveFilter} className="gap-x-2 gap-y-1 text-[11px]" />
+                      <CalendarLegend filtered={filters.hasActiveFilter} className="text-[11px]" />
                     </div>
                   )}
                   <h2 className="flex min-h-10 flex-col justify-center gap-0.5 text-base font-bold tracking-[-0.01em] text-primary">

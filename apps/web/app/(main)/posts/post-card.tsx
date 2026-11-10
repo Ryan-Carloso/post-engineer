@@ -105,14 +105,18 @@ const StatusBadge = ({ status, label, style }: { status: string; label: string; 
 // Status badge left, when right, on one line: neither side wraps. The
 // chevron says the card opens the post detail.
 const CardHeader = ({ badge, when, showChevron = true }: { badge: ReactNode; when: string; showChevron?: boolean }) => (
-  <div className="flex items-center justify-between gap-2">
+  <div className="flex items-center gap-2">
     {badge}
-    <p className="flex min-w-0 items-center gap-1 text-[13px] whitespace-nowrap text-ink-soft tabular-nums">
+    <p className="min-w-0 flex-1 text-right text-[13px] whitespace-nowrap text-ink-soft tabular-nums">
       <span className="truncate">{when}</span>
-      {showChevron && (
-        <ChevronRight data-card-chevron className="size-4 shrink-0 text-muted-text transition-transform group-hover/card:translate-x-0.5" aria-hidden />
-      )}
     </p>
+    {showChevron && (
+      <ChevronRight
+        data-card-chevron
+        className="size-4 shrink-0 text-muted-text transition-transform group-hover/card:translate-x-0.5"
+        aria-hidden
+      />
+    )}
   </div>
 );
 
@@ -130,10 +134,7 @@ const CardTitle = ({
     <p className="line-clamp-2 text-sm leading-snug font-semibold text-primary">{title}</p>
     <p className="mt-1 truncate text-[13px] text-ink-soft">
       <span className="sr-only">{personaLabel}: </span>
-      <span aria-hidden className="font-medium text-muted-foreground">
-        {personaLabel}:{' '}
-      </span>
-      {personaName}
+      <span className="text-muted-foreground">{personaLabel}:</span> {personaName}
     </p>
   </div>
 );

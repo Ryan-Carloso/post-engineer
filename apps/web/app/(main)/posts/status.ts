@@ -63,8 +63,8 @@ export function calendarGroupOf(status: string): CalendarGroup {
 export const CALENDAR_GROUP_MARKER: Record<CalendarGroup, string> = {
   failed: 'bg-destructive text-destructive-foreground',
   published: 'bg-success text-on-ink',
-  // Brand coral — distinct from navy selection and gold today.
-  inProgress: 'bg-brand text-white',
+  // Info blue — distinct from destructive red, gold today, and selection.
+  inProgress: 'bg-info text-white',
   scheduled: 'bg-ink-soft text-on-ink',
 };
 
@@ -72,7 +72,7 @@ export const CALENDAR_GROUP_MARKER: Record<CalendarGroup, string> = {
 export const CALENDAR_GROUP_DOT: Record<CalendarGroup, string> = {
   failed: 'bg-destructive',
   published: 'bg-success',
-  inProgress: 'bg-brand',
+  inProgress: 'bg-info',
   scheduled: 'bg-muted-foreground',
 };
 

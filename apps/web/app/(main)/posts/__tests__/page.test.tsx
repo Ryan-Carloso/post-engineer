@@ -462,7 +462,8 @@ describe('PostsPage', () => {
 
     render(<PostsPage />);
     // The error names the supporting data, not the calendar posts.
-    expect(screen.getAllByText('posts.loadErrorSupporting')).toHaveLength(2);
+    expect(screen.getByRole('alert')).toHaveTextContent('posts.loadErrorSupporting');
+    expect(screen.getByText('posts.loadErrorSideQuiet')).toBeInTheDocument();
   });
 
   it('shows the error state when an account query fails', () => {
@@ -476,7 +477,7 @@ describe('PostsPage', () => {
     } as never);
 
     render(<PostsPage />);
-    expect(screen.getAllByText('posts.loadErrorSupporting')).toHaveLength(2);
+    expect(screen.getByRole('alert')).toHaveTextContent('posts.loadErrorSupporting');
   });
 
   it('retry refetches the account queries as well', async () => {
@@ -492,8 +493,7 @@ describe('PostsPage', () => {
 
     // Without this, a failed account fetch could never clear without a
     // full page reload.
-    expect(screen.getAllByText('posts.loadErrorSupporting')).toHaveLength(2);
-    await user.click(screen.getAllByRole('button', { name: 'posts.loadErrorRetry' })[0]);
+    await user.click(screen.getByRole('button', { name: 'posts.loadErrorRetry' }));
     expect(youtubeRefetch).toHaveBeenCalledTimes(1);
   });
 
@@ -526,8 +526,7 @@ describe('PostsPage', () => {
 
     // Without this, a failed personas fetch could never clear without a
     // full page reload.
-    expect(screen.getAllByText('posts.loadErrorSupporting')).toHaveLength(2);
-    await user.click(screen.getAllByRole('button', { name: 'posts.loadErrorRetry' })[0]);
+    await user.click(screen.getByRole('button', { name: 'posts.loadErrorRetry' }));
     expect(personasRefetch).toHaveBeenCalledTimes(1);
   });
 
@@ -812,7 +811,7 @@ describe('PostsPage calendar view', () => {
 
     // The error names the calendar posts, not the supporting data.
     expect(screen.getByRole('alert')).toHaveTextContent('posts.loadErrorCalendar');
-    expect(screen.getAllByRole('status').some((node) => node.textContent?.includes('posts.loadErrorSideHint'))).toBe(true);
+    expect(screen.getByText('posts.loadErrorSideQuiet')).toBeInTheDocument();
   });
 
   it('clicking an outside day selects it and moves the shown month to it', async () => {
@@ -923,7 +922,9 @@ describe('PostsPage calendar view', () => {
     } as never);
     render(<PostsPage />);
 
-    expect(screen.getByRole('button', { name: 'posts.refresh' })).toBeDisabled();
+    for (const button of screen.getAllByRole('button', { name: 'posts.refresh' })) {
+      expect(button).toBeDisabled();
+    }
   });
 
   it('keeps the month navigation on a load error with a single in-card retry and no day-selection copy', async () => {
@@ -957,7 +958,7 @@ describe('PostsPage calendar view', () => {
 
   it('hides the header refresh on a load error so only the in-card retry remains', () => {
     const { unmount } = render(<PostsPage />);
-    expect(screen.getByRole('button', { name: 'posts.refresh' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'posts.refresh' }).length).toBeGreaterThanOrEqual(1);
     unmount();
     vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isFetching: false, isError: true, refetch: vi.fn() } as never);
     render(<PostsPage />);

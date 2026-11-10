@@ -105,7 +105,8 @@ describe('CalendarView', () => {
     const today = dayButton(/June 15, 2030/);
     const mark = today.querySelector('[data-today-mark="true"]');
     expect(mark).toHaveTextContent('15');
-    expect(mark?.className.split(/\s+/)).toContain('bg-warning');
+    expect(mark?.className.split(/\s+/)).toContain('ring-warning');
+    expect(mark?.className.split(/\s+/)).not.toContain('bg-warning');
     expect(mark?.className.split(/\s+/)).not.toContain('bg-info');
     // No border frame on the cell and no accent fill that could read as selected.
     expect(today.className.split(/\s+/)).not.toContain('border-2');
@@ -119,7 +120,8 @@ describe('CalendarView', () => {
     setup({ selectedKey: '2030-06-15' });
     const today = dayButton(/June 15, 2030/);
     const mark = today.querySelector('[data-today-mark="true"]');
-    expect(mark?.className.split(/\s+/)).toContain('bg-warning');
+    expect(mark?.className.split(/\s+/)).toContain('ring-warning');
+    expect(mark?.className.split(/\s+/)).not.toContain('bg-warning');
     expect(mark?.className.split(/\s+/)).not.toContain('border-2');
     expect(today.className.split(/\s+/)).toContain('data-[selected-single=true]:outline-primary');
     expect(today.className.split(/\s+/)).not.toContain('data-[selected-single=true]:bg-primary');
@@ -332,7 +334,8 @@ describe('CalendarView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onLoadErrorRetry).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
-    expect(props.onMonthNavigate).toHaveBeenLastCalledWith(2030, 6);
+    expect(onLoadErrorRetry).toHaveBeenCalledTimes(2);
+    expect(props.onMonthNavigate).not.toHaveBeenCalled();
   });
 
   it('keeps seven table cells per week on a narrow layout', () => {

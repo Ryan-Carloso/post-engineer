@@ -159,18 +159,14 @@ export function DaySummary({ slots }: { slots: Pick<ScheduledSlot, 'status'>[] }
 
 // The load error inside the calendar card. The page header refresh is hidden
 // while the calendar cannot load, so this is the only retry control.
-// The side column on a load error: no second retry, no centered wrap.
-export function LoadErrorSidePanel({ messageKey }: { messageKey: TranslationKey }) {
+// Side column on load error: one short line — the calendar card owns the alert + retry.
+export function LoadErrorSidePanel() {
   const { t } = useI18n();
   return (
-    <div className="flex min-h-[12rem] flex-col justify-start gap-2 rounded-xl border border-line bg-card p-4 xl:min-h-[22rem]">
-      <div role="status" className="flex max-w-md items-start gap-2 text-left text-sm text-ink">
-        <TriangleAlert className="mt-px size-5 shrink-0 text-destructive" aria-hidden />
-        <div>
-          <p className="font-semibold">{t(messageKey)}</p>
-          <p className="mt-1 text-muted-foreground">{t('posts.loadErrorSideHint')}</p>
-        </div>
-      </div>
+    <div className="rounded-xl border border-line bg-card p-4">
+      <p role="status" className="text-left text-sm text-muted-foreground">
+        {t('posts.loadErrorSideQuiet')}
+      </p>
     </div>
   );
 }

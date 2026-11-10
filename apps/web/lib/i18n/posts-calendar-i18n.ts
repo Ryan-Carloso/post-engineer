@@ -44,7 +44,7 @@ export const postsCalendarStrings = {
       cardNoPreview: 'Sem prévia',
       cardPersonaLabel: 'Persona',
       calendarLegendSelected: 'Dia selecionado',
-      loadErrorSideHint: 'Use «Tentar de novo» no calendário para recarregar as publicações.',
+      loadErrorSideQuiet: 'O detalhe do dia fica indisponível enquanto o calendário não carregar.',
       userNoticeEmail:
         '{provider} não publicou porque o e-mail desta conta não está verificado. Isto é um problema da sua conta. Só você pode resolver: verifique o e-mail no {provider}.',
       userNoticeReconnect:
@@ -99,7 +99,7 @@ export const postsCalendarStrings = {
       cardNoPreview: 'No preview',
       cardPersonaLabel: 'Persona',
       calendarLegendSelected: 'Selected day',
-      loadErrorSideHint: 'Use Try again in the calendar to reload posts.',
+      loadErrorSideQuiet: 'Day detail is unavailable until the calendar loads.',
       userNoticeEmail:
         '{provider} did not publish because the email on this account is not verified. This is a problem with your account. Only you can fix it: verify the email on {provider}.',
       userNoticeReconnect:

@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useMemo, type MouseEventHandler } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { UI, useDayPicker, type NavProps } from 'react-day-picker';
 import { enUS, ptBR } from 'react-day-picker/locale';
 import type { ScheduleConfig, ScheduledSlot } from '@/lib/api';
@@ -59,6 +60,8 @@ interface CalendarViewProps {
   showLegend?: boolean;
   loadErrorMessageKey?: TranslationKey;
   onLoadErrorRetry?: () => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }
 
 const DAY_PICKER_LOCALE: Record<Locale, typeof enUS> = { pt: ptBR, en: enUS };
@@ -77,9 +80,11 @@ const NAV_ARROW_CLASS =
 interface NavTodayValue {
   go: () => void;
   pressed: boolean;
+  unavailable: boolean;
+  onRetry?: () => void;
 }
 
-const NavTodayContext = createContext<NavTodayValue>({ go: () => {}, pressed: false });
+const NavTodayContext = createContext<NavTodayValue>({ go: () => {}, pressed: false, unavailable: false });
 
 // The month navigation: previous month, Today, next month. Mirrors
 // react-day-picker's default Nav (same buttons, labels and disabled
@@ -90,16 +95,31 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
   const today = useContext(NavTodayContext);
   const handlePreviousClick: MouseEventHandler<HTMLButtonElement> = useCallback(
     (event) => {
+      if (today.unavailable) {
+        today.onRetry?.();
+        return;
+      }
       if (previousMonth) onPreviousClick?.(event);
     },
-    [previousMonth, onPreviousClick],
+    [previousMonth, onPreviousClick, today.onRetry, today.unavailable],
   );
   const handleNextClick: MouseEventHandler<HTMLButtonElement> = useCallback(
     (event) => {
+      if (today.unavailable) {
+        today.onRetry?.();
+        return;
+      }
       if (nextMonth) onNextClick?.(event);
     },
-    [nextMonth, onNextClick],
+    [nextMonth, onNextClick, today.onRetry, today.unavailable],
   );
+  const handleTodayClick: MouseEventHandler<HTMLButtonElement> = useCallback(() => {
+    if (today.unavailable) {
+      today.onRetry?.();
+      return;
+    }
+    today.go();
+  }, [today]);
   return (
     <nav {...navProps}>
       <components.PreviousMonthButton
@@ -120,13 +140,16 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
       </components.PreviousMonthButton>
       <button
         type="button"
-        onClick={today.go}
-        aria-pressed={today.pressed}
+        onClick={handleTodayClick}
+        aria-pressed={today.unavailable ? undefined : today.pressed}
         className={cn(
           'h-10 rounded-md px-3 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-          today.pressed
-            ? 'bg-primary text-on-ink hover:bg-accent-hover'
-            : 'border border-input bg-card text-primary hover:bg-sunken',
+          today.unavailable && 'opacity-70',
+          !today.unavailable &&
+            (today.pressed
+              ? 'bg-primary text-on-ink hover:bg-accent-hover'
+              : 'border border-input bg-card text-primary hover:bg-sunken'),
+          today.unavailable && 'border border-input bg-card text-primary hover:bg-sunken',
         )}
       >
         {t('posts.calendarToday')}
@@ -170,6 +193,8 @@ export function CalendarView({
   showLegend = true,
   loadErrorMessageKey,
   onLoadErrorRetry,
+  onRefresh,
+  refreshing = false,
 }: CalendarViewProps) {
   const { t, locale } = useI18n();
   const dateFormat = useMemo(() => new Intl.DateTimeFormat(INTL_TAG[locale], { dateStyle: 'full' }), [locale]);
@@ -215,8 +240,13 @@ export function CalendarView({
     onSelect(todayKey);
   }, [todayKey, onMonthChange, onSelect]);
   const navToday = useMemo<NavTodayValue>(
-    () => ({ go: goToday, pressed: !unavailable && !muted && selectedKey === todayKey }),
-    [goToday, unavailable, muted, selectedKey, todayKey],
+    () => ({
+      go: goToday,
+      pressed: !unavailable && !muted && selectedKey === todayKey,
+      unavailable,
+      onRetry: onLoadErrorRetry,
+    }),
+    [goToday, unavailable, muted, selectedKey, todayKey, onLoadErrorRetry],
   );
   const inert = unavailable || muted;
   const monthHasPosts = useMemo(() => [...slotsByDay.values()].some((slots) => slots.length > 0), [slotsByDay]);
@@ -238,9 +268,23 @@ export function CalendarView({
         <CalendarChromeContext.Provider value={chrome}>
         <NavTodayContext.Provider value={navToday}>
           <div className={cn(!unavailable && 'max-xl:overflow-x-hidden max-xl:overflow-visible')}>
+          {onRefresh !== undefined && !unavailable && (
+            <div className="mb-2 flex justify-end xl:hidden">
+              <button
+                type="button"
+                onClick={onRefresh}
+                disabled={refreshing}
+                aria-label={t('posts.refresh')}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-input bg-card px-3 text-xs font-semibold text-primary hover:bg-sunken disabled:cursor-default"
+              >
+                <RefreshCw className={cn('size-3.5', refreshing && 'animate-spin')} aria-hidden />
+                {t('posts.refresh')}
+              </button>
+            </div>
+          )}
           {legendVisible && !unavailable && (
             <div className={cn('mb-2 hidden border-b border-line pb-2 xl:block', legendClassName)}>
-              <CalendarLegend filtered={filtered} showSelection />
+              <CalendarLegend filtered={filtered} />
             </div>
           )}
           <Calendar

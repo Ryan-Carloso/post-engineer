@@ -127,7 +127,7 @@ describe('calendar vocabulary', () => {
     }
     // The cell marker is a solid chip. The card pill is the same hue as a
     // soft tint, so a card does not shout the way a calendar chip does.
-    expect(CALENDAR_GROUP_MARKER.inProgress).toBe('bg-brand text-white');
+    expect(CALENDAR_GROUP_MARKER.inProgress).toBe('bg-info text-white');
     expect(CALENDAR_GROUP_DOT.scheduled).toBe('bg-muted-foreground');
     expect(CALENDAR_GROUP_DOT.published).toBe('bg-success');
     expect(CALENDAR_GROUP_PILL.inProgress).toBe('bg-info-soft text-info');
