@@ -211,10 +211,12 @@ describe('MetricsPage', () => {
     });
     renderPage();
     await waitFor(() => expect(screen.getByText('metrics.coverageTitle')).toBeInTheDocument());
-    // The as-of line and the per-row collected date go through the
-    // pt-BR branch of formatDateTime/formatDate.
-    expect(screen.getByText(/metrics\.asOf/)).toBeInTheDocument();
-    expect(screen.getAllByText(/metrics\.tableCollected/).length).toBeGreaterThan(0);
+    // The as-of line (formatDateTime) and the per-row collected date
+    // (formatDate) both go through the pt-BR branch: the mocked t()
+    // interpolates the formatted date as JSON, so the pt-BR date string
+    // itself must appear — once per line. With the en-US branch the same
+    // lines read "Oct 21, 2026", so this fails if the branch flips.
+    expect(screen.getAllByText(/21 de out\. de 2026/).length).toBe(2);
   });
 
   it('hides the coverage card when nothing is missing, but still dates the data', async () => {

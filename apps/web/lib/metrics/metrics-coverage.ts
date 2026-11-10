@@ -202,16 +202,29 @@ export async function fetchCoverage(
   if (postRecords.length === 0) return { items: [], truncated: false };
   const postsTruncated = postRecords.length > METRICS_ROW_LIMIT;
 
-  const { data: scheduleData, error: scheduleError } = await supabase
-    .from('schedules')
-    .select('id, persona_id')
-    .eq('user_id', userId)
-    .limit(1000);
-  if (scheduleError) throw new Error(`coverage schedules lookup failed: ${scheduleError.message}`);
+  // Only the schedules these posts reference can carry their persona.
+  // Reading the whole schedules table capped at 1000 would silently drop
+  // a referenced schedule for a user with more schedules than the cap,
+  // and the missing persona would read as "no persona" — which the scope
+  // guard in computeCoverage lets through. At most METRICS_ROW_LIMIT
+  // posts are in scope, so the id list is bounded, and each id matches
+  // at most one schedule row.
+  const scheduleIds = [...new Set(postRecords
+    .map((record) => (typeof record.schedule_id === 'string' ? record.schedule_id : null))
+    .filter((id): id is string => id !== null))];
   const personaBySchedule = new Map<string, string | null>();
-  for (const record of Array.isArray(scheduleData) ? scheduleData : []) {
-    if (typeof record.id === 'string') {
-      personaBySchedule.set(record.id, typeof record.persona_id === 'string' ? record.persona_id : null);
+  if (scheduleIds.length > 0) {
+    const { data: scheduleData, error: scheduleError } = await supabase
+      .from('schedules')
+      .select('id, persona_id')
+      .eq('user_id', userId)
+      .in('id', scheduleIds)
+      .limit(scheduleIds.length);
+    if (scheduleError) throw new Error(`coverage schedules lookup failed: ${scheduleError.message}`);
+    for (const record of Array.isArray(scheduleData) ? scheduleData : []) {
+      if (typeof record.id === 'string') {
+        personaBySchedule.set(record.id, typeof record.persona_id === 'string' ? record.persona_id : null);
+      }
     }
   }
 
