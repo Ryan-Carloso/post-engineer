@@ -953,7 +953,7 @@ export interface components {
             font_name?: string | null;
             /**
              * Font Size
-             * @default 65
+             * @default 50
              */
             font_size?: number;
             /**
