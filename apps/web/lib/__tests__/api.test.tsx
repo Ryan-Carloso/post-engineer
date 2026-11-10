@@ -923,5 +923,14 @@ describe('api', () => {
       vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ success: true, upcoming: [], recent: [] }));
       expect((await fetchScheduleStatus(1)).hasAnyPost).toBe(false);
     });
+
+    it('treats missing lists as empty instead of crashing', async () => {
+      const { fetchScheduleStatus } = await import('@/lib/api');
+      vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ success: true }));
+      const result = await fetchScheduleStatus(1);
+      expect(result.upcoming).toEqual([]);
+      expect(result.recent).toEqual([]);
+      expect(result.hasAnyPost).toBe(false);
+    });
   });
 });
