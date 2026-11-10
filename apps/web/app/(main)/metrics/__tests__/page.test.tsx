@@ -341,7 +341,85 @@ describe('MetricsPage', () => {
   it('notes when the row cap truncated the result', async () => {
     stubMetricsFetch({ success: true, rows: [row()], truncated: true });
     renderPage();
-    await waitFor(() => expect(screen.getByText(/metrics\.truncated/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('metrics.truncated {"limit":500}')).toBeInTheDocument());
+  });
+
+  it('labels the three total tiles and dates the data only when an as-of time exists', async () => {
+    stubMetricsFetch({ success: true, rows: [row()], truncated: false });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.statVideos')).toBeInTheDocument());
+    expect(screen.getByText('metrics.statTotalViews')).toBeInTheDocument();
+    expect(screen.getByText('metrics.statEngagement')).toBeInTheDocument();
+    expect(screen.getByText('metrics.statEngagementHint')).toBeInTheDocument();
+    expect(screen.getByText('metrics.windowCaption')).toBeInTheDocument();
+    // No as-of time in this payload: the as-of line stays hidden.
+    expect(screen.queryByText(/metrics\.asOf/)).toBeNull();
+  });
+
+  it('hides the total tiles when no videos were measured', async () => {
+    stubMetricsFetch({ success: true, rows: [], truncated: false });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.empty')).toBeInTheDocument());
+    expect(screen.queryByText('metrics.statVideos')).toBeNull();
+  });
+
+  it('shows the applied provider as a chip with the active-count badge, and removes it from the chip', async () => {
+    const fetchMock = stubMetricsFetch({ success: true, rows: [row()], truncated: false });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    await applyProviderFilter('Instagram');
+    await waitFor(() => expect(lastFetchUrl(fetchMock)).toContain('provider=instagram'));
+    expect(screen.getByText('Instagram')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'metrics.filtersActive {"count":1}' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'metrics.filtersRemoveFilter {"label":"Instagram"}' }));
+    await waitFor(() => expect(screen.queryByText('Instagram')).toBeNull());
+  });
+
+  it('removes the persona filter from its chip', async () => {
+    const fetchMock = stubMetricsFetch({ success: true, rows: [row()], truncated: false });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    await applyPersonaFilter('Beta');
+    await waitFor(() => expect(lastFetchUrl(fetchMock)).toContain(`persona=${PERSONA_B}`));
+    expect(screen.getByText('Beta')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'metrics.filtersRemoveFilter {"label":"Beta"}' }));
+    await waitFor(() => expect(screen.queryByText('Beta')).toBeNull());
+  });
+
+  it('falls back to the unknown-persona copy for a persona id it does not know', async () => {
+    stubMetricsFetch({ success: true, rows: [row({ personaId: 'unknown-persona' })], truncated: false });
+    renderPage();
+    await waitFor(() => expect(screen.getByText(/metrics\.unknownPersona/)).toBeInTheDocument());
+  });
+
+  it('labels the no-persona chip with the no-persona copy', async () => {
+    stubMetricsFetch({ success: true, rows: [row()], truncated: false });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    await applyPersonaFilter('metrics.noPersona');
+    expect(screen.getByText('metrics.noPersona')).toBeInTheDocument();
+    expect(screen.queryByText('metrics.unknownPersona')).toBeNull();
+  });
+
+  it('shows the filtered empty state for a provider-only filter', async () => {
+    stubMetricsFetch({ success: true, rows: [], truncated: false });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.empty')).toBeInTheDocument());
+    await applyProviderFilter('Instagram');
+    await waitFor(() => expect(screen.getByText('metrics.emptyFiltered')).toBeInTheDocument());
+  });
+
+  it('switches back to the 24h window', async () => {
+    const fetchMock = stubMetricsFetch({ success: true, rows: [row()], truncated: false });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    activateTab('metrics.window7d');
+    await waitFor(() => expect(lastFetchUrl(fetchMock)).toBe('/api/metrics?window=7d'));
+    // Back to 24h: the 24h query is still cache-fresh (staleTime 60s), so
+    // no new fetch fires — assert the switch through the Tabs state.
+    activateTab('metrics.window24h');
+    await waitFor(() => expect(screen.getByText('metrics.window24h')).toHaveAttribute('data-state', 'active'));
+    expect(screen.getByText('metrics.window7d')).toHaveAttribute('data-state', 'inactive');
   });
 
   it('shows the empty state, and the filtered empty state once a filter is set', async () => {

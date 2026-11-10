@@ -51,9 +51,9 @@ function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
   };
 }
 
-function renderRow(overrides: Partial<MetricsRowView> = {}): void {
+function renderRow(overrides: Partial<MetricsRowView> = {}): ReturnType<typeof render> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  return render(
     <QueryClientProvider client={client}>
       <ul>
         <MetricsRow
@@ -163,5 +163,44 @@ describe('MetricsRow', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'metrics.curveShow' }));
 
     expect(await screen.findByText('metrics.curveEmpty')).toBeInTheDocument();
+  });
+
+  it('shows views with the Views label and likes, comments and saves joined inline', () => {
+    renderRow();
+    expect(screen.getByText('100')).toBeInTheDocument();
+    expect(screen.getByText('metrics.viewsLabel')).toBeInTheDocument();
+    expect(screen.getByText(
+      'metrics.likesValue {"count":"10"} · metrics.commentsValue {"count":"3"} · metrics.savesValue {"count":"1"}',
+    )).toBeInTheDocument();
+  });
+
+  it('skips a null engagement value without leaving a dangling separator', () => {
+    renderRow({ likes: null, comments: 3, saves: 1 });
+    expect(screen.getByText(
+      'metrics.commentsValue {"count":"3"} · metrics.savesValue {"count":"1"}',
+    )).toBeInTheDocument();
+  });
+
+  it('renders no engagement line when nothing was reported', () => {
+    const { container } = renderRow({ likes: null, comments: null, saves: null });
+    expect(container.querySelector('p.mt-0\\.5')).toBeNull();
+  });
+
+  it('shows no retention line for a non-YouTube row even when Analytics is ok', () => {
+    renderRow({ provider: 'instagram', analyticsStatus: 'ok' });
+    expect(screen.queryByText('metrics.stayedToWatchDerived:')).toBeNull();
+    expect(screen.queryByText('metrics.retentionUnavailable')).toBeNull();
+  });
+
+  it('shows no retention line for a YouTube row without an Analytics status', () => {
+    renderRow({ analyticsStatus: null });
+    expect(screen.queryByText('metrics.stayedToWatchDerived:')).toBeNull();
+    expect(screen.queryByText('metrics.retentionUnavailable')).toBeNull();
+  });
+
+  it('says the stayed-to-watch share was not reported when YouTube has no value', () => {
+    renderRow({ analyticsStatus: 'ok', contentType: 'SHORTS', stayedToWatchPct: null });
+    expect(screen.getByText('metrics.stayedToWatchDerived:')).toBeInTheDocument();
+    expect(screen.getByText('metrics.notReported')).toBeInTheDocument();
   });
 });
