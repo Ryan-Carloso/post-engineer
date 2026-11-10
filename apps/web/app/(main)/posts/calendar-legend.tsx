@@ -3,7 +3,11 @@
 import { Filter } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/provider';
 import { cn } from '@/lib/utils';
-import { LEGEND_POST_TOTAL_SWATCH_CLASS, LegendTodayCell, SELECTED_DAY_LEGEND_SWATCH_CLASS } from './calendar-markers';
+import {
+  LEGEND_POST_TOTAL_SWATCH_CLASS,
+  LEGEND_TODAY_BAR_SWATCH_CLASS,
+  SELECTED_DAY_LEGEND_SWATCH_CLASS,
+} from './calendar-markers';
 
 export function CalendarLegend({
   filtered = false,
@@ -27,7 +31,7 @@ export function CalendarLegend({
         {t('posts.calendarLegendPostCount')}
       </li>
       <li className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
-        <LegendTodayCell />
+        <span aria-hidden data-legend-today-bar className={LEGEND_TODAY_BAR_SWATCH_CLASS} />
         {t('posts.calendarToday')}
       </li>
       {showSelection && (

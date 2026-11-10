@@ -60,37 +60,20 @@ export const LEGEND_POST_TOTAL_SWATCH_CLASS = cn(
   'pointer-events-none box-border h-6 min-h-6 min-w-6 shrink-0 px-1.5 shadow-[0_1px_0_rgba(13,43,69,0.1)]',
 );
 
-// Gold wash behind today's date numeral (not a count ring).
-export const TODAY_NUMERAL_WASH_CLASS = 'rounded-sm bg-warning/35 px-1 py-0.5';
+// Subtle wash behind today's date numeral (selection outline stays stronger).
+export const TODAY_NUMERAL_WASH_CLASS = 'rounded-sm bg-warning/15 px-0.5';
 
-export const TODAY_TOP_BAR_CLASS = 'h-1.5 w-full shrink-0 rounded-full bg-warning';
+export const TODAY_TOP_BAR_CLASS = 'h-1 w-full shrink-0 rounded-full bg-warning/90';
 
-export const TODAY_CELL_TOP_BAR_CLASS = 'absolute inset-x-1 top-0.5 z-[1] h-1.5 rounded-full bg-warning';
+export const TODAY_CELL_TOP_BAR_CLASS = 'absolute inset-x-1 top-0.5 z-[1] h-1 rounded-full bg-warning/90';
 
-// Short gold tick under the numeral — not a count-sized pill.
-export const TODAY_IN_CELL_MARK_CLASS = 'mt-0.5 block h-0.5 w-4 max-w-full shrink-0 rounded-full bg-warning';
-
-export const LEGEND_MINI_CELL_CLASS =
-  'pointer-events-none relative inline-flex h-10 w-9 shrink-0 flex-col overflow-hidden rounded-md border border-line/50 bg-card';
+// Legend today: the same gold top bar as the grid — not a miniature scene.
+export const LEGEND_TODAY_BAR_SWATCH_CLASS =
+  'inline-block h-1 w-10 shrink-0 rounded-full bg-warning/90 align-middle';
 
 // Miniature selected day cell: blue outline like the grid, not a form checkbox.
-export const SELECTED_DAY_LEGEND_SWATCH_CLASS = cn(
-  LEGEND_MINI_CELL_CLASS,
-  'items-center justify-center bg-card outline-2 -outline-offset-[3px] outline-primary',
-);
-
-export function LegendTodayCell() {
-  return (
-    <span aria-hidden data-legend-today-mark className={cn(LEGEND_MINI_CELL_CLASS, 'bg-warning/[0.07]')}>
-      <span data-legend-today-bar className={TODAY_TOP_BAR_CLASS} />
-      <span className="flex flex-1 flex-col items-center justify-start px-0.5 pt-1">
-        <span data-legend-today-wash className={cn(TODAY_NUMERAL_WASH_CLASS, 'flex flex-col items-center')}>
-          <span data-legend-today-inmark className={TODAY_IN_CELL_MARK_CLASS} aria-hidden />
-        </span>
-      </span>
-    </span>
-  );
-}
+export const SELECTED_DAY_LEGEND_SWATCH_CLASS =
+  'pointer-events-none inline-flex h-11 w-10 shrink-0 items-center justify-center rounded-md bg-card outline-2 -outline-offset-[4px] outline-primary';
 
 function DayCellPostTotal({
   total,
@@ -134,7 +117,7 @@ export const DayCellContext = createContext<DayContextValue>({ slotsByDay: new M
 // PostsDayButton — one day cell. One post total (per-status breakdown is
 // only in the accessible name and on the day's cards). No persona names in
 // the cell (the list below names them). Today is a gold top bar, wash on the
-// numeral, and a short underline mark; counts stay in the bottom pill. Selection
+// numeral wash; counts stay in the bottom pill. Selection
 // on an overflow-visible cell so the ring does not clip the markers.
 //---------------
 export function PostsDayButton({ children, day, modifiers, className, ...props }: ComponentProps<typeof DayButton>) {
@@ -161,7 +144,6 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       data-day-button
       className={cn(
         'aspect-auto h-[4.5rem] w-full max-w-full min-w-0 flex-col items-center justify-start gap-0.5 overflow-visible px-0.5 pb-1 pt-0.5 max-xl:h-[4.75rem] sm:h-24 sm:min-h-24 sm:gap-1 sm:pb-1 sm:pt-1 xl:h-[4.25rem] xl:min-h-[4.25rem] xl:gap-0.5 xl:pb-0.5 xl:pt-0.5',
-        isToday && !isOutside && 'bg-warning/[0.08]',
         !isOutside && '[&>span]:opacity-100',
         isOutside &&
           'text-muted-foreground hover:bg-transparent hover:text-muted-foreground active:bg-transparent data-[selected-single=true]:text-muted-foreground',
@@ -185,9 +167,6 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
         )}
       >
         <span className="leading-none">{children}</span>
-        {isToday && (
-          <span aria-hidden data-today-mark="true" className={TODAY_IN_CELL_MARK_CLASS} />
-        )}
       </span>
       {slots.length > 0 && (
         <span

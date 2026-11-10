@@ -179,6 +179,7 @@ export default function PostsPage() {
                 onSelect={handleSelect}
                 onMonthChange={(year, month) => setCursor({ year, month })}
                 onMonthNavigate={handleMonthNavigate}
+                onGoToToday={() => handleSelect(todayKey)}
                 unavailable={isError}
                 muted={isAccountEmpty}
                 filtered={filters.hasActiveFilter}
@@ -190,7 +191,7 @@ export default function PostsPage() {
                 refreshing={rangeQuery.isFetching}
               />
             </div>
-            {isError && loadErrorKey === 'posts.loadErrorCalendar' ? (
+            {isError && loadErrorKey !== 'posts.loadErrorCalendar' ? (
               <section
                 data-day-unavailable-note
                 aria-live="polite"

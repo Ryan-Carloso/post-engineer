@@ -101,27 +101,25 @@ describe('CalendarView', () => {
     expect(dayButton(/June 21, 2030/).closest('[data-selected="true"]')).toBeNull();
   });
 
-  it('marks today with a top bar, gold wash on the numeral, and an underline mark, not a ring', () => {
+  it('marks today with a top bar and a light gold wash on the numeral, not a ring', () => {
     setup({ selectedKey: '2030-06-20' });
     const today = dayButton(/June 15, 2030/);
     const number = today.querySelector('[data-day-number]');
     expect(number).toHaveTextContent('15');
-    expect(number?.className.split(/\s+/)).toContain('bg-warning/35');
+    expect(number?.className.split(/\s+/)).toContain('bg-warning/15');
     expect(today.querySelector('[data-today-bar="true"]')).not.toBeNull();
-    const mark = number?.querySelector('[data-today-mark="true"]');
-    expect(mark?.className.split(/\s+/)).toContain('bg-warning');
-    expect(mark?.className.split(/\s+/)).not.toContain('absolute');
+    expect(number?.querySelector('[data-today-mark]')).toBeNull();
     expect(number?.className.split(/\s+/)).not.toContain('ring-warning');
-    expect(dayButton(/June 20, 2030/).querySelector('[data-today-mark]')).toBeNull();
+    expect(dayButton(/June 20, 2030/).querySelector('[data-today-bar]')).toBeNull();
   });
 
-  it('keeps the today underline and post total as separate marks when today is selected', () => {
+  it('keeps the today bar and post total as separate marks when today is selected', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       ['2030-06-15', [{ status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-15T10:00:00.000Z' }]],
     ]);
     setup({ selectedKey: '2030-06-15', slotsByDay });
     const today = dayButton(/June 15, 2030/);
-    expect(today.querySelector('[data-today-mark="true"]')).not.toBeNull();
+    expect(today.querySelector('[data-today-bar="true"]')).not.toBeNull();
     expect(today.querySelector('[data-day-post-total]')).toHaveTextContent('1');
     expect(today.className.split(/\s+/)).toContain('data-[selected-single=true]:outline-primary');
   });
@@ -298,11 +296,9 @@ describe('CalendarView', () => {
     expect(countSwatch?.className.split(/\s+/)).toContain('bg-primary/12');
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
     expect(selectedSwatch).toBeEmptyDOMElement();
-    const todaySwatch = legend.querySelector('[data-legend-today-mark]');
-    expect(todaySwatch?.querySelector('[data-legend-today-bar]')).not.toBeNull();
-    expect(todaySwatch?.querySelector('[data-legend-today-wash]')).not.toBeNull();
-    expect(todaySwatch?.querySelector('[data-legend-today-inmark]')).not.toBeNull();
-    expect(todaySwatch?.className.split(/\s+/)).toContain('rounded-md');
+    const todaySwatch = legend.querySelector('[data-legend-today-bar]');
+    expect(todaySwatch?.className).toMatch(/bg-warning/);
+    expect(legend.querySelector('[data-legend-today-mark]')).toBeNull();
     expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-primary');
     expect(legend.querySelector('[data-filter-hint]')).toBeNull();
   });
@@ -375,6 +371,13 @@ describe('CalendarView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Go to today' }));
     expect(props.onMonthChange).toHaveBeenLastCalledWith(2030, 5);
     expect(props.onSelect).toHaveBeenLastCalledWith('2030-06-15');
+  });
+
+  it('selects today when go-to-today is clicked and today is already in the open month', () => {
+    const onGoToToday = vi.fn();
+    setup({ selectedKey: '2030-06-05', onGoToToday });
+    fireEvent.click(screen.getByRole('button', { name: 'Go to today' }));
+    expect(onGoToToday).toHaveBeenCalledTimes(1);
   });
 
   it('places the go-to-today button inside the month navigation, between the previous and next buttons', () => {

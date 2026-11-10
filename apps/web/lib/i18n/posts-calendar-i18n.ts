@@ -6,7 +6,7 @@ export const postsCalendarStrings = {
     posts: {
       subtitle:
         'Calendário de publicações de todas as contas. Selecione um dia para ver as publicações.',
-      subtitleLoadError: 'Os filtros ficam indisponíveis até o calendário carregar.',
+      subtitleLoadError: 'Não foi possível carregar o calendário. Os filtros estão desativados.',
       historyTitle: 'Histórico',
       historySubtitle: 'Publicações passadas e gerações de vídeo de todas as contas.',
       calendarPrevMonth: 'Mês anterior',
@@ -50,7 +50,7 @@ export const postsCalendarStrings = {
       calendarLegendSelected: 'Dia selecionado',
       calendarLegendPostCount: 'Publicações',
       cardOpen: 'Abrir publicação',
-      loadErrorSideQuiet: 'O detalhe do dia fica indisponível enquanto o calendário não carregar.',
+      loadErrorSideQuiet: 'A lista do dia não carregou com o calendário.',
       userNoticeEmail:
         '{provider} não publicou porque o e-mail desta conta não está verificado. Isto é um problema da sua conta. Só você pode resolver: verifique o e-mail no {provider}.',
       userNoticeReconnect:
@@ -68,7 +68,7 @@ export const postsCalendarStrings = {
   en: {
     posts: {
       subtitle: 'Calendar of posts across all accounts. Select a day to see its posts.',
-      subtitleLoadError: 'Filters stay disabled until the calendar loads.',
+      subtitleLoadError: 'The calendar failed to load. Filters are disabled.',
       historyTitle: 'History',
       historySubtitle: 'Past posts and video generations from all accounts.',
       calendarPrevMonth: 'Previous month',
@@ -111,7 +111,7 @@ export const postsCalendarStrings = {
       calendarLegendSelected: 'Selected day',
       calendarLegendPostCount: 'Posts',
       cardOpen: 'Open post',
-      loadErrorSideQuiet: 'Day detail is unavailable until the calendar loads.',
+      loadErrorSideQuiet: 'The day list did not load with the calendar.',
       userNoticeEmail:
         '{provider} did not publish because the email on this account is not verified. This is a problem with your account. Only you can fix it: verify the email on {provider}.',
       userNoticeReconnect:

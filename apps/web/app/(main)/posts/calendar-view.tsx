@@ -60,6 +60,8 @@ interface CalendarViewProps {
   loadErrorMessageKey?: TranslationKey;
   loadErrorNoteKey?: TranslationKey;
   onLoadErrorRetry?: () => void;
+  // Page-owned: select today and sync the month (including when today is already visible).
+  onGoToToday?: () => void;
   onRefresh?: () => void;
   refreshing?: boolean;
 }
@@ -197,6 +199,7 @@ export function CalendarView({
   loadErrorMessageKey,
   loadErrorNoteKey,
   onLoadErrorRetry,
+  onGoToToday,
   onRefresh,
   refreshing = false,
 }: CalendarViewProps) {
@@ -239,10 +242,14 @@ export function CalendarView({
   // The Today action in the month navigation: jump the shown month to today
   // and select today (a no-op when both already hold).
   const goToday = useCallback(() => {
+    if (onGoToToday !== undefined) {
+      onGoToToday();
+      return;
+    }
     const now = dateFromKey(todayKey);
     onMonthChange(now.getFullYear(), now.getMonth());
     onSelect(todayKey);
-  }, [todayKey, onMonthChange, onSelect]);
+  }, [onGoToToday, todayKey, onMonthChange, onSelect]);
   const navToday = useMemo<NavTodayValue>(
     () => ({
       go: goToday,
@@ -273,7 +280,7 @@ export function CalendarView({
           {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined ? (
             <div
               data-calendar-load-error
-              className="flex min-h-[22rem] flex-col items-center justify-center rounded-lg border border-destructive/30 bg-destructive-soft/50 p-4 sm:p-6 xl:min-h-[24rem]"
+              className="flex flex-col items-center justify-center rounded-lg border border-destructive/30 bg-destructive-soft/50 px-4 py-8 sm:px-6 sm:py-10"
             >
               <LoadErrorBanner
                 compact

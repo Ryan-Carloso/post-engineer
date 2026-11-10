@@ -40,7 +40,7 @@ const SLOT_VIDEO_STATUSES = new Set<ScheduledSlot['status']>(['ready', 'publishi
 // Progress is shown only while work is running: an awaiting post at 0%
 // looks stuck, and a ready video has nothing left to fill.
 const SLOT_PROGRESS_STATUSES = new Set<ScheduledSlot['status']>(['generating', 'publishing']);
-const NO_PREVIEW_CLASS = 'mt-1 text-xs italic text-muted-foreground/90';
+const NO_PREVIEW_CLASS = 'mt-1 border-l border-line/80 pl-2 text-xs text-muted-foreground/85';
 
 const GENERATION_STATUS_KEY: Record<string, TranslationKey> = {
   pending: 'posts.statusPending',
@@ -302,6 +302,11 @@ export const PostCard = ({
           <div className={cn('mt-3', generatingCue && 'rounded-lg border border-info/25 bg-info-soft/40 p-2.5')}>
             {!generatingCue && (
               <p className="text-xs font-semibold text-info">{t(STATUS_KEY[slot.status] ?? 'posts.groupInProgress')}</p>
+            )}
+            {generatingCue && (
+              <p data-card-progress-caption className="mb-1.5 text-xs font-medium text-info">
+                {t(STATUS_KEY.generating)}
+              </p>
             )}
             <div className={cn('flex w-full items-center gap-2', generatingCue ? 'mt-0' : 'mt-1.5')}>
               <div

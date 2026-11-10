@@ -506,14 +506,14 @@ describe('PostsPage', () => {
     const grid = screen.getByRole('grid');
     const todayCell = grid.querySelector('[data-today]');
     expect(todayCell?.querySelector('[data-day-number]')).toHaveTextContent('1');
-    expect(todayCell?.querySelector('[data-today-mark="true"]')).not.toBeNull();
+    expect(todayCell?.querySelector('[data-today-bar="true"]')).not.toBeNull();
 
     vi.setSystemTime(new Date('2030-06-02T00:01:00.000Z'));
     rerender(<PostsPage />);
 
     const nextToday = screen.getByRole('grid').querySelector('[data-today]');
     expect(nextToday?.querySelector('[data-day-number]')).toHaveTextContent('2');
-    expect(nextToday?.querySelector('[data-today-mark="true"]')).not.toBeNull();
+    expect(nextToday?.querySelector('[data-today-bar="true"]')).not.toBeNull();
     await user.click(screen.getByRole('button', { name: 'posts.calendarGoToToday' }));
     expect(screen.getByRole('grid').querySelector('[data-selected="true"]')?.textContent).toBe('2');
   });
@@ -727,6 +727,7 @@ describe('PostsPage calendar view', () => {
     { ...PUBLISHED_SLOT, id: 'c2', slotAt: '2030-06-05T15:00:00.000Z', title: 'Calendar published' },
     { ...FAILED_SLOT, id: 'c3', slotAt: '2030-06-07T12:00:00.000Z', title: 'Calendar failed' },
     { ...UPCOMING_SLOT, id: 'c4', slotAt: '2030-06-18T10:00:00.000Z', title: 'Future scheduled' },
+    { ...UPCOMING_SLOT, id: 'c5', slotAt: '2030-06-15T11:00:00.000Z', title: 'Today slot' },
   ];
 
   beforeEach(() => {
@@ -736,6 +737,23 @@ describe('PostsPage calendar view', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('selects today and lists its posts when go-to-today is clicked in the open month', async () => {
+    mockQueries({ range: rangeSlots });
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    const day5 = within(screen.getByRole('grid'))
+      .getAllByRole('button', { name: 'posts.calendarDayLabel' })
+      .find((button) => button.textContent?.startsWith('5'));
+    await user.click(day5 as HTMLElement);
+    expect(screen.getByText('Calendar upcoming')).toBeInTheDocument();
+    expect(screen.queryByText('Today slot')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'posts.calendarGoToToday' }));
+    expect(screen.getByText('Today slot')).toBeInTheDocument();
+    expect(screen.getByRole('grid').querySelector('[data-selected="true"] [data-day-number]')).toHaveTextContent('15');
   });
 
   it('reads the visible 6-week grid as one range', () => {
@@ -756,8 +774,8 @@ describe('PostsPage calendar view', () => {
     const user = userEvent.setup();
     render(<PostsPage />);
 
-    // Today (June 15) is selected on open and has no posts.
-    expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
+    // Today (June 15) is selected on open.
+    expect(screen.getByText('Today slot')).toBeInTheDocument();
     // Cells with posts carry the summary label (t() echoes keys here); the
     // only one starting with "5" is June 5 — July 5 in the grid is empty.
     const day5 = within(screen.getByRole('grid'))
@@ -827,7 +845,7 @@ describe('PostsPage calendar view', () => {
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('posts.loadErrorCalendar');
     expect(within(alert).queryByText('posts.loadErrorSideQuiet')).not.toBeInTheDocument();
-    expect(document.querySelector('[data-day-unavailable-note]')).toHaveTextContent('posts.loadErrorSideQuiet');
+    expect(document.querySelector('[data-day-unavailable-note]')).toBeNull();
     expect(screen.getByText('posts.subtitleLoadError')).toBeInTheDocument();
     expect(screen.queryByText('posts.subtitle')).not.toBeInTheDocument();
     expect(screen.queryByTestId('load-error-side-panel')).not.toBeInTheDocument();
@@ -970,18 +988,13 @@ describe('PostsPage calendar view', () => {
     expect(screen.queryByRole('grid')).not.toBeInTheDocument();
     expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
     expect(screen.queryByText('posts.calendarMonthHeading')).not.toBeInTheDocument();
-    expect(document.querySelector('[data-day-unavailable-note]')).toHaveTextContent('posts.loadErrorSideQuiet');
+    expect(document.querySelector('[data-day-unavailable-note]')).toBeNull();
     expect(screen.queryAllByRole('button', { name: 'posts.loadErrorRetry' })).toHaveLength(1);
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
     const loadError = document.querySelector('[data-calendar-load-error]');
-    expect(loadError?.className.split(/\s+/)).toContain('min-h-[22rem]');
+    expect(loadError?.className.split(/\s+/)).not.toContain('min-h-[22rem]');
     expect(loadError?.className.split(/\s+/)).toContain('justify-center');
     expect(loadError?.className).toMatch(/bg-destructive-soft/);
-    const sideNote = document.querySelector('[data-day-unavailable-note]');
-    expect(sideNote?.className).toMatch(/bg-destructive-soft/);
-    expect(sideNote?.querySelector('[data-load-side-warning]')).not.toBeNull();
-    expect(sideNote?.className.split(/\s+/)).toContain('xl:self-start');
-    expect(sideNote?.className.split(/\s+/)).not.toContain('xl:self-stretch');
   });
 
   it('hides the header refresh on a load error so only the in-card retry remains', () => {
