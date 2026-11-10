@@ -169,19 +169,23 @@ describe('CalendarView', () => {
     expect(today.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('outline-ring');
   });
 
-  it('lays the legend out in a wrapping row inside the calendar card without clipping items', () => {
+  it('keeps the phone legend on one row with tight gaps and compact swatches', () => {
     setup({
       slotsByDay: new Map([['2030-06-05', [{ status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T10:00:00.000Z' }]]]),
     });
     const legend = screen.getByText('posts.calendarLegendPostCount').closest('ul');
     if (legend === null) throw new Error('legend not rendered');
-    expect(legend.className.split(/\s+/)).toContain('flex-wrap');
+    expect(legend.className.split(/\s+/)).toContain('max-xl:flex-nowrap');
+    expect(legend.className.split(/\s+/)).toContain('max-xl:gap-x-1');
     expect(legend.className.split(/\s+/)).toContain('w-full');
-    expect(legend.className.split(/\s+/)).not.toContain('max-xl:flex-nowrap');
     for (const item of within(legend).getAllByRole('listitem')) {
       expect(item.className.split(/\s+/)).toContain('shrink-0');
       expect(item.className.split(/\s+/)).not.toContain('min-w-0');
     }
+    const todaySwatch = legend.querySelector('[data-legend-today-bar]');
+    expect(todaySwatch?.className.split(/\s+/)).toContain('max-xl:w-4');
+    const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('max-xl:size-4');
     expect(legend.closest('[data-calendar-card]')).not.toBeNull();
   });
 
@@ -354,7 +358,7 @@ describe('CalendarView', () => {
     expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-ring');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-2');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('rounded-md');
-    expect(selectedSwatch?.className.split(/\s+/)).toContain('size-7');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('xl:size-7');
     expect(selectedSwatch?.className.split(/\s+/)).not.toContain('outline-primary');
     expect(selectedSwatch?.className.split(/\s+/)).not.toContain('border-primary');
     expect(selectedSwatch?.className).not.toMatch(/bg-info-soft/);

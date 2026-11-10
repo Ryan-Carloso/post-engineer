@@ -190,6 +190,11 @@ describe('posts calendar legend copy', () => {
     expect(postsCalendarStrings.pt.posts.calendarLegendPostCount).toBe('Publicações no dia');
     expect(postsCalendarStrings.en.posts.calendarLegendPostCount).toBe('Posts that day');
   });
+
+  it('uses short selection labels so the phone legend fits on one line', () => {
+    expect(postsCalendarStrings.pt.posts.calendarLegendSelected).toBe('Selecionado');
+    expect(postsCalendarStrings.en.posts.calendarLegendSelected).toBe('Selected');
+  });
 });
 
 describe('PostsPage', () => {

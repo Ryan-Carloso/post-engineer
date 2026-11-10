@@ -68,7 +68,7 @@ export const TODAY_CELL_BAR_CLASS =
 
 // Legend today: the same gold top bar as the grid — not a miniature scene.
 export const LEGEND_TODAY_BAR_SWATCH_CLASS =
-  'inline-block h-1 w-10 shrink-0 rounded-full bg-warning align-middle';
+  'inline-block h-1 w-4 max-xl:w-4 shrink-0 rounded-full bg-warning align-middle xl:w-10';
 
 // Fixed square frame so the ring never grows with the cell stack (outline-offset was
 // collapsing the digit). Legend uses the same empty box — not a tall faux cell.
@@ -76,7 +76,7 @@ export const SELECTED_DAY_NUMERAL_OUTLINE_CLASS =
   'box-border inline-flex size-7 min-h-7 min-w-7 shrink-0 items-center justify-center overflow-visible rounded-md bg-transparent p-0 outline outline-2 outline-offset-0 outline-ring';
 
 export const SELECTED_DAY_LEGEND_SWATCH_CLASS = cn(
-  'pointer-events-none inline-block size-7 shrink-0 rounded-md outline outline-2 outline-offset-0 outline-ring',
+  'pointer-events-none inline-block size-4 max-xl:size-4 shrink-0 rounded-md outline outline-2 outline-offset-0 outline-ring xl:size-7',
 );
 
 function DayCellPostTotal({
