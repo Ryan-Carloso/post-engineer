@@ -72,13 +72,27 @@ export const LEGEND_TODAY_BAR_SWATCH_CLASS =
   'inline-block h-1 w-4 max-xl:w-4 shrink-0 rounded-full bg-warning align-middle xl:w-10';
 
 // Fixed square frame so the ring never grows with the cell stack (outline-offset was
-// collapsing the digit). Legend uses the same empty box — not a tall faux cell.
+// collapsing the digit).
 export const SELECTED_DAY_NUMERAL_OUTLINE_CLASS =
   'box-border inline-flex size-7 min-h-7 min-w-7 shrink-0 items-center justify-center overflow-visible rounded-md bg-transparent p-0 outline outline-2 outline-offset-0 outline-ring';
 
-export const SELECTED_DAY_LEGEND_SWATCH_CLASS = cn(
-  'pointer-events-none inline-block size-4 max-xl:size-4 shrink-0 rounded-md outline outline-2 outline-offset-0 outline-ring xl:size-7',
-);
+// Legend selected-day sample: same ring as the grid numeral, not an empty checkbox.
+export function LegendSelectedDaySwatch() {
+  return (
+    <span
+      aria-hidden
+      data-legend-selected-day
+      className={cn(
+        SELECTED_DAY_NUMERAL_OUTLINE_CLASS,
+        'pointer-events-none font-semibold leading-none text-primary tabular-nums',
+        'max-xl:size-4 max-xl:min-h-4 max-xl:min-w-4 max-xl:text-[10px]',
+        'xl:text-base',
+      )}
+    >
+      5
+    </span>
+  );
+}
 
 function DayCellPostTotal({
   total,

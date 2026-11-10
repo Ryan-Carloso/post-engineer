@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import {
   LEGEND_POST_TOTAL_SWATCH_CLASS,
   LEGEND_TODAY_BAR_SWATCH_CLASS,
-  SELECTED_DAY_LEGEND_SWATCH_CLASS,
+  LegendSelectedDaySwatch,
 } from './calendar-markers';
 
 export function CalendarLegend({
@@ -36,7 +36,7 @@ export function CalendarLegend({
       </li>
       {showSelection && (
         <li className="flex shrink-0 items-center gap-1 whitespace-nowrap max-xl:gap-1 xl:gap-1.5">
-          <span aria-hidden data-legend-selected-day className={SELECTED_DAY_LEGEND_SWATCH_CLASS} />
+          <LegendSelectedDaySwatch />
           {t('posts.calendarLegendSelected')}
         </li>
       )}

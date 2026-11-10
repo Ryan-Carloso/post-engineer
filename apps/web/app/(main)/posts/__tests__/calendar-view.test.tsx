@@ -187,7 +187,9 @@ describe('CalendarView', () => {
     const countSwatch = legend.querySelector('[data-legend-post-total]');
     expect(countSwatch?.className.split(/\s+/)).toContain('max-xl:w-4');
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
+    expect(selectedSwatch).toHaveTextContent('5');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('max-xl:size-4');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-ring');
     expect(legend.closest('[data-calendar-card]')).not.toBeNull();
   });
 
@@ -338,11 +340,13 @@ describe('CalendarView', () => {
     const legend = screen.getByText('posts.calendarLegendPostCount').closest('ul');
     if (legend === null) throw new Error('legend not rendered');
     expect(legend.querySelectorAll('[data-marker]')).toHaveLength(0);
-    expect(within(legend).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+    const items = within(legend).getAllByRole('listitem');
+    expect(items.map((item) => item.textContent)).toEqual([
       'posts.calendarLegendPostCount',
       'Today',
-      'posts.calendarLegendSelected',
+      '5posts.calendarLegendSelected',
     ]);
+    expect(items[2]?.querySelector('[data-legend-selected-day]')).toHaveTextContent('5');
     const countSwatch = legend.querySelector('[data-legend-post-total]');
     expect(countSwatch).toBeTruthy();
     expect(countSwatch).toBeEmptyDOMElement();
@@ -353,14 +357,16 @@ describe('CalendarView', () => {
     expect(countSwatch?.className.split(/\s+/)).not.toContain('w-8');
     expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/55');
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
-    expect(selectedSwatch).toBeEmptyDOMElement();
+    expect(selectedSwatch).toHaveTextContent('5');
+    expect(selectedSwatch).toHaveAttribute('aria-hidden', 'true');
     const todaySwatch = legend.querySelector('[data-legend-today-bar]');
     expect(todaySwatch?.className).toMatch(/bg-warning/);
     expect(legend.querySelector('[data-legend-today-mark]')).toBeNull();
     expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-ring');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-2');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('rounded-md');
-    expect(selectedSwatch?.className.split(/\s+/)).toContain('xl:size-7');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('size-7');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('font-semibold');
     expect(selectedSwatch?.className.split(/\s+/)).not.toContain('outline-primary');
     expect(selectedSwatch?.className.split(/\s+/)).not.toContain('border-primary');
     expect(selectedSwatch?.className).not.toMatch(/bg-info-soft/);
