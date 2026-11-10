@@ -327,10 +327,11 @@ describe('CalendarView', () => {
     const todaySwatch = legend.querySelector('[data-legend-today-bar]');
     expect(todaySwatch?.className).toMatch(/bg-warning/);
     expect(legend.querySelector('[data-legend-today-mark]')).toBeNull();
-    expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-primary');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-ring');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-2');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('rounded-md');
     expect(selectedSwatch?.className).toMatch(/bg-info-soft/);
+    expect(selectedSwatch?.className.split(/\s+/)).not.toContain('outline-primary');
     expect(selectedSwatch?.className.split(/\s+/)).not.toContain('border-primary');
     expect(legend.querySelector('[data-filter-hint]')).toBeNull();
   });
