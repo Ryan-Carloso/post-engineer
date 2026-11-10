@@ -602,7 +602,7 @@ describe('createPostMetricsStore', () => {
 
   it('caps the re-opened posts at the remaining run budget', async () => {
     const rpc = vi.fn(async () => ({
-      data: Array.from({ length: 50 }, (_, index) => ({
+      data: Array.from({ length: 49 }, (_, index) => ({
         post_id: `post-${index}`, user_id: 'user-1', task_id: `task-${index}`, metrics_window: '24h', collected_keys: [],
       })),
       error: null,
@@ -621,10 +621,10 @@ describe('createPostMetricsStore', () => {
       }),
     } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
-    // Budget is 1 (50 RPC posts of a 51-post run): only the first
+    // Budget is 1 (49 RPC posts of a 50-post run): only the first
     // re-openable candidate fits, so the second one proves the cap.
-    expect(posts).toHaveLength(51);
-    expect(posts[50]).toMatchObject({ id: 'post-99', window: '24h' });
+    expect(posts).toHaveLength(50);
+    expect(posts[49]).toMatchObject({ id: 'post-99', window: '24h' });
   });
 
   it('skips the re-open scan when the RPC already filled the run budget', async () => {
@@ -639,6 +639,20 @@ describe('createPostMetricsStore', () => {
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
     expect(posts).toHaveLength(51);
     expect(from).not.toHaveBeenCalled();
+
+    // The boundary is the 50-post processing cap, not the 51-post probe
+    // limit: with exactly 50 RPC posts the re-open budget is already 0.
+    const rpc50 = vi.fn(async () => ({
+      data: Array.from({ length: 50 }, (_, index) => ({
+        post_id: `post-${index}`, user_id: 'user-1', task_id: `task-${index}`, metrics_window: '24h', collected_keys: [],
+      })),
+      error: null,
+    }));
+    const from50 = fakeFrom({ scheduled_posts: { data: [scannedPost()], error: null } });
+    const store50 = createPostMetricsStore({ rpc: rpc50, from: from50 } as unknown as SupabaseClient);
+    const posts50 = await store50.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts50).toHaveLength(50);
+    expect(from50).not.toHaveBeenCalled();
   });
 
   it('keeps the RPC posts when the re-open rows lookup fails', async () => {

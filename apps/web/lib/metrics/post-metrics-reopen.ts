@@ -8,13 +8,14 @@ import {
   METRICS_WINDOW_LOOKBACK_HOURS,
   metricsWindowRange,
 } from './metrics-query';
-import { metricsTargets, targetKey, type DuePost } from './post-metrics';
+import type { DuePost, MetricsTarget, MetricsTargetsResult } from './post-metrics';
 
 //---------------
 // post-metrics-reopen — the late-target re-read (issue #525 item 4),
 // extracted from post-metrics.ts so that file stays under the 500-line
-// cap. Imported by post-metrics.ts; the metricsTargets/targetKey import
-// back is safe because both are used only inside function bodies.
+// cap. Imported by post-metrics.ts; metricsTargets/targetKey arrive as
+// parameters so the modules never import each other's values (a value
+// import back would be a circular import).
 //---------------
 
 // How many published posts the re-open scan reads per run (newest first).
@@ -45,6 +46,8 @@ export async function findReopenedPosts(
   now: Date,
   seen: ReadonlySet<string>,
   budget: number,
+  metricsTargets: (publishResults: unknown[]) => MetricsTargetsResult,
+  targetKey: (target: Pick<MetricsTarget, 'provider' | 'externalId'>) => string,
 ): Promise<DuePost[]> {
   if (budget <= 0) return [];
   const cutoff = new Date(now.getTime() - METRICS_WINDOW_LOOKBACK_HOURS * 60 * 60 * 1000);
@@ -78,9 +81,10 @@ export async function findReopenedPosts(
   }
   const rows = Array.isArray(rowData) ? rowData : [];
   if (rows.length >= REOPEN_ROWS_LIMIT) {
-    // The cap drops the oldest rows first: a collected target could read
-    // as missing and be snapshotted twice (the upsert is idempotent, but
-    // the PostHog event would fire twice). Skip the re-open this run.
+    // The cap drops the oldest rows first (newest are kept). An old
+    // collected target could read as missing and be snapshotted twice
+    // (the upsert is idempotent, but the PostHog event would fire
+    // twice). Skip the re-open this run.
     logger.warn('[post-metrics] reopen rows read hit its cap; skipping the re-open this run');
     return [];
   }

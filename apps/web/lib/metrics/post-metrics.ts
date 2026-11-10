@@ -349,7 +349,17 @@ export function createPostMetricsStore(
         });
         seen.add(`${row.post_id}:${window}`);
       }
-      const reopened = await findReopenedPosts(supabase, now, seen, Math.max(0, limit - posts.length));
+      // The re-open budget counts against what this run processes
+      // (MAX_POSTS_PER_RUN), not the +1 probe limit: a re-opened post
+      // appended past MAX would be dropped by collectPostMetrics' slice.
+      const reopened = await findReopenedPosts(
+        supabase,
+        now,
+        seen,
+        Math.max(0, MAX_POSTS_PER_RUN - posts.length),
+        metricsTargets,
+        targetKey,
+      );
       return [...posts, ...reopened];
     },
     async saveMetrics(row) {
