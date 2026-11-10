@@ -98,6 +98,11 @@ export interface PostMetricsDeps {
   listDuePosts: (now: Date, limit: number) => Promise<DuePost[]>;
   fetchTaskSource: (taskId: string, userId: string) => Promise<{ publishResults: unknown[]; scriptAngle: string | null }>;
   fetchCounters: (userId: string, target: MetricsTarget, context: CounterContext) => Promise<MetricsCounters>;
+  // Resolves a target's account before fetching: a placeholder YouTube
+  // account id ('unknown' from the old OAuth flow) maps to the user's
+  // connected account, or null when no connected account owns the video —
+  // a terminal skip, never a failure that keeps the window open.
+  resolveTarget: (userId: string, target: MetricsTarget) => Promise<MetricsTarget | null>;
   saveMetrics: (row: MetricsRow) => Promise<ExperimentTag>;
   markDone: (postId: string, window: MetricsWindow) => Promise<void>;
   track: (event: string, properties: Record<string, unknown>) => void;
@@ -251,10 +256,23 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
     for (const target of targets) {
       if (post.collectedKeys.has(targetKey(target))) continue;
       try {
-        const counters = await deps.fetchCounters(post.userId, target, { window: post.window, now: deps.now() });
+        const resolved = await deps.resolveTarget(post.userId, target);
+        if (resolved === null) {
+          // Terminal skip: no connected account owns this video, so it
+          // can never be measured — report it once and let the window
+          // close instead of retrying it every hour.
+          logger.warn('[post-metrics] snapshot skipped', {
+            postId: post.id,
+            provider: target.provider,
+            externalId: target.externalId,
+            accountId: target.accountId,
+          });
+          continue;
+        }
+        const counters = await deps.fetchCounters(post.userId, resolved, { window: post.window, now: deps.now() });
         if (counters.retention?.status === 'scope_missing') missingAnalyticsScope = true;
         const tag = await deps.saveMetrics({
-          postId: post.id, userId: post.userId, window: post.window, scriptAngle, ...target, ...counters,
+          postId: post.id, userId: post.userId, window: post.window, scriptAngle, ...resolved, ...counters,
         });
         report.recorded += 1;
         // script_angle lets PostHog break performance down by the angle the
@@ -270,7 +288,7 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
           script_angle: scriptAngle,
           post_id: post.id,
           user_id: post.userId,
-          provider: target.provider,
+          provider: resolved.provider,
           window: post.window,
           views: counters.views,
           likes: counters.likes,

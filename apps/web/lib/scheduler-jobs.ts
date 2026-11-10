@@ -32,6 +32,7 @@ import 'server-only';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { collectPostMetrics, createPostMetricsStore } from '@/lib/metrics/post-metrics';
 import { fetchProviderCounters } from '@/lib/metrics/provider-counters';
+import { resolveYouTubeMetricsTarget } from '@/lib/metrics/youtube-account-resolution';
 import { fetchEnginePostMetricsSource } from '@/lib/engine-tasks';
 import { createReconcileStore, runBillingReconciliation } from '@/lib/billing/reconcile';
 import { trackApiEvent } from '@/lib/analytics';
@@ -55,6 +56,7 @@ async function runPostMetricsTick(): Promise<void> {
     ...store,
     fetchTaskSource: fetchEnginePostMetricsSource,
     fetchCounters: fetchProviderCounters,
+    resolveTarget: resolveYouTubeMetricsTarget,
     track: trackApiEvent,
     now: () => new Date(),
   });

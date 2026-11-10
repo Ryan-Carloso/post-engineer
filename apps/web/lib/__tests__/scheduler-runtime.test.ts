@@ -31,6 +31,7 @@ vi.mock('../metrics/post-metrics', () => ({
   createPostMetricsStore: vi.fn(() => ({ store: true })),
 }));
 vi.mock('../metrics/provider-counters', () => ({ fetchProviderCounters: vi.fn() }));
+vi.mock('../metrics/youtube-account-resolution', () => ({ resolveYouTubeMetricsTarget: vi.fn() }));
 vi.mock('../engine-tasks', () => ({ fetchEnginePostMetricsSource: vi.fn() }));
 vi.mock('../billing/reconcile', () => ({
   runBillingReconciliation: vi.fn().mockResolvedValue({ errors: [] }),

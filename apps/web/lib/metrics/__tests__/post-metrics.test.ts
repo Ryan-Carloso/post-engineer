@@ -16,6 +16,7 @@ import {
   MAX_POSTS_PER_RUN,
   RUN_TIME_BUDGET_MS,
   type DuePost,
+  type MetricsTarget,
   type PostMetricsDeps,
 } from '../post-metrics';
 import { REOPEN_ROWS_LIMIT } from '../post-metrics-reopen';
@@ -50,6 +51,7 @@ function deps(overrides: Partial<PostMetricsDeps> = {}): PostMetricsDeps {
     listDuePosts: vi.fn(async () => [duePost()]),
     fetchTaskSource: vi.fn(async () => ({ publishResults: [YT_ENTRY, IG_ENTRY], scriptAngle: 'myth' })),
     fetchCounters: vi.fn(async () => COUNTERS),
+    resolveTarget: vi.fn(async (_userId: string, target: MetricsTarget) => target),
     saveMetrics: vi.fn(async () => NO_EXPERIMENT),
     markDone: vi.fn(async () => undefined),
     track: vi.fn(),
@@ -273,6 +275,66 @@ describe('collectPostMetrics', () => {
     expect(d.markDone).toHaveBeenLastCalledWith('post-2', '24h');
   });
 
+  it('resolves a placeholder YouTube account to the real account before fetching', async () => {
+    const resolved: MetricsTarget = { provider: 'youtube', accountId: 'UC-real', externalId: 'abc123' };
+    const d = deps({
+      fetchTaskSource: vi.fn(async () => ({ publishResults: [{ ...YT_ENTRY, accountId: 'unknown' }], scriptAngle: null })),
+      resolveTarget: vi.fn(async () => resolved),
+    });
+    await collectPostMetrics(d);
+
+    expect(d.resolveTarget).toHaveBeenCalledWith('user-1', { provider: 'youtube', accountId: 'unknown', externalId: 'abc123' });
+    expect(d.fetchCounters).toHaveBeenCalledWith('user-1', resolved, { window: '24h', now: new Date('2026-10-21T12:00:00.000Z') });
+    expect(d.saveMetrics).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'UC-real' }));
+    expect(d.markDone).toHaveBeenCalledWith('post-1', '24h');
+  });
+
+  it('skips a target that resolves to nothing and still closes the window', async () => {
+    const d = deps({
+      fetchTaskSource: vi.fn(async () => ({ publishResults: [{ ...YT_ENTRY, accountId: 'unknown' }], scriptAngle: null })),
+      resolveTarget: vi.fn(async () => null),
+    });
+    const report = await collectPostMetrics(d);
+
+    expect(report).toEqual({ checked: 1, recorded: 0, errors: [], truncated: false });
+    expect(d.fetchCounters).not.toHaveBeenCalled();
+    expect(d.saveMetrics).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith('[post-metrics] snapshot skipped', {
+      postId: 'post-1',
+      provider: 'youtube',
+      externalId: 'abc123',
+      accountId: 'unknown',
+    });
+    expect(d.markDone).toHaveBeenCalledWith('post-1', '24h');
+  });
+
+  it('collects the real videos and closes the window when a placeholder target is skipped', async () => {
+    const d = deps({
+      fetchTaskSource: vi.fn(async () => ({ publishResults: [{ ...YT_ENTRY, accountId: 'unknown' }, IG_ENTRY], scriptAngle: null })),
+      resolveTarget: vi.fn(async (_userId: string, target: MetricsTarget) => (target.provider === 'youtube' ? null : target)),
+    });
+    const report = await collectPostMetrics(d);
+
+    expect(report.recorded).toBe(1);
+    expect(d.fetchCounters).toHaveBeenCalledTimes(1);
+    expect(d.fetchCounters).toHaveBeenCalledWith('user-1', expect.objectContaining({ provider: 'instagram' }), expect.anything());
+    expect(d.markDone).toHaveBeenCalledWith('post-1', '24h');
+  });
+
+  it('keeps the post open when resolving a target fails', async () => {
+    const d = deps({
+      resolveTarget: vi.fn(async (_userId: string, target: MetricsTarget) => {
+        if (target.provider === 'youtube') throw new Error('video gone');
+        return target;
+      }),
+    });
+    const report = await collectPostMetrics(d);
+
+    expect(report.recorded).toBe(1);
+    expect(report.errors).toEqual(['post-1/youtube: snapshot failed']);
+    expect(d.markDone).not.toHaveBeenCalled();
+  });
+
   it('only retries the videos not yet collected for the window', async () => {
     const d = deps({ listDuePosts: vi.fn(async () => [duePost({ collectedKeys: new Set(['youtube:abc123']) })]) });
     const report = await collectPostMetrics(d);
@@ -284,6 +346,13 @@ describe('collectPostMetrics', () => {
       accountId: 'ig-acct',
       externalId: 'media-9',
     }, { window: '24h', now: new Date('2026-10-21T12:00:00.000Z') });
+    // Resolution runs only for the videos still to collect.
+    expect(d.resolveTarget).toHaveBeenCalledTimes(1);
+    expect(d.resolveTarget).toHaveBeenCalledWith('user-1', {
+      provider: 'instagram',
+      accountId: 'ig-acct',
+      externalId: 'media-9',
+    });
   });
 
   it('keeps going after one video fails and reports the failure', async () => {
