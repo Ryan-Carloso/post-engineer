@@ -99,7 +99,7 @@ describe('upload_media tool', () => {
 });
 
 describe('check_media tool', () => {
-  it.each(['ok', 'blocked_403', 'not_image', 'too_small', 'too_large', 'timeout', 'face_detected'])(
+  it.each(['ok', 'blocked_403', 'not_image', 'too_small', 'too_large', 'timeout', 'face_detected', 'wrong_aspect'])(
     'passes the engine code %s through unchanged',
     async (code) => {
       const client = fakeClient(async (path, init) => {
@@ -124,6 +124,23 @@ describe('check_media tool', () => {
     const response = await handleCheckMedia(client, { url: 'ftp://e.com/porto.jpg' });
     expect(response.isError).toBe(true);
     expect(client.request).not.toHaveBeenCalled();
+  });
+
+  it('forwards videoAspect and surfaces the probed dimensions on wrong_aspect', async () => {
+    let sentBody: unknown;
+    const client = fakeClient(async (path, init) => {
+      sentBody = JSON.parse(String(init.body));
+      return { success: true, code: 'wrong_aspect', width: 1920, height: 1080 };
+    });
+    const response = await handleCheckMedia(client, {
+      url: 'https://e.com/porto.jpg',
+      videoAspect: '9:16',
+    });
+    expect(response.isError).not.toBe(true);
+    expect(sentBody).toEqual({ url: 'https://e.com/porto.jpg', videoAspect: '9:16' });
+    expect(textOf(response)).toContain('wrong_aspect');
+    expect(textOf(response)).toContain('1920');
+    expect(textOf(response)).toContain('1080');
   });
 
   it('never puts the checked URL in its output', async () => {

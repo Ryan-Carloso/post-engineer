@@ -12,8 +12,8 @@ from app.models.schema import MaterialInfo, VideoAspect, VideoConcatMode
 from app.services import material_verification, stock_thumbnails, svg_material
 from app.services.material_verification import (
     MAX_LETTERBOX_BARS as MAX_LETTERBOX_BARS,
-    _ratio_matches as _ratio_matches,
     _source_resolution_allowed as _source_resolution_allowed,
+    ratio_matches as ratio_matches,
 )
 from app.services.video_download import _get_tls_verify
 # save_video lives in video_download; re-exported here because existing
@@ -96,7 +96,7 @@ def search_videos_pexels(
                 h = int(video["height"])
                 if not _source_resolution_allowed(w, h):
                     continue
-                if not _ratio_matches(w, h, aspect):
+                if not ratio_matches(w, h, aspect):
                     continue
                 area = w * h
                 if area > best_area:
@@ -167,7 +167,7 @@ def search_videos_pixabay(
                 h = int(video.get("height") or 0)
                 if not _source_resolution_allowed(w, h):
                     continue
-                if not _ratio_matches(w, h, aspect):
+                if not ratio_matches(w, h, aspect):
                     continue
                 area = w * h
                 if area > best_area:
@@ -249,7 +249,7 @@ def search_videos_coverr(
             # Can't evaluate the bar ceiling without dimensions — reject.
             width = int(v.get("width") or 0)
             height = int(v.get("height") or 0)
-            if not _source_resolution_allowed(width, height) or not _ratio_matches(
+            if not _source_resolution_allowed(width, height) or not ratio_matches(
                 width, height, aspect
             ):
                 continue

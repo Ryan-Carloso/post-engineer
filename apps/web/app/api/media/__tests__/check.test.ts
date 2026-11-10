@@ -29,11 +29,13 @@ vi.mock('@/lib/logger', () => ({
 import { POST } from '../check/route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 
-function checkRequest(url: string): Request {
+function checkRequest(url: string, videoAspect?: string): Request {
   return new Request('https://post-engineer.com/api/media/check', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify(
+      videoAspect === undefined ? { url } : { url, videoAspect },
+    ),
   });
 }
 
@@ -67,6 +69,30 @@ describe('POST /api/media/check', () => {
     const fetchCall = vi.mocked(global.fetch).mock.calls[0];
     expect(fetchCall?.[0]).toBe('https://engine.test/api/v1/media/check');
     expect(JSON.parse(String(fetchCall?.[1]?.body))).toEqual({ url });
+  });
+
+  it('forwards videoAspect and passes wrong_aspect with dimensions through', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ status: 200, body: { code: 'wrong_aspect', width: 1920, height: 1080 } }),
+    } as never);
+    const response = await POST(checkRequest('https://e.com/porto.jpg', '9:16'));
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as Record<string, unknown>;
+    expect(payload.code).toBe('wrong_aspect');
+    expect(payload.width).toBe(1920);
+    expect(payload.height).toBe(1080);
+    const fetchCall = vi.mocked(global.fetch).mock.calls[0];
+    expect(JSON.parse(String(fetchCall?.[1]?.body))).toEqual({
+      url: 'https://e.com/porto.jpg',
+      video_aspect: '9:16',
+    });
+  });
+
+  it('rejects an unknown videoAspect before calling the engine', async () => {
+    const response = await POST(checkRequest('https://e.com/porto.jpg', '4:3'));
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('rejects a non-http URL before calling the engine', async () => {

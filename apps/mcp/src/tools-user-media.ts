@@ -24,6 +24,12 @@ export const CheckMediaShape = {
     .string()
     .min(1, 'url is required')
     .describe('Public image URL to check mechanically (no LLM, no relevance judgement).'),
+  videoAspect: z
+    .enum(['9:16', '16:9'])
+    .optional()
+    .describe(
+      'Video aspect the image will fill (9:16 Shorts/Instagram, 16:9 long YouTube). When given, an image that cannot fill the frame returns wrong_aspect instead of ok — send one that matches the aspect.',
+    ),
 };
 
 export const CheckMediaSchema = z.object(CheckMediaShape);
@@ -32,7 +38,7 @@ export const UploadMediaDescription =
   `Upload a local image for a video segment and get a mediaId to use in a segment's media field (generate_persona_video). The file is stored as a temporary engine asset (1 hour TTL, same flow as debug uploads): upload shortly before generating, since a scheduled slot far in the future may outlive the asset and the segment then renders without it. JPG/JPEG, PNG, or WebP only, max ${MAX_SEGMENT_MEDIA_MB}MB (the engine photo limit). The real content type is validated, not the extension. Returns only the mediaId — never a local path or asset URL.`;
 
 export const CheckMediaDescription =
-  'Mechanically check one public image URL for a segment, without an LLM and without judging relevance (the agent, who sees the image, decides relevance). Returns exactly one code: ok, blocked_403 (the host blocked the SSRF-safe download — retry with upload_media bytes fetched on your own machine), not_image, too_small, too_large, timeout, or face_detected. No fake User-Agent or Referer is sent to bypass hotlink blocks, and private addresses are never fetched. The URL never appears in the output.';
+  'Mechanically check one public image URL for a segment, without an LLM and without judging relevance (the agent, who sees the image, decides relevance). Returns exactly one code: ok, blocked_403 (the host blocked the SSRF-safe download — retry with upload_media bytes fetched on your own machine), not_image, too_small, too_large, timeout, face_detected, or wrong_aspect (with videoAspect given: the image cannot fill that frame — send one that matches the aspect; the reply carries its probed width and height). No fake User-Agent or Referer is sent to bypass hotlink blocks, and private addresses are never fetched. The URL never appears in the output.';
 
 export async function handleUploadMedia(
   client: PostEngineerClient,
@@ -55,7 +61,7 @@ export async function handleCheckMedia(
   return handleLibraryCall(
     async () => {
       const parsed = CheckMediaSchema.parse(args);
-      return checkSegmentMedia(client, parsed.url);
+      return checkSegmentMedia(client, parsed.url, parsed.videoAspect);
     },
     'checking segment media',
     'Segment media check complete',

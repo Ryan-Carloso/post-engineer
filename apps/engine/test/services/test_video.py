@@ -15,6 +15,7 @@ from loguru import logger
 from moviepy import (
     VideoFileClip,
 )
+from PIL import Image
 # add project root to python path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.config import config
@@ -516,6 +517,48 @@ class TestVideoService(unittest.TestCase):
         materials = vd.preprocess_video([m], clip_duration=4)
 
         self.assertEqual(materials, [])
+
+    def _preprocess_image(self, name, width, height, video_aspect):
+        local_videos_dir = utils.storage_dir("local_videos", create=True)
+        source_path = os.path.join(local_videos_dir, name)
+        Image.new("RGB", (width, height), (200, 80, 40)).save(source_path, "JPEG")
+        material = MaterialInfo(provider="local", url=name)
+        try:
+            materials = vd.preprocess_video(
+                [material], clip_duration=4, video_aspect=video_aspect
+            )
+            return materials
+        finally:
+            for path in (source_path, f"{source_path}.mp4"):
+                if os.path.exists(path):
+                    os.remove(path)
+
+    def test_preprocess_video_skips_a_landscape_image_for_a_portrait_video(self):
+        materials = self._preprocess_image(
+            "test-preprocess-aspect-landscape.jpg", 1920, 1080, "9:16"
+        )
+        self.assertEqual(materials, [])
+
+    def test_preprocess_video_keeps_a_portrait_image_for_a_portrait_video(self):
+        materials = self._preprocess_image(
+            "test-preprocess-aspect-portrait.jpg", 1080, 1920, "9:16"
+        )
+        self.assertEqual(len(materials), 1)
+        self.assertTrue(materials[0].url.endswith(".mp4"))
+
+    def test_preprocess_video_keeps_a_landscape_image_for_a_landscape_video(self):
+        materials = self._preprocess_image(
+            "test-preprocess-aspect-landscape-16x9.jpg", 1920, 1080, "16:9"
+        )
+        self.assertEqual(len(materials), 1)
+        self.assertTrue(materials[0].url.endswith(".mp4"))
+
+    def test_preprocess_video_without_an_aspect_keeps_the_old_size_only_check(self):
+        materials = self._preprocess_image(
+            "test-preprocess-aspect-no-aspect.jpg", 1920, 1080, None
+        )
+        self.assertEqual(len(materials), 1)
+        self.assertTrue(materials[0].url.endswith(".mp4"))
 
     def test_get_ffmpeg_binary_uses_configured_env_path(self):
         """When ffmpeg is explicitly configured, that path takes precedence."""
