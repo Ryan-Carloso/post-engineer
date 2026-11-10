@@ -34,9 +34,11 @@ export const MAX_POSTS_PER_RUN = 50;
 export const RUN_TIME_BUDGET_MS = 45_000;
 // How many published posts the re-open scan reads per run (newest first).
 const REOPEN_SCAN_LIMIT = 200;
-// Worst case rows for those posts: 9 providers x 3 windows each. Hitting
-// the cap aborts the re-open for the run (a truncated rows read could
-// mistake a collected target for missing and snapshot it twice).
+// Rows scale with published videos (a multi-video slot can repeat a
+// provider), not with the 9 providers, so the worst case is unbounded
+// per post. Hitting the cap aborts the re-open for the run (a truncated
+// rows read could mistake a collected target for missing and snapshot
+// it twice).
 export const REOPEN_ROWS_LIMIT = 6000;
 
 export interface MetricsCounters {
