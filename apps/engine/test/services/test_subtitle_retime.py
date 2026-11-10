@@ -13,6 +13,7 @@ of characters inside the cue(s) it falls in — ordered, non-empty, spanning
 exactly the spoken range. A file that already matches is left untouched.
 """
 
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -75,6 +76,47 @@ def test_coarse_cues_give_every_capped_script_line_its_own_ordered_cue():
         previous_end = end
     assert _seconds(items[0][1], 0) == pytest.approx(0.08)
     assert _seconds(items[-1][1], 1) == pytest.approx(24.8)
+
+
+def test_cues_start_at_their_first_spoken_word_when_word_boundaries_exist(tmp_path):
+    srt = tmp_path / "subtitle.srt"
+    srt.write_text(
+        "1\n00:00:00,100 --> 00:00:03,900\nGo to bed earlier lose more weight tonight\n\n",
+        encoding="utf-8",
+    )
+    words = [
+        ["Go", 0.10, 0.30], ["to", 0.30, 0.45], ["bed", 0.45, 0.80], ["earlier.", 0.80, 1.40],
+        ["Lose", 2.20, 2.50], ["more", 2.50, 2.80], ["weight", 2.80, 3.20], ["tonight.", 3.20, 3.90],
+    ]
+    Path(subtitle.words_path(str(srt))).write_text(json.dumps(words), encoding="utf-8")
+
+    subtitle.correct(str(srt), "Go to bed earlier. Lose more weight tonight.")
+
+    items = subtitle.file_to_subtitles(str(srt))
+    assert [item[2] for item in items] == ["Go to bed earlier", "Lose more weight tonight"]
+    assert _seconds(items[0][1], 0) == pytest.approx(0.10)
+    assert _seconds(items[0][1], 1) == pytest.approx(1.40)
+    # Character share would have started this cue near 1.9s: the speech pauses first.
+    assert _seconds(items[1][1], 0) == pytest.approx(2.20)
+    assert _seconds(items[1][1], 1) == pytest.approx(3.90)
+
+
+def test_unusable_word_boundaries_fall_back_to_character_share(tmp_path):
+    srt = tmp_path / "subtitle.srt"
+    srt.write_text(
+        "1\n00:00:00,100 --> 00:00:03,900\nGo to bed earlier lose more weight tonight\n\n",
+        encoding="utf-8",
+    )
+    words = [["unrelated", 0.0, 1.0], ["transcript", 1.0, 2.0]]
+    Path(subtitle.words_path(str(srt))).write_text(json.dumps(words), encoding="utf-8")
+
+    subtitle.correct(str(srt), "Go to bed earlier. Lose more weight tonight.")
+
+    items = subtitle.file_to_subtitles(str(srt))
+    assert [item[2] for item in items] == ["Go to bed earlier", "Lose more weight tonight"]
+    assert _seconds(items[0][1], 0) == pytest.approx(0.10)
+    assert _seconds(items[1][1], 1) == pytest.approx(3.90)
+    assert 1.5 < _seconds(items[1][1], 0) < 2.3
 
 
 def test_hook_measured_on_the_corrected_file_lands_inside_the_first_cue():
