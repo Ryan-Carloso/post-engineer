@@ -441,6 +441,27 @@ describe('fetchCoverage', () => {
     expect(items.map((item) => item.postId)).toEqual(['post-own']);
   });
 
+  it('reads only the schedules the posts reference, so a scoped key cannot leak a post past a cap', async () => {
+    const { client, calls } = fakeClient({
+      scheduled_posts: {
+        data: [{
+          id: 'post-1', schedule_id: 'sched-1', user_id: 'user-1', status: 'published',
+          published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME],
+        }],
+        error: null,
+      },
+      schedules: { data: [{ id: 'sched-1', persona_id: 'other-persona' }], error: null },
+      post_metrics_done: { data: [], error: null },
+      post_metrics: { data: [], error: null },
+    });
+    const { items } = await fetchCoverage(client, 'user-1', query(), NOW, { personaIds: [PERSONA] });
+    // The referenced schedule resolves to a persona outside the scope,
+    // so the post is dropped — never degraded to "no persona".
+    expect(items).toEqual([]);
+    expect(calls).toContainEqual({ table: 'schedules', method: 'in', args: ['id', ['sched-1']] });
+    expect(calls).not.toContainEqual({ table: 'schedules', method: 'limit', args: [1000] });
+  });
+
   it('skips the done-marks and rows reads when the user has no posts in scope', async () => {
     const { client, from } = fakeClient({
       scheduled_posts: { data: [], error: null },
@@ -536,8 +557,19 @@ describe('fetchCoverage', () => {
     expect(items[0]?.personaId).toBeNull();
   });
 
-  it('treats a non-string schedule id as no persona', async () => {
+  it('skips schedule rows with a non-string id', async () => {
     const { client } = fakeClient({
+      scheduled_posts: { data: [postRecord()], error: null },
+      schedules: { data: [{ id: 123, persona_id: PERSONA }, { id: 'sched-1', persona_id: PERSONA }], error: null },
+      post_metrics_done: { data: [], error: null },
+      post_metrics: { data: [], error: null },
+    });
+    const { items } = await fetchCoverage(client, 'user-1', query(), NOW);
+    expect(items[0]?.personaId).toBe(PERSONA);
+  });
+
+  it('treats a non-string schedule id as no persona', async () => {
+    const { client, from } = fakeClient({
       scheduled_posts: { data: [postRecord({ schedule_id: 123 })], error: null },
       schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
       post_metrics_done: { data: [], error: null },
@@ -545,6 +577,8 @@ describe('fetchCoverage', () => {
     });
     const { items } = await fetchCoverage(client, 'user-1', query(), NOW);
     expect(items[0]?.personaId).toBeNull();
+    // No post references a schedule, so the schedules read never runs.
+    expect(from).not.toHaveBeenCalledWith('schedules');
   });
 
   it('treats non-array publish outcomes as no outcomes', async () => {
