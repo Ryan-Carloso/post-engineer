@@ -541,6 +541,93 @@ describe('createPostMetricsStore', () => {
     expect(posts[50]).toMatchObject({ id: 'post-99', window: '24h' });
   });
 
+  it('skips the re-open scan when the RPC already filled the run budget', async () => {
+    const rpc = vi.fn(async () => ({
+      data: Array.from({ length: 51 }, (_, index) => ({
+        post_id: `post-${index}`, user_id: 'user-1', task_id: `task-${index}`, metrics_window: '24h', collected_keys: [],
+      })),
+      error: null,
+    }));
+    const from = fakeFrom({ scheduled_posts: { data: [scannedPost()], error: null } });
+    const store = createPostMetricsStore({ rpc, from } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts).toHaveLength(51);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('keeps the RPC posts when the re-open rows lookup fails', async () => {
+    const rpc = vi.fn(async () => ({
+      data: [{ post_id: 'post-1', user_id: 'user-1', task_id: 'task-1', metrics_window: '24h', collected_keys: [] }],
+      error: null,
+    }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: { data: null, error: { message: 'boom' } },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts).toHaveLength(1);
+    expect(logger.warn).toHaveBeenCalledWith('[post-metrics] reopen rows lookup failed', { error: 'boom' });
+  });
+
+  it('treats non-array re-open reads as empty', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const noPosts = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({ scheduled_posts: { data: 'junk', error: null } }),
+    } as unknown as SupabaseClient);
+    await expect(noPosts.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51)).resolves.toEqual([]);
+
+    const noRows = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: { data: 'junk', error: null },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await noRows.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      collectedKeys: new Set(),
+    }]);
+  });
+
+  it('skips malformed scanned posts and rows instead of failing the re-open', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: {
+          data: [
+            scannedPost({ id: 123 }),
+            scannedPost({ id: 'post-bad-date', published_at: 'not-a-date' }),
+            scannedPost({ id: 'post-no-outcomes', publish_outcomes: 'junk' }),
+            scannedPost({ id: 'post-no-targets', publish_outcomes: [{ provider: 'instagram', accountId: 'ig1', status: 'failed' }] }),
+            scannedPost({ id: 'post-no-task', task_id: 123 }),
+            scannedPost(),
+          ],
+          error: null,
+        },
+        post_metrics: {
+          data: [
+            { post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h' },
+            { post_id: 'post-1', provider: 'youtube', external_id: null, metrics_window: '24h' },
+            { post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '30d' },
+          ],
+          error: null,
+        },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    // Only the well-formed post re-opens (its Instagram target is uncollected).
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      collectedKeys: new Set(['youtube:abc123']),
+    }]);
+  });
+
   it('upserts one row per post/video/window, returns its experiment link and throws on a write error', async () => {
     const single = vi.fn(async () => ({ data: { experiment_id: 'exp-1', variant_id: 'hook-calm', experiment_pair: 1 }, error: null }));
     const select = vi.fn(() => ({ single }));
