@@ -127,7 +127,7 @@ class VideoParams(BaseModel):
       "bgm_name": "random",
       "font_name": "BeVietnamPro-Medium",
       "text_color": "#FFFFFF",
-      "font_size": 60,
+      "font_size": 50,
       "stroke_color": "#000000",
       "stroke_width": 1.5
     }
@@ -203,7 +203,7 @@ class VideoParams(BaseModel):
     text_background_color: Union[bool, str] = config.ui.get("text_background_color", True)
     rounded_subtitle_background: bool = config.ui.get("rounded_subtitle_background", False)
 
-    font_size: int = Field(default=config.ui.get("font_size", 60), ge=8, le=300)
+    font_size: int = Field(default=config.ui.get("font_size", 50), ge=8, le=300)
     stroke_color: Optional[str] = Field(
         default=config.ui.get("stroke_color", "#000000"),
         max_length=64,
@@ -232,7 +232,7 @@ class SubtitleRequest(BaseModel):
     text_fore_color: Optional[str] = Field(default="#FFFFFF", max_length=64)
     text_background_color: Union[bool, str] = True
     rounded_subtitle_background: bool = False
-    font_size: int = Field(default=60, ge=8, le=300)
+    font_size: int = Field(default=50, ge=8, le=300)
     stroke_color: Optional[str] = Field(default="#000000", max_length=64)
     stroke_width: float = Field(default=1.5, ge=0, le=20)
     subtitle_enabled: Optional[str] = "true"

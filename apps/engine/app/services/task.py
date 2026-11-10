@@ -24,6 +24,7 @@ from app.services import (
     segment_panels,
     stock_terms,
     subtitle,
+    subtitle_provider,
     svg_terms,
     terms_fallback,
     twelvelabs,
@@ -743,52 +744,13 @@ def generate_audio(task_id, params, video_script):
         return custom_audio_file, audio_duration, None
 
 def generate_subtitle(task_id, params, video_script, sub_maker, audio_file):
-    '''
-    Generate subtitle for the video script.
-    If subtitle generation is disabled or no subtitle maker is provided, it will return an empty string.
-    Otherwise, it will generate the subtitle using the specified provider.
-    Returns:
-        - subtitle_path: path to the generated subtitle file
-    '''
-    logger.info("\n\n## generating subtitle")
-    if not params.subtitle_enabled:
-        return ""
+    """Write the subtitle file for the video script; return its path, or "" when none.
 
-    subtitle_path = path.join(utils.task_dir(task_id), "subtitle.srt")
-    subtitle_provider = config.app.get("subtitle_provider", "edge").strip().lower()
-    logger.info(f"\n\n## generating subtitle, provider: {subtitle_provider}")
-
-    if sub_maker is None and subtitle_provider != "whisper":
-        # Custom audio never goes through TTS, so there is no Edge/Azure TTS
-        # sub_maker timeline. Only Whisper can transcribe subtitles directly
-        # from the audio file; other subtitle providers keep their existing
-        # behavior to avoid producing a wrong empty timeline.
-        logger.warning(
-            "subtitle maker is missing, skip subtitle generation for provider: "
-            f"{subtitle_provider}"
-        )
-        return ""
-
-    subtitle_fallback = False
-    if subtitle_provider == "edge":
-        voice.create_subtitle(
-            text=video_script, sub_maker=sub_maker, subtitle_file=subtitle_path
-        )
-        if not os.path.exists(subtitle_path):
-            subtitle_fallback = True
-            logger.warning("subtitle file not found, fallback to whisper")
-
-    if subtitle_provider == "whisper" or subtitle_fallback:
-        subtitle.create(audio_file=audio_file, subtitle_file=subtitle_path)
-        logger.info("\n\n## correcting subtitle")
-        subtitle.correct(subtitle_file=subtitle_path, video_script=video_script)
-
-    subtitle_lines = subtitle.file_to_subtitles(subtitle_path)
-    if not subtitle_lines:
-        logger.warning(f"subtitle file is invalid: {subtitle_path}")
-        return ""
-
-    return subtitle_path
+    Provider choice and fallbacks live in subtitle_provider.build_subtitle.
+    """
+    return subtitle_provider.build_subtitle(
+        task_id, params, video_script, sub_maker, audio_file
+    )
 
 
 def get_video_materials(task_id, params, video_terms, audio_duration, photos=()):

@@ -28,7 +28,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from app.config import config
 from app.models import const
-from app.services import caption_layout, image_material, video_loop
+from app.services import caption_layout, image_material, subtitle_sizing, video_loop
 from app.services.material import MAX_LETTERBOX_BARS
 from app.models.schema import (
     MaterialInfo,
@@ -1511,6 +1511,7 @@ def generate_video(
 ):
     aspect = VideoAspect(params.video_aspect)
     video_width, video_height = aspect.to_resolution()
+    params = params.model_copy(update={"font_size": subtitle_sizing.scaled_font_size(params.font_size, video_width, video_height)})
 
     logger.info(f"generating video: {video_width} x {video_height}")
     logger.info(f"  ① video: {video_path}")
@@ -1542,7 +1543,6 @@ def generate_video(
         return params.text_background_color
 
     def create_text_clip(subtitle_item):
-        params.font_size = int(params.font_size)
         params.stroke_width = int(params.stroke_width)
         phrase = subtitle_item[1]
         max_width = video_width * 0.9
