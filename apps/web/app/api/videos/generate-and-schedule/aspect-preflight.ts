@@ -221,16 +221,13 @@ export async function checkPreChargePreflights(
   // value fails fast instead of silently checking against portrait.
   const effectiveAspect =
     input.options.videoAspect ?? input.prep.videoAspect ?? '9:16';
-  if (
-    effectiveAspect !== '9:16' &&
-    effectiveAspect !== '16:9' &&
-    effectiveAspect !== '1:1'
-  ) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      `Persona video aspect is '${effectiveAspect}', expected 9:16, 16:9 or 1:1: update the persona.`,
-      'personaId',
-    );
+  const aspectIsKnown =
+    effectiveAspect === '9:16' ||
+    effectiveAspect === '16:9' ||
+    effectiveAspect === '1:1';
+  if (!aspectIsKnown) {
+    const message = `Persona video aspect is '${effectiveAspect}', expected 9:16, 16:9 or 1:1: update the persona.`;
+    return validationFailed(ERROR_CODES.VALIDATION_FAILED, message, 'personaId');
   }
   return checkSegmentMediaAspect({
     userId: input.userId,
