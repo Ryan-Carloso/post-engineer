@@ -114,8 +114,8 @@ describe('CalendarView', () => {
     expect(bar?.parentElement?.getAttribute('data-day-number')).not.toBeNull();
     expect(bar?.previousElementSibling?.getAttribute('data-day-numeral')).not.toBeNull();
     const pill = today.querySelector('[data-day-post-total]');
-    if (pill !== null) {
-      expect(bar?.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    if (pill !== null && bar !== null) {
+      expect(bar.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
     expect(number?.querySelector('[data-today-mark]')).toBeNull();
     expect(number?.className.split(/\s+/)).not.toContain('ring-warning');
