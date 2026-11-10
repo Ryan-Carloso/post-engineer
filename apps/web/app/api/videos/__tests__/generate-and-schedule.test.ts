@@ -487,9 +487,9 @@ beforeEach(() => {
     vi.fn(async (url: string) =>
       String(url).includes('/api/v1/media/check')
         ? new Response(JSON.stringify({ status: 200, body: { code: 'ok', width: 1080, height: 1920 } }), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          })
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
         : new Response('{}', { status: 200 }),
     ),
   );
