@@ -169,14 +169,19 @@ describe('CalendarView', () => {
     expect(today.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('outline-ring');
   });
 
-  it('lays the legend out in one wrapping row inside the calendar card', () => {
+  it('lays the legend out in a wrapping row inside the calendar card without clipping items', () => {
     setup({
       slotsByDay: new Map([['2030-06-05', [{ status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T10:00:00.000Z' }]]]),
     });
     const legend = screen.getByText('posts.calendarLegendPostCount').closest('ul');
     if (legend === null) throw new Error('legend not rendered');
-    expect(legend.className.split(/\s+/)).toContain('max-xl:flex-nowrap');
-    expect(legend.className.split(/\s+/)).not.toContain('grid-cols-1');
+    expect(legend.className.split(/\s+/)).toContain('flex-wrap');
+    expect(legend.className.split(/\s+/)).toContain('w-full');
+    expect(legend.className.split(/\s+/)).not.toContain('max-xl:flex-nowrap');
+    for (const item of within(legend).getAllByRole('listitem')) {
+      expect(item.className.split(/\s+/)).toContain('shrink-0');
+      expect(item.className.split(/\s+/)).not.toContain('min-w-0');
+    }
     expect(legend.closest('[data-calendar-card]')).not.toBeNull();
   });
 

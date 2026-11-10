@@ -22,20 +22,20 @@ export function CalendarLegend({
   return (
     <ul
       className={cn(
-        'flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-text max-xl:flex-nowrap max-xl:gap-x-2 xl:gap-x-4',
+        'flex w-full flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-text xl:gap-x-4 xl:gap-y-1.5',
         className,
       )}
     >
-      <li className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+      <li className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
         <span aria-hidden data-legend-post-total className={LEGEND_POST_TOTAL_SWATCH_CLASS} />
         {t('posts.calendarLegendPostCount')}
       </li>
-      <li className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+      <li className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
         <span aria-hidden data-legend-today-bar className={LEGEND_TODAY_BAR_SWATCH_CLASS} />
         {t('posts.calendarToday')}
       </li>
       {showSelection && (
-        <li className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+        <li className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
           <span aria-hidden data-legend-selected-day className={SELECTED_DAY_LEGEND_SWATCH_CLASS} />
           {t('posts.calendarLegendSelected')}
         </li>
