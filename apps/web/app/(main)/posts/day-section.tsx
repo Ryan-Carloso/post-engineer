@@ -159,18 +159,29 @@ export function DaySummary({ slots }: { slots: Pick<ScheduledSlot, 'status'>[] }
 
 // The load error inside the calendar card. The page header refresh is hidden
 // while the calendar cannot load, so this is the only retry control.
-export function LoadErrorBanner({ messageKey, onRetry }: { messageKey: TranslationKey; onRetry: () => void }) {
+export function LoadErrorBanner({
+  messageKey,
+  onRetry,
+  compact = false,
+}: {
+  messageKey: TranslationKey;
+  onRetry: () => void;
+  compact?: boolean;
+}) {
   const { t } = useI18n();
   return (
     <div
       role="alert"
-      className="flex flex-col items-start gap-3 rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 text-ink"
+      className={cn(
+        'flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 text-ink',
+        compact ? 'mx-auto w-full max-w-md items-center text-center' : 'items-start',
+      )}
     >
-      <p className="flex items-start gap-3 text-sm">
-        <TriangleAlert className="mt-px size-5 shrink-0 text-destructive" aria-hidden />
+      <p className={cn('flex gap-3 text-sm', compact ? 'items-center' : 'items-start')}>
+        <TriangleAlert className={cn('size-5 shrink-0 text-destructive', compact ? '' : 'mt-px')} aria-hidden />
         <span className="font-semibold">{t(messageKey)}</span>
       </p>
-      <Button type="button" size="sm" onClick={onRetry}>
+      <Button type="button" size="sm" className={compact ? 'self-center' : undefined} onClick={onRetry}>
         {t('posts.loadErrorRetry')}
       </Button>
     </div>

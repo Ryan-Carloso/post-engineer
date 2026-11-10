@@ -155,4 +155,17 @@ describe('PostCard header and media', () => {
     renderCard({ ...FAILED_SLOT, status: 'awaiting', taskId: null });
     expect(document.querySelector('video')).toBeNull();
   });
+
+  it('does not underline the title as a second link affordance on a published card', () => {
+    renderCard({
+      ...FAILED_SLOT,
+      status: 'published',
+      title: 'Calendar published',
+      taskId: 'task-1',
+      publishedAt: '2030-06-01T10:05:00.000Z',
+    });
+  const title = screen.getByText('Calendar published');
+    expect(title.className.split(/\s+/)).not.toContain('underline');
+    expect(document.querySelector('[data-card-chevron]')).not.toBeNull();
+  });
 });

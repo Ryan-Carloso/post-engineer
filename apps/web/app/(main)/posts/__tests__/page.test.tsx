@@ -279,8 +279,8 @@ describe('PostsPage', () => {
     await user.selectOptions(selects[0], 'youtube');
     expect(selects[0].className.split(/\s+/)).toContain('border-primary');
     expect(selects[1].className.split(/\s+/)).not.toContain('border-primary');
-    // The calendar says it is filtered when the month still has posts (one legend below the grid).
-    expect(screen.getAllByText('posts.filterActive')).toHaveLength(1);
+    // Filter hint lives in the calendar legend and/or the mobile legend near the day list.
+    expect(screen.getAllByText('posts.filterActive').length).toBeGreaterThanOrEqual(1);
 
     const clears = screen.getAllByRole('button', { name: 'posts.clearFilters' });
     expect(clears).toHaveLength(1);
@@ -935,7 +935,7 @@ describe('PostsPage calendar view', () => {
     expect(within(alert).getByText('posts.loadErrorCalendar')).toBeInTheDocument();
     expect(within(alert).queryByText('posts.loadErrorRetryHint')).not.toBeInTheDocument();
   expect(alert.closest('[data-calendar-card]')).not.toBeNull();
-    expect(screen.queryByText('posts.subtitle')).not.toBeInTheDocument();
+    expect(screen.getByText('posts.subtitle')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'posts.refresh' })).not.toBeInTheDocument();
     const retry = within(alert).getByRole('button', { name: 'posts.loadErrorRetry' });
     await user.click(retry);
@@ -943,8 +943,10 @@ describe('PostsPage calendar view', () => {
     // Same frame as a loaded month: readable grid, no "not loaded" pill,
     // no selection, no day list.
     expect(screen.queryByText('posts.calendarNotLoaded')).not.toBeInTheDocument();
-    expect(screen.getByRole('grid').className.split(/\s+/)).not.toContain('opacity-40');
-    expect(screen.getByRole('grid').querySelector('[data-selected="true"]')).toBeNull();
+    expect(document.querySelector('[data-calendar-grid-outline]')).toBeInTheDocument();
+    const grid = screen.queryByRole('grid', { hidden: true });
+    expect(grid).not.toBeNull();
+    expect(grid?.className.split(/\s+/)).toContain('hidden');
     expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
     expect(screen.queryByText('posts.calendarMonthHeading')).not.toBeInTheDocument();
     // The month can still change.

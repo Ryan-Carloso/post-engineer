@@ -15,6 +15,20 @@ import { CalendarChromeContext, PostsCalendarWeek, PostsCalendarWeeks } from './
 import { CalendarLegend } from './calendar-legend';
 import { LoadErrorBanner } from './day-section';
 
+function CalendarGridOutline() {
+  return (
+    <div
+      aria-hidden
+      data-calendar-grid-outline
+      className="mx-auto grid max-w-lg grid-cols-7 gap-1.5 px-1 py-3"
+    >
+      {Array.from({ length: 21 }, (_, index) => (
+        <div key={index} className="mx-auto h-9 w-full max-w-[2.5rem] rounded-md border border-dashed border-line/80" />
+      ))}
+    </div>
+  );
+}
+
 // CalendarView — month calendar on the shadcn Calendar (react-day-picker:
 // grid semantics, keyboard navigation, focus). Each day cell shows up to
 // two status icons plus an overflow count per day, failure first
@@ -231,12 +245,17 @@ export function CalendarView({
       className={cn(
         'relative max-w-full min-w-0 rounded-xl border border-line bg-card p-2 sm:p-3',
         muted && 'pointer-events-none',
-        unavailable && '[&_thead]:hidden [&_tbody]:hidden',
+        unavailable && 'pb-1',
       )}
     >
       <DayCellContext.Provider value={dayCells}>
         <CalendarChromeContext.Provider value={chrome}>
         <NavTodayContext.Provider value={navToday}>
+          <div
+            className={cn(
+              !unavailable && 'max-xl:max-h-[min(40vh,17rem)] max-xl:overflow-y-auto max-xl:overscroll-contain',
+            )}
+          >
           <Calendar
             mode="single"
             required
@@ -263,14 +282,14 @@ export function CalendarView({
               button_previous: NAV_ARROW_CLASS,
               button_next: NAV_ARROW_CLASS,
               month_caption: 'flex min-h-(--cell-size) w-full items-center justify-start pr-44',
-              weekdays: 'table-row',
+              weekdays: unavailable ? 'hidden' : 'table-row',
               // Equal table cells so seven columns stay aligned on narrow screens.
               weekday:
-                'table-cell min-w-0 w-[14.2857%] select-none px-0.5 pb-1 text-center text-xs font-medium capitalize text-muted-foreground',
+                'table-cell min-w-0 w-[14.2857%] select-none px-0.5 pb-1 text-center text-xs font-medium capitalize text-muted-foreground max-xl:sticky max-xl:top-0 max-xl:z-[1] max-xl:bg-card',
               week: 'table-row',
               // table-fixed: a table sizes columns from cell content, so a
               // busy day's chips were widening the month past the screen.
-              month_grid: 'w-full table-fixed border-collapse',
+              month_grid: unavailable ? 'hidden' : 'w-full table-fixed border-collapse',
               // Today is drawn by the day number itself (see PostsDayButton):
               // drop shadcn's accent fill so today never reads as selected.
               today: 'rounded-md [&:not([data-selected-single=true])]:bg-transparent',
@@ -285,16 +304,18 @@ export function CalendarView({
             }}
             components={{ DayButton: PostsDayButton, Nav: CalendarNav, Week: PostsCalendarWeek, Weeks: PostsCalendarWeeks }}
           />
+          </div>
+          {unavailable && <CalendarGridOutline />}
           {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined && (
-            <div data-calendar-load-error className="border-t border-line pt-3">
-              <LoadErrorBanner messageKey={loadErrorMessageKey} onRetry={onLoadErrorRetry} />
+            <div data-calendar-load-error className="px-1 pt-1">
+              <LoadErrorBanner compact messageKey={loadErrorMessageKey} onRetry={onLoadErrorRetry} />
             </div>
           )}
         </NavTodayContext.Provider>
         </CalendarChromeContext.Provider>
       </DayCellContext.Provider>
       {legendVisible && !unavailable && (
-        <div className={cn('mt-3', legendClassName)}>
+        <div className={cn('mt-3 hidden xl:block', legendClassName)}>
           <CalendarLegend filtered={filtered} />
         </div>
       )}

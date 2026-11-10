@@ -109,7 +109,7 @@ const CardHeader = ({ badge, when, showChevron = true }: { badge: ReactNode; whe
 // The title is the card's main line; the persona sits under it.
 const CardTitle = ({ title, personaName }: { title: string; personaName: string }) => (
   <div className="min-w-0 flex-1">
-    <p className="line-clamp-2 text-sm leading-snug font-semibold text-primary group-hover/card:underline">{title}</p>
+    <p className="line-clamp-2 text-sm leading-snug font-semibold text-primary">{title}</p>
     <p className="mt-1 truncate text-[13px] text-ink-soft">{personaName}</p>
   </div>
 );
@@ -204,7 +204,11 @@ export const PostCard = ({
         />
         <div className="mt-3 flex gap-3">
           <CardTitle title={slot.title ?? t('posts.unknownTitle')} personaName={personaName} />
-          {thumbSrc !== null && <PostThumb src={thumbSrc} />}
+          {thumbSrc !== null && (
+            <span aria-hidden className="shrink-0">
+              <PostThumb src={thumbSrc} />
+            </span>
+          )}
         </div>
         {showProgress && (
           // The exact stage under the group pill ("In progress"), e.g.

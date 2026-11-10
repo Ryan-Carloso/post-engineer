@@ -175,6 +175,9 @@ describe('CalendarView', () => {
     expect(busy.querySelector('[data-cell-summary]')).not.toBeNull();
     expect(busy.querySelector('[data-total-count]')).toHaveTextContent('4');
     expect(busy.querySelectorAll('[data-status-dot]')).toHaveLength(3);
+    const dots = [...busy.querySelectorAll('[data-status-dot]')];
+    expect(dots.find((dot) => dot.getAttribute('data-status-dot') === 'published')?.className).toContain('bg-success');
+    expect(dots.find((dot) => dot.getAttribute('data-status-dot') === 'scheduled')?.className).toContain('bg-muted-foreground');
     expect(busy.querySelector('[data-overflow-count]')).toBeNull();
     expect(busy.className.split(/\s+/)).not.toContain('bg-destructive-soft');
     // A published-only day: one compact chip, and the cell itself stays unpainted.
@@ -308,18 +311,14 @@ describe('CalendarView', () => {
       onLoadErrorRetry,
     });
     expect(screen.queryByText('Posts not loaded')).not.toBeInTheDocument();
-    const day = dayButton(/June 5, 2030/);
-    expect(day).toBeDisabled();
-    expect(day.className.split(/\s+/)).not.toContain('opacity-40');
-    expect(day.querySelector('[data-marker]')).toBeNull();
-    expect(screen.getByRole('grid').className.split(/\s+/)).not.toContain('opacity-40');
-    expect(screen.getByRole('grid').querySelector('[data-selected="true"]')).toBeNull();
+    const grid = screen.getByRole('grid', { hidden: true });
+    expect(grid.className.split(/\s+/)).toContain('hidden');
+    expect(document.querySelector('[data-calendar-grid-outline]')).not.toBeNull();
     expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
     expect(document.querySelector('[data-calendar-load-error]')?.closest('[data-calendar-card]')).not.toBeNull();
     expect(screen.getByRole('alert')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onLoadErrorRetry).toHaveBeenCalledTimes(1);
-    expect(dayButton(/June 15, 2030/).querySelector('[data-today-mark]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
     expect(props.onMonthNavigate).toHaveBeenLastCalledWith(2030, 6);
   });

@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { RANGE_MAX_SLOTS, useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range';
 import { cn } from '@/lib/utils';
-import { CalendarView } from './calendar-view';
+import { CalendarLegend, CalendarView } from './calendar-view';
 import {
   FIRST_WEEKDAY,
   INTL_TAG,
@@ -147,7 +147,7 @@ export default function PostsPage() {
           </button>
         )}
       </div>
-      {!isError && <p className="mt-1 text-sm text-muted-foreground">{t('posts.subtitle')}</p>}
+      <p className="mt-1 text-sm text-muted-foreground">{t('posts.subtitle')}</p>
 
       <PostFiltersBar filters={filters} disabled={isLoading || isAccountEmpty} />
 
@@ -160,7 +160,6 @@ export default function PostsPage() {
               className={cn(
                 'min-w-0 xl:col-start-1 xl:row-start-1',
                 isError ? 'order-2 xl:order-0' : 'order-1',
-                !isError && 'max-xl:max-h-[min(42vh,17.5rem)] max-xl:overflow-y-auto max-xl:overscroll-contain',
               )}
             >
               {rangeQuery.data?.truncated === true && (
@@ -206,6 +205,11 @@ export default function PostsPage() {
                 </>
               ) : (
                 <>
+                  {monthPostCount > 0 && (
+                    <div className="mb-2 xl:hidden">
+                      <CalendarLegend filtered={filters.hasActiveFilter} className="gap-x-2 gap-y-1 text-[11px]" />
+                    </div>
+                  )}
                   <h2 className="flex min-h-10 flex-col justify-center gap-0.5 text-base font-bold tracking-[-0.01em] text-primary">
                     {monthIsEmpty || selectedKey === null ? (
                       t('posts.calendarMonthHeading', { month: monthLabel })

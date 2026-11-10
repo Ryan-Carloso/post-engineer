@@ -10,7 +10,16 @@ import {
   defaultDayForMonth,
   gridRange,
 } from '../calendar-days';
-import { CALENDAR_GROUP_ICON, CALENDAR_GROUP_KEY, CALENDAR_GROUP_MARKER, CALENDAR_GROUP_ORDER, CALENDAR_GROUP_PILL, STATUS_KEY, calendarGroupOf } from '../status';
+import {
+  CALENDAR_GROUP_DOT,
+  CALENDAR_GROUP_ICON,
+  CALENDAR_GROUP_KEY,
+  CALENDAR_GROUP_MARKER,
+  CALENDAR_GROUP_ORDER,
+  CALENDAR_GROUP_PILL,
+  STATUS_KEY,
+  calendarGroupOf,
+} from '../status';
 
 describe('day bucketing timezone (viewer browser timezone)', () => {
   // 2026-11-02T02:30Z is 23:30 on Nov 1 in São Paulo (UTC-3) but already
@@ -118,7 +127,9 @@ describe('calendar vocabulary', () => {
     }
     // The cell marker is a solid chip. The card pill is the same hue as a
     // soft tint, so a card does not shout the way a calendar chip does.
-    expect(CALENDAR_GROUP_MARKER.inProgress).toBe('bg-warning text-on-ink');
+    expect(CALENDAR_GROUP_MARKER.inProgress).toBe('bg-brand text-white');
+    expect(CALENDAR_GROUP_DOT.scheduled).toBe('bg-muted-foreground');
+    expect(CALENDAR_GROUP_DOT.published).toBe('bg-success');
     expect(CALENDAR_GROUP_PILL.inProgress).toBe('bg-info-soft text-info');
     expect(CALENDAR_GROUP_PILL.inProgress).not.toBe(CALENDAR_GROUP_MARKER.inProgress);
     expect(CALENDAR_GROUP_MARKER.failed).toBe('bg-destructive text-destructive-foreground');
