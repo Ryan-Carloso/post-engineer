@@ -276,13 +276,16 @@ describe('CalendarView', () => {
     if (legend === null) throw new Error('legend not rendered');
     expect(legend.querySelectorAll('[data-marker]')).toHaveLength(0);
     expect(within(legend).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-      '1posts.calendarLegendPostCount',
+      'posts.calendarLegendPostCount',
       'Today',
-      '5posts.calendarLegendSelected',
+      'posts.calendarLegendSelected',
     ]);
+    const countSwatch = legend.querySelector('[data-legend-post-total]');
+    expect(countSwatch).toBeTruthy();
+    expect(countSwatch).toBeEmptyDOMElement();
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
-    expect(selectedSwatch?.className.split(/\s+/)).toContain('border-primary');
-    expect(selectedSwatch).toHaveTextContent('5');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-primary');
+    expect(selectedSwatch).toBeEmptyDOMElement();
     expect(legend.querySelector('[data-filter-hint]')).toBeNull();
   });
 

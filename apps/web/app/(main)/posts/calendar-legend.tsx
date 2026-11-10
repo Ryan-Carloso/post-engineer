@@ -3,11 +3,7 @@
 import { Filter } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/provider';
 import { cn } from '@/lib/utils';
-import {
-  DAY_POST_TOTAL_CLASS,
-  SELECTED_DAY_LEGEND_SWATCH_CLASS,
-  TODAY_LEGEND_CLASS,
-} from './calendar-markers';
+import { LEGEND_POST_TOTAL_SWATCH_CLASS, SELECTED_DAY_LEGEND_SWATCH_CLASS, TODAY_LEGEND_CLASS } from './calendar-markers';
 
 export function CalendarLegend({
   filtered = false,
@@ -27,9 +23,7 @@ export function CalendarLegend({
       )}
     >
       <li className="flex min-w-0 items-center gap-1.5 max-xl:whitespace-normal xl:whitespace-nowrap">
-        <span aria-hidden className={cn(DAY_POST_TOTAL_CLASS, 'pointer-events-none px-1.5')}>
-          1
-        </span>
+        <span aria-hidden data-legend-post-total className={LEGEND_POST_TOTAL_SWATCH_CLASS} />
         {t('posts.calendarLegendPostCount')}
       </li>
       <li className="flex min-w-0 items-center gap-1.5 max-xl:whitespace-normal xl:whitespace-nowrap">
@@ -38,9 +32,7 @@ export function CalendarLegend({
       </li>
       {showSelection && (
         <li className="flex min-w-0 items-center gap-1.5 max-xl:whitespace-normal xl:whitespace-nowrap">
-          <span aria-hidden data-legend-selected-day className={SELECTED_DAY_LEGEND_SWATCH_CLASS}>
-            5
-          </span>
+          <span aria-hidden data-legend-selected-day className={SELECTED_DAY_LEGEND_SWATCH_CLASS} />
           {t('posts.calendarLegendSelected')}
         </li>
       )}

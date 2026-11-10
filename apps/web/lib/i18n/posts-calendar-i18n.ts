@@ -104,7 +104,7 @@ export const postsCalendarStrings = {
       cardNoPreview: 'No preview',
       cardPersonaLabel: 'Persona',
       calendarLegendSelected: 'Selected day',
-      calendarLegendPostCount: 'Post count on the day',
+      calendarLegendPostCount: 'Posts',
       cardOpen: 'Open',
       loadErrorSideQuiet: 'Day detail is unavailable until the calendar loads.',
       userNoticeEmail:

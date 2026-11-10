@@ -197,6 +197,7 @@ describe('PostCard header and media', () => {
     expect(header).not.toBeNull();
     expect(header?.querySelector('[data-card-when]')?.textContent).toMatch(/\d{1,2}:\d{2}/);
     expect(header?.querySelector('[data-card-open]')).toHaveTextContent('posts.cardOpen');
+    expect(header?.querySelector('[data-card-open]')?.className.split(/\s+/)).toContain('border');
     expect(header?.querySelector('[data-card-chevron]')).not.toBeNull();
   });
 });

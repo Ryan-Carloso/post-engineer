@@ -161,8 +161,8 @@ export default function PostsPage() {
         {isLoading ? (
           <CalendarLoadingSkeleton weeks={monthWeeks} />
         ) : (
-          <div className={cn('flex flex-col', !isError && CALENDAR_LAYOUT_CLASS)}>
-            <div className={cn('min-w-0', !isError && 'xl:col-start-1 xl:row-start-1')}>
+          <div className={cn('flex flex-col', CALENDAR_LAYOUT_CLASS)}>
+            <div className="min-w-0 xl:col-start-1 xl:row-start-1">
               {rangeQuery.data?.truncated === true && (
                 <p className="mb-3 text-xs text-muted-foreground">{t('posts.calendarTruncated', { count: RANGE_MAX_SLOTS })}</p>
               )}
@@ -184,12 +184,21 @@ export default function PostsPage() {
                 filtered={filters.hasActiveFilter}
                 showLegend={!isAccountEmpty && monthPostCount > 0}
                 loadErrorMessageKey={isError ? loadErrorKey : undefined}
+                loadErrorNoteKey={isError && loadErrorKey !== 'posts.loadErrorCalendar' ? 'posts.loadErrorSideQuiet' : undefined}
                 onLoadErrorRetry={isError ? handleRefresh : undefined}
                 onRefresh={!isError ? handleRefresh : undefined}
                 refreshing={rangeQuery.isFetching}
               />
             </div>
-            {!isError && (
+            {isError && loadErrorKey === 'posts.loadErrorCalendar' ? (
+              <section
+                data-day-unavailable-note
+                aria-live="polite"
+                className="order-2 mt-4 hidden min-w-0 scroll-mt-4 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:block xl:pt-4"
+              >
+                <p className="text-sm text-muted-foreground">{t('posts.loadErrorSideQuiet')}</p>
+              </section>
+            ) : !isError ? (
             <section
               ref={daySectionRef}
               aria-live="polite"
@@ -242,7 +251,7 @@ export default function PostsPage() {
                 </>
               )}
             </section>
-            )}
+            ) : null}
           </div>
         )}
       </div>

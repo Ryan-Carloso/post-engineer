@@ -140,7 +140,7 @@ const CardHeader = ({
   showChevron?: boolean;
   openLabel?: string;
 }) => (
-  <div data-card-header className={cn('relative flex w-full items-center gap-2', showChevron && openLabel !== undefined && 'pr-[4.5rem]')}>
+  <div data-card-header className={cn('relative flex w-full items-center gap-2', showChevron && openLabel !== undefined && 'pr-[4.5rem] max-xl:pr-[5.25rem]')}>
     {badge}
     <p className="min-w-0 flex-1 text-right text-[13px] whitespace-nowrap text-ink-soft tabular-nums">
       <span data-card-when className="truncate">
@@ -150,7 +150,7 @@ const CardHeader = ({
     {showChevron && openLabel !== undefined && (
       <span
         data-card-open
-        className="absolute top-1/2 right-0 flex -translate-y-1/2 items-center gap-0.5 text-xs font-semibold text-primary"
+        className="absolute top-1/2 right-0 flex -translate-y-1/2 items-center gap-0.5 rounded-md border border-line bg-card px-2 py-1 text-xs font-semibold text-primary shadow-[0_1px_0_rgba(13,43,69,0.06)] max-xl:border-primary/30 max-xl:bg-info-soft max-xl:px-2.5 max-xl:py-1"
       >
         <span className="whitespace-nowrap">{openLabel}</span>
         <ChevronRight

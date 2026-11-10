@@ -59,6 +59,7 @@ interface CalendarViewProps {
   // Hide status chips and the legend when the month has no posts.
   showLegend?: boolean;
   loadErrorMessageKey?: TranslationKey;
+  loadErrorNoteKey?: TranslationKey;
   onLoadErrorRetry?: () => void;
   onRefresh?: () => void;
   refreshing?: boolean;
@@ -112,11 +113,21 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
     today.go();
   }, [today]);
   const navInert = today.unavailable;
+  const navDisabledClass =
+    'cursor-not-allowed border-line bg-sunken/80 text-muted-foreground opacity-70 shadow-none hover:bg-sunken/80 hover:text-muted-foreground active:bg-sunken/80';
   return (
-    <nav {...navProps} className={cn(navProps.className, navInert && 'pointer-events-none opacity-50')} aria-disabled={navInert ? true : undefined}>
+    <nav
+      {...navProps}
+      className={cn(
+        navProps.className,
+        navInert &&
+          'pointer-events-none [&_button]:cursor-not-allowed [&_button]:border-line [&_button]:bg-sunken/80 [&_button]:text-muted-foreground [&_button]:opacity-70 [&_svg]:text-muted-foreground',
+      )}
+      aria-disabled={navInert ? true : undefined}
+    >
       <components.PreviousMonthButton
         type="button"
-        className={classNames[UI.PreviousMonthButton]}
+        className={cn(classNames[UI.PreviousMonthButton], navInert && navDisabledClass)}
         style={styles?.[UI.PreviousMonthButton]}
         tabIndex={navInert || !previousMonth ? -1 : undefined}
         aria-disabled={navInert || !previousMonth ? true : undefined}
@@ -138,7 +149,7 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
         aria-pressed={navInert ? undefined : today.pressed}
         className={cn(
           'h-10 rounded-md px-3 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-          navInert && 'cursor-not-allowed border border-line bg-sunken/80 text-muted-foreground',
+          navInert && navDisabledClass,
           !navInert &&
             (today.pressed
               ? 'bg-primary text-on-ink hover:bg-accent-hover'
@@ -149,7 +160,7 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
       </button>
       <components.NextMonthButton
         type="button"
-        className={classNames[UI.NextMonthButton]}
+        className={cn(classNames[UI.NextMonthButton], navInert && navDisabledClass)}
         style={styles?.[UI.NextMonthButton]}
         tabIndex={navInert || !nextMonth ? -1 : undefined}
         aria-disabled={navInert || !nextMonth ? true : undefined}
@@ -186,6 +197,7 @@ export function CalendarView({
   legendClassName,
   showLegend = true,
   loadErrorMessageKey,
+  loadErrorNoteKey,
   onLoadErrorRetry,
   onRefresh,
   refreshing = false,
@@ -255,7 +267,6 @@ export function CalendarView({
       className={cn(
         'relative max-w-full min-w-0 rounded-xl border border-line bg-card p-2 sm:p-3',
         muted && 'pointer-events-none',
-        unavailable && 'pb-1',
       )}
     >
       <DayCellContext.Provider value={dayCells}>
@@ -306,7 +317,10 @@ export function CalendarView({
               nav: 'absolute right-0 top-0 flex items-center gap-1',
               button_previous: NAV_ARROW_CLASS,
               button_next: NAV_ARROW_CLASS,
-              month_caption: 'flex min-h-(--cell-size) w-full items-center justify-start pr-44',
+              month_caption: cn(
+                'flex w-full items-center justify-start pr-44',
+                unavailable ? 'min-h-10' : 'min-h-(--cell-size)',
+              ),
               weekdays: unavailable ? 'hidden' : 'table-row',
               // Equal table cells so seven columns stay aligned on narrow screens.
               weekday:
@@ -331,17 +345,17 @@ export function CalendarView({
           />
           </div>
           {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined && (
-            <div
-              data-calendar-load-error
-              className="mt-2 flex min-h-[18rem] flex-col justify-center rounded-xl bg-sunken/25 p-3 sm:min-h-[22rem] sm:p-4"
-            >
+            <div data-calendar-load-error className="border-t border-line pt-3">
               <LoadErrorBanner
                 compact
                 fill
                 messageKey={loadErrorMessageKey}
-                noteKey="posts.loadErrorSideQuiet"
+                noteKey={loadErrorNoteKey}
                 onRetry={onLoadErrorRetry}
               />
+              {loadErrorNoteKey === undefined && (
+                <p className="mt-2 text-center text-sm text-muted-foreground xl:hidden">{t('posts.loadErrorSideQuiet')}</p>
+              )}
             </div>
           )}
         </NavTodayContext.Provider>

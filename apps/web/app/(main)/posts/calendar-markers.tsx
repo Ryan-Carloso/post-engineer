@@ -52,11 +52,15 @@ export function StatusMarker({ group, count, labeled = false }: { group: Calenda
 }
 
 export const DAY_POST_TOTAL_CLASS =
-  'inline-flex h-5 min-w-5 max-xl:h-6 max-xl:min-w-6 items-center justify-center rounded-full border border-line bg-card text-xs max-xl:text-sm font-bold leading-none text-primary tabular-nums shadow-[0_1px_0_rgba(13,43,69,0.06)]';
+  'inline-flex h-5 min-w-5 max-xl:h-6 max-xl:min-w-6 items-center justify-center rounded-full border border-primary/40 bg-primary/12 text-xs max-xl:text-sm font-bold leading-none text-primary tabular-nums shadow-[0_1px_0_rgba(13,43,69,0.1)]';
 
-// Miniature of a selected day cell: blue rounded frame + numeral (not an empty checkbox).
+// Legend sample: same pill shape, no numeral (not a live count).
+export const LEGEND_POST_TOTAL_SWATCH_CLASS =
+  'inline-flex h-5 min-w-5 max-xl:h-6 max-xl:min-w-6 shrink-0 rounded-full border border-primary/40 bg-primary/12 shadow-[0_1px_0_rgba(13,43,69,0.1)]';
+
+// Miniature selected day cell: grid-matching blue outline, no date numeral.
 export const SELECTED_DAY_LEGEND_SWATCH_CLASS =
-  'inline-flex h-8 w-[1.75rem] shrink-0 flex-col items-center justify-center rounded-md border-2 border-primary bg-card pt-0.5 text-[10px] font-semibold leading-none tabular-nums text-primary';
+  'inline-flex h-8 w-[1.75rem] shrink-0 flex-col items-center justify-center rounded-md bg-card outline-2 -outline-offset-2 outline-primary';
 
 function DayCellPostTotal({
   total,
@@ -78,7 +82,7 @@ function DayCellPostTotal({
       className={cn(
         DAY_POST_TOTAL_CLASS,
         'max-xl:px-2 px-1.5',
-        selected && 'border-primary/25 bg-card',
+        selected && 'border-primary/50 bg-primary/15',
       )}
     >
       {total}

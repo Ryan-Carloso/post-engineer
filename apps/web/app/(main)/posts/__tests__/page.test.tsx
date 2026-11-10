@@ -822,7 +822,8 @@ describe('PostsPage calendar view', () => {
     // The error names the calendar posts, not the supporting data.
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('posts.loadErrorCalendar');
-    expect(within(alert).getByText('posts.loadErrorSideQuiet')).toBeInTheDocument();
+    expect(within(alert).queryByText('posts.loadErrorSideQuiet')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-day-unavailable-note]')).toHaveTextContent('posts.loadErrorSideQuiet');
     expect(screen.getByText('posts.subtitleLoadError')).toBeInTheDocument();
     expect(screen.queryByText('posts.subtitle')).not.toBeInTheDocument();
     expect(screen.queryByTestId('load-error-side-panel')).not.toBeInTheDocument();
@@ -951,7 +952,8 @@ describe('PostsPage calendar view', () => {
     const alert = screen.getByRole('alert');
     expect(within(alert).getByText('posts.loadErrorCalendar')).toBeInTheDocument();
     expect(within(alert).queryByText('posts.loadErrorRetryHint')).not.toBeInTheDocument();
-  expect(alert.closest('[data-calendar-card]')).not.toBeNull();
+    expect(within(alert).queryByText('posts.loadErrorSideQuiet')).not.toBeInTheDocument();
+    expect(alert.closest('[data-calendar-card]')).not.toBeNull();
     expect(screen.getByText('posts.subtitleLoadError')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'posts.refresh' })).not.toBeInTheDocument();
     const retry = within(alert).getByRole('button', { name: 'posts.loadErrorRetry' });
@@ -966,9 +968,13 @@ describe('PostsPage calendar view', () => {
     expect(grid?.className.split(/\s+/)).toContain('hidden');
     expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
     expect(screen.queryByText('posts.calendarMonthHeading')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-day-unavailable-note]')).toHaveTextContent('posts.loadErrorSideQuiet');
+    expect(screen.queryAllByRole('button', { name: 'posts.loadErrorRetry' })).toHaveLength(1);
     const nav = screen.getByRole('navigation');
     expect(nav).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByRole('button', { name: 'posts.calendarNextMonth' })).toBeDisabled();
+    const loadError = document.querySelector('[data-calendar-load-error]');
+    expect(loadError?.className.split(/\s+/)).not.toContain('min-h-[18rem]');
   });
 
   it('hides the header refresh on a load error so only the in-card retry remains', () => {
