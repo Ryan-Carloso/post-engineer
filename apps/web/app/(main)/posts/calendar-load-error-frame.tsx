@@ -32,8 +32,11 @@ export function CalendarLoadErrorEmptyState({
       data-calendar-load-error-empty
       className="flex w-full max-w-lg flex-col items-center gap-3"
     >
-      <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-sunken text-warning">
-        <TriangleAlert className="size-6" aria-hidden />
+      <span
+        data-calendar-load-error-icon
+        className="flex size-12 shrink-0 items-center justify-center rounded-full bg-warning-soft text-warning"
+      >
+        <TriangleAlert className="size-6" strokeWidth={2.25} aria-hidden />
       </span>
       <p className="text-sm font-semibold leading-snug text-primary">{t(messageKey)}</p>
       <Button

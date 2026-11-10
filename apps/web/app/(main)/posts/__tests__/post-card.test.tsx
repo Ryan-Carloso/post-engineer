@@ -122,18 +122,21 @@ describe('PostCard status pill — the calendar vocabulary', () => {
     expect(document.querySelector(`[data-status="${status}"]`)).toHaveTextContent(label);
   });
 
-  it('surfaces generating as the stage label instead of the in-progress group pill in the day list', () => {
+  it('shows generating as a soft info pill with a spinner in the day list', () => {
     renderCard({ ...FAILED_SLOT, status: 'generating' }, true);
 
-    expect(screen.getAllByText('posts.statusGenerating').length).toBeGreaterThanOrEqual(1);
-    expect(document.querySelector('[data-status="generating"]')).toBeNull();
+    const pill = document.querySelector('[data-status="generating"]');
+    expect(pill).toHaveTextContent('posts.statusGenerating');
+    expect(pill?.className).toMatch(/bg-info-soft/);
+    expect(pill?.querySelector('.animate-spin')).not.toBeNull();
+    expect(screen.queryByText('posts.groupInProgress')).not.toBeInTheDocument();
   });
 
-  it('names the exact stage with the percent under the In progress pill', () => {
+  it('names the exact stage with the percent under the generating pill', () => {
     renderCard({ ...FAILED_SLOT, status: 'generating', progress: 45, slotAt: '2030-06-01T10:00:00.000Z' }, true);
 
     expect(screen.getAllByText('posts.statusGenerating')).toHaveLength(1);
-    expect(document.querySelector('[data-card-header] svg')).not.toBeNull();
+    expect(document.querySelector('[data-status="generating"]')?.querySelector('.animate-spin')).not.toBeNull();
     expect(screen.queryByText('posts.groupInProgress')).not.toBeInTheDocument();
     expect(screen.getByText('45%')).toBeInTheDocument();
     expect(screen.getByText('posts.cardProgressCaption')).toBeInTheDocument();

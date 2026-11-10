@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Play, TriangleAlert } from 'lucide-react';
+import { ChevronRight, Loader2, Play, TriangleAlert } from 'lucide-react';
 import type { ScheduledSlot, ScheduleConfig, VideoGeneration } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
@@ -21,6 +21,7 @@ import {
   STATUS_KEY,
   STATUS_STYLE,
   calendarGroupOf,
+  type CalendarGroup,
 } from './status';
 import { CREATE_POSTS_HREF } from './day-section';
 import { PublishAccountNotices } from './publish-user-notice';
@@ -125,11 +126,27 @@ const PostCardMedia = ({ src, noPreviewLabel }: { src: string | null; noPreviewL
   );
 };
 
-const StatusBadge = ({ status, label, style }: { status: string; label: string; style: string }) => {
-  const Icon = CALENDAR_GROUP_ICON[calendarGroupOf(status)];
+const StatusBadge = ({
+  status,
+  label,
+  style,
+  icon: IconOverride,
+  iconClassName,
+}: {
+  status: string;
+  label: string;
+  style: string;
+  icon?: (typeof CALENDAR_GROUP_ICON)[CalendarGroup];
+  iconClassName?: string;
+}) => {
+  const Icon = IconOverride ?? CALENDAR_GROUP_ICON[calendarGroupOf(status)];
   return (
     <Badge variant="outline" data-status={status} className={cn('shrink-0 gap-1 border-transparent whitespace-nowrap', style)}>
-      <Icon className="size-3" strokeWidth={3} aria-hidden />
+      <Icon
+        className={cn('size-3', iconClassName)}
+        strokeWidth={IconOverride === undefined ? 3 : 2.5}
+        aria-hidden
+      />
       {label}
     </Badge>
   );
@@ -286,24 +303,23 @@ export const PostCard = ({
         aria-label={t('posts.cardOpenDetail', { title: displayTitle })}
         className="block rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
-        {generatingCue ? (
-          <div data-card-header className="flex w-full items-start gap-2">
-            <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-info">
-              <CALENDAR_GROUP_ICON.inProgress className="size-3.5 shrink-0" strokeWidth={3} aria-hidden />
-              {t(STATUS_KEY.generating)}
-            </p>
-            <p className="ml-auto text-right text-xs text-muted-foreground tabular-nums">
-              <span className="sr-only">{t(timeKindKey)} </span>
-              <span data-card-when>{when}</span>
-            </p>
-          </div>
-        ) : (
-          <CardHeader
-            badge={<StatusBadge status={slot.status} label={t(CALENDAR_GROUP_KEY[group])} style={CALENDAR_GROUP_PILL[group]} />}
-            when={when}
-            whenHint={timeOnly && !generatingCue && slot.status !== 'published' ? t(timeKindKey) : undefined}
-          />
-        )}
+        <CardHeader
+          badge={
+            generatingCue ? (
+              <StatusBadge
+                status={slot.status}
+                label={t(STATUS_KEY.generating)}
+                style={STATUS_STYLE.generating}
+                icon={Loader2}
+                iconClassName="animate-spin"
+              />
+            ) : (
+              <StatusBadge status={slot.status} label={t(CALENDAR_GROUP_KEY[group])} style={CALENDAR_GROUP_PILL[group]} />
+            )
+          }
+          when={when}
+          whenHint={timeOnly && !generatingCue && slot.status !== 'published' ? t(timeKindKey) : undefined}
+        />
         <div className="mt-3">
           <CardTitle title={displayTitle} personaName={personaName} personaLabel={t('posts.cardPersonaLabel')} />
           {!isFailed && <PostCardMedia src={thumbSrc} noPreviewLabel={t('posts.cardNoPreview')} />}

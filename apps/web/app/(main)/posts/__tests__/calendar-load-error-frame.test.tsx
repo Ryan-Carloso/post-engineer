@@ -27,6 +27,10 @@ describe('CalendarUnavailableFrame', () => {
     expect(panel?.className).not.toMatch(/border-dashed/);
     expect(panel?.className).not.toMatch(/bg-warning/);
     expect(screen.getByRole('alert')).toHaveTextContent('posts.loadErrorCalendar');
+    const icon = document.querySelector('[data-calendar-load-error-icon]');
+    expect(icon?.className).toMatch(/size-12/);
+    expect(icon?.className).toMatch(/bg-warning-soft/);
+    expect(icon?.querySelector('svg')?.classList.contains('size-6')).toBe(true);
     const retry = screen.getByRole('button', { name: 'posts.loadErrorRetry' });
     expect(retry.className).toMatch(/bg-primary/);
     fireEvent.click(retry);
