@@ -1,27 +1,54 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { TriangleAlert } from 'lucide-react';
+import type { TranslationKey } from '@/lib/i18n';
+import { useI18n } from '@/lib/i18n/provider';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-export function CalendarUnavailableFrame({
-  children,
-}: {
-  year?: number;
-  month?: number;
-  firstWeekday?: 0 | 1;
-  filtered?: boolean;
-  legendClassName?: string;
-  showLegend?: boolean;
-  children: ReactNode;
-}) {
+export function CalendarUnavailableFrame({ children }: { children: ReactNode }) {
   return (
     <div data-calendar-unavailable-frame className="w-full">
       <div
         data-calendar-load-error
-        className={cn('w-full rounded-lg border border-warning/35 bg-warning/12 px-4 py-4 sm:px-5')}
+        className={cn(
+          'flex w-full flex-col items-center rounded-xl border border-dashed border-line bg-card px-6 py-10 text-center sm:px-8',
+        )}
       >
         {children}
       </div>
+    </div>
+  );
+}
+
+export function CalendarLoadErrorEmptyState({
+  messageKey,
+  onRetry,
+}: {
+  messageKey: TranslationKey;
+  onRetry: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div
+      role="alert"
+      data-calendar-load-error-empty
+      className="flex w-full max-w-lg flex-col items-center gap-3"
+    >
+      <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-sunken text-warning">
+        <TriangleAlert className="size-6" aria-hidden />
+      </span>
+      <p className="text-sm font-semibold leading-snug text-primary">{t(messageKey)}</p>
+      <Button
+        type="button"
+        variant="outline"
+        data-load-error-retry
+        className="min-h-10 rounded-lg border-input bg-card px-5 font-semibold text-primary hover:bg-sunken"
+        onClick={onRetry}
+      >
+        {t('posts.loadErrorRetry')}
+      </Button>
     </div>
   );
 }

@@ -387,6 +387,7 @@ describe('CalendarView', () => {
     expect(document.querySelector('[data-calendar-error-nav]')).toBeNull();
     expect(document.querySelector('[data-calendar-error-weekdays]')).toBeNull();
     expect(document.querySelector('[data-calendar-load-error]')?.closest('[data-calendar-card]')).not.toBeNull();
+    expect(document.querySelector('[data-calendar-load-error-empty]')).not.toBeNull();
     expect(screen.getByRole('alert')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onLoadErrorRetry).toHaveBeenCalledTimes(1);

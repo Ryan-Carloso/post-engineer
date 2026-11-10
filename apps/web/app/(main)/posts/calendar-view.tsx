@@ -13,8 +13,7 @@ import { CALENDAR_GROUP_KEY, CALENDAR_GROUP_ORDER } from './status';
 import { DayCellContext, PostsDayButton } from './calendar-markers';
 import { CalendarChromeContext, PostsCalendarWeek, PostsCalendarWeeks } from './calendar-week';
 import { CalendarLegend } from './calendar-legend';
-import { CalendarUnavailableFrame } from './calendar-load-error-frame';
-import { LoadErrorBanner } from './day-section';
+import { CalendarLoadErrorEmptyState, CalendarUnavailableFrame } from './calendar-load-error-frame';
 
 // CalendarView — month calendar on the shadcn Calendar (react-day-picker:
 // grid semantics, keyboard navigation, focus). Each day cell shows up to
@@ -273,30 +272,14 @@ export function CalendarView({
       className={cn(
         'relative max-w-full min-w-0 rounded-xl border border-line bg-card p-2 sm:p-3',
         muted && 'pointer-events-none',
-        unavailable && 'border-warning/30',
       )}
     >
       <DayCellContext.Provider value={dayCells}>
         <CalendarChromeContext.Provider value={chrome}>
           <NavTodayContext.Provider value={navToday}>
             {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined ? (
-              <CalendarUnavailableFrame
-                year={year}
-                month={month}
-                firstWeekday={firstWeekday}
-                filtered={filtered}
-                legendClassName={legendClassName}
-                showLegend={false}
-              >
-                <LoadErrorBanner
-                  compact
-                  fill
-                  bare
-                  banner
-                  messageKey={loadErrorMessageKey}
-                  noteKey={loadErrorNoteKey}
-                  onRetry={onLoadErrorRetry}
-                />
+              <CalendarUnavailableFrame>
+                <CalendarLoadErrorEmptyState messageKey={loadErrorMessageKey} onRetry={onLoadErrorRetry} />
               </CalendarUnavailableFrame>
             ) : (
               <div className="max-xl:overflow-x-hidden max-xl:overflow-visible">

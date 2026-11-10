@@ -162,7 +162,12 @@ export default function PostsPage() {
           <CalendarLoadingSkeleton weeks={monthWeeks} />
         ) : (
           <div className={cn('flex flex-col', CALENDAR_LAYOUT_CLASS)}>
-            <div className="min-w-0 xl:col-start-1 xl:row-start-1">
+            <div
+              className={cn(
+                'min-w-0 xl:col-start-1 xl:row-start-1',
+                isError && loadErrorKey === 'posts.loadErrorCalendar' && 'xl:col-span-2',
+              )}
+            >
               {rangeQuery.data?.truncated === true && (
                 <p className="mb-3 text-xs text-muted-foreground">{t('posts.calendarTruncated', { count: RANGE_MAX_SLOTS })}</p>
               )}

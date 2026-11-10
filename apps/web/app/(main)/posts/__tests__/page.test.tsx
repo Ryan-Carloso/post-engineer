@@ -472,7 +472,9 @@ describe('PostsPage', () => {
     // The error names the supporting data, not the calendar posts.
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('posts.loadErrorSupporting');
-    expect(within(alert).getByText('posts.loadErrorSideQuiet')).toBeInTheDocument();
+    const sideNote = document.querySelector('[data-day-unavailable-note]');
+    expect(sideNote).not.toBeNull();
+    expect(within(sideNote as HTMLElement).getByText('posts.loadErrorSideQuiet')).toBeInTheDocument();
   });
 
   it('shows the error state when an account query fails', () => {
@@ -1002,15 +1004,17 @@ describe('PostsPage calendar view', () => {
     expect(document.querySelector('[data-day-unavailable-note]')).toBeNull();
     expect(screen.queryAllByRole('button', { name: 'posts.loadErrorRetry' })).toHaveLength(1);
     expect(document.querySelector('[data-calendar-unavailable-frame]')).not.toBeNull();
+    expect(document.querySelector('[data-calendar-load-error-empty]')).not.toBeNull();
     expect(document.querySelector('[data-calendar-error-nav]')).toBeNull();
     expect(document.querySelector('[data-calendar-error-weekdays]')).toBeNull();
     expect(document.querySelector('[data-calendar-grid-footprint]')).toBeNull();
     const loadError = document.querySelector('[data-calendar-load-error]');
-    expect(loadError?.className).toMatch(/bg-warning/);
-    expect(document.querySelector('[data-load-error-banner="true"]')?.className).toMatch(/sm:flex-row/);
-    expect(alert.closest('.xl\\:col-span-2')).toBeNull();
+    expect(loadError?.className).toMatch(/border-dashed/);
+    expect(loadError?.className).not.toMatch(/bg-warning\/12/);
+    expect(document.querySelector('[data-load-error-banner="true"]')).toBeNull();
+    expect(alert.closest('.xl\\:col-span-2')).not.toBeNull();
     expect(retry.className).toMatch(/border-input/);
-    expect(retry.className).toMatch(/min-h-10|min-h-11/);
+    expect(retry.className).toMatch(/min-h-10/);
   });
 
   it('mutes disabled filters on a load error without a chevron affordance', () => {
