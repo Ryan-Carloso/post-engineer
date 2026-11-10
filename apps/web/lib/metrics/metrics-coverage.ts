@@ -63,8 +63,13 @@ export function computeCoverage(input: {
   donePostIds: ReadonlySet<string>;
   query: MetricsQuery;
   now: Date;
+  // Null (or absent) means unrestricted; a scoped caller (persona-scoped
+  // API key) passes its persona ids, and out-of-scope posts are dropped —
+  // the same policy the rows query enforces in the route.
+  personaIds?: ReadonlyArray<string> | null;
 }): { items: CoverageItem[]; truncated: boolean; unknownProviders: string[] } {
   const { posts, rows, donePostIds, query, now } = input;
+  const scope = input.personaIds ?? null;
   const cutoff = now.getTime() - METRICS_WINDOW_LOOKBACK_HOURS * 60 * 60 * 1000;
 
   const collected = new Set<string>();
@@ -88,6 +93,11 @@ export function computeCoverage(input: {
     if (query.personaId === METRICS_NONE) {
       if (post.personaId !== null) continue;
     } else if (query.personaId !== null && post.personaId !== query.personaId) {
+      continue;
+    }
+    // A scoped caller only sees its personas' items; a persona-less
+    // (faceless) post belongs to no scope, so it stays visible.
+    if (scope !== null && post.personaId !== null && !scope.includes(post.personaId)) {
       continue;
     }
     const angleKnown = postsWithRows.has(post.id);
@@ -125,6 +135,10 @@ export function computeCoverage(input: {
     // can never pick them up — missing for every window, whatever its
     // state. (A timeout can leave the video live anyway: the outcome
     // says 'failed' while the network has it. The item says so.)
+    // Two videos of one slot can fail on the same account; both failed
+    // entries carry no video id, so the items would be identical and
+    // collide as React keys — keep one per (provider, account).
+    const failedSeen = new Set<string>();
     for (const entry of post.outcomes) {
       if (typeof entry !== 'object' || entry === null) continue;
       const record = entry as Record<string, unknown>;
@@ -134,6 +148,9 @@ export function computeCoverage(input: {
       if (accountId === null) continue;
       if (query.provider !== null && record.provider !== query.provider) continue;
       if (query.accountId !== null && accountId !== query.accountId) continue;
+      const dedupeKey = `${record.provider}:${accountId}`;
+      if (failedSeen.has(dedupeKey)) continue;
+      failedSeen.add(dedupeKey);
       items.push({
         postId: post.id,
         personaId: post.personaId,
@@ -168,6 +185,7 @@ export async function fetchCoverage(
   userId: string,
   query: MetricsQuery,
   now: Date,
+  options?: { personaIds?: ReadonlyArray<string> | null },
 ): Promise<{ items: CoverageItem[]; truncated: boolean }> {
   const cutoff = new Date(now.getTime() - METRICS_WINDOW_LOOKBACK_HOURS * 60 * 60 * 1000);
   const { data: postData, error: postError } = await supabase
@@ -273,6 +291,7 @@ export async function fetchCoverage(
     donePostIds,
     query,
     now,
+    personaIds: options?.personaIds ?? null,
   });
   for (const provider of unknownProviders) {
     logger.warn('[metrics-coverage] unknown provider in publish outcomes', { provider });
