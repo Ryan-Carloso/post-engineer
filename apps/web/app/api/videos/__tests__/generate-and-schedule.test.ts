@@ -2670,6 +2670,27 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(payload.lipsync_enabled).toBe(false);
     });
 
+    it('accepts a square 1:1 videoAspect: it is a product aspect, not just an engine one', async () => {
+      const res = await post(
+        baseBody({
+          personaId: undefined,
+          options: {
+            faceless: true,
+            voiceId: 'chatterbox:kokoro_af_heart',
+            language: 'en',
+            niche: 'comedy',
+            videoAspect: '1:1',
+            paragraphNumber: 3,
+          },
+        }),
+      );
+      expect(res.status).toBe(200);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows[0].post_video_aspect).toBe('1:1');
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.video_aspect).toBe('1:1');
+    });
+
     it('skips the persona scope check for a persona-less post', async () => {
       // A scoped API key that allows nothing still creates a persona-less
       // post: there is no persona to scope against.

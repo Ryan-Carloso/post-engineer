@@ -9,6 +9,7 @@ import pytest
 
 from app.models.schema import VideoAspect
 from app.services import media_aspect
+from app.services.image_material import MIN_MATERIAL_EDGE
 
 
 def test_label_simplifies_dimensions_to_a_ratio():
@@ -48,8 +49,10 @@ def test_mismatched_ratio_names_both_sides(width, height, aspect):
 
 def test_rejection_reason_prefers_low_resolution_over_aspect():
     reason = media_aspect.rejection_reason(100, 100, VideoAspect.portrait)
-    assert reason is not None
-    assert reason.startswith("low resolution material: 100x100")
+    assert (
+        reason
+        == f"low resolution material: 100x100, minimum {MIN_MATERIAL_EDGE}x{MIN_MATERIAL_EDGE} required"
+    )
 
 
 def test_rejection_reason_names_the_wrong_aspect():

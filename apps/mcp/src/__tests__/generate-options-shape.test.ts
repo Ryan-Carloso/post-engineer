@@ -38,4 +38,18 @@ describe('generate_persona_video options (Phase 5-4)', () => {
       expect(parsed.data.options).not.toHaveProperty('scriptPrompts');
     }
   });
+
+  it('accepts a square 1:1 videoAspect: it is a product aspect, not just an engine one', () => {
+    const parsed = GeneratePersonaVideoSchema.safeParse({
+      title: 'Porto trip',
+      providers: ['youtube'],
+      mode: 'asap',
+      segments: [{ kind: 'hook', text: 'Stop scrolling, this Porto kitchen changes everything.' }],
+      options: { videoAspect: '1:1' },
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.options?.videoAspect).toBe('1:1');
+    }
+  });
 });

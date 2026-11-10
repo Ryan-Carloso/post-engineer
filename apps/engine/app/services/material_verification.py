@@ -60,7 +60,12 @@ def _source_resolution_allowed(width: int, height: int) -> bool:
 
 def ratio_matches(width: int, height: int, aspect: VideoAspect) -> bool:
     """True when letterboxing stays within the bar ceiling. Side bars
-    and missing/zero dimensions reject immediately."""
+    and missing/zero dimensions reject immediately.
+
+    Callers pass probed dimensions, never None: _probe_size returns
+    None only when the image cannot be opened, and _validate_photo
+    calls mismatch_detail only after a successful open.
+    """
     if width <= 0 or height <= 0:
         return False
     file_ratio = width / height

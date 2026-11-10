@@ -24,7 +24,7 @@ export interface OptionsInput {
   imageId?: string;
   webhookUrl?: string;
   voiceId?: string;
-  videoAspect?: '9:16' | '16:9';
+  videoAspect?: '9:16' | '16:9' | '1:1';
   videoLayout?: 'standard' | 'react';
   paragraphNumber?: number;
   language?: string;
@@ -46,7 +46,7 @@ export interface ValidatedOptions {
   imageId?: string;
   webhookUrl?: string;
   voiceId?: string;
-  videoAspect?: '9:16' | '16:9';
+  videoAspect?: '9:16' | '16:9' | '1:1';
   /** 'standard' = the avatar fills the frame; 'react' = the frame splits,
    *  avatar on top and the video material below. Absent means standard. */
   videoLayout?: 'standard' | 'react';

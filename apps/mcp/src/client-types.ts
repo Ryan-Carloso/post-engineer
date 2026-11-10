@@ -37,7 +37,7 @@ export interface CreatePersonaInput {
   avatarPath?: string;
   voiceId: string;
   language?: string;
-  videoAspect?: '9:16' | '16:9';
+  videoAspect?: '9:16' | '16:9' | '1:1';
   videoLayout?: VideoLayout;
   scriptPrompt?: string;
   paragraphNumber?: number;
@@ -97,7 +97,7 @@ export interface GeneratePersonaVideoInput {
     imageId?: string;
     voiceId?: string;
     webhookUrl?: string;
-    videoAspect?: '9:16' | '16:9';
+    videoAspect?: '9:16' | '16:9' | '1:1';
     videoLayout?: VideoLayout;
     paragraphNumber?: number;
     language?: string;
@@ -121,7 +121,7 @@ export interface UpdatePersonaInput {
   avatarPath?: string;
   voiceId?: string;
   language?: string;
-  videoAspect?: '9:16' | '16:9';
+  videoAspect?: '9:16' | '16:9' | '1:1';
   videoLayout?: VideoLayout;
   scriptPrompt?: string;
   paragraphNumber?: number;

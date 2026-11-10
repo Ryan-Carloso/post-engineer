@@ -86,7 +86,7 @@ export function resolvePostWithoutPersona(opts: {
   faceless: boolean;
   audioUrl?: string;
   voiceId?: string;
-  videoAspect?: '9:16' | '16:9';
+  videoAspect?: '9:16' | '16:9' | '1:1';
   videoLayout?: 'standard' | 'react';
   paragraphNumber?: number;
   language?: string;

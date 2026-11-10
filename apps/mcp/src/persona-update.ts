@@ -22,7 +22,7 @@ export const UpdatePersonaShape = {
     .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })
     .optional()
     .describe('New language code — English only for now (e.g. en-US, en-GB)'),
-  videoAspect: z.enum(['9:16', '16:9']).optional().describe('New video aspect ratio'),
+  videoAspect: z.enum(['9:16', '16:9', '1:1']).optional().describe('New video aspect ratio'),
   videoLayout: z.enum(VIDEO_LAYOUTS).optional().describe('New persona-hook layout (standard or react)'),
   scriptPrompt: z.string().optional().describe('New system prompt instructions for video scripts'),
   paragraphNumber: z.number().int().min(1).max(10).optional().describe('New number of paragraphs'),
