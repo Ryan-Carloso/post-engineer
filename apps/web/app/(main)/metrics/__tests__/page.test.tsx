@@ -1,14 +1,15 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 //---------------
-// Tests for the Metrics page: filters, stat tiles, chart and per-video
-// list over GET /api/metrics. The React Query hook and the grouping stay
-// real; the network (fetch), the personas/accounts hooks and i18n are
-// mocked. t() returns the key, with {vars} appended when interpolated.
+// Tests for the Metrics page: totals tiles, the sorted per-video list
+// and the Filters Sheet over GET /api/metrics. The React Query hook
+// stays real; the network (fetch), the personas/accounts hooks and i18n
+// are mocked. t() returns the key, with {vars} appended when interpolated.
 //---------------
 
 vi.mock('@/lib/api', () => ({
@@ -46,7 +47,6 @@ vi.mock('@/components/provider-icon', () => ({
 import MetricsPage from '../page';
 import { usePersonasQuery, useSocialAccountsQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
-import { METRICS_NONE } from '@/lib/metrics/metrics-query';
 import type { CoverageItem, MetricsRowView } from '@/lib/metrics/metrics-query';
 
 // The i18n mock defaults to 'en'; a test that needs the pt-BR date branch
@@ -58,6 +58,15 @@ function setLocale(locale: 'en' | 'pt'): void {
     setLocale: vi.fn(),
   } as never);
 }
+
+// cmdk scrolls the active item into view when the list opens; jsdom
+// has no Element.scrollIntoView, so stub it for the Combobox tests.
+window.HTMLElement.prototype.scrollIntoView = vi.fn();
+// Radix Select calls hasPointerCapture on pointerdown; jsdom has none,
+// so the trigger never opens without these stubs.
+window.HTMLElement.prototype.hasPointerCapture = () => false;
+window.HTMLElement.prototype.setPointerCapture = () => {};
+window.HTMLElement.prototype.releasePointerCapture = () => {};
 
 const PERSONA_A = '11111111-2222-4333-8444-555555555555';
 const PERSONA_B = '22222222-3333-4444-8555-666666666666';
@@ -102,6 +111,43 @@ function lastFetchUrl(fetchMock: ReturnType<typeof vi.fn>): string {
   return calls[calls.length - 1][0];
 }
 
+// Radix Tabs activates on mousedown, not on click alone in jsdom.
+function activateTab(label: string): void {
+  const trigger = screen.getByText(label);
+  fireEvent.mouseDown(trigger);
+  fireEvent.click(trigger);
+}
+
+// The Filters Sheet (Radix Dialog) renders its content in a portal;
+// the persona Combobox and the provider Select live inside it.
+async function openFiltersSheet(): Promise<void> {
+  fireEvent.click(screen.getByText('metrics.filtersButton'));
+  await waitFor(() => expect(screen.getByText('metrics.filtersTitle')).toBeInTheDocument());
+}
+
+async function applyPersonaFilter(label: string): Promise<void> {
+  await openFiltersSheet();
+  fireEvent.click(screen.getByRole('combobox', { name: 'metrics.filterPersona' }));
+  const options = await screen.findAllByRole('option');
+  const option = options.find((el) => el.textContent === label);
+  expect(option).toBeDefined();
+  fireEvent.click(option as HTMLElement);
+  fireEvent.click(screen.getByText('metrics.filtersApply'));
+}
+
+async function applyProviderFilter(label: string): Promise<void> {
+  await openFiltersSheet();
+  // Radix Select opens on pointerdown; fireEvent alone does not open it
+  // in jsdom, so drive it with user-event.
+  const user = userEvent.setup();
+  await user.click(screen.getByLabelText('metrics.filterProvider'));
+  const options = await screen.findAllByRole('option');
+  const option = options.find((el) => el.textContent === label);
+  expect(option).toBeDefined();
+  await user.click(option as HTMLElement);
+  fireEvent.click(screen.getByText('metrics.filtersApply'));
+}
+
 beforeEach(() => {
   setLocale('en');
   vi.mocked(usePersonasQuery).mockReturnValue({
@@ -142,7 +188,7 @@ describe('MetricsPage', () => {
     expect(screen.getByText('experiments.entryAction')).toBeInTheDocument();
   });
 
-  it('renders stat tiles, the chart style and the per-video rows on success', async () => {
+  it('renders total tiles and the per-video rows sorted by views, highest first', async () => {
     const rows = [
       row(),
       row({
@@ -157,28 +203,80 @@ describe('MetricsPage', () => {
     stubMetricsFetch({ success: true, rows, truncated: false });
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
-    // Stat tiles: 3 videos, average of reported views (100 + 300) / 2, best
-    // group by angle is the null-angle group (300) under its i18n label.
+    // The list heading renders while loading; wait for the tiles, which
+    // only exist once the rows arrive.
+    await waitFor(() => expect(screen.getByText('metrics.statVideos')).toBeInTheDocument());
+    // Totals, not averages: 3 videos, 100 + 300 views, engagement
+    // 10 + 3 + 1 + 5 + 0 + 0 = 19 (nulls skipped, never counted as 0).
     expect(screen.getByText('metrics.statVideos')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument();
-    expect(screen.getByText('200')).toBeInTheDocument();
-    // Row list: angle text, fallbacks for null angle/persona, account labels
-    // (known id resolves to its label, unknown id falls back to the raw id).
+    expect(screen.getByText('400')).toBeInTheDocument();
+    expect(screen.getByText('19')).toBeInTheDocument();
+    // Sorted by views: 300 first, then 100, then the null-views row.
+    const items = screen.getAllByRole('listitem');
+    expect(items[0]).toHaveTextContent('300');
+    expect(items[1]).toHaveTextContent('100');
+    expect(items[2]).toHaveTextContent('metrics.notReported');
+    // Fallback title is "{Network} · {date}", never "No angle".
+    expect(screen.getByText('Instagram · Oct 21, 2026')).toBeInTheDocument();
+    expect(screen.queryByText('metrics.noAngle')).toBeNull();
+    // Angle text, fallbacks for null persona, account labels (known id
+    // resolves to its label, unknown id falls back to the raw id).
     expect(screen.getAllByText('myth').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('metrics.noAngle').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Alpha/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/metrics.noPersona/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Chan One/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/did:plc:x/).length).toBeGreaterThan(0);
-    // Null metric value renders the not-reported label (post-3 views).
-    expect(screen.getAllByText('metrics.notReported').length).toBeGreaterThan(0);
-    // The chart container rendered the config colors into a style tag.
-    const styles = [...document.querySelectorAll('style')].map((el) => el.textContent ?? '');
-    expect(styles.some((css) => css.includes('--color-average: #c9d2dc;'))).toBe(true);
+    // Engagement inline as small numbers on the rows that reported it.
+    expect(screen.getAllByText(/metrics\.likesValue/).length).toBe(2);
   });
 
-  it('shows the coverage card with attention and waiting groups, and the as-of line', async () => {
+  it('shows 248 total views for the screenshot fixture', async () => {
+    const rows = [3, 0, 134, 1, 0, 0, 110, 0].map((views, i) =>
+      row({ postId: `post-${i}`, views, likes: 0, comments: 0, saves: 0 }),
+    );
+    stubMetricsFetch({ success: true, rows, truncated: false });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('248')).toBeInTheDocument());
+    expect(screen.getByText('8')).toBeInTheDocument();
+  });
+
+  it('formats big totals with the en-US grouping', async () => {
+    stubMetricsFetch({
+      success: true,
+      rows: [row({ views: 1200 }), row({ postId: 'post-2', views: 300 })],
+      truncated: false,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('1,500')).toBeInTheDocument());
+  });
+
+  it('formats big totals with the pt-BR grouping', async () => {
+    setLocale('pt');
+    stubMetricsFetch({
+      success: true,
+      rows: [row({ views: 1200 }), row({ postId: 'post-2', views: 300 })],
+      truncated: false,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('1.500')).toBeInTheDocument());
+  });
+
+  it('only offers the Persona and Network filters', async () => {
+    stubMetricsFetch({ success: true, rows: [row()], truncated: false });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    // The toolbar holds no filter fields: they live in the Sheet.
+    expect(screen.queryByText('metrics.filterPersona')).toBeNull();
+    await openFiltersSheet();
+    expect(screen.getByText('metrics.filterPersona')).toBeInTheDocument();
+    expect(screen.getByText('metrics.filterProvider')).toBeInTheDocument();
+    expect(screen.queryByText('metrics.filterAccount')).toBeNull();
+    expect(screen.queryByText('metrics.filterAngle')).toBeNull();
+  });
+
+  it('shows the coverage card below the list, with attention and waiting groups, and the as-of line', async () => {
     stubMetricsFetch({
       success: true, rows: [row()], truncated: false,
       coverage: [
@@ -210,6 +308,10 @@ describe('MetricsPage', () => {
     // As-of line above the table, and the collected date on each row.
     expect(screen.getByText(/metrics\.asOf/)).toBeInTheDocument();
     expect(screen.getAllByText(/metrics\.tableCollected/).length).toBeGreaterThan(0);
+    // The coverage card renders after the video list in the document.
+    const table = screen.getByText('metrics.tableTitle');
+    const coverage = screen.getByText('metrics.coverageTitle');
+    expect(table.compareDocumentPosition(coverage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('formats dates in pt-BR when the locale is pt', async () => {
@@ -232,9 +334,8 @@ describe('MetricsPage', () => {
   it('hides the coverage card when nothing is missing, but still dates the data', async () => {
     stubMetricsFetch({ success: true, rows: [row()], truncated: false, coverage: [], coverageTruncated: false, asOf: '2026-10-21T12:00:00Z' });
     renderPage();
-    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/metrics\.asOf/)).toBeInTheDocument());
     expect(screen.queryByText('metrics.coverageTitle')).toBeNull();
-    expect(screen.getByText(/metrics\.asOf/)).toBeInTheDocument();
   });
 
   it('notes when the row cap truncated the result', async () => {
@@ -248,8 +349,7 @@ describe('MetricsPage', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('metrics.empty')).toBeInTheDocument());
 
-    const personaSelect = screen.getByLabelText(/metrics\.filterPersona/);
-    fireEvent.change(personaSelect, { target: { value: METRICS_NONE } });
+    await applyPersonaFilter('metrics.noPersona');
     await waitFor(() => expect(screen.getByText('metrics.emptyFiltered')).toBeInTheDocument());
   });
 
@@ -267,7 +367,7 @@ describe('MetricsPage', () => {
     await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
   });
 
-  it('sends window, metric-independent filters and grouping choices to the API', async () => {
+  it('sends the window and the sheet filters to the API, and clears them from the chips', async () => {
     const fetchMock = stubMetricsFetch({
       success: true,
       rows: [row(), row({ postId: 'post-2', scriptAngle: 'tutorial', views: 50 })],
@@ -278,139 +378,33 @@ describe('MetricsPage', () => {
     expect(lastFetchUrl(fetchMock)).toBe('/api/metrics?window=24h');
 
     // Window switch refetches with window=7d.
-    fireEvent.click(screen.getByText('metrics.window7d'));
+    activateTab('metrics.window7d');
     await waitFor(() => expect(lastFetchUrl(fetchMock)).toBe('/api/metrics?window=7d'));
 
-    // Persona filter (a real persona, then the null sentinel).
-    fireEvent.change(screen.getByLabelText(/metrics\.filterPersona/), { target: { value: PERSONA_B } });
+    // Persona filter through the Sheet (a real persona).
+    await applyPersonaFilter('Beta');
     await waitFor(() => expect(lastFetchUrl(fetchMock)).toContain(`persona=${PERSONA_B}`));
+    // The applied filter shows as a removable chip.
+    expect(screen.getByText('Beta')).toBeInTheDocument();
+    expect(screen.getByText('metrics.clearFilters')).toBeInTheDocument();
 
-    // Provider filter resets the account filter and refetches.
-    fireEvent.change(screen.getByLabelText(/metrics\.filterProvider/), { target: { value: 'instagram' } });
+    // Provider filter through the Sheet.
+    await applyProviderFilter('Instagram');
     await waitFor(() => expect(lastFetchUrl(fetchMock)).toContain('provider=instagram'));
-
-    // Account filter lists only accounts of the chosen provider.
-    const accountSelect = screen.getByLabelText(/metrics\.filterAccount/);
-    expect(accountSelect).not.toHaveTextContent('Chan One');
-    fireEvent.change(accountSelect, { target: { value: 'ig1' } });
-    await waitFor(() => expect(lastFetchUrl(fetchMock)).toContain('account=ig1'));
-
-    // Angle filter: a loaded angle, sent verbatim.
-    fireEvent.change(screen.getByLabelText(/metrics\.filterAngle/), { target: { value: 'tutorial' } });
-    await waitFor(() => expect(lastFetchUrl(fetchMock)).toContain('angle=tutorial'));
-
-    // Metric + group segmented controls switch the displayed metric/group
-    // without refetching.
-    const callsBefore = fetchMock.mock.calls.length;
-    fireEvent.click(screen.getByText('metrics.metricLikes'));
-    fireEvent.change(screen.getByLabelText(/metrics\.groupLabel/), { target: { value: 'persona' } });
-    expect(fetchMock.mock.calls.length).toBe(callsBefore);
-    expect(screen.getByText('metrics.chartTitle {"metric":"metrics.metriclikes","group":"metrics.grouppersona"}')).toBeInTheDocument();
 
     // Clear filters resets every filter (window kept). The unfiltered 7d
     // query is still cache-fresh (staleTime 60s), so no new fetch fires:
     // assert the reset through the controls instead of the network.
     fireEvent.click(screen.getByText('metrics.clearFilters'));
     await waitFor(() => expect(screen.queryByText('metrics.clearFilters')).toBeNull());
-    expect(screen.getByLabelText(/metrics\.filterPersona/)).toHaveValue('all');
-    expect(screen.getByLabelText(/metrics\.filterAngle/)).toHaveValue('all');
-    expect(screen.getByLabelText(/metrics\.filterProvider/)).toHaveValue('all');
-  });
-
-  it('labels groups by persona name and account label in the chart data', async () => {
-    stubMetricsFetch({
-      success: true,
-      rows: [
-        row(),
-        row({ postId: 'post-2', provider: 'instagram', accountId: 'ig1', externalId: 'v2', views: 50 }),
-        // An account the accounts query no longer returns: labelFor
-        // falls back to the raw account id.
-        row({ postId: 'post-3', accountId: 'UC-gone', externalId: 'v3', views: 10 }),
-      ],
-      truncated: false,
-    });
-    renderPage();
-    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
-
-    fireEvent.change(screen.getByLabelText(/metrics\.groupLabel/), { target: { value: 'persona' } });
-    // 'Alpha' now appears in the filter select, the top-group stat and
-    // the chart axis (labelFor's persona branch).
-    await waitFor(() => expect(screen.getAllByText('Alpha').length).toBeGreaterThan(1));
-
-    fireEvent.change(screen.getByLabelText(/metrics\.groupLabel/), { target: { value: 'account' } });
-    await waitFor(() => expect(screen.getAllByText('Chan One').length).toBeGreaterThan(1));
-    // The unknown account's raw id labels its chart group (tick text may
-    // be split across tspans, so match on the rendered HTML).
-    expect(document.body.innerHTML).toContain('UC-gone');
-
-    fireEvent.change(screen.getByLabelText(/metrics\.groupLabel/), { target: { value: 'provider' } });
-    await waitFor(() => expect(screen.getAllByText('YouTube').length).toBeGreaterThan(1));
-  });
-
-  it('keeps a selected angle listed after filtering hides the other angles', async () => {
-    // First fetch lists the 'myth' angle; the filtered fetch returns no
-    // rows at all, so 'myth' can only stay in the select via the page's
-    // selected-angle prepend path.
-    const fetchMock = vi.fn(async (url: string) => new Response(
-      JSON.stringify(url.includes('angle=myth')
-        ? { success: true, rows: [], truncated: false }
-        : { success: true, rows: [row()], truncated: false }),
-      { status: 200 },
-    ));
-    vi.stubGlobal('fetch', fetchMock);
-    renderPage();
-    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
-
-    fireEvent.change(screen.getByLabelText(/metrics\.filterAngle/), { target: { value: 'myth' } });
-    await waitFor(() => expect(lastFetchUrl(fetchMock)).toContain('angle=myth'));
-    await waitFor(() => expect(screen.getByText('metrics.emptyFiltered')).toBeInTheDocument());
-    const angleSelect = screen.getByLabelText(/metrics\.filterAngle/);
-    expect(angleSelect).toHaveTextContent('myth');
-    expect(angleSelect).toHaveValue('myth');
   });
 
   it('offers the 28d window and fetches it', async () => {
     const fetchMock = stubMetricsFetch({ success: true, rows: [row()], truncated: false });
     renderPage();
     await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('metrics.window28d'));
+    activateTab('metrics.window28d');
     await waitFor(() => expect(lastFetchUrl(fetchMock)).toBe('/api/metrics?window=28d'));
-  });
-
-  it('shows engaged views, the derived stayed-to-watch label and the provisional chip on YouTube rows', async () => {
-    stubMetricsFetch({
-      success: true,
-      rows: [row({
-        analyticsStatus: 'ok', analyticsViews: 1000, engagedViews: 641, stayedToWatchPct: 64.1,
-        contentType: 'SHORTS', provisional: true,
-      })],
-      truncated: false,
-    });
-    renderPage();
-    await waitFor(() => expect(screen.getByText('metrics.engagedViewsValue {"count":"641"}')).toBeInTheDocument());
-    expect(screen.getByText('metrics.stayedToWatchDerived:')).toBeInTheDocument();
-    expect(screen.getByText('64.1%')).toBeInTheDocument();
-    expect(screen.getByText('metrics.provisional')).toHaveAttribute('title', 'metrics.provisionalHint');
-    // Shorts get the no-curve note instead of a curve toggle.
-    expect(screen.getByText('metrics.curveShortsNote')).toBeInTheDocument();
-    expect(screen.queryByText('metrics.curveShow')).toBeNull();
-    expect(screen.queryByText('metrics.reconnectTitle')).toBeNull();
-  });
-
-  it('charts stayed-to-watch as a percentage with one decimal', async () => {
-    stubMetricsFetch({
-      success: true,
-      rows: [
-        row({ analyticsStatus: 'ok', stayedToWatchPct: 60.5 }),
-        row({ postId: 'post-2', analyticsStatus: 'ok', stayedToWatchPct: 70.2 }),
-      ],
-      truncated: false,
-    });
-    renderPage();
-    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('metrics.metricStayedToWatch'));
-    // Overall average (60.5 + 70.2) / 2 = 65.35 -> 65.4%, never rounded to a whole number.
-    expect(screen.getAllByText('65.4%').length).toBeGreaterThan(0);
   });
 
   it('shows one reconnect prompt and "—" instead of zeros for a token without the Analytics scope', async () => {
@@ -430,81 +424,4 @@ describe('MetricsPage', () => {
     expect(screen.queryByText('0%')).toBeNull();
   });
 
-  it('marks non-measured analytics as unavailable', async () => {
-    stubMetricsFetch({ success: true, rows: [row({ analyticsStatus: 'not_owned' })], truncated: false });
-    renderPage();
-    await waitFor(() => expect(screen.getByText('metrics.retentionUnavailable')).toBeInTheDocument());
-  });
-
-  it('opens the retention curve of a long-form video on demand', async () => {
-    const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(
-      url.startsWith('/api/metrics/retention-curve')
-        ? { success: true, points: [{ ratio: 0.01, audienceWatchRatio: 1, relativeRetentionPerformance: 0.5 }], provisional: true }
-        : { success: true, rows: [row({ analyticsStatus: 'ok', contentType: 'VIDEO_ON_DEMAND', stayedToWatchPct: 50 })], truncated: false },
-    )));
-    vi.stubGlobal('fetch', fetchMock);
-    renderPage();
-    const toggle = await screen.findByRole('button', { name: 'metrics.curveShow' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    // Nothing is fetched from Analytics until the user asks.
-    expect(fetchMock.mock.calls.some(([url]) => url.startsWith('/api/metrics/retention-curve'))).toBe(false);
-    fireEvent.click(toggle);
-    await waitFor(() => expect(screen.getByTestId('retention-curve')).toHaveTextContent('1 points'));
-    expect(fetchMock).toHaveBeenCalledWith('/api/metrics/retention-curve?account=UC1&video=v1');
-    expect(screen.getByRole('button', { name: 'metrics.curveHide' })).toHaveAttribute('aria-expanded', 'true');
-  });
-
-  it('shows the reconnect copy when the curve endpoint reports a missing scope', async () => {
-    const curveFetch = vi.fn();
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.startsWith('/api/metrics/retention-curve')
-      ? (curveFetch(), new Response(JSON.stringify({ success: false, code: 'YOUTUBE_ANALYTICS_SCOPE_MISSING' }), { status: 403 }))
-      : new Response(JSON.stringify({ success: true, rows: [row({ analyticsStatus: 'ok', contentType: 'VIDEO_ON_DEMAND' })], truncated: false })))));
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'metrics.curveShow' }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('metrics.reconnectTitle'));
-    expect(curveFetch).toHaveBeenCalledTimes(1);
-
-    // A failed read is an errored (stale) query: closing and reopening the
-    // panel retries instead of serving the cached failure.
-    fireEvent.click(screen.getByRole('button', { name: 'metrics.curveHide' }));
-    fireEvent.click(screen.getByRole('button', { name: 'metrics.curveShow' }));
-    await waitFor(() => expect(curveFetch).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('metrics.reconnectTitle'));
-  });
-
-  it('shows a plain (non-reconnect) error in the destructive color when the curve read fails', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.startsWith('/api/metrics/retention-curve')
-      ? new Response(JSON.stringify({ success: false }), { status: 500 })
-      : new Response(JSON.stringify({ success: true, rows: [row({ analyticsStatus: 'ok', contentType: 'VIDEO_ON_DEMAND' })], truncated: false })))));
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'metrics.curveShow' }));
-
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('metrics.curveError');
-    expect(alert.className).toContain('text-destructive');
-    expect(alert.className).not.toContain('text-warning');
-  });
-
-  it('colors the reconnect curve message as a warning', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.startsWith('/api/metrics/retention-curve')
-      ? new Response(JSON.stringify({ success: false, code: 'YOUTUBE_ANALYTICS_SCOPE_MISSING' }), { status: 403 })
-      : new Response(JSON.stringify({ success: true, rows: [row({ analyticsStatus: 'ok', contentType: 'VIDEO_ON_DEMAND' })], truncated: false })))));
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'metrics.curveShow' }));
-
-    const alert = await screen.findByRole('alert');
-    expect(alert.className).toContain('text-warning');
-  });
-
-  it('says so when a long-form video has no retention points', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(
-      url.startsWith('/api/metrics/retention-curve')
-        ? { success: true, points: [], provisional: false }
-        : { success: true, rows: [row({ analyticsStatus: 'ok', contentType: 'VIDEO_ON_DEMAND' })], truncated: false },
-    ))));
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'metrics.curveShow' }));
-
-    expect(await screen.findByText('metrics.curveEmpty')).toBeInTheDocument();
-  });
 });
