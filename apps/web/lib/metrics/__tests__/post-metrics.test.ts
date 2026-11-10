@@ -14,11 +14,11 @@ import {
   metricsTargets,
   youtubeVideoId,
   MAX_POSTS_PER_RUN,
-  REOPEN_ROWS_LIMIT,
   RUN_TIME_BUDGET_MS,
   type DuePost,
   type PostMetricsDeps,
 } from '../post-metrics';
+import { REOPEN_ROWS_LIMIT } from '../post-metrics-reopen';
 import { logger } from '@/lib/logger';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 import { ANALYTICS_STATUSES } from '../metrics-query';
