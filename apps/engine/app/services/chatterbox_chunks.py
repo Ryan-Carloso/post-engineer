@@ -9,8 +9,13 @@ and stopped 14 words early (2 of the last 3 HabitLoom videos defective).
 The mitigation, Chatterbox path only: split the script into per-sentence
 chunks of at most ``CHATTERBOX_MAX_CHUNK_CHARS`` chars (~8-10 s of audio,
 inside the model's stable window), synthesize one chunk per POST in script
-order, and concatenate the chunk audios into the single output file. Short
-scripts that fit in one chunk take the old single-POST path unchanged.
+order, and concatenate the chunk audios into the single output file. The
+split is section-aware: the agent sends the script as labeled segments
+(hook / body / CTA) and the engine joins them with blank lines, so the
+script's paragraphs ARE the sections — a chunk never contains text from
+two paragraphs, because the image changes at the same boundaries too.
+Short scripts that fit in one chunk take the old single-POST path
+unchanged.
 
 The prod TTS server is CPU-only (8 CPU / 16 GB RAM, no GPU); Chatterbox
 on CPU runs at RTF 3-10, so ~30 s of audio takes ~120 s and the old
@@ -131,25 +136,46 @@ def _pack_pieces(pieces: list[str], max_chars: int) -> list[str]:
     return chunks
 
 
+def _split_paragraphs(text: str) -> list[str]:
+    """Split text on blank lines; each paragraph is one agent segment.
+
+    The agent sends segments (hook / body / CTA) and the engine joins them
+    with blank lines, so a paragraph boundary is a section boundary — and
+    the image changes at the same place. Empty paragraphs are dropped.
+    """
+    return [part.strip() for part in re.split(r"\n\s*\n", text) if part.strip()]
+
+
 def split_chatterbox_script(text: str, max_chars: int = CHATTERBOX_MAX_CHUNK_CHARS) -> list[str]:
     """Split a script into per-sentence chunks for Chatterbox, in order.
 
-    Sentences are packed greedily up to `max_chars` per chunk; a single
-    sentence over the cap splits at clause boundaries, never mid-word and
-    never reordered — except a single word longer than `max_chars`, which
-    is hard-cut (no natural boundary exists). Short scripts come back as
-    one chunk, unchanged. Joining the chunks with a single space reproduces
-    the input text, except for the hard-cut case above.
+    Paragraphs are split first and never merged back: a chunk never
+    contains text from two paragraphs, so hook, body, and CTA each keep
+    their own chunks. Within a paragraph, sentences are packed greedily
+    up to `max_chars` per chunk; a single sentence over the cap splits at
+    clause boundaries, never mid-word and never reordered — except a
+    single word longer than `max_chars`, which is hard-cut (no natural
+    boundary exists). Short scripts come back as one chunk, unchanged.
+    Joining the chunks with a single space reproduces the
+    whitespace-normalized input (paragraph breaks become single spaces),
+    except for the hard-cut case above.
     """
-    normalized = " ".join((text or "").split())
-    if not normalized:
+    paragraphs = _split_paragraphs(text or "")
+    if not paragraphs:
         return []
-    if len(normalized) <= max_chars:
-        return [normalized]
-    pieces: list[str] = []
-    for sentence in _split_sentences(normalized):
-        pieces.extend(_split_long_piece(sentence, max_chars))
-    return _pack_pieces(pieces, max_chars)
+    normalized = [" ".join(paragraph.split()) for paragraph in paragraphs]
+    if len(" ".join(normalized)) <= max_chars:
+        return [" ".join(normalized)]
+    chunks: list[str] = []
+    for paragraph in normalized:
+        if len(paragraph) <= max_chars:
+            chunks.append(paragraph)
+            continue
+        pieces: list[str] = []
+        for sentence in _split_sentences(paragraph):
+            pieces.extend(_split_long_piece(sentence, max_chars))
+        chunks.extend(_pack_pieces(pieces, max_chars))
+    return chunks
 
 
 def ensure_file_path_exists(file_path: str) -> None:

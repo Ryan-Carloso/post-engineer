@@ -4,7 +4,9 @@ Chatterbox loses its place on long single-shot scripts (~100 words): it
 repeats a fragment, skips a sentence, and stops early. The engine now
 splits the script into per-sentence chunks of at most
 ``CHATTERBOX_MAX_CHUNK_CHARS`` chars, synthesizes one chunk per POST, and
-concatenates the chunk audios in order. Short scripts still take the old
+concatenates the chunk audios in order. The split is section-aware: a
+chunk never crosses a paragraph boundary (paragraphs are the agent's
+hook / body / CTA segments). Short scripts still take the old
 single-POST path unchanged.
 """
 
@@ -68,6 +70,77 @@ def test_incident_script_splits_into_two_ordered_chunks() -> None:
     assert chunks[-1].endswith("Follow HabitLoom for one habit a day.")
     # Every chunk ends on a sentence boundary, never mid-sentence.
     assert all(chunk.endswith((".", "!", "?")) for chunk in chunks)
+
+
+# The incident script as the agent actually sent it: segments joined with
+# blank lines — hook paragraph, body paragraph, CTA paragraph. The body
+# tail ("no diet change") plus the whole CTA fits under 300 chars, so the
+# old sentence packer merged them into one chunk across the section
+# boundary; a section-aware split must keep them apart.
+INCIDENT_SCRIPT_PARAGRAPHS = (
+    "Finished dinner. Don't sit down yet — walk for 10 minutes."
+    "\n\n"
+    "In a 2016 trial, 41 adults with type 2 diabetes tried two ways to walk "
+    "30 minutes a day. One group did it all at once. "
+    "The other split it — 10 minutes after each meal. "
+    "Same 30 minutes, but their blood sugar after eating was about 12% lower. "
+    "After dinner, it was 22% lower. "
+    "Your muscles soak up sugar straight from your blood — no gym, no diet change."
+    "\n\n"
+    "Try it tonight. 10 minutes round the block after dinner. "
+    "Follow HabitLoom for one habit a day."
+)
+
+
+def _paragraphs(text: str) -> list[str]:
+    """Normalized paragraphs of a script, for the no-crossing invariant."""
+    return [" ".join(part.split()) for part in text.split("\n\n") if part.strip()]
+
+
+def test_chunk_never_crosses_a_paragraph_boundary() -> None:
+    chunks = split_chatterbox_script(INCIDENT_SCRIPT_PARAGRAPHS)
+    assert len(chunks) == 4
+    # Hook alone in its own chunk, CTA alone in the last chunk.
+    assert chunks[0] == _paragraphs(INCIDENT_SCRIPT_PARAGRAPHS)[0]
+    assert chunks[-1] == _paragraphs(INCIDENT_SCRIPT_PARAGRAPHS)[-1]
+    # No chunk contains text from two paragraphs: every chunk is a
+    # substring of exactly one paragraph.
+    paras = _paragraphs(INCIDENT_SCRIPT_PARAGRAPHS)
+    assert all(any(chunk in para for para in paras) for chunk in chunks)
+    # Nothing lost or reordered (paragraph breaks become single spaces).
+    assert " ".join(chunks) == " ".join(INCIDENT_SCRIPT_PARAGRAPHS.split())
+    # The old merge, spelled out: body tail and CTA start never share a chunk.
+    assert not any("no diet change" in chunk and "Try it tonight" in chunk for chunk in chunks)
+
+
+def test_section_boundaries_are_chunk_boundaries() -> None:
+    text = (
+        "First hook sentence here. Second hook sentence follows."
+        "\n\n"
+        "The body opens with a long first sentence that sets the scene, "
+        "then a second sentence adds the key number, "
+        "and a third sentence explains why it matters for the viewer, "
+        "while a fourth sentence keeps the story moving forward, "
+        "and a fifth sentence brings the body to its close."
+        "\n\n"
+        "Try it tonight. Follow the channel for more."
+    )
+    chunks = split_chatterbox_script(text)
+    assert len(chunks) > 1
+    paras = _paragraphs(text)
+    # Every chunk lives inside exactly one paragraph.
+    assert all(any(chunk in para for para in paras) for chunk in chunks)
+    # Hook and CTA each keep their own chunk.
+    assert chunks[0] == paras[0]
+    assert chunks[-1] == paras[-1]
+    assert " ".join(chunks) == " ".join(text.split())
+
+
+def test_short_multi_paragraph_script_is_single_chunk() -> None:
+    # Short scripts keep the old single-POST path unchanged, even across
+    # paragraphs: one short call is inside the model's stable window.
+    text = "Hook here.\n\nBody sentence one. Body sentence two.\n\nFollow us today."
+    assert split_chatterbox_script(text) == [" ".join(text.split())]
 
 
 def test_chunks_never_split_mid_sentence() -> None:
