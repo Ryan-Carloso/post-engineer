@@ -74,3 +74,7 @@ def test_a_cue_always_has_length_even_when_its_words_are_instantaneous():
     words = [("Go", 1.0, 1.0), ("now", 1.0, 1.0)]
     timed = subtitle_words.retime_by_words(["Go", "now"], words)
     assert all(end > start for _, start, end in timed)
+
+
+def test_a_line_without_any_word_of_its_own_cannot_be_timed():
+    assert subtitle_words.retime_by_words(["Go to bed earlier", "..."], _WORDS) == []
