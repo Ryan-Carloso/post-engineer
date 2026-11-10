@@ -183,6 +183,10 @@ export async function fetchCimdDocument(
   const fetchUrl = parsed.toString();
   let response: Response;
   try {
+    // codeql[js/request-forgery]: false positive — every URL reaching this
+    // fetch passed the SSRF guards above (https-only, no credentials/
+    // fragment/non-default port, DNS resolution with non-public IP
+    // rejection), and redirects are rejected, not followed.
     response = await fetchImpl(fetchUrl, {
       headers: { Accept: 'application/json' },
       // Never follow redirects: a 3xx to an internal URL would otherwise be
