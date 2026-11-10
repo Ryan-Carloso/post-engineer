@@ -121,6 +121,9 @@ export async function findReopenedPosts(
     if (Number.isNaN(published)) continue;
     const outcomes = Array.isArray(record.publish_outcomes) ? record.publish_outcomes : [];
     const found = metricsTargets(outcomes);
+    for (const provider of found.unknownProviders) {
+      logger.warn('[post-metrics] unknown provider in re-opened publish outcomes', { postId: record.id, provider });
+    }
     if (found.targets.length === 0) continue;
     for (const window of METRICS_WINDOWS) {
       if (seen.has(`${record.id}:${window}`)) continue;

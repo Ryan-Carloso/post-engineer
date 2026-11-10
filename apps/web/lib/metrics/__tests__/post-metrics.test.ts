@@ -706,6 +706,33 @@ describe('createPostMetricsStore', () => {
     }]);
   });
 
+  it('warns about unknown providers in re-opened publish outcomes and still re-opens the known targets', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: {
+          data: [
+            scannedPost({ publish_outcomes: [IG_ENTRY, { provider: 'tiktok', status: 'published', accountId: 'tt1', postId: 'v9' }] }),
+            scannedPost({ id: 'post-2', task_id: 'task-2', publish_outcomes: [{ provider: 'tiktok', status: 'published', accountId: 'tt1', postId: 'v9' }] }),
+          ],
+          error: null,
+        },
+        post_metrics: { data: [], error: null },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    // The post with only an unknown provider is skipped; the post with a
+    // known target re-opens. Both unknown providers are reported, never
+    // silently skipped.
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      collectedKeys: new Set(),
+    }]);
+    expect(logger.warn).toHaveBeenCalledWith('[post-metrics] unknown provider in re-opened publish outcomes', { postId: 'post-1', provider: 'tiktok' });
+    expect(logger.warn).toHaveBeenCalledWith('[post-metrics] unknown provider in re-opened publish outcomes', { postId: 'post-2', provider: 'tiktok' });
+  });
+
   it('upserts one row per post/video/window, returns its experiment link and throws on a write error', async () => {
     const single = vi.fn(async () => ({ data: { experiment_id: 'exp-1', variant_id: 'hook-calm', experiment_pair: 1 }, error: null }));
     const select = vi.fn(() => ({ single }));
