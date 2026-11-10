@@ -45,14 +45,15 @@ export function CalendarUnavailableFrame({
       )}
       <div className={cn('w-full', CALENDAR_LAYOUT_CLASS)}>
         <div data-calendar-error-chrome className="min-w-0">
-          <div className="relative w-full">
-            <div className="flex min-h-10 w-full items-center justify-start pr-44">
-              <p className="text-base font-bold capitalize text-primary">{monthLabel}</p>
-            </div>
+          <div
+            data-calendar-error-month-row
+            className="mb-1 grid min-h-10 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 sm:gap-2"
+          >
+            <p className="min-w-0 truncate text-base font-bold capitalize text-primary">{monthLabel}</p>
             <nav
               aria-disabled
               data-calendar-error-nav
-              className="absolute top-0 right-0 flex shrink-0 items-center gap-0.5 pr-0.5"
+              className="flex shrink-0 flex-nowrap items-center justify-end gap-0.5 max-xl:gap-1"
             >
               <button
                 type="button"
@@ -69,7 +70,10 @@ export function CalendarUnavailableFrame({
                 disabled
                 tabIndex={-1}
                 aria-disabled
-                className={cn('h-10 rounded-md px-3 text-sm font-semibold', NAV_DISABLED_CLASS)}
+                className={cn(
+                  'h-10 max-w-[7.25rem] truncate rounded-md px-2 text-xs font-semibold sm:max-w-none sm:px-3 sm:text-sm',
+                  NAV_DISABLED_CLASS,
+                )}
               >
                 {t('posts.calendarGoToToday')}
               </button>
@@ -84,25 +88,22 @@ export function CalendarUnavailableFrame({
                 <ChevronRight aria-hidden />
               </button>
             </nav>
-            <table
-              data-calendar-error-weekdays
-              className="w-full table-fixed border-collapse"
-            >
-              <thead>
-                <tr>
-                  {weekdays.map((label) => (
-                    <th
-                      key={label}
-                      scope="col"
-                      className="w-[14.2857%] px-0.5 pb-1 text-center text-xs font-medium capitalize text-muted-foreground"
-                    >
-                      {label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-            </table>
           </div>
+          <table data-calendar-error-weekdays className="w-full table-fixed border-collapse">
+            <thead>
+              <tr>
+                {weekdays.map((label) => (
+                  <th
+                    key={label}
+                    scope="col"
+                    className="w-[14.2857%] px-0.5 pb-1 text-center text-xs font-medium capitalize text-muted-foreground"
+                  >
+                    {label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+          </table>
         </div>
         <div className="hidden min-w-0 xl:block" aria-hidden />
         <div

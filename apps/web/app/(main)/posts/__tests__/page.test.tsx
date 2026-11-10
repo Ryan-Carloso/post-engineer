@@ -1006,6 +1006,7 @@ describe('PostsPage calendar view', () => {
       expect(button.className.split(/\s+/)).toContain('opacity-55');
     }
     expect(document.querySelector('[data-calendar-error-chrome]')).not.toBeNull();
+    expect(document.querySelector('[data-calendar-error-month-row]')).not.toBeNull();
     expect(document.querySelector('[data-calendar-grid-footprint]')?.className.split(/\s+/)).toContain(
       'justify-center',
     );

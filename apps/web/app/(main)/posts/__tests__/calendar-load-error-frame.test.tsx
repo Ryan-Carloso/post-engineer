@@ -31,8 +31,11 @@ describe('CalendarUnavailableFrame', () => {
     expect(document.querySelector('[data-calendar-error-chrome]')).not.toBeNull();
     expect(document.querySelectorAll('[data-calendar-error-weekdays] th')).toHaveLength(7);
     expect(screen.queryByRole('grid')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-calendar-error-month-row]')).not.toBeNull();
     const nav = document.querySelector('[data-calendar-error-nav]');
     expect(nav).not.toBeNull();
+    expect(nav?.className.split(/\s+/)).toContain('flex-nowrap');
+    expect(nav?.closest('[data-calendar-error-month-row]')).not.toBeNull();
     for (const button of within(nav as HTMLElement).getAllByRole('button')) {
       expect(button).toBeDisabled();
       expect(button.className.split(/\s+/)).toContain('saturate-50');
