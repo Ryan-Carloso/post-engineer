@@ -426,6 +426,84 @@ describe('createPostMetricsStore', () => {
     }]);
   });
 
+  it('does not count a scope_missing YouTube snapshot as collected', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: {
+          data: [{ post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h', analytics_status: 'scope_missing' }],
+          error: null,
+        },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    // Mirror the due SQL (migration 039): the run retries the target
+    // until the token is reconnected or the window closes.
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      collectedKeys: new Set(),
+    }]);
+  });
+
+  it('does not count a YouTube snapshot with a null Analytics status as collected', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: {
+          data: [{ post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h', analytics_status: null }],
+          error: null,
+        },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      collectedKeys: new Set(),
+    }]);
+  });
+
+  it('counts a YouTube snapshot with an ok Analytics status as collected', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: {
+          data: [{ post_id: 'post-1', provider: 'youtube', external_id: 'abc123', metrics_window: '24h', analytics_status: 'ok' }],
+          error: null,
+        },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      collectedKeys: new Set(['youtube:abc123']),
+    }]);
+  });
+
+  it('counts a non-YouTube row with a null Analytics status as collected', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    const store = createPostMetricsStore({
+      rpc,
+      from: fakeFrom({
+        scheduled_posts: { data: [scannedPost()], error: null },
+        post_metrics: {
+          data: [{ post_id: 'post-1', provider: 'instagram', external_id: 'media-9', metrics_window: '24h', analytics_status: null }],
+          error: null,
+        },
+      }),
+    } as unknown as SupabaseClient);
+    const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
+    expect(posts).toEqual([{
+      id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
+      collectedKeys: new Set(['instagram:media-9']),
+    }]);
+  });
+
   it('does not re-open a post whose targets are all collected', async () => {
     const rpc = vi.fn(async () => ({ data: [], error: null }));
     const store = createPostMetricsStore({

@@ -357,7 +357,7 @@ async function findReopenedPosts(
 
   const { data: rowData, error: rowError } = await supabase
     .from('post_metrics')
-    .select('post_id, provider, external_id, metrics_window')
+    .select('post_id, provider, external_id, metrics_window, analytics_status')
     .in('post_id', postIds)
     .order('collected_at', { ascending: false })
     .limit(REOPEN_ROWS_LIMIT);
@@ -380,6 +380,15 @@ async function findReopenedPosts(
       || typeof record.provider !== 'string'
       || typeof record.external_id !== 'string'
       || !isMetricsWindow(record.metrics_window)
+    ) {
+      continue;
+    }
+    // Mirror the due SQL (migration 039): a YouTube snapshot without the
+    // Analytics scope is not "collected" — the run retries it until the
+    // token is reconnected or the window closes.
+    if (
+      record.provider === 'youtube'
+      && (record.analytics_status === null || record.analytics_status === 'scope_missing')
     ) {
       continue;
     }
