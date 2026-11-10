@@ -136,8 +136,10 @@ def split_chatterbox_script(text: str, max_chars: int = CHATTERBOX_MAX_CHUNK_CHA
 
     Sentences are packed greedily up to `max_chars` per chunk; a single
     sentence over the cap splits at clause boundaries, never mid-word and
-    never reordered. Short scripts come back as one chunk, unchanged.
-    Joining the chunks with a single space reproduces the input text.
+    never reordered — except a single word longer than `max_chars`, which
+    is hard-cut (no natural boundary exists). Short scripts come back as
+    one chunk, unchanged. Joining the chunks with a single space reproduces
+    the input text, except for the hard-cut case above.
     """
     normalized = " ".join((text or "").split())
     if not normalized:
@@ -167,18 +169,29 @@ def concatenate_audio_files(part_files: list[str], output_file: str) -> None:
 
     pydub decodes each part and re-encodes once, so the output is a single
     valid MP3 (unlike byte concatenation, which would embed each chunk's
-    headers mid-stream).
+    headers mid-stream). The ffmpeg binary is set on
+    `AudioSegment.converter` for the duration of the call only and restored
+    afterwards.
     """
     if not part_files:
         raise ValueError("cannot concatenate audio: no audio parts given")
     ffmpeg_binary = utils.get_ffmpeg_binary()
+    # pydub offers no per-call converter: `from_file` and `export` both
+    # build their ffmpeg command from the `AudioSegment.converter` class
+    # attribute, so the binary is set here and restored in `finally`
+    # instead of leaking a global mutation. The engine generates video
+    # single-threaded, so no other thread can observe the temporary value.
+    previous_converter = AudioSegment.converter
     if ffmpeg_binary:
         AudioSegment.converter = ffmpeg_binary
-    combined = AudioSegment.empty()
-    for part_file in part_files:
-        combined += AudioSegment.from_file(part_file, format="mp3")
-    directory = os.path.dirname(output_file)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-    combined.export(output_file, format="mp3")
+    try:
+        combined = AudioSegment.empty()
+        for part_file in part_files:
+            combined += AudioSegment.from_file(part_file, format="mp3")
+        directory = os.path.dirname(output_file)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        combined.export(output_file, format="mp3")
+    finally:
+        AudioSegment.converter = previous_converter
     logger.info(f"concatenated {len(part_files)} chatterbox audio chunks: {output_file}")

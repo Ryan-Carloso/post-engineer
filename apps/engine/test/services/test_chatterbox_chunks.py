@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from pydub import AudioSegment
 
 from app.config import config as app_config
 from app.services import voice_providers as vp
@@ -96,6 +97,21 @@ def test_long_sentence_splits_at_clause_boundaries() -> None:
     assert all(not chunk.endswith(("a", "an", "the")) for chunk in chunks)
 
 
+def test_single_word_longer_than_cap_is_hard_cut() -> None:
+    # A single word has no natural boundary, so it is hard-cut and the
+    # round trip gains one space per cut (see split_chatterbox_script).
+    word = "a" * 350
+    chunks = split_chatterbox_script(word)
+    assert chunks == ["a" * CHATTERBOX_MAX_CHUNK_CHARS, "a" * 50]
+    assert " ".join(chunks) == "a" * CHATTERBOX_MAX_CHUNK_CHARS + " " + "a" * 50
+    # A word over twice the cap is cut more than once.
+    assert split_chatterbox_script("b" * 650) == [
+        "b" * CHATTERBOX_MAX_CHUNK_CHARS,
+        "b" * CHATTERBOX_MAX_CHUNK_CHARS,
+        "b" * 50,
+    ]
+
+
 def test_abbreviation_does_not_split_a_sentence() -> None:
     text = (
         "Dr. Smith walked for ten minutes after dinner. "
@@ -166,6 +182,74 @@ def test_concatenate_audio_files_joins_in_order(tmp_path: Path) -> None:
 def test_concatenate_audio_files_rejects_empty_input() -> None:
     with pytest.raises(ValueError, match="no audio parts"):
         concatenate_audio_files([], "/tmp/out.mp3")
+
+
+def test_concatenate_audio_files_restores_pydub_converter(tmp_path: Path) -> None:
+    """pydub has no per-call converter: the class attribute is set for the
+    call and restored to its previous value afterwards."""
+    seen_during_call: list[str] = []
+
+    class _FakeSegment:
+        def __add__(self, other: _FakeSegment) -> _FakeSegment:
+            return _FakeSegment()
+
+        def export(self, out: str, format: str) -> None:  # noqa: A002
+            pass
+
+    def _fake_from_file(path: str, format: str) -> _FakeSegment:  # noqa: A002
+        seen_during_call.append(AudioSegment.converter)
+        return _FakeSegment()
+
+    part = str(tmp_path / "chunk-0.mp3")
+    output = str(tmp_path / "voice.mp3")
+    with (
+        patch.object(AudioSegment, "converter", "converter-before"),
+        patch(
+            "app.services.chatterbox_chunks.utils.get_ffmpeg_binary",
+            return_value="/usr/bin/ffmpeg",
+        ),
+        patch(
+            "app.services.chatterbox_chunks.AudioSegment.empty",
+            return_value=_FakeSegment(),
+        ),
+        patch(
+            "app.services.chatterbox_chunks.AudioSegment.from_file",
+            side_effect=_fake_from_file,
+        ),
+    ):
+        concatenate_audio_files([part], output)
+        assert AudioSegment.converter == "converter-before"
+    assert seen_during_call == ["/usr/bin/ffmpeg"]
+
+
+def test_concatenate_audio_files_restores_converter_on_decode_error(
+    tmp_path: Path,
+) -> None:
+    """A decode failure mid-concat must still restore the converter."""
+
+    class _FakeSegment:
+        pass
+
+    part = str(tmp_path / "chunk-0.mp3")
+    output = str(tmp_path / "voice.mp3")
+    with (
+        patch.object(AudioSegment, "converter", "converter-before"),
+        patch(
+            "app.services.chatterbox_chunks.utils.get_ffmpeg_binary",
+            return_value="/usr/bin/ffmpeg",
+        ),
+        patch(
+            "app.services.chatterbox_chunks.AudioSegment.empty",
+            return_value=_FakeSegment(),
+        ),
+        patch(
+            "app.services.chatterbox_chunks.AudioSegment.from_file",
+            side_effect=RuntimeError("boom"),
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="boom"):
+            concatenate_audio_files([part], output)
+        assert AudioSegment.converter == "converter-before"
 
 
 class _FakeResponse:
