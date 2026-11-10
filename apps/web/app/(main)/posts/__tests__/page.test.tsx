@@ -989,7 +989,9 @@ describe('PostsPage calendar view', () => {
     const retry = within(alert).getByRole('button', { name: 'posts.loadErrorRetry' });
     await user.click(retry);
     expect(refetch).toHaveBeenCalledTimes(1);
-    // Recovery frame: month chrome and legend, no day grid, no day list.
+    // Recovery frame: month chrome without legend, no day grid, no day list.
+    expect(screen.queryByText('posts.calendarLegendPostCount')).not.toBeInTheDocument();
+    expect(screen.queryByText('posts.calendarLegendSelected')).not.toBeInTheDocument();
     expect(screen.queryByText('posts.calendarNotLoaded')).not.toBeInTheDocument();
     expect(document.querySelector('[data-calendar-grid-outline]')).not.toBeInTheDocument();
     expect(screen.queryByRole('grid')).not.toBeInTheDocument();
@@ -1017,6 +1019,8 @@ describe('PostsPage calendar view', () => {
     expect(loadError?.className.split(/\s+/)).not.toContain('justify-center');
     expect(loadError?.className).toMatch(/bg-warning/);
     expect(footprint?.className).toMatch(/min-h-/);
+    expect(footprint?.className).not.toMatch(/xl:min-h-\[20rem\]/);
+    expect(footprint?.className).not.toMatch(/min-h-\[14rem\]/);
     expect(document.querySelector('[data-load-error-banner="true"]')?.className).toMatch(/sm:flex-row/);
     expect(alert.closest('.xl\\:col-span-2')).not.toBeNull();
     expect(retry.className).toMatch(/border-input/);

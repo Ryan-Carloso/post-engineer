@@ -285,7 +285,7 @@ export function CalendarView({
                 firstWeekday={firstWeekday}
                 filtered={filtered}
                 legendClassName={legendClassName}
-                showLegend={showLegend && !muted}
+                showLegend={false}
               >
                 <LoadErrorBanner
                   compact

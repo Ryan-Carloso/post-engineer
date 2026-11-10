@@ -21,7 +21,7 @@ export function CalendarUnavailableFrame({
   firstWeekday,
   filtered = false,
   legendClassName,
-  showLegend = true,
+  showLegend = false,
   children,
 }: {
   year: number;
@@ -109,7 +109,7 @@ export function CalendarUnavailableFrame({
         <div
           data-calendar-grid-footprint
           className={cn(
-            'mt-2 flex min-h-[14rem] w-full items-center justify-center rounded-lg border border-line bg-card p-4 sm:min-h-[16rem] xl:col-span-2 xl:min-h-[20rem]',
+            'mt-2 flex min-h-[7.5rem] w-full items-center justify-center rounded-lg border border-line bg-card px-4 py-6 sm:min-h-[8.5rem] sm:py-8 xl:col-span-2',
           )}
         >
           <div

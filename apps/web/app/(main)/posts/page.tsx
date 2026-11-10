@@ -188,10 +188,7 @@ export default function PostsPage() {
                 unavailable={isError}
                 muted={isAccountEmpty}
                 filtered={filters.hasActiveFilter}
-                showLegend={
-                  !isAccountEmpty &&
-                  (monthPostCount > 0 || (isError && loadErrorKey === 'posts.loadErrorCalendar'))
-                }
+                showLegend={!isAccountEmpty && monthPostCount > 0}
                 loadErrorMessageKey={isError ? loadErrorKey : undefined}
                 loadErrorNoteKey={isError && loadErrorKey !== 'posts.loadErrorCalendar' ? 'posts.loadErrorSideQuiet' : undefined}
                 onLoadErrorRetry={isError ? handleRefresh : undefined}

@@ -20,12 +20,13 @@ vi.mock('@/lib/i18n/provider', () => ({
 }));
 
 describe('CalendarUnavailableFrame', () => {
-  it('renders weekday headers and a tinted recovery region without day buttons', () => {
+  it('renders weekday headers and a compact tinted recovery region without legend', () => {
     render(
-      <CalendarUnavailableFrame year={2030} month={5} firstWeekday={0}>
+      <CalendarUnavailableFrame year={2030} month={5} firstWeekday={0} showLegend={false}>
         <p role="alert">Load failed</p>
       </CalendarUnavailableFrame>,
     );
+    expect(document.querySelector('[data-calendar-unavailable-frame] ul')).toBeNull();
     const title = screen.getByText(/June 2030/);
     expect(title.textContent).not.toMatch(/\bof\b/i);
     expect(document.querySelector('[data-calendar-error-chrome]')).not.toBeNull();
