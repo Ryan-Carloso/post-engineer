@@ -158,6 +158,10 @@ export async function fetchCimdDocument(
     return null;
   }
   if (parsed.protocol !== 'https:') return null;
+  // Reject URL forms that are unnecessary for CIMD discovery and increase SSRF surface.
+  if (parsed.username || parsed.password) return null;
+  if (parsed.hash) return null;
+  if (parsed.port && parsed.port !== '443') return null;
 
   // Resolve the host and refuse non-public IPs before fetching (fail closed
   // when the host does not resolve). Residual risk: DNS rebinding between
@@ -176,9 +180,10 @@ export async function fetchCimdDocument(
     return null;
   }
 
+  const fetchUrl = parsed.toString();
   let response: Response;
   try {
-    response = await fetchImpl(clientId, {
+    response = await fetchImpl(fetchUrl, {
       headers: { Accept: 'application/json' },
       // Never follow redirects: a 3xx to an internal URL would otherwise be
       // fetched with the server's network privileges (SSRF).
