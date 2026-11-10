@@ -40,3 +40,23 @@ def split_script_lines(text: str) -> list[str]:
     for line in utils.split_string_by_punctuations(text):
         lines.extend(split_cue(line))
     return lines
+
+
+def split_timed(text: str, start: int, end: int) -> list[tuple[str, int, int]]:
+    """Split a sentence into cues, sharing the `start..end` span by character count.
+
+    A TTS timeline carries one fragment per sentence; create_subtitle matches
+    its fragments against the capped script lines, so the fragments must be
+    capped the same way. The last cue ends exactly on `end`.
+    """
+    cues = split_cue(text)
+    total = sum(len(cue) for cue in cues)
+    timed: list[tuple[str, int, int]] = []
+    cursor, covered = start, 0
+    for cue in cues:
+        covered += len(cue)
+        # Integer maths: the last cue (covered == total) ends exactly on `end`.
+        cue_end = start + (end - start) * covered // total
+        timed.append((cue, cursor, cue_end))
+        cursor = cue_end
+    return timed

@@ -265,10 +265,11 @@ def correct(subtitle_file, video_script):
     """Make the subtitle text match the script, keeping the speech timing.
 
     A file whose cues already match the script line for line is left as
-    is. Otherwise every script line is retimed by its character share of
-    the spoken timeline (see _retime_by_character_share) — the old
-    line-to-cue pairing ran out of cues on coarse Whisper output and wrote
-    the remaining lines at 00:00:00.
+    is. Otherwise every script line is retimed from Whisper's word
+    boundaries when they are usable (see subtitle_words.retime_by_words),
+    or by its character share of the spoken timeline otherwise (see
+    _retime_by_character_share) — the old line-to-cue pairing ran out of
+    cues on coarse Whisper output and wrote the remaining lines at 00:00:00.
     """
     subtitle_items = file_to_subtitles(subtitle_file)
     normalized_script = utils.normalize_script_for_subtitle_matching(video_script)

@@ -613,32 +613,43 @@ class TestVoiceService(unittest.TestCase):
         self.assertNotIn("这是_a_测试", subtitle_content)
         self.assertNotIn("00:00:00,000 --> 00:00:00,000", subtitle_content)
 
-    def test_create_subtitle_caps_every_cue_at_the_shared_word_limit(self):
-        """The TTS-timeline path splits long sentences with the same cap as Whisper."""
-        sentence = "each hour earlier to sleep was linked with about half a kilo more weight loss"
-        # The provider timeline carries the spoken fragments: three 5-word cues.
-        sub_maker = _sub_maker(
-            ["each hour earlier to sleep", "was linked with about half", "a kilo more weight loss"],
-            2.0, 4.0, 6.0,
+    def test_create_subtitle_caps_every_cue_for_the_timeline_a_provider_really_builds(self):
+        """A provider's timeline (one fragment per sentence) must still match the capped cues.
+
+        Every TTS provider fills the SubMaker through
+        populate_legacy_submaker_with_full_text; a comma-free sentence longer
+        than the cap used to leave create_subtitle without a file.
+        """
+        script = (
+            "Each hour earlier to sleep was linked with about half a kilo more weight loss. "
+            "Try this tonight, lights out one hour earlier."
         )
+        sub_maker = vs.SubMaker()
+        vp.populate_legacy_submaker_with_full_text(sub_maker, script, 10.0)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             subtitle_file = Path(tmp_dir) / "subtitle.srt"
             vs.create_subtitle(
                 sub_maker=sub_maker,
-                text=sentence,
+                text=script,
                 subtitle_file=str(subtitle_file),
             )
-            cues = [
-                block.split("\n", 2)[2].strip()
-                for block in subtitle_file.read_text(encoding="utf-8").strip().split("\n\n")
-            ]
+            self.assertTrue(subtitle_file.exists(), "the subtitle file was written")
+            blocks = subtitle_file.read_text(encoding="utf-8").strip().split("\n\n")
 
-        self.assertGreater(len(cues), 1)
+        cues = [block.split("\n", 2)[2].strip() for block in blocks]
+        self.assertEqual(
+            cues,
+            [
+                "Each hour earlier to sleep",
+                "was linked with about half",
+                "a kilo more weight loss",
+                "Try this tonight",
+                "lights out one hour earlier",
+            ],
+        )
         self.assertTrue(all(len(cue.split()) <= subtitle_cues.MAX_CUE_WORDS for cue in cues))
-        self.assertEqual(" ".join(cues), sentence)
-
-
+        self.assertTrue(blocks[-1].split("\n")[1].endswith("00:00:10,000"), "the last cue ends with the audio")
 
 
 

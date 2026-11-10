@@ -16,6 +16,7 @@ from loguru import logger
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 
 from app.config import config
+from app.services import subtitle_cues
 from app.services.analytics import scrub_error_text, scrub_secret_values
 from app.utils import utils
 
@@ -200,8 +201,12 @@ def populate_legacy_submaker_with_full_text(
             )
             sentence_end = min(current_offset + sentence_duration, audio_duration_100ns)
 
-        sub_maker.subs.append(cleaned_sentence)
-        sub_maker.offset.append((current_offset, sentence_end))
+        # One fragment per capped cue, so create_subtitle matches the script lines.
+        for cue, cue_start, cue_end in subtitle_cues.split_timed(
+            cleaned_sentence, current_offset, sentence_end
+        ):
+            sub_maker.subs.append(cue)
+            sub_maker.offset.append((cue_start, cue_end))
         current_offset = sentence_end
 
     return sub_maker
