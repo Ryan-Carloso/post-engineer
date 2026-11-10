@@ -42,7 +42,7 @@ SEGMENTS = [
 ]
 
 
-def _jpeg(width=1200, height=800, color=(200, 80, 40)):
+def _jpeg(width=1080, height=1920, color=(200, 80, 40)):
     buffer = io.BytesIO()
     Image.new("RGB", (width, height), color).save(buffer, "JPEG")
     return buffer.getvalue()
@@ -232,7 +232,7 @@ def test_too_small_and_face_photos_are_skipped(tmp_path, monkeypatch):
     monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
 
     def fake_download(url, dest_path, session=None):
-        size = (100, 100) if "small" in url else (1200, 800)
+        size = (100, 100) if "small" in url else (1080, 1920)
         with open(dest_path, "wb") as handle:
             handle.write(_jpeg(*size))
         return dest_path
@@ -381,3 +381,75 @@ def test_two_photos_split_the_segment_and_a_dropped_one_is_covered(tmp_path):
     covered, warnings = image_coverage.extend_over_gaps(prepared, 0.0, 4.0)
     assert [(panel.start, panel.end) for panel in covered] == [(0.0, 4.0)]
     assert warnings == ["segment 0 image extended: a neighbour image covers a missing image"]
+
+
+# ---- aspect ratio (issue #538): a photo that fills the frame must match it
+
+
+def test_validate_photo_rejects_a_landscape_photo_for_a_portrait_video(tmp_path):
+    path = str(tmp_path / "landscape.jpg")
+    with open(path, "wb") as handle:
+        handle.write(_jpeg(1920, 1080))
+    with patch(
+        "app.services.user_media.face_detect.image_contains_face", return_value=False
+    ):
+        assert user_media._validate_photo(path, VideoAspect.portrait) == "wrong_aspect"
+        assert user_media._validate_photo(path, VideoAspect.landscape) is None
+        assert user_media._validate_photo(path) is None
+
+
+def test_check_media_code_reports_wrong_aspect_for_a_landscape_photo(tmp_path):
+    def download(url, dest_path, session=None):
+        with open(dest_path, "wb") as handle:
+            handle.write(_jpeg(1920, 1080))
+        return dest_path
+
+    with patch.object(place_photos, "download_image", side_effect=download), patch(
+        "app.services.user_media.face_detect.image_contains_face", return_value=False
+    ):
+        assert (
+            user_media.check_media_code("https://e.com/porto.jpg", str(tmp_path), VideoAspect.portrait)
+            == "wrong_aspect"
+        )
+        assert (
+            user_media.check_media_code("https://e.com/porto.jpg", str(tmp_path))
+            == "ok"
+        )
+
+
+def test_check_media_detail_for_a_media_id_reports_dimensions(tmp_path, monkeypatch):
+    monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
+    portrait = tmp_path / "aabbccddeeff00112233445566778899.jpg"
+    portrait.write_bytes(_jpeg(1080, 1920))
+    assert user_media.check_media_detail(
+        media_id=portrait.name, aspect=VideoAspect.portrait
+    ) == {"code": "ok", "width": 1080, "height": 1920}
+    landscape = tmp_path / "00112233445566778899aabbccddeeff.jpg"
+    landscape.write_bytes(_jpeg(1920, 1080))
+    assert user_media.check_media_detail(
+        media_id=landscape.name, aspect=VideoAspect.portrait
+    ) == {"code": "wrong_aspect", "width": 1920, "height": 1080}
+    assert user_media.check_media_detail(
+        media_id="ffffffffffffffffffffffffffffffff.jpg", aspect=VideoAspect.portrait
+    ) == {"code": "media_expired", "width": None, "height": None}
+
+
+def test_resolve_media_id_skips_a_wrong_ratio_photo_with_both_ratios_named(
+    tmp_path, monkeypatch
+):
+    asset = tmp_path / "aabbccddeeff00112233445566778899.jpg"
+    asset.write_bytes(_jpeg(1920, 1080))
+    monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
+    prepared, skipped = user_media.prepare_segment_media(
+        "task-1",
+        _media_segments(tmp_path, {"mediaId": asset.name}),
+        _write_words(tmp_path, WORDS[:3]),
+        1.2,
+        str(tmp_path),
+        VideoAspect.portrait,
+    )
+    assert prepared == []
+    assert skipped == [
+        "segment 0 image 0 media skipped: wrong aspect ratio "
+        "(1920x1080 (16:9); expected 9:16 (1080x1920))"
+    ]

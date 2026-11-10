@@ -377,15 +377,41 @@
       },
       "MediaCheckRequest": {
         "properties": {
+          "media_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Id"
+          },
           "url": {
-            "maxLength": 2048,
-            "title": "Url",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "video_aspect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoAspect"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
-        "required": [
-          "url"
-        ],
         "title": "MediaCheckRequest",
         "type": "object"
       },
@@ -1911,7 +1937,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Mechanically check one image URL (MCP check_media)",
+        "summary": "Mechanically check one image URL or media id (MCP check_media)",
         "tags": [
           "V1"
         ]

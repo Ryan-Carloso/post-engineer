@@ -697,9 +697,8 @@ def generate_subtitle(task_id, params, video_script, sub_maker, audio_file):
 def get_video_materials(task_id, params, audio_duration):
     if params.video_materials:
         logger.info("\n\n## preprocess local materials")
-        materials = video.preprocess_video(
-            materials=params.video_materials, clip_duration=params.video_clip_duration
-        )
+        materials = video.preprocess_video(materials=params.video_materials,
+            clip_duration=params.video_clip_duration, video_aspect=params.video_aspect)
         if not materials:
             _fail_task(task_id, "no valid materials found", params, stage="materials")
             logger.error("no valid materials found, please check the materials and try again.")

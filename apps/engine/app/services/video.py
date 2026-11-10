@@ -28,7 +28,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from app.config import config
 from app.models import const
-from app.services import caption_layout, image_material, subtitle_sizing, video_loop
+from app.services import caption_layout, image_material, media_aspect, subtitle_sizing, video_loop
 from app.services.letterbox import MAX_LETTERBOX_BARS
 from app.models.schema import (
     MaterialInfo,
@@ -1756,12 +1756,14 @@ def generate_video(
     del video_clip
 
 
-def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
+def preprocess_video(materials: List[MaterialInfo], clip_duration=4, video_aspect=None):
     # The WebUI may pass an empty material list in some re-generation flows;
     # return an empty result directly instead of raising a NoneType error.
     if not materials:
         return []
 
+    # With an aspect, a photo that cannot fill the frame is skipped here.
+    aspect = media_aspect.coerce_aspect(video_aspect)
     # Only materials that pass preprocessing validation are returned, so
     # low-resolution images can't proceed into the video compositing flow.
     valid_materials = []
@@ -1813,13 +1815,11 @@ def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
         try:
             width = clip.size[0]
             height = clip.size[1]
-            if width < image_material.MIN_MATERIAL_EDGE or height < image_material.MIN_MATERIAL_EDGE:
-                logger.warning(
-                    f"low resolution material: {width}x{height}, "
-                    f"minimum {image_material.MIN_MATERIAL_EDGE}x{image_material.MIN_MATERIAL_EDGE} required"
-                )
-                # Release the probe handle right after detecting low
-                # resolution, and don't pass the material on.
+            reason = media_aspect.rejection_reason(width, height, aspect)
+            if reason is not None:
+                logger.warning(f"skip material {material.url}: {reason}")
+                # Release the probe handle right after the rejection,
+                # and don't pass the material on.
                 close_clip(clip)
                 continue
 

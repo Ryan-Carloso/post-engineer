@@ -36,7 +36,7 @@ import { refundRollbackSpend } from './rollback-refund';
 import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, verifyExperimentPairAfterInsert } from './experiment-link';
 import type { Provider } from './providers-validation';
 import { scheduleAccountColumns } from './account-columns';
-import { checkFullLipsyncNarration } from './full-lipsync-preflight';
+import { checkPreChargePreflights } from './aspect-preflight';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
 import { segmentsRequestSchema } from './segments-schema';
 import { rawKeyIssues } from './request-title';
@@ -454,19 +454,17 @@ async function postHandler(request: Request): Promise<NextResponse> {
     }
   }
 
-  // Full lip-sync preflight: measure the real narration BEFORE any charge,
-  // so >60s is rejected here (400) instead of charged then refunded.
+  // Pre-charge preflights: full lip-sync narration (>60s) and segment-media
+  // aspect (issue #538) — both reject here instead of charging then refunding.
   // Runs after all other pre-charge validation, before cost/spend below.
-  if (validatedOptions.fullLipsync === true) {
-    const preflight = await checkFullLipsyncNarration({
-      userId,
-      script: segmentsScript,
-      language: prep.language,
-      voiceId: prep.voiceIdValue,
-      voiceAudioUrl: prep.voiceAudioUrl,
-    });
-    if (preflight instanceof NextResponse) return preflight;
-  }
+  const preflight = await checkPreChargePreflights({
+    userId,
+    script: segmentsScript,
+    prep,
+    options: validatedOptions,
+    segments: options?.segments,
+  });
+  if (preflight instanceof NextResponse) return preflight;
 
   // Idempotency anchor, resolved once: the experiment check below needs the
   // same schedule id step 7 uses to tell a replay from a duplicate.

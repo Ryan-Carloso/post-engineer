@@ -144,7 +144,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mechanically check one image URL (MCP check_media) */
+        /** Mechanically check one image URL or media id (MCP check_media) */
         post: operations["check_media_api_v1_media_check_post"];
         delete?: never;
         options?: never;
@@ -657,8 +657,11 @@ export interface components {
         };
         /** MediaCheckRequest */
         MediaCheckRequest: {
+            /** Media Id */
+            media_id?: string | null;
             /** Url */
-            url: string;
+            url?: string | null;
+            video_aspect?: components["schemas"]["VideoAspect"] | null;
         };
         /**
          * PersonaParams

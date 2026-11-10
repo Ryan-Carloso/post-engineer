@@ -27,7 +27,7 @@ RED = (200, 30, 30)
 
 def _jpeg():
     buffer = io.BytesIO()
-    Image.new("RGB", (1200, 800), RED).save(buffer, "JPEG")
+    Image.new("RGB", (1080, 1920), RED).save(buffer, "JPEG")
     return buffer.getvalue()
 
 
