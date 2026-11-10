@@ -58,7 +58,7 @@ def _source_resolution_allowed(width: int, height: int) -> bool:
     return max(width, height) <= MAX_SOURCE_LONG_EDGE
 
 
-def _ratio_matches(width: int, height: int, aspect: VideoAspect) -> bool:
+def ratio_matches(width: int, height: int, aspect: VideoAspect) -> bool:
     """True when letterboxing stays within the bar ceiling. Side bars
     and missing/zero dimensions reject immediately."""
     if width <= 0 or height <= 0:

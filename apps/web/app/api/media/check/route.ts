@@ -5,9 +5,11 @@
 // to the engine's /api/v1/media/check with the server secret, where the
 // SSRF-safe download and the mechanical checks run (download refusal,
 // real image type, size bounds, face detection). The response carries
-// only the code — never the checked URL, which can hold credentials in
-// its query string. No LLM runs here and no relevance is judged: the
-// agent, who sees the image, decides relevance.
+// the code plus the probed dimensions — never the checked URL, which
+// can hold credentials in its query string. With videoAspect given, a
+// photo that cannot fill the frame reports wrong_aspect instead of ok.
+// No LLM runs here and no relevance is judged: the agent, who sees the
+// image, decides relevance.
 //---------------
 
 import { NextResponse } from 'next/server';
@@ -27,7 +29,13 @@ const CHECK_CODES = new Set([
   'too_large',
   'timeout',
   'face_detected',
+  'wrong_aspect',
+  'media_expired',
 ]);
+
+// Matches the engine VideoAspect enum (landscape 16:9, portrait 9:16,
+// square 1:1): the check must accept every aspect the engine does.
+const VIDEO_ASPECTS = new Set(['9:16', '16:9', '1:1']);
 
 async function postHandler(request: Request): Promise<NextResponse> {
   const limited = await applyRateLimit(request, RATE_LIMITS.mediaUpload);
@@ -42,10 +50,20 @@ async function postHandler(request: Request): Promise<NextResponse> {
   } catch {
     return apiErrorResponse(400, 'Invalid JSON payload.', { route: ROUTE });
   }
-  const url =
-    typeof body === 'object' && body !== null ? (body as { url?: unknown }).url : undefined;
+  const requestBody =
+    typeof body === 'object' && body !== null
+      ? (body as { url?: unknown; videoAspect?: unknown })
+      : {};
+  const url = requestBody.url;
   if (typeof url !== 'string' || url.length === 0) {
     return apiErrorResponse(400, 'url is required.', { route: ROUTE });
+  }
+  const videoAspect = requestBody.videoAspect;
+  if (
+    videoAspect !== undefined &&
+    (typeof videoAspect !== 'string' || !VIDEO_ASPECTS.has(videoAspect))
+  ) {
+    return apiErrorResponse(400, 'videoAspect must be 9:16, 16:9 or 1:1.', { route: ROUTE });
   }
   let parsed: URL;
   try {
@@ -66,7 +84,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
     upstream = await fetch(`${baseUrl.replace(/\/+$/, '')}/api/v1/media/check`, {
       method: 'POST',
       headers: { ...engineAuthHeaders(auth.userId), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify(
+        videoAspect === undefined ? { url } : { url, video_aspect: videoAspect },
+      ),
     });
   } catch {
     return apiErrorResponse(502, 'Video service is unavailable.', { route: ROUTE });
@@ -76,14 +96,24 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return apiErrorResponse(502, 'Video service is unavailable.', { route: ROUTE });
   }
   const record = payload as { body?: unknown };
-  const code =
+  const checked =
     typeof record.body === 'object' && record.body !== null
-      ? (record.body as { code?: unknown }).code
-      : undefined;
-  if (typeof code !== 'string' || !CHECK_CODES.has(code)) {
+      ? (record.body as { code?: unknown; width?: unknown; height?: unknown })
+      : {};
+  if (typeof checked.code !== 'string' || !CHECK_CODES.has(checked.code)) {
     return apiErrorResponse(502, 'Video service is unavailable.', { route: ROUTE });
   }
-  return NextResponse.json({ success: true, code });
+  const response: { success: true; code: string; width?: number; height?: number } = {
+    success: true,
+    code: checked.code,
+  };
+  if (typeof checked.width === 'number' && Number.isFinite(checked.width)) {
+    response.width = checked.width;
+  }
+  if (typeof checked.height === 'number' && Number.isFinite(checked.height)) {
+    response.height = checked.height;
+  }
+  return NextResponse.json(response);
 }
 
 export const POST = withApiErrorReporting(ROUTE, postHandler, { getUserId: resolveReportingUserId });
