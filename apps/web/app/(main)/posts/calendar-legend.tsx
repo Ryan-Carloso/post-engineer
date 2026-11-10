@@ -3,11 +3,11 @@
 import { Filter } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/provider';
 import { cn } from '@/lib/utils';
-import { StatusMarker, TODAY_LEGEND_CLASS } from './calendar-markers';
-import { CALENDAR_GROUP_KEY, CALENDAR_GROUP_ORDER } from './status';
-
-const SELECTED_LEGEND_CLASS =
-  'inline-flex size-4 shrink-0 items-center justify-center rounded-sm outline-2 -outline-offset-2 outline-primary';
+import {
+  DAY_POST_TOTAL_CLASS,
+  SELECTED_DAY_LEGEND_CLASS,
+  TODAY_LEGEND_CLASS,
+} from './calendar-markers';
 
 export function CalendarLegend({
   filtered = false,
@@ -26,19 +26,19 @@ export function CalendarLegend({
         className,
       )}
     >
-      {CALENDAR_GROUP_ORDER.map((group) => (
-        <li key={group} className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
-          <StatusMarker group={group} />
-          {t(CALENDAR_GROUP_KEY[group])}
-        </li>
-      ))}
+      <li className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+        <span aria-hidden className={cn(DAY_POST_TOTAL_CLASS, 'pointer-events-none px-1.5')}>
+          1
+        </span>
+        {t('posts.calendarLegendPostCount')}
+      </li>
       <li className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
         <span aria-hidden className={TODAY_LEGEND_CLASS} />
         {t('posts.calendarToday')}
       </li>
       {showSelection && (
         <li className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
-          <span aria-hidden className={SELECTED_LEGEND_CLASS} />
+          <span aria-hidden className={SELECTED_DAY_LEGEND_CLASS} />
           {t('posts.calendarLegendSelected')}
         </li>
       )}

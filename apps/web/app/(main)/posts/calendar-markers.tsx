@@ -51,14 +51,22 @@ export function StatusMarker({ group, count, labeled = false }: { group: Calenda
   );
 }
 
+export const DAY_POST_TOTAL_CLASS =
+  'inline-flex h-5 min-w-5 max-xl:h-6 max-xl:min-w-6 items-center justify-center rounded-full border border-line bg-card text-xs max-xl:text-sm font-bold leading-none text-primary tabular-nums shadow-[0_1px_0_rgba(13,43,69,0.06)]';
+
+export const SELECTED_DAY_LEGEND_CLASS =
+  'inline-flex size-6 shrink-0 items-center justify-center rounded-md outline-2 -outline-offset-2 outline-primary bg-transparent';
+
 function DayCellPostTotal({
   total,
   groups,
   counts,
+  selected = false,
 }: {
   total: number;
   groups: CalendarGroup[];
   counts: Record<CalendarGroup, number>;
+  selected?: boolean;
 }) {
   const { t } = useI18n();
   const breakdown = groups.map((group) => `${t(CALENDAR_GROUP_KEY[group])}: ${counts[group]}`).join(', ');
@@ -66,7 +74,11 @@ function DayCellPostTotal({
     <span
       data-day-post-total
       title={breakdown}
-      className="inline-flex h-5 min-w-5 max-xl:h-6 max-xl:min-w-6 max-xl:px-2 items-center justify-center rounded-full border border-line bg-card px-1.5 text-xs max-xl:text-sm font-bold leading-none text-primary tabular-nums shadow-[0_1px_0_rgba(13,43,69,0.06)]"
+      className={cn(
+        DAY_POST_TOTAL_CLASS,
+        'max-xl:px-2 px-1.5',
+        selected && 'border-primary/25 bg-card',
+      )}
     >
       {total}
     </span>
@@ -124,7 +136,7 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
         isOutside &&
           'text-muted-foreground hover:bg-transparent hover:text-muted-foreground active:bg-transparent data-[selected-single=true]:text-muted-foreground',
         !isOutside && 'hover:bg-sunken hover:text-primary',
-        'data-[selected-single=true]:bg-transparent data-[selected-single=true]:outline-2 data-[selected-single=true]:-outline-offset-[3px] data-[selected-single=true]:outline-primary data-[selected-single=true]:hover:bg-transparent data-[selected-single=true]:pb-1.5',
+        'data-[selected-single=true]:rounded-md data-[selected-single=true]:bg-transparent data-[selected-single=true]:outline-2 data-[selected-single=true]:-outline-offset-[4px] data-[selected-single=true]:outline-primary data-[selected-single=true]:hover:bg-transparent data-[selected-single=true]:pb-1.5',
         !isOutside && 'data-[selected-single=true]:text-primary',
         'focus-visible:ring-[3px] focus-visible:ring-ring/50',
         'group-data-[focused=true]/day:bg-transparent group-data-[focused=true]/day:ring-0 group-data-[focused=true]/day:shadow-none',
@@ -146,7 +158,7 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       </span>
       {slots.length > 0 && (
         <span aria-hidden className="flex w-full min-w-0 items-center justify-center overflow-visible px-0.5 pt-0.5">
-          <DayCellPostTotal total={slots.length} groups={groups} counts={counts} />
+          <DayCellPostTotal total={slots.length} groups={groups} counts={counts} selected={selectedSingle} />
         </span>
       )}
     </Button>

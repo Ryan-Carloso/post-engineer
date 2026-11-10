@@ -966,8 +966,9 @@ describe('PostsPage calendar view', () => {
     expect(grid?.className.split(/\s+/)).toContain('hidden');
     expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
     expect(screen.queryByText('posts.calendarMonthHeading')).not.toBeInTheDocument();
-    // The month can still change.
-    expect(screen.getByRole('button', { name: 'posts.calendarNextMonth' })).toBeEnabled();
+    const nav = screen.getByRole('navigation');
+    expect(nav).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: 'posts.calendarNextMonth' })).toBeDisabled();
   });
 
   it('hides the header refresh on a load error so only the in-card retry remains', () => {

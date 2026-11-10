@@ -129,20 +129,36 @@ const StatusBadge = ({ status, label, style }: { status: string; label: string; 
 
 // Status badge left, when right, on one line: neither side wraps. The
 // chevron says the card opens the post detail.
-const CardHeader = ({ badge, when, showChevron = true }: { badge: ReactNode; when: string; showChevron?: boolean }) => (
-  <div data-card-header className="relative flex w-full items-center gap-2 pr-6">
+const CardHeader = ({
+  badge,
+  when,
+  showChevron = true,
+  openLabel,
+}: {
+  badge: ReactNode;
+  when: string;
+  showChevron?: boolean;
+  openLabel?: string;
+}) => (
+  <div data-card-header className={cn('relative flex w-full items-center gap-2', showChevron && openLabel !== undefined && 'pr-[4.5rem]')}>
     {badge}
     <p className="min-w-0 flex-1 text-right text-[13px] whitespace-nowrap text-ink-soft tabular-nums">
       <span data-card-when className="truncate">
         {when}
       </span>
     </p>
-    {showChevron && (
-      <ChevronRight
-        data-card-chevron
-        className="absolute top-1/2 right-0 size-4 shrink-0 -translate-y-1/2 text-muted-text transition-transform group-hover/card:translate-x-0.5"
-        aria-hidden
-      />
+    {showChevron && openLabel !== undefined && (
+      <span
+        data-card-open
+        className="absolute top-1/2 right-0 flex -translate-y-1/2 items-center gap-0.5 text-xs font-semibold text-primary"
+      >
+        <span className="whitespace-nowrap">{openLabel}</span>
+        <ChevronRight
+          data-card-chevron
+          className="size-4 shrink-0 text-muted-text transition-transform group-hover/card:translate-x-0.5"
+          aria-hidden
+        />
+      </span>
     )}
   </div>
 );
@@ -258,6 +274,7 @@ export const PostCard = ({
           badge={<StatusBadge status={slot.status} label={t(CALENDAR_GROUP_KEY[group])} style={CALENDAR_GROUP_PILL[group]} />}
           when={when}
           showChevron={!isFailed}
+          openLabel={!isFailed ? t('posts.cardOpen') : undefined}
         />
         <div className="mt-3">
           <CardTitle title={displayTitle} personaName={personaName} personaLabel={t('posts.cardPersonaLabel')} />
@@ -333,6 +350,7 @@ export const GenerationCard = ({ generation, locale }: { generation: VideoGenera
             />
           }
           when={`${formatDate(generation.createdAt, locale)} · ${formatTime(generation.createdAt, locale)}`}
+          openLabel={t('posts.cardOpen')}
         />
         <div className="mt-3 flex gap-3">
           <CardTitle

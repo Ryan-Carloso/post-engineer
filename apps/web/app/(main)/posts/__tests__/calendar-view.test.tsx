@@ -268,23 +268,15 @@ describe('CalendarView', () => {
     expect(cell.querySelector('[data-personas]')).toBeNull();
   });
 
-  it('legends the same markers the cells draw — failed, published, in progress, scheduled — plus today', () => {
+  it('legends the grid vocabulary — post count, today, and selected day', () => {
     setup({
       slotsByDay: new Map([['2030-06-05', [{ status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T10:00:00.000Z' }]]]),
     });
-    const legend = screen.getAllByText('Scheduled')[0].closest('ul');
+    const legend = screen.getByText('posts.calendarLegendPostCount').closest('ul');
     if (legend === null) throw new Error('legend not rendered');
-    expect([...legend.querySelectorAll('[data-marker]')].map((marker) => marker.getAttribute('data-marker'))).toEqual([
-      'failed',
-      'published',
-      'inProgress',
-      'scheduled',
-    ]);
+    expect(legend.querySelectorAll('[data-marker]')).toHaveLength(0);
     expect(within(legend).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-      'Failed',
-      'Published',
-      'In progress',
-      'Scheduled',
+      '1posts.calendarLegendPostCount',
       'Today',
       'posts.calendarLegendSelected',
     ]);
@@ -318,14 +310,15 @@ describe('CalendarView', () => {
     const grid = screen.getByRole('grid', { hidden: true });
     expect(grid.className.split(/\s+/)).toContain('hidden');
     expect(document.querySelector('[data-calendar-grid-outline]')).toBeNull();
-    expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
+    expect(screen.queryByText('posts.calendarLegendPostCount')).not.toBeInTheDocument();
     expect(document.querySelector('[data-calendar-load-error]')?.closest('[data-calendar-card]')).not.toBeNull();
     expect(screen.getByRole('alert')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onLoadErrorRetry).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
-    expect(onLoadErrorRetry).toHaveBeenCalledTimes(2);
+    expect(onLoadErrorRetry).toHaveBeenCalledTimes(1);
     expect(props.onMonthNavigate).not.toHaveBeenCalled();
+    expect(screen.getByRole('navigation')).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('keeps seven table cells per week on a narrow layout', () => {
@@ -338,7 +331,7 @@ describe('CalendarView', () => {
 
   it('hides the legend when the visible month has no posts', () => {
     setup({ slotsByDay: new Map() });
-    expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
+    expect(screen.queryByText('posts.calendarLegendPostCount')).not.toBeInTheDocument();
   });
 
   it('selects a day on click', () => {

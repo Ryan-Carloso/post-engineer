@@ -196,7 +196,7 @@ describe('PostCard header and media', () => {
     const header = screen.getByRole('link', { name: 'posts.cardOpenDetail' }).querySelector('[data-card-header]');
     expect(header).not.toBeNull();
     expect(header?.querySelector('[data-card-when]')?.textContent).toMatch(/\d{1,2}:\d{2}/);
-    const chevron = header?.querySelector('[data-card-chevron]');
-    expect(chevron?.getAttribute('class') ?? '').toContain('absolute');
+    expect(header?.querySelector('[data-card-open]')).toHaveTextContent('posts.cardOpen');
+    expect(header?.querySelector('[data-card-chevron]')).not.toBeNull();
   });
 });

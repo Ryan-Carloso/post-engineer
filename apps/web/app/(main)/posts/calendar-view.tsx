@@ -95,41 +95,34 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
   const today = useContext(NavTodayContext);
   const handlePreviousClick: MouseEventHandler<HTMLButtonElement> = useCallback(
     (event) => {
-      if (today.unavailable) {
-        today.onRetry?.();
-        return;
-      }
+      if (today.unavailable) return;
       if (previousMonth) onPreviousClick?.(event);
     },
-    [previousMonth, onPreviousClick, today.onRetry, today.unavailable],
+    [previousMonth, onPreviousClick, today.unavailable],
   );
   const handleNextClick: MouseEventHandler<HTMLButtonElement> = useCallback(
     (event) => {
-      if (today.unavailable) {
-        today.onRetry?.();
-        return;
-      }
+      if (today.unavailable) return;
       if (nextMonth) onNextClick?.(event);
     },
-    [nextMonth, onNextClick, today.onRetry, today.unavailable],
+    [nextMonth, onNextClick, today.unavailable],
   );
   const handleTodayClick: MouseEventHandler<HTMLButtonElement> = useCallback(() => {
-    if (today.unavailable) {
-      today.onRetry?.();
-      return;
-    }
+    if (today.unavailable) return;
     today.go();
   }, [today]);
+  const navInert = today.unavailable;
   return (
-    <nav {...navProps}>
+    <nav {...navProps} className={cn(navProps.className, navInert && 'pointer-events-none opacity-50')} aria-disabled={navInert ? true : undefined}>
       <components.PreviousMonthButton
         type="button"
         className={classNames[UI.PreviousMonthButton]}
         style={styles?.[UI.PreviousMonthButton]}
-        tabIndex={previousMonth ? undefined : -1}
-        aria-disabled={previousMonth ? undefined : true}
+        tabIndex={navInert || !previousMonth ? -1 : undefined}
+        aria-disabled={navInert || !previousMonth ? true : undefined}
         aria-label={labels.labelPrevious(previousMonth)}
         onClick={handlePreviousClick}
+        disabled={navInert}
       >
         <components.Chevron
           disabled={previousMonth ? undefined : true}
@@ -141,14 +134,15 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
       <button
         type="button"
         onClick={handleTodayClick}
-        aria-pressed={today.unavailable ? undefined : today.pressed}
+        disabled={navInert}
+        aria-pressed={navInert ? undefined : today.pressed}
         className={cn(
           'h-10 rounded-md px-3 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-          !today.unavailable &&
+          navInert && 'cursor-not-allowed border border-line bg-sunken/80 text-muted-foreground',
+          !navInert &&
             (today.pressed
               ? 'bg-primary text-on-ink hover:bg-accent-hover'
               : 'border border-input bg-card text-primary hover:bg-sunken'),
-          today.unavailable && 'border border-input bg-card text-primary hover:bg-sunken',
         )}
       >
         {t('posts.calendarToday')}
@@ -157,10 +151,11 @@ function CalendarNav({ onPreviousClick, onNextClick, previousMonth, nextMonth, .
         type="button"
         className={classNames[UI.NextMonthButton]}
         style={styles?.[UI.NextMonthButton]}
-        tabIndex={nextMonth ? undefined : -1}
-        aria-disabled={nextMonth ? undefined : true}
+        tabIndex={navInert || !nextMonth ? -1 : undefined}
+        aria-disabled={navInert || !nextMonth ? true : undefined}
         aria-label={labels.labelNext(nextMonth)}
         onClick={handleNextClick}
+        disabled={navInert}
       >
         <components.Chevron
           disabled={nextMonth ? undefined : true}
@@ -338,7 +333,7 @@ export function CalendarView({
           {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined && (
             <div
               data-calendar-load-error
-              className="mt-2 flex min-h-[12rem] flex-col justify-center rounded-xl bg-sunken/25 p-3 sm:min-h-[14rem] sm:p-4"
+              className="mt-2 flex min-h-[18rem] flex-col justify-center rounded-xl bg-sunken/25 p-3 sm:min-h-[22rem] sm:p-4"
             >
               <LoadErrorBanner
                 compact
