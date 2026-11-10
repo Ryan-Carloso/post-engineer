@@ -101,7 +101,7 @@ describe('CalendarView', () => {
     expect(dayButton(/June 21, 2030/).closest('[data-selected="true"]')).toBeNull();
   });
 
-  it('marks today with a clipped top bar only, not a numeral wash or ring', () => {
+  it('marks today with a gold bar under the numeral, not above it or on the row gap', () => {
     setup({ selectedKey: '2030-06-20' });
     const today = dayButton(/June 15, 2030/);
     const number = today.querySelector('[data-day-numeral]');
@@ -112,7 +112,11 @@ describe('CalendarView', () => {
     expect(bar).not.toBeNull();
     expect(bar?.className.split(/\s+/)).not.toContain('absolute');
     expect(bar?.parentElement?.getAttribute('data-day-number')).not.toBeNull();
-    expect(bar?.nextElementSibling?.getAttribute('data-day-numeral')).not.toBeNull();
+    expect(bar?.previousElementSibling?.getAttribute('data-day-numeral')).not.toBeNull();
+    const pill = today.querySelector('[data-day-post-total]');
+    if (pill !== null) {
+      expect(bar?.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
     expect(number?.querySelector('[data-today-mark]')).toBeNull();
     expect(number?.className.split(/\s+/)).not.toContain('ring-warning');
     expect(dayButton(/June 20, 2030/).querySelector('[data-today-bar]')).toBeNull();
@@ -323,9 +327,10 @@ describe('CalendarView', () => {
     const todaySwatch = legend.querySelector('[data-legend-today-bar]');
     expect(todaySwatch?.className).toMatch(/bg-warning/);
     expect(legend.querySelector('[data-legend-today-mark]')).toBeNull();
-    expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-primary');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('border-primary');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('border-2');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('rounded-md');
-    expect(selectedSwatch?.className.split(/\s+/)).not.toContain('ring-primary');
+    expect(selectedSwatch?.className.split(/\s+/)).not.toContain('outline-primary');
     expect(legend.querySelector('[data-filter-hint]')).toBeNull();
   });
 

@@ -62,17 +62,17 @@ export const LEGEND_POST_TOTAL_SWATCH_CLASS = cn(
 
 export const TODAY_TOP_BAR_CLASS = 'h-1 w-full shrink-0 rounded-full bg-warning';
 
-// Inline above the today numeral — not pinned to the cell top edge.
+// Directly under the today numeral — underlines the date, not the row above.
 export const TODAY_CELL_BAR_CLASS =
-  'pointer-events-none mb-0.5 h-1 w-9 max-w-[calc(100%-0.35rem)] shrink-0 rounded-full bg-warning';
+  'pointer-events-none mt-0.5 h-1 w-9 max-w-[calc(100%-0.35rem)] shrink-0 rounded-full bg-warning';
 
 // Legend today: the same gold top bar as the grid — not a miniature scene.
 export const LEGEND_TODAY_BAR_SWATCH_CLASS =
   'inline-block h-1 w-10 shrink-0 rounded-full bg-warning align-middle';
 
-// Miniature selected day cell: same blue rounded outline as the grid.
+// Miniature selected day cell: explicit primary border (outline can read neutral).
 export const SELECTED_DAY_LEGEND_SWATCH_CLASS =
-  'pointer-events-none inline-flex aspect-[4/5] h-[2.35rem] w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent shadow-none outline outline-2 -outline-offset-[4px] outline-primary';
+  'pointer-events-none inline-flex aspect-[4/5] h-[2.35rem] w-9 shrink-0 items-center justify-center rounded-md border-2 border-primary bg-transparent shadow-none';
 
 function DayCellPostTotal({
   total,
@@ -115,8 +115,8 @@ export const DayCellContext = createContext<DayContextValue>({ slotsByDay: new M
 //---------------
 // PostsDayButton — one day cell. One post total (per-status breakdown is
 // only in the accessible name and on the day's cards). No persona names in
-// the cell (the list below names them). Today is a gold top bar, wash on the
-// numeral; counts sit under the numeral. Selection uses a visible outline;
+// the cell (the list below names them). Today is a gold bar under the
+// numeral, then the count pill. Selection uses a visible outline;
 // counts stay inset so they do not sit on the ring.
 //---------------
 export function PostsDayButton({ children, day, modifiers, className, ...props }: ComponentProps<typeof DayButton>) {
@@ -161,11 +161,11 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
         className={cn(
           'z-[2] flex min-h-0 w-full min-w-0 flex-1 flex-col items-center justify-center gap-1 px-0.5 tabular-nums',
           isToday ? 'pt-0.5' : 'pt-1',
-          isToday && slots.length > 0 && 'gap-1.5',
-          selectedSingle && slots.length > 0 && 'gap-1.5 pb-0.5',
+          isToday && slots.length > 0 && 'gap-1',
+          selectedSingle && slots.length > 0 && !isToday && 'gap-1.5 pb-0.5',
+          selectedSingle && isToday && slots.length > 0 && 'gap-1 pb-0.5',
         )}
       >
-        {isToday && <span aria-hidden data-today-bar="true" className={TODAY_CELL_BAR_CLASS} />}
         <span
           data-day-numeral
           className={cn(
@@ -176,6 +176,7 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
         >
           {children}
         </span>
+        {isToday && <span aria-hidden data-today-bar="true" className={TODAY_CELL_BAR_CLASS} />}
         {slots.length > 0 && (
           <span
             aria-hidden
