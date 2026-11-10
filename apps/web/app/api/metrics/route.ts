@@ -127,8 +127,11 @@ async function getHandler(request: Request): Promise<NextResponse> {
   let coverageTruncated = false;
   try {
     const found = await fetchCoverage(supabase, auth.userId, query, new Date(), {
-      // Same policy as the rows query above: a scoped key sees its
-      // personas' items plus persona-less posts.
+      // Same persona scope as the rows query above, with one deliberate
+      // exception: a persona-less post is visible only when it is really
+      // faceless. A deleted schedule leaves the persona unknown, and that
+      // post may belong to a persona outside the scope — see the scope
+      // guard in computeCoverage.
       personaIds: isScopedApiKey(auth) ? (auth.personaIds ?? []).filter((id) => UUID.test(id)) : null,
     });
     coverage = found.items;
