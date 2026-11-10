@@ -109,7 +109,6 @@ const OptionsSchema = z
     voiceId: z.string().optional(),
     // The rest of a persona's editorial definition, for a post created
     // WITHOUT one (migration 012). With a persona these still override it.
-    // 1:1 is a product aspect (VALID_VIDEO_ASPECTS, engine VideoAspect).
     videoAspect: z.enum(['9:16', '16:9', '1:1']).optional(),
     videoLayout: z.enum(['standard', 'react']).optional(),
     paragraphNumber: z.number().int().min(1).max(10).optional(),
