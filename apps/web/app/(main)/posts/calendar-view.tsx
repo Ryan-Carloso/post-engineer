@@ -72,7 +72,7 @@ const DAY_PICKER_LOCALE: Record<Locale, typeof enUS> = { pt: ptBR, en: enUS };
 // arrow was easy to miss, and an active fill stayed down after a click).
 // Hover tints; there is no stuck active fill. The target is 40px for touch.
 const NAV_ARROW_CLASS =
-  'inline-flex size-10 items-center justify-center rounded-md p-0 text-ink transition-colors select-none hover:bg-sunken active:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-disabled:opacity-50 [&_svg]:size-5 [&_svg]:stroke-[2.5] [&_svg]:text-ink';
+  'inline-flex size-10 min-h-10 min-w-10 shrink-0 items-center justify-center rounded-md p-0 text-ink transition-colors select-none hover:bg-sunken active:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-disabled:opacity-50 [&_svg]:size-6 [&_svg]:stroke-[2.5] [&_svg]:text-ink';
 
 // The Today action lives inside the month navigation (prev / Today / next),
 // so the nav component needs it from context: passing a closure component

@@ -144,8 +144,9 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       data-selected-single={selectedSingle ? true : undefined}
       data-day-button
       className={cn(
-        'relative aspect-auto h-[4.5rem] w-full max-w-full min-w-0 flex-col items-center justify-start px-0.5 pb-1 max-xl:h-[4.75rem] sm:h-24 sm:min-h-24 sm:pb-1 sm:pt-1 xl:h-[4.25rem] xl:min-h-[4.25rem] xl:gap-0.5 xl:pb-0.5',
+        'relative aspect-auto h-[4.5rem] w-full max-w-full min-w-0 flex-col items-center justify-start px-0.5 pb-1 max-xl:min-h-[5.25rem] max-xl:h-[5.25rem] sm:h-24 sm:min-h-24 sm:pb-1 sm:pt-1 xl:h-[4.25rem] xl:min-h-[4.25rem] xl:gap-0.5 xl:pb-0.5',
         isToday ? 'gap-0 overflow-hidden pt-1' : 'gap-0.5 overflow-visible pt-0.5',
+        slots.length > 0 && (isToday ? 'max-xl:gap-1.5' : 'max-xl:gap-2'),
         !isOutside && '[&>span]:opacity-100',
         isOutside &&
           'text-muted-foreground hover:bg-transparent hover:text-muted-foreground active:bg-transparent data-[selected-single=true]:text-muted-foreground',

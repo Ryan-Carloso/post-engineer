@@ -1014,7 +1014,8 @@ describe('PostsPage calendar view', () => {
     expect(loadError?.closest('[data-calendar-card]')?.className).toMatch(/border-line/);
     expect(document.querySelector('[data-load-error-banner="true"]')).toBeNull();
     expect(alert.closest('.xl\\:col-span-2')).not.toBeNull();
-    expect(retry.className).toMatch(/border-input/);
+    expect(retry.className).toMatch(/bg-primary/);
+    expect(retry.className).toMatch(/text-primary-foreground/);
     expect(retry.className).toMatch(/min-h-10/);
   });
 

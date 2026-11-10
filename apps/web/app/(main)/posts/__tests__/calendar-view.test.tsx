@@ -448,13 +448,27 @@ describe('CalendarView', () => {
     expect(arrows?.querySelectorAll('button')).toHaveLength(2);
   });
 
+  it('adds mobile gap between the numeral and count pill when a day has posts', () => {
+    setup({
+      selectedKey: '2030-06-05',
+      slotsByDay: new Map([
+        ['2030-06-05', [{ status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T10:00:00.000Z' }]],
+      ]),
+    });
+    const cell = dayButton(/June 5, 2030/);
+    expect(cell.className.split(/\s+/)).toContain('max-xl:gap-2');
+    expect(cell.querySelector('[data-day-number]')?.contains(cell.querySelector('[data-day-post-total]'))).toBe(false);
+  });
+
   it('gives every day cell the same fixed height, so rows with markers do not grow', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       ['2030-06-05', [{ status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' }]],
     ]);
     setup({ slotsByDay });
     for (const day of [dayButton(/June 5, 2030/), dayButton(/June 15, 2030/)]) {
-      expect(day.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-[4.5rem]', 'max-xl:h-[4.75rem]', 'sm:h-24']));
+      expect(day.className.split(/\s+/)).toEqual(
+        expect.arrayContaining(['h-[4.5rem]', 'max-xl:h-[5.25rem]', 'max-xl:min-h-[5.25rem]', 'sm:h-24']),
+      );
       expect(day.className.split(/\s+/)).not.toContain('h-auto');
       // The month table, not the chip text, owns the column width.
       const cell = day.parentElement;
@@ -498,6 +512,9 @@ describe('CalendarView', () => {
     for (const name of ['Previous month', 'Next month']) {
       const classes = screen.getByRole('button', { name }).className.split(/\s+/);
       expect(classes).toContain('size-10');
+      expect(classes).toContain('min-w-10');
+      expect(classes).toContain('min-h-10');
+      expect(classes).toContain('shrink-0');
       expect(classes).toContain('text-ink');
       expect(classes).toContain('hover:bg-sunken');
       expect(classes).not.toContain('hover:bg-accent');

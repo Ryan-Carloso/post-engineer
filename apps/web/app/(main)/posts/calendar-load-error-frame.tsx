@@ -38,9 +38,9 @@ export function CalendarLoadErrorEmptyState({
       <p className="text-sm font-semibold leading-snug text-primary">{t(messageKey)}</p>
       <Button
         type="button"
-        variant="outline"
+        variant="default"
         data-load-error-retry
-        className="min-h-10 rounded-lg border-input bg-card px-5 font-semibold text-primary hover:bg-sunken"
+        className="min-h-10 px-6 font-semibold"
         onClick={onRetry}
       >
         {t('posts.loadErrorRetry')}

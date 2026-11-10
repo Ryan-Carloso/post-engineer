@@ -27,7 +27,9 @@ describe('CalendarUnavailableFrame', () => {
     expect(panel?.className).not.toMatch(/border-dashed/);
     expect(panel?.className).not.toMatch(/bg-warning/);
     expect(screen.getByRole('alert')).toHaveTextContent('posts.loadErrorCalendar');
-    fireEvent.click(screen.getByRole('button', { name: 'posts.loadErrorRetry' }));
+    const retry = screen.getByRole('button', { name: 'posts.loadErrorRetry' });
+    expect(retry.className).toMatch(/bg-primary/);
+    fireEvent.click(retry);
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });
