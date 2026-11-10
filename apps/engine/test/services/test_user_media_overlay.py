@@ -15,7 +15,7 @@ import pytest
 from PIL import Image, ImageFont
 
 from app.models.schema import VideoAspect
-from app.services import persona_hook, place_photos, segment_panels, subtitle, user_media
+from app.services import persona_hook, image_fetch, segment_panels, subtitle, user_media
 
 WORDS = [("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2), ("Visit", 5.0, 5.4), ("Porto", 5.4, 5.9)]
 SEGMENTS_TEXT = [
@@ -51,7 +51,7 @@ def _font_for(size):
 
 
 def _prepare(tmp_path, segments, font_for=_font_for, has_face=False, face=segment_panels.FACE_FULL):
-    with patch.object(place_photos, "download_image", side_effect=_download), patch(
+    with patch.object(image_fetch, "download_image", side_effect=_download), patch(
         "app.services.user_media.face_detect.image_contains_face", return_value=has_face
     ):
         return user_media.prepare_segment_media(
@@ -162,21 +162,21 @@ def test_prepare_segment_panels_resolves_the_subtitle_font_only_when_a_card_is_w
         video_aspect="9:16", font_name="BeVietnamPro-Medium.ttf", segments=_segments({"title": "Sushi"})
     )
     with patch.object(user_media.video, "_resolve_font_with_fallback", side_effect=fake_resolve), patch.object(
-        place_photos, "download_image", side_effect=_download
+        image_fetch, "download_image", side_effect=_download
     ), patch("app.services.user_media.face_detect.image_contains_face", return_value=False), patch.object(
         user_media.media_overlay, "font_loader", return_value=_font_for
     ):
         warnings = user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
     assert seen == ["BeVietnamPro-Medium.ttf"]
-    assert warnings == []
+    assert warnings == ["segment 0 image extended: a neighbour image covers a missing image"]
     panels, stored_warnings = segment_panels._read_manifest("task-1")
     assert [panel.index for panel in panels] == [0]
-    assert stored_warnings == []
+    assert stored_warnings == warnings
 
     seen.clear()
     params.segments = _segments(None)
     with patch.object(user_media.video, "_resolve_font_with_fallback", side_effect=fake_resolve), patch.object(
-        place_photos, "download_image", side_effect=_download
+        image_fetch, "download_image", side_effect=_download
     ), patch("app.services.user_media.face_detect.image_contains_face", return_value=False):
         user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
     assert seen == [], "no card wanted, no font lookup"
@@ -187,10 +187,13 @@ def test_prepare_segment_panels_warns_and_keeps_the_photo_when_the_font_is_missi
     monkeypatch.setattr(user_media.utils, "task_dir", lambda task_id: str(tmp_path))
     params = SimpleNamespace(video_aspect="9:16", font_name="Missing.ttf", segments=_segments({"title": "Sushi"}))
     with patch.object(user_media.video, "_resolve_font_with_fallback", side_effect=ValueError("no font")), patch.object(
-        place_photos, "download_image", side_effect=_download
+        image_fetch, "download_image", side_effect=_download
     ), patch("app.services.user_media.face_detect.image_contains_face", return_value=False):
         warnings = user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
-    assert warnings == ["segment 0 image 0 media overlay skipped: overlay font unavailable"]
+    assert warnings == [
+        "segment 0 image 0 media overlay skipped: overlay font unavailable",
+        "segment 0 image extended: a neighbour image covers a missing image",
+    ]
     panels, stored = segment_panels._read_manifest("task-1")
     assert len(panels) == 1 and stored == warnings
 
@@ -229,13 +232,13 @@ def test_full_lipsync_photos_are_all_panels_over_the_face(tmp_path):
     assert [_is_full_frame(panel) for panel in panels] == [False, False]
 
 
-def test_hook_only_lipsync_puts_the_hook_photo_over_the_face_and_the_b_roll_photo_full_frame(tmp_path):
+def test_hook_only_lipsync_puts_the_hook_photo_over_the_face_and_the_background_photo_full_frame(tmp_path):
     # The hook is spoken 0.0-1.2 and the CTA from 5.0: the face leaves at 1.2.
     panels, skipped = _prepare(tmp_path, _two_media_segments(), face=segment_panels.FACE_HOOK)
     assert skipped == []
     assert [panel.index for panel in panels] == [0, 1]
     assert _is_full_frame(panels[0]) is False, "the hook photo is a panel: the face is on screen"
-    assert _is_full_frame(panels[1]) is True, "after the hook it is b-roll, so the photo is full frame"
+    assert _is_full_frame(panels[1]) is True, "after the hook it is background footage, so the photo is full frame"
 
 
 def _timed_subtitle(tmp_path, words, name="timed.srt"):
@@ -281,7 +284,7 @@ def test_a_segment_that_starts_exactly_when_the_face_leaves_is_full_frame(tmp_pa
     segments = _two_media_segments()
     with patch.object(user_media, "_hook_end", return_value=5.0):
         panels, _ = _prepare(tmp_path, segments, face=segment_panels.FACE_HOOK)
-    assert _is_full_frame(panels[1]) is True, "start == hook end is b-roll, not face"
+    assert _is_full_frame(panels[1]) is True, "start == hook end is background footage, not face"
 
 
 @pytest.mark.parametrize(
@@ -322,10 +325,10 @@ def test_prepare_segment_panels_uses_the_video_type_to_pick_panel_or_full_frame(
     )
     with patch.object(user_media.video, "_resolve_font_with_fallback", return_value="/f.ttf"), patch.object(
         user_media.media_overlay, "font_loader", return_value=_font_for
-    ), patch.object(place_photos, "download_image", side_effect=_download), patch(
+    ), patch.object(image_fetch, "download_image", side_effect=_download), patch(
         "app.services.user_media.face_detect.image_contains_face", return_value=False
     ):
         warnings = user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
-    assert warnings == []
+    assert warnings == ["segment 1 image extended: a neighbour image covers a missing image"]
     panels, _ = segment_panels._read_manifest("task-1")
     assert [(panel.index, _is_full_frame(panel)) for panel in panels] == [(0, False), (1, True)]

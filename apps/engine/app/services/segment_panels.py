@@ -3,7 +3,7 @@
 Where the persona's face is on screen the photo is a rounded panel with a
 white border and a soft shadow, 30px from the bottom edge and about 38% of
 the frame tall, so the face shows behind it and the captions sit above it.
-Everywhere else (faceless videos, the b-roll after a hook-only lip-sync
+Everywhere else (faceless videos, the images after a hook-only lip-sync
 intro) the photo is full frame: contained over a blurred copy of itself, so a
 photo that does not fill the frame never leaves black bars.
 
@@ -25,7 +25,7 @@ from loguru import logger
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 from app.models.schema import VideoAspect
-from app.services import media_overlay, panel_motion, place_photos, video
+from app.services import media_overlay, panel_motion, image_fetch, video
 from app.utils import utils
 
 # Where the photo may be full frame: never (face on screen), after the hook, or always.
@@ -119,7 +119,7 @@ def build_full(
     width, height = aspect.to_resolution()
     still_path = f"{out_path}.still.jpg"
     try:
-        if not place_photos.compose_portrait_still(photo_path, still_path, aspect):
+        if not image_fetch.compose_portrait_still(photo_path, still_path, aspect):
             return None
         with Image.open(still_path) as opened:
             layer = opened.convert("RGBA")

@@ -302,7 +302,7 @@ class CaptionParamsTest(unittest.TestCase):
         self.assertIs(full_lipsync.caption_params(params), params)
 
     def test_full_lipsync_react_layout_still_moves_caption(self) -> None:
-        # Full mode has no persona/b-roll seam: the whole video is the
+        # Full mode has no persona/background seam: the whole video is the
         # face, so the react exclusion applies to the hook only.
         params = self._params(
             full_lipsync=True, subtitle_position="center", video_layout="react"

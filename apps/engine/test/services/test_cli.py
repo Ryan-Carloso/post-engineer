@@ -16,8 +16,6 @@ class TestCli(unittest.TestCase):
                 "测试主题",
                 "--video-materials",
                 "a.mp4, ,b.jpg,",
-                "--video-terms",
-                "foo, bar",
             ]
         )
 
@@ -27,7 +25,6 @@ class TestCli(unittest.TestCase):
         self.assertEqual(params.video_subject, "测试主题")
         self.assertEqual([m.url for m in materials], ["a.mp4", "b.jpg"])
         self.assertTrue(all(m.provider == "local" for m in materials))
-        self.assertEqual(params.video_terms, ["foo", "bar"])
 
     def test_run_cli_dispatches_task_start(self):
         with patch.object(cli.tm, "start", return_value={"script": "ok"}) as start, patch.object(
@@ -64,9 +61,9 @@ class TestCli(unittest.TestCase):
 
     def test_video_source_flags_are_removed(self):
         """
-        Source selection is fixed in the engine (3 sources shuffled in
-        cascade) — the --video-source and --video-source-mix flags no
-        longer exist in the CLI.
+        There is no remote source selection anymore (issue #542) — the
+        --video-source and --video-source-mix flags no longer exist in
+        the CLI.
         """
         with self.assertRaises(SystemExit):
             cli.parse_args(["--video-subject", "test", "--video-source", "pexels"])
@@ -91,23 +88,6 @@ class TestCli(unittest.TestCase):
                 ["--video-subject", "test", "--custom-system-prompt", "be concise"]
             )
 
-    def test_materials_with_stop_at_terms_is_rejected(self):
-        """
-        Local materials don't generate search terms — --stop-at terms
-        makes no sense together with --video-materials.
-        """
-        with self.assertRaises(SystemExit):
-            cli.parse_args(
-                [
-                    "--video-subject",
-                    "test",
-                    "--video-materials",
-                    "a.mp4",
-                    "--stop-at",
-                    "terms",
-                ]
-            )
-
     def test_build_video_params_with_script_video_and_audio_options(self):
         args = cli.parse_args(
             [
@@ -123,7 +103,6 @@ class TestCli(unittest.TestCase):
                 "fade-in",
                 "--video-clip-duration",
                 "4",
-                "--match-materials-to-script",
                 "--voice-volume",
                 "1.2",
                 "--voice-rate",
@@ -140,7 +119,6 @@ class TestCli(unittest.TestCase):
         self.assertEqual(params.video_concat_mode, "sequential")
         self.assertEqual(params.video_transition_mode, "FadeIn")
         self.assertEqual(params.video_clip_duration, 4)
-        self.assertTrue(params.match_materials_to_script)
         self.assertEqual(params.voice_volume, 1.2)
         self.assertEqual(params.voice_rate, 1.1)
         self.assertEqual(params.bgm_volume, 0.3)

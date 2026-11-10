@@ -147,24 +147,21 @@ def slot_faceless(slot: dict[str, Any]) -> bool:
 
 
 def slot_material(slot: dict[str, Any]) -> str:
-    """The slot's video material: "svg", "images" or "broll".
+    """The slot's video material: always "images" (issue #542).
 
     ``scheduled_posts.faceless_material`` (migration 029) is the per-post
-    choice written by the web, with or without a face. Only the literal
-    "svg" selects illustrations and only the literal "images" selects the
-    agent's segment images; a row without the field (selected before the
-    migration) or any other value renders stock, the behaviour every
-    earlier video had.
+    choice written by the web, with or without a face. Migration 054
+    backfills every stored row to "images", so any other value here is a
+    legacy row that predates it — it renders images, the only material left.
     """
-    material = slot.get("faceless_material")
-    return material if material in ("svg", "images") else "broll"
+    return "images"
 
 
 def slot_full_lipsync(slot: dict[str, Any]) -> bool:
     """True only for the literal True in ``scheduled_posts.full_lipsync``
     (migration 035). Missing/other values render intro-only, the behaviour
     every earlier video had; dropping the field would let a requeued
-    full-mode slot silently degrade to b-roll.
+    full-mode slot silently degrade to images-only.
     """
     return slot.get("full_lipsync") is True
 
@@ -191,7 +188,7 @@ def build_persona_params(
     """TaskVideoRequest persona params: avatar/voice resolution.
 
     A faceless post contributes ONLY the voice — no avatar, no photo — so the
-    engine renders stock footage (its ``persona_lipsync_active`` also returns
+    engine renders the agent's images (its ``persona_lipsync_active`` also returns
     false without a visual identity). This keeps the batch pipeline in step
     with the web's direct dispatch of the same slot.
     """

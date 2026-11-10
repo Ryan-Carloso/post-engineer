@@ -12,7 +12,6 @@ from unittest.mock import patch
 from pydantic import ValidationError
 
 from app.models.schema import PersonaParams, VideoParams
-from app.services import stock_terms
 from app.services import task as task_service
 from app.services import video as video_service
 from app.services.task import (
@@ -290,7 +289,6 @@ class TestPersonaPacingConstants:
         assert task_service.PERSONA_HOOK_TARGET_WORDS_MIN == 20
         assert task_service.PERSONA_HOOK_TARGET_WORDS_MAX == 30
         assert task_service.PERSONA_LIPSYNC_MAX_SECONDS == 12.0
-        assert task_service.PERSONA_SELECTIVE_STOCK_MIN_SCORE == 0.3
 
     def test_hook_constants_stay_inside_the_gpu_ceiling(self):
         assert task_service.PERSONA_HOOK_MIN_SECONDS <= task_service.PERSONA_HOOK_MAX_SECONDS
@@ -300,39 +298,3 @@ class TestPersonaPacingConstants:
         params = VideoParams(video_subject="viagem")
         assert not hasattr(params, "persona_hook_min_seconds")
         assert not hasattr(params, "persona_hook_max_seconds")
-
-
-class TestSelectiveStockFilter:
-    """Weak stock terms never enter the download queue (always on)."""
-
-    def _filter(self, subject, terms):
-        params = VideoParams(video_subject=subject)
-        return stock_terms.filter_weak_stock_terms(params, terms)
-
-    def test_weak_term_is_dropped_strong_kept_in_order(self):
-        kept = self._filter(
-            "portagens e vinhetas na europa",
-            ["portagens europa", "gato selado", "vinhetas"],
-        )
-        assert kept == ["portagens europa", "vinhetas"]
-
-    def test_all_weak_keeps_the_original_list(self):
-        terms = ["gato selado", "submarino"]
-        assert self._filter("portagens europa", terms) == terms
-
-    def test_single_term_is_never_filtered(self):
-        terms = ["gato selado"]
-        assert self._filter("portagens europa", terms) == terms
-
-    def test_tokenless_term_scores_zero_and_is_dropped(self):
-        kept = self._filter(
-            "portagens europa",
-            ["a o e", "portagens europa"],
-        )
-        assert kept == ["portagens europa"]
-
-    def test_empty_subject_disables_the_filter(self):
-        terms = ["gato selado"]
-        params = VideoParams(video_subject="portagens europa")
-        params.video_subject = ""
-        assert stock_terms.filter_weak_stock_terms(params, terms) == terms

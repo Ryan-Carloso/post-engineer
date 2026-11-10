@@ -17,8 +17,7 @@ import pytest
 from PIL import Image
 
 from app.models.schema import VideoAspect, VideoParams
-from app.services import image_coverage, place_photos, user_media
-from app.services.place_names import PreparedPhoto  # noqa: F401 - pins the shared photo shape
+from app.services import image_coverage, image_fetch, user_media
 from app.utils import ssrf
 
 WORDS = [
@@ -68,7 +67,7 @@ def _params(**overrides):
 
 
 def test_segment_media_limit_is_the_engine_photo_limit_not_the_library_limit():
-    assert user_media.MAX_SEGMENT_MEDIA_BYTES == place_photos.MAX_PHOTO_BYTES
+    assert user_media.MAX_SEGMENT_MEDIA_BYTES == image_fetch.MAX_PHOTO_BYTES
     assert user_media.MAX_SEGMENT_MEDIA_BYTES == 8 * 1024 * 1024
     assert user_media.MAX_SEGMENT_MEDIA_BYTES != 10 * 1024 * 1024
 
@@ -212,7 +211,7 @@ def test_one_bad_url_costs_only_that_segment(tmp_path, monkeypatch):
         {"kind": "body", "text": "Where the river meets the sea.", "media": [{"url": "https://e.com/good.jpg"}]},
         {"kind": "cta", "text": "Visit Porto soon."},
     ]
-    with patch.object(place_photos, "download_image", side_effect=fake_download):
+    with patch.object(image_fetch, "download_image", side_effect=fake_download):
         prepared, skipped = user_media.prepare_segment_media(
             "task-1",
             segments,
@@ -243,7 +242,7 @@ def test_too_small_and_face_photos_are_skipped(tmp_path, monkeypatch):
         {"kind": "body", "text": "Where the river meets the sea.", "media": [{"url": "https://e.com/face.jpg"}]},
         {"kind": "cta", "text": "Visit Porto soon."},
     ]
-    with patch.object(place_photos, "download_image", side_effect=fake_download), patch(
+    with patch.object(image_fetch, "download_image", side_effect=fake_download), patch(
         "app.services.user_media.face_detect.image_contains_face", return_value=True
     ):
         prepared, skipped = user_media.prepare_segment_media(
@@ -276,7 +275,7 @@ def test_expired_media_id_reports_expired_not_invalid(tmp_path, monkeypatch):
 def _check(url, tmp_path, download=None, face=False):
     work = str(tmp_path)
     if download is not None:
-        with patch.object(place_photos, "download_image", side_effect=download):
+        with patch.object(image_fetch, "download_image", side_effect=download):
             with patch(
                 "app.services.user_media.face_detect.image_contains_face",
                 return_value=face,
@@ -359,7 +358,7 @@ def test_two_photos_split_the_segment_and_a_dropped_one_is_covered(tmp_path):
         "text": "Welcome to Porto.",
         "media": [{"url": "https://e.com/a.jpg"}, {"url": "https://e.com/b.jpg"}],
     }]
-    with patch.object(place_photos, "download_image", side_effect=fake_download):
+    with patch.object(image_fetch, "download_image", side_effect=fake_download):
         prepared, skipped = user_media.prepare_segment_media(
             "task-1", both, _write_words(tmp_path, words), 4.0, str(tmp_path), VideoAspect.portrait,
         )
@@ -373,7 +372,7 @@ def test_two_photos_split_the_segment_and_a_dropped_one_is_covered(tmp_path):
         "text": "Welcome to Porto.",
         "media": [{"url": "https://e.com/drop.jpg"}, {"url": "https://e.com/keep.jpg"}],
     }]
-    with patch.object(place_photos, "download_image", side_effect=fake_download):
+    with patch.object(image_fetch, "download_image", side_effect=fake_download):
         prepared, skipped = user_media.prepare_segment_media(
             "task-1", dropped, _write_words(tmp_path, words), 4.0, str(tmp_path), VideoAspect.portrait,
         )

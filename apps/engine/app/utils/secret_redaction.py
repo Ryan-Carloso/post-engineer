@@ -1,7 +1,7 @@
 """Redact secrets and sensitive URL parameters from log output.
 
 Log lines must never contain API keys, tokens, or signed-URL credentials
-(e.g. Pixabay ``key=``, ``token=`` / ``access_token=`` on signed asset URLs).
+(e.g. ``key=``, ``token=`` / ``access_token=`` on signed asset URLs).
 All helpers are pure and never mutate their input.
 """
 

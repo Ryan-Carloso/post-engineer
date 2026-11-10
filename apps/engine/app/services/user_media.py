@@ -12,7 +12,7 @@ word counts, and the fallback is reported to the caller instead of
 silently placing a photo at the wrong time.
 
 A panel is an overlay, so it works the same on every video: faceless over
-stock or the neutral background, and on a persona video over the persona's
+the neutral background, and on a persona video over the persona's
 face (hook-only or full lip-sync). Where the face shows the panel sits at
 the bottom edge, so the captions above it never cover the photo.
 
@@ -41,7 +41,7 @@ from PIL import Image
 
 from app.models.schema import VideoAspect
 from app.services import (
-    face_detect, faceless_material, image_coverage, media_overlay, persona_hook, place_photos, segment_panels, subtitle, video,
+    face_detect, image_coverage, media_overlay, persona_hook, image_fetch, segment_panels, subtitle, video,
 )
 from app.services.image_density import split_interval
 from app.services.lipsync_active import persona_lipsync_active
@@ -50,12 +50,12 @@ from app.utils import file_security, utils
 from app.utils.ssrf import UnsafeUrlError
 
 # The segment-media bottleneck is the engine photo path, not the persona
-# library: place_photos refuses downloads over this size, so a larger
+# library: image_fetch refuses downloads over this size, so a larger
 # segment upload could never render. Pinned by test against both limits.
-MAX_SEGMENT_MEDIA_BYTES = place_photos.MAX_PHOTO_BYTES
-MIN_PHOTO_LONG_EDGE = place_photos.MIN_PHOTO_LONG_EDGE
-MIN_PHOTO_SHORT_EDGE = place_photos.MIN_PHOTO_SHORT_EDGE
-MAX_PHOTO_PIXELS = place_photos.MAX_PHOTO_PIXELS
+MAX_SEGMENT_MEDIA_BYTES = image_fetch.MAX_PHOTO_BYTES
+MIN_PHOTO_LONG_EDGE = image_fetch.MIN_PHOTO_LONG_EDGE
+MIN_PHOTO_SHORT_EDGE = image_fetch.MIN_PHOTO_SHORT_EDGE
+MAX_PHOTO_PIXELS = image_fetch.MAX_PHOTO_PIXELS
 
 _WORD = re.compile(r"[^\W_]+")
 _MEDIA_ID_PATTERN = re.compile(r"^[0-9a-f]{32}\.(jpg|jpeg|png|webp)$")
@@ -206,7 +206,7 @@ def check_media_code(url: str, work_dir: str) -> str:
     """
     raw_path = os.path.join(work_dir, "check-media.raw")
     try:
-        place_photos.download_image(url, raw_path)
+        image_fetch.download_image(url, raw_path)
     except Exception as exc:  # noqa: BLE001 - every download failure maps to a code
         return _download_failure_code(exc)
     try:
@@ -242,7 +242,7 @@ def _resolve_url(url: str, token: str, task_dir: str, session=None) -> tuple[str
     """
     raw_path = os.path.join(task_dir, f"segment-media-{token}.raw")
     try:
-        place_photos.download_image(url, raw_path, session=session)
+        image_fetch.download_image(url, raw_path, session=session)
     except Exception as exc:  # noqa: BLE001 - one bad URL costs only this segment
         return "", _CODE_TO_REASON.get(_download_failure_code(exc), "download failed")
     failure = _validate_photo(raw_path)
@@ -391,12 +391,11 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
         face=face, video_script=video_script,
         font_for=_overlay_font(params, segments),
     )
-    if getattr(params, "faceless_material", None) == faceless_material.IMAGES:
-        # The photos are the whole picture: neighbours cover gaps; none left fails the task.
-        hook_end = _hook_end(video_script, subtitle_path, audio_duration) if face == segment_panels.FACE_HOOK else 0.0
-        panels, gap_warnings = image_coverage.extend_over_gaps(
-            panels, image_coverage.coverage_start(face, hook_end), audio_duration
-        )
-        warnings = [*warnings, *gap_warnings]
+    # The photos are the whole picture: neighbours cover gaps; none left fails the task.
+    hook_end = _hook_end(video_script, subtitle_path, audio_duration) if face == segment_panels.FACE_HOOK else 0.0
+    panels, gap_warnings = image_coverage.extend_over_gaps(
+        panels, image_coverage.coverage_start(face, hook_end), audio_duration
+    )
+    warnings = [*warnings, *gap_warnings]
     segment_panels.write_manifest(task_id, panels, warnings)
     return warnings

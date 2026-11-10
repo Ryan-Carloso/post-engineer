@@ -112,8 +112,8 @@ class StartPreflightOrderTests(unittest.TestCase):
         image.assert_called_once_with("t-2", params, 2048)
         self.assertEqual([c.args[0] for c in phases.begin.call_args_list], ["voice", "persona_image"])
 
-    def test_script_and_terms_runs_check_nothing(self):
-        for stop_at in ("script", "terms"):
+    def test_a_script_run_checks_nothing(self):
+        for stop_at in ("script",):
             with self.subTest(stop_at=stop_at), patch.object(
                 persona_preflight, "preflight_persona_image"
             ) as image:

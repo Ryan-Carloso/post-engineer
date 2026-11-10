@@ -74,7 +74,9 @@ class _Config:
 
 @pydantic.dataclasses.dataclass(config=_Config)
 class MaterialInfo:
-    provider: str = "pexels"
+    # Local files only (CLI --video-materials, local_videos/): the provider
+    # is a leftover label, never read by the pipeline.
+    provider: str = "local"
     url: str = ""
     duration: int = 0
 
@@ -135,25 +137,23 @@ class VideoParams(BaseModel):
 
     video_subject: str = Field(max_length=500)
     video_script: str = Field(default="", max_length=20000)  # Script used to generate the video
-    video_terms: Optional[str | list] = None  # Keywords used to generate the video
     video_aspect: Optional[VideoAspect] = VideoAspect.portrait.value
     video_concat_mode: Optional[VideoConcatMode] = VideoConcatMode.random.value
     # How the persona meets the video material during the hook. "standard"
     # fills the frame with the avatar; "react" splits the frame in half
-    # (avatar on top, the post's material below: stock or drawings). Per-request only, never config.toml: an editorial choice
+    # (avatar on top, the post's material below: the agent's images).
+    # Per-request only, never config.toml: an editorial choice
     # per post, not a site-wide rendering default. The default is the enum's
     # own first member so a caller that omits the field gets the behaviour
     # every pre-existing video already had.
     video_layout: VideoLayout = VideoLayout.standard
     video_transition_mode: Optional[VideoTransitionMode] = None
     video_clip_duration: Optional[int] = Field(default=2, ge=1, le=60)
-    match_materials_to_script: bool = True
     # Material choice, per request only (like video_layout, never
-    # config.toml), for posts with or without a face: "broll" is stock
-    # only, "svg" is only the R2 SVG catalog, "images" is only the agent's
-    # own segment images; they never mix. The web sends it on every post;
-    # a caller omitting it gets "broll".
-    faceless_material: Literal["broll", "svg", "images"] = "broll"
+    # config.toml), for posts with or without a face: "images" is the only
+    # material left — only the agent's own segment images (issue #542).
+    # The web sends it on every post; a caller omitting it gets "images".
+    faceless_material: Literal["images"] = "images"
     video_materials: Optional[List[MaterialInfo]] = (
         None  # Materials used to generate the video
     )
@@ -164,8 +164,8 @@ class VideoParams(BaseModel):
     persona: Optional[PersonaParams] = None  # Inline persona (stateless, caller-resolved refs)
     lipsync_enabled: bool = config.app.get("persona_lipsync_enabled", True)  # False = persona voice only, no lip-sync intro
     # Opt-in full lip-sync: the whole narration renders as talking head
-    # with no b-roll, instead of the default intro-only lip-sync over
-    # stock material. Per-request only (like video_layout, never
+    # with no background footage, instead of the default intro-only lip-sync
+    # over the agent's images. Per-request only (like video_layout, never
     # config.toml): an editorial choice per post, not a site-wide default.
     # False (the default) keeps every existing video's behaviour exactly.
     full_lipsync: bool = False
@@ -246,24 +246,6 @@ class AudioRequest(BaseModel):
     voice_rate: Optional[float] = Field(default=1.2, ge=0.1, le=5.0)
 
 
-class VideoTermsParams(BaseModel):
-    """
-    {
-      "video_subject": "",
-      "video_script": "",
-      "amount": 5,
-      "match_materials_to_script": false
-    }
-    """
-
-    video_subject: Optional[str] = "春天的花海"
-    video_script: Optional[str] = (
-        "春天的花海，如诗如画般展现在眼前。万物复苏的季节里，大地披上了一袭绚丽多彩的盛装。金黄的迎春、粉嫩的樱花、洁白的梨花、艳丽的郁金香……"
-    )
-    amount: Optional[int] = Field(default=5, ge=1, le=50)
-    match_materials_to_script: bool = False
-
-
 class BaseResponse(BaseModel):
     status: int = 200
     message: Optional[str] = "success"
@@ -318,7 +300,6 @@ class ScriptSegment(BaseModel):
     kind: Literal["hook", "body", "cta"]
     text: str
     media: Optional[list[SegmentMedia]] = Field(None, max_length=MAX_IMAGES_MODE_MEDIAS)
-    terms: Optional[list[str]] = None
 
 
 class TaskVideoRequest(VideoParams, BaseModel):
@@ -345,14 +326,15 @@ class TaskVideoRequest(VideoParams, BaseModel):
     @model_validator(mode="after")
     def _validate_segments_into_script(self) -> "TaskVideoRequest":
         if self.segments is None:
-            if self.faceless_material == "images":
-                raise ValueError("faceless_material images needs segments, each with media")
+            # Script-only direct/CLI calls keep working: the script is used
+            # as-is, with no segment panels. Web, MCP and the batch pipeline
+            # always send segments, and validate media there before charging.
             return self
         from app.services import script_segments
 
         joined = script_segments.segments_to_script(
             [segment.model_dump(exclude_none=True) for segment in self.segments],
-            self.faceless_material,
+            full_lipsync=self.full_lipsync,
         )
         # Pydantic v2 does not re-validate on assignment: enforce the
         # video_script cap from the field metadata, not a hardcoded value.

@@ -133,7 +133,7 @@ class BatchGenerator:
                 faceless_material=slot_material(slot),
                 # Per-post full lip-sync (migration 035), like direct
                 # dispatch. Without it a tick-dispatched or requeued slot
-                # silently renders intro-only b-roll; a pre-migration row
+                # silently renders intro-only; a pre-migration row
                 # renders intro-only, as every earlier video did.
                 full_lipsync=slot_full_lipsync(slot),
                 # Per-post BGM mood (migration 045), like direct dispatch.

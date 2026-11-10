@@ -1,6 +1,5 @@
 import math
 import os.path
-import random
 import re
 from collections import deque
 from os import path
@@ -18,16 +17,10 @@ from app.services import (
     social_metadata,
     start_preflight,
     longcat,
-    material,
     persona_hook,
-    place_photos,
     segment_panels,
-    stock_terms,
     subtitle,
     subtitle_provider,
-    svg_terms,
-    terms_fallback,
-    twelvelabs,
     video,
     video_storage,
     voice,
@@ -50,16 +43,9 @@ from app.services.persona_hook import (
     _limit_generated_script,
 )
 from app.services.bgm_history import history_repository
-from app.services.stock_terms import PERSONA_SELECTIVE_STOCK_MIN_SCORE  # noqa: F401 - pinned by tests
 from app.services.analytics import nonempty_error_reason, track_event
 from app.services.notify import safe_reason, send_discord, task_failed_msg
 from app.utils import file_security, ssrf, utils
-
-#---------------
-# Remote material sources for broll mode, used in cascade with per-task
-# shuffled order (random start for variety, rest as fallback).
-#---------------
-REMOTE_VIDEO_SOURCES: list[str] = ["pexels", "pixabay", "coverr"]
 
 #---------------
 # _fail_task — marks a task FAILED and sends one Discord alert per task.
@@ -499,55 +485,10 @@ def generate_script(task_id, params):
     return video_script
 
 
-def generate_terms(task_id, params, video_script):
-    logger.info("\n\n## generating video terms")
-    video_terms = params.video_terms
-    if params.faceless_material == "svg":
-        # Catalog terms carry specific-to-generic alternatives (svg_terms).
-        video_terms = svg_terms.resolve_svg_terms(params, video_script)
-    else:
-        # Mechanical fallback, no LLM: agent terms verbatim at 20+, else
-        # expanded from the script itself in script narrative order, so
-        # later ordered download and ordered concat keep working. A
-        # warning is recorded in the task status when terms were
-        # auto-generated or expanded.
-        persona_niche = params.persona.niche if params.persona else ""
-        video_terms, terms_warning = terms_fallback.expand_terms(
-            video_terms, video_script, params.video_subject, persona_niche
-        )
-        _update_task(task_id, terms_warning=terms_warning)
-        # Log only the count — the terms themselves are user content and must
-        # not reach the logs.
-        logger.debug(f"video terms: {len(video_terms)} terms")
-
-    if not video_terms:
-        _fail_task(task_id, "failed to generate video terms", params, stage="terms")
-        logger.error("failed to generate video terms.")
-        return None
-
-    # Optional TwelveLabs Marengo semantic rerank: returns the original order
-    # untouched when disabled. In ordered-match mode the keyword order is
-    # already the script narrative order and must be preserved, so it is
-    # skipped.
-    if not params.match_materials_to_script:
-        video_terms = twelvelabs.rerank_terms_by_subject(
-            video_subject=params.video_subject,
-            search_terms=video_terms,
-        )
-
-    # Always on, ALL video kinds (not persona-specific): weak terms never
-    # reach the download queue. If every term is filtered the original list
-    # is kept, so the worst case is the pre-filter behavior.
-    video_terms = stock_terms.filter_weak_stock_terms(params, video_terms, video_script)
-
-    return video_terms
-
-
-def save_script_data(task_id, video_script, video_terms, params):
+def save_script_data(task_id, video_script, params):
     script_file = path.join(utils.task_dir(task_id), "script.json")
     script_data = {
         "script": video_script,
-        "search_terms": video_terms,
         "params": params,
     }
 
@@ -753,7 +694,7 @@ def generate_subtitle(task_id, params, video_script, sub_maker, audio_file):
     )
 
 
-def get_video_materials(task_id, params, video_terms, audio_duration, photos=()):
+def get_video_materials(task_id, params, audio_duration):
     if params.video_materials:
         logger.info("\n\n## preprocess local materials")
         materials = video.preprocess_video(
@@ -764,58 +705,9 @@ def get_video_materials(task_id, params, video_terms, audio_duration, photos=())
             logger.error("no valid materials found, please check the materials and try again.")
             return None
         return [material_info.url for material_info in materials]
-    elif params.faceless_material == faceless_material.IMAGES:
-        # Only a neutral canvas: the segment photos cover it (image_coverage), never stock.
-        return faceless_material.images_canvas(utils.task_dir(task_id), audio_duration, params.video_aspect) or None
-    else:
-        # Svg mode queries the catalog only: no stock provider runs.
-        if params.faceless_material == "svg":
-            source_order = faceless_material.svg_source_order()
-            video_terms = svg_terms.fit_to_audio(video_terms, audio_duration)
-        else:
-            source_order = list(REMOTE_VIDEO_SOURCES)
-            random.shuffle(source_order)
-        logger.info(f"\n\n## downloading videos from {' -> '.join(source_order)}")
-        # Ordered-match mode only applies when explicitly enabled: downloads
-        # round-robin in keyword order so an early keyword can't squeeze
-        # later script themes out of the final timeline.
-        downloaded_videos = material.download_videos(
-            task_id=task_id,
-            search_terms=video_terms,
-            video_aspect=params.video_aspect,
-            video_concat_mode=(
-                VideoConcatMode.sequential
-                if params.match_materials_to_script
-                else params.video_concat_mode
-            ),
-            audio_duration=audio_duration,
-            max_clip_duration=svg_terms.clip_seconds(params, len(video_terms), audio_duration),
-            match_script_order=params.match_materials_to_script,
-            source_mix=source_order,
-            exclude_faces=persona_lipsync_active(params),
-        )
-        if params.faceless_material == "svg":
-            svg_terms.report_coverage(
-                task_id,
-                len(downloaded_videos),
-                svg_terms.clip_seconds(params, len(downloaded_videos), audio_duration) or 0,
-                audio_duration,
-            )
-        if photos and downloaded_videos:
-            downloaded_videos = place_photos.splice_photos(
-                downloaded_videos, photos, svg_terms.clip_seconds(params, len(downloaded_videos), audio_duration)
-            )
-        if not downloaded_videos and params.faceless_material == "svg":
-            # Catalog empty: one neutral clip from the shared renderer, never stock.
-            neutral = material.material_verification.render_neutral_clip(
-                utils.task_dir(task_id), audio_duration, params.video_aspect
-            )
-            downloaded_videos = [neutral] if neutral else []
-        if not downloaded_videos:
-            _fail_task(task_id, "failed to download videos", params, stage="download")
-            logger.error("failed to download videos, maybe the network is not available.")
-            return None
-        return downloaded_videos
+    # Images mode: only a neutral canvas. The agent's segment photos cover
+    # it full frame (image_coverage); it never ships on its own.
+    return faceless_material.images_canvas(utils.task_dir(task_id), audio_duration, params.video_aspect) or None
 
 
 def generate_final_videos(
@@ -828,14 +720,8 @@ def generate_final_videos(
     final_video_paths = []
     combined_video_paths = []
     intro_report = IntroCostReport(ran=False, cost_usd=None, job_id=None)
-    # Single output per task. match_materials_to_script forces sequential
-    # concatenation (stable, explainable timeline); otherwise, respects the
-    # configured concat mode.
-    video_concat_mode = (
-        VideoConcatMode.sequential
-        if params.match_materials_to_script
-        else params.video_concat_mode
-    )
+    # Single output per task, concatenated in the configured mode.
+    video_concat_mode = params.video_concat_mode
     video_transition_mode = params.video_transition_mode
     task = sm.state.get_task(task_id)
     user_id = str(task.get("user_id", "internal")) if task else "internal"
@@ -851,23 +737,22 @@ def generate_final_videos(
         video_aspect=params.video_aspect,
         video_concat_mode=video_concat_mode,
         video_transition_mode=video_transition_mode,
-        max_clip_duration=svg_terms.combine_clip_seconds(params, len(downloaded_videos), audio_file),
+        max_clip_duration=params.video_clip_duration,
         threads=params.n_threads,
     )
 
     video_for_render = combined_video_path
     if params.full_lipsync:
-        # Full mode replaces the b-roll video entirely: every narration
+        # Full mode replaces the images canvas entirely: every narration
         # window renders as talking head and the windows concatenate into
         # the video the final encode muxes with narration. Any failure
         # here propagates and fails the task; it NEVER falls through to
-        # the intro/b-roll path below (there is no stock left
-        # to fill).
+        # the intro path below.
         if not persona_lipsync_active(params):
             raise ValueError(
                 "full_lipsync requires a persona with a photo and lipsync enabled"
             )
-        logger.info("generating full lip-sync video (no b-roll)")
+        logger.info("generating full lip-sync video (no background footage)")
         full_image = full_lipsync.resolve_persona_image(task_id, params, _PERSONA_IMAGE_MAX_BYTES)
         full_path, full_cost, full_job_ids = full_lipsync.render_full_lipsync(
             task_id=task_id,
@@ -1054,22 +939,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             _complete_task(task_id, params, script=video_script)
             return {"script": video_script}
 
-        # 2. Generate terms
-        video_terms = ""  # images material: the agent's photos, no stock search terms
-        if not params.video_materials and params.faceless_material != faceless_material.IMAGES:
-            phases.begin("terms")
-            video_terms = generate_terms(task_id, params, video_script)
-            phases.complete("terms")
-            if not video_terms:
-                _fail_task(task_id, "failed to generate video terms", params, stage="terms")
-                cleanup_task_intermediates(task_id, ())
-                return
-
-        save_script_data(task_id, video_script, video_terms, params)
-
-        if stop_at == "terms":
-            _complete_task(task_id, params, terms=video_terms)
-            return {"script": video_script, "terms": video_terms}
+        save_script_data(task_id, video_script, params)
 
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=20)
 
@@ -1147,34 +1017,17 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
         if video_script != script_before_hook_guard:
-            save_script_data(task_id, video_script, video_terms, params)
+            save_script_data(task_id, video_script, params)
 
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=40)
 
-        # 5. Get video materials
+        # 5. Get video materials: local files, or the neutral canvas the
+        # agent's segment photos cover (image_coverage).
         phases.begin("materials")
-        # Persona videos keep their lip-sync intro on screen: a photo fits
-        # only after it. Random concatenation scrambles the timeline, so a
-        # photo's moment would be lost.
-        # Short narration (audio_duration <= 12s) gives an inverted window:
-        # prepare_photos then matches no mention, which is correct — the
-        # face fills the whole video, so no photo fits after the intro.
-        photo_window = (
-            (PERSONA_LIPSYNC_MAX_SECONDS, audio_duration)
-            if persona_lipsync_active(params)
-            else None
-        )
-        photos = []
-        if params.match_materials_to_script and params.faceless_material != faceless_material.IMAGES:
-            photos = place_photos.prepare_photos(
-                task_id, params, video_script, subtitle_path, audio_duration, window=photo_window
-            )
-        downloaded_videos = get_video_materials(
-            task_id, params, video_terms, audio_duration, photos
-        )
+        downloaded_videos = get_video_materials(task_id, params, audio_duration)
         phases.complete("materials")
         if not downloaded_videos:
-            _fail_task(task_id, "failed to download videos", params, stage="download")
+            _fail_task(task_id, "failed to get video materials", params, stage="download")
             cleanup_task_intermediates(task_id, ())
             return
 
@@ -1281,7 +1134,6 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             "videos": final_video_paths,
             "combined_videos": combined_video_paths,
             "script": video_script,
-            "terms": video_terms,
             "audio_file": audio_file,
             "audio_duration": audio_duration,
             "platform_ids": params.platform_ids,

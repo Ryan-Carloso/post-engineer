@@ -4,7 +4,7 @@ An operator script comparing apps/engine/.env.example and
 config.example.toml against the private secrets tree
 (secrets/{prod,dev}/engine/*). It must print exactly the missing names
 and exit nonzero when something is missing: a missing key currently means
-a half-configured environment (e.g. the SVG catalog silently off in
+a half-configured environment (e.g. a feature silently off in
 production), and the operator decides which gaps to fill.
 """
 
