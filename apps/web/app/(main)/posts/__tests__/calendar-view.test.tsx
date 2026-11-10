@@ -396,6 +396,18 @@ describe('CalendarView', () => {
     }
   });
 
+  it('shortens week rows that have no posts on narrow screens', () => {
+    setup({
+      slotsByDay: new Map([
+        ['2030-06-05', [{ status: 'published', scheduleId: 's2', slotAt: '2030-06-05T10:00:00.000Z' }]],
+      ]),
+    });
+    const grid = screen.getByRole('grid');
+    const emptyWeek = grid.querySelector('tr[data-week-has-posts="false"]');
+    expect(emptyWeek).not.toBeNull();
+    expect(emptyWeek?.className.split(/\s+/)).toContain('max-xl:[&_[data-day-button]]:h-11');
+  });
+
   it('shows only the weeks the month spans — no all-next-month row', () => {
     // February 2026 starts on a Sunday and has 28 days: exactly 4 weeks.
     setup({ year: 2026, month: 1, todayKey: '2026-02-10' });
