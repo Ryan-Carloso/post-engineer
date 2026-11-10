@@ -1,7 +1,6 @@
 'use client';
 
 import { createContext, useCallback, useContext, useMemo, type MouseEventHandler } from 'react';
-import { RefreshCw } from 'lucide-react';
 import { UI, useDayPicker, type NavProps } from 'react-day-picker';
 import { enUS, ptBR } from 'react-day-picker/locale';
 import type { ScheduleConfig, ScheduledSlot } from '@/lib/api';
@@ -271,22 +270,19 @@ export function CalendarView({
       <DayCellContext.Provider value={dayCells}>
         <CalendarChromeContext.Provider value={chrome}>
         <NavTodayContext.Provider value={navToday}>
-          <div className={cn(!unavailable && 'max-xl:overflow-x-hidden max-xl:overflow-visible')}>
-          {onRefresh !== undefined && !unavailable && (
-            <div className="mb-2 flex justify-end xl:hidden">
-              <button
-                type="button"
-                onClick={onRefresh}
-                disabled={refreshing}
-                aria-label={t('posts.refresh')}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-input bg-card px-3 text-xs font-semibold text-primary hover:bg-sunken disabled:cursor-default"
-              >
-                <RefreshCw className={cn('size-3.5', refreshing && 'animate-spin')} aria-hidden />
-                {t('posts.refresh')}
-              </button>
+          {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined ? (
+            <div data-calendar-load-error>
+              <LoadErrorBanner
+                compact
+                fill
+                messageKey={loadErrorMessageKey}
+                noteKey={loadErrorNoteKey}
+                onRetry={onLoadErrorRetry}
+              />
             </div>
-          )}
-          {legendVisible && !unavailable && (
+          ) : (
+          <div className="max-xl:overflow-x-hidden max-xl:overflow-visible">
+          {legendVisible && (
             <div className={cn('mb-2 border-b border-line pb-2', legendClassName)}>
               <CalendarLegend filtered={filtered} />
             </div>
@@ -309,28 +305,22 @@ export function CalendarView({
             className="w-full bg-transparent p-0 [--cell-size:--spacing(10)]"
             classNames={{
               root: 'w-full',
-              caption_label: cn(
-                'text-base font-bold capitalize',
-                unavailable ? 'text-muted-foreground' : 'text-primary',
-              ),
+              caption_label: 'text-base font-bold capitalize text-primary',
               // The nav clusters right (prev / Today / next) and the caption
               // title left-aligns with room to its right, so the title
               // never runs under the navigation.
               nav: 'absolute right-0 top-0 flex items-center gap-1',
               button_previous: NAV_ARROW_CLASS,
               button_next: NAV_ARROW_CLASS,
-              month_caption: cn(
-                'flex w-full items-center justify-start pr-44',
-                unavailable ? 'min-h-10' : 'min-h-(--cell-size)',
-              ),
-              weekdays: unavailable ? 'hidden' : 'table-row',
+              month_caption: 'flex min-h-(--cell-size) w-full items-center justify-start pr-44',
+              weekdays: 'table-row',
               // Equal table cells so seven columns stay aligned on narrow screens.
               weekday:
                 'table-cell min-w-0 w-[14.2857%] select-none px-0.5 pb-1 text-center text-xs font-medium capitalize text-muted-foreground max-xl:sticky max-xl:top-0 max-xl:z-[1] max-xl:bg-card',
               week: 'table-row',
               // table-fixed: a table sizes columns from cell content, so a
               // busy day's chips were widening the month past the screen.
-              month_grid: unavailable ? 'hidden' : 'w-full table-fixed border-collapse',
+              month_grid: 'w-full table-fixed border-collapse',
               // Today is drawn by the day number itself (see PostsDayButton):
               // drop shadcn's accent fill so today never reads as selected.
               today: 'rounded-md [&:not([data-selected-single=true])]:bg-transparent',
@@ -346,19 +336,6 @@ export function CalendarView({
             components={{ DayButton: PostsDayButton, Nav: CalendarNav, Week: PostsCalendarWeek, Weeks: PostsCalendarWeeks }}
           />
           </div>
-          {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined && (
-            <div data-calendar-load-error className="border-t border-line pt-3">
-              <LoadErrorBanner
-                compact
-                fill
-                messageKey={loadErrorMessageKey}
-                noteKey={loadErrorNoteKey}
-                onRetry={onLoadErrorRetry}
-              />
-              {loadErrorNoteKey === undefined && (
-                <p className="mt-2 text-center text-sm text-muted-foreground xl:hidden">{t('posts.loadErrorSideQuiet')}</p>
-              )}
-            </div>
           )}
         </NavTodayContext.Provider>
         </CalendarChromeContext.Provider>

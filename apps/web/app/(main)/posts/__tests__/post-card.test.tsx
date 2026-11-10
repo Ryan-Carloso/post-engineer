@@ -205,12 +205,15 @@ describe('PostCard header and media', () => {
 
   it('keeps the header chevron separated from the timestamp', () => {
     renderCard({ ...FAILED_SLOT, status: 'published', title: 'Calendar published', publishedAt: '2030-06-01T10:05:00.000Z' }, true);
-    const header = screen.getByRole('link', { name: 'posts.cardOpenDetail' }).querySelector('[data-card-header]');
+    const cardLink = screen.getByRole('link', { name: 'posts.cardOpenDetail' });
+    const header = cardLink.querySelector('[data-card-header]');
     expect(header).not.toBeNull();
     expect(header?.querySelector('[data-card-when]')?.textContent).toMatch(/\d{1,2}:\d{2}/);
-    expect(header?.querySelector('[data-card-open]')).toHaveTextContent('posts.cardOpen');
-    expect(header?.querySelector('[data-card-open]')?.className.split(/\s+/)).toContain('border');
-    expect(header?.querySelector('[data-card-open]')?.className.split(/\s+/)).not.toContain('absolute');
-    expect(header?.querySelector('[data-card-chevron]')).not.toBeNull();
+    expect(header?.querySelector('[data-card-open]')).toBeNull();
+    const open = cardLink.querySelector('[data-card-open]');
+    expect(open).toHaveTextContent('posts.cardOpen');
+    expect(open?.className.split(/\s+/)).toContain('border');
+    expect(header?.querySelector('[data-card-chevron]')).toBeNull();
+    expect(open?.querySelector('[data-card-chevron]')).not.toBeNull();
   });
 });

@@ -967,16 +967,12 @@ describe('PostsPage calendar view', () => {
     // no selection, no day list.
     expect(screen.queryByText('posts.calendarNotLoaded')).not.toBeInTheDocument();
     expect(document.querySelector('[data-calendar-grid-outline]')).not.toBeInTheDocument();
-    const grid = screen.queryByRole('grid', { hidden: true });
-    expect(grid).not.toBeNull();
-    expect(grid?.className.split(/\s+/)).toContain('hidden');
+    expect(screen.queryByRole('grid')).not.toBeInTheDocument();
     expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
     expect(screen.queryByText('posts.calendarMonthHeading')).not.toBeInTheDocument();
     expect(document.querySelector('[data-day-unavailable-note]')).toHaveTextContent('posts.loadErrorSideQuiet');
     expect(screen.queryAllByRole('button', { name: 'posts.loadErrorRetry' })).toHaveLength(1);
-    const nav = screen.getByRole('navigation');
-    expect(nav).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByRole('button', { name: 'posts.calendarNextMonth' })).toBeDisabled();
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
     const loadError = document.querySelector('[data-calendar-load-error]');
     expect(loadError?.className.split(/\s+/)).not.toContain('min-h-[18rem]');
     expect(document.querySelector('[data-day-unavailable-note]')?.className.split(/\s+/)).toContain('border');

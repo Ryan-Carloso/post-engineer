@@ -291,8 +291,9 @@ describe('CalendarView', () => {
     const countSwatch = legend.querySelector('[data-legend-post-total]');
     expect(countSwatch).toBeTruthy();
     expect(countSwatch).toBeEmptyDOMElement();
+    expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/40');
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
-    expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-primary');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('border-primary');
     expect(selectedSwatch).toBeEmptyDOMElement();
     const todaySwatch = legend.querySelector('[data-legend-today-mark]');
     expect(todaySwatch?.className.split(/\s+/)).toContain('bg-warning');
@@ -324,18 +325,14 @@ describe('CalendarView', () => {
       onLoadErrorRetry,
     });
     expect(screen.queryByText('Posts not loaded')).not.toBeInTheDocument();
-    const grid = screen.getByRole('grid', { hidden: true });
-    expect(grid.className.split(/\s+/)).toContain('hidden');
+    expect(screen.queryByRole('grid')).not.toBeInTheDocument();
     expect(document.querySelector('[data-calendar-grid-outline]')).toBeNull();
     expect(screen.queryByText('posts.calendarLegendPostCount')).not.toBeInTheDocument();
     expect(document.querySelector('[data-calendar-load-error]')?.closest('[data-calendar-card]')).not.toBeNull();
     expect(screen.getByRole('alert')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onLoadErrorRetry).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
-    expect(onLoadErrorRetry).toHaveBeenCalledTimes(1);
-    expect(props.onMonthNavigate).not.toHaveBeenCalled();
-    expect(screen.getByRole('navigation')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
   });
 
   it('keeps seven table cells per week on a narrow layout', () => {

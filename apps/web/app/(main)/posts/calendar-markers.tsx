@@ -58,9 +58,9 @@ export const DAY_POST_TOTAL_CLASS =
 export const LEGEND_POST_TOTAL_SWATCH_CLASS =
   'inline-flex h-5 min-w-5 max-xl:h-6 max-xl:min-w-6 shrink-0 rounded-full border border-primary/40 bg-primary/12 shadow-[0_1px_0_rgba(13,43,69,0.1)]';
 
-// Miniature selected day cell: grid-matching blue outline, no date numeral.
+// Miniature selected day cell: same blue rounded frame as the grid, no date numeral.
 export const SELECTED_DAY_LEGEND_SWATCH_CLASS =
-  'inline-flex h-8 w-[1.75rem] shrink-0 flex-col items-center justify-center rounded-md bg-card outline-2 -outline-offset-2 outline-primary';
+  'inline-flex h-7 w-[1.75rem] shrink-0 items-center justify-center rounded-md border-2 border-primary bg-card';
 
 function DayCellPostTotal({
   total,
@@ -135,7 +135,7 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       data-selected-single={selectedSingle ? true : undefined}
       data-day-button
       className={cn(
-        'aspect-auto h-[4.5rem] w-full max-w-full min-w-0 flex-col items-center justify-start gap-0.5 overflow-visible px-0.5 pb-1 pt-0.5 max-xl:h-[4.75rem] sm:h-24 sm:min-h-24 sm:gap-1 sm:pb-1 sm:pt-1',
+        'aspect-auto h-[4.5rem] w-full max-w-full min-w-0 flex-col items-center justify-start gap-0.5 overflow-visible px-0.5 pb-1 pt-0.5 max-xl:h-[4.75rem] sm:h-24 sm:min-h-24 sm:gap-1 sm:pb-1 sm:pt-1 xl:h-[4.25rem] xl:min-h-[4.25rem] xl:gap-0.5 xl:pb-0.5 xl:pt-0.5',
         !isOutside && '[&>span]:opacity-100',
         isOutside &&
           'text-muted-foreground hover:bg-transparent hover:text-muted-foreground active:bg-transparent data-[selected-single=true]:text-muted-foreground',

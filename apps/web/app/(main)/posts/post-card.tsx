@@ -127,48 +127,43 @@ const StatusBadge = ({ status, label, style }: { status: string; label: string; 
   );
 };
 
-// Status badge left, when right, on one line: neither side wraps. The
-// chevron says the card opens the post detail.
 const CardHeader = ({
   badge,
   when,
   whenHint,
-  showChevron = true,
-  openLabel,
 }: {
   badge: ReactNode;
   when: string;
   whenHint?: string;
-  showChevron?: boolean;
-  openLabel?: string;
 }) => (
   <div data-card-header className="flex w-full items-start gap-2">
     <div className="shrink-0">{badge}</div>
-    <div className="ml-auto flex min-w-0 flex-col items-end gap-1.5">
-      <p className="w-full text-right text-[13px] text-ink-soft tabular-nums">
-        <span data-card-when className="inline-flex max-w-full flex-col items-end gap-0.5 leading-tight">
-          {whenHint !== undefined && (
-            <span data-card-when-kind className="text-[10px] font-medium text-muted-foreground">
-              {whenHint}
-            </span>
-          )}
-          <span className="whitespace-nowrap">{when}</span>
-        </span>
-      </p>
-      {showChevron && openLabel !== undefined && (
-      <span
-        data-card-open
-        className="flex min-h-9 shrink-0 items-center gap-0.5 rounded-lg border border-primary/30 bg-info-soft px-3 py-2 text-sm font-semibold text-primary shadow-[0_1px_0_rgba(13,43,69,0.06)]"
-      >
-        <span className="whitespace-nowrap">{openLabel}</span>
-        <ChevronRight
-          data-card-chevron
-          className="size-4 shrink-0 text-muted-text transition-transform group-hover/card:translate-x-0.5"
-          aria-hidden
-        />
+    <p className="ml-auto min-w-0 text-right text-[13px] text-ink-soft tabular-nums">
+      <span data-card-when className="inline-flex max-w-full flex-col items-end gap-0.5 leading-tight">
+        {whenHint !== undefined && (
+          <span data-card-when-kind className="text-[10px] font-medium text-muted-foreground">
+            {whenHint}
+          </span>
+        )}
+        <span className="whitespace-nowrap">{when}</span>
       </span>
-      )}
-    </div>
+    </p>
+  </div>
+);
+
+const CardOpenAction = ({ label }: { label: string }) => (
+  <div className="mt-3 flex justify-end border-t border-line pt-3">
+    <span
+      data-card-open
+      className="inline-flex min-h-10 w-full items-center justify-center gap-1 rounded-lg border border-line bg-card px-3 py-2 text-sm font-semibold text-primary shadow-[0_1px_0_rgba(13,43,69,0.06)] max-xl:max-w-none sm:w-auto sm:min-w-[10.5rem]"
+    >
+      <span className="whitespace-nowrap">{label}</span>
+      <ChevronRight
+        data-card-chevron
+        className="size-4 shrink-0 text-muted-text transition-transform group-hover/card:translate-x-0.5"
+        aria-hidden
+      />
+    </span>
   </div>
 );
 
@@ -286,8 +281,6 @@ export const PostCard = ({
           badge={<StatusBadge status={slot.status} label={t(CALENDAR_GROUP_KEY[group])} style={CALENDAR_GROUP_PILL[group]} />}
           when={when}
           whenHint={timeOnly ? t(timeKindKey) : undefined}
-          showChevron={!isFailed}
-          openLabel={!isFailed ? t('posts.cardOpen') : undefined}
         />
         <div className="mt-3">
           <CardTitle title={displayTitle} personaName={personaName} personaLabel={t('posts.cardPersonaLabel')} />
@@ -312,6 +305,12 @@ export const PostCard = ({
           </div>
         )}
         <PublishAccountNotices status={slot.status} userNotices={slot.userNotices} compact />
+        {!isFailed && accounts.length > 0 && (
+          <div className="mt-3">
+            <AccountChips accounts={accounts} />
+          </div>
+        )}
+        {!isFailed && <CardOpenAction label={t('posts.cardOpen')} />}
       </Link>
       {isFailed && (
         <FailureBox message={failureMessage}>
@@ -333,11 +332,6 @@ export const PostCard = ({
             </Link>
           </div>
         </FailureBox>
-      )}
-      {!isFailed && accounts.length > 0 && (
-        <div className="mt-3">
-          <AccountChips accounts={accounts} />
-        </div>
       )}
     </Card>
   );
@@ -361,7 +355,6 @@ export const GenerationCard = ({ generation, locale }: { generation: VideoGenera
             />
           }
           when={`${formatDate(generation.createdAt, locale)} · ${formatTime(generation.createdAt, locale)}`}
-          openLabel={t('posts.cardOpen')}
         />
         <div className="mt-3 flex gap-3">
           <CardTitle
@@ -381,6 +374,7 @@ export const GenerationCard = ({ generation, locale }: { generation: VideoGenera
             </Badge>
           </div>
         )}
+        <CardOpenAction label={t('posts.cardOpen')} />
       </Card>
     </Link>
   );

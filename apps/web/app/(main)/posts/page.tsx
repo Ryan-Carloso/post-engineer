@@ -140,7 +140,7 @@ export default function PostsPage() {
             onClick={handleRefresh}
             disabled={rangeQuery.isFetching}
             aria-label={t('posts.refresh')}
-            className="hidden h-10 items-center justify-center gap-2 rounded-xl border border-input bg-card px-4 text-sm font-semibold text-primary hover:bg-sunken disabled:cursor-default sm:inline-flex"
+            className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-input bg-card px-3 text-xs font-semibold text-primary hover:bg-sunken disabled:cursor-default sm:h-10 sm:gap-2 sm:px-4 sm:text-sm"
           >
             <RefreshCw className={cn('size-4', rangeQuery.isFetching && 'animate-spin')} aria-hidden />
             <span>{t('posts.refresh')}</span>
