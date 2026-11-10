@@ -64,7 +64,7 @@ export const TODAY_TOP_BAR_CLASS = 'h-1 w-full shrink-0 rounded-full bg-warning'
 
 // Directly under the today numeral — underlines the date, not the row above.
 export const TODAY_CELL_BAR_CLASS =
-  'pointer-events-none mt-0.5 h-1 w-9 max-w-[calc(100%-0.35rem)] shrink-0 rounded-full bg-warning';
+  'pointer-events-none mt-0.5 h-1.5 w-10 max-w-[calc(100%-0.25rem)] shrink-0 rounded-full bg-warning';
 
 // Legend today: the same gold top bar as the grid — not a miniature scene.
 export const LEGEND_TODAY_BAR_SWATCH_CLASS =
@@ -162,8 +162,8 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       <span
         data-day-number
         className={cn(
-          'z-[2] flex min-h-0 w-full min-w-0 flex-1 flex-col items-center justify-center gap-1 px-0.5 tabular-nums',
-          isToday ? 'pt-0.5' : 'pt-1',
+          'z-[2] flex min-h-0 w-full min-w-0 flex-1 flex-col items-center gap-1 px-0.5 tabular-nums',
+          isToday ? 'justify-center pt-0.5' : 'justify-start pt-2 sm:pt-2.5',
           isToday && slots.length > 0 && 'gap-1',
           selectedSingle && slots.length > 0 && !isToday && 'gap-1.5 pb-0.5',
           selectedSingle && isToday && slots.length > 0 && 'gap-1 pb-0.5',

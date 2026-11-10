@@ -171,7 +171,7 @@ export default function PostsPage() {
               {rangeQuery.data?.truncated === true && (
                 <p className="mb-3 text-xs text-muted-foreground">{t('posts.calendarTruncated', { count: RANGE_MAX_SLOTS })}</p>
               )}
-              {/* On error the days stay readable and the month can still change. */}
+              {/* On error the calendar keeps month chrome and an in-card retry. */}
               <CalendarView
                 year={cursor.year}
                 month={cursor.month}
@@ -188,7 +188,10 @@ export default function PostsPage() {
                 unavailable={isError}
                 muted={isAccountEmpty}
                 filtered={filters.hasActiveFilter}
-                showLegend={!isAccountEmpty && monthPostCount > 0}
+                showLegend={
+                  !isAccountEmpty &&
+                  (monthPostCount > 0 || (isError && loadErrorKey === 'posts.loadErrorCalendar'))
+                }
                 loadErrorMessageKey={isError ? loadErrorKey : undefined}
                 loadErrorNoteKey={isError && loadErrorKey !== 'posts.loadErrorCalendar' ? 'posts.loadErrorSideQuiet' : undefined}
                 onLoadErrorRetry={isError ? handleRefresh : undefined}

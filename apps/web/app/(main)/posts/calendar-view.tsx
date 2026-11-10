@@ -13,6 +13,7 @@ import { CALENDAR_GROUP_KEY, CALENDAR_GROUP_ORDER } from './status';
 import { DayCellContext, PostsDayButton } from './calendar-markers';
 import { CalendarChromeContext, PostsCalendarWeek, PostsCalendarWeeks } from './calendar-week';
 import { CalendarLegend } from './calendar-legend';
+import { CalendarUnavailableFrame } from './calendar-load-error-frame';
 import { LoadErrorBanner } from './day-section';
 
 // CalendarView — month calendar on the shadcn Calendar (react-day-picker:
@@ -24,10 +25,9 @@ import { LoadErrorBanner } from './day-section';
 // spans (no all-next-month sixth row). Day buckets use the viewer's
 // browser timezone (calendar-days.ts). Data and the selected day's posts
 // live in the page. `unavailable` (the posts failed to load) disables the
-// days without washing the numbers out, and drops the selection and the
-// legend, so a failed load never reads as an empty month; the month
-// navigation stays usable. `muted` is the account-empty calendar: the same
-// readable grid, not interactive.
+// days for a recovery frame (legend when enabled, month label, disabled
+// nav, weekday headers) so a failed load never reads as an empty month.
+// `muted` is the account-empty calendar: the same readable grid, not interactive.
 
 interface CalendarViewProps {
   year: number;
@@ -279,9 +279,13 @@ export function CalendarView({
         <CalendarChromeContext.Provider value={chrome}>
           <NavTodayContext.Provider value={navToday}>
             {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined ? (
-              <div
-                data-calendar-load-error
-                className="w-full rounded-lg border border-warning/35 bg-warning/12 px-4 py-3 sm:px-5 sm:py-3.5"
+              <CalendarUnavailableFrame
+                year={year}
+                month={month}
+                firstWeekday={firstWeekday}
+                filtered={filtered}
+                legendClassName={legendClassName}
+                showLegend={showLegend && !muted}
               >
                 <LoadErrorBanner
                   compact
@@ -292,7 +296,7 @@ export function CalendarView({
                   noteKey={loadErrorNoteKey}
                   onRetry={onLoadErrorRetry}
                 />
-              </div>
+              </CalendarUnavailableFrame>
             ) : (
               <div className="max-xl:overflow-x-hidden max-xl:overflow-visible">
                 {legendVisible && (

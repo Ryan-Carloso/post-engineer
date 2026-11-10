@@ -344,15 +344,14 @@ describe('CalendarView', () => {
     expect(screen.getAllByText('Filtered: only matching posts are shown')[0].closest('[data-filter-hint]')).not.toBeNull();
   });
 
-  // A failed load must not read as an empty month: disabled days, readable
-  // numbers, no selection, no markers, no legend — but the month can still
-  // change. There is no "not loaded" pill over the cells.
+  // A failed load must not read as an empty month: no day grid or pills, but
+  // the month chrome (legend, caption, disabled nav, weekday headers) stays.
   it('covers an unavailable grid and hides today gold so a failed load does not read empty', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       ['2030-06-05', [{ status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' }]],
     ]);
     const onLoadErrorRetry = vi.fn();
-    const props = setup({
+    setup({
       slotsByDay,
       selectedKey: '2030-06-15',
       unavailable: true,
@@ -362,12 +361,21 @@ describe('CalendarView', () => {
     expect(screen.queryByText('Posts not loaded')).not.toBeInTheDocument();
     expect(screen.queryByRole('grid')).not.toBeInTheDocument();
     expect(document.querySelector('[data-calendar-grid-outline]')).toBeNull();
-    expect(screen.queryByText('posts.calendarLegendPostCount')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-calendar-unavailable-frame]')).not.toBeNull();
+    expect(screen.getByText(/June 2030/)).toBeInTheDocument();
+    expect(document.querySelector('[data-calendar-error-nav]')).not.toBeNull();
+    const navButtons = within(document.querySelector('[data-calendar-error-nav]') as HTMLElement).getAllByRole(
+      'button',
+    );
+    for (const button of navButtons) {
+      expect(button).toBeDisabled();
+    }
+    expect(document.querySelectorAll('[data-calendar-unavailable-frame] th')).toHaveLength(7);
+    expect(document.querySelector('[data-calendar-grid-footprint]')?.className).toMatch(/min-h-/);
     expect(document.querySelector('[data-calendar-load-error]')?.closest('[data-calendar-card]')).not.toBeNull();
     expect(screen.getByRole('alert')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onLoadErrorRetry).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
   });
 
   it('keeps seven table cells per week on a narrow layout', () => {
