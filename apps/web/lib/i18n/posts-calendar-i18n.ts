@@ -48,7 +48,7 @@ export const postsCalendarStrings = {
       cardTimePublished: 'Publicado',
       cardPersonaLabel: 'Persona',
       calendarLegendSelected: 'Dia selecionado',
-      calendarLegendPostCount: 'Publicações',
+      calendarLegendPostCount: 'Publicações no dia',
       cardOpen: 'Abrir publicação',
       loadErrorSideQuiet: 'A lista do dia não carregou com o calendário.',
       userNoticeEmail:
@@ -110,7 +110,7 @@ export const postsCalendarStrings = {
       cardTimePublished: 'Published',
       cardPersonaLabel: 'Persona',
       calendarLegendSelected: 'Selected day',
-      calendarLegendPostCount: 'Posts',
+      calendarLegendPostCount: 'Posts that day',
       cardOpen: 'Open post',
       loadErrorSideQuiet: 'The day list did not load with the calendar.',
       userNoticeEmail:

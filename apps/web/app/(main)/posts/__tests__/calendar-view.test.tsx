@@ -175,7 +175,7 @@ describe('CalendarView', () => {
     });
     const legend = screen.getByText('posts.calendarLegendPostCount').closest('ul');
     if (legend === null) throw new Error('legend not rendered');
-    expect(legend.className.split(/\s+/)).toContain('flex-wrap');
+    expect(legend.className.split(/\s+/)).toContain('max-xl:flex-nowrap');
     expect(legend.className.split(/\s+/)).not.toContain('grid-cols-1');
     expect(legend.closest('[data-calendar-card]')).not.toBeNull();
   });
@@ -477,7 +477,7 @@ describe('CalendarView', () => {
     }
   });
 
-  it('shortens week rows that have no posts on narrow screens', () => {
+  it('keeps full-height week rows on narrow screens when a week has no posts', () => {
     setup({
       slotsByDay: new Map([
         ['2030-06-05', [{ status: 'published', scheduleId: 's2', slotAt: '2030-06-05T10:00:00.000Z' }]],
@@ -486,7 +486,21 @@ describe('CalendarView', () => {
     const grid = screen.getByRole('grid');
     const emptyWeek = grid.querySelector('tr[data-week-has-posts="false"]:not([data-week-outside-padding])');
     expect(emptyWeek).not.toBeNull();
-    expect(emptyWeek?.className.split(/\s+/)).toContain('max-xl:[&_[data-day-button]]:h-11');
+    expect(emptyWeek?.className.split(/\s+/)).not.toContain('max-xl:[&_[data-day-button]]:h-11');
+    const emptyDay = emptyWeek?.querySelector('[data-day-button]');
+    expect(emptyDay?.className.split(/\s+/)).toContain('max-xl:h-[5.25rem]');
+  });
+
+  it('shortens post-free week rows on desktop only', () => {
+    setup({
+      slotsByDay: new Map([
+        ['2030-06-05', [{ status: 'published', scheduleId: 's2', slotAt: '2030-06-05T10:00:00.000Z' }]],
+      ]),
+    });
+    const emptyWeek = screen
+      .getByRole('grid')
+      .querySelector('tr[data-week-has-posts="false"]:not([data-week-outside-padding])');
+    expect(emptyWeek?.className.split(/\s+/)).toContain('xl:[&_[data-day-button]]:h-14');
   });
 
   it('keeps full-height rows for weeks that show neighbouring-month days', () => {

@@ -8,9 +8,9 @@ import { DayCellContext } from './calendar-markers';
 
 export const CalendarChromeContext = createContext({ filtered: false, showLegend: true });
 
-// A week with no posts uses a shorter row so empty months do not leave
-// tall blank bands on phones or desktop; any day with a post keeps the full
-// cell height for that week.
+// A week with no posts uses a shorter row on desktop so empty months do not
+// leave tall blank bands; phones keep every week row at full cell height so
+// the grid rhythm stays even. Any day with a post keeps the full cell height.
 export function PostsCalendarWeek({ week, className, ...props }: WeekProps) {
   const { slotsByDay } = useContext(DayCellContext);
   const hasPosts = week.days.some((day) => (slotsByDay.get(dayKey(day.date))?.length ?? 0) > 0);
@@ -29,8 +29,7 @@ export function PostsCalendarWeek({ week, className, ...props }: WeekProps) {
       data-week-outside-padding={hasOutside ? 'true' : undefined}
       className={cn(
         className,
-        compact &&
-          'max-xl:[&_[data-day-button]]:h-11 max-xl:[&_[data-day-button]]:min-h-11 max-xl:[&_[data-day-button]]:gap-0 xl:[&_[data-day-button]]:h-14 xl:[&_[data-day-button]]:sm:h-16',
+        compact && 'xl:[&_[data-day-button]]:h-14 xl:[&_[data-day-button]]:min-h-14 xl:[&_[data-day-button]]:sm:h-16',
       )}
     />
   );

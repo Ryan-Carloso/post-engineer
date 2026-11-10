@@ -185,6 +185,13 @@ describe('posts calendar load failure copy', () => {
   });
 });
 
+describe('posts calendar legend copy', () => {
+  it('names the count marker as posts on that day, not the page title', () => {
+    expect(postsCalendarStrings.pt.posts.calendarLegendPostCount).toBe('Publicações no dia');
+    expect(postsCalendarStrings.en.posts.calendarLegendPostCount).toBe('Posts that day');
+  });
+});
+
 describe('PostsPage', () => {
   it("opens on the calendar with today's posts below it: persona, title, status and account avatars", () => {
     render(<PostsPage />);
