@@ -140,6 +140,22 @@ describe('CalendarView', () => {
     const total = selected.querySelector('[data-day-post-total]');
     expect(numeral?.contains(total)).toBe(false);
     expect(selected.querySelector('[data-day-number]')?.contains(total)).toBe(false);
+    expect(selected.className.split(/\s+/)).toContain('focus-visible:ring-0');
+    expect(selected.className.split(/\s+/)).not.toContain('focus-visible:ring-[3px]');
+  });
+
+  it('does not paint a focus ring on the whole cell after the day is clicked', () => {
+    setup({
+      selectedKey: '2030-06-05',
+      slotsByDay: new Map([
+        ['2030-06-05', [{ status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-05T10:00:00.000Z' }]],
+      ]),
+    });
+    const selected = dayButton(/June 5, 2030/);
+    selected.focus();
+    expect(selected).toHaveFocus();
+    expect(selected.className.split(/\s+/)).toContain('focus:ring-0');
+    expect(selected.className.split(/\s+/)).toContain('shadow-none');
   });
 
   it('keeps the today bar and post total as separate marks when today is selected', () => {

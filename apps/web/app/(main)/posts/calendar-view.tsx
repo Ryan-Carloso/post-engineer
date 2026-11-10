@@ -350,7 +350,9 @@ export function CalendarView({
                     disabled: 'text-primary opacity-100',
                     // Equal share of the fixed table. Selection is drawn on the numeral only.
                     day: 'group/day relative min-w-0 w-[14.2857%] table-cell p-0 text-center align-top',
-                    selected: 'bg-transparent',
+                    selected: 'bg-transparent shadow-none',
+                    day_button:
+                      'border-0 shadow-none outline-none ring-0 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0',
                   }}
                   components={{ DayButton: PostsDayButton, Nav: CalendarNav, Week: PostsCalendarWeek, Weeks: PostsCalendarWeeks }}
                 />

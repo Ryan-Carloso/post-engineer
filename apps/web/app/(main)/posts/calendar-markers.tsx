@@ -152,8 +152,10 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
         !isOutside && 'hover:bg-sunken hover:text-primary',
         'data-[selected-single=true]:bg-transparent data-[selected-single=true]:hover:bg-transparent',
         !isOutside && 'data-[selected-single=true]:text-primary',
-        'outline-none focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+        // shadcn Button paints a focus ring on the whole cell — nested under the numeral ring.
+        'border-0 shadow-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0',
         'group-data-[focused=true]/day:bg-transparent group-data-[focused=true]/day:ring-0 group-data-[focused=true]/day:shadow-none',
+        'group-data-[focused=true]/day:[&_[data-day-numeral]]:outline group-data-[focused=true]/day:[&_[data-day-numeral]]:outline-2 group-data-[focused=true]/day:[&_[data-day-numeral]]:outline-offset-0 group-data-[focused=true]/day:[&_[data-day-numeral]]:outline-ring',
         className,
       )}
       {...props}
