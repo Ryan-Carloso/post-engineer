@@ -126,7 +126,11 @@ async function getHandler(request: Request): Promise<NextResponse> {
   let coverage: CoverageItem[] = [];
   let coverageTruncated = false;
   try {
-    const found = await fetchCoverage(supabase, auth.userId, query, new Date());
+    const found = await fetchCoverage(supabase, auth.userId, query, new Date(), {
+      // Same policy as the rows query above: a scoped key sees its
+      // personas' items plus persona-less posts.
+      personaIds: isScopedApiKey(auth) ? (auth.personaIds ?? []).filter((id) => UUID.test(id)) : null,
+    });
     coverage = found.items;
     coverageTruncated = found.truncated;
   } catch (error) {

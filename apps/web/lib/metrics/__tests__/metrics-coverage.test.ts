@@ -1,13 +1,23 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { findRepoRoot } from '@/test/repo-root';
+
+vi.mock('@/lib/logger', () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
+}));
+
 import {
-  METRICS_ROW_LIMIT, METRICS_WINDOW_START_HOURS, METRICS_WINDOW_WIDTH_HOURS, metricsWindowRange,
+  METRICS_NONE, METRICS_ROW_LIMIT, METRICS_WINDOW_START_HOURS, METRICS_WINDOW_WIDTH_HOURS, metricsWindowRange,
   type MetricsQuery, type MetricsRowView,
 } from '../metrics-query';
 import { computeCoverage, fetchCoverage, type CoveragePostInput } from '../metrics-coverage';
+import { logger } from '@/lib/logger';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 //---------------
 // Tests for metrics coverage (issue #525): published videos with no
@@ -145,6 +155,125 @@ describe('computeCoverage', () => {
     })]);
   });
 
+  it('keeps one publish-failed item per (provider, account) when several videos fail there', () => {
+    // Two videos of one slot failing on the same account carry no video
+    // id, so without dedupe the items are identical and collide as
+    // React keys.
+    const { items } = compute({
+      posts: [post({ outcomes: [IG_FAILED_OUTCOME, IG_FAILED_OUTCOME, { provider: 'youtube', accountId: 'yt', status: 'failed' }] })],
+    });
+    expect(items).toHaveLength(2);
+    expect(items.filter((item) => item.provider === 'instagram')).toHaveLength(1);
+    // The dedupe is per post: the same failure on another post is its
+    // own item.
+    const { items: twoPosts } = compute({
+      posts: [
+        post({ id: 'post-1', outcomes: [IG_FAILED_OUTCOME] }),
+        post({ id: 'post-2', outcomes: [IG_FAILED_OUTCOME] }),
+      ],
+    });
+    expect(twoPosts).toHaveLength(2);
+  });
+
+  it('drops out-of-scope personas for a scoped caller, keeps its own and persona-less posts', () => {
+    const posts = [
+      post({ id: 'post-own', personaId: PERSONA }),
+      post({ id: 'post-other', personaId: 'other-persona' }),
+      post({ id: 'post-faceless', personaId: null }),
+    ];
+    const { items } = compute({ posts, personaIds: [PERSONA] });
+    expect(items.map((item) => item.postId).sort()).toEqual(['post-faceless', 'post-own']);
+  });
+
+  it('keeps only persona-less posts when the scope is empty', () => {
+    const posts = [
+      post({ id: 'post-own', personaId: PERSONA }),
+      post({ id: 'post-faceless', personaId: null }),
+    ];
+    const { items } = compute({ posts, personaIds: [] });
+    expect(items.map((item) => item.postId)).toEqual(['post-faceless']);
+  });
+
+  it('is unrestricted without a scope', () => {
+    const posts = [
+      post({ id: 'post-own', personaId: PERSONA }),
+      post({ id: 'post-other', personaId: 'other-persona' }),
+    ];
+    expect(compute({ posts }).items).toHaveLength(2);
+  });
+
+  it('skips posts with an unparseable publish date', () => {
+    const { items } = compute({ posts: [post({ publishedAt: 'not-a-date' })] });
+    expect(items).toEqual([]);
+  });
+
+  it('takes a null angle from a row and shows the item with no angle', () => {
+    // The YouTube target is collected; the Instagram target is missing
+    // and inherits the null angle from the collected row.
+    const { items } = compute({
+      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
+      rows: [row({ scriptAngle: null })],
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ provider: 'instagram', scriptAngle: null });
+  });
+
+  it('keeps the first angle when a later row has none', () => {
+    const { items } = compute({
+      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
+      rows: [row(), row({ scriptAngle: null })],
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ provider: 'instagram', scriptAngle: 'myth' });
+  });
+
+  it('shows persona-less posts under the none persona filter, hides persona posts', () => {
+    const posts = [
+      post({ id: 'post-own', personaId: PERSONA }),
+      post({ id: 'post-faceless', personaId: null }),
+    ];
+    const { items } = compute({ posts, query: query({ personaId: METRICS_NONE }) });
+    expect(items.map((item) => item.postId)).toEqual(['post-faceless']);
+  });
+
+  it('hides angled posts under the none angle filter, shows angle-less ones', () => {
+    expect(compute({
+      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
+      rows: [row()],
+      query: query({ angle: METRICS_NONE }),
+    }).items).toEqual([]);
+    const shown = compute({
+      posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
+      rows: [row({ scriptAngle: null })],
+      query: query({ angle: METRICS_NONE }),
+    });
+    expect(shown.items).toHaveLength(1);
+    expect(shown.items[0]).toMatchObject({ provider: 'instagram', scriptAngle: null });
+  });
+
+  it('skips non-object entries and failed entries with unknown providers or no account', () => {
+    const { items } = compute({
+      posts: [post({ outcomes: [
+        'junk',
+        null,
+        { provider: 'tiktok', accountId: 'a', status: 'failed' },
+        { provider: 'instagram', status: 'failed' },
+        { provider: 'instagram', accountId: '', status: 'failed' },
+        IG_FAILED_OUTCOME,
+      ] })],
+    });
+    // Only the well-formed Instagram failure survives, once.
+    expect(items).toEqual([expect.objectContaining({
+      provider: 'instagram', accountId: 'ig1', externalId: null, reason: 'publish-failed',
+    })]);
+  });
+
+  it('does not list failed publishes filtered out by provider or account', () => {
+    const failed = post({ outcomes: [IG_FAILED_OUTCOME] });
+    expect(compute({ posts: [failed], query: query({ provider: 'youtube' }) }).items).toEqual([]);
+    expect(compute({ posts: [failed], query: query({ accountId: 'other' }) }).items).toEqual([]);
+  });
+
   it('skips targets that already have a snapshot row', () => {
     const { items } = compute({ rows: [row()] });
     expect(items).toEqual([]);
@@ -228,6 +357,14 @@ function fakeClient(tables: Record<string, { data: unknown; error: unknown }>) {
 }
 
 describe('fetchCoverage', () => {
+  function postRecord(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: 'post-1', schedule_id: 'sched-1', user_id: 'user-1', status: 'published',
+      published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME],
+      ...overrides,
+    };
+  }
+
   it('reads the user posts, their personas, the done marks and the window rows', async () => {
     const { client, calls, from } = fakeClient({
       scheduled_posts: {
@@ -275,6 +412,35 @@ describe('fetchCoverage', () => {
     expect(items[0]?.personaId).toBeNull();
   });
 
+  it('drops out-of-scope personas when the caller passes a persona scope', async () => {
+    const { client } = fakeClient({
+      scheduled_posts: {
+        data: [
+          {
+            id: 'post-own', schedule_id: 'sched-own', user_id: 'user-1', status: 'published',
+            published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME],
+          },
+          {
+            id: 'post-other', schedule_id: 'sched-other', user_id: 'user-1', status: 'published',
+            published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME],
+          },
+        ],
+        error: null,
+      },
+      schedules: {
+        data: [
+          { id: 'sched-own', persona_id: PERSONA },
+          { id: 'sched-other', persona_id: 'other-persona' },
+        ],
+        error: null,
+      },
+      post_metrics_done: { data: [], error: null },
+      post_metrics: { data: [], error: null },
+    });
+    const { items } = await fetchCoverage(client, 'user-1', query(), NOW, { personaIds: [PERSONA] });
+    expect(items.map((item) => item.postId)).toEqual(['post-own']);
+  });
+
   it('skips the done-marks and rows reads when the user has no posts in scope', async () => {
     const { client, from } = fakeClient({
       scheduled_posts: { data: [], error: null },
@@ -293,5 +459,219 @@ describe('fetchCoverage', () => {
       schedules: { data: [], error: null },
     });
     await expect(fetchCoverage(client, 'user-1', query(), NOW)).rejects.toThrow('coverage posts lookup failed: boom');
+  });
+
+  it('throws when the schedules read fails', async () => {
+    const { client } = fakeClient({
+      scheduled_posts: { data: [postRecord()], error: null },
+      schedules: { data: null, error: { message: 'boom' } },
+    });
+    await expect(fetchCoverage(client, 'user-1', query(), NOW)).rejects.toThrow('coverage schedules lookup failed: boom');
+  });
+
+  it('throws when the done-marks read fails', async () => {
+    const { client } = fakeClient({
+      scheduled_posts: { data: [postRecord()], error: null },
+      schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
+      post_metrics_done: { data: null, error: { message: 'boom' } },
+    });
+    await expect(fetchCoverage(client, 'user-1', query(), NOW)).rejects.toThrow('coverage done lookup failed: boom');
+  });
+
+  it('throws when the rows read fails', async () => {
+    const { client } = fakeClient({
+      scheduled_posts: { data: [postRecord()], error: null },
+      schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
+      post_metrics_done: { data: [], error: null },
+      post_metrics: { data: null, error: { message: 'boom' } },
+    });
+    await expect(fetchCoverage(client, 'user-1', query(), NOW)).rejects.toThrow('coverage rows lookup failed: boom');
+  });
+
+  it('treats non-array reads as empty', async () => {
+    const { client } = fakeClient({
+      scheduled_posts: { data: 'junk', error: null },
+      schedules: { data: [], error: null },
+    });
+    const empty = await fetchCoverage(client, 'user-1', query(), NOW);
+    expect(empty).toEqual({ items: [], truncated: false });
+
+    const noPersonas = fakeClient({
+      scheduled_posts: { data: [postRecord()], error: null },
+      schedules: { data: 'junk', error: null },
+      post_metrics_done: { data: [], error: null },
+      post_metrics: { data: [], error: null },
+    });
+    const { items: noPersonaItems } = await fetchCoverage(noPersonas.client, 'user-1', query(), NOW);
+    expect(noPersonaItems[0]?.personaId).toBeNull();
+
+    const noDone = fakeClient({
+      scheduled_posts: { data: [postRecord({ published_at: '2026-10-20T12:00:00.000Z' })], error: null },
+      schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
+      post_metrics_done: { data: 'junk', error: null },
+      post_metrics: { data: [], error: null },
+    });
+    const { items: missedItems } = await fetchCoverage(noDone.client, 'user-1', query(), NOW);
+    expect(missedItems[0]?.reason).toBe('missed');
+
+    const noRows = fakeClient({
+      scheduled_posts: { data: [postRecord()], error: null },
+      schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
+      post_metrics_done: { data: [], error: null },
+      post_metrics: { data: 'junk', error: null },
+    });
+    const { items: retryingItems } = await fetchCoverage(noRows.client, 'user-1', query(), NOW);
+    expect(retryingItems).toHaveLength(1);
+    expect(retryingItems[0]?.reason).toBe('retrying');
+  });
+
+  it('treats a non-string persona id as no persona', async () => {
+    const { client } = fakeClient({
+      scheduled_posts: { data: [postRecord()], error: null },
+      schedules: { data: [{ id: 'sched-1', persona_id: 123 }], error: null },
+      post_metrics_done: { data: [], error: null },
+      post_metrics: { data: [], error: null },
+    });
+    const { items } = await fetchCoverage(client, 'user-1', query(), NOW);
+    expect(items[0]?.personaId).toBeNull();
+  });
+
+  it('treats a non-string schedule id as no persona', async () => {
+    const { client } = fakeClient({
+      scheduled_posts: { data: [postRecord({ schedule_id: 123 })], error: null },
+      schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
+      post_metrics_done: { data: [], error: null },
+      post_metrics: { data: [], error: null },
+    });
+    const { items } = await fetchCoverage(client, 'user-1', query(), NOW);
+    expect(items[0]?.personaId).toBeNull();
+  });
+
+  it('treats non-array publish outcomes as no outcomes', async () => {
+    const { client } = fakeClient({
+      scheduled_posts: { data: [postRecord({ publish_outcomes: 'junk' })], error: null },
+      schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
+      post_metrics_done: { data: [], error: null },
+      post_metrics: { data: [], error: null },
+    });
+    const { items } = await fetchCoverage(client, 'user-1', query(), NOW);
+    expect(items).toEqual([]);
+  });
+
+  it('skips posts with a missing id or publish date, and stops when none remain', async () => {
+    const { client, from } = fakeClient({
+      scheduled_posts: {
+        data: [{
+          schedule_id: 'sched-1', user_id: 'user-1', status: 'published',
+          published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME],
+        }],
+        error: null,
+      },
+      schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
+    });
+    const { items, truncated } = await fetchCoverage(client, 'user-1', query(), NOW);
+    expect(items).toEqual([]);
+    expect(truncated).toBe(false);
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[metrics-coverage] skipped post with missing id or published_at',
+      { postId: undefined },
+    );
+    expect(from).not.toHaveBeenCalledWith('post_metrics_done');
+  });
+
+  it('reads a done mark as no-target for a closed window', async () => {
+    const { client } = fakeClient({
+      scheduled_posts: { data: [postRecord({ published_at: '2026-10-20T12:00:00.000Z' })], error: null },
+      schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
+      post_metrics_done: { data: [{ post_id: 'post-1' }, { post_id: 123 }], error: null },
+      post_metrics: { data: [], error: null },
+    });
+    const { items } = await fetchCoverage(client, 'user-1', query(), NOW);
+    expect(items).toHaveLength(1);
+    expect(items[0]?.reason).toBe('no-target');
+  });
+
+  it('skips rows with an unknown provider or a missing id, and warns', async () => {
+    const { client } = fakeClient({
+      scheduled_posts: { data: [postRecord()], error: null },
+      schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
+      post_metrics_done: { data: [], error: null },
+      post_metrics: {
+        data: [
+          { post_id: 'post-1', provider: 'tiktok', external_id: 't1', script_angle: 'myth' },
+          { post_id: 'post-1', provider: 'youtube', external_id: null, script_angle: 'myth' },
+          { post_id: 'post-1', provider: 'youtube', external_id: 'abc123', script_angle: 'myth' },
+        ],
+        error: null,
+      },
+    });
+    const { items } = await fetchCoverage(client, 'user-1', query(), NOW);
+    // The valid row collects the YouTube target; nothing is missing.
+    expect(items).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[metrics-coverage] skipped row with unknown provider or missing id',
+      { provider: 'tiktok' },
+    );
+  });
+
+  it('reads a null script angle from a collected row', async () => {
+    const { client } = fakeClient({
+      scheduled_posts: { data: [postRecord({ publish_outcomes: [YT_OUTCOME, IG_OUTCOME] })], error: null },
+      schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
+      post_metrics_done: { data: [], error: null },
+      post_metrics: { data: [{ post_id: 'post-1', provider: 'youtube', external_id: 'abc123', script_angle: null }], error: null },
+    });
+    const { items } = await fetchCoverage(client, 'user-1', query(), NOW);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ provider: 'instagram', scriptAngle: null });
+  });
+
+  it('warns when the rows read hits its cap', async () => {
+    const rows = Array.from({ length: 5000 }, (_, i) => ({
+      post_id: 'post-1', provider: 'youtube', external_id: `v${i}`, script_angle: 'myth',
+    }));
+    const { client } = fakeClient({
+      scheduled_posts: { data: [postRecord()], error: null },
+      schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
+      post_metrics_done: { data: [], error: null },
+      post_metrics: { data: rows, error: null },
+    });
+    const { items } = await fetchCoverage(client, 'user-1', query(), NOW);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ provider: 'youtube', externalId: 'abc123', reason: 'retrying' });
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[metrics-coverage] rows read hit its cap; coverage may overstate missing snapshots',
+      { userId: 'user-1', window: '24h' },
+    );
+  });
+
+  it('warns about unknown providers in publish outcomes', async () => {
+    const { client } = fakeClient({
+      scheduled_posts: {
+        data: [postRecord({ publish_outcomes: [{ provider: 'tiktok', accountId: 'a', status: 'published', postId: 'p' }] })],
+        error: null,
+      },
+      schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
+      post_metrics_done: { data: [], error: null },
+      post_metrics: { data: [], error: null },
+    });
+    const { items } = await fetchCoverage(client, 'user-1', query(), NOW);
+    expect(items).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[metrics-coverage] unknown provider in publish outcomes',
+      { provider: 'tiktok' },
+    );
+  });
+
+  it('flags truncation when more posts than the cap exist', async () => {
+    const posts = Array.from({ length: METRICS_ROW_LIMIT + 1 }, (_, i) => postRecord({ id: `post-${i}` }));
+    const { client } = fakeClient({
+      scheduled_posts: { data: posts, error: null },
+      schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
+      post_metrics_done: { data: [], error: null },
+      post_metrics: { data: [], error: null },
+    });
+    const { truncated } = await fetchCoverage(client, 'user-1', query(), NOW);
+    expect(truncated).toBe(true);
   });
 });

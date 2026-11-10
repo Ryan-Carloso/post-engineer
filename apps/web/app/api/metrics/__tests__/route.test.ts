@@ -157,6 +157,40 @@ describe('GET /api/metrics', () => {
     expect(calls).toContainEqual(['is', 'persona_id', null]);
   });
 
+  it('limits a persona-scoped API key coverage to its personas plus persona-less posts', async () => {
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: 'user-1', isApiKey: true, personaIds: [PERSONA] }, error: null,
+    } as never);
+    // Published 25h ago: the 24h window is open, so the missing targets
+    // are retrying items.
+    const publishedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    const youtube = { provider: 'youtube', accountId: 'yt', status: 'published', videoUrl: 'https://youtu.be/v2' };
+    mockQuery(
+      { data: [], error: null },
+      {
+        scheduled_posts: {
+          data: [
+            { id: 'post-own', schedule_id: 'sched-own', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube] },
+            { id: 'post-other', schedule_id: 'sched-other', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube] },
+            { id: 'post-faceless', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube] },
+          ],
+          error: null,
+        },
+        schedules: {
+          data: [
+            { id: 'sched-own', persona_id: PERSONA },
+            { id: 'sched-other', persona_id: 'other-persona' },
+          ],
+          error: null,
+        },
+        post_metrics_done: { data: [], error: null },
+        post_metrics: { data: [], error: null },
+      },
+    );
+    const body = await (await get('?window=24h')).json();
+    expect(body.coverage.map((item: { postId: string }) => item.postId).sort()).toEqual(['post-faceless', 'post-own']);
+  });
+
   it('drops malformed stored persona ids before building the scope filter', async () => {
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: 'user-1', isApiKey: true, personaIds: ['bad,id)', PERSONA] }, error: null,

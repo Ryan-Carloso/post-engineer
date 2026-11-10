@@ -45,8 +45,19 @@ vi.mock('@/components/provider-icon', () => ({
 
 import MetricsPage from '../page';
 import { usePersonasQuery, useSocialAccountsQuery } from '@/lib/api';
+import { useI18n } from '@/lib/i18n/provider';
 import { METRICS_NONE } from '@/lib/metrics/metrics-query';
 import type { CoverageItem, MetricsRowView } from '@/lib/metrics/metrics-query';
+
+// The i18n mock defaults to 'en'; a test that needs the pt-BR date branch
+// flips it and the beforeEach below flips it back.
+function setLocale(locale: 'en' | 'pt'): void {
+  vi.mocked(useI18n).mockReturnValue({
+    t: (key: string, vars?: Record<string, unknown>) => (vars === undefined ? key : `${key} ${JSON.stringify(vars)}`),
+    locale,
+    setLocale: vi.fn(),
+  } as never);
+}
 
 const PERSONA_A = '11111111-2222-4333-8444-555555555555';
 const PERSONA_B = '22222222-3333-4444-8555-666666666666';
@@ -92,6 +103,7 @@ function lastFetchUrl(fetchMock: ReturnType<typeof vi.fn>): string {
 }
 
 beforeEach(() => {
+  setLocale('en');
   vi.mocked(usePersonasQuery).mockReturnValue({
     data: [
       { id: PERSONA_A, name: 'Alpha' },
@@ -165,9 +177,10 @@ describe('MetricsPage', () => {
           postId: 'post-10', provider: 'instagram', accountId: 'ig1', externalId: null,
           reason: 'publish-failed', scriptAngle: null,
         }),
-        coverageItem({ postId: 'post-11', reason: 'pending' }),
+        // Unknown account id: the card falls back to the raw id.
+        coverageItem({ postId: 'post-11', accountId: 'unknown-acct', reason: 'pending' }),
       ],
-      coverageTruncated: false, asOf: '2026-10-21T12:00:00Z',
+      coverageTruncated: true, asOf: '2026-10-21T12:00:00Z',
     });
     renderPage();
 
@@ -178,11 +191,28 @@ describe('MetricsPage', () => {
     expect(screen.getByText('metrics.coverageReasonRetrying')).toBeInTheDocument();
     expect(screen.getByText('metrics.coverageReasonPublishFailed')).toBeInTheDocument();
     expect(screen.getByText('metrics.coverageReasonPending')).toBeInTheDocument();
+    expect(screen.getByText(/unknown-acct/)).toBeInTheDocument();
+    expect(screen.getByText(/metrics\.truncated/)).toBeInTheDocument();
     // The YouTube retrying item links the gap to the Analytics connection.
     expect(screen.getByText('metrics.coverageYoutubeHint')).toBeInTheDocument();
     // The failed publish warns the video may be live anyway.
     expect(screen.getByText('metrics.coveragePublishFailedHint')).toBeInTheDocument();
     // As-of line above the table, and the collected date on each row.
+    expect(screen.getByText(/metrics\.asOf/)).toBeInTheDocument();
+    expect(screen.getAllByText(/metrics\.tableCollected/).length).toBeGreaterThan(0);
+  });
+
+  it('formats dates in pt-BR when the locale is pt', async () => {
+    setLocale('pt');
+    stubMetricsFetch({
+      success: true, rows: [row()], truncated: false,
+      coverage: [coverageItem({ reason: 'retrying' })],
+      coverageTruncated: false, asOf: '2026-10-21T12:00:00Z',
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.coverageTitle')).toBeInTheDocument());
+    // The as-of line and the per-row collected date go through the
+    // pt-BR branch of formatDateTime/formatDate.
     expect(screen.getByText(/metrics\.asOf/)).toBeInTheDocument();
     expect(screen.getAllByText(/metrics\.tableCollected/).length).toBeGreaterThan(0);
   });
