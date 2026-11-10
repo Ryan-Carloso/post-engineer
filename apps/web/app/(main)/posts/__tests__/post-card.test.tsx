@@ -132,10 +132,10 @@ describe('PostCard status pill — the calendar vocabulary', () => {
   it('names the exact stage with the percent under the In progress pill', () => {
     renderCard({ ...FAILED_SLOT, status: 'generating', progress: 45, slotAt: '2030-06-01T10:00:00.000Z' }, true);
 
-    expect(screen.getAllByText('posts.statusGenerating')).toHaveLength(2);
+    expect(screen.getAllByText('posts.statusGenerating')).toHaveLength(1);
     expect(screen.queryByText('posts.groupInProgress')).not.toBeInTheDocument();
     expect(screen.getByText('45%')).toBeInTheDocument();
-    expect(document.querySelector('[data-card-progress-caption]')).toHaveTextContent('posts.statusGenerating');
+    expect(screen.getByText('posts.cardProgressCaption')).toBeInTheDocument();
     const bar = screen.getByRole('progressbar');
     expect(bar).toHaveAttribute('aria-valuenow', '45');
     expect(bar.className.split(/\s+/)).toContain('flex-1');

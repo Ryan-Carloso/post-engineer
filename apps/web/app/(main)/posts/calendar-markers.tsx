@@ -57,7 +57,7 @@ export const DAY_POST_TOTAL_CLASS =
 // Legend count sample: empty day-total pill (same chrome as the grid badges).
 export const LEGEND_POST_TOTAL_SWATCH_CLASS = cn(
   DAY_POST_TOTAL_CLASS,
-  'pointer-events-none box-border h-6 min-h-6 min-w-6 shrink-0 px-1.5 shadow-[0_1px_0_rgba(13,43,69,0.1)]',
+  'pointer-events-none box-border h-5 min-h-5 w-8 min-w-8 max-w-8 shrink-0 px-0 shadow-[0_1px_0_rgba(13,43,69,0.1)]',
 );
 
 // Subtle wash behind today's date numeral (selection outline stays stronger).
@@ -73,7 +73,7 @@ export const LEGEND_TODAY_BAR_SWATCH_CLASS =
 
 // Miniature selected day cell: blue outline like the grid, not a form checkbox.
 export const SELECTED_DAY_LEGEND_SWATCH_CLASS =
-  'pointer-events-none inline-flex h-11 w-10 shrink-0 items-center justify-center rounded-md bg-card outline-2 -outline-offset-[4px] outline-primary';
+  'pointer-events-none inline-flex h-[2.75rem] w-10 shrink-0 items-center justify-center rounded-md bg-transparent outline-2 -outline-offset-[4px] outline-primary';
 
 function DayCellPostTotal({
   total,
@@ -143,7 +143,8 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       data-selected-single={selectedSingle ? true : undefined}
       data-day-button
       className={cn(
-        'aspect-auto h-[4.5rem] w-full max-w-full min-w-0 flex-col items-center justify-start gap-0.5 overflow-visible px-0.5 pb-1 pt-0.5 max-xl:h-[4.75rem] sm:h-24 sm:min-h-24 sm:gap-1 sm:pb-1 sm:pt-1 xl:h-[4.25rem] xl:min-h-[4.25rem] xl:gap-0.5 xl:pb-0.5 xl:pt-0.5',
+        'aspect-auto h-[4.5rem] w-full max-w-full min-w-0 flex-col items-center justify-start overflow-visible px-0.5 pb-1 max-xl:h-[4.75rem] sm:h-24 sm:min-h-24 sm:pb-1 sm:pt-1 xl:h-[4.25rem] xl:min-h-[4.25rem] xl:gap-0.5 xl:pb-0.5',
+        isToday ? 'gap-0 pt-1.5' : 'gap-0.5 pt-0.5',
         !isOutside && '[&>span]:opacity-100',
         isOutside &&
           'text-muted-foreground hover:bg-transparent hover:text-muted-foreground active:bg-transparent data-[selected-single=true]:text-muted-foreground',
@@ -160,7 +161,8 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       <span
         data-day-number
         className={cn(
-          'z-[2] mt-1 inline-flex min-h-6 shrink-0 flex-col items-center justify-center tabular-nums',
+          'z-[2] inline-flex min-h-6 shrink-0 flex-col items-center justify-center tabular-nums',
+          isToday && slots.length > 0 ? 'mt-0.5' : 'mt-1',
           isOutside ? 'font-normal text-muted-foreground opacity-50' : 'font-semibold text-primary',
           isToday && TODAY_NUMERAL_WASH_CLASS,
           isToday && isOutside && 'opacity-100',
@@ -171,7 +173,10 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
       {slots.length > 0 && (
         <span
           aria-hidden
-          className="z-[2] mt-auto flex w-full min-w-0 items-center justify-center px-0.5 pb-0.5 pt-1"
+          className={cn(
+            'z-[2] mt-auto flex w-full min-w-0 items-center justify-center px-0.5 pb-0.5',
+            isToday ? 'pt-2' : 'pt-1',
+          )}
         >
           <DayCellPostTotal total={slots.length} groups={groups} counts={counts} selected={selectedSingle} />
         </span>

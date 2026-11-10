@@ -304,8 +304,8 @@ export const PostCard = ({
               <p className="text-xs font-semibold text-info">{t(STATUS_KEY[slot.status] ?? 'posts.groupInProgress')}</p>
             )}
             {generatingCue && (
-              <p data-card-progress-caption className="mb-1.5 text-xs font-medium text-info">
-                {t(STATUS_KEY.generating)}
+              <p data-card-progress-caption className="mb-1.5 text-xs font-medium text-muted-foreground">
+                {t('posts.cardProgressCaption')}
               </p>
             )}
             <div className={cn('flex w-full items-center gap-2', generatingCue ? 'mt-0' : 'mt-1.5')}>

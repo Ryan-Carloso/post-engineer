@@ -294,12 +294,16 @@ describe('CalendarView', () => {
     expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/40');
     expect(countSwatch?.className.split(/\s+/)).toContain('rounded-full');
     expect(countSwatch?.className.split(/\s+/)).toContain('bg-primary/12');
+    expect(countSwatch?.className.split(/\s+/)).toContain('w-8');
+    expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/40');
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
     expect(selectedSwatch).toBeEmptyDOMElement();
     const todaySwatch = legend.querySelector('[data-legend-today-bar]');
     expect(todaySwatch?.className).toMatch(/bg-warning/);
     expect(legend.querySelector('[data-legend-today-mark]')).toBeNull();
     expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-primary');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('rounded-md');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('-outline-offset-[4px]');
     expect(legend.querySelector('[data-filter-hint]')).toBeNull();
   });
 

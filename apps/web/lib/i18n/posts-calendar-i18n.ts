@@ -6,7 +6,7 @@ export const postsCalendarStrings = {
     posts: {
       subtitle:
         'Calendário de publicações de todas as contas. Selecione um dia para ver as publicações.',
-      subtitleLoadError: 'Não foi possível carregar o calendário. Os filtros estão desativados.',
+      subtitleLoadError: 'Não foi possível carregar o calendário de publicações.',
       historyTitle: 'Histórico',
       historySubtitle: 'Publicações passadas e gerações de vídeo de todas as contas.',
       calendarPrevMonth: 'Mês anterior',
@@ -57,7 +57,8 @@ export const postsCalendarStrings = {
         '{provider} não publicou porque esta conta precisa de ser reconectada. Isto é um problema da sua conta. Só você pode resolver: reconecte o {provider}.',
       cardRetry: 'Tentar de novo',
       historyPostsTitle: 'Publicações passadas',
-      loadErrorCalendar: 'Não foi possível carregar as publicações do calendário.',
+      loadErrorCalendar: 'Não foi possível carregar o calendário de publicações.',
+      cardProgressCaption: 'Progresso',
       loadErrorHistory: 'Não foi possível carregar o histórico de publicações.',
       loadErrorGenerations: 'Não foi possível carregar as gerações de vídeo.',
       loadErrorSupporting: 'Não foi possível carregar as informações das publicações.',
@@ -68,7 +69,7 @@ export const postsCalendarStrings = {
   en: {
     posts: {
       subtitle: 'Calendar of posts across all accounts. Select a day to see its posts.',
-      subtitleLoadError: 'The calendar failed to load. Filters are disabled.',
+      subtitleLoadError: 'Could not load the posts calendar.',
       historyTitle: 'History',
       historySubtitle: 'Past posts and video generations from all accounts.',
       calendarPrevMonth: 'Previous month',
@@ -118,7 +119,8 @@ export const postsCalendarStrings = {
         '{provider} did not publish because the account needs to be reconnected. This is a problem with your account. Only you can fix it: reconnect {provider}.',
       cardRetry: 'Try again',
       historyPostsTitle: 'Past posts',
-      loadErrorCalendar: 'Could not load the calendar posts.',
+      loadErrorCalendar: 'Could not load the posts calendar.',
+      cardProgressCaption: 'Progress',
       loadErrorHistory: 'Could not load the post history.',
       loadErrorGenerations: 'Could not load the video generations.',
       loadErrorSupporting: 'Could not load the post details.',

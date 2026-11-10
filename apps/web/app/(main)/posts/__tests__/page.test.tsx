@@ -56,6 +56,7 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 import PostsPage from '../page';
+import { postsCalendarStrings } from '@/lib/i18n/posts-calendar-i18n';
 import { useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range';
 import {
   useSchedulesQuery,
@@ -175,6 +176,13 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe('posts calendar load failure copy', () => {
+  it('uses the same sentence in the subtitle and the in-card alert', () => {
+    expect(postsCalendarStrings.pt.posts.subtitleLoadError).toBe(postsCalendarStrings.pt.posts.loadErrorCalendar);
+    expect(postsCalendarStrings.en.posts.subtitleLoadError).toBe(postsCalendarStrings.en.posts.loadErrorCalendar);
+  });
 });
 
 describe('PostsPage', () => {
@@ -994,7 +1002,9 @@ describe('PostsPage calendar view', () => {
     const loadError = document.querySelector('[data-calendar-load-error]');
     expect(loadError?.className.split(/\s+/)).not.toContain('min-h-[22rem]');
     expect(loadError?.className.split(/\s+/)).toContain('justify-center');
-    expect(loadError?.className).toMatch(/bg-destructive-soft/);
+    expect(loadError?.className).toMatch(/bg-warning/);
+    expect(alert.closest('.xl\\:col-span-2')).not.toBeNull();
+    expect(retry.className).toMatch(/border-input/);
   });
 
   it('hides the header refresh on a load error so only the in-card retry remains', () => {

@@ -157,13 +157,19 @@ export function LoadErrorBanner({
       )}
     >
       <p className={cn('flex gap-3 text-sm', compact ? 'items-center' : 'items-start')}>
-        <TriangleAlert className={cn('size-5 shrink-0 text-destructive', compact ? '' : 'mt-px')} aria-hidden />
+        <TriangleAlert className={cn('size-5 shrink-0 text-warning', compact ? '' : 'mt-px')} aria-hidden />
         <span className="font-semibold">{t(messageKey)}</span>
       </p>
       {noteKey !== undefined && (
         <p className={cn('text-sm text-muted-foreground', compact ? 'max-w-sm' : 'text-left')}>{t(noteKey)}</p>
       )}
-      <Button type="button" size="sm" className={compact ? 'self-center' : undefined} onClick={onRetry}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={cn('min-h-10 rounded-lg border-input bg-card font-semibold text-primary hover:bg-sunken', compact ? 'self-center' : undefined)}
+        onClick={onRetry}
+      >
         {t('posts.loadErrorRetry')}
       </Button>
     </div>
