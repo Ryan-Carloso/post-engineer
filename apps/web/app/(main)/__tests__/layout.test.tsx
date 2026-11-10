@@ -168,14 +168,21 @@ describe('app/(main)/layout — MainLayout', () => {
     }
   });
 
-  it('renders the sidebar tabs in order: Posts, History, Accounts, Personas, Metrics, API Key & MCP', () => {
+  it('renders the sidebar tabs in order: Posts, History, Accounts, Personas, Metrics, A/B Tests, API Key & MCP', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const sidebar = screen.getByTestId('nav-brand').closest('aside');
     const nav = within(sidebar as HTMLElement).getByRole('navigation');
     const titles = within(nav)
       .getAllByRole('link')
       .map((link) => link.getAttribute('title'));
-    expect(titles).toEqual(['nav.posts', 'nav.history', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.prompts']);
+    expect(titles).toEqual(['nav.posts', 'nav.history', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.experiments', 'nav.prompts']);
+  });
+
+  it('experiments tab links to /experiments', () => {
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const sidebar = screen.getByTestId('nav-brand').closest('aside');
+    const nav = within(sidebar as HTMLElement).getByRole('navigation');
+    expect(within(nav).getByTitle('nav.experiments').closest('a')).toHaveAttribute('href', '/experiments');
   });
 
   it('support link uses the shared support email, not a hardcoded copy', () => {
@@ -441,6 +448,15 @@ describe('app/(main)/layout — MainLayout', () => {
       expect(sidebar.getByTitle('nav.posts').className).not.toContain('bg-brand-soft');
     });
 
+    it('on /experiments highlights A/B Tests in the sidebar and More in the bottom bar', () => {
+      vi.mocked(usePathname).mockReturnValue('/experiments');
+      render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+      expect(within(getMobileNav()).getByRole('button', { name: 'nav.more' }).className).toContain('font-semibold');
+      const sidebar = within(screen.getByTestId('nav-brand').closest('aside') as HTMLElement);
+      expect(sidebar.getByTitle('nav.experiments').className).toContain('bg-brand-soft');
+      expect(sidebar.getByTitle('nav.metrics').className).not.toContain('bg-brand-soft');
+    });
+
     it.each([
       ['/posts/abc', '/posts'],
       ['/personas/abc', '/personas'],
@@ -515,12 +531,13 @@ describe('mobile header profile area', () => {
     expect(within(link).getByText('H')).toBeInTheDocument();
   });
 
-  it('More opens a sheet linking History, Metrics and Tokens (not the profile)', async () => {
+  it('More opens a sheet linking History, Metrics, A/B Tests and Tokens (not the profile)', async () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     fireEvent.click(screen.getByRole('button', { name: 'nav.more' }));
     const sheet = await screen.findByRole('dialog', { name: 'nav.moreTitle' });
     expect(within(sheet).getByText('nav.history').closest('a')).toHaveAttribute('href', '/posts/history');
     expect(within(sheet).getByText('nav.metrics').closest('a')).toHaveAttribute('href', '/metrics');
+    expect(within(sheet).getByText('nav.experiments').closest('a')).toHaveAttribute('href', '/experiments');
     expect(within(sheet).queryByText('nav.profile')).toBeNull();
     expect(within(sheet).getByText('nav.billing').closest('a')).toHaveAttribute('href', '/billing');
   });

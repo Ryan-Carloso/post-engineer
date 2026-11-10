@@ -13,6 +13,7 @@ import VersionBadge from '@/components/ui/version-badge';
 import AppLogo from '@/components/ui/app-logo';
 import {
   AccountsIcon,
+  BoltIcon,
   CalendarIcon,
   ChartIcon,
   CoinsIcon,
@@ -26,8 +27,8 @@ import {
 //---------------
 interface NavItem {
   href: string;
-  labelKey: 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.history' | 'nav.metrics' | 'nav.prompts' | 'nav.billing';
-  hintKey: 'nav.accountsHint' | 'nav.personaHint' | 'nav.postsHint' | 'nav.historyHint' | 'nav.metricsHint' | 'nav.promptsHint';
+  labelKey: 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.history' | 'nav.metrics' | 'nav.experiments' | 'nav.prompts' | 'nav.billing';
+  hintKey: 'nav.accountsHint' | 'nav.personaHint' | 'nav.postsHint' | 'nav.historyHint' | 'nav.metricsHint' | 'nav.experimentsHint' | 'nav.promptsHint';
   icon: () => React.JSX.Element;
 }
 
@@ -49,7 +50,7 @@ function isNavActive(href: string, pathname: string): boolean {
 }
 
 // Routes reached through the mobile "More" sheet instead of a bottom tab.
-const MORE_ROUTES = [HISTORY_HREF, '/metrics', '/billing'];
+const MORE_ROUTES = [HISTORY_HREF, '/metrics', '/experiments', '/billing'];
 
 //---------------
 // AppShell — authenticated shell with Arc-browser-style fixed sidebar.
@@ -86,6 +87,7 @@ const MainSidebar = () => {
     { href: '/accounts', labelKey: 'nav.accounts', hintKey: 'nav.accountsHint', icon: AccountsIcon },
     { href: '/personas', labelKey: 'nav.persona', hintKey: 'nav.personaHint', icon: SparklesIcon },
     { href: '/metrics', labelKey: 'nav.metrics', hintKey: 'nav.metricsHint', icon: ChartIcon },
+    { href: '/experiments', labelKey: 'nav.experiments', hintKey: 'nav.experimentsHint', icon: BoltIcon },
     { href: '/recipes', labelKey: 'nav.prompts', hintKey: 'nav.promptsHint', icon: KeyIcon },
   ];
 
@@ -194,6 +196,7 @@ const MobileNavigation = () => {
   const moreLinks: Array<{ href: string; labelKey: NavItem['labelKey']; icon: () => React.JSX.Element }> = [
     { href: HISTORY_HREF, labelKey: 'nav.history', icon: HistoryIcon },
     { href: '/metrics', labelKey: 'nav.metrics', icon: ChartIcon },
+    { href: '/experiments', labelKey: 'nav.experiments', icon: BoltIcon },
     { href: '/billing', labelKey: 'nav.billing', icon: CoinsIcon },
   ];
   const moreActive = MORE_ROUTES.some((route) => onRoute(route, pathname));

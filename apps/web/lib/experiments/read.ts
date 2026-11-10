@@ -11,7 +11,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { computeExperimentResults, type ExperimentResults } from './results';
+import { computeExperimentResults, type ExperimentMetricFact, type ExperimentResults } from './results';
 import type { MetricsWindow } from '@/lib/metrics/metrics-query';
 import { numericOrNull, UUID } from '@/lib/metrics/metrics-query';
 
@@ -135,10 +135,25 @@ export interface ExperimentDetail {
   truncated: boolean;
 }
 
-export async function loadExperimentResults(
+//---------------
+// ExperimentFacts — the raw rows behind a detail read: the snapshot
+// metric facts per post/provider. loadExperimentResults computes the
+// paired results from these; the live read (lib/experiments/live.ts)
+// swaps snapshot facts for freshly fetched provider counters and
+// recomputes from the same facts, so both paths share one loader.
+//---------------
+export interface ExperimentFacts {
+  experiment: ExperimentView;
+  window: MetricsWindow;
+  videos: ExperimentVideoView[];
+  metrics: ExperimentMetricFact[];
+  truncated: boolean;
+}
+
+export async function loadExperimentFacts(
   supabase: SupabaseClient,
   input: { userId: string; experimentId: string; scope: readonly string[] | null; window: MetricsWindow },
-): Promise<ReadResult<ExperimentDetail>> {
+): Promise<ReadResult<ExperimentFacts>> {
   const { userId, experimentId } = input;
   const { data: row, error } = await supabase
     .from('experiments')
@@ -197,20 +212,64 @@ export async function loadExperimentResults(
     // numeric columns come back from PostgREST as numbers or strings.
     averageViewDurationSeconds: numericOrNull(metric.average_view_duration_seconds),
   }));
-  const [first, second] = variantViews;
   return {
     ok: true,
     value: {
       experiment: view(row, variantViews),
       window: input.window,
       videos,
+      metrics: metricFacts,
+      truncated: (slots ?? []).length > SLOT_LIMIT || (metrics ?? []).length > METRIC_ROW_LIMIT,
+    },
+  };
+}
+
+//---------------
+// loadExperimentTaskIds — the engine task id per slot of an experiment.
+// The live read needs it to fetch publish_results (the provider video
+// ids); the snapshot read never does, so it stays a separate query
+// instead of leaking task ids into the detail response.
+//---------------
+export async function loadExperimentTaskIds(
+  supabase: SupabaseClient,
+  input: { userId: string; experimentId: string },
+): Promise<Map<string, string | null> | { error: unknown }> {
+  const { data, error } = await supabase
+    .from('scheduled_posts')
+    .select('id, task_id')
+    .eq('user_id', input.userId)
+    .eq('experiment_id', input.experimentId)
+    .order('id', { ascending: true })
+    .limit(SLOT_LIMIT + 1);
+  if (error) return { error };
+  const taskIds = new Map<string, string | null>();
+  for (const row of (data ?? []).slice(0, SLOT_LIMIT)) {
+    taskIds.set(row.id, typeof row.task_id === 'string' && row.task_id !== '' ? row.task_id : null);
+  }
+  return taskIds;
+}
+
+export async function loadExperimentResults(
+  supabase: SupabaseClient,
+  input: { userId: string; experimentId: string; scope: readonly string[] | null; window: MetricsWindow },
+): Promise<ReadResult<ExperimentDetail>> {
+  const facts = await loadExperimentFacts(supabase, input);
+  if (!facts.ok) return facts;
+  const { experiment, window, videos, metrics, truncated } = facts.value;
+  const [first, second] = experiment.variants;
+  return {
+    ok: true,
+    value: {
+      experiment,
+      window,
+      videos,
       results: computeExperimentResults({
         variantIds: [first.variantId, second.variantId],
-        targetPairs: row.target_pairs,
+        targetPairs: experiment.targetPairs,
         slots: videos.map((video) => ({ postId: video.postId, variantId: video.variantId, pair: video.pair, status: video.status })),
-        metrics: metricFacts,
+        metrics,
       }),
-      truncated: (slots ?? []).length > SLOT_LIMIT || (metrics ?? []).length > METRIC_ROW_LIMIT,
+      truncated,
     },
   };
 }

@@ -132,6 +132,16 @@ describe('MetricsPage', () => {
     expect(screen.getByText('metrics.title')).toBeInTheDocument();
   });
 
+  it('links the experiments entry card to /experiments', () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    renderPage();
+    const link = screen.getByText('experiments.entryTitle').closest('a');
+    expect(link).toHaveAttribute('href', '/experiments');
+    expect(link?.className).toContain('justify-between');
+    expect(screen.getByText('experiments.entryBody')).toBeInTheDocument();
+    expect(screen.getByText('experiments.entryAction')).toBeInTheDocument();
+  });
+
   it('renders stat tiles, the chart style and the per-video rows on success', async () => {
     const rows = [
       row(),

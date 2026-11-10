@@ -7,6 +7,7 @@ import { enDictionary as baseEnDictionary } from './en';
 import { publishingAccountsStrings } from './publishing-accounts';
 import { metricsStrings } from './metrics-i18n';
 import { metricsCoverageStrings } from './metrics-coverage-i18n';
+import { experimentsStrings } from './experiments-i18n';
 import { threadsStrings } from './threads-i18n';
 import { facebookStrings } from './facebook-i18n';
 import { pinterestStrings } from './pinterest-i18n';
@@ -37,8 +38,9 @@ export const ptDictionary = {
   apiKeys: { ...basePtDictionary.apiKeys, ...publishingAccountsStrings.pt.apiKeys, ...pinterestStrings.pt.apiKeys },
   persona: { ...basePtDictionary.persona, ...publishingAccountsStrings.pt.persona, ...voiceFallbackStrings.pt.persona },
   newPost: { ...voiceFallbackStrings.pt.newPost, ...facelessMaterialStrings.pt.newPost },
-  nav: { ...basePtDictionary.nav, ...metricsStrings.pt.nav, ...promptsStrings.pt.nav },
+  nav: { ...basePtDictionary.nav, ...metricsStrings.pt.nav, ...promptsStrings.pt.nav, ...experimentsStrings.pt.nav },
   metrics: { ...metricsStrings.pt.metrics, ...metricsCoverageStrings.pt.metrics },
+  experiments: experimentsStrings.pt.experiments,
   accounts: { ...basePtDictionary.accounts, ...threadsStrings.pt.accounts, ...facebookStrings.pt.accounts, ...pinterestStrings.pt.accounts, ...rumbleStrings.pt.accounts },
   posts: { ...basePtDictionary.posts, ...facelessMaterialStrings.pt.posts, ...postsCalendarStrings.pt.posts },
   personas: { ...basePtDictionary.personas, ...facelessMaterialStrings.pt.personas },
@@ -52,8 +54,9 @@ export const enDictionary = {
   apiKeys: { ...baseEnDictionary.apiKeys, ...publishingAccountsStrings.en.apiKeys, ...pinterestStrings.en.apiKeys },
   persona: { ...baseEnDictionary.persona, ...publishingAccountsStrings.en.persona, ...voiceFallbackStrings.en.persona },
   newPost: { ...voiceFallbackStrings.en.newPost, ...facelessMaterialStrings.en.newPost },
-  nav: { ...baseEnDictionary.nav, ...metricsStrings.en.nav, ...promptsStrings.en.nav },
+  nav: { ...baseEnDictionary.nav, ...metricsStrings.en.nav, ...promptsStrings.en.nav, ...experimentsStrings.en.nav },
   metrics: { ...metricsStrings.en.metrics, ...metricsCoverageStrings.en.metrics },
+  experiments: experimentsStrings.en.experiments,
   accounts: { ...baseEnDictionary.accounts, ...threadsStrings.en.accounts, ...facebookStrings.en.accounts, ...pinterestStrings.en.accounts, ...rumbleStrings.en.accounts },
   posts: { ...baseEnDictionary.posts, ...facelessMaterialStrings.en.posts, ...postsCalendarStrings.en.posts },
   personas: { ...baseEnDictionary.personas, ...facelessMaterialStrings.en.personas },
@@ -63,6 +66,7 @@ export const enDictionary = {
 
 type PublishingAccountsKeys = typeof publishingAccountsStrings.en;
 type MetricsKeys = typeof metricsStrings.en;
+type ExperimentsKeys = typeof experimentsStrings.en;
 type MetricsCoverageKeys = typeof metricsCoverageStrings.en;
 type ThreadsKeys = typeof threadsStrings.en & typeof facebookStrings.en & typeof pinterestStrings.en & typeof rumbleStrings.en;
 type PromptsKeys = typeof promptsStrings.en;
@@ -83,6 +87,10 @@ export type Dictionary = BaseDictionary & {
 } & {
   [Section in keyof MetricsKeys]: {
     [Key in keyof MetricsKeys[Section]]: string;
+  };
+} & {
+  [Section in keyof ExperimentsKeys]: {
+    [Key in keyof ExperimentsKeys[Section]]: string;
   };
 } & {
   [Section in keyof MetricsCoverageKeys]: {
