@@ -3,18 +3,14 @@ import {
   bucketByDay,
   buildMonthGrid,
   calendarCounts,
-  calendarWeekdayShortLabels,
   countMonthPosts,
   dayKey,
   defaultDayForMonth,
-  formatCalendarMonthCaption,
   gridRange,
 } from '../calendar-days';
 import {
-  CALENDAR_GROUP_DOT,
   CALENDAR_GROUP_ICON,
   CALENDAR_GROUP_KEY,
-  CALENDAR_GROUP_MARKER,
   CALENDAR_GROUP_ORDER,
   CALENDAR_GROUP_PILL,
   STATUS_KEY,
@@ -47,22 +43,6 @@ describe('day bucketing timezone (viewer browser timezone)', () => {
     const date = new Date(2026, 0, 5, 12);
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     expect(dayKey(date)).toBe(dayKey(date, zone));
-  });
-});
-
-describe('formatCalendarMonthCaption', () => {
-  it('matches the loaded calendar month title without a connecting preposition', () => {
-    expect(formatCalendarMonthCaption(2030, 5, 'en')).toBe('June 2030');
-    expect(formatCalendarMonthCaption(2030, 5, 'pt')).toBe('junho 2030');
-    expect(formatCalendarMonthCaption(2030, 5, 'pt')).not.toMatch(/\bde\b/i);
-  });
-});
-
-describe('calendarWeekdayShortLabels', () => {
-  it('returns seven short weekday names starting on the locale first weekday', () => {
-    expect(calendarWeekdayShortLabels('en', 0)).toHaveLength(7);
-    expect(calendarWeekdayShortLabels('en', 0)[0]).toMatch(/Sun/i);
-    expect(calendarWeekdayShortLabels('en', 1)[0]).toMatch(/Mon/i);
   });
 });
 
@@ -134,21 +114,15 @@ describe('calendar vocabulary', () => {
     expect(CALENDAR_GROUP_ORDER).toEqual(['failed', 'published', 'inProgress', 'scheduled']);
   });
 
-  it('gives every group a word, an icon, a marker and a card pill', () => {
+  it('gives every group a word, an icon and a card pill', () => {
     for (const group of CALENDAR_GROUP_ORDER) {
       expect(CALENDAR_GROUP_KEY[group]).toMatch(/^posts\.group/);
       expect(CALENDAR_GROUP_ICON[group]).toBeDefined();
-      expect(CALENDAR_GROUP_MARKER[group]).not.toBe('');
       expect(CALENDAR_GROUP_PILL[group]).not.toBe('');
     }
-    // The cell marker is a solid chip. The card pill is the same hue as a
-    // soft tint, so a card does not shout the way a calendar chip does.
-    expect(CALENDAR_GROUP_MARKER.inProgress).toBe('bg-info text-white');
-    expect(CALENDAR_GROUP_DOT.scheduled).toBe('bg-muted-foreground');
-    expect(CALENDAR_GROUP_DOT.published).toBe('bg-success');
+    // The card pill is a soft tint of the status hue, so a card does not
+    // shout the way a solid chip would.
     expect(CALENDAR_GROUP_PILL.inProgress).toBe('bg-info-soft text-info');
-    expect(CALENDAR_GROUP_PILL.inProgress).not.toBe(CALENDAR_GROUP_MARKER.inProgress);
-    expect(CALENDAR_GROUP_MARKER.failed).toBe('bg-destructive text-destructive-foreground');
     expect(CALENDAR_GROUP_PILL.failed).toBe('bg-destructive-soft text-destructive');
   });
 

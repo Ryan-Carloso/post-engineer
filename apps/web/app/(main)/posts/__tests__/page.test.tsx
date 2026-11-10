@@ -290,6 +290,36 @@ describe('PostsPage', () => {
     expect(screen.queryByText('Upcoming topic')).not.toBeInTheDocument();
   });
 
+  it('shows the filter empty state, not the day empty state, when a filter empties the selected day', async () => {
+    const user = userEvent.setup();
+    // Two schedules, one per network: the June 1 post is YouTube-only, the
+    // June 5 post Instagram-only. Today (June 1) stays selected while the
+    // filter hides its post, so the month still has posts but the day has none.
+    mockQueries({
+      range: [
+        UPCOMING_SLOT,
+        { ...UPCOMING_SLOT, id: 'u2', scheduleId: 's2', slotAt: '2030-06-05T10:00:00.000Z', title: 'Second topic' },
+      ],
+      schedules: [
+        { ...SCHEDULE, id: 's1', providers: ['youtube'], youtubeAccountIds: ['ch1'], instagramAccountIds: [] },
+        { ...SCHEDULE, id: 's2', providers: ['instagram'], youtubeAccountIds: [], instagramAccountIds: ['ig1'] },
+      ],
+    });
+    render(<PostsPage />);
+    expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
+
+    const selects = screen.getAllByRole('combobox');
+    await user.selectOptions(selects[0], 'instagram');
+
+    expect(screen.queryByText('Upcoming topic')).not.toBeInTheDocument();
+    expect(screen.getByText('posts.filterMonthEmptyTitle')).toBeInTheDocument();
+    // The filter bar has its own clear button; scope to the day section to
+    // prove the empty state itself offers to clear the filters.
+    const daySection = screen.getByText('posts.filterMonthEmptyTitle').closest('section');
+    expect(within(daySection as HTMLElement).getByRole('button', { name: 'posts.clearFilters' })).toBeInTheDocument();
+    expect(screen.queryByText('posts.calendarDayNone')).not.toBeInTheDocument();
+  });
+
   it('marks an applied filter and clears every filter with one action', async () => {
     const user = userEvent.setup();
     render(<PostsPage />);

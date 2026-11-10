@@ -86,7 +86,7 @@ const PostThumb = ({ src }: { src: string }) => (
     <AspectRatio ratio={1} className="w-18 overflow-hidden rounded-[9px] bg-sunken">
       <video src={`${src}#t=0.1`} preload="metadata" muted playsInline className="size-full object-cover" />
     </AspectRatio>
-    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-ink/10">
+    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-scrim/10">
       <Play className="size-4 fill-primary text-primary drop-shadow-md" />
     </span>
   </div>

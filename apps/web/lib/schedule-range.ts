@@ -44,13 +44,15 @@ export function useScheduleRangeQuery(monthKey: string, from: string, to: string
 // Whether the account has any post at all, in any month: one row of the
 // upcoming/recent read (GET /api/schedule/status?limit=1). The calendar
 // asks only when the month it opens on is empty, to tell "no posts this
-// month" from "no posts yet".
+// month" from "no posts yet". The route's `hasAnyPost` answers it
+// directly — the lists alone cannot, because a past pending/ready slot
+// (or a publishing slot without a user notice) is in neither list.
 export function useHasAnyPostQuery(enabled: boolean) {
   return useQuery<boolean>({
     queryKey: ['fill-schedule-has-any-post'],
     queryFn: async () => {
-      const { upcoming, recent } = await fetchScheduleStatus(1);
-      return upcoming.length > 0 || recent.length > 0;
+      const { hasAnyPost } = await fetchScheduleStatus(1);
+      return hasAnyPost;
     },
     enabled,
     staleTime: 60_000,

@@ -25,7 +25,7 @@ import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-j
 
 //---------------
 // PostsPage — month calendar of every post (past and upcoming) across all
-// connected accounts. Read-only: the visible 6-week grid is one from/to
+// connected accounts. Read-only: the visible month grid is one from/to
 // range read of GET /api/schedule/status. Selecting a day lists its posts
 // beside the calendar on wide screens (so they show without scrolling) and
 // below it otherwise; today is selected on open. Past posts and video
@@ -124,8 +124,10 @@ export default function PostsPage() {
     new Date(cursor.year, cursor.month, 1),
   );
   // The panel is scoped like its content: a month without posts is named
-  // as a month, a day of a month with posts as that day.
-  const emptyReason = !monthIsEmpty ? 'day' : filters.hasActiveFilter ? 'filter' : 'month';
+  // as a month, a day of a month with posts as that day. A filter that
+  // empties the selected day is a filter empty state even when the month
+  // still has posts — the clear-filters action is the way out.
+  const emptyReason = filters.hasActiveFilter ? 'filter' : !monthIsEmpty ? 'day' : 'month';
   // Only the weeks the month spans, like the calendar itself.
   const monthWeeks = gridDays.filter((week) => week.some((day) => day.inMonth)).length;
 

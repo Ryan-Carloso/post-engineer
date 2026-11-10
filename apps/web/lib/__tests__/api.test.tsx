@@ -898,4 +898,30 @@ describe('api', () => {
       faceQuality: null,
     });
   });
+
+  describe('fetchScheduleStatus', () => {
+    it('trusts the route hasAnyPost field when both lists are empty (stale slots)', async () => {
+      // A past pending slot is in neither list, so the lists alone would
+      // read the account as never-posted.
+      vi.mocked(fetch).mockResolvedValueOnce(
+        jsonResponse({ success: true, upcoming: [], recent: [], hasAnyPost: true }),
+      );
+      const { fetchScheduleStatus } = await import('@/lib/api');
+      const result = await fetchScheduleStatus(1);
+
+      expect(fetch).toHaveBeenCalledWith('/api/schedule/status?limit=1');
+      expect(result.hasAnyPost).toBe(true);
+    });
+
+    it('falls back to the lists when the field is absent', async () => {
+      const { fetchScheduleStatus } = await import('@/lib/api');
+      const slot = { id: 'u1', schedule_id: 's1', slot_at: '2030-06-01T10:00:00.000Z', status: 'awaiting', title: 'T' };
+
+      vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ success: true, upcoming: [slot], recent: [] }));
+      expect((await fetchScheduleStatus(1)).hasAnyPost).toBe(true);
+
+      vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ success: true, upcoming: [], recent: [] }));
+      expect((await fetchScheduleStatus(1)).hasAnyPost).toBe(false);
+    });
+  });
 });

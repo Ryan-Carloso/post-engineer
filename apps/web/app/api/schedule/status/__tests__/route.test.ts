@@ -68,7 +68,7 @@ describe('parseLimit', () => {
 
 const USER_ID = 'user-1';
 
-function mockPostsClient(upcoming: unknown[], recent: unknown[], queue: unknown[] = []) {
+function mockPostsClient(upcoming: unknown[], recent: unknown[], queue: unknown[] = [], any?: unknown[]) {
   let limitCalls = 0;
   const chain = {
     select: vi.fn().mockReturnThis(),
@@ -77,10 +77,22 @@ function mockPostsClient(upcoming: unknown[], recent: unknown[], queue: unknown[
     contains: vi.fn().mockReturnThis(),
     gte: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
-    // Upcoming, recent, then the publishing-with-notice query (empty here).
+    // Upcoming, recent, then the publishing-with-notice query (empty here),
+    // then the has-any-post existence row: a post exists whenever any list
+    // has one, unless the test overrides it.
     limit: vi.fn(async () => {
       const call = limitCalls++;
-      return { data: call === 0 ? upcoming : call === 1 ? recent : [], error: null };
+      return {
+        data:
+          call === 0
+            ? upcoming
+            : call === 1
+              ? recent
+              : call === 3
+                ? (any ?? (upcoming.length > 0 || recent.length > 0 ? [{ id: 'any-1' }] : []))
+                : [],
+        error: null,
+      };
     }),
     // The queue-positions query is awaited without .limit() (the real
     // Supabase chain is thenable); it resolves the queue fixture.
@@ -104,7 +116,7 @@ function mockAuthSession(auth: unknown, error: unknown) {
 // must stay visible to a scoped key. The mock therefore resolves rows
 // carrying `persona_id`, not bare ids — pass the rows, not the ids.
 //---------------
-function mockScopedPostsClient(schedules: Array<{ id: string; persona_id: string | null }>, upcoming: unknown[], recent: unknown[], queue: unknown[] = []) {
+function mockScopedPostsClient(schedules: Array<{ id: string; persona_id: string | null }>, upcoming: unknown[], recent: unknown[], queue: unknown[] = [], any?: unknown[]) {
   let limitCalls = 0;
   const postsChain = {
     select: vi.fn().mockReturnThis(),
@@ -113,10 +125,22 @@ function mockScopedPostsClient(schedules: Array<{ id: string; persona_id: string
     contains: vi.fn().mockReturnThis(),
     gte: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
-    // Upcoming, recent, then the publishing-with-notice query (empty here).
+    // Upcoming, recent, then the publishing-with-notice query (empty here),
+    // then the has-any-post existence row: a post exists whenever any list
+    // has one, unless the test overrides it.
     limit: vi.fn(async () => {
       const call = limitCalls++;
-      return { data: call === 0 ? upcoming : call === 1 ? recent : [], error: null };
+      return {
+        data:
+          call === 0
+            ? upcoming
+            : call === 1
+              ? recent
+              : call === 3
+                ? (any ?? (upcoming.length > 0 || recent.length > 0 ? [{ id: 'any-1' }] : []))
+                : [],
+        error: null,
+      };
     }),
     // Thenable like the real Supabase chain: the queue-positions query is
     // awaited without .limit().
@@ -171,6 +195,7 @@ describe('GET auth', () => {
         queueTotal: null,
         retryable: null,
       })),
+      hasAnyPost: true,
     });
   });
 
@@ -205,6 +230,7 @@ describe('GET auth', () => {
         queueTotal: null,
         retryable: null,
       })),
+      hasAnyPost: true,
     });
   });
 
@@ -252,6 +278,7 @@ describe('GET auth', () => {
         queueTotal: null,
         retryable: null,
       })),
+      hasAnyPost: true,
     });
   });
 
@@ -301,6 +328,7 @@ describe('GET auth', () => {
         queueTotal: null,
         retryable: null,
       })),
+      hasAnyPost: true,
     });
   });
 
@@ -350,7 +378,7 @@ describe('GET auth', () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ success: true, upcoming: [], recent: [] });
+    expect(body).toEqual({ success: true, upcoming: [], recent: [], hasAnyPost: false });
   });
 
   it('returns empty lists for a scoped key with no allowed schedules', async () => {
@@ -365,8 +393,41 @@ describe('GET auth', () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ success: true, upcoming: [], recent: [] });
+    expect(body).toEqual({ success: true, upcoming: [], recent: [], hasAnyPost: false });
     expect(client.from).not.toHaveBeenCalledWith('scheduled_posts');
+  });
+});
+
+describe('hasAnyPost', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('is true when the only posts are stale past pending slots invisible to upcoming/recent', async () => {
+    // A past pending slot is in neither list: upcoming needs slot_at >= now
+    // and recent needs published/failed. The existence row still sees it,
+    // so the calendar must not read the account as never-posted.
+    const client = mockPostsClient([], [], [], [{ id: 'stale-1' }]);
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/status?limit=1'));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({ success: true, upcoming: [], recent: [], hasAnyPost: true });
+  });
+
+  it('is false when the account has no posts at all', async () => {
+    const client = mockPostsClient([], []);
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/status?limit=1'));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({ success: true, upcoming: [], recent: [], hasAnyPost: false });
   });
 });
 
@@ -870,15 +931,16 @@ describe('GET query contracts', () => {
     return calls.filter(([column]) => column === 'schedule_id');
   }
 
-  it('queries scheduled_posts four times, each scoped by the caller user id', async () => {
+  it('queries scheduled_posts five times, each scoped by the caller user id', async () => {
     const client = await getWithLimit(null);
     const fromCalls: unknown[][] = client.from.mock.calls;
-    expect(fromCalls).toHaveLength(4);
+    expect(fromCalls).toHaveLength(5);
     expect(fromCalls.every(([table]) => table === 'scheduled_posts')).toBe(true);
-    // Every query (upcoming, recent, queue) scopes by user id — a single
-    // mutated .eq must not hide behind the other two queries' calls.
+    // Every query (upcoming, recent, publishing, queue, existence) scopes
+    // by user id — a single mutated .eq must not hide behind the other
+    // queries' calls.
     const eqCalls: unknown[][] = client.chain.eq.mock.calls;
-    expect(eqCalls).toHaveLength(4);
+    expect(eqCalls).toHaveLength(5);
     expect(eqCalls.every(([column, value]) => column === 'user_id' && value === USER_ID)).toBe(true);
   });
 
@@ -926,12 +988,13 @@ describe('GET query contracts', () => {
     expect(client.chain.gte).toHaveBeenCalledWith('slot_at', expect.any(String));
   });
 
-  it('applies the parsed limit to both paginated queries', async () => {
+  it('applies the parsed limit to the paginated lists, and 1 to the existence row', async () => {
     const client = await getWithLimit('5');
-    expect(client.chain.limit).toHaveBeenCalledTimes(3);
+    expect(client.chain.limit).toHaveBeenCalledTimes(4);
     expect(client.chain.limit).toHaveBeenNthCalledWith(1, 5);
     expect(client.chain.limit).toHaveBeenNthCalledWith(2, 5);
     expect(client.chain.limit).toHaveBeenNthCalledWith(3, 5);
+    expect(client.chain.limit).toHaveBeenNthCalledWith(4, 1);
   });
 
   it('does not filter by schedule id for unscoped callers', async () => {
@@ -948,8 +1011,8 @@ describe('GET query contracts', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     const response = await GET(new Request('https://example.com/api/schedule/status'));
     expect(response.status).toBe(200);
-    // Upcoming, recent, publishing, and the queue query carry the filter.
-    expect(scheduleIdFilters(client.postsChain)).toHaveLength(4);
+    // Upcoming, recent, publishing, the queue query, and the existence row carry the filter.
+    expect(scheduleIdFilters(client.postsChain)).toHaveLength(5);
     expect(client.schedulesChain.select).toHaveBeenCalledWith('id, persona_id');
   });
 
@@ -1232,7 +1295,7 @@ describe('GET failure handling', () => {
     const { response, client } = await getScopedWithScheduleResult({ data: null, error: null });
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ success: true, upcoming: [], recent: [] });
+    expect(body).toEqual({ success: true, upcoming: [], recent: [], hasAnyPost: false });
     expect(client.from).not.toHaveBeenCalledWith('scheduled_posts');
   });
 
@@ -1256,7 +1319,7 @@ describe('GET failure handling', () => {
     // Null data degrades to empty lists — never a crash, never garbage rows.
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ success: true, upcoming: [], recent: [] });
+    expect(body).toEqual({ success: true, upcoming: [], recent: [], hasAnyPost: false });
   });
 
   it('treats a scoped key with no personas as no allowed schedules', async () => {
@@ -1275,7 +1338,7 @@ describe('GET failure handling', () => {
     // them in memory, so there is no query arg left to assert; the outcome
     // is that no post query runs at all.
     const body = await response.json();
-    expect(body).toEqual({ success: true, upcoming: [], recent: [] });
+    expect(body).toEqual({ success: true, upcoming: [], recent: [], hasAnyPost: false });
     expect(client.from).not.toHaveBeenCalledWith('scheduled_posts');
   });
 });

@@ -642,6 +642,9 @@ interface ScheduleStatusPayload {
   success: boolean;
   upcoming?: SlotRow[];
   recent?: SlotRow[];
+  // Whether the account has any post at all, in any month: the lists
+  // cannot answer it (a stale past pending/ready slot is in neither).
+  hasAnyPost?: boolean;
 }
 
 export function mapSlot(row: SlotRow): ScheduledSlot {
@@ -664,14 +667,23 @@ export function mapSlot(row: SlotRow): ScheduledSlot {
   };
 }
 
-export async function fetchScheduleStatus(limit?: number): Promise<{ upcoming: ScheduledSlot[]; recent: ScheduledSlot[] }> {
+export async function fetchScheduleStatus(limit?: number): Promise<{
+  upcoming: ScheduledSlot[];
+  recent: ScheduledSlot[];
+  hasAnyPost: boolean;
+}> {
   const url = typeof limit === 'number' ? `/api/schedule/status?limit=${limit}` : '/api/schedule/status';
   const response = await fetch(url);
   const data: ScheduleStatusPayload | null = await response.json().catch(() => null);
   if (!response.ok || !data?.success) throw new HttpStatusError('Failed to fetch schedule status', response.status);
+  const upcoming = (data.upcoming ?? []).map(mapSlot);
+  const recent = (data.recent ?? []).map(mapSlot);
   return {
-    upcoming: (data.upcoming ?? []).map(mapSlot),
-    recent: (data.recent ?? []).map(mapSlot),
+    upcoming,
+    recent,
+    // The route answers "any post at all" directly; responses from before
+    // the field existed fall back to the lists (which miss stale slots).
+    hasAnyPost: data.hasAnyPost ?? (upcoming.length > 0 || recent.length > 0),
   };
 }
 
