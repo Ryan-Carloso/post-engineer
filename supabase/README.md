@@ -59,6 +59,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 051 | `migrations/051_scheduled_posts_publish_outcomes.sql` | `scheduled_posts.publish_outcomes` (jsonb, default `[]`): one row per provider, account, and video so a restart keeps accounts that already published and retries only the rest (issue #500) |
 | 052 | `migrations/052_threespeak-provider.sql` | 3Speak (Hive) as a publishing provider: `schedules.threespeak_account_ids` (default empty) and `3speak` in both the `post_metrics.provider` and `social_accounts.provider` checks (each dropped and re-created with the full list, so a live constraint the chain no longer defines cannot survive) |
 | 053 | `migrations/053_rumble-provider.sql` | Rumble as a publishing provider: `schedules.rumble_account_ids` (default empty) and `rumble` in both the `post_metrics.provider` and `social_accounts.provider` checks (each dropped and re-created with the full list, so a live constraint the chain no longer defines cannot survive) |
+| 054 | `migrations/054_scheduled-posts-images-only-material.sql` | `scheduled_posts.faceless_material` keeps only `'images'` (issue #542): stock B-roll and SVG are deleted, stored `'broll'`/`'svg'` rows are backfilled to `'images'`, the column default moves from `'broll'` to `'images'`, and the check drops the two dead values |
 
 ## Schema snapshot
 
