@@ -462,8 +462,9 @@ describe('PostsPage', () => {
 
     render(<PostsPage />);
     // The error names the supporting data, not the calendar posts.
-    expect(screen.getByRole('alert')).toHaveTextContent('posts.loadErrorSupporting');
-    expect(screen.getByText('posts.loadErrorSideQuiet')).toBeInTheDocument();
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('posts.loadErrorSupporting');
+    expect(within(alert).getByText('posts.loadErrorSideQuiet')).toBeInTheDocument();
   });
 
   it('shows the error state when an account query fails', () => {
@@ -709,9 +710,19 @@ describe('PostsPage fallbacks', () => {
 //---------------
 describe('PostsPage calendar view', () => {
   const rangeSlots = [
-    { ...UPCOMING_SLOT, id: 'c1', slotAt: '2030-06-05T12:00:00.000Z', title: 'Calendar upcoming' },
+    {
+      ...UPCOMING_SLOT,
+      id: 'c1',
+      status: 'generating',
+      slotAt: '2030-06-05T12:00:00.000Z',
+      title: 'Calendar upcoming',
+      taskId: 'task-42',
+      progress: 42,
+      stage: 'lipsync',
+    },
     { ...PUBLISHED_SLOT, id: 'c2', slotAt: '2030-06-05T15:00:00.000Z', title: 'Calendar published' },
     { ...FAILED_SLOT, id: 'c3', slotAt: '2030-06-07T12:00:00.000Z', title: 'Calendar failed' },
+    { ...UPCOMING_SLOT, id: 'c4', slotAt: '2030-06-18T10:00:00.000Z', title: 'Future scheduled' },
   ];
 
   beforeEach(() => {
@@ -780,20 +791,19 @@ describe('PostsPage calendar view', () => {
     expect((day1 as HTMLElement).querySelector('[data-personas]')).toBeNull();
   });
 
-  it('summarizes only the groups the selected day has — no zero counts', async () => {
+  it('names only the post count under the day heading — status stays in cells and cards', async () => {
     mockQueries({ range: rangeSlots });
     const user = userEvent.setup();
     render(<PostsPage />);
 
-    // June 5 holds one awaiting and one published post.
     const day5 = within(screen.getByRole('grid'))
       .getAllByRole('button', { name: 'posts.calendarDayLabel' })
       .find((button) => button.textContent?.startsWith('5'));
     await user.click(day5 as HTMLElement);
 
-    expect(screen.getByText('posts.groupPublished: 1')).toBeInTheDocument();
-    expect(screen.getByText('posts.groupScheduled: 1')).toBeInTheDocument();
-    expect(screen.queryByText(/posts\.groupFailed:/)).not.toBeInTheDocument();
+    expect(screen.getByText('posts.calendarDayPostCountMany')).toBeInTheDocument();
+    expect(screen.queryByText(/posts\.groupPublished:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/posts\.groupScheduled:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/posts\.groupInProgress:/)).not.toBeInTheDocument();
   });
 
@@ -810,8 +820,10 @@ describe('PostsPage calendar view', () => {
     render(<PostsPage />);
 
     // The error names the calendar posts, not the supporting data.
-    expect(screen.getByRole('alert')).toHaveTextContent('posts.loadErrorCalendar');
-    expect(screen.getByText('posts.loadErrorSideQuiet')).toBeInTheDocument();
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('posts.loadErrorCalendar');
+    expect(within(alert).getByText('posts.loadErrorSideQuiet')).toBeInTheDocument();
+    expect(screen.queryByTestId('load-error-side-panel')).not.toBeInTheDocument();
   });
 
   it('clicking an outside day selects it and moves the shown month to it', async () => {

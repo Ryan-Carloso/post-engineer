@@ -390,7 +390,7 @@ describe('CalendarView', () => {
     ]);
     setup({ slotsByDay });
     for (const day of [dayButton(/June 5, 2030/), dayButton(/June 15, 2030/)]) {
-      expect(day.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-[4.25rem]', 'sm:h-24']));
+      expect(day.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-[4.5rem]', 'max-xl:h-[4.75rem]', 'sm:h-24']));
       expect(day.className.split(/\s+/)).not.toContain('h-auto');
       // The month table, not the chip text, owns the column width.
       const cell = day.parentElement;

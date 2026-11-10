@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { RANGE_MAX_SLOTS, useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range';
 import { cn } from '@/lib/utils';
-import { CalendarLegend, CalendarView } from './calendar-view';
+import { CalendarView } from './calendar-view';
 import {
   FIRST_WEEKDAY,
   INTL_TAG,
@@ -19,7 +19,7 @@ import {
   gridRange,
   monthKey,
 } from './calendar-days';
-import { AccountEmptyState, DayEmptyState, DaySummary, LoadErrorSidePanel } from './day-section';
+import { AccountEmptyState, DayEmptyState } from './day-section';
 import { CALENDAR_LAYOUT_CLASS, CalendarLoadingSkeleton } from './loading-skeleton';
 import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-joins';
 
@@ -149,19 +149,18 @@ export default function PostsPage() {
       </div>
       <p className="mt-1 text-sm text-muted-foreground">{t('posts.subtitle')}</p>
 
-      <PostFiltersBar filters={filters} disabled={isLoading || isAccountEmpty || isError} />
+      <PostFiltersBar
+        filters={filters}
+        disabled={isLoading || isAccountEmpty || isError}
+        unavailable={isError}
+      />
 
       <div className="mt-4 sm:mt-6">
         {isLoading ? (
           <CalendarLoadingSkeleton weeks={monthWeeks} />
         ) : (
-          <div className={cn('flex flex-col', CALENDAR_LAYOUT_CLASS)}>
-            <div
-              className={cn(
-                'min-w-0 xl:col-start-1 xl:row-start-1',
-                isError ? 'order-2 xl:order-0' : 'order-1',
-              )}
-            >
+          <div className={cn('flex flex-col', !isError && CALENDAR_LAYOUT_CLASS)}>
+            <div className={cn('min-w-0', !isError && 'xl:col-start-1 xl:row-start-1')}>
               {rangeQuery.data?.truncated === true && (
                 <p className="mb-3 text-xs text-muted-foreground">{t('posts.calendarTruncated', { count: RANGE_MAX_SLOTS })}</p>
               )}
@@ -188,17 +187,13 @@ export default function PostsPage() {
                 refreshing={rangeQuery.isFetching}
               />
             </div>
+            {!isError && (
             <section
               ref={daySectionRef}
               aria-live="polite"
-              className={cn(
-                'min-w-0 scroll-mt-4 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4',
-                isError ? 'order-1 mb-4 xl:order-0 xl:mb-0' : 'order-2 mt-4 max-xl:pb-24',
-              )}
+              className="order-2 mt-4 min-w-0 scroll-mt-4 max-xl:pb-24 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4"
             >
-              {isError ? (
-                <LoadErrorSidePanel />
-              ) : isAccountEmpty ? (
+              {isAccountEmpty ? (
                 <>
                   <h2 className="text-base font-bold tracking-[-0.01em] text-primary">
                     {t('posts.calendarMonthHeading', { month: monthLabel })}
@@ -209,11 +204,6 @@ export default function PostsPage() {
                 </>
               ) : (
                 <>
-                  {monthPostCount > 0 && (
-                    <div className="mb-2 xl:hidden">
-                      <CalendarLegend filtered={filters.hasActiveFilter} className="text-[11px]" />
-                    </div>
-                  )}
                   <h2 className="flex min-h-10 flex-col justify-center gap-0.5 text-base font-bold tracking-[-0.01em] text-primary">
                     {monthIsEmpty || selectedKey === null ? (
                       t('posts.calendarMonthHeading', { month: monthLabel })
@@ -230,7 +220,6 @@ export default function PostsPage() {
                       </>
                     )}
                   </h2>
-                  {!monthIsEmpty && <DaySummary slots={selectedSlots} />}
                   <div className="mt-3">
                     {selectedSlots.length === 0 ? (
                       <DayEmptyState
@@ -251,6 +240,7 @@ export default function PostsPage() {
                 </>
               )}
             </section>
+            )}
           </div>
         )}
       </div>

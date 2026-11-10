@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { ChevronRight, Play, TriangleAlert } from 'lucide-react';
 import type { ScheduledSlot, ScheduleConfig, VideoGeneration } from '@/lib/api';
@@ -83,13 +83,32 @@ const PostThumb = ({ src }: { src: string }) => (
   </div>
 );
 
+const PostNoPreviewTile = ({ noPreviewLabel }: { noPreviewLabel: string }) => (
+  <AspectRatio ratio={1} className="flex w-18 items-center justify-center rounded-[9px] border border-dashed border-line bg-sunken/60">
+    <span className="px-1 text-center text-[10px] leading-tight font-medium text-muted-foreground">{noPreviewLabel}</span>
+  </AspectRatio>
+);
+
 const PostMediaTile = ({ src, noPreviewLabel }: { src: string | null; noPreviewLabel: string }) => {
-  if (src !== null) return <PostThumb src={src} />;
-  return (
-    <AspectRatio ratio={1} className="flex w-18 items-center justify-center rounded-[9px] border border-dashed border-line bg-sunken/60">
-      <span className="px-1 text-center text-[10px] leading-tight font-medium text-muted-foreground">{noPreviewLabel}</span>
-    </AspectRatio>
-  );
+  const [previewReady, setPreviewReady] = useState(false);
+  if (src === null) return <PostNoPreviewTile noPreviewLabel={noPreviewLabel} />;
+  if (!previewReady) {
+    return (
+      <>
+        <video
+          className="hidden"
+          src={`${src}#t=0.1`}
+          preload="metadata"
+          muted
+          playsInline
+          onLoadedData={() => setPreviewReady(true)}
+          onError={() => setPreviewReady(false)}
+        />
+        <PostNoPreviewTile noPreviewLabel={noPreviewLabel} />
+      </>
+    );
+  }
+  return <PostThumb src={src} />;
 };
 
 const StatusBadge = ({ status, label, style }: { status: string; label: string; style: string }) => {
@@ -105,15 +124,17 @@ const StatusBadge = ({ status, label, style }: { status: string; label: string; 
 // Status badge left, when right, on one line: neither side wraps. The
 // chevron says the card opens the post detail.
 const CardHeader = ({ badge, when, showChevron = true }: { badge: ReactNode; when: string; showChevron?: boolean }) => (
-  <div className="flex items-center gap-2">
+  <div data-card-header className="relative flex w-full items-center gap-2 pr-6">
     {badge}
     <p className="min-w-0 flex-1 text-right text-[13px] whitespace-nowrap text-ink-soft tabular-nums">
-      <span className="truncate">{when}</span>
+      <span data-card-when className="truncate">
+        {when}
+      </span>
     </p>
     {showChevron && (
       <ChevronRight
         data-card-chevron
-        className="size-4 shrink-0 text-muted-text transition-transform group-hover/card:translate-x-0.5"
+        className="absolute top-1/2 right-0 size-4 shrink-0 -translate-y-1/2 text-muted-text transition-transform group-hover/card:translate-x-0.5"
         aria-hidden
       />
     )}

@@ -283,7 +283,7 @@ export function CalendarView({
             </div>
           )}
           {legendVisible && !unavailable && (
-            <div className={cn('mb-2 hidden border-b border-line pb-2 xl:block', legendClassName)}>
+            <div className={cn('mb-2 border-b border-line pb-2', legendClassName)}>
               <CalendarLegend filtered={filtered} />
             </div>
           )}
@@ -337,8 +337,16 @@ export function CalendarView({
           />
           </div>
           {unavailable && loadErrorMessageKey !== undefined && onLoadErrorRetry !== undefined && (
-            <div data-calendar-load-error className="px-1 pt-2">
-              <LoadErrorBanner compact messageKey={loadErrorMessageKey} onRetry={onLoadErrorRetry} />
+            <div
+              data-calendar-load-error
+              className="mt-2 rounded-lg border border-dashed border-line bg-sunken/40 px-2 py-6 sm:px-4"
+            >
+              <LoadErrorBanner
+                compact
+                messageKey={loadErrorMessageKey}
+                noteKey="posts.loadErrorSideQuiet"
+                onRetry={onLoadErrorRetry}
+              />
             </div>
           )}
         </NavTodayContext.Provider>

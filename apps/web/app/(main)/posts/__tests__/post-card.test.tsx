@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import type { ScheduledSlot } from '@/lib/api';
 
 //---------------
@@ -146,9 +146,17 @@ describe('PostCard header and media', () => {
     expect(screen.getByText(/^\d{1,2}:\d{2}/)).toBeInTheDocument();
   });
 
-  it('shows the video thumbnail for a published post with a video, and no tile without one', () => {
+  it('shows the video thumbnail only after the preview loads, and no play tile before that', async () => {
     renderCard({ ...FAILED_SLOT, status: 'published', taskId: 'task-1', publishedAt: '2030-06-01T10:05:00.000Z' });
-    expect(document.querySelector('video')).toHaveAttribute('src', '/api/persona/video-download/task-1/final-1.mp4#t=0.1');
+    const probe = document.querySelector('video');
+    expect(probe).toHaveAttribute('src', '/api/persona/video-download/task-1/final-1.mp4#t=0.1');
+    const link = screen.getByRole('link', { name: 'posts.cardOpenDetail' });
+    expect(link.querySelector('.border-dashed')).not.toBeNull();
+    probe?.dispatchEvent(new Event('loadeddata'));
+    await waitFor(() => {
+      expect(link.querySelector('.border-dashed')).toBeNull();
+    });
+    expect(link.querySelector('[data-card-chevron]')).not.toBeNull();
   });
 
   it('draws a quiet media placeholder when the post has no video yet', () => {
@@ -181,5 +189,14 @@ describe('PostCard header and media', () => {
   const title = screen.getByText('Calendar published');
     expect(title.className.split(/\s+/)).not.toContain('underline');
     expect(document.querySelector('[data-card-chevron]')).not.toBeNull();
+  });
+
+  it('keeps the header chevron separated from the timestamp', () => {
+    renderCard({ ...FAILED_SLOT, status: 'published', title: 'Calendar published', publishedAt: '2030-06-01T10:05:00.000Z' }, true);
+    const header = screen.getByRole('link', { name: 'posts.cardOpenDetail' }).querySelector('[data-card-header]');
+    expect(header).not.toBeNull();
+    expect(header?.querySelector('[data-card-when]')?.textContent).toMatch(/\d{1,2}:\d{2}/);
+    const chevron = header?.querySelector('[data-card-chevron]');
+    expect(chevron?.getAttribute('class') ?? '').toContain('absolute');
   });
 });

@@ -214,23 +214,42 @@ const SELECT_CLASS = 'h-10 w-full truncate rounded-xl border border-input bg-car
 const SELECT_ACTIVE_CLASS = 'border-primary bg-info-soft ring-1 ring-primary';
 const LABEL_CLASS = 'flex min-w-0 flex-col gap-1 text-xs font-semibold text-muted-foreground';
 
-export function PostFiltersBar({ filters, disabled = false }: { filters: PostFilters; disabled?: boolean }) {
+export function PostFiltersBar({
+  filters,
+  disabled = false,
+  unavailable = false,
+}: {
+  filters: PostFilters;
+  disabled?: boolean;
+  unavailable?: boolean;
+}) {
   const { t } = useI18n();
+  const inert = disabled || unavailable;
   return (
     // Side by side on a phone too (two columns), so the filters take one
     // row above the calendar instead of two. "Clear filters" shows only
     // while a filter is applied.
-    <div className="mt-3 grid grid-cols-2 gap-3 sm:mt-4 sm:flex sm:flex-wrap sm:items-end">
+    <div
+      className={cn(
+        'mt-3 grid grid-cols-2 gap-3 sm:mt-4 sm:flex sm:flex-wrap sm:items-end',
+        unavailable && 'pointer-events-none',
+      )}
+      aria-disabled={unavailable ? true : undefined}
+    >
       <label className={LABEL_CLASS}>
         {t('posts.filterProvider')}
         <select
           value={filters.provider}
-          disabled={disabled}
+          disabled={inert}
           onChange={(event) => {
             const next = PROVIDERS.find((item) => item === event.target.value) ?? 'all';
             filters.setProvider(next);
           }}
-          className={cn(SELECT_CLASS, filters.provider !== 'all' && SELECT_ACTIVE_CLASS, disabled && 'cursor-not-allowed opacity-60')}
+          className={cn(
+            SELECT_CLASS,
+            filters.provider !== 'all' && !unavailable && SELECT_ACTIVE_CLASS,
+            inert && 'cursor-not-allowed border-line bg-sunken/80 text-muted-foreground opacity-70',
+          )}
         >
           <option value="all">{t('posts.allProviders')}</option>
           {PROVIDERS.map((item) => (
@@ -244,9 +263,13 @@ export function PostFiltersBar({ filters, disabled = false }: { filters: PostFil
         {t('posts.filterAccount')}
         <select
           value={filters.account}
-          disabled={disabled}
+          disabled={inert}
           onChange={(event) => filters.setAccount(event.target.value)}
-          className={cn(SELECT_CLASS, filters.account !== 'all' && SELECT_ACTIVE_CLASS, disabled && 'cursor-not-allowed opacity-60')}
+          className={cn(
+            SELECT_CLASS,
+            filters.account !== 'all' && !unavailable && SELECT_ACTIVE_CLASS,
+            inert && 'cursor-not-allowed border-line bg-sunken/80 text-muted-foreground opacity-70',
+          )}
         >
           <option value="all">{t('posts.allAccounts')}</option>
           {filters.visibleAccounts.map((item) => (

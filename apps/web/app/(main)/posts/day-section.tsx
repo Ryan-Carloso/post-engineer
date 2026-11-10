@@ -3,14 +3,10 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { CalendarPlus, CalendarX2, Filter, FilterX, TriangleAlert, type LucideIcon } from 'lucide-react';
-import type { ScheduledSlot } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { calendarCounts } from './calendar-days';
-import { StatusMarker } from './calendar-markers';
-import { CALENDAR_GROUP_KEY, CALENDAR_GROUP_ORDER } from './status';
 
 //---------------
 // The posts calendar's states around the grid: the summary of the selected
@@ -132,51 +128,14 @@ export function DayEmptyState({
   );
 }
 
-// The selected day's counts, failure first, as plain text with the
-// calendar's markers — only the groups the day actually has, and nothing
-// for an empty day. Not chips: they are not filters.
-export function DaySummary({ slots }: { slots: Pick<ScheduledSlot, 'status'>[] }) {
-  const { t } = useI18n();
-  const counts = calendarCounts(slots);
-  const groups = CALENDAR_GROUP_ORDER.filter((group) => counts[group] > 0);
-  if (groups.length === 0) return null;
-  return (
-    // Icon and count only, so three or four groups stay on one line in the
-    // side column. The words stay in the accessible name (and the marker
-    // title) and match the legend.
-    <ul className="mt-1.5 flex max-w-full flex-nowrap items-center gap-x-2 text-xs text-muted-foreground">
-      {groups.map((group) => (
-        <li key={group} className="flex shrink-0 items-center gap-1">
-          <StatusMarker group={group} count={counts[group]} />
-          <span className="sr-only">
-            {t(CALENDAR_GROUP_KEY[group])}: {counts[group]}
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-// The load error inside the calendar card. The page header refresh is hidden
-// while the calendar cannot load, so this is the only retry control.
-// Side column on load error: one short line — the calendar card owns the alert + retry.
-export function LoadErrorSidePanel() {
-  const { t } = useI18n();
-  return (
-    <div className="rounded-xl border border-line bg-card p-4">
-      <p role="status" className="text-left text-sm text-muted-foreground">
-        {t('posts.loadErrorSideQuiet')}
-      </p>
-    </div>
-  );
-}
-
 export function LoadErrorBanner({
   messageKey,
+  noteKey,
   onRetry,
   compact = false,
 }: {
   messageKey: TranslationKey;
+  noteKey?: TranslationKey;
   onRetry: () => void;
   compact?: boolean;
 }) {
@@ -193,6 +152,9 @@ export function LoadErrorBanner({
         <TriangleAlert className={cn('size-5 shrink-0 text-destructive', compact ? '' : 'mt-px')} aria-hidden />
         <span className="font-semibold">{t(messageKey)}</span>
       </p>
+      {noteKey !== undefined && (
+        <p className={cn('text-sm text-muted-foreground', compact ? 'max-w-sm' : 'text-left')}>{t(noteKey)}</p>
+      )}
       <Button type="button" size="sm" className={compact ? 'self-center' : undefined} onClick={onRetry}>
         {t('posts.loadErrorRetry')}
       </Button>
