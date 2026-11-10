@@ -10,6 +10,7 @@ except ImportError:
 from loguru import logger
 
 from app.config import config
+from app.services import subtitle_cues
 from app.utils import utils
 
 model_size = config.whisper.get("model_size", "large-v3")
@@ -271,7 +272,7 @@ def correct(subtitle_file, video_script):
     """
     subtitle_items = file_to_subtitles(subtitle_file)
     normalized_script = utils.normalize_script_for_subtitle_matching(video_script)
-    script_lines = [line.strip() for line in utils.split_string_by_punctuations(normalized_script) if line.strip()]
+    script_lines = [line.strip() for line in subtitle_cues.split_script_lines(normalized_script) if line.strip()]
 
     if [item[2].strip() for item in subtitle_items] == script_lines:
         logger.success("Subtitle is correct")

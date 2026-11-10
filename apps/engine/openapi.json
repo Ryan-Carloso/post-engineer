@@ -692,7 +692,7 @@
             "title": "Font Name"
           },
           "font_size": {
-            "default": 60,
+            "default": 50,
             "maximum": 300.0,
             "minimum": 8.0,
             "title": "Font Size",

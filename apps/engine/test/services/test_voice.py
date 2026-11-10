@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.config import config as app_config
 from app.utils import utils
+from app.services import subtitle_cues
 from app.services import voice as vs
 from app.services import voice_providers as vp
 
@@ -611,6 +612,31 @@ class TestVoiceService(unittest.TestCase):
         self.assertIn("这是a测试", subtitle_content)
         self.assertNotIn("这是_a_测试", subtitle_content)
         self.assertNotIn("00:00:00,000 --> 00:00:00,000", subtitle_content)
+
+    def test_create_subtitle_caps_every_cue_at_the_shared_word_limit(self):
+        """The TTS-timeline path splits long sentences with the same cap as Whisper."""
+        sentence = "each hour earlier to sleep was linked with about half a kilo more weight loss"
+        # The provider timeline carries the spoken fragments: three 5-word cues.
+        sub_maker = _sub_maker(
+            ["each hour earlier to sleep", "was linked with about half", "a kilo more weight loss"],
+            2.0, 4.0, 6.0,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            subtitle_file = Path(tmp_dir) / "subtitle.srt"
+            vs.create_subtitle(
+                sub_maker=sub_maker,
+                text=sentence,
+                subtitle_file=str(subtitle_file),
+            )
+            cues = [
+                block.split("\n", 2)[2].strip()
+                for block in subtitle_file.read_text(encoding="utf-8").strip().split("\n\n")
+            ]
+
+        self.assertGreater(len(cues), 1)
+        self.assertTrue(all(len(cue.split()) <= subtitle_cues.MAX_CUE_WORDS for cue in cues))
+        self.assertEqual(" ".join(cues), sentence)
 
 
 

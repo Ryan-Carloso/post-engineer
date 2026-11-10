@@ -775,7 +775,7 @@ export interface components {
             font_name?: string | null;
             /**
              * Font Size
-             * @default 60
+             * @default 50
              */
             font_size?: number;
             /**

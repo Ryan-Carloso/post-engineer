@@ -21,7 +21,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from app.services import subtitle
+from app.services import subtitle, subtitle_cues
 from app.services.persona_hook import _find_hook_end_seconds
 
 _SCRIPT = (
@@ -60,10 +60,12 @@ def _correct(srt: str, script: str):
         return path.read_text(encoding="utf-8"), subtitle.file_to_subtitles(str(path))
 
 
-def test_coarse_cues_give_every_script_line_its_own_ordered_cue():
+def test_coarse_cues_give_every_capped_script_line_its_own_ordered_cue():
     text, items = _correct(_WHISPER_SRT, _SCRIPT)
     assert "00:00:00,000 --> 00:00:00,000" not in text
-    assert len(items) == 9
+    # 9 punctuation lines, each longer than MAX_CUE_WORDS split into balanced cues.
+    assert len(items) == 15
+    assert all(len(item[2].split()) <= subtitle_cues.MAX_CUE_WORDS for item in items)
     assert items[0][2].startswith("I ate five legendary")
     previous_end = 0.0
     for _, timing, _ in items:
