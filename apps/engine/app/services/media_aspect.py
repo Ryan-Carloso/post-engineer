@@ -18,6 +18,11 @@ from app.services.image_material import MIN_MATERIAL_EDGE
 from app.services.material_verification import ratio_matches
 
 
+# Mirrored in the web preflight (aspect-preflight.ts: ratioLabel and
+# aspectResolution): the web cannot import engine code, so the gcd and
+# the aspect -> resolution mapping live in both places. The preflight
+# tests pin the mapping through the 400 error strings; change both sides
+# together.
 def ratio_label(width: int, height: int) -> str:
     """Simplified ratio of a WxH image, e.g. 1920x1080 -> "16:9"."""
     divisor = math.gcd(width, height)

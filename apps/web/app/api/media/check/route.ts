@@ -30,9 +30,12 @@ const CHECK_CODES = new Set([
   'timeout',
   'face_detected',
   'wrong_aspect',
+  'media_expired',
 ]);
 
-const VIDEO_ASPECTS = new Set(['9:16', '16:9']);
+// Matches the engine VideoAspect enum (landscape 16:9, portrait 9:16,
+// square 1:1): the check must accept every aspect the engine does.
+const VIDEO_ASPECTS = new Set(['9:16', '16:9', '1:1']);
 
 async function postHandler(request: Request): Promise<NextResponse> {
   const limited = await applyRateLimit(request, RATE_LIMITS.mediaUpload);
@@ -60,7 +63,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     videoAspect !== undefined &&
     (typeof videoAspect !== 'string' || !VIDEO_ASPECTS.has(videoAspect))
   ) {
-    return apiErrorResponse(400, 'videoAspect must be 9:16 or 16:9.', { route: ROUTE });
+    return apiErrorResponse(400, 'videoAspect must be 9:16, 16:9 or 1:1.', { route: ROUTE });
   }
   let parsed: URL;
   try {

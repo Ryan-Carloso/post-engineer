@@ -89,6 +89,31 @@ describe('POST /api/media/check', () => {
     });
   });
 
+  it('forwards a square aspect: the engine contract includes 1:1', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ status: 200, body: { code: 'ok', width: 1080, height: 1080 } }),
+    } as never);
+    const response = await POST(checkRequest('https://e.com/porto.jpg', '1:1'));
+    expect(response.status).toBe(200);
+    const fetchCall = vi.mocked(global.fetch).mock.calls[0];
+    expect(JSON.parse(String(fetchCall?.[1]?.body))).toEqual({
+      url: 'https://e.com/porto.jpg',
+      video_aspect: '1:1',
+    });
+  });
+
+  it('passes an expired media id code through instead of a 502', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ status: 200, body: { code: 'media_expired', width: null, height: null } }),
+    } as never);
+    const response = await POST(checkRequest('https://e.com/porto.jpg'));
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as Record<string, unknown>;
+    expect(payload.code).toBe('media_expired');
+  });
+
   it('rejects an unknown videoAspect before calling the engine', async () => {
     const response = await POST(checkRequest('https://e.com/porto.jpg', '4:3'));
     expect(response.status).toBe(400);

@@ -60,7 +60,7 @@ MAX_PHOTO_PIXELS = place_photos.MAX_PHOTO_PIXELS
 _WORD = re.compile(r"[^\W_]+")
 _MEDIA_ID_PATTERN = re.compile(r"^[0-9a-f]{32}\.(jpg|jpeg|png|webp)$")
 
-CHECK_CODES = ("ok", "blocked_403", "not_image", "too_small", "too_large", "timeout", "face_detected", "wrong_aspect")
+CHECK_CODES = ("ok", "blocked_403", "not_image", "too_small", "too_large", "timeout", "face_detected", "wrong_aspect", "media_expired")
 
 # check_media_code failure -> the warning reason prepare_segment_media records.
 # wrong_aspect is composed with dimensions at the call site instead: the

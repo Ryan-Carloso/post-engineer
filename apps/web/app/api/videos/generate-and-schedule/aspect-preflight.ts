@@ -62,6 +62,11 @@ interface SegmentMediaRef {
   url?: string;
 }
 
+// Mirrors the engine (media_aspect.ratio_label and
+// VideoAspect.to_resolution): the web cannot import engine code, so the
+// gcd and the aspect -> resolution mapping live in both places. The
+// tests below pin the mapping through the 400 error strings; change
+// both sides together.
 function ratioLabel(width: number, height: number): string {
   const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
   const divisor = gcd(width, height);

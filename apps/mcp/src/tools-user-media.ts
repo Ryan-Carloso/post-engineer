@@ -25,10 +25,10 @@ export const CheckMediaShape = {
     .min(1, 'url is required')
     .describe('Public image URL to check mechanically (no LLM, no relevance judgement).'),
   videoAspect: z
-    .enum(['9:16', '16:9'])
+    .enum(['9:16', '16:9', '1:1'])
     .optional()
     .describe(
-      'Video aspect the image will fill (9:16 Shorts/Instagram, 16:9 long YouTube). When given, an image that cannot fill the frame returns wrong_aspect instead of ok — send one that matches the aspect.',
+      'Video aspect the image will fill (9:16 Shorts/Instagram, 16:9 long YouTube, 1:1 square). When given, an image that cannot fill the frame returns wrong_aspect instead of ok — send one that matches the aspect.',
     ),
 };
 

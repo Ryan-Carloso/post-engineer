@@ -24,6 +24,7 @@ export const CHECK_MEDIA_CODES = [
   'timeout',
   'face_detected',
   'wrong_aspect',
+  'media_expired',
 ] as const;
 
 export type CheckMediaCode = (typeof CHECK_MEDIA_CODES)[number];
@@ -127,7 +128,7 @@ function narrowUploadResult(result: unknown): { mediaId: string } {
 export async function checkSegmentMedia(
   client: PostEngineerClient,
   url: string,
-  videoAspect?: '9:16' | '16:9',
+  videoAspect?: '9:16' | '16:9' | '1:1',
 ): Promise<{ code: CheckMediaCode; width?: number; height?: number }> {
   let parsed: URL;
   try {
