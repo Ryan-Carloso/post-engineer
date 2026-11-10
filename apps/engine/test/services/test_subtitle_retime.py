@@ -119,6 +119,22 @@ def test_unusable_word_boundaries_fall_back_to_character_share(tmp_path):
     assert 1.5 < _seconds(items[1][1], 0) < 2.3
 
 
+def test_a_transcript_that_stops_early_falls_back_to_character_share(tmp_path):
+    srt = tmp_path / "subtitle.srt"
+    srt.write_text(
+        "1\n00:00:00,100 --> 00:00:03,900\nGo to bed earlier lose more weight tonight\n\n",
+        encoding="utf-8",
+    )
+    words = [["Go", 0.10, 0.30], ["to", 0.30, 0.45], ["bed", 0.45, 0.80], ["earlier.", 0.80, 1.40]]
+    Path(subtitle.words_path(str(srt))).write_text(json.dumps(words), encoding="utf-8")
+
+    subtitle.correct(str(srt), "Go to bed earlier. Lose more weight tonight.")
+
+    items = subtitle.file_to_subtitles(str(srt))
+    # The last line is spread over the spoken span, not stacked on one instant.
+    assert _seconds(items[1][1], 1) - _seconds(items[1][1], 0) > 0.5
+
+
 def test_hook_measured_on_the_corrected_file_lands_inside_the_first_cue():
     _, items = _correct(_WHISPER_SRT, _SCRIPT)
     # "I ate ... collapse." is the first ~half of the 0.08-11.02s cue.

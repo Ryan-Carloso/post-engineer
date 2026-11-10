@@ -70,10 +70,27 @@ def test_overlapping_word_boundaries_never_start_a_cue_before_the_previous_one_e
     assert timed == [("Go to", 0.0, 1.2), ("bed now", 1.2, 2.0)]
 
 
-def test_a_cue_always_has_length_even_when_its_words_are_instantaneous():
+def test_a_transcript_that_stops_before_the_script_ends_is_rejected():
+    # Half of the words match, but nothing was heard for the last line: its cue
+    # would have no time at all (a stack of instants at the end of the video).
+    timed = subtitle_words.retime_by_words(["Go to bed earlier", "Lose more weight tonight"], _WORDS[:4])
+    assert timed == []
+
+
+def test_instantaneous_words_cannot_time_a_readable_cue():
     words = [("Go", 1.0, 1.0), ("now", 1.0, 1.0)]
-    timed = subtitle_words.retime_by_words(["Go", "now"], words)
-    assert all(end > start for _, start, end in timed)
+    assert subtitle_words.retime_by_words(["Go", "now"], words) == []
+
+
+def test_a_mis_heard_last_word_still_gets_the_time_it_was_heard_in():
+    # "HabitLoom" heard as "Habit loom": the script token has no match, but the
+    # transcript does cover the end of the script.
+    words = [("Follow", 0.0, 0.5), ("Habit", 0.5, 0.9), ("loom.", 0.9, 1.4)]
+    assert subtitle_words.retime_by_words(["Follow HabitLoom"], words) == [("Follow HabitLoom", 0.0, 1.4)]
+
+
+def test_the_shortest_readable_cue_is_a_tenth_of_a_second():
+    assert subtitle_words.MIN_CUE_SECONDS == 0.1
 
 
 def test_a_line_without_any_word_of_its_own_cannot_be_timed():

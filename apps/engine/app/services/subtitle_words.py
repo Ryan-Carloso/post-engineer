@@ -13,6 +13,9 @@ import re
 # Below this share of matched script words the transcript is not trusted to
 # time the cues, and callers fall back to character-share timing.
 MIN_MATCHED_SHARE = 0.5
+# A cue shorter than this was given no real time (words missing from the
+# transcript leave a zero-width window), so the transcript cannot time it.
+MIN_CUE_SECONDS = 0.1
 
 
 def _norm(token: str) -> str:
@@ -47,7 +50,9 @@ def retime_by_words(script_lines, words):
 
     `words` are Whisper's `(word, start, end)` boundaries. Returns [] with no
     words, with a line that has no words of its own, or when fewer than
-    MIN_MATCHED_SHARE of the script words are found in the transcript.
+    MIN_MATCHED_SHARE of the script words are found in the transcript, or when
+    any cue would be shorter than MIN_CUE_SECONDS (a transcript that stops
+    before the script ends).
     """
     heard = [(_norm(word), start, end) for word, start, end in words if _norm(word)]
     lines = [line.strip() for line in script_lines if line.strip()]
@@ -86,7 +91,9 @@ def retime_by_words(script_lines, words):
     previous_end = 0.0
     for line, (first, last) in zip(lines, line_spans):
         start = max(starts[first], previous_end)
-        end = max(ends[last - 1], start + 0.01)
+        end = ends[last - 1]
+        if end - start < MIN_CUE_SECONDS:
+            return []
         timed.append((line, start, end))
         previous_end = end
     return timed
