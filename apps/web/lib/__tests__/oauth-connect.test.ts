@@ -712,7 +712,8 @@ describe('oauth-connect — fanvue PKCE', () => {
       // 43-char string) to assert the RFC 7636 S256 challenge, not a
       // password. SHA-256 is the mandated hash here.
       expect(url.searchParams.get('code_challenge')).toBe(
-        createHash('sha256').update(result.codeVerifier as string, 'utf8').digest('base64url'), // codeql[js/insufficient-password-hash]
+        // codeql[js/insufficient-password-hash]
+        createHash('sha256').update(result.codeVerifier as string, 'utf8').digest('base64url'),
       );
       expect(decodeOAuthState(result.state)).toMatchObject({ provider: 'fanvue', redirectUri: FANVUE_REDIRECT });
     }
