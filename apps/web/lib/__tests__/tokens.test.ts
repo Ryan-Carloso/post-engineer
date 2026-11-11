@@ -23,7 +23,6 @@ import {
   VIDEO_TYPE_ERROR_SUFFIX,
   VIDEO_TYPE_REQUIRED_MESSAGE,
   unknownVideoTypeMessage,
-  type VideoType,
 } from '@/lib/tokens';
 
 describe('constant prices', () => {

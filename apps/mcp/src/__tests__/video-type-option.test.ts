@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect, vi } from 'vitest';
@@ -15,6 +15,7 @@ import { VIDEO_TYPE_ERROR_SUFFIX, VIDEO_TYPE_REQUIRED_MESSAGE, isVideoType, unkn
 import { GeneratePersonaVideoSchema, ValidateScriptSchema } from '../single-video-shape.js';
 import { handleGeneratePersonaVideo, handleValidateScript } from '../tools-single-video.js';
 import type { PostEngineerClient } from '../client.js';
+import type { McpToolResponse } from '../tools.js';
 
 //---------------
 // video_type (issue #542 follow-up): the one video mode, with the
@@ -23,8 +24,20 @@ import type { PostEngineerClient } from '../client.js';
 // the MCP relays upstream errors through errors.ts, which truncates
 // error detail at 200 chars — the message must arrive whole.
 //---------------
-const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(here, '..', '..', '..', '..');
+// Walk up to the pnpm-workspace.yaml marker instead of climbing a fixed
+// number of `..` segments: Stryker runs tests from a sandbox nested deeper
+// than the repo layout (`.stryker-tmp/sandbox-<n>/`), where a fixed climb
+// lands in apps/mcp instead of the repo root.
+function findRepoRoot(fromUrl: string): string {
+  let dir = dirname(fileURLToPath(fromUrl));
+  for (;;) {
+    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) throw new Error(`findRepoRoot: pnpm-workspace.yaml not found above ${fromUrl}`);
+    dir = parent;
+  }
+}
+const repoRoot = findRepoRoot(import.meta.url);
 
 function readSuffix(file: string, pattern: RegExp): string {
   const text = readFileSync(join(repoRoot, file), 'utf8');
@@ -59,11 +72,18 @@ const baseArgs = {
   description: 'Agent description.',
   providers: ['youtube'] as 'youtube'[],
   youtubeAccountIds: ['chan-1'],
+  mode: 'scheduled' as const,
   startAt: '2026-10-05T20:00:00',
   times: ['20:00'],
   timezone: 'Europe/Lisbon',
   options: { videoType: 'hook_lipsync' as const },
 };
+
+function textOf(response: McpToolResponse): string {
+  const block = response.content[0];
+  if (!block || block.type !== 'text') throw new Error('expected a text content block');
+  return block.text;
+}
 
 function mockClient() {
   return {
@@ -174,7 +194,7 @@ describe('generate_persona_video videoType guards (no charge)', () => {
       options: { videoType: 'full_lipsync' },
     });
     expect(response.isError).toBe(true);
-    expect(response.content[0].text).toContain('must be faceless');
+    expect(textOf(response)).toContain('must be faceless');
     expect(client.generatePersonaVideo).not.toHaveBeenCalled();
   });
 
@@ -183,7 +203,7 @@ describe('generate_persona_video videoType guards (no charge)', () => {
     const { personaId: _personaId, ...rest } = baseArgs;
     const response = await handleGeneratePersonaVideo(client, { ...rest, options: { videoType: 'hook_lipsync' } });
     expect(response.isError).toBe(true);
-    expect(response.content[0].text).toContain('must be faceless');
+    expect(textOf(response)).toContain('must be faceless');
     expect(client.generatePersonaVideo).not.toHaveBeenCalled();
   });
 
@@ -192,7 +212,7 @@ describe('generate_persona_video videoType guards (no charge)', () => {
     const { personaId: _personaId, ...rest } = baseArgs;
     const response = await handleGeneratePersonaVideo(client, { ...rest, options: { videoType: 'faceless' } });
     expect(response.isError).toBe(true);
-    expect(response.content[0].text).toContain('must have a voice');
+    expect(textOf(response)).toContain('must have a voice');
     expect(client.generatePersonaVideo).not.toHaveBeenCalled();
   });
 
@@ -216,6 +236,6 @@ describe('validate_script videoType (no charge)', () => {
     expect(full.isError).toBeUndefined();
     const faceless = await handleValidateScript(client, { segments: bare, videoType: 'faceless' });
     expect(faceless.isError).toBe(true);
-    expect(faceless.content[0].text).toContain('segments.0.media');
+    expect(textOf(faceless)).toContain('segments.0.media');
   });
 });
