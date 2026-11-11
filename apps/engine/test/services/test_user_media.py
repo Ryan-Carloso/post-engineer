@@ -232,7 +232,7 @@ def test_one_bad_url_costs_only_that_segment(tmp_path, monkeypatch):
     assert "e.com" not in skipped[0] and "bad.jpg" not in skipped[0]
 
 
-def test_too_small_and_face_photos_are_skipped(tmp_path, monkeypatch):
+def test_only_the_too_small_photo_is_skipped(tmp_path, monkeypatch):
     monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
 
     def fake_download(url, dest_path, session=None):
@@ -246,9 +246,7 @@ def test_too_small_and_face_photos_are_skipped(tmp_path, monkeypatch):
         {"kind": "body", "text": "Where the river meets the sea.", "media": [{"url": "https://e.com/face.jpg"}]},
         {"kind": "cta", "text": "Visit Porto soon."},
     ]
-    with patch.object(image_fetch, "download_image", side_effect=fake_download), patch(
-        "app.services.user_media.face_detect.image_contains_face", return_value=True
-    ):
+    with patch.object(image_fetch, "download_image", side_effect=fake_download):
         prepared, skipped = user_media.prepare_segment_media(
             "task-1",
             segments,
@@ -257,10 +255,13 @@ def test_too_small_and_face_photos_are_skipped(tmp_path, monkeypatch):
             str(tmp_path),
             VideoAspect.portrait,
         )
-    # The small photo fails the size gate before any face check runs, so
-    # the face mock only fires for the second photo; both are skipped.
-    assert prepared == []
-    assert len(skipped) == 2
+    # The small photo fails the size gate; the second photo survives with
+    # no face gate left to reject it: faces were a stock B-roll rule, and
+    # agent-supplied segment photos may show people.
+    assert len(prepared) == 1
+    assert prepared[0].index == 1
+    assert len(skipped) == 1
+    assert "too small" in skipped[0]
 
 
 def test_expired_media_id_reports_expired_not_invalid(tmp_path, monkeypatch):
@@ -276,19 +277,12 @@ def test_expired_media_id_reports_expired_not_invalid(tmp_path, monkeypatch):
 # ---- check_media codes (engine side of the MCP check_media tool)
 
 
-def _check(url, tmp_path, download=None, face=False):
+def _check(url, tmp_path, download=None):
     work = str(tmp_path)
     if download is not None:
         with patch.object(image_fetch, "download_image", side_effect=download):
-            with patch(
-                "app.services.user_media.face_detect.image_contains_face",
-                return_value=face,
-            ):
-                return user_media.check_media_code(url, work)
-    with patch(
-        "app.services.user_media.face_detect.image_contains_face", return_value=face
-    ):
-        return user_media.check_media_code(url, work)
+            return user_media.check_media_code(url, work)
+    return user_media.check_media_code(url, work)
 
 
 def test_check_media_ok_for_a_good_portrait_photo(tmp_path):
@@ -339,13 +333,22 @@ def test_check_media_timeout_when_the_download_times_out(tmp_path):
     assert _check("https://e.com/porto.jpg", tmp_path, download) == "timeout"
 
 
-def test_check_media_face_detected_when_a_face_is_present(tmp_path):
+def test_segment_photos_no_longer_pass_through_face_detection():
+    # The face rule was a stock B-roll rule; agent-supplied segment
+    # photos may show people, so no code, reason, or import for it
+    # may survive in the segment-media path.
+    assert "face_detected" not in user_media.CHECK_CODES
+    assert "face_detected" not in user_media._CODE_TO_REASON
+    assert not hasattr(user_media, "face_detect")
+
+
+def test_check_media_ok_for_a_photo_with_people(tmp_path):
     def download(url, dest_path, session=None):
         with open(dest_path, "wb") as handle:
             handle.write(_jpeg())
         return dest_path
 
-    assert _check("https://e.com/porto.jpg", tmp_path, download, face=True) == "face_detected"
+    assert _check("https://e.com/porto.jpg", tmp_path, download) == "ok"
 
 
 def test_two_photos_split_the_segment_and_a_dropped_one_is_covered(tmp_path):
@@ -394,12 +397,9 @@ def test_validate_photo_rejects_a_landscape_photo_for_a_portrait_video(tmp_path)
     path = str(tmp_path / "landscape.jpg")
     with open(path, "wb") as handle:
         handle.write(_jpeg(1920, 1080))
-    with patch(
-        "app.services.user_media.face_detect.image_contains_face", return_value=False
-    ):
-        assert user_media._validate_photo(path, VideoAspect.portrait) == "wrong_aspect"
-        assert user_media._validate_photo(path, VideoAspect.landscape) is None
-        assert user_media._validate_photo(path) is None
+    assert user_media._validate_photo(path, VideoAspect.portrait) == "wrong_aspect"
+    assert user_media._validate_photo(path, VideoAspect.landscape) is None
+    assert user_media._validate_photo(path) is None
 
 
 def test_check_media_code_reports_wrong_aspect_for_a_landscape_photo(tmp_path):
@@ -408,9 +408,7 @@ def test_check_media_code_reports_wrong_aspect_for_a_landscape_photo(tmp_path):
             handle.write(_jpeg(1920, 1080))
         return dest_path
 
-    with patch.object(image_fetch, "download_image", side_effect=download), patch(
-        "app.services.user_media.face_detect.image_contains_face", return_value=False
-    ):
+    with patch.object(image_fetch, "download_image", side_effect=download):
         assert (
             user_media.check_media_code("https://e.com/porto.jpg", str(tmp_path), VideoAspect.portrait)
             == "wrong_aspect"

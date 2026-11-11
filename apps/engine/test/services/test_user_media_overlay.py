@@ -56,11 +56,8 @@ def _font_for(size):
     return ImageFont.load_default(size)
 
 
-def _prepare(tmp_path, segments, font_for=_font_for, has_face=False, face=segment_panels.FACE_FULL):
-    with (
-        patch.object(image_fetch, "download_image", side_effect=_download),
-        patch("app.services.user_media.face_detect.image_contains_face", return_value=has_face),
-    ):
+def _prepare(tmp_path, segments, font_for=_font_for, face=segment_panels.FACE_FULL):
+    with patch.object(image_fetch, "download_image", side_effect=_download):
         return user_media.prepare_segment_media(
             "task-1",
             segments,
@@ -79,6 +76,14 @@ def _segments(overlay):
     if overlay is not None:
         media["overlay"] = overlay
     return [{**SEGMENTS_TEXT[0], "media": [media]}, SEGMENTS_TEXT[1]]
+
+
+def _segments_with_cta_photo(overlay):
+    """_segments plus a plain photo on the CTA: prepare_segment_panels
+    enforces the per-segment density minimum, so a segment with no
+    photo at all fails instead of rendering."""
+    hook, cta = _segments(overlay)
+    return [hook, {**cta, "media": [{"url": "https://e.com/q.jpg"}]}]
 
 
 def _panel_pixel(panel, offset_y):
@@ -129,11 +134,13 @@ def test_missing_font_keeps_the_photo_and_warns(tmp_path):
     assert skipped == ["segment 0 image 0 media overlay skipped: overlay font unavailable"]
 
 
-def test_photo_with_a_face_is_skipped_before_any_panel_is_drawn(tmp_path):
-    panels, skipped = _prepare(tmp_path, _segments({"title": "Sushi"}), has_face=True)
-    assert panels == []
-    assert skipped == ["segment 0 image 0 media skipped: face detected"]
-    assert not os.path.exists(tmp_path / "segment-panel-0-0.png")
+def test_a_photo_is_drawn_without_any_face_gate(tmp_path):
+    # Faces were a stock B-roll rule: a segment photo is drawn whatever
+    # it shows, and no face check runs before the panel is built.
+    panels, skipped = _prepare(tmp_path, _segments({"title": "Sushi"}))
+    assert len(panels) == 1
+    assert skipped == []
+    assert os.path.exists(tmp_path / "segment-panel-0-0.png")
 
 
 def test_segment_with_no_spoken_time_is_skipped_with_a_reason(tmp_path):
@@ -162,16 +169,15 @@ def test_two_segments_sharing_one_media_id_each_get_their_own_panel_and_card(tmp
         {**SEGMENTS_TEXT[0], "media": [{"mediaId": asset.name, "overlay": {"title": "First"}}]},
         {**SEGMENTS_TEXT[1], "media": [{"mediaId": asset.name, "overlay": {"title": "Second"}}]},
     ]
-    with patch("app.services.user_media.face_detect.image_contains_face", return_value=False):
-        panels, skipped = user_media.prepare_segment_media(
-            "task-1",
-            segments,
-            _subtitle(tmp_path),
-            6.0,
-            str(tmp_path),
-            VideoAspect.portrait,
-            font_for=_font_for,
-        )
+    panels, skipped = user_media.prepare_segment_media(
+        "task-1",
+        segments,
+        _subtitle(tmp_path),
+        6.0,
+        str(tmp_path),
+        VideoAspect.portrait,
+        font_for=_font_for,
+    )
     assert skipped == []
     assert len({panel.path for panel in panels}) == 2
     assert asset.exists(), "the temp asset is the caller's upload and must not be deleted"
@@ -191,27 +197,25 @@ def test_prepare_segment_panels_resolves_the_subtitle_font_only_when_a_card_is_w
     params = SimpleNamespace(
         video_aspect="9:16",
         font_name="BeVietnamPro-Medium.ttf",
-        segments=_segments({"title": "Sushi"}),
+        segments=_segments_with_cta_photo({"title": "Sushi"}),
     )
     with (
         patch.object(user_media.video, "_resolve_font_with_fallback", side_effect=fake_resolve),
         patch.object(image_fetch, "download_image", side_effect=_download),
-        patch("app.services.user_media.face_detect.image_contains_face", return_value=False),
         patch.object(user_media.media_overlay, "font_loader", return_value=_font_for),
     ):
         warnings = user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
     assert seen == ["BeVietnamPro-Medium.ttf"]
     assert warnings == ["segment 0 image extended: a neighbour image covers a missing image"]
     panels, stored_warnings = segment_panels._read_manifest("task-1")
-    assert [panel.index for panel in panels] == [0]
+    assert [panel.index for panel in panels] == [0, 1]
     assert stored_warnings == warnings
 
     seen.clear()
-    params.segments = _segments(None)
+    params.segments = _segments_with_cta_photo(None)
     with (
         patch.object(user_media.video, "_resolve_font_with_fallback", side_effect=fake_resolve),
         patch.object(image_fetch, "download_image", side_effect=_download),
-        patch("app.services.user_media.face_detect.image_contains_face", return_value=False),
     ):
         user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
     assert seen == [], "no card wanted, no font lookup"
@@ -223,14 +227,13 @@ def test_prepare_segment_panels_warns_and_keeps_the_photo_when_the_font_is_missi
     monkeypatch.setattr(segment_panels.utils, "task_dir", lambda task_id: str(tmp_path))
     monkeypatch.setattr(user_media.utils, "task_dir", lambda task_id: str(tmp_path))
     params = SimpleNamespace(
-        video_aspect="9:16", font_name="Missing.ttf", segments=_segments({"title": "Sushi"})
+        video_aspect="9:16", font_name="Missing.ttf", segments=_segments_with_cta_photo({"title": "Sushi"})
     )
     with (
         patch.object(
             user_media.video, "_resolve_font_with_fallback", side_effect=ValueError("no font")
         ),
         patch.object(image_fetch, "download_image", side_effect=_download),
-        patch("app.services.user_media.face_detect.image_contains_face", return_value=False),
     ):
         warnings = user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
     assert warnings == [
@@ -238,7 +241,7 @@ def test_prepare_segment_panels_warns_and_keeps_the_photo_when_the_font_is_missi
         "segment 0 image extended: a neighbour image covers a missing image",
     ]
     panels, stored = segment_panels._read_manifest("task-1")
-    assert len(panels) == 1 and stored == warnings
+    assert len(panels) == 2 and stored == warnings
 
 
 def test_prepare_segment_panels_without_segments_writes_nothing(tmp_path, monkeypatch):
@@ -399,7 +402,6 @@ def test_prepare_segment_panels_uses_the_video_type_to_pick_panel_or_full_frame(
         patch.object(user_media.video, "_resolve_font_with_fallback", return_value="/f.ttf"),
         patch.object(user_media.media_overlay, "font_loader", return_value=_font_for),
         patch.object(image_fetch, "download_image", side_effect=_download),
-        patch("app.services.user_media.face_detect.image_contains_face", return_value=False),
     ):
         warnings = user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
     assert warnings == ["segment 1 image extended: a neighbour image covers a missing image"]

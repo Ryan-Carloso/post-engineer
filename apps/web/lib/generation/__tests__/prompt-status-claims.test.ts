@@ -20,16 +20,13 @@ import * as promptBase from '../prompt-base';
 
 const STALE_STATUS_PHRASES = ['currently being fixed', 'being fixed', 'issue #', 'is broken'];
 
-// snake_case values in prompt text that are not tool calls: check_media
-// returns face_detected as a photo-check code, it is never called as a
-// tool, so it is excluded from the registration check by name, with the
-// reason recorded here instead of silently passing an unknown token.
+// snake_case values in prompt text that are not tool calls:
 // retention_evidence is an output field the viral-shorts prompt asks the
 // agent to print ('unavailable' for another creator's video), not a tool.
 // full_lipsync / hook_lipsync are video_type enum values and very_good is
 // a face-quality value from the video-type cost line (issue #542
 // follow-up), never tools.
-const NON_TOOL_TOKENS = new Set(['face_detected', 'retention_evidence', 'full_lipsync', 'hook_lipsync', 'very_good']);
+const NON_TOOL_TOKENS = new Set(['retention_evidence', 'full_lipsync', 'hook_lipsync', 'very_good']);
 
 function servedPromptTexts(): Array<{ name: string; text: string }> {
   const texts: Array<{ name: string; text: string }> = [];

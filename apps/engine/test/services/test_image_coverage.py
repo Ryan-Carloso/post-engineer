@@ -110,3 +110,131 @@ def test_only_framed_panels_left_is_still_no_coverage():
 def test_nothing_to_cover_returns_the_panels_untouched(window_start):
     panels = [_framed(0, 0.5, 6.5)]
     assert image_coverage.extend_over_gaps(panels, window_start, 12.0) == (panels, [])
+
+
+def test_the_bare_code_is_unchanged_when_no_detail_is_given():
+    assert str(ImagesDoNotCoverAudio()) == "images_do_not_cover_audio"
+
+
+def test_adequate_survivors_still_stretch_over_small_gaps():
+    panels = [_full(0, 0.2, 3.9), _full(1, 4.1, 8.0)]
+    covered, warnings = image_coverage.ensure_coverage(
+        panels,
+        face=segment_panels.FACE_NONE,
+        hook_end=0.0,
+        audio_duration=8.0,
+        words_per_segment=[8, 8],
+        sent=2,
+        skipped=[],
+    )
+    assert [(p.start, p.end) for p in covered] == [(0.0, 4.1), (4.1, 8.0)]
+    assert warnings == []
+
+
+def test_thin_survivors_fail_naming_each_short_segment_and_the_skip_reasons():
+    panels = [_full(0, 0.0, 4.0), _full(1, 4.0, 8.0)]
+    with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
+        image_coverage.ensure_coverage(
+            panels,
+            face=segment_panels.FACE_NONE,
+            hook_end=0.0,
+            audio_duration=8.0,
+            words_per_segment=[24, 24],
+            sent=6,
+            skipped=[
+                "segment 0 image 1 media skipped: download blocked",
+                "segment 0 image 2 media skipped: download blocked",
+                "segment 1 image 1 media skipped: too small",
+                "segment 1 image 2 media skipped: too small",
+            ],
+        )
+    message = str(exc_info.value)
+    assert message.startswith("images_do_not_cover_audio: ")
+    assert "segment 0 has 1 surviving image but needs at least 3 images (one per ~3s)" in message
+    assert "segment 1 has 1 surviving image but needs at least 3 images (one per ~3s)" in message
+    assert "6 sent, 2 survived, 4 skipped (download blocked x2, too small x2)" in message
+    assert "segment 0 image 1 media skipped: download blocked" in message
+    assert "segment 1 image 2 media skipped: too small" in message
+
+
+def test_no_survivor_reports_the_counts_and_every_skip_reason():
+    with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
+        image_coverage.ensure_coverage(
+            [],
+            face=segment_panels.FACE_NONE,
+            hook_end=0.0,
+            audio_duration=12.0,
+            words_per_segment=[24, 24],
+            sent=4,
+            skipped=[
+                "segment 0 image 0 media skipped: download blocked",
+                "segment 0 image 1 media skipped: media expired or missing",
+                "segment 1 image 0 media skipped: download blocked",
+                "segment 1 image 1 media skipped: too small",
+            ],
+        )
+    message = str(exc_info.value)
+    assert message.startswith("images_do_not_cover_audio: no full-frame image survived; ")
+    assert "4 sent, 0 survived, 4 skipped (download blocked x2, media expired or missing x1, too small x1)" in message
+    assert "segment 0 image 1 media skipped: media expired or missing" in message
+    assert "segment 1 image 1 media skipped: too small" in message
+
+
+def test_zero_sent_photos_report_no_skips():
+    with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
+        image_coverage.ensure_coverage(
+            [],
+            face=segment_panels.FACE_NONE,
+            hook_end=0.0,
+            audio_duration=12.0,
+            words_per_segment=[24],
+            sent=0,
+            skipped=[],
+        )
+    assert str(exc_info.value) == (
+        "images_do_not_cover_audio: no full-frame image survived; "
+        "segment 0 has 0 surviving images but needs at least 3 images (one per ~3s); "
+        "0 sent, 0 survived, 0 skipped"
+    )
+
+
+def test_overlay_skips_are_not_counted_as_lost_photos():
+    panels = [_full(0, 0.0, 4.0)]
+    covered, warnings = image_coverage.ensure_coverage(
+        panels,
+        face=segment_panels.FACE_NONE,
+        hook_end=0.0,
+        audio_duration=4.0,
+        words_per_segment=[8],
+        sent=1,
+        skipped=["segment 0 image 0 media overlay skipped: overlay font unavailable"],
+    )
+    assert [(p.start, p.end) for p in covered] == [(0.0, 4.0)]
+    assert warnings == []
+
+
+def test_framed_hook_panels_count_toward_their_segments_density():
+    hook = _framed(0, 0.5, 6.5)
+    covered, _warnings = image_coverage.ensure_coverage(
+        [hook, _full(1, 8.0, 12.0)],
+        face=segment_panels.FACE_HOOK,
+        hook_end=7.0,
+        audio_duration=12.0,
+        words_per_segment=[8, 8],
+        sent=2,
+        skipped=[],
+    )
+    assert covered[0] == hook, "a panel over the face counts for the hook segment"
+
+
+def test_full_lipsync_skips_the_density_check():
+    covered, warnings = image_coverage.ensure_coverage(
+        [],
+        face=segment_panels.FACE_FULL,
+        hook_end=0.0,
+        audio_duration=12.0,
+        words_per_segment=[24],
+        sent=0,
+        skipped=[],
+    )
+    assert (covered, warnings) == ([], [])

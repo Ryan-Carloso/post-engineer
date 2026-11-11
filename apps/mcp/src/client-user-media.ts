@@ -22,7 +22,6 @@ export const CHECK_MEDIA_CODES = [
   'too_small',
   'too_large',
   'timeout',
-  'face_detected',
   'wrong_aspect',
   'media_expired',
 ] as const;

@@ -4,7 +4,7 @@
 // The caller authenticates with a session or API key; the route proxies
 // to the engine's /api/v1/media/check with the server secret, where the
 // SSRF-safe download and the mechanical checks run (download refusal,
-// real image type, size bounds, face detection). The response carries
+// real image type, size bounds). The response carries
 // the code plus the probed dimensions — never the checked URL, which
 // can hold credentials in its query string. With videoAspect given, a
 // photo that cannot fill the frame reports wrong_aspect instead of ok.
@@ -28,7 +28,6 @@ const CHECK_CODES = new Set([
   'too_small',
   'too_large',
   'timeout',
-  'face_detected',
   'wrong_aspect',
   'media_expired',
 ]);
