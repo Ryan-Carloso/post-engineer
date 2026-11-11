@@ -128,6 +128,15 @@ class BatchDispatchVideoTypeTests(unittest.TestCase):
         request = self._dispatched_request(_slot())
         self.assertEqual(request.video_type, "hook_lipsync")
 
+    def test_long_stored_title_is_truncated_to_the_engine_cap(self):
+        # Pre-migration rows were created when the engine cap was 500
+        # (video_subject) and the web had none: the request carries the
+        # title truncated to 100 — what publish shows on YouTube — and
+        # the row keeps generating instead of failing validation before
+        # the refund block.
+        request = self._dispatched_request(_slot(title="x" * 150))
+        self.assertEqual(request.video_title, "x" * 100)
+
     def test_slot_without_video_type_fails_without_dispatch(self):
         slot = _slot()
         del slot["video_type"]

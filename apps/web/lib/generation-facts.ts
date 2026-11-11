@@ -33,8 +33,9 @@ export function buildGenerationFacts(
   paragraphNumber: number | null;
   faceQuality: string | null;
 } {
-  // Only the literal true counts — mirrors the engine's slot_faceless
-  // rule, so a legacy NULL row is never misread as faceless.
+  // Only the literal true counts — the stored video_type decides the
+  // mode, and slot-rows.ts writes this derived flag from it, so a legacy
+  // NULL row is never misread as faceless.
   // One const per leaf (not an inline object literal): v8 coverage does not
   // report object-literal property lines, so this keeps every fact visible
   // to the coverage gate.

@@ -840,8 +840,8 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
   });
 
   it('reports faceless as true only for the literal true', async () => {
-    // Mirrors the engine's slot_faceless rule (support.py: only
-    // `slot.get("faceless") is True` counts), so a legacy NULL row — or a
+    // Only the literal true counts (the derived flag slot-rows.ts
+    // writes from the stored video_type), so a legacy NULL row — or a
     // stray string — is never misread as faceless.
     for (const faceless of [true, false, null, 'true', 1]) {
       const generation = await getGeneration({ ...SLOT_DETAIL_ROW, faceless }, SCHEDULE_ROW);

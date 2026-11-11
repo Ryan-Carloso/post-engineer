@@ -375,7 +375,7 @@ class TestGenerateFinalVideosSingleOutput(unittest.TestCase):
         params = VideoParams(
             video_title="x",
             video_description="Test description.",
-            video_type="faceless",
+            video_type=params_kwargs.pop("video_type", "faceless"),
             **params_kwargs,
         )
         with (
@@ -414,6 +414,19 @@ class TestGenerateFinalVideosSingleOutput(unittest.TestCase):
         self.assertEqual(
             combine.call_args.kwargs.get("video_concat_mode"),
             tm.VideoConcatMode.random,
+        )
+
+    def test_hook_lipsync_with_a_photo_less_persona_fails_before_any_render(self):
+        # A hook video needs a face, like full lip-sync: without a photo
+        # there is nothing to lip-sync, so fail loudly instead of
+        # silently rendering images-only for a face mode.
+        with self.assertRaises(ValueError) as caught:
+            self._run(
+                video_type="hook_lipsync",
+                persona=PersonaParams(name="Ana", voice_id="calm"),
+            )
+        self.assertIn(
+            "hook_lipsync requires a persona with a photo", str(caught.exception)
         )
 
 

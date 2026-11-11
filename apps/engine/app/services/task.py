@@ -741,11 +741,7 @@ def generate_final_videos(
 
     video_for_render = combined_video_path
     if params.video_type == "full_lipsync":
-        # Full mode replaces the images canvas entirely: every narration
-        # window renders as talking head and the windows concatenate into
-        # the video the final encode muxes with narration. Any failure
-        # here propagates and fails the task; it NEVER falls through to
-        # the intro path below.
+        # Full mode renders every window as talking head; failures fail the task, never falling through to the intro path.
         if not persona_lipsync_active(params):
             raise ValueError(
                 "full_lipsync requires a persona with a photo"
@@ -767,6 +763,10 @@ def generate_final_videos(
             cost_usd=full_cost,
             job_id=full_job_ids[0] if full_job_ids else None,
         )
+    elif params.video_type == "hook_lipsync" and not persona_lipsync_active(params):
+        # Hook needs a face too: fail loudly instead of silently rendering
+        # images-only for a face mode (full_lipsync raises above).
+        raise ValueError("hook_lipsync requires a persona with a photo")
     elif persona_lipsync_active(params):
         logger.info("generating persona lip-sync intro")
         intro = prepare_persona_lipsync_video(

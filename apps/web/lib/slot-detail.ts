@@ -110,8 +110,8 @@ export function narrowGeneration(value: unknown): GenerationFacts {
     typeof record[key] === 'string' ? (record[key] as string) : null;
   const paragraphNumber = record.paragraphNumber;
   return {
-    // Only the literal true counts — mirrors the route and the engine's
-    // slot_faceless rule.
+    // Only the literal true counts — mirrors the route and the derived
+    // faceless flag slot-rows.ts writes from the stored video_type.
     faceless: record.faceless === true,
     language: text('language'),
     voiceId: text('voiceId'),

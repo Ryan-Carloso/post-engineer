@@ -124,7 +124,14 @@ class BatchGenerator:
             # refund is anchored to.)
             voice_for(identity)
             request = TaskVideoRequest(
-                video_title=title,
+                # Pre-migration rows were created when the engine cap was
+                # 500 (video_subject) and the web had none, so a stored
+                # title can legally exceed the 100-char video_title cap.
+                # Publish truncates the YouTube title to the same 100
+                # (metadata_for), so the request carries the truncated
+                # title and the row keeps generating instead of failing
+                # validation before the refund block (migration 055).
+                video_title=title[:100],
                 video_description=description,
                 video_type=video_type,
                 persona=build_persona_params(identity, self.store, video_type),
