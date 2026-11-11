@@ -109,7 +109,6 @@ export const ptDictionary = {
   publishing: {
     mustSelectAccount: 'Selecione pelo menos uma conta para publicar.',
   },
-
   // Accounts
   accounts: { ...accountsI18nPt },
   // Login
@@ -195,6 +194,7 @@ export const ptDictionary = {
     ...segmentMediaToolDescPt,
     toolDescGetVideoStatus: 'Confira o status do vídeo',
     toolDescGetVideoTaskProgress: 'Acompanhe o progresso por vídeo (%, etapa)',
+    toolDescWaitForVideoTasks: 'Espere até os vídeos terminarem ou falharem',
     toolDescListPersonaImages: 'Liste a biblioteca de imagens da persona',
     toolDescAddPersonaImage: 'Adicione uma imagem à biblioteca',
     toolDescUpdatePersonaImage: 'Atualize uma imagem da biblioteca',

@@ -268,8 +268,7 @@ export class PostEngineerClient {
       const failure = readApiFailure(errorText);
       throw new ApiError(
         `Failed to ${action}: ${response.status} ${failure.detail}`,
-        failure.code,
-        failure.field,
+        failure.code, failure.field, response.status,
       );
     }
 

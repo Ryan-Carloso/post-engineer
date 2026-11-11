@@ -48,7 +48,7 @@ import { GeneratePersonaVideoBatchShape } from '../tools-batch.js';
 import { ListPinterestBoardsShape } from '../tools-pinterest.js';
 import { AddExperimentPairShape, CreateExperimentShape, GetExperimentResultsShape, ListExperimentsShape } from '../tools-experiments.js';
 import { GetPostShape, GetPostMetricsShape, GetYouTubeRetentionCurveShape } from '../tools-posts.js';
-import { CancelVideoTaskShape } from '../video-task-tools.js';
+import { CancelVideoTaskShape, WaitForVideoTasksShape } from '../video-task-tools.js';
 import { ListPromptsShape, GetPromptShape } from '../tools-prompts.js';
 import type { PostEngineerClient } from '../client.js';
 
@@ -109,6 +109,7 @@ const EXPECTED_TOOLS = [
   'get_experiment_results',
   'get_video_status',
   'get_video_task_progress',
+  'wait_for_video_tasks',
   'list_persona_images',
   'add_persona_image',
   'update_persona_image',
@@ -265,6 +266,7 @@ describe('registered tool schemas (single source of truth)', () => {
       get_experiment_results: GetExperimentResultsShape,
       get_video_status: GetVideoStatusShape,
       get_video_task_progress: GetVideoTaskProgressShape,
+      wait_for_video_tasks: WaitForVideoTasksShape,
       list_persona_images: ListPersonaImagesShape,
       add_persona_image: AddPersonaImageShape,
       update_persona_image: UpdatePersonaImageShape,

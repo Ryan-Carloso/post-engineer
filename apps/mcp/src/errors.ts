@@ -22,12 +22,15 @@ export class ApiError extends Error {
   readonly code: string | null;
   /** Dot-path of the offending input field, when the API names one. */
   readonly field: string | null;
+  /** HTTP status of the failed response (e.g. 410 when the engine lost the task). */
+  readonly status: number | null;
 
-  constructor(message: string, code: string | null, field: string | null) {
+  constructor(message: string, code: string | null, field: string | null, status: number | null = null) {
     super(message);
     this.name = 'ApiError';
     this.code = code;
     this.field = field;
+    this.status = status;
   }
 }
 

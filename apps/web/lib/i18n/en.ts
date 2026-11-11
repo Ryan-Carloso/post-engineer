@@ -108,7 +108,6 @@ export const enDictionary: Dictionary = {
   publishing: {
     mustSelectAccount: 'Select at least one account to publish to.',
   },
-
   accounts: { ...accountsI18nEn },
 
   // Login
@@ -194,6 +193,7 @@ export const enDictionary: Dictionary = {
     ...segmentMediaToolDescEn,
     toolDescGetVideoStatus: 'Check video status',
     toolDescGetVideoTaskProgress: 'Poll per-video progress (%, stage)',
+    toolDescWaitForVideoTasks: 'Wait until videos finish or fail',
     toolDescListPersonaImages: "List a persona's image library",
     toolDescAddPersonaImage: 'Add an image to the library',
     toolDescUpdatePersonaImage: 'Update a library image',
