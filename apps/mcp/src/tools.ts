@@ -21,7 +21,6 @@ import {
   DisconnectAccountShape,
 } from './account-shapes.js';
 import { PublishVideoDirectSchema, PublishVideoDirectShape } from './publish-direct-shape.js';
-
 // Re-exported so existing import sites (`./tools.js`) keep working.
 export {
   CancelScheduleSchema,
@@ -56,14 +55,12 @@ import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { CreatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar.js';
 
 export type { McpToolResponse } from './tools-call.js';
-
 // Image path/tag/description limits are shared by create-persona and add_persona_image.
 const LibraryImageFields = {
   path: z.string().min(1).describe(`Local file path to the image (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB)`),
   tag: z.string().max(MAX_LIBRARY_TAG_LENGTH).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
   description: z.string().max(MAX_LIBRARY_DESCRIPTION_LENGTH).optional().describe('Description of the photo for tag/keyword matching (e.g. smiling at the beach at sunset)'),
 };
-
 // Single source of truth: index.ts registers these shapes directly with the
 // MCP server, so field definitions (and their descriptions) live here only.
 const PersonaLibraryImageInputShape = z.object(LibraryImageFields);
@@ -94,9 +91,7 @@ export const CreatePersonaShape = {
 };
 
 export const CreatePersonaSchema = z.object(CreatePersonaShape).superRefine(refinePersonaAvatar(true));
-
 export const ListPersonasShape = {};
-
 export const ListPersonasSchema = z.object(ListPersonasShape);
 
 export { ListVoicesShape, ListVoicesSchema } from './voice-filters.js';
@@ -115,7 +110,6 @@ export {
 export const ListFacesShape = {};
 
 export const ListFacesSchema = z.object(ListFacesShape);
-
 // update_persona lives in persona-update.ts (shape, schema and handler);
 // re-exported here so existing import sites keep working.
 export { UpdatePersonaShape, UpdatePersonaSchema, handleUpdatePersona } from './persona-update.js';
@@ -248,7 +242,6 @@ export const GetVideoStatusShape = {
 };
 
 export const GetVideoStatusSchema = z.object(GetVideoStatusShape);
-
 // Machine-readable progress for a single video task. Unlike get_video_status
 // (raw status + URLs), this returns only the four progress fields so agents
 // can poll "video 1/6: 60%" style progress without parsing a full payload.
@@ -870,6 +863,7 @@ function narrowSlotDetail(result: unknown): {
     stage: string | null;
     error: string | null;
     publishedAt: string | null;
+    postUrl: string | null;
     userNotices: unknown[];
     providerFailures: unknown[];
   };
@@ -916,6 +910,7 @@ function narrowSlotDetail(result: unknown): {
       stage: str(slot.stage),
       error: str(slot.error),
       publishedAt: str(slot.publishedAt),
+      postUrl: str(slot.postUrl),
       userNotices: readNoticeList(slot.userNotices),
       providerFailures: readNoticeList(slot.providerFailures),
     },
@@ -1026,9 +1021,10 @@ export function sanitizeEngineError(error: string): string {
 }
 
 /** Narrows the web video-status response to the progress fields agents
- * poll on. The engine task record carries task_id/state/progress/stage;
- * error carries the engine failure reason when the task failed. A body
- * without them (empty-body sentinel, 404 shape) is reported with
+ * poll on, plus the post detail link when the video belongs to a scheduled
+ * slot (issue #555). The engine task record carries task_id/state/progress/
+ * stage; error carries the engine failure reason when the task failed. A
+ * body without them (empty-body sentinel, 404 shape) is reported with
  * explicit nulls rather than silently dropping fields. */
 export function narrowTaskProgress(result: unknown): {
   task_id: string | null;
@@ -1036,6 +1032,7 @@ export function narrowTaskProgress(result: unknown): {
   progress: number | null;
   stage: string | null;
   error: string | null;
+  postUrl: string | null;
 } {
   const payload =
     typeof result === 'object' && result !== null && 'body' in result
@@ -1057,6 +1054,9 @@ export function narrowTaskProgress(result: unknown): {
     // Surface the engine failure reason: without it a failed task only
     // reports state -1 and the caller can never learn why it failed.
     error: typeof error === 'string' ? sanitizeEngineError(error) : null,
+    // The post detail link, when the video belongs to a scheduled slot
+    // (null for direct generations and for tasks with no slot yet).
+    postUrl: typeof get('postUrl') === 'string' ? (get('postUrl') as string) : null,
   };
 }
 

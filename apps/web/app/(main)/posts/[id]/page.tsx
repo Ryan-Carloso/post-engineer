@@ -17,6 +17,8 @@ import { Badge } from '@/components/ui/badge';
 import AccountCard from '@/components/account-card';
 import { buildGenerationRows } from './generation-rows';
 import { DetailProgressBar } from './detail-progress-bar';
+import { formatDateTime, ScheduleSection } from './schedule-section';
+import { RescheduleSection } from './reschedule-section';
 import { ScriptAngleSection } from './script-angle-section';
 import { usePostAccountCards, type AccountCardData } from './account-cards';
 import { ExternalLinkIcon } from '@/lib/ui';
@@ -31,8 +33,10 @@ import { PublishAccountNotices } from '../publish-user-notice';
 //---------------
 // PostDetailPage (/posts/[id]) — the full-page post detail: big video
 // player, live progress while generating, title editing and delete for
-// awaiting/failed slots. Resolved by id through the unified detail
-// endpoint (GET /api/posts/[id]), never by scanning the history lists.
+// awaiting/ready/failed slots, download of the generated video, and
+// reschedule for pending/ready slots. Resolved by id through the unified
+// detail endpoint (GET /api/posts/[id]), never by scanning the history
+// lists.
 //---------------
 
 const GENERATION_ERROR_KEY: Record<string, TranslationKey> = {
@@ -50,36 +54,6 @@ function videoUrlFor(taskId: string | null | undefined): string | null {
 
 const SLOT_VIDEO_STATUSES = new Set<ScheduledSlot['status']>(['ready', 'publishing', 'published']);
 
-//---------------
-// PUBLISH_LINK_LABEL — the display name per provider. A fixed literal map
-// rather than the raw provider id, so the UI never shows an internal slug
-// or an untranslated new provider.
-//---------------
-function formatDateTime(value: string, locale: 'pt' | 'en', timeZone?: string | null): string {
-  const tag = locale === 'pt' ? 'pt-BR' : 'en-US';
-  if (timeZone) {
-    try {
-      return new Date(value).toLocaleString(tag, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-        timeZone,
-      });
-    } catch {
-      // A schedule row with a garbage timezone must not blank the date —
-      // fall through to the viewer's zone below. The warn keeps the bad
-      // value diagnosable: the UI only ever sends IANA names, so reaching
-      // here signals drift or a direct API caller. Plain console.warn (not
-      // the central logger, which is server-only via posthog-server) —
-      // echoing the schedule's own timezone to the viewer's own console
-      // exfiltrates nothing.
-      console.warn(`Ignoring invalid schedule timezone: ${timeZone}`);
-    }
-  }
-  return new Date(value).toLocaleString(tag, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-}
 
 export default function PostDetailPage() {
   const { t, locale } = useI18n();
@@ -251,48 +225,6 @@ export const PostIdSection = ({ postId }: { postId: string }) => {
   );
 };
 
-//---------------
-// ScheduleSection — when the post goes out (or went out): the slot time
-// rendered in the schedule's own timezone, with the IANA name beside it,
-// so "10:00" is never ambiguous about whose 10:00 it is. An ASAP post has
-// no scheduled time: until it is published the section says so plainly.
-//---------------
-export const ScheduleSection = ({
-  slot,
-  timezone,
-  publishMode,
-  locale,
-}: {
-  slot: ScheduledSlot;
-  timezone: string;
-  publishMode: SlotDetailPayload['schedule']['publishMode'];
-  locale: 'pt' | 'en';
-}) => {
-  const { t } = useI18n();
-  const publishedAt = slot.status === 'published' ? slot.publishedAt : null;
-  const shownAt = publishedAt ?? slot.slotAt;
-  if (publishedAt === null && publishMode === 'asap') {
-    return (
-      <section aria-label={t('posts.scheduleLabel')} className="mt-6">
-        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          {t('posts.asapLabel')}
-        </p>
-        <p className="mt-1 text-sm leading-6 text-primary">{t('posts.asapHint')}</p>
-      </section>
-    );
-  }
-  return (
-    <section aria-label={t('posts.scheduleLabel')} className="mt-6">
-      <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        {publishedAt ? t('posts.publishedOnLabel') : t('posts.scheduledForLabel')}
-      </p>
-      <p className="mt-1 text-sm font-semibold text-primary">
-        {formatDateTime(shownAt, locale, timezone)}{' '}
-        <span className="font-normal text-muted-foreground">({timezone})</span>
-      </p>
-    </section>
-  );
-};
 
 //---------------
 // GenerationFactsSection — read-only record of what the post was generated
@@ -441,7 +373,7 @@ const PublishLinks = ({ links }: { links: PublishLink[] }) => {
 
 //---------------
 // SlotDetail — the scheduled-post body: player or generating progress,
-// title (editable while awaiting), target accounts, error, and the
+// title (editable while awaiting or ready), target accounts, error, and the
 // per-status actions. Delete redirects back to /posts on success;
 // mutation errors render inline and never navigate away.
 //---------------
@@ -475,8 +407,12 @@ export const SlotDetail = ({
 
   const videoUrl = videoUrlFor(slot.taskId);
   const canWatch = SLOT_VIDEO_STATUSES.has(slot.status) && videoUrl !== null;
-  const canEdit = slot.status === 'awaiting';
-  const canDelete = slot.status === 'awaiting' || slot.status === 'failed';
+  // Ready slots are generated but not yet dispatched: their label, time
+  // and row are still the owner's to change (issue #555). Deleting a ready
+  // slot removes the row the publisher claims, so it can never publish.
+  const canEdit = slot.status === 'awaiting' || slot.status === 'ready';
+  const canDelete =
+    slot.status === 'awaiting' || slot.status === 'ready' || slot.status === 'failed';
   const mutationError =
     (updateTitle.isError ? updateTitle.error?.message : null) ??
     (deleteSlot.isError ? deleteSlot.error?.message : null);
@@ -507,6 +443,18 @@ export const SlotDetail = ({
           src={null}
           placeholder={slot.status === 'awaiting' ? t('posts.videoPending') : t('posts.coverNoVideo')}
         />
+      )}
+
+      {canWatch && videoUrl && (
+        <div className="mt-3">
+          <a
+            href={`${videoUrl}?source=download`}
+            download
+            className="inline-block rounded-xl border border-input px-4 py-2 text-sm font-semibold text-primary hover:bg-background"
+          >
+            {t('posts.downloadVideo')}
+          </a>
+        </div>
       )}
 
       <div className="mt-6">
@@ -555,6 +503,8 @@ export const SlotDetail = ({
       <PostIdSection postId={slot.id} />
 
       <ScheduleSection slot={slot} timezone={timezone} publishMode={publishMode} locale={locale} />
+
+      <RescheduleSection slot={slot} timezone={timezone} publishMode={publishMode} />
 
       <GenerationFactsSection generation={generation} personaName={personaName} />
 

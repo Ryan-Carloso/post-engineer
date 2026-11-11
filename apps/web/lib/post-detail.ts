@@ -13,6 +13,7 @@ import { noticesFromOutcomes, type PublishProviderFailure, type PublishUserNotic
 import { buildGenerationFacts } from './generation-facts';
 import { isPersonaAllowed, isScopedApiKey, type PersonaScopeContext } from './api-keys';
 import { logger } from './logger';
+import { postUrlFor } from './post-url';
 
 //---------------
 // Post detail — the shared builders behind GET /api/posts/[id] (and the
@@ -62,6 +63,10 @@ export interface SlotPostDetail {
     providerFailures: PublishProviderFailure[];
     queuePosition: null;
     queueTotal: null;
+    // Absolute link to the post detail page — the agent sends this link in
+    // chat so the owner can watch/download the video (issue #555). Null
+    // when the caller did not pass an origin.
+    postUrl: string | null;
   };
   schedule: {
     id: string;
@@ -159,13 +164,16 @@ async function resolvePublishedSlotEngineData(
 // getSlotPost — the full detail for a scheduled_posts id: slot row,
 // schedule, persona, live engine progress, publish links, progress
 // history. Null when the id is unknown, another user's, or the schedule
-// row is gone (the slot without its schedule is not a post).
+// row is gone (the slot without its schedule is not a post). The origin
+// (request origin, e.g. https://post-engineer.com) builds the absolute
+// postUrl the agent sends in chat; without it postUrl is null.
 //---------------
 export async function getSlotPost(
   supabase: SupabaseClient,
   slotId: string,
   userId: string,
   personaScope: readonly string[] | null,
+  origin: string | null = null,
 ): Promise<SlotPostDetail | null> {
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
@@ -305,6 +313,7 @@ export async function getSlotPost(
   const errorOut = row.error;
   const publishedAtOut = row.published_at;
   const taskIdOut = row.task_id;
+  const postUrlOut = origin === null ? null : postUrlFor(origin, row.id);
   const progressOut = enrichment.progress;
   const stageOut = enrichment.stage;
   const retryableOut = enrichment.retryable;
@@ -325,6 +334,7 @@ export async function getSlotPost(
       error: errorOut,
       publishedAt: publishedAtOut,
       taskId: taskIdOut,
+      postUrl: postUrlOut,
       progress: progressOut,
       stage: stageOut,
       retryable: retryableOut,

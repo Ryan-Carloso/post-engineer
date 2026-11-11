@@ -471,10 +471,10 @@ describe('api', () => {
 
   it('updateSlotTitle throws on failure', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({ success: false, error: 'Only a slot that has not started generating can be edited.' }, false, 409),
+      jsonResponse({ success: false, error: 'Only a pending or ready slot can be edited.' }, false, 409),
     );
     const { updateSlotTitle } = await import('@/lib/api');
-    await expect(updateSlotTitle('slot-1', 'x')).rejects.toThrow('Only a slot that has not started generating can be edited.');
+    await expect(updateSlotTitle('slot-1', 'x')).rejects.toThrow('Only a pending or ready slot can be edited.');
   });
 
   it('updateSlotTitle throws a clean error (not parse noise) on a non-JSON error body', async () => {

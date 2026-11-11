@@ -12,6 +12,8 @@ import { apiErrorResponse } from '@/lib/api-error';
 import { rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
 import { taskPayload, taskState, extractTaskError } from '@/lib/engine-task-state';
 import { hasPublishedSlotForTask, readDurableTaskState } from '@/lib/generation/gone-settle';
+import { lookupSlotIdForTask } from '@/lib/slot-by-task';
+import { postUrlFor } from '@/lib/post-url';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
@@ -109,11 +111,14 @@ async function getHandler(
         // The 410 body carries delivered: true so a caller that only sees
         // the status (e.g. the MCP wait tool) can tell a finished video
         // apart from a failed one — both answer 410 with the same message.
+        // postUrl names the delivered post's detail page (issue #555).
+        const postUrl = await resolvePostUrl(auth.userId, taskId, new URL(request.url).origin);
         return NextResponse.json(
           {
             success: false,
             terminal: true,
             delivered: true,
+            postUrl,
             error: 'The video task no longer exists on the generation engine.',
           },
           { status: 410 },
@@ -129,10 +134,13 @@ async function getHandler(
         rawError: taskGoneMessage(body),
         errorCode: 'engine_restart',
       });
+      // The failed slot's detail page is still a valid link (issue #555).
+      const failedPostUrl = await resolvePostUrl(auth.userId, taskId, new URL(request.url).origin);
       return NextResponse.json(
         {
           success: false,
           terminal: true,
+          postUrl: failedPostUrl,
           error: 'The video task no longer exists on the generation engine.',
         },
         { status: 410 },
@@ -173,13 +181,43 @@ async function getHandler(
         }
       }
     }
-    return NextResponse.json(rewriteVideoUrls(body, taskId, baseUrl), { status: response.ok ? 200 : 502 });
+    // The slot link rides on every status read (issue #555): the agent can
+    // send the detail link as soon as the video exists, and the slot exists
+    // from scheduling time — not only once the render finishes. A missing
+    // slot (direct generation) or a failed lookup answers postUrl null.
+    const postUrl = await resolvePostUrl(auth.userId, taskId, new URL(request.url).origin);
+    return NextResponse.json(attachPostUrl(rewriteVideoUrls(body, taskId, baseUrl), postUrl), { status: response.ok ? 200 : 502 });
   } catch (error) {
     return apiErrorResponse(502, 'Video service is unavailable.', {
       route: 'GET /api/persona/video-status',
       cause: error,
     });
   }
+}
+
+//---------------
+// resolvePostUrl — the slot's absolute detail link for one engine task,
+// or null when the task has no slot (direct generation) or the lookup
+// fails. A failure anywhere (including service-client construction)
+// degrades to null: the status itself still resolves, and the next poll
+// retries.
+//---------------
+async function resolvePostUrl(userId: string, taskId: string, origin: string): Promise<string | null> {
+  try {
+    const slotId = await lookupSlotIdForTask(createSupabaseServiceClient(), userId, taskId);
+    return slotId === null ? null : postUrlFor(origin, slotId);
+  } catch {
+    return null;
+  }
+}
+
+//---------------
+// attachPostUrl — top-level postUrl on an object status body (issue #555).
+// A non-object body (a bare string or array) passes through untouched.
+//---------------
+function attachPostUrl(body: unknown, postUrl: string | null): unknown {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return body;
+  return { ...(body as Record<string, unknown>), postUrl };
 }
 
 //---------------

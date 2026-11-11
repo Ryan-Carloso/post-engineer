@@ -97,6 +97,11 @@ export const enDictionary: Dictionary = {
     delete: 'Delete',
     deleteConfirm: 'Confirm deletion',
     deleteTokenNote: 'The tokens for this video will not be refunded.',
+    downloadVideo: 'Download video',
+    reschedule: 'Reschedule',
+    rescheduleHint: 'Choose a new publish time in the schedule timezone — at least 3 hours ahead and within 30 days.',
+    rescheduleInvalid: 'Choose a valid date and time.',
+    rescheduleError: 'Could not reschedule this post. Please try again.',
     videoPending: 'The video will be generated automatically shortly before publishing.',
     videoGenerating: 'The video is being generated right now.',
     coverNoVideo: 'No video',
@@ -109,7 +114,6 @@ export const enDictionary: Dictionary = {
     mustSelectAccount: 'Select at least one account to publish to.',
   },
   accounts: { ...accountsI18nEn },
-
   // Login
   login: {
     title: 'Welcome back',
@@ -135,7 +139,6 @@ export const enDictionary: Dictionary = {
     agreePrefix: 'By continuing, you agree to our',
     agreeAnd: 'and',
   },
-
   // OAuth
   oauth: {
     startFailed: 'Could not start OAuth.',
@@ -143,7 +146,6 @@ export const enDictionary: Dictionary = {
     popupClosed: 'The OAuth window was closed before completing.',
     failed: 'OAuth authentication failed.',
   },
-
   // API Keys
   apiKeys: {
     title: 'API Keys',
@@ -361,7 +363,6 @@ export const enDictionary: Dictionary = {
     details: 'View details',
     createdAt: 'Created on',
   },
-
   // Tokens / face quality (price per video)
   tokens: {
     balance: 'Token balance',
@@ -376,7 +377,6 @@ export const enDictionary: Dictionary = {
     buyMore: 'Buy more tokens',
     whatsappCta: 'WhatsApp us',
   },
-
   // Pricing / prepaid tokens
   pricing: {
     heroEyebrow: 'TOKENS',

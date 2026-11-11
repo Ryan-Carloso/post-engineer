@@ -79,6 +79,7 @@ function mockSlotsClient(options: {
       select: track('select'),
       eq: track('eq'),
       neq: track('neq'),
+      in: track('in'),
       single: vi.fn(async () => {
         // PATCH's UPDATE ... .select('id').single() runs after an update()
         // call; updateConflict simulates the row dispatching (pending →
@@ -251,8 +252,8 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     );
   });
 
-  it('returns 409 for slots mid-flight (generating, ready, publishing)', async () => {
-    for (const status of ['generating', 'ready', 'publishing']) {
+  it('returns 409 for slots mid-flight (generating, publishing)', async () => {
+    for (const status of ['generating', 'publishing']) {
       const client = mockSlotsClient({
         slot: { id: 'slot-1', schedule_id: 's1', status, title: 'T' },
         schedule: { id: 's1', user_id: USER_ID },
@@ -265,6 +266,29 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
       expect(response.status).toBe(409);
       expect(client.calls.some((c) => c.op === 'delete')).toBe(false);
     }
+  });
+
+  it('deletes a ready slot owned by the user', async () => {
+    // Ready is generated but not yet dispatched: deleting its row removes
+    // the target the publisher claims, so it can never publish. No refund:
+    // a user-initiated delete never refunds tokens.
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'T' },
+      schedule: { id: 's1', user_id: USER_ID },
+      rpcResult: 'deleted',
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await deleteSlot(SLOT_ID);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { success: boolean };
+    expect(body.success).toBe(true);
+    expect(client.rpc).toHaveBeenCalledWith('delete_slot_if_not_last', {
+      p_slot_id: 'slot-1',
+      p_user_id: USER_ID,
+    });
   });
 
   it('returns 409 when deleting the schedule’s only remaining slot', async () => {
@@ -335,9 +359,151 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     const updateCall = client.calls.find((c) => c.op === 'update');
     expect(updateCall).toBeDefined();
     expect(updateCall?.args?.[0]).toEqual({ title: 'Novo tema' });
-    // The status guard is re-checked in the UPDATE predicate itself.
-    const eqCalls = client.calls.filter((c) => c.op === 'eq');
-    expect(eqCalls.some((c) => c.args?.[0] === 'status' && c.args?.[1] === 'pending')).toBe(true);
+    // The status guard is re-checked in the UPDATE predicate itself, over
+    // both editable statuses.
+    const inCall = client.calls.find((c) => c.op === 'in');
+    expect(inCall?.args?.[0]).toBe('status');
+    expect(inCall?.args?.[1]).toEqual(['pending', 'ready']);
+  });
+
+  it('edits the title of a ready slot', async () => {
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { title: 'Novo tema' });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { success: boolean; title: string };
+    expect(body).toEqual({ success: true, title: 'Novo tema' });
+  });
+
+  it('reschedules a pending slot within the window', async () => {
+    const slotAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { slotAt });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { success: boolean; slotAt: string };
+    expect(body).toEqual({ success: true, slotAt });
+    const updateCall = client.calls.find((c) => c.op === 'update');
+    expect(updateCall?.args?.[0]).toEqual({ slot_at: slotAt });
+  });
+
+  it('reschedules a ready slot within the window', async () => {
+    const slotAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { slotAt });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { success: boolean; slotAt: string };
+    expect(body).toEqual({ success: true, slotAt });
+  });
+
+  it('edits the title and reschedules in one call', async () => {
+    const slotAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { title: 'Novo tema', slotAt });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { success: boolean; title: string; slotAt: string };
+    expect(body).toEqual({ success: true, title: 'Novo tema', slotAt });
+    const updateCall = client.calls.find((c) => c.op === 'update');
+    expect(updateCall?.args?.[0]).toEqual({ title: 'Novo tema', slot_at: slotAt });
+  });
+
+  it('returns 400 when the new time is inside the 3h lead', async () => {
+    const slotAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { slotAt });
+
+    expect(response.status).toBe(400);
+    expect(client.calls.some((c) => c.op === 'update')).toBe(false);
+  });
+
+  it('returns 400 when the new time is more than 30 days ahead', async () => {
+    const slotAt = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000).toISOString();
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { slotAt });
+
+    expect(response.status).toBe(400);
+    expect(client.calls.some((c) => c.op === 'update')).toBe(false);
+  });
+
+  it('returns 400 for an invalid slotAt', async () => {
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { slotAt: 'not-a-date' });
+
+    expect(response.status).toBe(400);
+    expect(client.calls.some((c) => c.op === 'update')).toBe(false);
+  });
+
+  it('returns 409 when rescheduling an ASAP slot', async () => {
+    const slotAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID, publish_mode: 'asap' },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { slotAt });
+
+    expect(response.status).toBe(409);
+    expect(client.calls.some((c) => c.op === 'update')).toBe(false);
+  });
+
+  it('returns 400 when neither title nor slotAt is provided', async () => {
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, {});
+
+    expect(response.status).toBe(400);
+    expect(client.calls.some((c) => c.op === 'update')).toBe(false);
   });
 
   it('returns 409 when the slot dispatches between the status check and the update', async () => {
@@ -384,7 +550,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     expect(client.calls.some((c) => c.op === 'update')).toBe(false);
   });
 
-  it('returns 409 for a slot that already dispatched (not pending)', async () => {
+  it('returns 409 for a slot that already dispatched (not pending or ready)', async () => {
     const client = mockSlotsClient({
       slot: { id: 'slot-1', schedule_id: 's1', status: 'published', title: 'Old' },
       schedule: { id: 's1', user_id: USER_ID },
@@ -492,6 +658,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
       status: 'awaiting',
       title: 'Next big thing',
       taskId: null,
+      postUrl: 'https://example.com/posts/slot-1',
     });
     expect(body.schedule).toMatchObject({
       id: 's1',

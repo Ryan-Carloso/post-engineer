@@ -205,4 +205,41 @@ describe('GET /api/persona/video-download', () => {
       expect.objectContaining({ taskId: 'task-1' }),
     );
   });
+
+  it('returns 401 without a session, before any engine call', async () => {
+    const fetchMock = vi.fn(async () => new Response('video-bytes', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: null,
+      error: NextResponse.json({ success: false, error: 'Unauthorized.' }, { status: 401 }),
+    } as never);
+
+    const response = await GET(new Request('https://app.test/api/persona/video-download/task-1/final-1.mp4'), {
+      params: Promise.resolve({ taskId: 'task-1', path: ['final-1.mp4'] }),
+    });
+
+    expect(response.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 for another owner’s task and forwards the caller’s user id', async () => {
+    // The engine looks the task up scoped by the x-user-id the proxy
+    // forwards: another owner's task 404s exactly like a missing one, so
+    // the download never leaks across accounts.
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes('/api/v1/download/')) return new Response('not found', { status: 404 });
+      if (url.includes('/api/v1/tasks/')) return new Response('not found', { status: 404 });
+      return new Response('unexpected', { status: 500 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await GET(new Request('https://app.test/api/persona/video-download/task-1/final-1.mp4'), {
+      params: Promise.resolve({ taskId: 'task-1', path: ['final-1.mp4'] }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ headers: { 'x-user-id': USER_ID } });
+  });
 });

@@ -221,7 +221,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'list_posts',
-    'List upcoming (scheduled) and past (published/failed) posts across all connected accounts. With from + to (ISO-8601 timestamps with UTC offset, at most 62 days) it instead returns every post of any status (awaiting|generating|ready|publishing|published|failed) with slot_at in [from, to) as one slots list plus truncated (true when the cap was hit) — use it to read a day or month. Without from/to it returns two lists: upcoming slots and recent results, each with id, slot_at, status (awaiting|generating|ready|publishing|published|failed; publishing appears in upcoming only when the slot already has userNotices), title, schedule_id, task_id, progress (0-100: 0 for awaiting, 100 for ready/publishing/published, live engine progress for generating, last known for failed), stage (engine pipeline stage like "lipsync" while generating, "done" when complete, null otherwise), queuePosition/queueTotal (1-based position among the schedule\'s awaiting+generating slots; awaiting slots only, null otherwise). Failed slots also carry error and retryable (boolean: true when the failure looks transient). Use when the user asks about their posts — what is coming next, what already went out, how far a video has generated, where it sits in the queue, or why a post failed. Combine with list_schedules or list_social_accounts when persona/account names are needed. A slot that is still publishing is included in upcoming when it already has userNotices (requiresUser true): relay each notice as-is and do not retry, because only the user can fix the account. providerFailures lists every terminal account failure; its requiresUser is true only for the failures also in userNotices.',
+    'List upcoming (scheduled) and past (published/failed) posts across all connected accounts. With from + to (ISO-8601 timestamps with UTC offset, at most 62 days) it instead returns every post of any status (awaiting|generating|ready|publishing|published|failed) with slot_at in [from, to) as one slots list plus truncated (true when the cap was hit) — use it to read a day or month. Without from/to it returns two lists: upcoming slots and recent results, each with id, slot_at, status (awaiting|generating|ready|publishing|published|failed; publishing appears in upcoming only when the slot already has userNotices), title, schedule_id, task_id, postUrl (the link to the post detail page — send it in chat so the user can watch or download the video and edit, reschedule or delete the post), progress (0-100: 0 for awaiting, 100 for ready/publishing/published, live engine progress for generating, last known for failed), stage (engine pipeline stage like "lipsync" while generating, "done" when complete, null otherwise), queuePosition/queueTotal (1-based position among the schedule\'s awaiting+generating slots; awaiting slots only, null otherwise). Failed slots also carry error and retryable (boolean: true when the failure looks transient). Use when the user asks about their posts — what is coming next, what already went out, how far a video has generated, where it sits in the queue, or why a post failed. Combine with list_schedules or list_social_accounts when persona/account names are needed. A slot that is still publishing is included in upcoming when it already has userNotices (requiresUser true): relay each notice as-is and do not retry, because only the user can fix the account. providerFailures lists every terminal account failure; its requiresUser is true only for the failures also in userNotices.',
     ListPostsShape,
     withTracking('list_posts', async (args) => {
       return handleListPosts(apiClient, args);
@@ -239,7 +239,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'get_slot',
-    'Get one scheduled post\'s full detail by slot ID: status, title, scheduled time, generation progress, its schedule (providers, publish mode) and persona. userNotices (requiresUser true) and providerFailures are on the slot as soon as an account fails, including while the slot is still publishing. Relay each userNotices notice. Only the user can fix that account. Do not retry it. Use the slotId from list_posts.',
+    'Get one scheduled post\'s full detail by slot ID: status, title, scheduled time, generation progress, its schedule (providers, publish mode) and persona. userNotices (requiresUser true) and providerFailures are on the slot as soon as an account fails, including while the slot is still publishing. Relay each userNotices notice. Only the user can fix that account. Do not retry it. The slot carries postUrl, the link to its post detail page — send it in chat so the user can watch or download the video and edit, reschedule or delete the post. Use the slotId from list_posts.',
     GetSlotShape,
     withTracking('get_slot', async (args) => {
       return handleGetSlot(apiClient, args);
@@ -248,7 +248,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'update_slot_title',
-    'Edit the title text of one scheduled post. Only a slot that has not started generating (status pending/awaiting) can be edited — published or mid-flight slots are rejected.',
+    'Edit the title text of one scheduled post. Only a pending/awaiting or ready slot can be edited — published or mid-flight slots are rejected.',
     UpdateSlotTitleShape,
     withTracking('update_slot_title', async (args) => {
       return handleUpdateSlotTitle(apiClient, args);
@@ -257,7 +257,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'delete_slot',
-    'Delete one scheduled post slot. Only pending (awaiting) or failed slots can be deleted; published or mid-flight slots are rejected. The schedule\'s last slot cannot be deleted — use cancel_schedule to delete the whole schedule instead.',
+    'Delete one scheduled post slot. Only pending (awaiting), ready or failed slots can be deleted; published or mid-flight slots are rejected. The schedule\'s last slot cannot be deleted — use cancel_schedule to delete the whole schedule instead.',
     DeleteSlotShape,
     withTracking('delete_slot', async (args) => {
       return handleDeleteSlot(apiClient, args);
@@ -293,7 +293,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'get_post',
-    'Get one post\'s full detail by id, whichever kind it is: a scheduled slot (kind "slot") or a direct video generation (kind "generation"). The server resolves the id, so there is no need to guess between get_slot and get_video_generation. Both kinds carry live generation progress while the video is still generating.',
+    'Get one post\'s full detail by id, whichever kind it is: a scheduled slot (kind "slot") or a direct video generation (kind "generation"). The server resolves the id, so there is no need to guess between get_slot and get_video_generation. Both kinds carry live generation progress while the video is still generating. A scheduled slot carries postUrl, the link to its post detail page — send it in chat so the user can watch or download the video and edit, reschedule or delete the post.',
     GetPostShape,
     withTracking('get_post', async (args) => {
       return handleGetPost(apiClient, args);
@@ -380,11 +380,11 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
   server.tool('add_experiment_pair', 'Create both videos of one experiment pair: the same title, body and CTA (segments, without the hook) and one hook per variant. Each video is a normal generate-and-schedule video (charged as usual); the second one starts spacingHours after the first and the order alternates per pair. The server rejects the second video of a pair (before charging; a concurrent race is caught after the insert and refunded) unless it matches the first in: the same providers and accounts, the same title, voice (id and audio URL), video type, video aspect and layout, paragraph number, face quality, language, niche and CTA text, and identical body and CTA segments, with a different hook. The pinned options.imageId is not stored, so it is not compared: pass the same imageId (or none) to both videos yourself. Calling it again with the same arguments replays the videos already created.', AddExperimentPairShape, withTracking('add_experiment_pair', async (args) => handleAddExperimentPair(apiClient, args)));
   server.tool('get_experiment_results', 'Get an experiment\'s videos by pair and its paired results per provider for a metrics window (default 7d): per-pair views/likes/comments/average view duration, wins per variant, sign-test pValue and a label — pending (nothing to compare), indicative (not proven: too few pairs or not all pairs in) or clear (every target pair decided and p < 0.05). Never call a variant the winner unless the label is clear.', GetExperimentResultsShape, withTracking('get_experiment_results', async (args) => handleGetExperimentResults(apiClient, args)));
 
-  server.tool('get_video_status', 'Check the generation status and fetch final video URLs for a taskId.', GetVideoStatusShape, withTracking('get_video_status', async (args) => handleGetVideoStatus(apiClient, args)));
+  server.tool('get_video_status', 'Check the generation status and fetch final video URLs for a taskId. When the video belongs to a scheduled slot the body also carries postUrl, the link to its post detail page — send it in chat so the user can watch or download the video.', GetVideoStatusShape, withTracking('get_video_status', async (args) => handleGetVideoStatus(apiClient, args)));
 
   server.tool(
     'get_video_task_progress',
-    'Poll one video task for its machine-readable progress: returns {task_id, state, progress, stage, error}. error is the engine failure reason when state is -1 (failed), null otherwise. Use for the video after generate_persona_video; prefer this over get_video_status when only progress matters. Prefer wait_for_video_tasks when you need the final outcome instead of progress snapshots.',
+    'Poll one video task for its machine-readable progress: returns {task_id, state, progress, stage, error, postUrl}. error is the engine failure reason when state is -1 (failed), null otherwise. postUrl is the link to the post detail page when the video belongs to a scheduled slot (null otherwise) — send it in chat so the user can watch or download the video. Use for the video after generate_persona_video; prefer this over get_video_status when only progress matters. Prefer wait_for_video_tasks when you need the final outcome instead of progress snapshots.',
     GetVideoTaskProgressShape,
     withTracking('get_video_task_progress', async (args) => {
       return handleGetVideoTaskProgress(apiClient, args);
@@ -393,7 +393,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'wait_for_video_tasks',
-    'Wait for one or more video tasks to reach a terminal state: blocks until every taskId completes (state 1) or fails (state -1, or gone from the engine), or the timeout elapses. Returns {summary, allTerminal, timedOut, results} with one entry per taskId: {task_id, state, outcome, progress, stage, error}. error is the engine failure reason when outcome is failed. Use after generate_persona_video or generate_persona_video_batch instead of polling get_video_task_progress. On timeout the results are partial: call again with the unfinished taskIds.',
+    'Wait for one or more video tasks to reach a terminal state: blocks until every taskId completes (state 1) or fails (state -1, or gone from the engine), or the timeout elapses. Returns {summary, allTerminal, timedOut, results} with one entry per taskId: {task_id, state, outcome, progress, stage, error, postUrl}. error is the engine failure reason when outcome is failed. postUrl is the link to the post detail page when the video belongs to a scheduled slot (null otherwise) — send it in chat so the user can watch or download the video. Use after generate_persona_video or generate_persona_video_batch instead of polling get_video_task_progress. On timeout the results are partial: call again with the unfinished taskIds.',
     WaitForVideoTasksShape,
     withTracking('wait_for_video_tasks', async (args) => {
       return handleWaitForVideoTasks(apiClient, args);

@@ -113,6 +113,7 @@ describe('GET /api/posts/[id]', () => {
         queueTotal: null,
         userNotices: [],
         providerFailures: [],
+        postUrl: 'https://example.com/posts/slot-1',
       },
       schedule: {
         id: 'sched-1',
@@ -150,7 +151,7 @@ describe('GET /api/posts/[id]', () => {
     expect(body.success).toBe(true);
     expect(body.kind).toBe('slot');
     expect(body.slot.id).toBe('slot-1');
-    expect(getSlotPost).toHaveBeenCalledWith(expect.anything(), SLOT_ID, USER_ID, null);
+    expect(getSlotPost).toHaveBeenCalledWith(expect.anything(), SLOT_ID, USER_ID, null, 'https://example.com');
   });
 
   it('returns 404 when neither lookup matches (genuine miss)', async () => {
@@ -166,6 +167,20 @@ describe('GET /api/posts/[id]', () => {
       '[GET /api/posts/[id]] 404 Post not found.',
       expect.objectContaining({ route: 'GET /api/posts/[id]' }),
     );
+  });
+
+  it('returns 404 for another user’s slot id without leaking the row', async () => {
+    // getSlotPost scopes its query by user_id, so another user's slot
+    // resolves to null exactly like an unknown id — the route must answer
+    // the same 404, never the row.
+    vi.mocked(getGenerationPost).mockResolvedValue(null);
+    vi.mocked(getSlotPost).mockResolvedValue(null);
+    const response = await get(SLOT_ID);
+    expect(response.status).toBe(404);
+    const body = (await response.json()) as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toBe('Post not found.');
+    expect(getSlotPost).toHaveBeenCalledWith(expect.anything(), SLOT_ID, USER_ID, null, 'https://example.com');
   });
 
   it('returns 500 and logs when a lookup throws', async () => {

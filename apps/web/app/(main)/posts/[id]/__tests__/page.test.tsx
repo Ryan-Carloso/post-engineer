@@ -33,6 +33,10 @@ vi.mock('@/lib/api', () => ({
   useDeleteSlotMutation: vi.fn(),
 }));
 
+vi.mock('@/lib/api-slot-reschedule', () => ({
+  useRescheduleSlotMutation: vi.fn(),
+}));
+
 vi.mock('@/lib/social-accounts-queries', () => ({
   useRumbleAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
 }));
@@ -71,6 +75,7 @@ import {
 } from '@/lib/api';
 import { useParams } from 'next/navigation';
 import { useI18n } from '@/lib/i18n/provider';
+import { useRescheduleSlotMutation } from '@/lib/api-slot-reschedule';
 
 const SLOT_SCHEDULE = {
   id: 's1',
@@ -224,6 +229,16 @@ function mockMutations() {
     error: null,
   } as never);
   vi.mocked(useDeleteSlotMutation).mockReturnValue({
+    mutate: vi.fn((...args: unknown[]) => {
+      const options = args[args.length - 1] as { onSuccess?: () => void } | undefined;
+      options?.onSuccess?.();
+    }),
+    mutateAsync: vi.fn().mockResolvedValue(undefined),
+    isPending: false,
+    isError: false,
+    error: null,
+  } as never);
+  vi.mocked(useRescheduleSlotMutation).mockReturnValue({
     mutate: vi.fn((...args: unknown[]) => {
       const options = args[args.length - 1] as { onSuccess?: () => void } | undefined;
       options?.onSuccess?.();
@@ -609,7 +624,7 @@ describe('PostDetailPage', () => {
       mutateAsync: vi.fn().mockRejectedValue(new Error('Only a slot that has not started generating can be edited.')),
       isPending: false,
       isError: true,
-      error: new Error('Only a slot that has not started generating can be edited.'),
+      error: new Error('Only a pending or ready slot can be edited.'),
     } as never);
     const user = userEvent.setup();
     render(<DetailPage />);
@@ -617,8 +632,100 @@ describe('PostDetailPage', () => {
     await user.click(screen.getByRole('button', { name: 'posts.editCaption' }));
     await user.click(screen.getByRole('button', { name: 'posts.save' }));
 
-    expect(await screen.findByText('Only a slot that has not started generating can be edited.')).toBeInTheDocument();
+    expect(await screen.findByText('Only a pending or ready slot can be edited.')).toBeInTheDocument();
     expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it('shows a download button for a ready slot', () => {
+    mockQueries({
+      slot: slotPayload({ id: 'r1', status: 'ready', taskId: 'task-9', progress: 100, stage: 'done' }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'r1' });
+    render(<DetailPage />);
+
+    const download = screen.getByRole('link', { name: 'posts.downloadVideo' });
+    expect(download.getAttribute('href')).toBe(
+      '/api/persona/video-download/task-9/final-1.mp4?source=download',
+    );
+    expect(download.getAttribute('download')).not.toBeNull();
+  });
+
+  it('shows no download button for an awaiting slot with no video yet', () => {
+    render(<DetailPage />);
+
+    expect(screen.queryByRole('link', { name: 'posts.downloadVideo' })).not.toBeInTheDocument();
+  });
+
+  it('offers edit and delete on a ready slot', () => {
+    mockQueries({
+      slot: slotPayload({ id: 'r1', status: 'ready', taskId: 'task-9', progress: 100, stage: 'done' }),
+    });
+    vi.mocked(useParams).mockReturnValue({ id: 'r1' });
+    render(<DetailPage />);
+
+    expect(screen.getByRole('button', { name: 'posts.editCaption' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'posts.delete' })).toBeInTheDocument();
+  });
+
+  it('prefills the reschedule input with the slot time in the schedule timezone', async () => {
+    const user = userEvent.setup();
+    render(<DetailPage />);
+
+    await user.click(screen.getByRole('button', { name: 'posts.reschedule' }));
+    // 2030-06-01T10:00:00Z is 11:00 in Europe/Lisbon (summer, UTC+1).
+    expect(screen.getByLabelText('posts.reschedule')).toHaveValue('2030-06-01T11:00');
+  });
+
+  it('saves a reschedule through the mutation', async () => {
+    const user = userEvent.setup();
+    render(<DetailPage />);
+
+    await user.click(screen.getByRole('button', { name: 'posts.reschedule' }));
+    const input = screen.getByLabelText('posts.reschedule');
+    fireEvent.change(input, { target: { value: '2030-06-02T12:00' } });
+    await user.click(screen.getByRole('button', { name: 'posts.save' }));
+
+    const mutate = vi.mocked(useRescheduleSlotMutation).mock.results[0].value.mutate as ReturnType<
+      typeof vi.fn
+    >;
+    // 12:00 in Europe/Lisbon (summer) is 11:00 UTC.
+    expect(mutate).toHaveBeenCalledWith(
+      { slotId: 'u1', slotAt: '2030-06-02T11:00:00.000Z' },
+      expect.anything(),
+    );
+  });
+
+  it('shows no reschedule for an ASAP slot', () => {
+    mockQueries({
+      slot: slotPayload({}, { schedule: { ...SLOT_SCHEDULE, publishMode: 'asap' } }),
+    });
+    render(<DetailPage />);
+
+    expect(screen.queryByRole('button', { name: 'posts.reschedule' })).not.toBeInTheDocument();
+  });
+
+  it('shows no reschedule for a generating slot', () => {
+    mockQueries({ slot: GENERATING_PAYLOAD });
+    vi.mocked(useParams).mockReturnValue({ id: 'gen-slot' });
+    render(<DetailPage />);
+
+    expect(screen.queryByRole('button', { name: 'posts.reschedule' })).not.toBeInTheDocument();
+  });
+
+  it('shows the reschedule error instead of closing the editor', async () => {
+    vi.mocked(useRescheduleSlotMutation).mockReturnValue({
+      mutate: vi.fn(),
+      mutateAsync: vi.fn().mockRejectedValue(new Error('nope')),
+      isPending: false,
+      isError: true,
+      error: new Error('nope'),
+    } as never);
+    const user = userEvent.setup();
+    render(<DetailPage />);
+
+    await user.click(screen.getByRole('button', { name: 'posts.reschedule' }));
+    expect(screen.getByText('posts.rescheduleError')).toBeInTheDocument();
+    expect(screen.getByLabelText('posts.reschedule')).toBeInTheDocument();
   });
 
   it('resolves a completed generation with its video and no slot actions', () => {

@@ -1078,6 +1078,7 @@ describe('narrowTaskProgress type narrowing', () => {
         progress: '60',
         stage: 7,
         error: { reason: 'x' },
+        postUrl: 42,
       },
     });
 
@@ -1088,6 +1089,7 @@ describe('narrowTaskProgress type narrowing', () => {
     expect(text).toContain('"progress": null');
     expect(text).toContain('"stage": null');
     expect(text).toContain('"error": null');
+    expect(text).toContain('"postUrl": null');
   });
 
   it('reports all nulls when the payload is not an object', async () => {
@@ -1101,12 +1103,13 @@ describe('narrowTaskProgress type narrowing', () => {
     expect(text).toContain('"progress": null');
     expect(text).toContain('"stage": null');
     expect(text).toContain('"error": null');
+    expect(text).toContain('"postUrl": null');
   });
 
   it('keeps well-typed fields and nulls only the missing ones', async () => {
     const { handleGetVideoTaskProgress } = await import('../tools.js');
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
-      body: { task_id: 't-2', state: 1, progress: 60 },
+      body: { task_id: 't-2', state: 1, progress: 60, postUrl: 'https://post-engineer.com/posts/slot-1' },
     });
 
     const response = await handleGetVideoTaskProgress(mockClient, { taskId: 't-2' });
@@ -1116,6 +1119,7 @@ describe('narrowTaskProgress type narrowing', () => {
     expect(text).toContain('"progress": 60');
     expect(text).toContain('"stage": null');
     expect(text).toContain('"error": null');
+    expect(text).toContain('"postUrl": "https://post-engineer.com/posts/slot-1"');
   });
 });
 
@@ -1163,6 +1167,7 @@ describe('slot tools', () => {
         stage: null,
         error: null,
         publishedAt: null,
+        postUrl: 'https://post-engineer.com/posts/slot-1',
       },
       schedule: { id: 'sched-1', providers: ['youtube'], publishMode: 'scheduled', timezone: 'Europe/Lisbon' },
       persona: { id: 'persona-1', name: 'Ava' },
@@ -1177,6 +1182,7 @@ describe('slot tools', () => {
     expect(text).toContain('Launch day');
     expect(text).toContain('awaiting');
     expect(text).toContain('"title": "Launch day"');
+    expect(text).toContain('"postUrl": "https://post-engineer.com/posts/slot-1"');
     expect(text).not.toContain('extraUnpinnedField');
     expect(text).toContain('"userNotices": []');
   });

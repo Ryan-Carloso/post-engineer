@@ -193,8 +193,14 @@ describe('GET /api/persona/video-status/:taskId', () => {
       const publishedLimit = vi
         .fn()
         .mockResolvedValue({ data: publishedSlot ? [{ id: 'slot-1' }] : [], error: null });
-      const publishedEq3 = vi.fn().mockReturnValue({ limit: publishedLimit });
-      const publishedEq2 = vi.fn().mockReturnValue({ eq: publishedEq3 });
+      const publishedSingle = vi
+        .fn()
+        .mockResolvedValue({ data: publishedSlot ? { id: 'slot-1' } : null, error: null });
+      const publishedEq3 = vi.fn().mockReturnValue({ limit: publishedLimit, maybeSingle: publishedSingle });
+      // The real builder exposes the terminators after every eq, not only
+      // after the third: the slot-by-task lookup filters on two columns
+      // (user_id + task_id) and ends the chain with maybeSingle here.
+      const publishedEq2 = vi.fn().mockReturnValue({ eq: publishedEq3, maybeSingle: publishedSingle });
       const publishedEq1 = vi.fn().mockReturnValue({ eq: publishedEq2 });
       const publishedSelect = vi.fn().mockReturnValue({ eq: publishedEq1 });
       const chargeSingle = vi
@@ -341,6 +347,46 @@ describe('GET /api/persona/video-status/:taskId', () => {
             engineTaskId: 'task-1',
           }),
         );
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('includes postUrl for the task’s slot on a completed video', async () => {
+      mockTaskBody({
+        status: 200,
+        message: 'success',
+        body: { task_id: 'task-1', state: 1, progress: 100 },
+      });
+      mockServiceClient('gen-1', null, null, null, true);
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as { postUrl: string | null };
+        expect(body.postUrl).toBe('http://localhost/posts/slot-1');
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('returns a null postUrl when the task has no slot', async () => {
+      mockTaskBody({
+        status: 200,
+        message: 'success',
+        body: { task_id: 'task-1', state: 1, progress: 100 },
+      });
+      mockServiceClient('gen-1');
+      const updateSpy = vi
+        .spyOn(videoGeneration, 'recordGenerationUpdate')
+        .mockResolvedValue(undefined);
+      try {
+        const response = await poll();
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as { postUrl: string | null };
+        expect(body.postUrl).toBeNull();
       } finally {
         updateSpy.mockRestore();
       }
@@ -605,6 +651,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
           success: false,
           terminal: true,
           delivered: true,
+          postUrl: 'http://localhost/posts/slot-1',
         });
         expect(updateSpy).toHaveBeenCalledWith(
           expect.objectContaining({

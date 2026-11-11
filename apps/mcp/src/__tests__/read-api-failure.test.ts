@@ -57,13 +57,21 @@ describe('readApiFailure', () => {
       success: false,
       terminal: true,
       delivered: true,
+      postUrl: 'https://post-engineer.com/posts/slot-1',
       error: 'The video task no longer exists on the generation engine.',
     }));
     expect(failure.delivered).toBe(true);
+    expect(failure.postUrl).toBe('https://post-engineer.com/posts/slot-1');
   });
 
-  it('defaults delivered to false when the body carries no flag', () => {
+  it('defaults delivered to false and postUrl to null when the body carries neither', () => {
     const failure = readApiFailure(JSON.stringify({ error: 'Invalid taskId.' }));
     expect(failure.delivered).toBe(false);
+    expect(failure.postUrl).toBeNull();
+  });
+
+  it('ignores a non-string postUrl', () => {
+    const failure = readApiFailure(JSON.stringify({ error: 'Gone.', postUrl: 42 }));
+    expect(failure.postUrl).toBeNull();
   });
 });

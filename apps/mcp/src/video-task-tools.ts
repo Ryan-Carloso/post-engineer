@@ -73,6 +73,9 @@ export interface TaskWaitResult {
   progress: number | null;
   stage: string | null;
   error: string | null;
+  // The post detail link, when the video belongs to a scheduled slot
+  // (null for direct generations and for tasks with no slot yet).
+  postUrl: string | null;
 }
 
 /** Clock and sleep injection (options, never test-only fields on the input). */
@@ -89,7 +92,7 @@ const ENGINE_TASK_GONE_MESSAGE = 'The video task no longer exists on the generat
 
 function toWaitResult(
   taskId: string,
-  narrowed: { task_id: string | null; state: number | null; progress: number | null; stage: string | null; error: string | null },
+  narrowed: { task_id: string | null; state: number | null; progress: number | null; stage: string | null; error: string | null; postUrl: string | null },
 ): TaskWaitResult {
   const outcome = narrowed.state === 1 ? 'completed' : narrowed.state === -1 ? 'failed' : 'running';
   return {
@@ -99,6 +102,7 @@ function toWaitResult(
     progress: narrowed.progress,
     stage: narrowed.stage,
     error: narrowed.error,
+    postUrl: narrowed.postUrl,
   };
 }
 
@@ -155,6 +159,7 @@ export async function handleWaitForVideoTasks(
                   progress: 100,
                   stage: null,
                   error: null,
+                  postUrl: error.postUrl ?? null,
                 } satisfies TaskWaitResult,
               };
             }
@@ -172,6 +177,7 @@ export async function handleWaitForVideoTasks(
                 progress: null,
                 stage: null,
                 error: ENGINE_TASK_GONE_MESSAGE,
+                postUrl: error.postUrl ?? null,
               } satisfies TaskWaitResult,
             };
           }
@@ -197,6 +203,7 @@ export async function handleWaitForVideoTasks(
                 progress: null,
                 stage: null,
                 error: getErrorMessage(error),
+                postUrl: null,
               } satisfies TaskWaitResult,
             };
           }
@@ -235,6 +242,7 @@ export async function handleWaitForVideoTasks(
           progress: null,
           stage: null,
           error: null,
+          postUrl: null,
         },
     );
     const allTerminal = results.every((entry) => entry.outcome !== 'running');

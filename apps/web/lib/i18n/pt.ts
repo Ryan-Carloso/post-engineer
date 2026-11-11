@@ -97,6 +97,11 @@ export const ptDictionary = {
     delete: 'Apagar',
     deleteConfirm: 'Confirmar exclusão',
     deleteTokenNote: 'Os tokens deste vídeo não serão devolvidos.',
+    downloadVideo: 'Baixar vídeo',
+    reschedule: 'Remarcar',
+    rescheduleHint: 'Escolha um novo horário de publicação no fuso horário do agendamento — pelo menos 3 horas à frente e dentro de 30 dias.',
+    rescheduleInvalid: 'Escolha uma data e hora válidas.',
+    rescheduleError: 'Não foi possível remarcar este post. Tente novamente.',
     videoPending: 'O vídeo será gerado automaticamente pouco antes da publicação.',
     videoGenerating: 'O vídeo está sendo gerado agora.',
     coverNoVideo: 'Sem vídeo',
@@ -136,7 +141,6 @@ export const ptDictionary = {
     agreePrefix: 'Ao continuar, você concorda com os nossos',
     agreeAnd: 'e',
   },
-
   // OAuth
   oauth: {
     startFailed: 'Não foi possível iniciar o OAuth.',
@@ -144,7 +148,6 @@ export const ptDictionary = {
     popupClosed: 'A janela do OAuth foi fechada antes de concluir.',
     failed: 'Falha na autenticação OAuth.',
   },
-
   // API Keys
   apiKeys: {
     title: 'API Keys',
@@ -360,7 +363,6 @@ export const ptDictionary = {
     details: 'Ver detalhes',
     createdAt: 'Criada em',
   },
-
   // Tokens / face quality (price per video)
   tokens: {
     balance: 'Saldo de tokens',
@@ -375,7 +377,6 @@ export const ptDictionary = {
     buyMore: 'Comprar mais tokens',
     whatsappCta: 'Chamar no WhatsApp',
   },
-
   // Pricing / prepaid tokens
   pricing: {
     heroEyebrow: 'TOKENS',
@@ -459,7 +460,6 @@ export const ptDictionary = {
     historyRetry: 'Tentar novamente',
     historyShowing: 'Mostrando {shown} de {total}',
   },
-
   // Public landing page
   landing: {
     signIn: 'Entrar',

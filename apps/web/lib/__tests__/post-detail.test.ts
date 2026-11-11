@@ -133,6 +133,40 @@ describe('getSlotPost', () => {
     expect(detail?.generation).not.toHaveProperty('material');
   });
 
+  it('returns postUrl built from the request origin', async () => {
+    const { supabase } = mockSupabase({
+      scheduled_posts: { data: SLOT_ROW, error: null },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null, 'https://post-engineer.com');
+    expect(detail?.slot.postUrl).toBe('https://post-engineer.com/posts/slot-1');
+  });
+
+  it('returns a null postUrl without an origin', async () => {
+    const { supabase } = mockSupabase({
+      scheduled_posts: { data: SLOT_ROW, error: null },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
+    expect(detail?.slot.postUrl).toBeNull();
+  });
+
+  it('scopes the slot lookup by user_id, so another user’s slot never matches', async () => {
+    const { supabase, chains } = mockSupabase({
+      scheduled_posts: { data: SLOT_ROW, error: null },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    await getSlotPost(supabase, 'slot-1', 'user-1', null);
+    expect(chains['scheduled_posts'].eq).toHaveBeenCalledWith('id', 'slot-1');
+    expect(chains['scheduled_posts'].eq).toHaveBeenCalledWith('user_id', 'user-1');
+  });
+
   it('returns the schedule facebook page ids, empty when the column is absent', async () => {
     const tables = {
       scheduled_posts: { data: SLOT_ROW, error: null },

@@ -7,6 +7,7 @@ import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { getSlotPost, personaScopeOf } from '@/lib/post-detail';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { resolveSlotUuid } from '@/lib/schedule-slot-id';
+import { validateScheduleWindow } from '@/lib/schedule-window';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
@@ -14,10 +15,14 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 // /api/schedule/slots/:slotId — per-slot operations on scheduled posts.
 // DELETE removes a single slot; a published slot can never be deleted
 // (the post already went out) and slots that are mid-flight (generating,
-// ready, publishing) are rejected too — the engine owns them.
-// Auth: cookie session (web) or API key / OAuth token (MCP clients) via
-// requireSupabaseSession. API-key callers use the service client, so
-// ownership is re-checked explicitly below (RLS does not apply to it).
+// publishing) are rejected too — the engine owns them. A ready slot IS
+// deletable (issue #555): generated but not yet dispatched, deleting its
+// row removes the target the publisher claims, so it can never publish;
+// the delete RPC re-checks the status under a row lock, so a slot that
+// dispatches mid-delete answers 409 instead. Auth: cookie session (web)
+// or API key / OAuth token (MCP clients) via requireSupabaseSession.
+// API-key callers use the service client, so ownership is re-checked
+// explicitly below (RLS does not apply to it).
 //---------------
 
 interface SlotRow {
@@ -31,6 +36,7 @@ interface ScheduleRow {
   id: string;
   user_id: string;
   persona_id: string | null;
+  publish_mode: string | null;
 }
 
 async function loadOwnedSlot(
@@ -38,7 +44,7 @@ async function loadOwnedSlot(
   slotId: string,
   userId: string,
   personaScope: readonly string[] | null,
-): Promise<{ slot: SlotRow } | { error: NextResponse }> {
+): Promise<{ slot: SlotRow; publishMode: 'scheduled' | 'asap' } | { error: NextResponse }> {
   const { data: slot, error } = await supabase
     .from('scheduled_posts')
     .select('id, schedule_id, status, title')
@@ -66,7 +72,7 @@ async function loadOwnedSlot(
   const row = slot as SlotRow;
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
-    .select('id, user_id, persona_id')
+    .select('id, user_id, persona_id, publish_mode')
     .eq('id', row.schedule_id)
     .maybeSingle();
   if (scheduleError) {
@@ -88,7 +94,10 @@ async function loadOwnedSlot(
   ) {
     return { error: apiErrorResponse(404, 'Slot not found.', { route: 'SLOT_OPS /api/schedule/slots' }) };
   }
-  return { slot: row };
+  // Pre-015 rows have no column value: they are scheduled posts by
+  // construction, so a missing mode narrows to 'scheduled', not null.
+  const publishMode = scheduleRow.publish_mode === 'asap' ? 'asap' : 'scheduled';
+  return { slot: row, publishMode };
 }
 
 //---------------
@@ -128,7 +137,8 @@ async function getHandler(
 
   let detail;
   try {
-    detail = await getSlotPost(supabase, resolvedSlotId, auth.userId, personaScopeOf(auth));
+    // The request origin builds the slot's absolute postUrl (issue #555).
+    detail = await getSlotPost(supabase, resolvedSlotId, auth.userId, personaScopeOf(auth), new URL(request.url).origin);
   } catch (error) {
     logger.error('[api/schedule/slots] slot lookup failed', error);
     return apiErrorResponse(500, 'Failed to load post.', {
@@ -170,9 +180,10 @@ async function deleteHandler(
   const slot = owned.slot;
 
   // DB stores 'pending'; the API presents it as 'awaiting'. Only pending
-  // (not yet dispatched to the engine) and failed (dead row cleanup) slots
-  // can be deleted.
-  const DELETABLE_STATUSES = new Set(['pending', 'failed']);
+  // (not yet dispatched to the engine), ready (generated, not yet
+  // dispatched — deleting removes the row the publisher claims) and failed
+  // (dead row cleanup) slots can be deleted.
+  const DELETABLE_STATUSES = new Set(['pending', 'ready', 'failed']);
   if (!DELETABLE_STATUSES.has(slot.status)) {
     return apiErrorResponse(
       409,
@@ -222,12 +233,16 @@ async function deleteHandler(
 }
 
 //---------------
-// PATCH — edit the title of a slot that has not been dispatched to the
-// engine yet (DB status 'pending', presented as 'awaiting'). The title is
-// the slot label; the video script comes from the stored segments, so this
-// is the edit-label action; anything already generating or beyond is
-// rejected with 409. Only { title: string } is accepted; the title is
-// trimmed and must be non-empty.
+// PATCH — edit the title and/or reschedule a slot that has not been
+// dispatched to the engine yet (DB status 'pending', presented as
+// 'awaiting') or is ready (generated, not yet dispatched — issue #555).
+// The title is the slot label; the video script comes from the stored
+// segments, so this is the edit-label action. slotAt moves the publish
+// time and reuses the scheduling window (3h lead, 30-day max); an ASAP
+// schedule has no scheduled time to move. Anything generating,
+// publishing, published or failed is rejected with 409. Only
+// { title?: string, slotAt?: string } is accepted, and at least one must
+// be present; the title is trimmed and must be non-empty.
 //---------------
 async function patchHandler(
   request: Request,
@@ -251,10 +266,14 @@ async function patchHandler(
 
   const owned = await loadOwnedSlot(supabase, resolvedSlotId, auth.userId, personaScopeOf(auth));
   if ('error' in owned) return owned.error;
-  const slot = owned.slot;
+  const { slot, publishMode } = owned;
 
-  if (slot.status !== 'pending') {
-    return apiErrorResponse(409, 'Only a slot that has not started generating can be edited.', {
+  // A ready slot is generated but not dispatched: its label and publish
+  // time are still the owner's to change. Generating, publishing,
+  // published and failed slots are owned by the engine or already gone.
+  const EDITABLE_STATUSES = new Set(['pending', 'ready']);
+  if (!EDITABLE_STATUSES.has(slot.status)) {
+    return apiErrorResponse(409, 'Only a pending or ready slot can be edited.', {
       route: 'PATCH /api/schedule/slots',
       metadata: { status: slot.status },
     });
@@ -269,28 +288,60 @@ async function patchHandler(
     });
   }
   const rawTitle = (body as { title?: unknown } | null)?.title;
-  if (typeof rawTitle !== 'string' || rawTitle.trim() === '') {
-    return apiErrorResponse(400, 'title must be a non-empty string.', {
+  const rawSlotAt = (body as { slotAt?: unknown } | null)?.slotAt;
+  if (rawTitle === undefined && rawSlotAt === undefined) {
+    return apiErrorResponse(400, 'Provide title or slotAt to update.', {
       route: 'PATCH /api/schedule/slots',
     });
   }
-  const title = rawTitle.trim();
+  const patch: { title?: string; slot_at?: string } = {};
+  let title: string | undefined;
+  if (rawTitle !== undefined) {
+    if (typeof rawTitle !== 'string' || rawTitle.trim() === '') {
+      return apiErrorResponse(400, 'title must be a non-empty string.', {
+        route: 'PATCH /api/schedule/slots',
+      });
+    }
+    title = rawTitle.trim();
+    patch.title = title;
+  }
+  let slotAt: string | undefined;
+  if (rawSlotAt !== undefined) {
+    if (typeof rawSlotAt !== 'string') {
+      return apiErrorResponse(400, 'slotAt must be an ISO date string.', {
+        route: 'PATCH /api/schedule/slots',
+      });
+    }
+    if (publishMode === 'asap') {
+      return apiErrorResponse(409, 'An ASAP post has no scheduled time to move.', {
+        route: 'PATCH /api/schedule/slots',
+      });
+    }
+    const window = validateScheduleWindow(rawSlotAt);
+    if (!window.ok) {
+      return apiErrorResponse(400, window.error, {
+        route: 'PATCH /api/schedule/slots',
+      });
+    }
+    slotAt = new Date(rawSlotAt).toISOString();
+    patch.slot_at = slotAt;
+  }
 
   const { error: updateError } = await supabase
     .from('scheduled_posts')
-    .update({ title })
+    .update(patch)
     .eq('id', slot.id)
     .eq('user_id', auth.userId)
     // Re-check the status in the UPDATE predicate itself: the slot may have
     // dispatched (pending → generating) between the check above and this
     // write. Zero affected rows means the guard failed — surface 409 so the
     // caller refetches instead of believing the edit landed.
-    .eq('status', 'pending')
+    .in('status', ['pending', 'ready'])
     .select('id')
     .single();
   if (updateError) {
     if ((updateError as { code?: string }).code === 'PGRST116') {
-      return apiErrorResponse(409, 'Only a slot that has not started generating can be edited.', {
+      return apiErrorResponse(409, 'Only a pending or ready slot can be edited.', {
         route: 'PATCH /api/schedule/slots',
         metadata: { status: slot.status },
       });
@@ -300,7 +351,11 @@ async function patchHandler(
       cause: updateError,
     });
   }
-  return NextResponse.json({ success: true, title });
+  return NextResponse.json({
+    success: true,
+    ...(title !== undefined ? { title } : {}),
+    ...(slotAt !== undefined ? { slotAt } : {}),
+  });
 }
 
 //---------------

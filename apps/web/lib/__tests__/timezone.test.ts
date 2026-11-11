@@ -4,6 +4,7 @@ import {
   isValidTimezone,
   parseNaiveDateTime,
   parseZonedDateTime,
+  utcToZonedInputValue,
   zonedTimeToUtc,
 } from '../timezone';
 
@@ -109,5 +110,18 @@ describe('parseZonedDateTime', () => {
     expect(parseZonedDateTime('', 'Europe/Lisbon')).toBeNull();
     expect(parseZonedDateTime(null, 'Europe/Lisbon')).toBeNull();
     expect(parseZonedDateTime(123, 'Europe/Lisbon')).toBeNull();
+  });
+});
+
+describe('utcToZonedInputValue', () => {
+  it('formats a UTC instant as wall-clock in the given timezone', () => {
+    // 13:00 UTC is 14:00 in Lisbon (WEST, UTC+1 in October).
+    expect(utcToZonedInputValue('2026-10-01T13:00:00.000Z', 'Europe/Lisbon')).toBe('2026-10-01T14:00');
+    expect(utcToZonedInputValue('2026-10-01T13:00:00.000Z', 'UTC')).toBe('2026-10-01T13:00');
+  });
+
+  it('returns null for garbage', () => {
+    expect(utcToZonedInputValue('not-a-date', 'Europe/Lisbon')).toBeNull();
+    expect(utcToZonedInputValue('2026-10-01T13:00:00.000Z', 'Not/AZone')).toBeNull();
   });
 });
