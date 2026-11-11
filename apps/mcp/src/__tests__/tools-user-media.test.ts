@@ -99,7 +99,7 @@ describe('upload_media tool', () => {
 });
 
 describe('check_media tool', () => {
-  it.each(['ok', 'blocked_403', 'not_image', 'too_small', 'too_large', 'timeout', 'face_detected', 'wrong_aspect', 'media_expired'])(
+  it.each(['ok', 'blocked_403', 'not_image', 'too_small', 'too_large', 'timeout', 'wrong_aspect', 'media_expired'])(
     'passes the engine code %s through unchanged',
     async (code) => {
       const client = fakeClient(async (path, init) => {

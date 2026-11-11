@@ -33,7 +33,7 @@ def _auth_headers():
 
 
 def test_check_returns_the_engine_code(client):
-    detail = {"code": "face_detected", "width": None, "height": None}
+    detail = {"code": "too_small", "width": 100, "height": 100}
     with patch(
         "app.controllers.v1.media_check.user_media.check_media_detail", return_value=detail
     ) as check:

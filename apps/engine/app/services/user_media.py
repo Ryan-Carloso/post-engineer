@@ -21,9 +21,10 @@ card with the place's real name, address or price, painted inside the
 panel (media_overlay). A card that cannot be drawn costs only the card:
 the photo still ships and the reason is recorded as a task warning.
 
-A segment without media shows nothing extra. A segment whose media fails is
-skipped with a warning recorded on the task; one bad URL never fails the
-video.
+A segment without media shows nothing extra. In the images modes every sent
+photo must survive render: a skipped one fails the task with
+images_do_not_cover_audio naming the photo (full lip sync stays lenient and
+only warns). The warning itself never carries a URL, a path or a mediaId.
 
 Nothing here logs image content, local paths, or full URLs: warnings
 carry only the segment index, a stable reason, and — for skipped
@@ -41,7 +42,7 @@ from PIL import Image
 
 from app.models.schema import VideoAspect
 from app.services import (
-    face_detect, image_coverage, media_aspect, media_overlay, persona_hook, image_fetch, segment_panels, subtitle, video,
+    image_coverage, media_aspect, media_overlay, persona_hook, image_fetch, segment_panels, subtitle, video,
 )
 from app.services.image_density import split_interval
 from app.services.lipsync_active import persona_lipsync_active
@@ -60,7 +61,7 @@ MAX_PHOTO_PIXELS = image_fetch.MAX_PHOTO_PIXELS
 _WORD = re.compile(r"[^\W_]+")
 _MEDIA_ID_PATTERN = re.compile(r"^[0-9a-f]{32}\.(jpg|jpeg|png|webp)$")
 
-CHECK_CODES = ("ok", "blocked_403", "not_image", "too_small", "too_large", "timeout", "face_detected", "wrong_aspect", "media_expired")
+CHECK_CODES = ("ok", "blocked_403", "not_image", "too_small", "too_large", "timeout", "wrong_aspect", "media_expired")
 
 # check_media_code failure -> the warning reason prepare_segment_media records.
 # wrong_aspect is composed with dimensions at the call site instead: the
@@ -71,7 +72,6 @@ _CODE_TO_REASON = {
     "too_small": "too small",
     "too_large": "too large",
     "timeout": "download timed out",
-    "face_detected": "face detected",
 }
 REASON_NO_SPOKEN_TIME = "segment has no spoken time"
 REASON_PANEL_FAILED = "photo panel failed to render"
@@ -116,9 +116,10 @@ def segment_intervals(
         for tokens in segment_tokens:
             if not tokens:
                 # A segment with no spoken words (punctuation-only text
-                # passes validation) has no interval of its own: inherit
-                # the previous boundary instead of indexing an empty
-                # slice, which raised IndexError and failed the video.
+                # passes validation in full lip sync; the images modes
+                # reject it before charging) has no interval of its own:
+                # inherit the previous boundary instead of indexing an
+                # empty slice, which raised IndexError and failed the video.
                 boundary = flat[cursor - 1][2] if cursor > 0 else 0.0
                 intervals.append((boundary, boundary))
                 continue
@@ -179,11 +180,12 @@ def _wrong_aspect_reason(source_path: str, aspect: VideoAspect) -> str:
 def _validate_photo(source_path: str, aspect: Optional[VideoAspect] = None) -> Optional[str]:
     """Mechanical check of one image file: None when usable, else a failure code.
 
-    The code is one of not_image / too_small / too_large / wrong_aspect /
-    face_detected. Size is checked on the decoded pixels, so a thumbnail
-    is too_small rather than an opaque render failure. The aspect is only
-    checked when one was given: a photo that cannot fill the frame is
-    wrong_aspect, so it never ships as a blurred strip.
+    The code is one of not_image / too_small / too_large / wrong_aspect.
+    Size is checked on the decoded pixels, so a thumbnail is too_small
+    rather than an opaque render failure. The aspect is only checked when
+    one was given: a photo that cannot fill the frame is wrong_aspect, so
+    it never ships as a blurred strip. Faces are not checked: these are
+    the agent's own photos, and they may show people.
     """
     try:
         with Image.open(source_path) as opened:
@@ -196,8 +198,6 @@ def _validate_photo(source_path: str, aspect: Optional[VideoAspect] = None) -> O
         return "too_small"
     if aspect is not None and media_aspect.mismatch_detail(width, height, aspect) is not None:
         return "wrong_aspect"
-    if face_detect.image_contains_face(source_path):
-        return "face_detected"
     return None
 
 
@@ -250,8 +250,9 @@ def check_media_detail(
     that blocks the SSRF-safe download reports blocked_403 and the agent
     retries with upload_media bytes fetched on its own machine. Never
     logs the URL. A media id that expired or never existed reports
-    "media_expired": the caller lets the existing skip-warning path
-    handle it, it never blocks the video.
+    "media_expired": in the images modes the skip now fails the task
+    (images_do_not_cover_audio names the photo); full lip sync only
+    records the warning.
     """
     if media_id is not None:
         source, reason = _media_id_path(media_id)
@@ -454,8 +455,9 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
     """Materials-stage step for tm.start: draw the panels, persist them, report warnings.
 
     They are overlaid when the final video is assembled (segment_panels.overlay_onto).
-    With the images material, raises image_coverage.ImagesDoNotCoverAudio when no
-    full-frame photo survived.
+    With the images material, raises image_coverage.ImagesDoNotCoverAudio when any
+    sent photo was skipped at render, naming the skip reasons. Full lip sync
+    keeps the lenient behavior: a skipped photo is a warning there.
     """
     segments = getattr(params, "segments", None)
     if not segments:
@@ -471,11 +473,13 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
         face=face, video_script=video_script,
         font_for=_overlay_font(params, segments),
     )
-    # The photos are the whole picture: neighbours cover gaps; none left fails the task.
+    # The photos are the whole picture: every sent photo must survive;
+    # a skipped one fails the task with the skip reasons, never silently.
     hook_end = _hook_end(video_script, subtitle_path, audio_duration) if face == segment_panels.FACE_HOOK else 0.0
-    panels, gap_warnings = image_coverage.extend_over_gaps(
-        panels, image_coverage.coverage_start(face, hook_end), audio_duration
+    sent = sum(len(_media_list(_segment_dict(s).get("media"))) for s in segments)
+    panels = image_coverage.ensure_coverage(
+        panels, face=face, hook_end=hook_end, audio_duration=audio_duration,
+        sent=sent, skipped=warnings,
     )
-    warnings = [*warnings, *gap_warnings]
     segment_panels.write_manifest(task_id, panels, warnings)
     return warnings

@@ -69,6 +69,29 @@ describe('validateSegments with the images material', () => {
     }
   });
 
+  it('rejects a punctuation-only segment with a photo before charging', () => {
+    const segments = withMedia();
+    segments[2] = { kind: 'cta', text: '... ... ... ... ...', media: photos(1, 'c') };
+    const result = validateSegments(segments);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.field).toBe('segments.2.text');
+      expect(result.error.rule).toBe(
+        'The images material needs spoken words on every segment that carries media.',
+      );
+      expect(result.error.fix).toBe('Write real words for this segment, or move its photo to another segment.');
+    }
+  });
+
+  it('still allows a punctuation-only segment in full lip sync', () => {
+    const segments = withMedia();
+    segments[0] = { kind: 'hook', text: hook, media: photos(1, 'h') };
+    segments[1] = { kind: 'body', text: body, media: photos(1, 'b') };
+    segments[2] = { kind: 'cta', text: '... ... ... ... ...', media: photos(1, 'c') };
+    const result = validateSegments(segments, 'full_lipsync');
+    expect(result.ok).toBe(true);
+  });
+
   it('accepts four photos on that 32-word segment and rejects eleven', () => {
     const enough = withMedia();
     enough[1] = { kind: 'body', text: Array(32).fill('word').join(' '), media: photos(4, 'ok') };

@@ -668,6 +668,36 @@ def test_images_density_names_how_many_photos_a_segment_is_missing():
     assert exc_info.value.fix == "Add 3 more images to this segment's media array."
 
 
+def test_a_punctuation_only_segment_with_a_photo_is_rejected_before_charging():
+    # "..." counts as words for the density rule but has no spoken
+    # words, so at render its photo gets no seconds and the
+    # all-must-survive rule would fail the task after charging.
+    segments = _images_segments()
+    segments[2]["text"] = "... ... ... ... ..."
+    segments[2]["media"] = _photos(1, "c")
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments)
+    assert exc_info.value.field == "segments.2.text"
+    assert exc_info.value.rule == (
+        "The images material needs spoken words on every segment that carries media."
+    )
+    assert exc_info.value.fix == (
+        "Write real words for this segment, or move its photo to another segment."
+    )
+
+
+def test_a_punctuation_only_segment_is_still_allowed_in_full_lip_sync():
+    # Full lip sync only warns on a skipped photo, so validation does
+    # not need to reject it there. (One photo per segment: full mode
+    # caps the video at 6 medias.)
+    segments = _images_segments()
+    segments[0]["media"] = _photos(1, "h")
+    segments[1]["media"] = _photos(1, "b")
+    segments[2]["text"] = "... ... ... ... ..."
+    segments[2]["media"] = _photos(1, "c")
+    script_segments.validate_segments(segments, video_type="full_lipsync")
+
+
 def test_the_six_media_cap_still_holds_for_full_lipsync():
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(_many_media_segments(5), video_type="full_lipsync")

@@ -12,9 +12,10 @@
 // mediaId from its own temp_assets directory at task start.
 //
 // Temp assets expire after 1 hour: upload shortly before generating. A
-// scheduled slot far in the future may outlive the asset; the engine
-// then skips that segment's photo with a task warning instead of
-// failing the video.
+// scheduled slot far in the future may outlive the asset; in the images
+// modes the engine then fails the task (images_do_not_cover_audio names
+// the photo) instead of rendering without it, while full lip sync only
+// warns.
 //---------------
 
 import { NextResponse } from 'next/server';

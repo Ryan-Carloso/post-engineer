@@ -93,6 +93,15 @@ describe('prompts hub data', () => {
     expect(text).toContain('30');
     expect(text).toContain('Never send a fake User-Agent or');
     expect(text).toContain('never attach a photo of a different');
+    // The sentence spans two source lines: assert it whole (whitespace
+    // flattened), so dropping the "Referer to bypass a block," line fails.
+    const flatText = text
+      .split('\n')
+      .map((line) => line.trim())
+      .join(' ');
+    expect(flatText).toContain(
+      'Never send a fake User-Agent or Referer to bypass a block, and never attach a photo of a different place.',
+    );
     expect(text).toContain('lives one hour');
   });
 
@@ -154,6 +163,15 @@ describe('prompts hub data', () => {
     expect(text).toContain('drop the badge: a');
     expect(text).toContain('Never send a fake User-Agent or');
     expect(text).toContain('never attach a photo of a different');
+    // The sentence spans two source lines: assert it whole (whitespace
+    // flattened), so dropping the "Referer to bypass a block," line fails.
+    const flatText = text
+      .split('\n')
+      .map((line) => line.trim())
+      .join(' ');
+    expect(flatText).toContain(
+      'Never send a fake User-Agent or Referer to bypass a block, and never attach a photo of a different subject.',
+    );
     expect(text).toContain('lives one hour');
   });
 
