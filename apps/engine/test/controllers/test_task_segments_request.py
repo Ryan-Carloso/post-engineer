@@ -33,7 +33,12 @@ def valid_segments():
 
 
 def test_valid_segments_join_into_video_script():
-    request = TaskVideoRequest(video_subject="Porto", segments=valid_segments())
+    request = TaskVideoRequest(
+        video_title="Porto",
+        video_description="Test description.",
+        video_type="faceless",
+        segments=valid_segments(),
+    )
     assert request.video_script == f"{HOOK}\n\n{BODY}\n\n{CTA}"
 
 
@@ -41,27 +46,44 @@ def test_segments_without_hook_first_is_rejected():
     segments = valid_segments()
     segments[0], segments[1] = segments[1], segments[0]
     with pytest.raises(ValidationError, match="segments"):
-        TaskVideoRequest(video_subject="Porto", segments=segments)
+        TaskVideoRequest(
+            video_title="Porto",
+            video_description="Test description.",
+            video_type="faceless",
+            segments=segments,
+        )
 
 
 def test_segments_with_short_body_is_rejected():
     segments = valid_segments()
     segments[1]["text"] = "Short body text here."
     with pytest.raises(ValidationError, match="segments"):
-        TaskVideoRequest(video_subject="Porto", segments=segments)
+        TaskVideoRequest(
+            video_title="Porto",
+            video_description="Test description.",
+            video_type="faceless",
+            segments=segments,
+        )
 
 
 def test_supplied_script_mismatching_segments_is_rejected():
     with pytest.raises(ValidationError, match="video_script"):
         TaskVideoRequest(
-            video_subject="Porto",
+            video_title="Porto",
+            video_description="Test description.",
+            video_type="faceless",
             video_script="A completely different script.",
             segments=valid_segments(),
         )
 
 
 def test_request_without_segments_is_unchanged():
-    request = TaskVideoRequest(video_subject="Porto", video_script="script")
+    request = TaskVideoRequest(
+        video_title="Porto",
+        video_description="Test description.",
+        video_type="faceless",
+        video_script="script",
+    )
     assert request.video_script == "script"
     assert request.segments is None
 
@@ -70,19 +92,34 @@ def test_segments_with_unknown_segment_key_is_rejected():
     segments = valid_segments()
     segments[1]["voice"] = "narrator"
     with pytest.raises(ValidationError, match="voice"):
-        TaskVideoRequest(video_subject="Porto", segments=segments)
+        TaskVideoRequest(
+            video_title="Porto",
+            video_description="Test description.",
+            video_type="faceless",
+            segments=segments,
+        )
 
 
 def test_segments_with_unknown_media_key_is_rejected():
     segments = valid_segments()
     segments[1]["media"] = {"mediaId": "abc", "alt": "kitchen"}
     with pytest.raises(ValidationError, match="alt"):
-        TaskVideoRequest(video_subject="Porto", segments=segments)
+        TaskVideoRequest(
+            video_title="Porto",
+            video_description="Test description.",
+            video_type="faceless",
+            segments=segments,
+        )
 
 
 def test_empty_segments_list_is_rejected():
     with pytest.raises(ValidationError, match="segments"):
-        TaskVideoRequest(video_subject="Porto", segments=[])
+        TaskVideoRequest(
+            video_title="Porto",
+            video_description="Test description.",
+            video_type="faceless",
+            segments=[],
+        )
 
 
 def test_segments_joining_beyond_video_script_cap_is_rejected():
@@ -97,11 +134,21 @@ def test_segments_joining_beyond_video_script_cap_is_rejected():
         {"kind": "cta", "text": CTA, "media": _photos("c", 2)},
     ]
     with pytest.raises(ValidationError, match="video_script"):
-        TaskVideoRequest(video_subject="Porto", segments=segments)
+        TaskVideoRequest(
+            video_title="Porto",
+            video_description="Test description.",
+            video_type="faceless",
+            segments=segments,
+        )
 
 
 def test_media_shape_only_in_phase_one():
     segments = valid_segments()
     segments[1]["media"] = {"mediaId": "abc", "url": "https://example.com/x.jpg"}
     with pytest.raises(ValidationError, match="media"):
-        TaskVideoRequest(video_subject="Porto", segments=segments)
+        TaskVideoRequest(
+            video_title="Porto",
+            video_description="Test description.",
+            video_type="faceless",
+            segments=segments,
+        )

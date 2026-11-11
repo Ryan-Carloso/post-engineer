@@ -74,7 +74,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Post Engineer command line video generation"
     )
-    parser.add_argument("--video-subject", required=True, help="video subject")
+    parser.add_argument("--video-title", required=True, help="video title")
+    parser.add_argument(
+        "--video-description", required=True, help="video description"
+    )
+    parser.add_argument(
+        "--video-type",
+        required=True,
+        choices=["full_lipsync", "hook_lipsync", "faceless"],
+        help="video mode: full lip sync, lip sync on the hook only, or faceless",
+    )
     parser.add_argument("--video-script", default="", help="custom script")
     parser.add_argument(
         "--video-language",
@@ -212,7 +221,9 @@ def build_video_params(args: argparse.Namespace) -> VideoParams:
         ]
 
     params_kwargs = {
-        "video_subject": args.video_subject,
+        "video_title": args.video_title,
+        "video_description": args.video_description,
+        "video_type": args.video_type,
         "video_script": args.video_script,
         "video_materials": video_materials,
         "video_aspect": args.video_aspect,

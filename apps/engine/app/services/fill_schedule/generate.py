@@ -26,12 +26,10 @@ from app.services.fill_schedule.support import (
     build_persona_params,
     notify_safe,
     post_identity,
-    slot_faceless,
-    slot_full_lipsync,
-    slot_material,
     slot_music_mood,
     slot_refund_amount,
     slot_user_id,
+    slot_video_type,
     track_refund_issued,
     voice_for,
 )
@@ -99,6 +97,14 @@ class BatchGenerator:
             # loudly here — before dispatch, so nothing is spent and
             # nothing needs refunding.
             title = str(slot.get("title") or "").strip()
+            # Agent-supplied publish copy (migration 055): the description
+            # rides the slot row into the task as video_description. A
+            # pre-migration row carries none and the slot fails loudly
+            # in validate_publish_plan — there is no fallback.
+            description = str(slot.get("description") or "").strip()
+            # The one video mode (migration 056): a row without a valid
+            # value fails loudly here, before any dispatch or spend.
+            video_type = slot_video_type(slot)
             # Rows stored before the media-list contract carry one object
             # per segment; normalize so a prepaid slot renders instead of
             # failing on a Pydantic list_type error with no refund. A
@@ -109,7 +115,7 @@ class BatchGenerator:
             # Pre-flight before anything about the job itself: a slot that
             # could never publish is the more fundamental failure, and this
             # check is free.
-            validate_publish_plan(schedule, title)
+            validate_publish_plan(schedule, title, description)
             # `PersonaParams` requires exactly one of voice_id / voice_audio_url,
             # so a schedule that resolves no voice can never generate. Checked
             # before the dispatch: failing the slot now gives a readable reason
@@ -117,10 +123,18 @@ class BatchGenerator:
             # (No refund on this path: the slot never reached the dispatch a
             # refund is anchored to.)
             voice_for(identity)
-            faceless = slot_faceless(slot)
+            # Face modes need a face: the photo comes only from the persona
+            # embed (the snapshot carries no photo), so a persona-less slot
+            # in full_lipsync or hook_lipsync fails here, before dispatch.
+            if video_type in ("full_lipsync", "hook_lipsync") and not (
+                identity.get("avatar_url") or identity.get("photo_path")
+            ):
+                raise RuntimeError(f"{video_type} requires a persona with a photo")
             request = TaskVideoRequest(
-                video_subject=title,
-                persona=build_persona_params(identity, self.store, faceless),
+                video_title=title,
+                video_description=description,
+                video_type=video_type,
+                persona=build_persona_params(identity, self.store, video_type),
                 video_aspect=identity.get("video_aspect") or "9:16",
                 # Layout resolves through post_identity() like every other
                 # editorial field: snapshot first, persona embed second. The
@@ -128,14 +142,6 @@ class BatchGenerator:
                 # before migration 018) and a NULL persona column, which is
                 # the behaviour every existing video already has.
                 video_layout=identity.get("video_layout") or "standard",
-                # Per-post material (scheduled_posts, migration 029), forwarded
-                # exactly like the web's direct dispatch does.
-                faceless_material=slot_material(slot),
-                # Per-post full lip-sync (migration 035), like direct
-                # dispatch. Without it a tick-dispatched or requeued slot
-                # silently renders intro-only; a pre-migration row
-                # renders intro-only, as every earlier video did.
-                full_lipsync=slot_full_lipsync(slot),
                 # Per-post BGM mood (migration 045), like direct dispatch.
                 # Without it a tick-dispatched or requeued slot silently
                 # renders the engine's default mood instead of the

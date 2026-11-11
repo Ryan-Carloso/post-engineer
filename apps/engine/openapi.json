@@ -1012,12 +1012,6 @@
             "title": "Custom Position",
             "type": "number"
           },
-          "faceless_material": {
-            "const": "images",
-            "default": "images",
-            "title": "Faceless Material",
-            "type": "string"
-          },
           "font_name": {
             "anyOf": [
               {
@@ -1038,11 +1032,6 @@
             "title": "Font Size",
             "type": "integer"
           },
-          "full_lipsync": {
-            "default": false,
-            "title": "Full Lipsync",
-            "type": "boolean"
-          },
           "generation_id": {
             "anyOf": [
               {
@@ -1053,11 +1042,6 @@
               }
             ],
             "title": "Generation Id"
-          },
-          "lipsync_enabled": {
-            "default": true,
-            "title": "Lipsync Enabled",
-            "type": "boolean"
           },
           "music_mood": {
             "anyOf": [
@@ -1257,6 +1241,12 @@
             "title": "Video Cta",
             "type": "string"
           },
+          "video_description": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Video Description",
+            "type": "string"
+          },
           "video_language": {
             "anyOf": [
               {
@@ -1297,9 +1287,10 @@
             "title": "Video Script",
             "type": "string"
           },
-          "video_subject": {
-            "maxLength": 500,
-            "title": "Video Subject",
+          "video_title": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Video Title",
             "type": "string"
           },
           "video_transition_mode": {
@@ -1311,6 +1302,9 @@
                 "type": "null"
               }
             ]
+          },
+          "video_type": {
+            "$ref": "#/components/schemas/VideoType"
           },
           "voice_name": {
             "anyOf": [
@@ -1366,7 +1360,9 @@
           }
         },
         "required": [
-          "video_subject"
+          "video_title",
+          "video_description",
+          "video_type"
         ],
         "title": "TaskVideoRequest",
         "type": "object"
@@ -1519,6 +1515,16 @@
           "SlideOut"
         ],
         "title": "VideoTransitionMode",
+        "type": "string"
+      },
+      "VideoType": {
+        "description": "The one video mode (issue #542 follow-up): it replaces the\nfaceless / full_lipsync / lipsync_enabled boolean combination.\n\nfull_lipsync: the whole narration renders as talking head; a persona\n    with a photo is required. 8 tokens at face quality ok, 15 at\n    very_good.\nhook_lipsync: lip sync only on the hook, then the agent's images; a\n    persona with a photo is required. 2 tokens ok, 3 very_good.\nfaceless: only the agent's images; a persona is optional, and when one\n    is present only its voice and niche are used, never its face.\n    1 token.",
+        "enum": [
+          "full_lipsync",
+          "hook_lipsync",
+          "faceless"
+        ],
+        "title": "VideoType",
         "type": "string"
       }
     }

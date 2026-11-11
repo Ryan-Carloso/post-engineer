@@ -64,6 +64,7 @@ def publish_slot_accounts(
     read_video: Callable[[], bytes],
     now: datetime,
     title: str,
+    description: str,
     *,
     base_url: str,
     api_secret: str,
@@ -142,7 +143,7 @@ def publish_slot_accounts(
                 persist_outcomes(outcomes, {"publish_attempts": max_attempts})
                 continue
             try:
-                metadata = _metadata(provider_name, title, schedule, [item["accountId"] for item in started])
+                metadata = _metadata(provider_name, title, schedule, [item["accountId"] for item in started], description)
             except RuntimeError as exc:
                 for outcome in started:
                     _fail_outcome(outcome, str(exc), "publish_rejected", 400, now)

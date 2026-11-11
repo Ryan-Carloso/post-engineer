@@ -942,12 +942,6 @@ export interface components {
              */
             custom_position?: number;
             /**
-             * Faceless Material
-             * @default images
-             * @constant
-             */
-            faceless_material?: "images";
-            /**
              * Font Name
              * @default BeVietnamPro-Medium.ttf
              */
@@ -957,18 +951,8 @@ export interface components {
              * @default 50
              */
             font_size?: number;
-            /**
-             * Full Lipsync
-             * @default false
-             */
-            full_lipsync?: boolean;
             /** Generation Id */
             generation_id?: string | null;
-            /**
-             * Lipsync Enabled
-             * @default true
-             */
-            lipsync_enabled?: boolean;
             /** Music Mood */
             music_mood?: string | null;
             /**
@@ -1034,6 +1018,8 @@ export interface components {
              * @default
              */
             video_cta?: string;
+            /** Video Description */
+            video_description: string;
             /**
              * Video Language
              * @default
@@ -1050,9 +1036,10 @@ export interface components {
              * @default
              */
             video_script?: string;
-            /** Video Subject */
-            video_subject: string;
+            /** Video Title */
+            video_title: string;
             video_transition_mode?: components["schemas"]["VideoTransitionMode"] | null;
+            video_type: components["schemas"]["VideoType"];
             /**
              * Voice Name
              * @default
@@ -1159,6 +1146,22 @@ export interface components {
          * @enum {string}
          */
         VideoTransitionMode: "None" | "Shuffle" | "FadeIn" | "FadeOut" | "SlideIn" | "SlideOut";
+        /**
+         * VideoType
+         * @description The one video mode (issue #542 follow-up): it replaces the
+         *     faceless / full_lipsync / lipsync_enabled boolean combination.
+         *
+         *     full_lipsync: the whole narration renders as talking head; a persona
+         *         with a photo is required. 8 tokens at face quality ok, 15 at
+         *         very_good.
+         *     hook_lipsync: lip sync only on the hook, then the agent's images; a
+         *         persona with a photo is required. 2 tokens ok, 3 very_good.
+         *     faceless: only the agent's images; a persona is optional, and when one
+         *         is present only its voice and niche are used, never its face.
+         *         1 token.
+         * @enum {string}
+         */
+        VideoType: "full_lipsync" | "hook_lipsync" | "faceless";
     };
     responses: never;
     parameters: never;

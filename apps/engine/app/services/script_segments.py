@@ -259,7 +259,7 @@ def legacy_media_list(segments: Any) -> Any:
     return normalized
 
 
-def validate_segments(segments: Any, full_lipsync: bool = False) -> dict[str, Any]:
+def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[str, Any]:
     """Validate segments in rule order and return the normalized result.
 
     Rule order is deliberate: shape, then forbidden content, then hook
@@ -395,7 +395,7 @@ def validate_segments(segments: Any, full_lipsync: bool = False) -> dict[str, An
             f"At most {MAX_SEGMENTS} segments are allowed.",
             "Merge segments until there are at most 12.",
         )
-    images_mode = not full_lipsync
+    images_mode = video_type != "full_lipsync"
     media_cap = MAX_IMAGES_MODE_MEDIAS if images_mode else MAX_MEDIAS
     media_count = 0
     seen_photos: set[tuple[str, str]] = set()
@@ -441,7 +441,7 @@ def validate_segments(segments: Any, full_lipsync: bool = False) -> dict[str, An
     }
 
 
-def segments_to_script(segments: Sequence[dict[str, Any]], full_lipsync: bool = False) -> str:
+def segments_to_script(segments: Sequence[dict[str, Any]], video_type: str = "hook_lipsync") -> str:
     """Validate and join segment texts into the single spoken script.
 
     This function runs the full mechanical validation itself and raises
@@ -449,7 +449,7 @@ def segments_to_script(segments: Sequence[dict[str, Any]], full_lipsync: bool = 
     body paragraphs, and CTA with blank lines, which is the paragraph
     layout the existing TTS and subtitle pipeline reads.
     """
-    validated = validate_segments(list(segments), full_lipsync)
+    validated = validate_segments(list(segments), video_type)
     parts = [validated["hook_text"], *validated["body_texts"], validated["cta_text"]]
     return "\n\n".join(parts)
 

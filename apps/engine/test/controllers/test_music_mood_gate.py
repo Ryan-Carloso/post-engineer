@@ -27,29 +27,23 @@ class CreateTaskMusicMoodGateTests(unittest.TestCase):
     def _patched_create_task(self):
         auth = SimpleNamespace(user_id="user-1")
         with (
-            patch.object(
-                video_controller.base, "get_task_id", return_value="req-1"
-            ),
-            patch.object(
-                video_controller.base, "get_auth_context", return_value=auth
-            ),
-            patch.object(
-                mm, "get_available_music_moods", return_value=("calm", "upbeat")
-            ),
+            patch.object(video_controller.base, "get_task_id", return_value="req-1"),
+            patch.object(video_controller.base, "get_auth_context", return_value=auth),
+            patch.object(mm, "get_available_music_moods", return_value=("calm", "upbeat")),
             patch.object(video_controller.task_manager, "add_task") as add_task,
         ):
             yield add_task
 
     def _call_create_task(self, body):
         with self._patched_create_task() as add_task:
-            response = video_controller.create_task(
-                MagicMock(), body, stop_at="video"
-            )
+            response = video_controller.create_task(MagicMock(), body, stop_at="video")
         return response, add_task
 
     def test_rejects_unknown_music_mood(self):
         body = TaskVideoRequest(
-            video_subject="subject",
+            video_title="subject",
+            video_description="Test description.",
+            video_type="faceless",
             video_script="script",
             music_mood="finance",
         )
@@ -65,7 +59,9 @@ class CreateTaskMusicMoodGateTests(unittest.TestCase):
         for music_mood in ("calm", "none", None):
             with self.subTest(music_mood=music_mood):
                 body = TaskVideoRequest(
-                    video_subject="subject",
+                    video_title="subject",
+                    video_description="Test description.",
+                    video_type="faceless",
                     video_script="script",
                     music_mood=music_mood,
                 )

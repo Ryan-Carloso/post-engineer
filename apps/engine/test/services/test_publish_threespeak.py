@@ -93,19 +93,19 @@ class ThreespeakFillScheduleTest(unittest.TestCase):
     schedule = {"providers": ["3speak"], "threespeak_account_ids": ["alice"]}
 
     def test_metadata_reads_the_caption_and_accounts(self) -> None:
-        metadata = metadata_for("3speak", "title", self.schedule)
+        metadata = metadata_for("3speak", "title", self.schedule, "Agent description.")
         self.assertIsInstance(metadata, upload_publisher.ThreespeakMetadata)
-        self.assertEqual(metadata.caption, "title")
+        self.assertEqual(metadata.caption, "Agent description.")
         self.assertEqual(metadata.account_ids, ("alice",))
 
-    def test_metadata_keeps_a_long_title_whole(self) -> None:
-        metadata = metadata_for("3speak", "a" * 70000, self.schedule)
+    def test_metadata_keeps_a_long_description_whole(self) -> None:
+        metadata = metadata_for("3speak", "title", self.schedule, "a" * 70000)
         self.assertEqual(len(metadata.caption), 70000)
 
     def test_preflight_passes_with_accounts_and_fails_without(self) -> None:
-        validate_publish_plan(self.schedule, "title")
+        validate_publish_plan(self.schedule, "title", "Agent description.")
         with self.assertRaisesRegex(ValueError, "at least one account id"):
-            validate_publish_plan({"providers": ["3speak"]}, "title")
+            validate_publish_plan({"providers": ["3speak"]}, "title", "Agent description.")
 
     def test_slot_select_reads_the_threespeak_column(self) -> None:
         from app.services.fill_schedule.store import ScheduleStore

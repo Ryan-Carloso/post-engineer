@@ -378,7 +378,7 @@ def caption_params(params: VideoParams) -> VideoParams:
     """
     if params.subtitle_position != "center":
         return params
-    on_face = params.full_lipsync or (
+    on_face = params.video_type == "full_lipsync" or (
         persona_lipsync_active(params) and params.video_layout != VideoLayout.react
     )
     if not on_face:

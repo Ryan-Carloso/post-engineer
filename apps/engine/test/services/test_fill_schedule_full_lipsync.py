@@ -1,10 +1,11 @@
-"""The batch pipeline forwards the per-post full lip-sync choice.
+"""The batch pipeline forwards the per-post video_type choice.
 
-scheduled_posts.full_lipsync (migration 035) is written by the web and
+scheduled_posts.video_type (migration 056) is written by the web and
 must reach the engine request on the batch path too, or a tick-dispatched
 pending slot — or a slot requeued after an engine restart mid-generation
 — silently renders intro-only even though the user asked for the
-whole video as talking head.
+whole video as talking head. A slot without a valid video_type fails
+loudly in the pre-flight instead of guessing a mode.
 """
 
 import sys
@@ -15,8 +16,9 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from app.models.schema import VIDEO_TYPE_ERROR_SUFFIX
 from app.services import fill_schedule as fs
-from app.services.fill_schedule.support import slot_full_lipsync
+from app.services.fill_schedule.support import slot_video_type
 
 UTC = timezone.utc
 
@@ -26,6 +28,8 @@ def _slot(**extra):
         "id": "slot-1",
         "slot_at": "2026-09-08T09:00:00+00:00",
         "title": "Batch title one",
+        "description": "Agent description.",
+        "video_type": "hook_lipsync",
         "segments": [
             {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.", "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}]},
             {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.", "media": [{"url": "https://example.com/b0.jpg"}, {"url": "https://example.com/b1.jpg"}, {"url": "https://example.com/b2.jpg"}, {"url": "https://example.com/b3.jpg"}, {"url": "https://example.com/b4.jpg"}, {"url": "https://example.com/b5.jpg"}]},
@@ -73,15 +77,24 @@ class _Store:
         pass
 
 
-class SlotFullLipsyncTests(unittest.TestCase):
-    def test_only_literal_true_selects_full_lipsync(self):
-        self.assertTrue(slot_full_lipsync({"full_lipsync": True}))
-        for value in (False, None, "true", 1, "True", ""):
-            self.assertFalse(slot_full_lipsync({"full_lipsync": value}))
-        self.assertFalse(slot_full_lipsync({}))
+class SlotVideoTypeTests(unittest.TestCase):
+    def test_valid_video_types_pass_through(self):
+        for video_type in ("full_lipsync", "hook_lipsync", "faceless"):
+            self.assertEqual(slot_video_type({"video_type": video_type}), video_type)
+
+    def test_missing_video_type_fails_with_the_valid_values(self):
+        with self.assertRaises(RuntimeError) as caught:
+            slot_video_type({})
+        self.assertIn(VIDEO_TYPE_ERROR_SUFFIX, str(caught.exception))
+
+    def test_invalid_video_type_fails_with_the_valid_values(self):
+        for bad in ("full", "true", 1, None, ""):
+            with self.assertRaises(RuntimeError) as caught:
+                slot_video_type({"video_type": bad})
+            self.assertIn(VIDEO_TYPE_ERROR_SUFFIX, str(caught.exception))
 
 
-class BatchDispatchFullLipsyncTests(unittest.TestCase):
+class BatchDispatchVideoTypeTests(unittest.TestCase):
     def _dispatched_request(self, slot):
         store = _Store(slot)
         scheduler = fs.FillScheduleScheduler(
@@ -96,19 +109,44 @@ class BatchDispatchFullLipsyncTests(unittest.TestCase):
     def test_full_lipsync_slot_dispatches_full_lipsync(self):
         # Full lip sync needs no media (at most 6 photos for the whole
         # video), so the slot dispatches with the media stripped.
-        slot = _slot(full_lipsync=True)
+        slot = _slot(video_type="full_lipsync")
         for segment in slot["segments"]:
             segment.pop("media", None)
         request = self._dispatched_request(slot)
-        self.assertTrue(request.full_lipsync)
+        self.assertEqual(request.video_type, "full_lipsync")
 
-    def test_legacy_slot_without_the_column_dispatches_intro_only(self):
+    def test_hook_lipsync_slot_dispatches_hook_lipsync(self):
         request = self._dispatched_request(_slot())
-        self.assertFalse(request.full_lipsync)
+        self.assertEqual(request.video_type, "hook_lipsync")
 
-    def test_non_literal_full_lipsync_dispatches_intro_only(self):
-        request = self._dispatched_request(_slot(full_lipsync="true"))
-        self.assertFalse(request.full_lipsync)
+    def test_slot_without_video_type_fails_without_dispatch(self):
+        slot = _slot()
+        del slot["video_type"]
+        store = _Store(slot)
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=MagicMock(), publish_video=MagicMock()
+        )
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(enqueued, 0)
+        dispatch.assert_not_called()
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertIn(VIDEO_TYPE_ERROR_SUFFIX, store.updates[0][1]["error"])
+
+    def test_invalid_video_type_fails_without_dispatch(self):
+        slot = _slot(video_type="true")
+        store = _Store(slot)
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=MagicMock(), publish_video=MagicMock()
+        )
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(enqueued, 0)
+        dispatch.assert_not_called()
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertIn(VIDEO_TYPE_ERROR_SUFFIX, store.updates[0][1]["error"])
 
 
 if __name__ == "__main__":

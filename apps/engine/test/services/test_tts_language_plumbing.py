@@ -22,7 +22,9 @@ from app.services.voice_providers import TtsResult
 class TestGenerateAudioForwardsLanguage(unittest.TestCase):
     def test_video_language_reaches_voice_tts(self):
         params = VideoParams(
-            video_subject="Port wine cellars",
+            video_title="Port wine cellars",
+            video_description="Test description.",
+            video_type="faceless",
             video_language="en",
             voice_name="chatterbox:en_us_male_01",
         )

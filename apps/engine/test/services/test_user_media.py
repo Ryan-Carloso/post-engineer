@@ -58,7 +58,11 @@ def _write_words(tmp_path, words):
 
 
 def _params(**overrides):
-    values = {"video_subject": "Porto trip"}
+    values = {
+        "video_title": "Porto trip",
+        "video_description": "Test description.",
+        "video_type": "faceless",
+    }
     values.update(overrides)
     return VideoParams(**values)
 

@@ -37,19 +37,44 @@ def _stub_bundled_font(tmp_path, monkeypatch):
     fonts = tmp_path / "fonts"
     fonts.mkdir()
     shutil.copyfile(source, fonts / vd.DEFAULT_SUBTITLE_FONT)
-    monkeypatch.setattr(vd.utils, "font_dir", lambda sub_dir="": str(fonts / sub_dir if sub_dir else fonts))
+    monkeypatch.setattr(
+        vd.utils, "font_dir", lambda sub_dir="": str(fonts / sub_dir if sub_dir else fonts)
+    )
 
 
 def _media(tmp_path):
     base = str(tmp_path / "base.mp4")
     subprocess.run(
-        ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0x1e1ed2:s=1080x1920:r=25:d=2",
-         "-pix_fmt", "yuv420p", base],
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=0x1e1ed2:s=1080x1920:r=25:d=2",
+            "-pix_fmt",
+            "yuv420p",
+            base,
+        ],
         check=True,
     )
     audio = str(tmp_path / "voice.wav")
     subprocess.run(
-        ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "2", audio],
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=r=44100:cl=mono",
+            "-t",
+            "2",
+            audio,
+        ],
         check=True,
     )
     subtitle = str(tmp_path / "subtitle.srt")
@@ -61,7 +86,9 @@ def _media(tmp_path):
 def _text_rows(path, tmp_path):
     """First and last pixel row carrying caption text, in a rendered video."""
     frame = str(tmp_path / "frame.png")
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", "1", "-i", path, "-frames:v", "1", frame], check=True)
+    subprocess.run(
+        ["ffmpeg", "-y", "-v", "error", "-ss", "1", "-i", path, "-frames:v", "1", frame], check=True
+    )
     with Image.open(frame) as opened:
         pixels = np.asarray(opened.convert("RGB")).astype(int)
     differs = np.abs(pixels - np.array(BLUE)).sum(axis=2) > 90
@@ -76,7 +103,9 @@ def _render(tmp_path, caption_bands, name):
     # The same params the final encode gets for a persona video.
     params = full_lipsync.caption_params(
         VideoParams(
-            video_subject="x",
+            video_title="x",
+            video_description="Test description.",
+            video_type="hook_lipsync",
             video_aspect="9:16",
             persona=PersonaParams(name="p", photo_url="https://example.com/p.png", voice_id="calm"),
         )
@@ -93,7 +122,9 @@ def _render(tmp_path, caption_bands, name):
     return output
 
 
-def test_the_production_caption_position_lands_inside_the_panel_without_a_band(tmp_path, monkeypatch):
+def test_the_production_caption_position_lands_inside_the_panel_without_a_band(
+    tmp_path, monkeypatch
+):
     _stub_bundled_font(tmp_path, monkeypatch)
     output = _render(tmp_path, (), "no-band.mp4")
     _top, bottom = _text_rows(output, tmp_path)
@@ -123,7 +154,9 @@ def test_a_cue_that_starts_before_the_panel_is_still_lifted(tmp_path, monkeypatc
     assert bottom <= panel_top - segment_panels.CAPTION_GAP, "the captions stay above the panel"
 
 
-def test_captions_use_the_frame_scaled_font_size_and_leave_the_callers_params_alone(tmp_path, monkeypatch):
+def test_captions_use_the_frame_scaled_font_size_and_leave_the_callers_params_alone(
+    tmp_path, monkeypatch
+):
     _stub_bundled_font(tmp_path, monkeypatch)
     sizes = []
     real_text_clip = vd.TextClip
@@ -141,7 +174,13 @@ def test_captions_use_the_frame_scaled_font_size_and_leave_the_callers_params_al
     monkeypatch.setattr(vd, "TextClip", recording_text_clip)
     monkeypatch.setattr(vd.subtitle_sizing, "scaled_font_size", fake_scaled)
     base, audio, subtitle = _media(tmp_path)
-    params = VideoParams(video_subject="x", video_aspect="9:16", font_size=50)
+    params = VideoParams(
+        video_title="x",
+        video_description="Test description.",
+        video_type="faceless",
+        video_aspect="9:16",
+        font_size=50,
+    )
     vd.generate_video(
         video_path=base,
         audio_path=audio,

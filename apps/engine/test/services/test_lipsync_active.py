@@ -5,7 +5,11 @@ from app.services.lipsync_active import persona_lipsync_active
 
 
 def _params(**overrides):
-    values = {"video_subject": "x"}
+    values = {
+        "video_title": "x",
+        "video_description": "Test description.",
+        "video_type": "hook_lipsync" if overrides.get("persona") is not None else "faceless",
+    }
     values.update(overrides)
     return VideoParams(**values)
 
@@ -24,6 +28,6 @@ def test_no_persona_is_inactive():
     assert persona_lipsync_active(_params()) is False
 
 
-def test_lipsync_disabled_is_inactive_even_with_a_photo():
+def test_faceless_is_inactive_even_with_a_photo():
     persona = PersonaParams(name="P", photo_url="https://e.com/p.jpg", voice_id="v")
-    assert persona_lipsync_active(_params(persona=persona, lipsync_enabled=False)) is False
+    assert persona_lipsync_active(_params(persona=persona, video_type="faceless")) is False

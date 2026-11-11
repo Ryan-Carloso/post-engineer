@@ -22,7 +22,12 @@ from app.services import music_mood as mm
 
 
 def _params(music_mood=None):
-    return VideoParams(video_subject="Lisbon trams", music_mood=music_mood)
+    return VideoParams(
+        video_title="Lisbon trams",
+        video_description="Test description.",
+        video_type="faceless",
+        music_mood=music_mood,
+    )
 
 
 class TestResolveMusicMood(unittest.TestCase):
@@ -31,7 +36,8 @@ class TestResolveMusicMood(unittest.TestCase):
 
     def test_none_mood_is_explicit_no_music_without_consulting_catalog(self):
         with patch.object(
-            mm, "get_available_music_moods",
+            mm,
+            "get_available_music_moods",
             side_effect=AssertionError("catalog must not be consulted for 'none'"),
         ):
             self.assertEqual(mm.resolve_music_mood(_params("none")), "none")
@@ -47,9 +53,7 @@ class TestResolveMusicMood(unittest.TestCase):
 
     def test_omitted_mood_with_empty_catalog_reports_error_and_returns_none(self):
         records = []
-        handler_id = logger.add(
-            lambda message: records.append(message.record), level="ERROR"
-        )
+        handler_id = logger.add(lambda message: records.append(message.record), level="ERROR")
         try:
             with self._patch_moods(()):
                 self.assertEqual(mm.resolve_music_mood(_params()), "none")
@@ -62,9 +66,7 @@ class TestResolveMusicMood(unittest.TestCase):
 
     def test_requested_mood_with_empty_catalog_reports_error_and_returns_none(self):
         records = []
-        handler_id = logger.add(
-            lambda message: records.append(message.record), level="ERROR"
-        )
+        handler_id = logger.add(lambda message: records.append(message.record), level="ERROR")
         try:
             with self._patch_moods(()):
                 self.assertEqual(mm.resolve_music_mood(_params("upbeat")), "none")
@@ -76,14 +78,10 @@ class TestResolveMusicMood(unittest.TestCase):
         # The ERROR is forwarded to PostHog as $exception: a path-like
         # requested mood must be scrubbed like any other free text.
         records = []
-        handler_id = logger.add(
-            lambda message: records.append(message.record), level="ERROR"
-        )
+        handler_id = logger.add(lambda message: records.append(message.record), level="ERROR")
         try:
             with self._patch_moods(()):
-                self.assertEqual(
-                    mm.resolve_music_mood(_params("/home/ryan/secret-mood")), "none"
-                )
+                self.assertEqual(mm.resolve_music_mood(_params("/home/ryan/secret-mood")), "none")
         finally:
             logger.remove(handler_id)
         messages = [r["message"] for r in records]
@@ -104,7 +102,8 @@ class TestResolveMusicMood(unittest.TestCase):
 class TestValidateMusicMood(unittest.TestCase):
     def test_none_and_none_string_need_no_catalog(self):
         with patch.object(
-            mm, "get_available_music_moods",
+            mm,
+            "get_available_music_moods",
             side_effect=AssertionError("catalog must not be consulted"),
         ):
             mm.validate_music_mood(None)
@@ -130,9 +129,7 @@ class TestValidateMusicMood(unittest.TestCase):
 class TestLogBgmSelection(unittest.TestCase):
     def _capture(self, level):
         records = []
-        handler_id = logger.add(
-            lambda message: records.append(message.record), level=level
-        )
+        handler_id = logger.add(lambda message: records.append(message.record), level=level)
         return records, handler_id
 
     def test_selected_track_logs_info(self):
@@ -207,13 +204,9 @@ class TestGetAvailableMusicMoods(unittest.TestCase):
         # A missing catalog warns locally: the absolute path must not reach
         # the log line (the OSError text carries the path too).
         records = []
-        handler_id = logger.add(
-            lambda message: records.append(message.record), level="WARNING"
-        )
+        handler_id = logger.add(lambda message: records.append(message.record), level="WARNING")
         try:
-            self.assertEqual(
-                mm.get_available_music_moods("/app/resource/songs/missing.toml"), ()
-            )
+            self.assertEqual(mm.get_available_music_moods("/app/resource/songs/missing.toml"), ())
         finally:
             logger.remove(handler_id)
         messages = [r["message"] for r in records]
@@ -246,9 +239,7 @@ class TestGetAvailableMusicMoods(unittest.TestCase):
             )
 
     def test_missing_catalog_returns_empty_tuple(self):
-        self.assertEqual(
-            mm.get_available_music_moods("/no/such/catalog.toml"), ()
-        )
+        self.assertEqual(mm.get_available_music_moods("/no/such/catalog.toml"), ())
 
 
 if __name__ == "__main__":

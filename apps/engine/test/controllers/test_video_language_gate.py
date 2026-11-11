@@ -24,24 +24,20 @@ class CreateTaskLanguageGateTests(unittest.TestCase):
     def _call_create_task(self, body):
         auth = SimpleNamespace(user_id="user-1")
         with (
-            patch.object(
-                video_controller.base, "get_task_id", return_value="req-1"
-            ),
-            patch.object(
-                video_controller.base, "get_auth_context", return_value=auth
-            ),
+            patch.object(video_controller.base, "get_task_id", return_value="req-1"),
+            patch.object(video_controller.base, "get_auth_context", return_value=auth),
             patch.object(video_controller.task_manager, "add_task") as add_task,
         ):
-            response = video_controller.create_task(
-                MagicMock(), body, stop_at="video"
-            )
+            response = video_controller.create_task(MagicMock(), body, stop_at="video")
         return response, add_task
 
     def test_rejects_non_english_video_language(self):
         for language in ("pt", "pt-BR", "es", "fr"):
             with self.subTest(language=language):
                 body = TaskVideoRequest(
-                    video_subject="subject",
+                    video_title="subject",
+                    video_description="Test description.",
+                    video_type="faceless",
                     video_script="script",
                     video_language=language,
                 )
@@ -57,14 +53,10 @@ class CreateTaskLanguageGateTests(unittest.TestCase):
                         "get_auth_context",
                         return_value=auth,
                     ),
-                    patch.object(
-                        video_controller.task_manager, "add_task"
-                    ) as add_task,
+                    patch.object(video_controller.task_manager, "add_task") as add_task,
                 ):
                     with self.assertRaises(HttpException) as ctx:
-                        video_controller.create_task(
-                            MagicMock(), body, stop_at="video"
-                        )
+                        video_controller.create_task(MagicMock(), body, stop_at="video")
                 self.assertEqual(ctx.exception.status_code, 400)
                 self.assertIn(
                     "Only English videos are supported for now",
@@ -76,7 +68,9 @@ class CreateTaskLanguageGateTests(unittest.TestCase):
         for language in ("en", "en-US", "EN", ""):
             with self.subTest(language=language):
                 body = TaskVideoRequest(
-                    video_subject="subject",
+                    video_title="subject",
+                    video_description="Test description.",
+                    video_type="faceless",
                     video_script="script",
                     video_language=language,
                 )

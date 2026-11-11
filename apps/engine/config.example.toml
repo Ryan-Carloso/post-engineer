@@ -33,14 +33,6 @@ max_video_script_characters = 600
 # Persistent per-user BGM history database. Keep this on durable storage.
 bgm_history_db = "storage/bgm_history.sqlite3"
 
-# Persona lip-sync intro (LongCat-Video-Avatar 1.5 on GPU).
-# When true (default), jobs that include an inline persona generate the
-# lip-synced persona intro before the main video. When false, the persona
-# contributes only its voice/house voice and the video is rendered as a
-# normal stock-footage video — much faster and no GPU required.
-# Callers can also override per request with the `lipsync_enabled` field.
-persona_lipsync_enabled = true
-
 # Persona hook pacing is product-fixed in code
 # (PERSONA_HOOK_* in app/services/persona_hook.py) — the values were validated against GPU intro cost and lipsync quality windows and are
 # intentionally not tunable.

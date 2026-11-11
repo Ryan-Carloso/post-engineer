@@ -51,6 +51,7 @@ class FillSchedulePublishPostHogTests(TestCase):
         slot = {
             "id": "slot-1",
             "title": "Porto coffee",
+            "description": "Porto coffee description.",
             "task_id": "t-1",
             "faceless": True,
             "publish_attempts": 0,

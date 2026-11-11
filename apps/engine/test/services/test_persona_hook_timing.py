@@ -80,14 +80,18 @@ class TestHookEndMeasurement:
 
     def test_unmatched_words_fall_back_to_the_spoken_end(self):
         cues = [_cue(1, "00:00:00,000", "00:00:06,000", "Different words.")]
-        assert _find_hook_end_seconds("The hook is complete here.\n\nThe rest.", cues) == pytest.approx(6.0)
+        assert _find_hook_end_seconds(
+            "The hook is complete here.\n\nThe rest.", cues
+        ) == pytest.approx(6.0)
 
     def test_no_timed_cues_measures_zero(self):
         assert _find_hook_end_seconds("Hook.\n\nBody.", []) == 0.0
 
 
 class TestLipsyncWindow:
-    @pytest.mark.parametrize("hook_end, expected", [(14.6, 12.0), (9.0, 9.0), (5.0, 5.0), (12.0, 12.0)])
+    @pytest.mark.parametrize(
+        "hook_end, expected", [(14.6, 12.0), (9.0, 9.0), (5.0, 5.0), (12.0, 12.0)]
+    )
     def test_window_is_the_hook_capped_at_the_ceiling(self, hook_end, expected):
         assert lipsync_window_seconds(hook_end, 12.0) == expected
 
@@ -95,9 +99,10 @@ class TestLipsyncWindow:
 def _lipsync_params() -> VideoParams:
     avatar = "data:image/png;base64," + base64.b64encode(b"img").decode()
     return VideoParams(
-        video_subject="francesinha",
+        video_title="francesinha",
+        video_description="Test description.",
+        video_type="hook_lipsync",
         video_aspect="9:16",
-        lipsync_enabled=True,
         persona=PersonaParams(name="Ryan", voice_id="calm", avatar_url=avatar),
     )
 
@@ -125,8 +130,12 @@ class TestHookOutsideWindowNeverRegeneratesOrFails:
 class TestLipsyncIntroIsCappedNotSkipped:
     def _prepare(self, tmp_path, cues=_WHISPER_CUES, hook_end=None, audio_seconds=30.0):
         with ExitStack() as stack:
-            stack.enter_context(patch.object(task_service.utils, "task_dir", return_value=str(tmp_path)))
-            stack.enter_context(patch.object(task_service.subtitle, "file_to_subtitles", return_value=cues))
+            stack.enter_context(
+                patch.object(task_service.utils, "task_dir", return_value=str(tmp_path))
+            )
+            stack.enter_context(
+                patch.object(task_service.subtitle, "file_to_subtitles", return_value=cues)
+            )
             stack.enter_context(
                 patch.object(task_service.voice, "get_audio_duration", return_value=audio_seconds)
             )
@@ -142,7 +151,9 @@ class TestLipsyncIntroIsCappedNotSkipped:
                 )
             )
             compose = stack.enter_context(
-                patch.object(task_service.video, "compose_lipsync_layout", return_value="combined.mp4")
+                patch.object(
+                    task_service.video, "compose_lipsync_layout", return_value="combined.mp4"
+                )
             )
             track = stack.enter_context(patch.object(persona_hook, "track_event"))
             result = task_service.prepare_persona_lipsync_video(
@@ -180,7 +191,9 @@ class TestHookEstimatedWithoutSubtitles:
     def test_estimate_is_the_hook_share_of_the_audio(self):
         script = "Hook here.\n\nBody text that runs."
         hook, total = len("Hookhere"), len("HookhereBodytextthatruns")
-        assert persona_hook.estimate_hook_end_seconds(script, 24.0) == pytest.approx(24.0 * hook / total)
+        assert persona_hook.estimate_hook_end_seconds(script, 24.0) == pytest.approx(
+            24.0 * hook / total
+        )
 
     def test_estimate_without_a_duration_is_zero(self):
         assert persona_hook.estimate_hook_end_seconds("Hook.\n\nBody.", 0.0) == 0.0
@@ -214,7 +227,10 @@ def test_report_lipsync_intro_skipped_tracks_immediately(monkeypatch):
     monkeypatch.setattr(persona_hook, "track_event", lambda *a, **k: tracked.append((a, k)))
     persona_hook.report_lipsync_intro_skipped("task-9", 0.0)
     assert tracked == [
-        (("persona_hook_lipsync_skipped", {"task_id": "task-9", "hook_end_seconds": 0.0}), {"immediate": True})
+        (
+            ("persona_hook_lipsync_skipped", {"task_id": "task-9", "hook_end_seconds": 0.0}),
+            {"immediate": True},
+        )
     ]
 
 
@@ -223,7 +239,10 @@ def test_clamp_event_carries_only_numbers(monkeypatch):
     monkeypatch.setattr(persona_hook, "track_event", lambda *a, **k: tracked.append(a))
     persona_hook.report_hook_clamped("task-9", 14.6, 12.0)
     assert tracked == [
-        ("persona_hook_clamped", {"task_id": "task-9", "hook_end_seconds": 14.6, "lipsync_seconds": 12.0})
+        (
+            "persona_hook_clamped",
+            {"task_id": "task-9", "hook_end_seconds": 14.6, "lipsync_seconds": 12.0},
+        )
     ]
 
 
@@ -232,11 +251,24 @@ class TestHookEndFromWhisperWords:
     ends exactly at the end of its last word — no interpolation."""
 
     _WORDS = [
-        ("Stop", 0.14, 0.5), ("wasting", 0.5, 0.9), ("your", 0.9, 1.0), ("trip", 1.0, 1.3),
-        ("stuck", 1.3, 1.6), ("in", 1.6, 1.7), ("a", 1.7, 1.75), ("ninety-minute", 1.75, 2.6),
-        ("line", 2.6, 2.9), ("for", 2.9, 3.0), ("the", 3.0, 3.1), ("original,", 3.1, 3.7),
-        ("it's", 3.9, 4.1), ("not", 4.1, 4.3), ("worth", 4.3, 4.6), ("it.", 4.6, 4.95),
-        ("Stop", 5.4, 5.7), ("eating", 5.7, 6.0),
+        ("Stop", 0.14, 0.5),
+        ("wasting", 0.5, 0.9),
+        ("your", 0.9, 1.0),
+        ("trip", 1.0, 1.3),
+        ("stuck", 1.3, 1.6),
+        ("in", 1.6, 1.7),
+        ("a", 1.7, 1.75),
+        ("ninety-minute", 1.75, 2.6),
+        ("line", 2.6, 2.9),
+        ("for", 2.9, 3.0),
+        ("the", 3.0, 3.1),
+        ("original,", 3.1, 3.7),
+        ("it's", 3.9, 4.1),
+        ("not", 4.1, 4.3),
+        ("worth", 4.3, 4.6),
+        ("it.", 4.6, 4.95),
+        ("Stop", 5.4, 5.7),
+        ("eating", 5.7, 6.0),
     ]
 
     def test_hook_ends_at_its_last_word(self):

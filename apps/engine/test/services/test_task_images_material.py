@@ -35,7 +35,10 @@ def _params():
             copied["media"] = _photos(counts[index], f"{index}-")
         segments.append(copied)
     return TaskVideoRequest(
-        video_subject="Porto walks", segments=segments, faceless_material="images",
+        video_title="Porto walks",
+        video_description="Test description.",
+        video_type="faceless",
+        segments=segments,
         voice_name="chatterbox:kokoro_af_heart",
     )
 
@@ -54,16 +57,26 @@ class ImagesMaterialStartTests(unittest.TestCase):
             mocks["complete"] = stack.enter_context(patch.object(tm, "_complete_task"))
             mocks["fail"] = stack.enter_context(patch.object(tm, "_fail_task"))
             stack.enter_context(patch.object(tm, "generate_script", return_value="script text"))
-            stack.enter_context(patch.object(tm, "generate_audio", return_value=("audio.mp3", 10.0, None)))
+            stack.enter_context(
+                patch.object(tm, "generate_audio", return_value=("audio.mp3", 10.0, None))
+            )
             stack.enter_context(patch.object(tm, "generate_subtitle", return_value="sub.srt"))
             stack.enter_context(patch.object(tm.audio_trim, "task_local_copy", return_value=None))
             stack.enter_context(
-                patch.object(tm, "_ensure_persona_hook_fits", side_effect=lambda tid, p, s, a, d, sm, sp: (s, a, d, sm, sp))
+                patch.object(
+                    tm,
+                    "_ensure_persona_hook_fits",
+                    side_effect=lambda tid, p, s, a, d, sm, sp: (s, a, d, sm, sp),
+                )
             )
             mocks["canvas"] = stack.enter_context(
                 patch.object(tm.faceless_material, "images_canvas", return_value=list(canvas))
             )
-            mocks["panels"] = stack.enter_context(patch.object(tm.user_media, "prepare_segment_panels", **(panels or {"return_value": []})))
+            mocks["panels"] = stack.enter_context(
+                patch.object(
+                    tm.user_media, "prepare_segment_panels", **(panels or {"return_value": []})
+                )
+            )
             stack.enter_context(patch.object(tm.utils, "task_dir", return_value="/t"))
             tm.start(task_id="task-images", params=params, stop_at="materials")
         return mocks
@@ -77,7 +90,9 @@ class ImagesMaterialStartTests(unittest.TestCase):
     def test_a_canvas_that_cannot_render_fails_the_task(self):
         mocks = self._run(_params(), canvas=[])
         mocks["fail"].assert_called()
-        self.assertEqual(mocks["fail"].call_args.args[:2], ("task-images", "failed to get video materials"))
+        self.assertEqual(
+            mocks["fail"].call_args.args[:2], ("task-images", "failed to get video materials")
+        )
         mocks["complete"].assert_not_called()
 
     def test_no_surviving_photo_fails_with_the_stable_code_at_the_materials_stage(self):

@@ -18,6 +18,7 @@ Gated behind MPT_RUN_INTEGRATION_TESTS=1 because it calls real providers
 
 The finished video is copied to storage/portugal_campervan.mp4 for easy viewing.
 """
+
 import os
 import shutil
 import sys
@@ -49,9 +50,9 @@ SCRIPT = (
     "Acordas junto ao mar, almoças numa aldeia do interior e terminas o "
     "dia num miradouro sobre o Atlântico, com a casa sempre contigo."
 )
-LANGUAGE = "pt-BR"                     # script + narration language
-VOICE = "pt-BR-FranciscaNeural"        # Brazilian female voice.
-ASPECT = "9:16"             
+LANGUAGE = "pt-BR"  # script + narration language
+VOICE = "pt-BR-FranciscaNeural"  # Brazilian female voice.
+ASPECT = "9:16"
 OUTPUT_COPY_NAME = "portugal_campervan_2.mp4"
 # NOTE: this test must NOT override video-generation logic (script prompt,
 # subtitle styling, etc.). Those live as production defaults in config.toml
@@ -64,9 +65,7 @@ STORAGE_DIR = PROJECT_ROOT / "storage"
 class TestPortugalCampervanE2E(unittest.TestCase):
     """Full-pipeline integration test for the Portugal campervan subject."""
 
-    @unittest.skipUnless(
-        RUN_INTEGRATION_TESTS, "set MPT_RUN_INTEGRATION_TESTS=1 to run"
-    )
+    @unittest.skipUnless(RUN_INTEGRATION_TESTS, "set MPT_RUN_INTEGRATION_TESTS=1 to run")
     def test_generate_portugal_campervan_video(self):
         # storage/ is auto-created by the task service, but ensure it exists
         # before we copy the friendly-named output there.
@@ -77,7 +76,9 @@ class TestPortugalCampervanE2E(unittest.TestCase):
         print(f"[subject] {SUBJECT}  (lang={LANGUAGE}, voice={VOICE})")
 
         params = VideoParams(
-            video_subject=SUBJECT,
+            video_title=SUBJECT,
+            video_description="Test description.",
+            video_type="faceless",
             video_script=SCRIPT,
             video_language=LANGUAGE,
             video_aspect=ASPECT,
@@ -88,7 +89,6 @@ class TestPortugalCampervanE2E(unittest.TestCase):
             subtitle_enabled=True,
             n_threads=2,
             paragraph_number=1,
-            # subtitle styling deliberately omitted → uses config.toml [ui] defaults
         )
 
         # ── Run the whole pipeline in-process ──

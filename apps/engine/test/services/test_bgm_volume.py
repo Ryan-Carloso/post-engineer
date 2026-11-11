@@ -23,7 +23,12 @@ def gain_db(gain: float) -> float:
 
 class TestBgmVolumeDefault(unittest.TestCase):
     def test_default_is_0_09(self):
-        self.assertEqual(VideoParams(video_subject="test").bgm_volume, 0.09)
+        self.assertEqual(
+            VideoParams(
+                video_title="test", video_description="Test description.", video_type="faceless"
+            ).bgm_volume,
+            0.09,
+        )
 
     def test_new_default_attenuates_7_db_vs_old_default(self):
         delta = gain_db(NEW_DEFAULT_BGM_VOLUME) - gain_db(OLD_DEFAULT_BGM_VOLUME)
@@ -34,8 +39,24 @@ class TestBgmVolumeDefault(unittest.TestCase):
         self.assertAlmostEqual(MEASURED_NET_BALANCE_DB + delta, TARGET_NET_BALANCE_DB, delta=0.1)
 
     def test_explicit_override_still_honoured(self):
-        self.assertEqual(VideoParams(video_subject="test", bgm_volume=0.2).bgm_volume, 0.2)
-        self.assertEqual(VideoParams(video_subject="test", bgm_volume=0.3).bgm_volume, 0.3)
+        self.assertEqual(
+            VideoParams(
+                video_title="test",
+                video_description="Test description.",
+                video_type="faceless",
+                bgm_volume=0.2,
+            ).bgm_volume,
+            0.2,
+        )
+        self.assertEqual(
+            VideoParams(
+                video_title="test",
+                video_description="Test description.",
+                video_type="faceless",
+                bgm_volume=0.3,
+            ).bgm_volume,
+            0.3,
+        )
 
 
 if __name__ == "__main__":

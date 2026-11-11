@@ -53,6 +53,7 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
         return {
             "id": "slot-1",
             "title": "Porto food",
+            "description": "Porto food description.",
             "task_id": "t-1",
             "schedules": {
                 "id": "sched-1",

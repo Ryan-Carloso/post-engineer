@@ -38,7 +38,12 @@ def _direct_data(**overrides):
 
 def _row(**overrides):
     row = {
-        "params": {"video_subject": "myth busting", "generation_id": "g1"},
+        "params": {
+            "video_title": "myth busting",
+            "video_description": "Agent description.",
+            "video_type": "faceless",
+            "generation_id": "g1",
+        },
         "publish_mode": "asap",
         "status": "running",
     }
@@ -123,7 +128,7 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         state.update_task.assert_not_called()
 
     def test_invalid_params_not_claimed(self):
-        state = _state_with_rows([_row(params={"video_subject": 12345})])
+        state = _state_with_rows([_row(params={"video_title": 12345})])
         with patch.object(orphan_requeue.logger, "error"):
             claimed = self._claimed(state, "t-1", _direct_data())
         self.assertFalse(claimed)
@@ -134,11 +139,17 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         # object per segment; triage normalizes it instead of dropping
         # the prepaid orphan as unvalidatable.
         params = {
-            "video_subject": "myth busting",
+            "video_title": "myth busting",
+            "video_description": "Agent description.",
+            "video_type": "full_lipsync",
             "generation_id": "g1",
+            "persona": {
+                "name": "Ana",
+                "photo_url": "https://e.com/p.jpg",
+                "voice_id": "calm",
+            },
             # Full lip-sync: a single legacy photo can never satisfy the
             # images density rule on a long body, and media is optional here.
-            "full_lipsync": True,
             "segments": [
                 {
                     "kind": "hook",
@@ -217,7 +228,7 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         job = direct_redispatch._pending_direct_redispatches[0]
         self.assertEqual(job.task_id, "t-1")
         self.assertEqual(job.requeue_count, 1)
-        self.assertEqual(job.request.video_subject, "myth busting")
+        self.assertEqual(job.request.video_title, "myth busting")
         self.assertEqual(job.request.generation_id, "g1")
         # The persisted engine payload (buildJobPayload) carries no publish
         # plan: publishing happens exclusively via the fill-schedule slot
