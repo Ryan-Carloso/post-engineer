@@ -21,9 +21,10 @@ card with the place's real name, address or price, painted inside the
 panel (media_overlay). A card that cannot be drawn costs only the card:
 the photo still ships and the reason is recorded as a task warning.
 
-A segment without media shows nothing extra. A segment whose media fails is
-skipped with a warning recorded on the task; one bad URL never fails the
-video.
+A segment without media shows nothing extra. In the images modes every sent
+photo must survive render: a skipped one fails the task with
+images_do_not_cover_audio naming the photo (full lip sync stays lenient and
+only warns). The warning itself never carries a URL, a path or a mediaId.
 
 Nothing here logs image content, local paths, or full URLs: warnings
 carry only the segment index, a stable reason, and — for skipped

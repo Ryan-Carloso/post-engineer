@@ -79,9 +79,8 @@ def _segments(overlay):
 
 
 def _segments_with_cta_photo(overlay):
-    """_segments plus a plain photo on the CTA: prepare_segment_panels
-    enforces the per-segment density minimum, so a segment with no
-    photo at all fails instead of rendering."""
+    """_segments plus a plain photo on the CTA, so both segments produce a
+    panel (the density minimum itself is enforced earlier, at validation)."""
     hook, cta = _segments(overlay)
     return [hook, {**cta, "media": [{"url": "https://e.com/q.jpg"}]}]
 
