@@ -4,6 +4,9 @@
 // ratchet. client.ts re-exports every name here, so existing import sites
 // (`./client.js`) keep working.
 import { VIDEO_LAYOUTS } from './limits.js';
+import type { VideoType } from './video-type.js';
+
+export type { VideoType } from './video-type.js';
 
 export interface PostEngineerClientOptions {
   apiKey?: string;
@@ -37,7 +40,7 @@ export interface CreatePersonaInput {
   avatarPath?: string;
   voiceId: string;
   language?: string;
-  videoAspect?: '9:16' | '16:9';
+  videoAspect?: '9:16' | '16:9' | '1:1';
   videoLayout?: VideoLayout;
   scriptPrompt?: string;
   paragraphNumber?: number;
@@ -54,11 +57,13 @@ export interface GeneratePersonaVideoInput {
    * Optional. Omit it for a faceless post defined entirely by `options` —
    * the persona is then not just a face: it is where the voice, the
    * aspect ratio and the niche come from. A post without one
-   * MUST set options.faceless and one of options.voiceId / options.audioUrl.
+   * MUST set options.videoType to 'faceless' and one of options.voiceId / options.audioUrl.
    */
   personaId?: string;
   /** The slot label for the single video. */
   title: string;
+  /** Agent-supplied video description (issue #542 follow-up): the publish copy. Required — there is no fallback to the title. */
+  description: string;
   /** Paired A/B experiment link (issue #476); checked server-side before the charge. */
   experiment?: { experimentId: string; variantId: string; pair: number };
   providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble')[];
@@ -86,18 +91,15 @@ export interface GeneratePersonaVideoInput {
   /** IANA timezone for a naive startAt and the times (display-only in 'asap' mode). Defaults to UTC. */
   timezone?: string;
   options?: {
-    faceless?: boolean;
-    /** Stock footage only ('broll'), drawn illustrations only ('svg') or only the segment images ('images'), with or without a face. */
-    facelessMaterial?: 'broll' | 'svg' | 'images';
-    /** Render the whole video as the persona talking, with no b-roll: every narration window is lip-synced to the persona face. Requires a persona with a photo and lip-sync enabled; cannot be combined with faceless. */
-    fullLipsync?: boolean;
+    /** The one video mode: full_lipsync, hook_lipsync or faceless. Required — it decides the render path and the price. */
+    videoType: VideoType;
     /** Background-music mood: a mood from the engine BGM catalog, or "none" for explicit no music. Omitted lets the engine pick the first catalogued mood. */
     musicMood?: string;
     audioUrl?: string;
     imageId?: string;
     voiceId?: string;
     webhookUrl?: string;
-    videoAspect?: '9:16' | '16:9';
+    videoAspect?: '9:16' | '16:9' | '1:1';
     videoLayout?: VideoLayout;
     paragraphNumber?: number;
     language?: string;
@@ -107,7 +109,6 @@ export interface GeneratePersonaVideoInput {
       kind: 'hook' | 'body' | 'cta';
       text: string;
       media?: Array<{ mediaId?: string; url?: string; overlay?: { title: string; subtitle?: string; badge?: string } }>;
-      terms?: string[];
     }>;
   };
   /** Omitted: a UUID is generated per call, so a retry cannot double-generate. */
@@ -121,7 +122,7 @@ export interface UpdatePersonaInput {
   avatarPath?: string;
   voiceId?: string;
   language?: string;
-  videoAspect?: '9:16' | '16:9';
+  videoAspect?: '9:16' | '16:9' | '1:1';
   videoLayout?: VideoLayout;
   scriptPrompt?: string;
   paragraphNumber?: number;

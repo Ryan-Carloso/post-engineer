@@ -1,8 +1,8 @@
 //---------------
 // E2E: the metrics dashboard renders the caller's per-video snapshots
-// (grouped by script angle by default), with the API stubbed at the
+// as totals and a list sorted by views, with the API stubbed at the
 // network boundary so no real account data is needed. Also drives the
-// filters, the chart tooltip and the empty/error states.
+// Filters Sheet, the window Tabs and the empty/error states.
 //---------------
 
 const PERSONA_ID = '11111111-2222-4333-8444-555555555555';
@@ -62,45 +62,53 @@ describe('metrics dashboard', () => {
     interceptShell();
   });
 
-  it('renders stats, the chart and rows; filters, regroups and hovers', () => {
+  it('renders totals and rows sorted by views; filters through the Sheet and clears', () => {
     interceptMetrics({ success: true, truncated: true, rows: ROWS });
     cy.visit('/metrics');
     cy.wait('@getMetrics');
 
     cy.contains('h1', 'Métricas').should('be.visible');
     cy.contains('Vídeos medidos').should('be.visible');
+    // Totals, not averages: 1200 + 300 views, engagement 90 + 12 + 4
+    // + 10 + 1 + 0 = 117 (nulls skipped).
+    cy.contains('1.500').should('be.visible');
+    cy.contains('117').should('be.visible');
+    // No per-group chart anymore.
+    cy.get('.recharts-wrapper').should('not.exist');
+    // Rows sorted by views: the 1200-view video first, then 300, then n/d.
     cy.contains('myth-busting').should('be.visible');
-    cy.contains('Sem ângulo').should('be.visible');
+    cy.contains('YouTube · 21 de out. de 2026').scrollIntoView().should('be.visible');
+    cy.contains('Sem ângulo').should('not.exist');
     // The truncated note and the not-reported counters render too.
     cy.contains('Mostrando só os').scrollIntoView().should('be.visible');
     cy.contains('n/d').scrollIntoView().should('be.visible');
 
-    // Hover the first bar: the tooltip names the group and its count.
-    cy.get('.recharts-wrapper').trigger('mousemove', { clientX: 320, clientY: 40 });
-    cy.contains('myth-busting · 1 vídeos').should('be.visible');
-
-    // Window + metric controls re-render the summary (24h is the
-    // default window, so switch to 7 days to force a refetch).
+    // Window Tabs re-fetch (24h is the default window, so switch to 7
+    // days to force a refetch).
     cy.contains('button', '7d').click();
     cy.wait('@getMetrics');
     // 28d (final YouTube Analytics values) is a third window.
     cy.contains('button', '28d').click();
     cy.wait('@getMetrics').its('request.url').should('include', 'window=28d');
-    cy.contains('button', 'Curtidas').click();
-    cy.contains('Média de curtidas').scrollIntoView().should('be.visible');
 
-    // Filters narrow the request; clearing restores it.
-    cy.contains('label', 'Ângulo do roteiro').last().scrollIntoView().find('select').select('myth-busting');
-    cy.wait('@getMetrics');
+    // Network filter through the Filters Sheet.
+    cy.contains('button', 'Filtros').click();
+    cy.get('button[aria-label="Rede"]').click();
+    cy.get('[role="option"]').contains('Instagram').click();
+    cy.contains('button', 'Aplicar filtros').click();
+    cy.wait('@getMetrics').its('request.url').should('include', 'provider=instagram');
+    // The applied filter shows as a chip; clearing removes it.
     cy.contains('button', 'Limpar filtros').click();
-    // Clearing returns to the window's already-fresh query, so no new
-    // request fires — the button disappearing is the observable reset.
     cy.contains('button', 'Limpar filtros').should('not.exist');
 
-    // Group by network: the chart and stats re-render with provider labels.
-    cy.contains('label', 'Comparar por').scrollIntoView().find('select').select('provider');
-    cy.contains('Melhor rede').scrollIntoView().should('be.visible');
-    cy.contains('YouTube').should('be.visible');
+    // Persona filter through the Sheet's searchable Combobox.
+    cy.contains('button', 'Filtros').click();
+    cy.get('button[aria-label="Persona"]').click();
+    cy.get('[role="option"]').contains('Alpha').click();
+    cy.contains('button', 'Aplicar filtros').click();
+    cy.wait('@getMetrics').its('request.url').should('include', `persona=${PERSONA_ID}`);
+    cy.contains('button', 'Limpar filtros').click();
+    cy.contains('button', 'Limpar filtros').should('not.exist');
   });
 
   it('shows YouTube retention on a row and the reconnect prompt for an old token', () => {
@@ -141,16 +149,18 @@ describe('metrics dashboard', () => {
 
     cy.visit('/metrics');
     cy.wait('@getMetrics');
+    // No chart renders until the curve is opened.
+    cy.get('.recharts-wrapper').should('have.length', 0);
     // Nothing is read from Analytics until the user asks for the curve.
     cy.get('@getCurve.all').should('have.length', 0);
     cy.contains('button', 'Curva de retenção').scrollIntoView().click();
     cy.wait('@getCurve');
-    // The bar chart plus the opened retention line chart.
-    cy.get('.recharts-wrapper').should('have.length', 2);
+    // Only the retention line chart renders now.
+    cy.get('.recharts-wrapper').should('have.length', 1);
     cy.get('.recharts-wrapper').last().trigger('mousemove', { clientX: 200, clientY: 90 });
     cy.contains('Público assistindo:').should('be.visible');
     cy.contains('button', 'Esconder curva de retenção').click();
-    cy.get('.recharts-wrapper').should('have.length', 1);
+    cy.get('.recharts-wrapper').should('have.length', 0);
   });
 
   it('shows the empty state when nothing was measured', () => {

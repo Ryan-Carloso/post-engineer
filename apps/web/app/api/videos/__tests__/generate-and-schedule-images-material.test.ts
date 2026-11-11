@@ -51,23 +51,25 @@ function post(options: Record<string, unknown>): Promise<Response> {
       body: JSON.stringify({
         personaId: 'persona-1',
         title: 'Porto trip',
+        description: 'Agent description.',
         publishing: {
           providers: ['youtube'],
           accounts: { youtube: ['acct-1'] },
           schedule: { startAt: new Date(Date.now() + 48 * 3600_000).toISOString(), times: ['18:00'], timezone: 'Europe/Lisbon' },
         },
-        options,
+        options: { videoType: 'hook_lipsync', ...options },
       }),
     }),
   );
 }
 
-function semantics(segments: unknown, facelessMaterial?: 'broll' | 'svg' | 'images') {
+function semantics(segments: unknown, videoType: 'full_lipsync' | 'hook_lipsync' = 'hook_lipsync') {
   return checkSemantics({
     title: 'Porto trip',
+    description: 'Agent description.',
     segments,
     providers: ['youtube'],
-    options: facelessMaterial === undefined ? {} : { facelessMaterial },
+    options: { videoType },
     personaId: 'persona-1',
   });
 }
@@ -79,7 +81,7 @@ beforeEach(() => {
 
 describe('generate-and-schedule with the images material', () => {
   it('rejects a segment without media with a 400 naming it, before auth or any charge', async () => {
-    const res = await post({ segments: bodyWithoutMedia, facelessMaterial: 'images' });
+    const res = await post({ segments: bodyWithoutMedia });
     expect(res.status).toBe(400);
     const json = (await res.json()) as { field: string; error: string };
     expect(json.field).toBe('options.segments.1.media');
@@ -89,17 +91,16 @@ describe('generate-and-schedule with the images material', () => {
   });
 
   it('accepts media on every segment and joins the script', () => {
-    const checked = semantics(withMedia, 'images');
+    const checked = semantics(withMedia);
     expect(checked.ok).toBe(true);
     if (checked.ok) {
-      expect(checked.value.options.facelessMaterial).toBe('images');
       expect(checked.value.script).toBe(`${hook}\n\n${bodyText}\n\n${cta}`);
     }
   });
 
-  it('keeps media optional for broll, svg and an omitted material', () => {
-    for (const material of ['broll', 'svg', undefined] as const) {
-      expect(semantics(bodyWithoutMedia, material).ok).toBe(true);
-    }
+  it('keeps media optional for full lip sync, required otherwise', () => {
+    expect(semantics(bodyWithoutMedia, 'full_lipsync').ok).toBe(true);
+    expect(semantics(bodyWithoutMedia, 'hook_lipsync').ok).toBe(false);
+    expect(semantics(bodyWithoutMedia).ok).toBe(false);
   });
 });

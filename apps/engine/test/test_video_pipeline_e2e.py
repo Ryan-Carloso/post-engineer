@@ -27,8 +27,7 @@ MATERIAL_COLORS = {
 }
 # The script supplied with the job: two sentences of validation copy.
 MOCKED_SCRIPT = (
-    "First paragraph of the validation script. "
-    "Second paragraph of the validation script."
+    "First paragraph of the validation script. Second paragraph of the validation script."
 )
 AUDIO_SECONDS = 12
 MATERIAL_SECONDS = 6
@@ -50,9 +49,16 @@ def _make_materials(local_videos: Path) -> list[str]:
     for name, color in MATERIAL_COLORS.items():
         out = local_videos / f"e2e-{name}.mp4"
         _ffmpeg(
-            "-f", "lavfi", "-i",
+            "-f",
+            "lavfi",
+            "-i",
             f"color={color}:size={WIDTH}x{HEIGHT}:duration={MATERIAL_SECONDS}:rate=30",
-            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
             str(out),
         )
         names.append(out.name)
@@ -62,9 +68,12 @@ def _make_materials(local_videos: Path) -> list[str]:
 def _make_audio(local_videos: Path) -> str:
     out = local_videos / "e2e-narration.wav"
     _ffmpeg(
-        "-f", "lavfi", "-i",
+        "-f",
+        "lavfi",
+        "-i",
         f"sine=frequency=440:duration={AUDIO_SECONDS}",
-        "-c:a", "pcm_s16le",
+        "-c:a",
+        "pcm_s16le",
         str(out),
     )
     return out.name
@@ -73,12 +82,18 @@ def _make_audio(local_videos: Path) -> str:
 def _probe_streams(video: Path) -> list[dict]:
     out = subprocess.run(
         [
-            "ffprobe", "-v", "error",
-            "-show_entries", "stream=codec_type,width,height",
-            "-of", "csv=p=0",
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=codec_type,width,height",
+            "-of",
+            "csv=p=0",
             str(video),
         ],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     streams = []
     for line in out.stdout.strip().splitlines():
@@ -92,12 +107,18 @@ def _probe_streams(video: Path) -> list[dict]:
 def _probe_duration(video: Path) -> float:
     out = subprocess.run(
         [
-            "ffprobe", "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "csv=p=0",
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "csv=p=0",
             str(video),
         ],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     return float(out.stdout.strip())
 
@@ -106,11 +127,23 @@ def _dominant_channel(video: Path, at_seconds: float) -> str:
     """Dominant RGB channel of a single frame — pure stdlib, no PIL."""
     out = subprocess.run(
         [
-            "ffmpeg", "-v", "error", "-ss", str(at_seconds),
-            "-i", str(video), "-vframes", "1",
-            "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
+            "ffmpeg",
+            "-v",
+            "error",
+            "-ss",
+            str(at_seconds),
+            "-i",
+            str(video),
+            "-vframes",
+            "1",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgb24",
+            "-",
         ],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     px = out.stdout
     n = len(px) // 3
@@ -139,11 +172,12 @@ def test_faceless_pipeline_renders_multi_material_video(tmp_path, monkeypatch):
     audio_name = _make_audio(local_videos)
 
     params = TaskVideoRequest(
-        video_subject="E2E validation",
+        video_title="E2E validation",
+        video_description="Test description.",
+        video_type="faceless",
         video_script=MOCKED_SCRIPT,
         video_materials=[
-            MaterialInfo(provider="local", url=name, duration=0)
-            for name in material_names
+            MaterialInfo(provider="local", url=name, duration=0) for name in material_names
         ],
         video_aspect="9:16",
         custom_audio_file=audio_name,
@@ -170,16 +204,11 @@ def test_faceless_pipeline_renders_multi_material_video(tmp_path, monkeypatch):
     # The video is assembled from whole 2s subclips, so it rounds UP to
     # cover the audio (12s audio -> 7x2s = 14s); it must cover the audio
     # but never exceed it by more than one subclip plus the safety margin.
-    assert AUDIO_SECONDS <= duration <= AUDIO_SECONDS + 2.5, (
-        f"unexpected duration {duration}"
-    )
+    assert AUDIO_SECONDS <= duration <= AUDIO_SECONDS + 2.5, f"unexpected duration {duration}"
 
     # The pipeline must assemble DIFFERENT materials, not repeat one clip:
     # the three primary 2s slices (one per color) land in the first 6s.
-    channels = {
-        _dominant_channel(final, at)
-        for at in (1.0, 3.0, 5.0)
-    }
+    channels = {_dominant_channel(final, at) for at in (1.0, 3.0, 5.0)}
     assert channels == {"r", "g", "b"}, (
         f"expected all three materials in the first 6s, got {channels}"
     )

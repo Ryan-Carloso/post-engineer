@@ -218,19 +218,20 @@ describe('Account area — desktop sidebar footer', () => {
     interceptShellData();
   });
 
-  it('sidebar has six tabs starting at /posts and has no API Keys tab', () => {
+  it('sidebar has seven tabs starting at /posts and has no API Keys tab', () => {
     cy.visit('/');
 
     // Sidebar nav: Posts first, then History, ..., API Key & MCP last.
-    // Six tabs; the mobile bottom bar has four tabs plus a More sheet
-    // that holds History and Metrics.
+    // Seven tabs; the mobile bottom bar has four tabs plus a More sheet
+    // that holds History, Metrics and A/B Tests.
     cy.get('aside nav')
       .first()
       .find('a')
-      .should('have.length', 6)
+      .should('have.length', 7)
       .first()
       .should('have.attr', 'href', '/posts');
     cy.get('aside nav').first().find('a[href="/metrics"]').should('have.length', 1);
+    cy.get('aside nav').first().find('a[href="/experiments"]').should('have.length', 1);
     cy.get('aside nav').first().contains('a', 'API Keys').should('not.exist');
   });
 

@@ -11,7 +11,7 @@ export const ptDictionary = {
   // Sidebar / navigation
   nav: {
     brand: 'Post Engineer',
-    brandSubtitle: 'YouTube · Instagram',
+    brandSubtitle: 'Vídeos com IA para redes',
     accounts: 'Contas',
     accountsHint: 'Conectar e gerenciar',
     create: 'Criar post',
@@ -20,12 +20,10 @@ export const ptDictionary = {
     personaHint: 'Identidade e voz',
     billing: 'Tokens',
     billingHint: 'Tokens pré-pagos',
-    apiKeys: 'API Keys',
-    apiKeysHint: 'MCP e integrações',
     debug: 'Debug',
     debugHint: 'Ferramentas de validação',
     signOut: 'Sair',
-    posts: 'Posts',
+    posts: 'Publicações',
     postsHint: 'Calendário de posts',
     primaryNavigation: 'Navegação principal',
     profile: 'Perfil',
@@ -34,8 +32,8 @@ export const ptDictionary = {
   account: { ...accountI18nPt },
   // Posts page — history + upcoming posts from all accounts
   posts: {
-    title: 'Posts',
-    subtitle: 'Calendário com os posts de todas as contas. Clique num dia para ver os posts.',
+    title: 'Publicações',
+    subtitle: 'Calendário com os posts de todas as contas. Selecione um dia para ver os posts.',
     filterProvider: 'Rede',
     allProviders: 'Todas as redes',
     filterAccount: 'Conta',

@@ -89,6 +89,7 @@ class BatchPublisher:
     def _publish_one(self, slot: dict[str, Any], now: datetime, resumed: bool) -> int:
         schedule = slot.get("schedules") or {}
         title = slot.get("title") or "Scheduled post"
+        description = str(slot.get("description") or "").strip()
         persona_name = (schedule.get("personas") or {}).get("name", "Persona")
         if resumed:
             claim = getattr(self.store, "claim_resumable_slot", None)
@@ -150,6 +151,7 @@ class BatchPublisher:
             lambda: video_storage.read_final_video_r2(object_path),
             now,
             title,
+            description,
             base_url=self.base_url,
             api_secret=self.api_secret,
             publish_video=self.publish_video,

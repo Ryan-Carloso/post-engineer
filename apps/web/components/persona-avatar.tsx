@@ -110,7 +110,7 @@ export default function PersonaAvatar({
     <span
       aria-busy={imageLoading || undefined}
       className={cn(
-        'relative flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-sunken to-sunken text-muted-text ring-2 ring-hairline',
+        'relative flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-sunken text-ink-soft ring-2 ring-hairline',
         className,
       )}
       style={{ width: size, height: size }}

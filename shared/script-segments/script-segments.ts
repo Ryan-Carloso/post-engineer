@@ -13,11 +13,13 @@
 // (Phase 1 gap, see validate_script).
 
 export const MAX_SEGMENTS = 12;
+// Full lip sync renders the persona's face over the whole video, so media
+// is optional there: at most 6 photos for the whole video. The images
+// mode is the only other mode left: the agent's photos are the whole
+// picture. One photo per ~3s of speech (8 words), each photo on screen at
+// least ~1s (3 words), at most 30 photos per video. Same numbers as
+// image_density.py.
 export const MAX_MEDIAS = 6;
-// The "images" material: the agent's photos are the whole picture. One photo
-// per ~3s of speech (8 words), each photo on screen at least ~1s (3 words),
-// at most 30 photos per video. Same numbers as image_density.py.
-export const IMAGES_MATERIAL = 'images';
 export const WORDS_PER_IMAGE = 8;
 export const MIN_WORDS_PER_IMAGE = 3;
 export const MAX_IMAGES_MODE_MEDIAS = 30;
@@ -28,7 +30,6 @@ export const MIN_CTA_WORDS = 5;
 export const MAX_CTA_WORDS = 20;
 export const MIN_HOOK_WORDS = 15;
 export const MAX_HOOK_WORDS = 40;
-export const MAX_TERMS_PER_SEGMENT = 10;
 // The info card painted inside a segment photo's panel (engine media_overlay). Same
 // numbers as MAX_OVERLAY_*_CHARS in apps/engine/app/services/script_segments.py;
 // a sync test in the engine pins them.
@@ -62,7 +63,6 @@ export type ScriptSegment = {
   kind: SegmentKind;
   text: string;
   media?: SegmentMedia[];
-  terms?: string[];
 };
 
 export type SegmentsError = {
@@ -246,7 +246,14 @@ function normalize(text: string): string {
   return text.toLowerCase().replace(/[^\p{L}\p{N}_\s]/gu, '').trim();
 }
 
-export function validateSegments(input: unknown, material?: string): SegmentsResult {
+/** The one video mode (issue #542 follow-up). Defined here so this shared
+ *  file stays dependency-free: the web and MCP copies are byte-identical
+ *  generated files and cannot import either app's VideoType. Structurally
+ *  identical to the VideoType in web lib/tokens.ts and MCP video-type.ts;
+ *  the literal values are pinned together by the video-type sync tests. */
+export type VideoType = 'full_lipsync' | 'hook_lipsync' | 'faceless';
+
+export function validateSegments(input: unknown, videoType: VideoType = 'hook_lipsync'): SegmentsResult {
   if (!Array.isArray(input) || input.length === 0) {
     return fail(
       'segments',
@@ -274,12 +281,11 @@ export function validateSegments(input: unknown, material?: string): SegmentsRes
         'Write the spoken text for this segment.',
       );
     }
-    // The engine rejects unknown segment keys and checks terms for every
-    // segment: these checks must not hide behind the media loop below,
-    // or a media-less segment with 11 terms (or an unknown key) passes
-    // here while the engine rejects it.
+    // The engine rejects unknown segment keys: this check must not hide
+    // behind the media loop below, or a media-less segment with an
+    // unknown key passes here while the engine rejects it.
     const unknown = Object.keys(segment)
-      .filter((key) => key !== 'kind' && key !== 'text' && key !== 'media' && key !== 'terms')
+      .filter((key) => key !== 'kind' && key !== 'text' && key !== 'media')
       .sort();
     if (unknown.length > 0) {
       return fail(
@@ -287,20 +293,6 @@ export function validateSegments(input: unknown, material?: string): SegmentsRes
         `segment has unknown field ${unknown[0]}`,
         'Remove unknown fields from the segment.',
       );
-    }
-    const terms = segment.terms;
-    if (terms !== undefined) {
-      if (
-        !Array.isArray(terms) ||
-        terms.some((term) => typeof term !== 'string' || term.trim().length === 0) ||
-        terms.length > MAX_TERMS_PER_SEGMENT
-      ) {
-        return fail(
-          `segments.${i}.terms`,
-          `terms must be non-empty strings, at most ${MAX_TERMS_PER_SEGMENT} per segment`,
-          'Fix the terms list for this segment.',
-        );
-      }
     }
   }
   const hooks = segments.filter((segment) => segment.kind === 'hook');
@@ -394,7 +386,7 @@ export function validateSegments(input: unknown, material?: string): SegmentsRes
       'Merge body segments until the count fits.',
     );
   }
-  const imagesMode = material === IMAGES_MATERIAL;
+  const imagesMode = videoType !== 'full_lipsync';
   const mediaCap = imagesMode ? MAX_IMAGES_MODE_MEDIAS : MAX_MEDIAS;
   let mediaCount = 0;
   const seenPhotos = new Set<string>();
@@ -409,7 +401,7 @@ export function validateSegments(input: unknown, material?: string): SegmentsRes
         return fail(
           `segments.${i}.media`,
           'the images material needs media on every segment',
-          'Send images for this segment as a list of { mediaId } or { url }, or use another material.',
+          'Send images for this segment as a list of { mediaId } or { url }.',
         );
       }
       continue;
@@ -455,8 +447,8 @@ export function validateSegments(input: unknown, material?: string): SegmentsRes
   };
 }
 
-export function joinSegments(input: unknown, material?: string): string {
-  const result = validateSegments(input, material);
+export function joinSegments(input: unknown, videoType: VideoType = 'hook_lipsync'): string {
+  const result = validateSegments(input, videoType);
   if (!result.ok) {
     throw new Error(`${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`);
   }

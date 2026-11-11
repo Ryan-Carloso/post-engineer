@@ -54,11 +54,11 @@ class PublishSlotAccountsDirectTests(unittest.TestCase):
             with patch.object(accounts_module, "_metadata", side_effect=RuntimeError("metadata boom")):
                 return publish_slot_accounts(
                     slot, schedule, [self.video_path], lambda: b"fake-video-bytes",
-                    NOW, "Porto coffee", **kwargs,
+                    NOW, "Porto coffee", "Porto coffee description.", **kwargs,
                 )
         return publish_slot_accounts(
             slot, schedule, [self.video_path], lambda: b"fake-video-bytes",
-            NOW, "Porto coffee", **kwargs,
+            NOW, "Porto coffee", "Porto coffee description.", **kwargs,
         )
 
     def _slot(self, providers, publish_attempts=0, outcomes=None):
@@ -73,6 +73,7 @@ class PublishSlotAccountsDirectTests(unittest.TestCase):
         slot = {
             "id": "slot-1",
             "title": "Porto coffee",
+            "description": "Porto coffee description.",
             "task_id": "t-1",
             "publish_attempts": publish_attempts,
             "schedules": schedule,

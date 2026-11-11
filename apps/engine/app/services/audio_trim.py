@@ -55,11 +55,6 @@ def _duration(path: str) -> float:
     return float(result.stdout.strip())
 
 
-def media_duration(path: str) -> float:
-    """Length in seconds of any audio or video file (ffprobe)."""
-    return _duration(path)
-
-
 def _cut(audio_file: str, new_length: float) -> None:
     root, ext = os.path.splitext(audio_file)
     trimmed = f"{root}.trimmed{ext}"

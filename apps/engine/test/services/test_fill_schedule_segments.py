@@ -21,13 +21,15 @@ SEGMENTS = [
     {
         "kind": "hook",
         "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time.",
+        "media": [{"url": f"https://e.com/h{i}.jpg"} for i in range(3)],
     },
     {
         "kind": "body",
         "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold at sunset before heading home through the old town streets.",
-        "media": [{"mediaId": "abc123def456abc123def456abc12345.jpg"}],
+        "media": [{"mediaId": "abc123def456abc123def456abc12345.jpg"}]
+        + [{"url": f"https://e.com/b{i}.jpg"} for i in range(4)],
     },
-    {"kind": "cta", "text": "Follow for more Porto walks every week."},
+    {"kind": "cta", "text": "Follow for more Porto walks every week.", "media": [{"url": "https://e.com/c0.jpg"}]},
 ]
 
 
@@ -36,6 +38,8 @@ def _slot(**extra):
         "id": "slot-1",
         "slot_at": "2026-09-08T09:00:00+00:00",
         "title": "Batch title one",
+        "description": "Agent description.",
+        "video_type": "hook_lipsync",
         "schedules": {
             "id": "sched-1",
             "user_id": "user-1",
@@ -91,7 +95,7 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
         return dispatch.call_args[0][1]
 
     def test_segment_slot_dispatches_segments_and_joined_script(self):
-        request = self._dispatched_request(_slot(faceless=True, segments=SEGMENTS))
+        request = self._dispatched_request(_slot(video_type="faceless", segments=SEGMENTS))
         self.assertIsNotNone(request.segments)
         self.assertEqual(
             [segment.kind for segment in request.segments],
@@ -113,7 +117,7 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
         )
 
     def test_slot_without_segments_fails_without_dispatch(self):
-        store = _Store(_slot(faceless=True))
+        store = _Store(_slot(video_type="faceless"))
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=MagicMock(), publish_video=MagicMock()
         )
@@ -128,13 +132,18 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
     def test_legacy_single_object_media_dispatches_as_a_list(self):
         # Rows stored before the media-list contract carry one object per
         # segment; dispatch normalizes it to a list instead of failing the
-        # prepaid slot on a Pydantic list_type error with no refund.
+        # prepaid slot on a Pydantic list_type error with no refund. A
+        # single photo can never satisfy the images density rule on a long
+        # body, so the legacy row dispatches as full lip-sync (media
+        # optional there) — the normalization is what this pins.
         legacy = [
             dict(SEGMENTS[0]),
             dict(SEGMENTS[1], media={"mediaId": "abc123def456abc123def456abc12345.jpg"}),
             dict(SEGMENTS[2]),
         ]
-        request = self._dispatched_request(_slot(faceless=True, segments=legacy))
+        request = self._dispatched_request(
+            _slot(video_type="full_lipsync", segments=legacy)
+        )
         self.assertIsNotNone(request.segments)
         self.assertEqual(
             request.segments[1].media[0].mediaId,

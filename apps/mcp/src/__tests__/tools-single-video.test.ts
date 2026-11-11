@@ -28,10 +28,14 @@ const hook =
 const body =
   'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
 const cta = 'Save this video before your next trip to Porto.';
+function photos(count: number, prefix: string): Array<{ url: string }> {
+  return Array.from({ length: count }, (_, i) => ({ url: `https://example.com/${prefix}-${i + 1}.jpg` }));
+}
+
 const segments = [
-  { kind: 'hook' as const, text: hook },
-  { kind: 'body' as const, text: body },
-  { kind: 'cta' as const, text: cta },
+  { kind: 'hook' as const, text: hook, media: photos(3, 'hook') },
+  { kind: 'body' as const, text: body, media: photos(6, 'body') },
+  { kind: 'cta' as const, text: cta, media: photos(2, 'cta') },
 ];
 
 function mockClient() {
@@ -64,6 +68,7 @@ describe('generate_persona_video tool', () => {
       personaId: 'persona-1',
       segments,
       title: 'Porto trip',
+      description: 'Agent description.',
       language: 'en-US',
       providers: ['youtube'],
       youtubeAccountIds: ['acct-1'],
@@ -88,6 +93,7 @@ describe('generate_persona_video tool', () => {
       personaId: 'persona-1',
       segments,
       title: 'Porto trip',
+      description: 'Agent description.',
       language: 'en-US',
       providers: ['pinterest'],
       pinterestAccountIds: ['user-9'],
@@ -109,6 +115,7 @@ describe('generate_persona_video tool', () => {
       personaId: 'persona-1',
       segments,
       title: 'Porto trip',
+      description: 'Agent description.',
       providers: ['pinterest'],
       pinterestAccountIds: ['user-9'],
       mode: 'asap',
@@ -124,8 +131,9 @@ describe('generate_persona_video tool', () => {
       personaId: 'persona-1',
       segments,
       title: 'Porto trip',
+      description: 'Agent description.',
       language: 'en-US',
-      options: { language: 'en-GB' },
+      options: { videoType: 'hook_lipsync', language: 'en-GB' },
       providers: ['youtube'],
       mode: 'asap',
       timezone: 'Europe/Lisbon',
@@ -146,6 +154,7 @@ describe('generate_persona_video tool', () => {
       personaId: 'persona-1',
       segments: bad,
       title: 'Porto trip',
+      description: 'Agent description.',
       providers: ['youtube'],
       mode: 'asap',
       timezone: 'Europe/Lisbon',
@@ -164,6 +173,7 @@ describe('generate_persona_video tool', () => {
       personaId: 'persona-1',
       segments,
       title: 'Porto trip',
+      description: 'Agent description.',
       language: 'en-US',
       providers: ['youtube'],
       youtubeAccountIds: ['acct-1'],
@@ -183,10 +193,11 @@ describe('generate_persona_video tool', () => {
       personaId: 'persona-1',
       segments,
       title: 'Porto trip',
+      description: 'Agent description.',
       providers: ['youtube'],
       mode: 'asap',
       timezone: 'Europe/Lisbon',
-      options: { voiceId: 'phonon_zoey' },
+      options: { videoType: 'hook_lipsync', voiceId: 'phonon_zoey' },
     });
     expect(response.isError).toBeUndefined();
     const input = vi.mocked(client.generatePersonaVideo).mock.calls[0][0];
@@ -200,10 +211,11 @@ describe('generate_persona_video tool', () => {
       personaId: 'persona-1',
       segments,
       title: 'Porto trip',
+      description: 'Agent description.',
       providers: ['youtube'],
       mode: 'asap',
       timezone: 'Europe/Lisbon',
-      options: { voiceId: 'energetic' },
+      options: { videoType: 'hook_lipsync', voiceId: 'energetic' },
     });
     expect(response.isError).toBe(true);
     expect(textOf(response)).toContain(
@@ -228,7 +240,7 @@ describe('validate_script tool', () => {
     const response = await handleValidateScript(client, { segments });
     expect(response.isError).toBeUndefined();
     expect(vi.mocked(client.validateScript)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(client.validateScript)).toHaveBeenCalledWith(segments, undefined);
+    expect(vi.mocked(client.validateScript)).toHaveBeenCalledWith(segments, 'hook_lipsync');
     const text = textOf(response);
     expect(text).toContain('3 segment(s)');
     expect(text).toContain('75 words total');

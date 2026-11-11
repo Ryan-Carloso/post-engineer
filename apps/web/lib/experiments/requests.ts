@@ -63,3 +63,25 @@ export function parseResultsWindow(params: URLSearchParams): MetricsWindow | { e
   const match = METRICS_WINDOWS.find((window) => window === raw);
   return match ?? { error: `window must be one of ${METRICS_WINDOWS.join(', ')}.` };
 }
+
+export interface ExperimentDetailQuery {
+  window: MetricsWindow;
+  /** Live provider counters instead of snapshots (issue #532). */
+  live: boolean;
+}
+
+/** `?window=&live=` for the detail read: `live` is absent or `0`/`1` only. */
+export function parseExperimentDetailQuery(params: URLSearchParams): ExperimentDetailQuery | { error: string } {
+  const unknown = [...params.keys()].filter((key) => key !== 'window' && key !== 'live');
+  if (unknown.length > 0) return { error: 'Unknown query parameter.' };
+  const rawLive = params.get('live');
+  if (rawLive !== null && rawLive !== '0' && rawLive !== '1') {
+    return { error: 'live must be 0 or 1.' };
+  }
+  const windowParams = new URLSearchParams();
+  const rawWindow = params.get('window');
+  if (rawWindow !== null) windowParams.set('window', rawWindow);
+  const window = parseResultsWindow(windowParams);
+  if (typeof window !== 'string') return window;
+  return { window, live: rawLive === '1' };
+}

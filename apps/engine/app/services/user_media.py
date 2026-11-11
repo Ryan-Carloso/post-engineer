@@ -12,7 +12,7 @@ word counts, and the fallback is reported to the caller instead of
 silently placing a photo at the wrong time.
 
 A panel is an overlay, so it works the same on every video: faceless over
-stock or the neutral background, and on a persona video over the persona's
+the neutral background, and on a persona video over the persona's
 face (hook-only or full lip-sync). Where the face shows the panel sits at
 the bottom edge, so the captions above it never cover the photo.
 
@@ -41,7 +41,7 @@ from PIL import Image
 
 from app.models.schema import VideoAspect
 from app.services import (
-    face_detect, faceless_material, image_coverage, media_overlay, persona_hook, place_photos, segment_panels, subtitle, video,
+    face_detect, image_coverage, media_aspect, media_overlay, persona_hook, image_fetch, segment_panels, subtitle, video,
 )
 from app.services.image_density import split_interval
 from app.services.lipsync_active import persona_lipsync_active
@@ -50,19 +50,21 @@ from app.utils import file_security, utils
 from app.utils.ssrf import UnsafeUrlError
 
 # The segment-media bottleneck is the engine photo path, not the persona
-# library: place_photos refuses downloads over this size, so a larger
+# library: image_fetch refuses downloads over this size, so a larger
 # segment upload could never render. Pinned by test against both limits.
-MAX_SEGMENT_MEDIA_BYTES = place_photos.MAX_PHOTO_BYTES
-MIN_PHOTO_LONG_EDGE = place_photos.MIN_PHOTO_LONG_EDGE
-MIN_PHOTO_SHORT_EDGE = place_photos.MIN_PHOTO_SHORT_EDGE
-MAX_PHOTO_PIXELS = place_photos.MAX_PHOTO_PIXELS
+MAX_SEGMENT_MEDIA_BYTES = image_fetch.MAX_PHOTO_BYTES
+MIN_PHOTO_LONG_EDGE = image_fetch.MIN_PHOTO_LONG_EDGE
+MIN_PHOTO_SHORT_EDGE = image_fetch.MIN_PHOTO_SHORT_EDGE
+MAX_PHOTO_PIXELS = image_fetch.MAX_PHOTO_PIXELS
 
 _WORD = re.compile(r"[^\W_]+")
 _MEDIA_ID_PATTERN = re.compile(r"^[0-9a-f]{32}\.(jpg|jpeg|png|webp)$")
 
-CHECK_CODES = ("ok", "blocked_403", "not_image", "too_small", "too_large", "timeout", "face_detected")
+CHECK_CODES = ("ok", "blocked_403", "not_image", "too_small", "too_large", "timeout", "face_detected", "wrong_aspect", "media_expired")
 
 # check_media_code failure -> the warning reason prepare_segment_media records.
+# wrong_aspect is composed with dimensions at the call site instead: the
+# bare code alone cannot tell the agent which ratio it sent.
 _CODE_TO_REASON = {
     "blocked_403": "download blocked",
     "not_image": "not an image",
@@ -156,12 +158,32 @@ def _segment_dict(segment: Any) -> dict[str, Any]:
     return {}
 
 
-def _validate_photo(source_path: str) -> Optional[str]:
+def _probe_size(source_path: str) -> Optional[tuple[int, int]]:
+    """Decoded dimensions of an image file, or None when it is not an image."""
+    try:
+        with Image.open(source_path) as opened:
+            return opened.size
+    except (OSError, ValueError, Image.DecompressionBombError):
+        return None
+
+
+def _wrong_aspect_reason(source_path: str, aspect: VideoAspect) -> str:
+    """The skip reason for a wrong-ratio photo, naming both sides."""
+    size = _probe_size(source_path)
+    if size is None:
+        return "wrong aspect ratio"
+    detail = media_aspect.mismatch_detail(size[0], size[1], aspect)
+    return f"wrong aspect ratio ({detail})" if detail is not None else "wrong aspect ratio"
+
+
+def _validate_photo(source_path: str, aspect: Optional[VideoAspect] = None) -> Optional[str]:
     """Mechanical check of one image file: None when usable, else a failure code.
 
-    The code is one of not_image / too_small / too_large / face_detected.
-    Size is checked on the decoded pixels, so a thumbnail is too_small
-    rather than an opaque render failure.
+    The code is one of not_image / too_small / too_large / wrong_aspect /
+    face_detected. Size is checked on the decoded pixels, so a thumbnail
+    is too_small rather than an opaque render failure. The aspect is only
+    checked when one was given: a photo that cannot fill the frame is
+    wrong_aspect, so it never ships as a blurred strip.
     """
     try:
         with Image.open(source_path) as opened:
@@ -172,6 +194,8 @@ def _validate_photo(source_path: str) -> Optional[str]:
         return "too_large"
     if max(width, height) < MIN_PHOTO_LONG_EDGE or min(width, height) < MIN_PHOTO_SHORT_EDGE:
         return "too_small"
+    if aspect is not None and media_aspect.mismatch_detail(width, height, aspect) is not None:
+        return "wrong_aspect"
     if face_detect.image_contains_face(source_path):
         return "face_detected"
     return None
@@ -197,28 +221,8 @@ def _download_failure_code(exc: Exception) -> str:
     return "blocked_403"
 
 
-def check_media_code(url: str, work_dir: str) -> str:
-    """Mechanical check of one image URL: one code, no judgement.
-
-    No User-Agent or Referer tricks: a host that blocks the SSRF-safe
-    download reports blocked_403 and the agent retries with upload_media
-    bytes it fetched on its own machine. Never logs the URL.
-    """
-    raw_path = os.path.join(work_dir, "check-media.raw")
-    try:
-        place_photos.download_image(url, raw_path)
-    except Exception as exc:  # noqa: BLE001 - every download failure maps to a code
-        return _download_failure_code(exc)
-    try:
-        failure = _validate_photo(raw_path)
-        return failure if failure is not None else "ok"
-    finally:
-        with contextlib.suppress(OSError):
-            os.remove(raw_path)
-
-
-def _resolve_media_id(media_id: str) -> tuple[str, Optional[str]]:
-    """A temp asset by its UUID filename: (path, None), or ("", reason)."""
+def _media_id_path(media_id: str) -> tuple[str, Optional[str]]:
+    """Temp asset path for a media id: (path, None), or ("", reason)."""
     if not _MEDIA_ID_PATTERN.match(media_id or ""):
         return "", "invalid media id"
     try:
@@ -231,26 +235,97 @@ def _resolve_media_id(media_id: str) -> tuple[str, Optional[str]]:
         if str(exc) == "file does not exist":
             return "", "media expired or missing"
         return "", "invalid media id"
-    failure = _validate_photo(source)
-    return (source, None) if failure is None else ("", _CODE_TO_REASON.get(failure, "unusable media"))
+    return source, None
 
 
-def _resolve_url(url: str, token: str, task_dir: str, session=None) -> tuple[str, Optional[str]]:
+def check_media_detail(
+    url: Optional[str] = None,
+    media_id: Optional[str] = None,
+    aspect: Optional[VideoAspect] = None,
+    work_dir: str = "",
+) -> dict:
+    """Mechanical check with dimensions: {"code", "width", "height"}.
+
+    Exactly one of url/media_id. No User-Agent or Referer tricks: a host
+    that blocks the SSRF-safe download reports blocked_403 and the agent
+    retries with upload_media bytes fetched on its own machine. Never
+    logs the URL. A media id that expired or never existed reports
+    "media_expired": the caller lets the existing skip-warning path
+    handle it, it never blocks the video.
+    """
+    if media_id is not None:
+        source, reason = _media_id_path(media_id)
+        if reason is not None:
+            return {"code": "media_expired", "width": None, "height": None}
+        size = _probe_size(source)
+        code = _validate_photo(source, aspect)
+        return {
+            "code": code if code is not None else "ok",
+            "width": size[0] if size is not None else None,
+            "height": size[1] if size is not None else None,
+        }
+    raw_path = os.path.join(work_dir, "check-media.raw")
+    try:
+        image_fetch.download_image(url, raw_path)
+    except Exception as exc:  # noqa: BLE001 - every download failure maps to a code
+        return {"code": _download_failure_code(exc), "width": None, "height": None}
+    try:
+        size = _probe_size(raw_path)
+        failure = _validate_photo(raw_path, aspect)
+        return {
+            "code": failure if failure is not None else "ok",
+            "width": size[0] if size is not None else None,
+            "height": size[1] if size is not None else None,
+        }
+    finally:
+        with contextlib.suppress(OSError):
+            os.remove(raw_path)
+
+
+def check_media_code(
+    url: str, work_dir: str, aspect: Optional[VideoAspect] = None
+) -> str:
+    """Mechanical check of one image URL: one code, no judgement."""
+    return check_media_detail(url=url, aspect=aspect, work_dir=work_dir)["code"]
+
+
+def _resolve_media_id(
+    media_id: str, aspect: Optional[VideoAspect] = None
+) -> tuple[str, Optional[str]]:
+    """A temp asset by its UUID filename: (path, None), or ("", reason)."""
+    source, reason = _media_id_path(media_id)
+    if reason is not None:
+        return "", reason
+    failure = _validate_photo(source, aspect)
+    if failure is None:
+        return source, None
+    if failure == "wrong_aspect" and aspect is not None:
+        return "", _wrong_aspect_reason(source, aspect)
+    return "", _CODE_TO_REASON.get(failure, "unusable media")
+
+
+def _resolve_url(
+    url: str, token: str, task_dir: str, session=None, aspect: Optional[VideoAspect] = None
+) -> tuple[str, Optional[str]]:
     """Download one URL to the task directory: (path, None), or ("", reason).
 
     The downloaded file is the caller's to remove once the panel is drawn.
     """
     raw_path = os.path.join(task_dir, f"segment-media-{token}.raw")
     try:
-        place_photos.download_image(url, raw_path, session=session)
+        image_fetch.download_image(url, raw_path, session=session)
     except Exception as exc:  # noqa: BLE001 - one bad URL costs only this segment
         return "", _CODE_TO_REASON.get(_download_failure_code(exc), "download failed")
-    failure = _validate_photo(raw_path)
-    if failure is not None:
-        with contextlib.suppress(OSError):
-            os.remove(raw_path)
-        return "", _CODE_TO_REASON.get(failure, "unusable media")
-    return raw_path, None
+    failure = _validate_photo(raw_path, aspect)
+    if failure is None:
+        return raw_path, None
+    if failure == "wrong_aspect" and aspect is not None:
+        reason = _wrong_aspect_reason(raw_path, aspect)
+    else:
+        reason = _CODE_TO_REASON.get(failure, "unusable media")
+    with contextlib.suppress(OSError):
+        os.remove(raw_path)
+    return "", reason
 
 
 def _overlay_font(params: Any, segments: Sequence[Any]) -> Optional[media_overlay.FontFor]:
@@ -273,7 +348,7 @@ def _face_mode(params: Any) -> str:
     """How the persona's face appears: never, for the hook only, or all video."""
     if getattr(params, "persona", None) is None or not persona_lipsync_active(params):
         return segment_panels.FACE_NONE
-    if getattr(params, "full_lipsync", False) is True:
+    if getattr(params, "video_type", None) == "full_lipsync":
         return segment_panels.FACE_FULL
     return segment_panels.FACE_HOOK
 
@@ -332,13 +407,19 @@ def prepare_segment_media(
         for image_index, (media, (slice_start, slice_end)) in enumerate(zip(items, split_interval(start, end, len(items)))):
             if not isinstance(media, dict):
                 continue
+            on_face = face == segment_panels.FACE_FULL or (face == segment_panels.FACE_HOOK and slice_start < hook_end)
+            # A photo that fills the frame must match its ratio; a photo
+            # shown as a panel is contained by the panel, so no gate.
+            resolve_aspect = None if on_face else aspect
             media_id = media.get("mediaId")
             url = media.get("url")
             downloaded = ""
             if isinstance(media_id, str) and media_id:
-                photo, reason = _resolve_media_id(media_id)
+                photo, reason = _resolve_media_id(media_id, resolve_aspect)
             elif isinstance(url, str) and url:
-                photo, reason = _resolve_url(url, f"{index}-{image_index}", task_dir, session=session)
+                photo, reason = _resolve_url(
+                    url, f"{index}-{image_index}", task_dir, aspect=resolve_aspect, session=session
+                )
                 downloaded = photo
             else:
                 continue
@@ -348,7 +429,6 @@ def prepare_segment_media(
             overlay = media.get("overlay")
             overlay = overlay if isinstance(overlay, dict) else None
             out_path = os.path.join(task_dir, f"segment-panel-{index}-{image_index}.png")
-            on_face = face == segment_panels.FACE_FULL or (face == segment_panels.FACE_HOOK and slice_start < hook_end)
             try:
                 if on_face:
                     built = segment_panels.build_panel(photo, overlay, font_for, aspect, out_path)
@@ -391,12 +471,11 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
         face=face, video_script=video_script,
         font_for=_overlay_font(params, segments),
     )
-    if getattr(params, "faceless_material", None) == faceless_material.IMAGES:
-        # The photos are the whole picture: neighbours cover gaps; none left fails the task.
-        hook_end = _hook_end(video_script, subtitle_path, audio_duration) if face == segment_panels.FACE_HOOK else 0.0
-        panels, gap_warnings = image_coverage.extend_over_gaps(
-            panels, image_coverage.coverage_start(face, hook_end), audio_duration
-        )
-        warnings = [*warnings, *gap_warnings]
+    # The photos are the whole picture: neighbours cover gaps; none left fails the task.
+    hook_end = _hook_end(video_script, subtitle_path, audio_duration) if face == segment_panels.FACE_HOOK else 0.0
+    panels, gap_warnings = image_coverage.extend_over_gaps(
+        panels, image_coverage.coverage_start(face, hook_end), audio_duration
+    )
+    warnings = [*warnings, *gap_warnings]
     segment_panels.write_manifest(task_id, panels, warnings)
     return warnings

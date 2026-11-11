@@ -11,7 +11,7 @@ import { legalI18nEn } from './legal-i18n-en';
 export const enDictionary: Dictionary = {
   nav: {
     brand: 'Post Engineer',
-    brandSubtitle: 'YouTube · Instagram',
+    brandSubtitle: 'AI videos for social media',
     accounts: 'Accounts',
     accountsHint: 'Connect and manage',
     create: 'Create post',
@@ -20,8 +20,6 @@ export const enDictionary: Dictionary = {
     personaHint: 'Identity and voice',
     billing: 'Tokens',
     billingHint: 'Prepaid tokens',
-    apiKeys: 'API Keys',
-    apiKeysHint: 'MCP and integrations',
     debug: 'Debug',
     debugHint: 'Validation tools',
     signOut: 'Sign out',
@@ -35,7 +33,7 @@ export const enDictionary: Dictionary = {
   // Posts page — history + upcoming posts from all accounts
   posts: {
     title: 'Posts',
-    subtitle: 'Calendar of posts across all accounts. Click a day to see its posts.',
+    subtitle: 'Calendar of posts across all accounts. Select a day to see its posts.',
     filterProvider: 'Network',
     allProviders: 'All networks',
     filterAccount: 'Account',

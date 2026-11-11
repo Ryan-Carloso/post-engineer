@@ -45,7 +45,7 @@ the fetch date.
   an agent-side instruction only. If it is missing, the prompt tells the
   user to install it instead of failing silently.
 - A persona (`personaId` from `list_personas`), or a faceless setup
-  (`options.faceless` plus `options.voiceId` or `options.audioUrl`).
+  (`options.videoType: 'faceless'` plus `options.voiceId` or `options.audioUrl`).
 - A token balance that covers one video: check with `get_token_balance`
   before generating. Generation costs tokens; `validate_script` and
   `score_draft` do not debit tokens.

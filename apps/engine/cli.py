@@ -74,9 +74,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Post Engineer command line video generation"
     )
-    parser.add_argument("--video-subject", required=True, help="video subject")
+    parser.add_argument("--video-title", required=True, help="video title")
+    parser.add_argument(
+        "--video-description", required=True, help="video description"
+    )
+    parser.add_argument(
+        "--video-type",
+        required=True,
+        choices=["full_lipsync", "hook_lipsync", "faceless"],
+        help="video mode: full lip sync, lip sync on the hook only, or faceless",
+    )
     parser.add_argument("--video-script", default="", help="custom script")
-    parser.add_argument("--video-terms", default=None, help="comma-separated terms")
     parser.add_argument(
         "--video-language",
         default=None,
@@ -96,7 +104,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--stop-at",
         default="video",
-        choices=["script", "terms", "audio", "subtitle", "materials", "video"],
+        choices=["script", "audio", "subtitle", "materials", "video"],
         help="pipeline stop stage",
     )
     parser.add_argument("--video-aspect", default="9:16", help="video aspect ratio")
@@ -118,12 +126,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=_positive_int,
         default=None,
         help="maximum duration of each source clip in seconds",
-    )
-    parser.add_argument(
-        "--match-materials-to-script",
-        default=None,
-        action=argparse.BooleanOptionalAction,
-        help="match generated/search materials to script order",
     )
     parser.add_argument("--voice-name", default="", help="tts voice name")
     parser.add_argument(
@@ -204,21 +206,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--task-id", default="", help="custom task id")
     args = parser.parse_args(argv)
-
-    if (args.video_materials or "").strip() and args.stop_at == "terms":
-        parser.error(
-            "--stop-at terms has no effect with --video-materials "
-            "(search terms are not generated for local materials)"
-        )
-
     return args
 
 
 def build_video_params(args: argparse.Namespace) -> VideoParams:
-    video_terms = args.video_terms
-    if video_terms:
-        video_terms = [term.strip() for term in video_terms.split(",") if term.strip()]
-
     video_materials = None
     materials_arg = args.video_materials or ""
     if materials_arg.strip():
@@ -230,9 +221,10 @@ def build_video_params(args: argparse.Namespace) -> VideoParams:
         ]
 
     params_kwargs = {
-        "video_subject": args.video_subject,
+        "video_title": args.video_title,
+        "video_description": args.video_description,
+        "video_type": args.video_type,
         "video_script": args.video_script,
-        "video_terms": video_terms,
         "video_materials": video_materials,
         "video_aspect": args.video_aspect,
         "voice_name": args.voice_name,
@@ -245,7 +237,6 @@ def build_video_params(args: argparse.Namespace) -> VideoParams:
         "video_concat_mode",
         "video_transition_mode",
         "video_clip_duration",
-        "match_materials_to_script",
         "voice_volume",
         "voice_rate",
         "bgm_volume",

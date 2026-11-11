@@ -36,10 +36,14 @@ const hook =
 const body =
   'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
 const cta = 'Save this video before your next trip to Porto.';
+function photos(count: number, prefix: string): Array<{ url: string }> {
+  return Array.from({ length: count }, (_, i) => ({ url: `https://example.com/${prefix}-${i + 1}.jpg` }));
+}
+
 const validSegments = [
-  { kind: 'hook' as const, text: hook },
-  { kind: 'body' as const, text: body },
-  { kind: 'cta' as const, text: cta },
+  { kind: 'hook' as const, text: hook, media: photos(3, 'hook') },
+  { kind: 'body' as const, text: body, media: photos(6, 'body') },
+  { kind: 'cta' as const, text: cta, media: photos(2, 'cta') },
 ];
 // Too short: the mechanical validator rejects it before any request.
 const rejectedSegments = [
@@ -235,9 +239,11 @@ describe('recipe adoption through the registered server', () => {
     personaId: 'persona-1',
     segments: validSegments,
     title: 'Porto trip',
+    description: 'Agent description.',
     providers: ['youtube'],
     youtubeAccountIds: ['acct-1'],
     mode: 'asap',
+    options: { videoType: 'hook_lipsync' },
   };
 
   it('nudges on list_personas, attributes list_prompts to it, then stops nudging', async () => {

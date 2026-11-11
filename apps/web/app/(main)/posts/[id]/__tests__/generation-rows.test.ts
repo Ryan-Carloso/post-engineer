@@ -5,33 +5,20 @@ import { narrowGeneration } from '@/lib/slot-detail';
 const t = (key: string): string => key;
 
 describe('buildGenerationRows', () => {
-  it('always shows the material, right after the face', () => {
-    const rows = buildGenerationRows({ ...narrowGeneration(null), material: 'svg' }, 'Ana', t);
-    expect(rows.slice(0, 3)).toEqual([
+  it('shows persona and face, with no material row: every video is the agent images', () => {
+    const rows = buildGenerationRows(narrowGeneration(null), 'Ana', t);
+    expect(rows).toEqual([
       { label: 'posts.generationPersonaLabel', value: 'Ana' },
       { label: 'posts.generationFaceLabel', value: 'posts.generationWithFace' },
-      { label: 'posts.generationMaterialLabel', value: 'posts.generationMaterialSvg' },
     ]);
-    expect(rows).toHaveLength(3);
   });
 
-  it('labels the images material', () => {
-    const rows = buildGenerationRows({ ...narrowGeneration(null), material: 'images' }, 'Ana', t);
-    expect(rows[2]).toEqual({ label: 'posts.generationMaterialLabel', value: 'posts.generationMaterialImages' });
-  });
-
-  it('labels stock material and keeps the optional facts after it', () => {
+  it('keeps the optional facts after the face', () => {
     const rows = buildGenerationRows(
       { ...narrowGeneration(null), faceless: true, language: 'en-US', paragraphNumber: 3 },
       'Ana',
       t,
     );
-    expect(rows.map((r) => r.value)).toEqual([
-      'Ana',
-      'posts.generationFaceless',
-      'posts.generationMaterialBroll',
-      'en-US',
-      '3',
-    ]);
+    expect(rows.map((r) => r.value)).toEqual(['Ana', 'posts.generationFaceless', 'en-US', '3']);
   });
 });

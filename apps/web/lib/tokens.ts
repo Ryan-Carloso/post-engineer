@@ -1,20 +1,51 @@
 import { create } from 'zustand';
 
 //---------------
-// Token pricing model for the persona video.
-//  - Faceless (no face, 100% stock)   = 1 token
-//  - With the persona's face "ok" (480p)    = 2 tokens
-//  - With the persona's face "very_good" (720p) = 3 tokens
-//  - Full lip-sync, face "ok"               = 8 tokens
-//  - Full lip-sync, face "very_good"        = 15 tokens
+// Token pricing model for the persona video, keyed by the one video mode
+// (video_type, issue #542 follow-up):
+//  - faceless (no face, only the agent's images) = 1 token
+//  - hook_lipsync, face "ok" (480p)    = 2 tokens
+//  - hook_lipsync, face "very_good" (720p) = 3 tokens
+//  - full_lipsync, face "ok"               = 8 tokens
+//  - full_lipsync, face "very_good"        = 15 tokens
 //
 // Full lip-sync renders every narration window as talking head, so its GPU
 // cost is a multiple of the hook-only intro; the flat hook prices above do
 // not cover it. There is no face MIX anymore (migration 007 dropped the
-// persona column): a persona always has a face, and "no face" is a boolean
-// the user picks per post — so the price is a straight lookup, not a
+// persona column): a persona always has a face, and the mode is one enum
+// the caller picks per post — so the price is a straight lookup, not a
 // weighted average.
 //---------------
+
+export const VIDEO_TYPES = ['full_lipsync', 'hook_lipsync', 'faceless'] as const;
+
+export type VideoType = (typeof VIDEO_TYPES)[number];
+
+/** Narrow an untrusted value to a video mode (DB rows, request bodies). */
+export function isVideoType(value: unknown): value is VideoType {
+  return typeof value === 'string' && (VIDEO_TYPES as readonly string[]).includes(value);
+}
+
+/**
+ * The invalid-video_type message suffix: every valid type WITH its token
+ * cost, so the agent can choose knowing the price. Kept short on purpose:
+ * the MCP caps upstream error bodies at 200 chars (apps/mcp/src/errors.ts
+ * MAX_ERROR_BODY_CHARS), so a long message would arrive truncated.
+ * Must stay identical to the engine's VIDEO_TYPE_ERROR_SUFFIX
+ * (apps/engine/app/models/schema.py) — the video-type sync test pins the
+ * two together, and the numbers must match the price tables below.
+ */
+export const VIDEO_TYPE_ERROR_SUFFIX =
+  'use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)';
+
+/** Short invalid-video_type error, costs included, under 200 chars. */
+export function unknownVideoTypeMessage(value: unknown): string {
+  const shown = value === null || value === undefined ? '' : String(value).slice(0, 32);
+  return `unknown video_type '${shown}'; ${VIDEO_TYPE_ERROR_SUFFIX}`;
+}
+
+/** Missing-video_type error: same suffix, so the agent sees values + costs. */
+export const VIDEO_TYPE_REQUIRED_MESSAGE = `videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}`;
 
 export const FACELESS_PRICE = 1;
 
@@ -71,23 +102,21 @@ export function computeTokenPercentage(balance: unknown, maxTokens: unknown): nu
 }
 
 //---------------
-// computeVideoTokens — cost of ONE video: the faceless price when the post
-// asked for no face, otherwise the persona's face quality, or the full
-// lip-sync price when the post asked for full lip-sync. This is the only
-// copy of the formula: generate-and-schedule charges with it and stores the
-// result on the slot (scheduled_posts.charged_tokens, migration 045), and
-// every refund, engine included, reads that stored amount.
-// A full lip-sync request is never faceless (the route rejects the
-// combination before charging), so faceless still wins here and the full
-// price never applies to a faceless post.
+// computeVideoTokens — cost of ONE video, from the one video mode: the
+// faceless price for faceless, otherwise the persona's face quality, or
+// the full lip-sync price for full_lipsync. This is the only copy of the
+// formula: generate-and-schedule charges with it and stores the result on
+// the slot (scheduled_posts.charged_tokens, migration 045), and every
+// refund, engine included, reads that stored amount. The cost is always
+// computed by the server from video_type — the request never carries a
+// price, so a caller cannot under-charge a video.
 //---------------
 export function computeVideoTokens(
-  faceless: boolean,
+  videoType: VideoType,
   faceQuality: FaceQuality,
-  fullLipsync = false,
 ): number {
-  if (faceless) return FACELESS_PRICE;
-  if (fullLipsync) return FULL_LIPSYNC_PRICES[faceQuality];
+  if (videoType === 'faceless') return FACELESS_PRICE;
+  if (videoType === 'full_lipsync') return FULL_LIPSYNC_PRICES[faceQuality];
   return FACE_QUALITY_PRICES[faceQuality];
 }
 

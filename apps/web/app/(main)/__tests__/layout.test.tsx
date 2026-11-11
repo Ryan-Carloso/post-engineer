@@ -168,14 +168,21 @@ describe('app/(main)/layout — MainLayout', () => {
     }
   });
 
-  it('renders the sidebar tabs in order: Posts, History, Accounts, Personas, Metrics, API Key & MCP', () => {
+  it('renders the sidebar tabs in order: Posts, History, Accounts, Personas, Metrics, A/B Tests, API Key & MCP', () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     const sidebar = screen.getByTestId('nav-brand').closest('aside');
     const nav = within(sidebar as HTMLElement).getByRole('navigation');
     const titles = within(nav)
       .getAllByRole('link')
       .map((link) => link.getAttribute('title'));
-    expect(titles).toEqual(['nav.posts', 'nav.history', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.prompts']);
+    expect(titles).toEqual(['nav.posts', 'nav.history', 'nav.accounts', 'nav.persona', 'nav.metrics', 'nav.experiments', 'nav.prompts']);
+  });
+
+  it('experiments tab links to /experiments', () => {
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const sidebar = screen.getByTestId('nav-brand').closest('aside');
+    const nav = within(sidebar as HTMLElement).getByRole('navigation');
+    expect(within(nav).getByTitle('nav.experiments').closest('a')).toHaveAttribute('href', '/experiments');
   });
 
   it('support link uses the shared support email, not a hardcoded copy', () => {
@@ -194,13 +201,6 @@ describe('app/(main)/layout — MainLayout', () => {
     const firstTab = within(sidebar as HTMLElement).getAllByRole('link')[0];
     expect(firstTab).toHaveAttribute('title', 'nav.posts');
     expect(firstTab).toHaveAttribute('href', '/posts');
-  });
-
-  it('does not render an API Keys tab in the sidebar nav (moved to the profile area)', () => {
-    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const sidebar = screen.getByTestId('nav-brand').closest('aside');
-    const nav = within(sidebar as HTMLElement).getByRole('navigation');
-    expect(within(nav).queryByText('nav.apiKeys')).toBeNull();
   });
 
   it('posts tab links to /posts', () => {
@@ -237,7 +237,7 @@ describe('app/(main)/layout — MainLayout', () => {
     expect(panelLink).toHaveTextContent('account.billingLink');
   });
 
-  it('api keys are reachable from the profile panel, not from a tab', () => {
+  it('does not duplicate the API keys row in the sidebar footer when the nav tab already links there', () => {
     vi.mocked(useSessionQuery).mockReturnValue({
       data: {
         id: 'u1',
@@ -247,9 +247,10 @@ describe('app/(main)/layout — MainLayout', () => {
       isLoading: false,
     } as never);
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    const panelLink = screen.getByTestId('profile-api-keys-link');
-    expect(panelLink).toHaveAttribute('href', '/recipes');
-    expect(panelLink).toHaveTextContent('nav.apiKeys');
+    const footer = document.querySelector('[data-sidebar-footer]');
+    expect(footer).not.toBeNull();
+    expect(within(footer as HTMLElement).queryByTestId('profile-api-keys-link')).not.toBeInTheDocument();
+    expect(screen.getAllByTitle('nav.prompts').length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders locale switcher', () => {
@@ -310,6 +311,20 @@ describe('app/(main)/layout — MainLayout', () => {
     expect(sidebarImg).toHaveAttribute('src', 'https://example.com/avatar.png');
     const headerImg = within(screen.getByTestId('mobile-profile-link')).getByRole('img', { name: 'A' });
     expect(headerImg).toHaveAttribute('src', 'https://example.com/avatar.png');
+  });
+
+  it('scrolls the sidebar footer so sign out stays reachable', () => {
+    vi.mocked(useSessionQuery).mockReturnValue({
+      data: { id: 'u1', email: 'test@example.com', user_metadata: { name: 'User' } },
+      isLoading: false,
+    } as never);
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    const footer = document.querySelector('[data-sidebar-footer]');
+    expect(footer).not.toBeNull();
+    expect(footer?.className.split(/\s+/)).toContain('overflow-y-auto');
+    expect(within(footer as HTMLElement).getByTitle('nav.signOut')).toBeInTheDocument();
+    const aside = screen.getByTestId('nav-brand').closest('aside');
+    expect(aside?.className.split(/\s+/)).toContain('overflow-hidden');
   });
 
   it('sign out button calls signOut and navigates to /login', async () => {
@@ -388,14 +403,9 @@ describe('app/(main)/layout — MainLayout', () => {
       const labels = within(getMobileNav())
         .getAllByRole('link')
         .map((link) => link.textContent);
-      // The mobile tab uses the short label: the full "API Key e MCP"
+      // The mobile tab uses the short label. The full prompts label
       // wraps to two lines in a ~70px tab.
       expect(labels).toEqual(['nav.posts', 'nav.persona', 'nav.accounts', 'nav.promptsShort']);
-    });
-
-    it('has no API Keys tab in the mobile nav (moved to the profile area)', () => {
-      render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-      expect(within(getMobileNav()).queryByText('nav.apiKeys')).toBeNull();
     });
 
     it('has no Billing tab in the mobile nav (moved to the profile area)', () => {
@@ -436,6 +446,15 @@ describe('app/(main)/layout — MainLayout', () => {
       const sidebar = within(screen.getByTestId('nav-brand').closest('aside') as HTMLElement);
       expect(sidebar.getByTitle('nav.history').className).toContain('bg-brand-soft');
       expect(sidebar.getByTitle('nav.posts').className).not.toContain('bg-brand-soft');
+    });
+
+    it('on /experiments highlights A/B Tests in the sidebar and More in the bottom bar', () => {
+      vi.mocked(usePathname).mockReturnValue('/experiments');
+      render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+      expect(within(getMobileNav()).getByRole('button', { name: 'nav.more' }).className).toContain('font-semibold');
+      const sidebar = within(screen.getByTestId('nav-brand').closest('aside') as HTMLElement);
+      expect(sidebar.getByTitle('nav.experiments').className).toContain('bg-brand-soft');
+      expect(sidebar.getByTitle('nav.metrics').className).not.toContain('bg-brand-soft');
     });
 
     it.each([
@@ -512,12 +531,13 @@ describe('mobile header profile area', () => {
     expect(within(link).getByText('H')).toBeInTheDocument();
   });
 
-  it('More opens a sheet linking History, Metrics and Tokens (not the profile)', async () => {
+  it('More opens a sheet linking History, Metrics, A/B Tests and Tokens (not the profile)', async () => {
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
     fireEvent.click(screen.getByRole('button', { name: 'nav.more' }));
     const sheet = await screen.findByRole('dialog', { name: 'nav.moreTitle' });
     expect(within(sheet).getByText('nav.history').closest('a')).toHaveAttribute('href', '/posts/history');
     expect(within(sheet).getByText('nav.metrics').closest('a')).toHaveAttribute('href', '/metrics');
+    expect(within(sheet).getByText('nav.experiments').closest('a')).toHaveAttribute('href', '/experiments');
     expect(within(sheet).queryByText('nav.profile')).toBeNull();
     expect(within(sheet).getByText('nav.billing').closest('a')).toHaveAttribute('href', '/billing');
   });

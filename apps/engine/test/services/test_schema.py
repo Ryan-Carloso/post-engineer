@@ -13,7 +13,6 @@ from app.models.schema import (
     VideoAspect,
     VideoLayout,
     VideoParams,
-    VideoTermsParams,
 )
 
 
@@ -34,58 +33,24 @@ class TestVideoLayout(unittest.TestCase):
 
     def test_video_params_default_is_standard(self):
         self.assertEqual(
-            VideoParams(video_subject="test").video_layout, VideoLayout.standard
+            VideoParams(
+                video_title="test",
+                video_description="Test description.",
+                video_type="faceless",
+            ).video_layout,
+            VideoLayout.standard,
         )
-
-
-class TestVideoParamsLipsyncEnabled(unittest.TestCase):
-    def test_default_is_true(self):
-        self.assertTrue(VideoParams(video_subject="test").lipsync_enabled)
-
-    def test_accepts_false(self):
-        params = VideoParams(video_subject="test", lipsync_enabled=False)
-        self.assertFalse(params.lipsync_enabled)
-
-    def test_accepts_true(self):
-        params = VideoParams(video_subject="test", lipsync_enabled=True)
-        self.assertTrue(params.lipsync_enabled)
 
 
 class TestSchemaBounds(unittest.TestCase):
     """Numeric and length bounds guard the public API against absurd inputs
-    (e.g. amount=10**9 fanning out into a billion material searches)."""
+    (e.g. a 101-char title or a 20001-char script)."""
 
     def _params(self, **kwargs):
-        kwargs.setdefault("video_subject", "test")
+        kwargs.setdefault("video_title", "test")
+        kwargs.setdefault("video_description", "Test description.")
+        kwargs.setdefault("video_type", "faceless")
         return VideoParams(**kwargs)
-
-    # VideoTermsParams.amount: 1..50
-
-    def test_terms_amount_rejects_huge_value(self):
-        with self.assertRaises(ValidationError):
-            VideoTermsParams(amount=10**9)
-
-    def test_terms_amount_rejects_zero(self):
-        with self.assertRaises(ValidationError):
-            VideoTermsParams(amount=0)
-
-    def test_terms_amount_rejects_above_max(self):
-        with self.assertRaises(ValidationError):
-            VideoTermsParams(amount=51)
-
-    def test_terms_amount_accepts_edges_and_default(self):
-        self.assertEqual(VideoTermsParams(amount=1).amount, 1)
-        self.assertEqual(VideoTermsParams(amount=50).amount, 50)
-        self.assertEqual(VideoTermsParams().amount, 5)
-
-    # VideoParams.video_subject: max 500 chars
-
-    def test_video_subject_rejects_501_chars(self):
-        with self.assertRaises(ValidationError):
-            self._params(video_subject="x" * 501)
-
-    def test_video_subject_accepts_500_chars(self):
-        self.assertEqual(len(self._params(video_subject="x" * 500).video_subject), 500)
 
     # VideoParams.video_script: max 20000 chars
 

@@ -648,12 +648,14 @@ describe('generate and schedule video client', () => {
   const baseInput = {
     personaId: 'persona-123',
     title: 'Launch a SaaS in days',
+    description: 'Agent description.',
     providers: ['youtube', 'bluesky'] as ('youtube' | 'bluesky')[],
     youtubeAccountIds: ['chan-1'],
     blueskyAccountIds: ['did:plc:abc'],
     startAt: '2026-10-05T20:00:00',
     times: ['20:00'],
     timezone: 'Europe/Lisbon',
+    options: { videoType: 'hook_lipsync' as const },
   };
 
   beforeEach(() => {
@@ -719,6 +721,7 @@ describe('generate and schedule video client', () => {
       })
     );
     expect(lastRequestBody().segments).toEqual(segments);
+    expect(lastRequestBody().videoType).toBe('hook_lipsync');
     expect(result).toEqual({ success: true });
   });
 
@@ -735,6 +738,20 @@ describe('generate and schedule video client', () => {
       instagram: ['ig-1'],
       linkedin: ['li-1'],
     });
+  });
+
+  it('sends the agent-supplied description at the top level of the body', async () => {
+    await client.generatePersonaVideo({
+      ...baseInput,
+      description: 'Watch to the end.',
+    });
+    const body = lastRequestBody();
+    expect(body.description).toBe('Watch to the end.');
+  });
+
+  it('always sends description at the top level of the body (required, no fallback)', async () => {
+    await client.generatePersonaVideo(baseInput);
+    expect(lastRequestBody().description).toBe('Agent description.');
   });
 
   it('nests the threads and facebook account arrays under their own providers', async () => {
@@ -808,12 +825,12 @@ describe('generate and schedule video client', () => {
     const { personaId: _personaId, ...rest } = baseInput;
     await client.generatePersonaVideo({
       ...rest,
-      options: { faceless: true, voiceId: 'calm', videoAspect: '16:9' },
+      options: { videoType: 'faceless', voiceId: 'calm', videoAspect: '16:9' },
     });
     const body = lastRequestBody();
     expect('personaId' in body).toBe(false);
     // The identity travels in options instead.
-    expect(body.options).toEqual({ faceless: true, voiceId: 'calm', videoAspect: '16:9' });
+    expect(body.options).toEqual({ videoType: 'faceless', voiceId: 'calm', videoAspect: '16:9' });
   });
 
   it('sends an empty accounts record when no account arrays are provided', async () => {
@@ -833,11 +850,12 @@ describe('generate and schedule video client', () => {
   it('forwards options and omits the key when options are absent', async () => {
     await client.generatePersonaVideo({
       ...baseInput,
-      options: { faceless: true, voiceId: 'v-1' },
+      options: { videoType: 'faceless', voiceId: 'v-1' },
     });
-    expect(lastRequestBody().options).toEqual({ faceless: true, voiceId: 'v-1' });
+    expect(lastRequestBody().options).toEqual({ videoType: 'faceless', voiceId: 'v-1' });
 
-    await client.generatePersonaVideo(baseInput);
+    const { options: _options, ...withoutOptions } = baseInput;
+    await client.generatePersonaVideo(withoutOptions);
     expect('options' in lastRequestBody()).toBe(false);
   });
 

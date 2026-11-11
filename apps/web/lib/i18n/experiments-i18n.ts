@@ -1,0 +1,91 @@
+//---------------
+// experiments-i18n — copy for the /experiments A/B results page
+// (issue #532). Merged into `nav` and `experiments` in ./index.ts
+// (en.ts/pt.ts are over the file-size cap and may not grow).
+//
+// Variant names are user data, never translated; the page never shows
+// A/B letters — only the human variant names.
+//---------------
+
+export const experimentsStrings = {
+  en: {
+    nav: {
+      experiments: 'A/B Tests',
+      experimentsHint: 'Experiment results',
+    },
+    experiments: {
+      title: 'A/B Tests',
+      subtitle: 'Which hook won — live from publish until 7 days after.',
+      entryTitle: 'A/B Tests — see results',
+      entryBody: 'Live experiment results, separate from the metrics dashboard.',
+      entryAction: 'See results',
+      selectLabel: 'Experiment',
+      selectPlaceholder: 'Choose an experiment',
+      window24h: '24h',
+      window7d: '7d',
+      liveBadge: 'Live',
+      partialBadge: 'Partly live',
+      snapshotBadge: 'Snapshot',
+      frozenBadge: 'Frozen at 7 days',
+      updatedAt: 'Updated {date}',
+      liveFailures: '{count} videos could not be read live — showing the last snapshot for them.',
+      empty: 'No A/B tests yet. Create one from the MCP agent to compare two hooks.',
+      emptyDetail: 'No videos published yet for this experiment.',
+      loadError: 'Could not load the experiments. Try again in a moment.',
+      retry: 'Try again',
+      pairsPlanned: '{published} of {target} pairs published',
+      labelPending: 'Pending',
+      labelIndicative: 'Indicative',
+      labelClear: 'Clear winner',
+      wins: 'Wins',
+      pValue: 'p-value {value}',
+      winner: 'Winner: {name}',
+      noWinner: 'No winner yet — the result is not clear.',
+      pairHeader: 'Pair',
+      viewsHeader: 'Views',
+      winnerHeader: 'Pair winner',
+      tie: 'Tie',
+      noData: 'No data yet',
+    },
+  },
+  pt: {
+    nav: {
+      experiments: 'Testes A/B',
+      experimentsHint: 'Resultados dos testes',
+    },
+    experiments: {
+      title: 'Testes A/B',
+      subtitle: 'Qual hook venceu — ao vivo desde a publicação até 7 dias depois.',
+      entryTitle: 'Testes A/B — ver resultados',
+      entryBody: 'Resultados dos testes ao vivo, separados do painel de métricas.',
+      entryAction: 'Ver resultados',
+      selectLabel: 'Teste',
+      selectPlaceholder: 'Escolha um teste',
+      window24h: '24h',
+      window7d: '7d',
+      liveBadge: 'Ao vivo',
+      partialBadge: 'Parcialmente ao vivo',
+      snapshotBadge: 'Snapshot',
+      frozenBadge: 'Congelado aos 7 dias',
+      updatedAt: 'Atualizado às {date}',
+      liveFailures: '{count} vídeos não puderam ser lidos ao vivo — mostrando o último snapshot deles.',
+      empty: 'Nenhum teste A/B ainda. Crie um pelo agente MCP para comparar dois hooks.',
+      emptyDetail: 'Nenhum vídeo publicado ainda neste teste.',
+      loadError: 'Não foi possível carregar os testes. Tente de novo em instantes.',
+      retry: 'Tentar de novo',
+      pairsPlanned: '{published} de {target} pares publicados',
+      labelPending: 'Pendente',
+      labelIndicative: 'Indicativo',
+      labelClear: 'Vencedor claro',
+      wins: 'Vitórias',
+      pValue: 'valor-p {value}',
+      winner: 'Vencedor: {name}',
+      noWinner: 'Ainda sem vencedor — o resultado não está claro.',
+      pairHeader: 'Par',
+      viewsHeader: 'Views',
+      winnerHeader: 'Vencedor do par',
+      tie: 'Empate',
+      noData: 'Sem dados ainda',
+    },
+  },
+};

@@ -27,19 +27,38 @@ from app.services import task_webhook
 class WebhookUrlValidationTests(unittest.TestCase):
     def test_rejects_non_http_url(self):
         with self.assertRaises(ValidationError):
-            TaskVideoRequest(video_subject="x", webhook_url="ftp://example.com/hook")
+            TaskVideoRequest(
+                video_title="x",
+                video_description="Test description.",
+                video_type="faceless",
+                webhook_url="ftp://example.com/hook",
+            )
 
     def test_rejects_bare_string(self):
         with self.assertRaises(ValidationError):
-            TaskVideoRequest(video_subject="x", webhook_url="not-a-url")
+            TaskVideoRequest(
+                video_title="x",
+                video_description="Test description.",
+                video_type="faceless",
+                webhook_url="not-a-url",
+            )
 
     def test_accepts_http_and_https(self):
         for url in ("http://example.com/hook", "https://example.com/hook"):
-            request = TaskVideoRequest(video_subject="x", webhook_url=url)
+            request = TaskVideoRequest(
+                video_title="x",
+                video_description="Test description.",
+                video_type="faceless",
+                webhook_url=url,
+            )
             self.assertEqual(request.webhook_url, url)
 
     def test_webhook_url_defaults_to_none(self):
-        self.assertIsNone(TaskVideoRequest(video_subject="x").webhook_url)
+        self.assertIsNone(
+            TaskVideoRequest(
+                video_title="x", video_description="Test description.", video_type="faceless"
+            ).webhook_url
+        )
 
 
 class NotifyTerminalTaskTests(unittest.TestCase):
@@ -124,17 +143,13 @@ class NotifyTerminalTaskTests(unittest.TestCase):
         # requests embeds the target URL in str(exc); Discord/Slack-style
         # path-embedded tokens do not match the key-anchored scrubber, so
         # the known webhook URL is redacted before scrub-then-truncate.
-        webhook_url = (
-            "https://discord.com/api/webhooks/123456789/abcdefGHIJKL-token-secret"
-        )
+        webhook_url = "https://discord.com/api/webhooks/123456789/abcdefGHIJKL-token-secret"
         response = MagicMock()
         response.raise_for_status.side_effect = requests.exceptions.HTTPError(
             f"500 Server Error: Internal Server Error for url: {webhook_url}"
         )
         with (
-            patch(
-                "app.services.task_webhook.requests.post", return_value=response
-            ),
+            patch("app.services.task_webhook.requests.post", return_value=response),
             patch("app.services.task_webhook.logger") as mock_logger,
         ):
             task_webhook._post(webhook_url, {"task_id": "t-1"}, "t-1")
@@ -157,9 +172,7 @@ class NotifyTerminalTaskTests(unittest.TestCase):
             f"500 Server Error: Internal Server Error for url: {encoded}"
         )
         with (
-            patch(
-                "app.services.task_webhook.requests.post", return_value=response
-            ),
+            patch("app.services.task_webhook.requests.post", return_value=response),
             patch("app.services.task_webhook.logger") as mock_logger,
         ):
             task_webhook._post(webhook_url, {"task_id": "t-1"}, "t-1")
@@ -246,7 +259,10 @@ class FailTaskWebhookTests(unittest.TestCase):
         from app.services import task as task_service
 
         params = TaskVideoRequest(
-            video_subject="x", webhook_url="https://example.com/hook"
+            video_title="x",
+            video_description="Test description.",
+            video_type="faceless",
+            webhook_url="https://example.com/hook",
         )
         with (
             patch("app.services.task_webhook.requests.post") as mock_post,
@@ -266,7 +282,9 @@ class FailTaskWebhookTests(unittest.TestCase):
     def test_fail_task_without_webhook_url_posts_nothing(self):
         from app.services import task as task_service
 
-        params = TaskVideoRequest(video_subject="x")
+        params = TaskVideoRequest(
+            video_title="x", video_description="Test description.", video_type="faceless"
+        )
         with (
             patch("app.services.task_webhook.requests.post") as mock_post,
             patch.object(task_service, "send_discord", return_value=True),
@@ -278,7 +296,10 @@ class FailTaskWebhookTests(unittest.TestCase):
         from app.services import task as task_service
 
         params = TaskVideoRequest(
-            video_subject="x", webhook_url="https://example.com/hook"
+            video_title="x",
+            video_description="Test description.",
+            video_type="faceless",
+            webhook_url="https://example.com/hook",
         )
         task_id = "wc-1"
         task_service.sm.state.update_task(task_id, user_id="u-1")

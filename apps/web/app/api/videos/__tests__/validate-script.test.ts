@@ -28,10 +28,16 @@ const hook =
 const body =
   'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
 const cta = 'Save this video before your next trip to Porto.';
+// Images mode needs media on every segment (hook 24 words -> 3, body 42
+// -> 6, CTA 9 -> 2).
 const segments = [
-  { kind: 'hook', text: hook },
-  { kind: 'body', text: body },
-  { kind: 'cta', text: cta },
+  { kind: 'hook', text: hook, media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
+  {
+    kind: 'body',
+    text: body,
+    media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
+  },
+  { kind: 'cta', text: cta, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
 ];
 
 function authRequest(payload: unknown): Request {
@@ -86,9 +92,9 @@ describe('POST /api/videos/validate-script', () => {
 
   it('rejects media with an unknown key, like the generation route does', async () => {
     const withAlt = [
-      { kind: 'hook', text: hook },
+      { kind: 'hook', text: hook, media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
       { kind: 'body', text: body, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
-      { kind: 'cta', text: cta },
+      { kind: 'cta', text: cta, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
     ];
     const response = await POST(authRequest({ segments: withAlt }));
     expect(response.status).toBe(400);
@@ -118,41 +124,43 @@ describe('POST /api/videos/validate-script', () => {
     expect(source).not.toContain('from \'@/lib/engine');
   });
 
-  describe('facelessMaterial', () => {
-    const counts = [3, 6, 2];
-    const withMedia = segments.map((segment, index) => ({
-      ...segment,
-      media: Array.from({ length: counts[index] }, (_, photo) => ({ url: `https://e.com/${index}-${photo}.jpg` })),
-    }));
-
-    it('accepts the images material when every segment carries media', async () => {
-      const response = await POST(authRequest({ segments: withMedia, facelessMaterial: 'images' }));
+  describe('videoType', () => {
+    it('accepts images mode when every segment carries media', async () => {
+      const response = await POST(authRequest({ segments }));
       expect(response.status).toBe(200);
       expect(((await response.json()) as { mediaCount: number }).mediaCount).toBe(11);
     });
 
-    it('rejects the images material when a segment has no media, naming that segment', async () => {
-      const missing = withMedia.map((segment, index) => (index === 1 ? { kind: segment.kind, text: segment.text } : segment));
-      const response = await POST(authRequest({ segments: missing, facelessMaterial: 'images' }));
+    it('rejects images mode when a segment has no media, naming that segment', async () => {
+      const missing = segments.map((segment, index) => (index === 1 ? { kind: segment.kind, text: segment.text } : segment));
+      const response = await POST(authRequest({ segments: missing }));
       expect(response.status).toBe(400);
       const payload = (await response.json()) as { field?: string; error?: string };
       expect(payload.field).toBe('segments.1.media');
       expect(payload.error).toContain('the images material needs media on every segment');
     });
 
-    it('keeps media optional for the other materials', async () => {
-      for (const facelessMaterial of ['broll', 'svg']) {
-        const response = await POST(authRequest({ segments, facelessMaterial }));
-        expect(response.status).toBe(200);
-      }
+    it('keeps media optional for full lip sync', async () => {
+      const bare = segments.map((segment) => ({ kind: segment.kind, text: segment.text }));
+      const response = await POST(authRequest({ segments: bare, videoType: 'full_lipsync' }));
+      expect(response.status).toBe(200);
     });
 
-    it('rejects an unknown material instead of reading it as broll', async () => {
-      const response = await POST(authRequest({ segments, facelessMaterial: 'stock' }));
+    it('keeps media required for faceless', async () => {
+      const bare = segments.map((segment) => ({ kind: segment.kind, text: segment.text }));
+      const response = await POST(authRequest({ segments: bare, videoType: 'faceless' }));
+      expect(response.status).toBe(400);
+      const payload = (await response.json()) as { field?: string };
+      expect(payload.field).toBe('segments.0.media');
+    });
+
+    it('rejects an unknown videoType with a 400 listing the modes and costs', async () => {
+      const response = await POST(authRequest({ segments, videoType: 'sideways' }));
       expect(response.status).toBe(400);
       const payload = (await response.json()) as { field?: string; error?: string };
-      expect(payload.field).toBe('facelessMaterial');
-      expect(payload.error).toBe('facelessMaterial must be one of: broll, svg, images.');
+      expect(payload.field).toBe('videoType');
+      expect(payload.error).toContain("unknown video_type 'sideways'");
+      expect(payload.error).toContain('full_lipsync (8/15)');
     });
   });
 });

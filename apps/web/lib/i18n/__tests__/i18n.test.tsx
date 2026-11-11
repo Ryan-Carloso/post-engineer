@@ -55,8 +55,14 @@ describe('i18n dictionaries', () => {
   });
 
   it('carries the prompts tab copy in both locales', () => {
-    expect(ptDictionary.nav.prompts).toBe('API Key e MCP');
-    expect(enDictionary.nav.prompts).toBe('API Key & MCP');
+    expect(ptDictionary.nav.prompts).toBe('Chave de API e MCP');
+    expect(enDictionary.nav.prompts).toBe('API key and MCP');
+    expect(ptDictionary.nav.posts).toBe('Publicações');
+    expect(enDictionary.nav.posts).toBe('Posts');
+    expect(ptDictionary.posts.title).toBe('Publicações');
+    expect(ptDictionary.posts.subtitle).toContain('publicações');
+    expect(ptDictionary.nav.postsHint).toBe('Calendário de publicações');
+    expect(enDictionary.posts.title).toBe('Posts');
     expect(ptDictionary.nav.promptsHint).toBeTruthy();
     expect(enDictionary.nav.promptsHint).toBeTruthy();
   });

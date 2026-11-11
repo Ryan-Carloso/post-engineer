@@ -36,9 +36,13 @@ function mockClient(overrides: Partial<Record<'request' | 'generatePersonaVideo'
   return client as unknown as PostEngineerClient & typeof client;
 }
 
+function photos(count: number, prefix: string): Array<{ url: string }> {
+  return Array.from({ length: count }, (_, i) => ({ url: `https://example.com/${prefix}-${i + 1}.jpg` }));
+}
+
 const BODY = [
-  { kind: 'body' as const, text: 'Most people bounce at the bottom of the squat, which moves the load off the legs and onto the lower back, so slow the last inch down and pause before you drive up again. Keep your chest tall, brace like someone is about to poke your stomach, and let the bar travel in a straight line over the middle of your foot on every single rep.' },
-  { kind: 'cta' as const, text: 'Follow for one fix a day.' },
+  { kind: 'body' as const, text: 'Most people bounce at the bottom of the squat, which moves the load off the legs and onto the lower back, so slow the last inch down and pause before you drive up again. Keep your chest tall, brace like someone is about to poke your stomach, and let the bar travel in a straight line over the middle of your foot on every single rep.', media: photos(9, 'body') },
+  { kind: 'cta' as const, text: 'Follow for one fix a day.', media: photos(1, 'cta') },
 ];
 
 function pairArgs(overrides: Record<string, unknown> = {}) {
@@ -46,10 +50,11 @@ function pairArgs(overrides: Record<string, unknown> = {}) {
     experimentId: EXPERIMENT_ID,
     pair: 1,
     title: 'Gym',
+    description: 'Agent description.',
     segments: BODY,
     hooks: [
-      { variantId: 'hook-calm', text: 'Here is a small squat detail that quietly changes how your legs grow over the next few months.' },
-      { variantId: 'hook-aggressive', text: 'Stop squatting like this right now, because you are wrecking your back and wasting every single leg day.' },
+      { variantId: 'hook-calm', text: 'Here is a small squat detail that quietly changes how your legs grow over the next few months.', media: photos(3, 'hook-calm') },
+      { variantId: 'hook-aggressive', text: 'Stop squatting like this right now, because you are wrecking your back and wasting every single leg day.', media: photos(3, 'hook-aggressive') },
     ],
     personaId: '11111111-2222-4333-8444-555555555555',
     providers: ['youtube'],
@@ -57,6 +62,7 @@ function pairArgs(overrides: Record<string, unknown> = {}) {
     startAt: '2026-11-10T18:00:00',
     times: ['18:00'],
     timezone: 'Europe/Lisbon',
+    options: { videoType: 'hook_lipsync' as const },
     ...overrides,
   });
 }

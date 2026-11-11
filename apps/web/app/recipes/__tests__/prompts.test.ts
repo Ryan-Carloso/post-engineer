@@ -86,8 +86,8 @@ describe('prompts hub data', () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(text).toContain('one generate_persona_video call');
     expect(text).toContain('only on ok');
-    expect(text).toContain('broll or svg, attach at most 6 photos; fewer, chosen well');
-    expect(text).toContain('For images, follow the density rule above.');
+    expect(text).toContain('Follow the density rule above; fewer, chosen well, beats every');
+    expect(text).toContain('photo you found.');
     expect(text).toContain('60 characters');
     expect(text).toContain('80');
     expect(text).toContain('30');
@@ -148,8 +148,8 @@ describe('prompts hub data', () => {
     expect(text).toContain('a price without a source is a');
     expect(text).toContain('never a different generation, a render, or a rebadged');
     expect(text).toContain('only on ok');
-    expect(text).toContain('6 photos; fewer, chosen well, beats every photo you found. For');
-    expect(text).toContain('images, follow the density rule above.');
+    expect(text).toContain('Follow the density rule above;');
+    expect(text).toContain('fewer, chosen well, beats every photo you found.');
     expect(text).toContain('60 characters');
     expect(text).toContain('drop the badge: a');
     expect(text).toContain('Never send a fake User-Agent or');
@@ -229,12 +229,14 @@ describe('prompts hub data', () => {
     expect(text).not.toContain('issue #');
   });
 
-  it('says when to pick images and keeps recipe media caps conditional', () => {
+  it('says images is the only material and names the video types with the full-lip-sync media cap', () => {
     const baseText = SHARED_PROMPT_BASE.join('\n');
-    expect(baseText).toContain('own real photos, a place, a product, or a person');
-    expect(baseText).toContain('broll is the default');
-    expect(baseText).toContain('svg for an abstract explainer');
-    expect(baseText).toContain('facelessMaterial on validate_script and as options.facelessMaterial on generate_persona_video');
+    expect(baseText).toContain('images is the only material');
+    expect(baseText).toContain('no stock footage and no drawn material');
+    expect(baseText).toContain('options.videoType on generate_persona_video: full_lipsync');
+    expect(baseText).toContain('media optional, at most 6 photos in total');
+    expect(baseText).toContain('hook_lipsync (lip sync only on the hook');
+    expect(baseText).toContain('faceless (only the agent\'s photos, no face');
     expect(baseText).toContain('one photo per idea in its segment');
     expect(baseText).toContain('while it is spoken');
     expect(baseText).toContain('each segment idea, not once for the whole topic');
@@ -242,9 +244,10 @@ describe('prompts hub data', () => {
     expect(baseText).toContain('strongest photo in the hook segment');
     const daily = (getPrompt('daily-news')?.prompt ?? '').slice(baseText.length);
     const github = (getPrompt('github-prs')?.prompt ?? '').slice(baseText.length);
-    expect(daily).toContain('At most 6 medias for broll or svg; for images, follow the');
-    expect(github).toContain('at most 6 for broll or svg, and the density rule above for');
-    expect(github).toContain('images, only if they match the PR');
+    expect(daily).toContain('Follow the density rule above. Skip a failed photo,');
+    expect(github).toContain('follow the density rule above for images, only if they');
+    expect(github).toContain('match the PR (screenshots, diagrams, or repo visuals)');
+    expect(github).toContain('generate with full lip sync and no media');
   });
 
   it('bakes the segments contract into every prompt text', () => {

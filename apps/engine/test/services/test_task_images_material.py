@@ -1,4 +1,4 @@
-"""tm.start with the images material: no terms, no stock, no place photos; no photo fails."""
+"""tm.start with the images material: only the neutral canvas renders; no photo fails."""
 
 import unittest
 from contextlib import ExitStack
@@ -25,10 +25,9 @@ def _photos(count, prefix):
     return [{"url": f"https://e.com/{prefix}{i}.jpg"} for i in range(count)]
 
 
-def _params(material):
+def _params():
     # Images mode needs about one photo per 3s (hook 19 words → 3, body 38 → 5, CTA 7 → 1).
-    # Other materials keep one photo each so they stay under the 6-photo cap.
-    counts = (3, 5, 1) if material == "images" else (1, 1, 0)
+    counts = (3, 5, 1)
     segments = []
     for index, segment in enumerate(SEGMENTS):
         copied = dict(segment)
@@ -36,7 +35,10 @@ def _params(material):
             copied["media"] = _photos(counts[index], f"{index}-")
         segments.append(copied)
     return TaskVideoRequest(
-        video_subject="Porto walks", segments=segments, faceless_material=material,
+        video_title="Porto walks",
+        video_description="Test description.",
+        video_type="faceless",
+        segments=segments,
         voice_name="chatterbox:kokoro_af_heart",
     )
 
@@ -55,48 +57,46 @@ class ImagesMaterialStartTests(unittest.TestCase):
             mocks["complete"] = stack.enter_context(patch.object(tm, "_complete_task"))
             mocks["fail"] = stack.enter_context(patch.object(tm, "_fail_task"))
             stack.enter_context(patch.object(tm, "generate_script", return_value="script text"))
-            mocks["terms"] = stack.enter_context(patch.object(tm, "generate_terms", return_value=["porto"]))
-            stack.enter_context(patch.object(tm, "generate_audio", return_value=("audio.mp3", 10.0, None)))
+            stack.enter_context(
+                patch.object(tm, "generate_audio", return_value=("audio.mp3", 10.0, None))
+            )
             stack.enter_context(patch.object(tm, "generate_subtitle", return_value="sub.srt"))
             stack.enter_context(patch.object(tm.audio_trim, "task_local_copy", return_value=None))
             stack.enter_context(
-                patch.object(tm, "_ensure_persona_hook_fits", side_effect=lambda tid, p, s, a, d, sm, sp: (s, a, d, sm, sp))
+                patch.object(
+                    tm,
+                    "_ensure_persona_hook_fits",
+                    side_effect=lambda tid, p, s, a, d, sm, sp: (s, a, d, sm, sp),
+                )
             )
-            mocks["photos"] = stack.enter_context(patch.object(tm.place_photos, "prepare_photos", return_value=[]))
-            mocks["download"] = stack.enter_context(patch.object(tm.material, "download_videos", return_value=["stock.mp4"]))
             mocks["canvas"] = stack.enter_context(
                 patch.object(tm.faceless_material, "images_canvas", return_value=list(canvas))
             )
-            mocks["panels"] = stack.enter_context(patch.object(tm.user_media, "prepare_segment_panels", **(panels or {"return_value": []})))
+            mocks["panels"] = stack.enter_context(
+                patch.object(
+                    tm.user_media, "prepare_segment_panels", **(panels or {"return_value": []})
+                )
+            )
             stack.enter_context(patch.object(tm.utils, "task_dir", return_value="/t"))
             tm.start(task_id="task-images", params=params, stop_at="materials")
         return mocks
 
-    def test_images_material_skips_terms_place_photos_and_stock(self):
-        mocks = self._run(_params("images"))
-        mocks["terms"].assert_not_called()
-        mocks["photos"].assert_not_called()
-        mocks["download"].assert_not_called()
+    def test_images_material_renders_only_the_canvas(self):
+        mocks = self._run(_params())
         mocks["canvas"].assert_called_once_with("/t", 10.0, "9:16")
         mocks["fail"].assert_not_called()
         mocks["complete"].assert_called_once_with("task-images", ANY, materials=["/t/neutral.mp4"])
 
-    def test_broll_material_still_generates_terms_and_downloads_stock(self):
-        mocks = self._run(_params("broll"))
-        mocks["terms"].assert_called_once()
-        mocks["photos"].assert_called_once()
-        mocks["download"].assert_called_once()
-        mocks["canvas"].assert_not_called()
-
     def test_a_canvas_that_cannot_render_fails_the_task(self):
-        mocks = self._run(_params("images"), canvas=[])
-        mocks["download"].assert_not_called()
+        mocks = self._run(_params(), canvas=[])
         mocks["fail"].assert_called()
-        self.assertEqual(mocks["fail"].call_args.args[:2], ("task-images", "failed to download videos"))
+        self.assertEqual(
+            mocks["fail"].call_args.args[:2], ("task-images", "failed to get video materials")
+        )
         mocks["complete"].assert_not_called()
 
     def test_no_surviving_photo_fails_with_the_stable_code_at_the_materials_stage(self):
-        mocks = self._run(_params("images"), panels={"side_effect": image_coverage.ImagesDoNotCoverAudio()})
+        mocks = self._run(_params(), panels={"side_effect": image_coverage.ImagesDoNotCoverAudio()})
         mocks["fail"].assert_called_once()
         args, kwargs = mocks["fail"].call_args
         self.assertEqual(args[:2], ("task-images", "images_do_not_cover_audio"))

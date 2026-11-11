@@ -19,13 +19,13 @@ import { NextResponse } from 'next/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
+import { isVideoType, unknownVideoTypeMessage, type VideoType } from '@/lib/tokens';
 import {
   HOOK_MAX_SECONDS,
   HOOK_MIN_SECONDS,
   validateSegments,
 } from '@/lib/generation/script-segments';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import { FACELESS_MATERIALS, type FacelessMaterial } from '@/lib/generation/faceless-materials';
 
 const ROUTE = 'POST /api/videos/validate-script';
 
@@ -33,10 +33,6 @@ const ROUTE = 'POST /api/videos/validate-script';
 // response field and the MCP description cannot drift apart in wording.
 export const MEASURED_DURATION_PENDING_REASON =
   'No hook-only TTS endpoint exists yet, so the measured hook duration cannot be checked in this phase.';
-
-function isFacelessMaterial(value: unknown): value is FacelessMaterial {
-  return FACELESS_MATERIALS.some((material) => material === value);
-}
 
 async function postHandler(request: Request): Promise<NextResponse> {
   // Auth first: the same session-or-API-key auth as the other video
@@ -54,18 +50,23 @@ async function postHandler(request: Request): Promise<NextResponse> {
       route: ROUTE,
     });
   }
-  const fields = typeof body === 'object' && body !== null ? (body as { segments?: unknown; facelessMaterial?: unknown }) : {};
-  // Optional, like on generate-and-schedule: "images" needs media on every
-  // segment. An unknown value is a 400, never silently read as "broll".
-  const material = fields.facelessMaterial;
-  if (material !== undefined && !isFacelessMaterial(material)) {
-    return apiErrorResponse(400, `facelessMaterial must be one of: ${FACELESS_MATERIALS.join(', ')}.`, {
-      code: ERROR_CODES.VALIDATION_FAILED,
-      field: 'facelessMaterial',
-      route: ROUTE,
-    });
+  const fields = typeof body === 'object' && body !== null ? (body as { segments?: unknown; videoType?: unknown }) : {};
+  // Optional, unlike generate-and-schedule (where the mode is required):
+  // absent means hook lip sync, the images mode that needs media on every
+  // segment. Full lip sync leaves media optional. An unknown value is a
+  // 400 naming every mode with its cost, never silently read as hook.
+  let videoType: VideoType = 'hook_lipsync';
+  if (fields.videoType !== undefined) {
+    if (!isVideoType(fields.videoType)) {
+      return apiErrorResponse(400, unknownVideoTypeMessage(fields.videoType), {
+        code: ERROR_CODES.VALIDATION_FAILED,
+        field: 'videoType',
+        route: ROUTE,
+      });
+    }
+    videoType = fields.videoType;
   }
-  const result = validateSegments(fields.segments, material);
+  const result = validateSegments(fields.segments, videoType);
   if (!result.ok) {
     return apiErrorResponse(400, `${result.error.rule} Fix: ${result.error.fix}`, {
       code: ERROR_CODES.VALIDATION_FAILED,

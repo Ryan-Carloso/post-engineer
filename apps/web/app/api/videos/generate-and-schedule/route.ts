@@ -29,14 +29,14 @@ import {
 } from '@/lib/schedule/slot-distribution';
 import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone } from '@/lib/timezone';
-import { computeVideoTokens, netLedgerSpent, toFiniteNumber } from '@/lib/tokens';
+import { computeVideoTokens, netLedgerSpent, toFiniteNumber, unknownVideoTypeMessage, VIDEO_TYPE_ERROR_SUFFIX } from '@/lib/tokens';
 import { buildSlotRows } from './slot-rows';
 import { fetchReplay } from './replay';
 import { refundRollbackSpend } from './rollback-refund';
 import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, verifyExperimentPairAfterInsert } from './experiment-link';
 import type { Provider } from './providers-validation';
 import { scheduleAccountColumns } from './account-columns';
-import { checkFullLipsyncNarration } from './full-lipsync-preflight';
+import { checkPreChargePreflights } from './aspect-preflight';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
 import { segmentsRequestSchema } from './segments-schema';
 import { rawKeyIssues } from './request-title';
@@ -55,7 +55,6 @@ import {
   type JobPersona,
 } from '@/lib/generation/video-job-payload';
 import { recordGenerationStart, recordGenerationUpdate, startEngineVideoTask } from '@/lib/generation/video-generation';
-import { FACELESS_MATERIALS } from '@/lib/generation/faceless-materials';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
 import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { resolveIdempotency } from '@/lib/idempotency';
@@ -93,11 +92,12 @@ const PublishingSchema = z.object({
 
 const OptionsSchema = z
   .object({
-    faceless: z.boolean().optional(),
-    facelessMaterial: z.enum(FACELESS_MATERIALS).optional(),
-    // Opt-in full lip-sync: the whole video is the persona talking, no
-    // b-roll. False (default) keeps intro-only lip-sync over stock; rejected with faceless (no face to render).
-    fullLipsync: z.boolean().optional(),
+    // The one video mode (issue #542 follow-up), required: it decides
+    // render path + price. Zod v4 dropped errorMap, so the message lives
+    // in `error` (missing -> required, else unknown-mode with costs).
+    videoType: z.enum(['full_lipsync', 'hook_lipsync', 'faceless'], {
+      error: (issue) => (issue.input === undefined ? `options.videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}` : unknownVideoTypeMessage(issue.input)),
+    }),
     // BGM mood (issue #489): a catalogued mood, or "none" for no music; omitted = engine default.
     musicMood: z.string().min(1).max(64).optional(),
     audioUrl: z.string().optional(),
@@ -109,7 +109,7 @@ const OptionsSchema = z
     voiceId: z.string().optional(),
     // The rest of a persona's editorial definition, for a post created
     // WITHOUT one (migration 012). With a persona these still override it.
-    videoAspect: z.enum(['9:16', '16:9']).optional(),
+    videoAspect: z.enum(['9:16', '16:9', '1:1']).optional(),
     videoLayout: z.enum(['standard', 'react']).optional(),
     paragraphNumber: z.number().int().min(1).max(10).optional(),
     language: z.string().optional(),
@@ -118,12 +118,16 @@ const OptionsSchema = z
   .optional();
 
 const BodySchema = z.object({
-  // Optional: a faceless post can be defined entirely by options + title.
+  // Optional: a post without a persona is faceless (options.videoType
+  // 'faceless') and defined entirely by options + title + description.
   personaId: z.string().optional(),
   // The slot label. A `topics` key is rejected explicitly in
   // postHandler before this parse (a plain zod object would strip it
   // silently and the caller would think videos were created).
-  title: z.string(),
+  // At most 100 chars (YouTube's cap): the engine rejects longer titles at dispatch, so fail here, pre-charge.
+  title: z.string().max(100, 'title must be at most 100 characters.'),
+  // Agent-supplied video description (issue #542 follow-up), REQUIRED: the publish copy. Zod v4 dropped required_error, so the missing-value message lives in `error`.
+  description: z.string({ error: (issue) => (issue.input === undefined ? 'description is required: the publish copy for this video.' : undefined) }).min(1, 'description must be a non-empty string: the publish copy for this video.').max(5000, 'description must be at most 5000 characters.'),
   publishing: PublishingSchema,
   options: OptionsSchema,
   idempotencyKey: z.string().optional(),
@@ -351,6 +355,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const personaId = parsed.data.personaId?.trim() || null;
   const checked = checkSemantics({
     title: parsed.data.title,
+    description: parsed.data.description,
     segments: options?.segments,
     providers: publishing.providers,
     options: options ?? {},
@@ -359,7 +364,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (rawIssues.length > 0 || !checked.ok) {
     return rejectInvalidRequest([...rawIssues, ...(checked.ok ? [] : checked.issues)]);
   }
-  const { title, script: segmentsScript, providers, options: validatedOptions, pinterestBoardId } = checked.value;
+  const { title, description, script: segmentsScript, providers, options: validatedOptions, pinterestBoardId } = checked.value;
 
   // Publish mode: scheduled (default) distributes slots across the plan's
   // times; asap skips the schedule entirely and lands every slot at the
@@ -405,7 +410,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     personaId,
     numberOfVideos: 1,
     providers,
-    faceless: validatedOptions.faceless,
+    videoType: validatedOptions.videoType,
   });
 
   // 4. Persona scope (API keys) + ownership. A persona-less post has nothing
@@ -414,7 +419,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return validationFailed(ERROR_CODES.PERSONA_SCOPE_DENIED, formatErrorMessage(ERROR_CODES.PERSONA_SCOPE_DENIED), 'personaId', 403);
   }
   const prep = await preparePost(supabase, userId, personaId, {
-    faceless: validatedOptions.faceless,
+    videoType: validatedOptions.videoType,
     audioUrl: validatedOptions.audioUrl,
     imageId: validatedOptions.imageId,
     voiceId: validatedOptions.voiceId,
@@ -456,38 +461,36 @@ async function postHandler(request: Request): Promise<NextResponse> {
     }
   }
 
-  // Full lip-sync preflight: measure the real narration BEFORE any charge,
-  // so >60s is rejected here (400) instead of charged then refunded.
+  // Pre-charge preflights: full lip-sync narration (>60s) and segment-media
+  // aspect (issue #538) — both reject here instead of charging then refunding.
   // Runs after all other pre-charge validation, before cost/spend below.
-  if (validatedOptions.fullLipsync === true) {
-    const preflight = await checkFullLipsyncNarration({
-      userId,
-      script: segmentsScript,
-      language: prep.language,
-      voiceId: prep.voiceIdValue,
-      voiceAudioUrl: prep.voiceAudioUrl,
-    });
-    if (preflight instanceof NextResponse) return preflight;
-  }
+  const preflight = await checkPreChargePreflights({
+    userId,
+    script: segmentsScript,
+    prep,
+    options: validatedOptions,
+    segments: options?.segments,
+  });
+  if (preflight instanceof NextResponse) return preflight;
 
   // Idempotency anchor, resolved once: the experiment check below needs the
   // same schedule id step 7 uses to tell a replay from a duplicate.
   const idem = resolveIdempotency(userId, idempotencyKey, request);
-  const pairFacts = buildPairFacts({ providers, accountIds, pinterestBoardId, prep, title, segments: options?.segments, fullLipsync: validatedOptions.fullLipsync, facelessMaterial: validatedOptions.facelessMaterial, audioUrl: validatedOptions.audioUrl });
+  const pairFacts = buildPairFacts({ providers, accountIds, pinterestBoardId, prep, title, segments: options?.segments, videoType: validatedOptions.videoType, audioUrl: validatedOptions.audioUrl });
   if (experiment !== undefined) {
     const link = await checkExperimentLink(supabase, { link: experiment, userId, personaId, replayScheduleId: idem.scheduleId, facts: pairFacts });
     if (!link.ok && link.status === 500) return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
     if (!link.ok) return validationFailed(ERROR_CODES.VALIDATION_FAILED, link.message, link.field, link.status);
   }
 
-  // 6. Cost for the single video, computed BEFORE the charge.
-  const perVideoCost = computeVideoTokens(prep.faceless, prep.faceQuality, validatedOptions.fullLipsync === true);
+  // 6. Cost for the single video, computed BEFORE the charge from the video mode.
+  const perVideoCost = computeVideoTokens(validatedOptions.videoType, prep.faceQuality);
   trackApiEvent('video_creation_validated', {
     userId,
     personaId,
     numberOfVideos: 1,
     providers,
-    faceless: validatedOptions.faceless,
+    videoType: validatedOptions.videoType,
   });
   trackApiEvent('video_tokens_calculated', {
     userId,
@@ -779,11 +782,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
       buildSlotRows({
         slots,
         title,
+        description,
         scheduleId: idem.scheduleId,
         userId,
-        faceless: prep.faceless,
-        facelessMaterial: validatedOptions.facelessMaterial,
-        fullLipsync: validatedOptions.fullLipsync,
+        videoType: validatedOptions.videoType,
         musicMood: validatedOptions.musicMood,
         chargedTokens: perVideoCost,
         segments: options?.segments,
@@ -844,7 +846,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       // to its title (faceless skips the face entirely).
       let photoUrl: string | undefined;
       let pickedImageId: string | null = null;
-      if (!validatedOptions.faceless && personaId !== null) {
+      if (validatedOptions.videoType !== 'faceless' && personaId !== null) {
         const selection = await resolveVideoImage(supabase, personaId, userId, recentIds, {
           title,
           niche: prep.niche,
@@ -900,26 +902,19 @@ async function postHandler(request: Request): Promise<NextResponse> {
         face_quality: prep.faceQuality,
       };
       const payload = buildJobPayload(jobPersona, {
-        video_subject: title,
+        video_title: title, video_description: description,
+        video_type: validatedOptions.videoType,
         video_script: segmentsScript,
         webhook_url: validatedOptions.webhookUrl,
         // generation_id: web-side correlation id for PostHog event joins;
         // slot_id: lets boot orphan triage requeue (not fail) on engine restart.
         generation_id: slotGenerationId,
         slot_id: slot.id,
-        // The per-post "no face" choice reaches the engine as lipsync: the
-        // engine's persona_lipsync_active also returns false when no visual is
-        // attached, and a faceless job carries no photo_url.
-        lipsync: !prep.faceless,
-        // The material choice rides the payload under its snake_case name on every post, face or not.
-        faceless_material: validatedOptions.facelessMaterial,
-        // Opt-in full lip-sync rides the same way; omitted when unset, existing posts keep intro-only.
-        full_lipsync: validatedOptions.fullLipsync,
         music_mood: validatedOptions.musicMood,
         segments: options?.segments, // Segment media rides to the engine here, next to the joined script.
       });
-      if (!hasNonEmptyString(payload.video_subject)) {
-        throw new SlotDispatchError('empty_subject', 'Video subject is empty.');
+      if (!hasNonEmptyString(payload.video_title)) {
+        throw new SlotDispatchError('empty_title', 'Video title is empty.');
       }
 
       // History snapshot (+ full engine payload for the boot rebuild, #205).

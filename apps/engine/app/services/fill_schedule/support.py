@@ -6,6 +6,7 @@ from typing import Any
 
 from loguru import logger
 
+from app.models.schema import VideoType, unknown_video_type_message
 from app.services.analytics import track_event
 from app.services.fill_schedule.store import ScheduleStore
 
@@ -133,40 +134,19 @@ def notify_safe(notify: Any, message: str) -> None:
         logger.warning(f"fill_schedule: notify failed: {exc}")
 
 
-def slot_faceless(slot: dict[str, Any]) -> bool:
-    """True when this slot's post was created with "no face".
+def slot_video_type(slot: dict[str, Any]) -> str:
+    """The slot's video mode (issue #542 follow-up).
 
-    ``scheduled_posts.faceless`` is the per-post choice written by the web at
-    creation (the persona face mix column no longer exists). Anything that is
-    not the literal True is treated as "with the persona's face": a slot dict
-    without the field (rows selected before migration 007, partial API
-    projections) or a malformed value prices and renders the expensive case,
-    never the cheap one.
+    ``scheduled_posts.video_type`` (migration 056) is the one mode the web
+    writes at creation; migration 056 backfilled every stored row from the
+    old faceless / full_lipsync booleans. A row without a valid value fails
+    loudly with the same short message the engine validator uses — a slot
+    must never silently render a mode nobody asked for.
     """
-    return slot.get("faceless") is True
-
-
-def slot_material(slot: dict[str, Any]) -> str:
-    """The slot's video material: "svg", "images" or "broll".
-
-    ``scheduled_posts.faceless_material`` (migration 029) is the per-post
-    choice written by the web, with or without a face. Only the literal
-    "svg" selects illustrations and only the literal "images" selects the
-    agent's segment images; a row without the field (selected before the
-    migration) or any other value renders stock, the behaviour every
-    earlier video had.
-    """
-    material = slot.get("faceless_material")
-    return material if material in ("svg", "images") else "broll"
-
-
-def slot_full_lipsync(slot: dict[str, Any]) -> bool:
-    """True only for the literal True in ``scheduled_posts.full_lipsync``
-    (migration 035). Missing/other values render intro-only, the behaviour
-    every earlier video had; dropping the field would let a requeued
-    full-mode slot silently degrade to b-roll.
-    """
-    return slot.get("full_lipsync") is True
+    value = slot.get("video_type")
+    if isinstance(value, str) and value in {item.value for item in VideoType}:
+        return value
+    raise RuntimeError(unknown_video_type_message(value))
 
 
 def slot_music_mood(slot: dict[str, Any]) -> str | None:
@@ -186,12 +166,12 @@ def slot_music_mood(slot: dict[str, Any]) -> str | None:
 def build_persona_params(
     persona: dict[str, Any],
     store: ScheduleStore,
-    faceless: bool = False,
+    video_type: str = "hook_lipsync",
 ) -> dict[str, Any]:
     """TaskVideoRequest persona params: avatar/voice resolution.
 
     A faceless post contributes ONLY the voice — no avatar, no photo — so the
-    engine renders stock footage (its ``persona_lipsync_active`` also returns
+    engine renders the agent's images (its ``persona_lipsync_active`` also returns
     false without a visual identity). This keeps the batch pipeline in step
     with the web's direct dispatch of the same slot.
     """
@@ -200,7 +180,7 @@ def build_persona_params(
     # faceless posts, because the script angle is generated from it.
     if persona.get("niche"):
         params["niche"] = persona["niche"]
-    if not faceless:
+    if video_type != "faceless":
         if persona.get("avatar_url"):
             params["avatar_url"] = persona["avatar_url"]
         elif persona.get("photo_path"):

@@ -149,9 +149,9 @@ describe('PostHistoryPage', () => {
     render(<PostHistoryPage />);
 
     expect(screen.getByText('Past topic')).toBeInTheDocument();
-    expect(screen.getByText('posts.statusPublished')).toBeInTheDocument();
+    expect(screen.getByText('posts.groupPublished')).toBeInTheDocument();
     expect(screen.getByText('Failed topic')).toBeInTheDocument();
-    expect(screen.getByText('posts.statusFailed')).toBeInTheDocument();
+    expect(screen.getByText('posts.groupFailed')).toBeInTheDocument();
     // The failure is localized inline; the raw engine/upstream text is never rendered.
     expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
     expect(screen.queryByText('Upload failed')).not.toBeInTheDocument();
@@ -226,12 +226,15 @@ describe('PostHistoryPage', () => {
     expect(slotMessage.className.split(/\s+/)).not.toContain('line-clamp-2');
   });
 
-  it('marks a card without video with the no-video placeholder', () => {
+  it('draws no thumbnail tile on a card without video, and keeps the full date on history cards', () => {
     render(<PostHistoryPage />);
 
-    // The failed slot has no video: its thumbnail is the placeholder.
+    // The failed slot has no video: no tile at all, no placeholder.
     const card = screen.getByText('Failed topic').closest('a');
-    expect(card?.querySelector('[data-thumb="empty"]')).not.toBeNull();
+    expect(card).not.toBeNull();
+    expect(card?.querySelector('video')).toBeNull();
+    // History is not grouped by day: its cards keep the date with the time.
+    expect(card?.textContent).toContain('·');
   });
 
   it('shows the error state with a retry button', () => {
@@ -338,8 +341,15 @@ describe('PostHistoryPage', () => {
     mockQueries({ generations: [COMPLETED_GENERATION] });
     render(<PostHistoryPage />);
 
-    expect(screen.getByRole('link', { name: /Past topic/ })).toHaveAttribute('href', '/posts/r1');
-    expect(screen.getByRole('link', { name: /Failed topic/ })).toHaveAttribute('href', '/posts/r2');
+    // The card link's accessible name is its aria-label ("Open post:
+    // <title>"), not the title text, so find the card by its visible
+    // title and check the enclosing link.
+    const pastCard = screen.getByText('Past topic').closest('a');
+    expect(pastCard).not.toBeNull();
+    expect(pastCard).toHaveAttribute('href', '/posts/r1');
+    const failedCard = screen.getByText('Failed topic').closest('a');
+    expect(failedCard).not.toBeNull();
+    expect(failedCard).toHaveAttribute('href', '/posts/r2');
     // Generation cards link by generationId (the business id the detail
     // endpoint resolves via .eq('generation_id', ...)), NOT the DB row PK.
     expect(screen.getByRole('link', { name: /Launch recap/ })).toHaveAttribute('href', '/posts/gen-3');

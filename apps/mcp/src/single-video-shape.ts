@@ -4,10 +4,10 @@
 // calls using the handlers in tools-single-video.ts.
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
-import { FACELESS_MATERIALS } from './limits.js';
 import { GeneratePersonaVideoOptionsShape } from './schedule-shapes.js';
 import { RECIPE_SLUG_PATTERN } from './recipe-session.js';
 import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from './limits.js';
+import { VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, unknownVideoTypeMessage } from './video-type.js';
 import {
   MAX_IMAGES_MODE_MEDIAS,
   MAX_OVERLAY_BADGE_CHARS,
@@ -30,8 +30,7 @@ export const ScriptSegmentShape = {
     .array(z.object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), overlay: SegmentOverlayShape.optional() }).strict())
     .max(MAX_IMAGES_MODE_MEDIAS)
     .optional()
-    .describe('Photos for this segment, as a list. Each item is exactly one of mediaId (from upload_media) or url (a public image URL). With "images": one image per ~3s of speech (about 8 words), e.g. a 60s video needs about 20 images; split them across segments (at most 30). Other materials allow at most 6 images in total. Each photo is shown while its share of the segment is spoken: full frame on faceless videos and over b-roll, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional overlay on an item: an info card (title, subtitle, badge), e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
-  terms: z.array(z.string().min(1)).max(10).optional().describe('Stock terms for this segment, chosen by the agent. At most 10.'),
+    .describe('Photos for this segment, as a list. Each item is exactly one of mediaId (from upload_media) or url (a public image URL). One image per ~3s of speech (about 8 words), e.g. a 60s video needs about 20 images; split them across segments (at most 30). Full lip sync allows at most 6 images in total. Each photo is shown while its share of the segment is spoken: full frame on faceless videos, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional overlay on an item: an info card (title, subtitle, badge), e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
 };
 
 /** Paired A/B experiment link (issue #476): one variant of one pair. */
@@ -48,13 +47,23 @@ export const GeneratePersonaVideoShape = {
     .string()
     .min(1, 'personaId must be a non-empty string when provided')
     .optional()
-    .describe('The persona to generate the video with. Omit for a faceless post with no persona: in that case set options.faceless and options.voiceId (or options.audioUrl).'),
+    .describe('The persona to generate the video with. Omit for a faceless post with no persona: in that case set options.videoType to \'faceless\' and options.voiceId (or options.audioUrl).'),
   segments: z
     .array(z.object(ScriptSegmentShape).strict())
     .min(1, 'Provide at least one segment')
     .max(12, 'At most 12 segments per video')
     .describe('The complete script as segments: first hook, then body segments, last CTA. Total 60-200 words, body at least 30, CTA 5-20, hook 15-40 words before TTS. The hook must end with terminal punctuation. No LLM expands this script.'),
-  title: z.string().min(1, 'title must be a non-empty string').describe('Video title: the slot label sent to the web route (one call is one video).'),
+  title: z.string().min(1, 'title must be a non-empty string').max(100, 'title must be at most 100 characters').describe('Video title: the slot label sent to the web route (one call is one video).'),
+  // Agent-supplied video description (issue #542 follow-up): REQUIRED —
+  // the publish copy, sent top-level to the web route. The 5000-char cap
+  // mirrors the engine's VideoParams.video_description max_length. There
+  // is no fallback: a missing or blank description is rejected.
+  description: z
+    .string()
+    .trim()
+    .min(1, 'description must be a non-empty string')
+    .max(5000)
+    .describe('Video description: the publish copy sent to the web route (one call is one video). Required — there is no fallback to the title.'),
   language: z
     .string()
     .min(1)
@@ -95,7 +104,7 @@ export const GeneratePersonaVideoShape = {
   timezone: z.string().min(1).default('UTC').describe('IANA timezone for a naive startAt and the HH:MM times, e.g. "Europe/Lisbon". Defaults to UTC.'),
   options: z.object(GeneratePersonaVideoOptionsShape).optional().describe('Generation options applied to this video.'),
   idempotencyKey: z.string().min(1).optional().describe('Idempotency key: retrying the call with the same key returns the original schedule (replayed: true) instead of generating again.'),
-  experiment: ExperimentLinkShape.optional().describe('Join a paired A/B experiment (create_experiment): this video is one variant of one pair. The server rejects it when the pair partner differs in: the same providers and accounts, the same title, voice (id and audio URL), faceless and faceless material, full lip-sync, video aspect and layout, paragraph number, face quality, language, niche and CTA text, and identical body and CTA segments, with a different hook. The pinned options.imageId is not stored, so it is not compared: pass the same imageId (or none) to both videos yourself. Prefer add_experiment_pair, which creates both videos of a pair.'),
+  experiment: ExperimentLinkShape.optional().describe('Join a paired A/B experiment (create_experiment): this video is one variant of one pair. The server rejects it when the pair partner differs in: the same providers and accounts, the same title, voice (id and audio URL), video type, video aspect and layout, paragraph number, face quality, language, niche and CTA text, and identical body and CTA segments, with a different hook. The pinned options.imageId is not stored, so it is not compared: pass the same imageId (or none) to both videos yourself. Prefer add_experiment_pair, which creates both videos of a pair.'),
   // Telemetry-only: the recipe the script came from. Never forwarded in the
   // request body (handleGeneratePersonaVideo builds it field by field);
   // recipe-session.ts sends it as the X-MCP-Recipe header.
@@ -106,7 +115,18 @@ export const GeneratePersonaVideoShape = {
     .describe('The recipe slug (from list_prompts / get_prompt) this script was written with. Omit when the script was not written from a recipe.'),
 };
 
-export const GeneratePersonaVideoSchema = z.object(GeneratePersonaVideoShape);
+export const GeneratePersonaVideoSchema = z.object(GeneratePersonaVideoShape).superRefine((value, ctx) => {
+  // options itself is optional in the shape, but the mode is not: a call
+  // with no options carries no videoType, and the web would reject it.
+  // Fail here, locally, with the same values + costs message instead.
+  if (value.options === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['options', 'videoType'],
+      message: `options.videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}`,
+    });
+  }
+});
 
 export const ValidateScriptShape = {
   segments: z
@@ -114,10 +134,12 @@ export const ValidateScriptShape = {
     .min(1, 'Provide at least one segment')
     .max(12, 'At most 12 segments per video')
     .describe('The complete script as segments to validate mechanically, without spending tokens.'),
-  facelessMaterial: z
-    .enum(FACELESS_MATERIALS)
+  videoType: z
+    .enum(VIDEO_TYPES, {
+      errorMap: (_issue, ctx) => ({ message: unknownVideoTypeMessage(ctx.data) }),
+    })
     .optional()
-    .describe('The material the video will use (as in generate_persona_video options). "images" checks that every segment carries a media list, about one image per ~3s of speech (a 60s video needs about 20 images, at most 30).'),
+    .describe('The video mode the script is for: full_lipsync = media is optional (at most 6 images in total); hook_lipsync or faceless = images mode, which checks that every segment carries a media list, about one image per ~3s of speech (a 60s video needs about 20 images, at most 30). Omitted means hook_lipsync.'),
 };
 
 export const ValidateScriptSchema = z.object(ValidateScriptShape);

@@ -67,7 +67,7 @@ const SLOT_ROW = {
   error: null,
   published_at: null,
   task_id: 'task-1',
-  faceless: false, faceless_material: 'svg',
+  faceless: false, faceless_material: 'images',
 };
 
 const SCHEDULE_ROW = {
@@ -120,7 +120,7 @@ describe('getSlotPost', () => {
     // Pin the query shape: the select column list is load-bearing for the
     // camelCase mapping below.
     expect(chains['scheduled_posts'].select).toHaveBeenCalledWith(
-      'id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, faceless_material, publish_outcomes'
+      'id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, publish_outcomes'
     );
     expect(chains['schedules'].select).toHaveBeenCalledWith(
       'id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode'
@@ -129,7 +129,8 @@ describe('getSlotPost', () => {
     expect(detail?.slot.stage).toBe('video');
     expect(detail?.schedule.publishMode).toBe('scheduled');
     expect(detail?.persona?.name).toBe('Viva Leve');
-    expect(detail?.generation).toMatchObject({ faceless: false, material: 'svg' });
+    expect(detail?.generation).toMatchObject({ faceless: false });
+    expect(detail?.generation).not.toHaveProperty('material');
   });
 
   it('returns the schedule facebook page ids, empty when the column is absent', async () => {

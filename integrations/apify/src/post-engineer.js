@@ -6,11 +6,10 @@
 export const DEFAULT_API_URL = 'https://post-engineer.com';
 export const PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'];
 export const MODES = ['asap', 'scheduled'];
-export const FACELESS_MATERIALS = ['broll', 'svg', 'images'];
-// The "images" material renders only the given images. About one image per
+// Every video renders only the images given here. About one image per
 // 3 seconds of speech (8 words), each image on screen at least about 1
 // second (3 words), at most 30 images. Segments stay capped at 12.
-export const IMAGES_MATERIAL = 'images';
+// Full lip sync is the only mode without images.
 export const MAX_SEGMENTS = 12;
 export const MAX_IMAGES = 30;
 export const WORDS_PER_IMAGE = 8;
@@ -142,14 +141,12 @@ function parseTimeoutMinutes(raw) {
 // How the video looks, with the rules generate-and-schedule enforces before
 // any charge (route.ts): a post without a persona must be faceless and needs
 // a voice; full lip-sync needs a persona's face, so never with faceless.
+// The Actor still takes the faceless/fullLipsync inputs (its public
+// interface) and translates them to the route's one videoType field.
 function parseLook(raw, personaId) {
   const faceless = optionalBoolean(raw, 'faceless', personaId === undefined);
   const voiceId = optionalString(raw, 'voiceId');
   const fullLipsync = optionalBoolean(raw, 'fullLipsync', false);
-  const facelessMaterial = raw.facelessMaterial ?? undefined;
-  if (facelessMaterial !== undefined && !FACELESS_MATERIALS.includes(facelessMaterial)) {
-    throw new ActorInputError(`facelessMaterial must be one of: ${FACELESS_MATERIALS.join(', ')}.`);
-  }
   if (personaId === undefined && !faceless) {
     throw new ActorInputError('A video without a persona must be faceless: set faceless to true or give a personaId.');
   }
@@ -159,7 +156,11 @@ function parseLook(raw, personaId) {
   if (fullLipsync && (faceless || personaId === undefined)) {
     throw new ActorInputError('fullLipsync needs a persona with a face, so it cannot be used with faceless videos.');
   }
-  return { faceless, voiceId, fullLipsync, facelessMaterial };
+  // faceless wins: a persona video with faceless on is voice-only (the old
+  // options.faceless contract) — never silently upgraded to hook_lipsync,
+  // which would show the face and charge the hook price instead of 1 token.
+  const videoType = faceless ? 'faceless' : fullLipsync ? 'full_lipsync' : 'hook_lipsync';
+  return { videoType, voiceId };
 }
 
 // Body paragraphs (split on blank lines). With images each paragraph is its
@@ -216,18 +217,18 @@ export function assignImages(urls, texts) {
   });
 }
 
-// images: public https URLs, only with the "images" material. The web
-// fetches them with its own SSRF guard; here only the shape and the
-// ~3s rhythm are checked.
-function parseImages(raw, facelessMaterial, hook, body, cta) {
+// images: public https URLs, required for every video except full lip
+// sync. The web fetches them with its own SSRF guard; here only the shape
+// and the ~3s rhythm are checked.
+function parseImages(raw, videoType, hook, body, cta) {
   const value = raw.images;
   const given = value !== undefined && value !== null;
-  if (facelessMaterial !== IMAGES_MATERIAL) {
-    if (given) throw new ActorInputError('images can only be used with facelessMaterial "images".');
+  if (videoType === 'full_lipsync') {
+    if (given) throw new ActorInputError('images are not used with fullLipsync: the persona talks for the whole video without segment photos.');
     return undefined;
   }
   if (!Array.isArray(value) || value.length === 0) {
-    throw new ActorInputError('facelessMaterial "images" needs images: about one public image URL per 3 seconds of speech.');
+    throw new ActorInputError('images are required: about one public image URL per 3 seconds of speech.');
   }
   for (const [index, url] of value.entries()) {
     let parsed;
@@ -268,9 +269,12 @@ export function parseInput(raw) {
     apiKey,
     apiUrl: parseApiUrl(raw),
     title: requireString(raw, 'title'),
+    // Publish caption (the route requires it): an explicit description
+    // input, or the hook when omitted — the hook is the caption-like line.
+    description: optionalString(raw, 'description') ?? hook,
     hook,
     body,
-    images: parseImages(raw, look.facelessMaterial, hook, body, cta),
+    images: parseImages(raw, look.videoType, hook, body, cta),
     cta,
     personaId,
     ...look,
@@ -310,6 +314,7 @@ export function buildSegments(input) {
 export function buildGenerateBody(input, idempotencyKey) {
   return {
     title: input.title,
+    description: input.description,
     ...(input.personaId !== undefined ? { personaId: input.personaId } : {}),
     publishing: {
       mode: input.mode,
@@ -319,10 +324,8 @@ export function buildGenerateBody(input, idempotencyKey) {
     },
     options: {
       segments: buildSegments(input),
-      ...(input.faceless ? { faceless: true } : {}),
+      videoType: input.videoType,
       ...(input.voiceId !== undefined ? { voiceId: input.voiceId } : {}),
-      ...(input.facelessMaterial !== undefined ? { facelessMaterial: input.facelessMaterial } : {}),
-      ...(input.fullLipsync ? { fullLipsync: true } : {}),
     },
     ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
   };
@@ -442,7 +445,7 @@ export async function runActor({ input: rawInput, fetchImpl, sleep, now, idempot
 
   const validation = await callApi(ctx, 'POST', '/api/videos/validate-script', {
     segments: buildSegments(input),
-    ...(input.facelessMaterial !== undefined ? { facelessMaterial: input.facelessMaterial } : {}),
+    videoType: input.videoType,
   });
   if (!validation.ok) {
     const detail = errorMessageOf(validation.json, validation.status);

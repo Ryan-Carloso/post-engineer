@@ -71,7 +71,7 @@ describe('preparePost explicit voiceId validation (issue #353 follow-up)', () =>
 
   it('rejects an explicit unknown voice with UNKNOWN_VOICE before any charge', async () => {
     const prep = await preparePost(makeSupabase([]), USER_ID, PERSONA_ID, {
-      faceless: true,
+      videoType: 'faceless',
       voiceId: 'energetic',
     });
     expect(prep).toBeInstanceOf(NextResponse);
@@ -86,7 +86,7 @@ describe('preparePost explicit voiceId validation (issue #353 follow-up)', () =>
 
   it('rejects an explicit clone that is not one of the caller\'s READY clones', async () => {
     const prep = await preparePost(makeSupabase([]), USER_ID, PERSONA_ID, {
-      faceless: true,
+      videoType: 'faceless',
       voiceId: CLONE_ID,
     });
     expect(prep).toBeInstanceOf(NextResponse);
@@ -99,7 +99,7 @@ describe('preparePost explicit voiceId validation (issue #353 follow-up)', () =>
 
   it('passes an explicit clone that is one of the caller\'s READY clones', async () => {
     const prep = await preparePost(makeSupabase([{ engine_voice_key: CLONE_KEY }]), USER_ID, PERSONA_ID, {
-      faceless: true,
+      videoType: 'faceless',
       voiceId: CLONE_ID,
     });
     expect(prep).not.toBeInstanceOf(NextResponse);
@@ -110,7 +110,7 @@ describe('preparePost explicit voiceId validation (issue #353 follow-up)', () =>
 
   it('passes an explicit house voice (shape-only when the catalog is unreachable)', async () => {
     const prep = await preparePost(makeSupabase([]), USER_ID, PERSONA_ID, {
-      faceless: true,
+      videoType: 'faceless',
       voiceId: 'chatterbox:kokoro_af_heart',
     });
     expect(prep).not.toBeInstanceOf(NextResponse);
@@ -121,7 +121,7 @@ describe('preparePost explicit voiceId validation (issue #353 follow-up)', () =>
 
   it('rejects an explicit unknown voice on a persona-less post too', async () => {
     const prep = await preparePost(makeSupabase([]), USER_ID, null, {
-      faceless: true,
+      videoType: 'faceless',
       voiceId: 'energetic',
     });
     expect(prep).toBeInstanceOf(NextResponse);
@@ -134,7 +134,7 @@ describe('preparePost explicit voiceId validation (issue #353 follow-up)', () =>
 
   it('skips validation when a custom audioUrl wins (the voice is ignored)', async () => {
     const prep = await preparePost(makeSupabase([]), USER_ID, PERSONA_ID, {
-      faceless: true,
+      videoType: 'faceless',
       audioUrl: 'https://cdn.example/custom.mp3',
       voiceId: 'energetic',
     });
@@ -146,7 +146,7 @@ describe('preparePost explicit voiceId validation (issue #353 follow-up)', () =>
 
   it('does not 400 a stored legacy voice when no explicit voice was sent (fallback, not rejection)', async () => {
     const prep = await preparePost(makeSupabase([], 'energetic'), USER_ID, PERSONA_ID, {
-      faceless: true,
+      videoType: 'faceless',
     });
     expect(prep).not.toBeInstanceOf(NextResponse);
     if (!(prep instanceof NextResponse)) {

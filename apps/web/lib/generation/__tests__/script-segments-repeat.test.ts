@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+// The repeat rule is material-independent, so these sparse fixtures run
+// with fullLipsync true (media optional): the images density rule would
+// fire first on one photo per segment.
 import { validateSegments } from '../script-segments';
 
 const REPEAT_RULE = 'the same photo must not repeat';
@@ -23,7 +26,7 @@ describe('validateSegments repeated photos', () => {
     const input = segments();
     input[0] = { ...input[0], media: [{ mediaId: 'photo-1' }] };
     input[1] = { ...input[1], media: [{ mediaId: 'photo-1' }] };
-    const result = validateSegments(input);
+    const result = validateSegments(input, 'full_lipsync');
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.field).toBe('segments.1.media.0');
@@ -37,7 +40,7 @@ describe('validateSegments repeated photos', () => {
       ...input[1],
       media: [{ url: 'https://example.com/a.jpg' }, { url: 'https://example.com/a.jpg' }],
     };
-    const result = validateSegments(input);
+    const result = validateSegments(input, 'full_lipsync');
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.field).toBe('segments.1.media.1');
@@ -49,7 +52,7 @@ describe('validateSegments repeated photos', () => {
     const input = segments();
     input[0] = { ...input[0], media: [{ mediaId: 'photo-1' }] };
     input[2] = { ...input[2], media: [{ mediaId: '  photo-1  ' }] };
-    const result = validateSegments(input);
+    const result = validateSegments(input, 'full_lipsync');
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.field).toBe('segments.2.media.0');
@@ -61,7 +64,7 @@ describe('validateSegments repeated photos', () => {
     const input = segments();
     input[0] = { ...input[0], media: [{ mediaId: 'photo-1' }] };
     input[1] = { ...input[1], media: [{ url: 'photo-1' }, { url: 'https://example.com/b.jpg' }] };
-    const result = validateSegments(input);
+    const result = validateSegments(input, 'full_lipsync');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.mediaCount).toBe(3);
@@ -77,7 +80,7 @@ describe('validateSegments repeated photos', () => {
         { url: 'https://example.com/a.jpg' },
       ],
     };
-    const result = validateSegments(input, 'images');
+    const result = validateSegments(input);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.field).toBe('segments.0.media.2');

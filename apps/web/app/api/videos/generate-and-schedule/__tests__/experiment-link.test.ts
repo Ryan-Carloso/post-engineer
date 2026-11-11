@@ -28,11 +28,9 @@ function facts(overrides: Partial<PairFacts> = {}): PairFacts {
     accountIds: { youtube: ['chan-1'] },
     pinterestBoardId: null,
     voiceId: 'kokoro:af_heart',
-    faceless: false,
-    fullLipsync: false,
+    videoType: 'hook_lipsync',
     segments: [{ ...SEGMENTS[0], text: 'Your squat is hurting you.' }, SEGMENTS[1], SEGMENTS[2]],
     title: 'Squat form',
-    facelessMaterial: null,
     voiceAudioUrl: null,
     videoAspect: '9:16',
     videoLayout: 'standard',
@@ -104,10 +102,8 @@ const PARTNER_SCHEDULE = {
 const PARTNER_SLOT = {
   schedule_id: 'sched-partner',
   variant_id: 'hook-calm',
-  faceless: false,
-  full_lipsync: false,
+  video_type: 'hook_lipsync',
   title: 'Squat form',
-  faceless_material: 'broll',
   segments: [
     { text: SEGMENTS[0].text, kind: 'hook' },
     { media: [{ url: 'https://x/a.png' }], text: SEGMENTS[1].text, kind: 'body' },
@@ -224,6 +220,12 @@ describe('checkExperimentLink', () => {
     await expect(run(tables).promise).resolves.toMatchObject({ ok: false, status: 500, field: 'experiment.pair' });
   });
 
+  it('500 when the stored partner slot carries an unknown video_type (corrupt row, never a mode to compare)', async () => {
+    const corrupt = { data: [{ ...PARTNER_SLOT, video_type: 'sideways' }], error: null };
+    const tables = { experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: corrupt, schedule: PARTNER_SCHEDULE };
+    await expect(run(tables).promise).resolves.toMatchObject({ ok: false, status: 500, field: 'experiment.pair' });
+  });
+
   it('accepts a two-provider pair whose second provider has no account list on either side', async () => {
     const schedule = { data: { ...PARTNER_SCHEDULE.data, providers: ['youtube', 'bluesky'] }, error: null };
     const tables = { experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: { data: [PARTNER_SLOT], error: null }, schedule };
@@ -261,10 +263,9 @@ describe('pairMismatch', () => {
   it('names the first differing field', () => {
     expect(pairMismatch(partner, facts({ providers: ['youtube', 'bluesky'] }))?.field).toBe('publishing.providers');
     expect(pairMismatch(partner, facts({ voiceId: 'other' }))?.field).toBe('options.voiceId');
-    expect(pairMismatch(partner, facts({ faceless: true }))?.field).toBe('options');
-    expect(pairMismatch(partner, facts({ fullLipsync: true }))?.field).toBe('options');
+    expect(pairMismatch(partner, facts({ videoType: 'faceless' }))?.field).toBe('options.videoType');
+    expect(pairMismatch(partner, facts({ videoType: 'full_lipsync' }))?.field).toBe('options.videoType');
     expect(pairMismatch(partner, facts({ title: 'Other title' }))?.field).toBe('title');
-    expect(pairMismatch(partner, facts({ facelessMaterial: 'svg' }))?.field).toBe('options.facelessMaterial');
     expect(pairMismatch(partner, facts({ voiceAudioUrl: 'https://x/v.mp3' }))?.field).toBe('options.audioUrl');
     expect(pairMismatch(partner, facts({ videoAspect: '16:9' }))?.field).toBe('options.videoAspect');
     expect(pairMismatch(partner, facts({ videoLayout: 'react' }))?.field).toBe('options.videoLayout');
@@ -283,13 +284,6 @@ describe('pairMismatch', () => {
   it('compares account lists regardless of order', () => {
     const two = facts({ accountIds: { youtube: ['chan-1', 'chan-2'] } });
     expect(pairMismatch(two, facts({ accountIds: { youtube: ['chan-2', 'chan-1'] }, segments: [{ kind: 'hook', text: 'x.' }, SEGMENTS[1], SEGMENTS[2]] }))).toBeNull();
-  });
-});
-
-describe('pairMismatch faceless material default', () => {
-  it('treats an omitted material as the stored default broll', () => {
-    const partner = facts({ facelessMaterial: 'broll', segments: SEGMENTS });
-    expect(pairMismatch(partner, facts({ facelessMaterial: null }))).toBeNull();
   });
 });
 
@@ -359,10 +353,10 @@ describe('verifyExperimentPairAfterInsert', () => {
 });
 
 describe('buildPairFacts', () => {
-  it('defaults a missing voice id, full lip-sync flag, material and audio URL to null/false', () => {
+  it('defaults a missing voice id and audio URL to null and keeps the requested video type', () => {
     const prep = { faceless: false, faceQuality: null, voiceIdValue: undefined, niche: null, ctaText: null, language: null, videoAspect: null, videoLayout: null, paragraphNumber: null } as unknown as PersonaPrep;
-    expect(buildPairFacts({ providers: [], accountIds: {}, pinterestBoardId: undefined, prep, title: 'T', segments: [], fullLipsync: undefined, facelessMaterial: 'svg', audioUrl: 'https://x/v.mp3' })).toMatchObject({
-      voiceId: null, fullLipsync: false, facelessMaterial: 'svg', voiceAudioUrl: 'https://x/v.mp3', pinterestBoardId: null,
+    expect(buildPairFacts({ providers: [], accountIds: {}, pinterestBoardId: undefined, prep, title: 'T', segments: [], videoType: 'hook_lipsync', audioUrl: 'https://x/v.mp3' })).toMatchObject({
+      voiceId: null, videoType: 'hook_lipsync', voiceAudioUrl: 'https://x/v.mp3', pinterestBoardId: null,
     });
   });
 
@@ -372,10 +366,10 @@ describe('buildPairFacts', () => {
       videoAspect: '9:16', videoLayout: 'standard', paragraphNumber: 3,
     } as unknown as PersonaPrep;
     expect(
-      buildPairFacts({ providers: ['youtube'], accountIds: { youtube: ['a'] }, pinterestBoardId: 'b1', prep, title: 'T', segments: [], fullLipsync: true, facelessMaterial: undefined, audioUrl: undefined }),
+      buildPairFacts({ providers: ['youtube'], accountIds: { youtube: ['a'] }, pinterestBoardId: 'b1', prep, title: 'T', segments: [], videoType: 'full_lipsync', audioUrl: undefined }),
     ).toEqual({
-      providers: ['youtube'], accountIds: { youtube: ['a'] }, pinterestBoardId: 'b1', voiceId: 'v1', faceless: true, fullLipsync: true, segments: [], title: 'T',
-      facelessMaterial: null, voiceAudioUrl: null, videoAspect: '9:16', videoLayout: 'standard', paragraphNumber: 3, faceQuality: 'ok',
+      providers: ['youtube'], accountIds: { youtube: ['a'] }, pinterestBoardId: 'b1', voiceId: 'v1', videoType: 'full_lipsync', segments: [], title: 'T',
+      voiceAudioUrl: null, videoAspect: '9:16', videoLayout: 'standard', paragraphNumber: 3, faceQuality: 'ok',
       language: 'en-US', niche: 'fitness', ctaText: 'Go.',
     });
   });

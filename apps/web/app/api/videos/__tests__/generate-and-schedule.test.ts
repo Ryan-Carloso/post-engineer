@@ -404,7 +404,7 @@ function setup(cfg: DbConfig = {}): void {
   vi.mocked(checkCustomAudioUrl).mockResolvedValue({ ok: true });
   vi.mocked(resolveVideoImage).mockResolvedValue({ ok: true, image: null });
   vi.mocked(startEngineVideoTask).mockImplementation(async (_userId: string, payload: object) => {
-    const subject = (payload as { video_subject?: string }).video_subject ?? '';
+    const subject = (payload as { video_title?: string }).video_title ?? '';
     if (cfg.engineFailSubjects?.includes(subject)) {
       return { ok: false, response: NextResponse.json({}), upstreamStatus: 500, body: null };
     }
@@ -418,29 +418,42 @@ function setup(cfg: DbConfig = {}): void {
   });
 }
 
+// Images mode needs media on every segment (one photo per ~3s): hook 24
+// words -> 3, body 42 -> 6, CTA 9 -> 2.
 const DEFAULT_SEGMENTS = [
   {
     kind: 'hook',
     text: 'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.',
+    media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })),
   },
   {
     kind: 'body',
     text: 'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.',
+    media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
   },
-  { kind: 'cta', text: 'Save this video before your next trip to Porto.' },
+  {
+    kind: 'cta',
+    text: 'Save this video before your next trip to Porto.',
+    media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })),
+  },
 ];
+
+// Full lip sync caps media at 6 photos for the whole video, so its requests
+// carry no media at all.
+const NO_MEDIA_SEGMENTS = DEFAULT_SEGMENTS.map(({ kind, text }) => ({ kind, text }));
 
 function baseBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const { options: optionsOverrides, ...rest } = overrides;
   return {
     personaId: 'persona-1',
     title: 'Porto trip',
+    description: 'Agent description.',
     publishing: {
       providers: ['youtube'],
       accounts: { youtube: ['acct-1'] },
       schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
     },
-    options: { segments: DEFAULT_SEGMENTS, ...((optionsOverrides ?? {}) as Record<string, unknown>) },
+    options: { videoType: 'hook_lipsync', segments: DEFAULT_SEGMENTS, ...((optionsOverrides ?? {}) as Record<string, unknown>) },
     ...rest,
   };
 }
@@ -464,6 +477,23 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(applyRateLimit).mockResolvedValue(null);
   setup(DEFAULT_CFG);
+  // The merged route runs the segment-media aspect preflight before
+  // charging (#538): every full-frame photo asks the engine media/check.
+  // Answer it as fitting (9:16) so the request reaches the dispatch the
+  // test is about; the preflight itself is pinned in its own test file.
+  vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+  vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) =>
+      String(url).includes('/api/v1/media/check')
+        ? new Response(JSON.stringify({ status: 200, body: { code: 'ok', width: 1080, height: 1920 } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+        : new Response('{}', { status: 200 }),
+    ),
+  );
 });
 
 describe('POST /api/videos/generate-and-schedule', () => {
@@ -571,7 +601,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('charges the faceless rate (1 token/video) and skips image resolution', async () => {
-      const res = await post(baseBody({ options: { faceless: true } }));
+      const res = await post(baseBody({ options: { videoType: 'faceless' } }));
       expect(res.status).toBe(200);
       const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
       expect(spends[0].args.p_amount).toBe(1);
@@ -581,15 +611,17 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('stores the faceless choice on every slot (the engine prices a slot from it)', async () => {
-      // scheduled_posts.faceless is where the per-post choice lives: the
-      // engine's batch pipeline reads it when it refunds a failed slot. A
-      // slot created without it would be re-priced as a faced video.
-      const res = await post(baseBody({ options: { faceless: true, facelessMaterial: 'svg' } }));
+      // scheduled_posts.video_type is where the per-post choice lives:
+      // the engine's batch pipeline reads it when it refunds a failed
+      // slot. The faceless flag is derived storage for the batch-discount
+      // reader. A slot created without the mode would be re-priced as a
+      // faced video.
+      const res = await post(baseBody({ options: { videoType: 'faceless' } }));
       expect(res.status).toBe(200);
       const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
       expect(slotRows).toHaveLength(1);
       for (const row of slotRows) {
-        expect(row).toMatchObject({ faceless: true, faceless_material: 'svg' });
+        expect(row).toMatchObject({ faceless: true, video_type: 'faceless' });
       }
     });
 
@@ -607,20 +639,21 @@ describe('POST /api/videos/generate-and-schedule', () => {
       }
     });
 
-    it('stores faceless: false and the default broll material for a post with the persona face', async () => {
+    it('stores faceless: false and video_type hook_lipsync for a post with the persona face', async () => {
       const res = await post(baseBody());
       expect(res.status).toBe(200);
       const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
       for (const row of slotRows) {
-        expect(row).toMatchObject({ faceless: false, faceless_material: 'broll' });
+        expect(row).toMatchObject({ faceless: false, video_type: 'hook_lipsync' });
+        expect(row).not.toHaveProperty('faceless_material');
       }
     });
 
-    it('sends lipsync: true and the persona quality as the job resolution', async () => {
+    it('sends video_type hook_lipsync and the persona quality as the job resolution', async () => {
       const res = await post(baseBody());
       expect(res.status).toBe(200);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      expect(payload.lipsync_enabled).toBe(true);
+      expect(payload.video_type).toBe('hook_lipsync');
       // The persona's face quality becomes the job resolution.
       expect(payload.video_quality).toBe('ok');
     });
@@ -676,32 +709,27 @@ describe('POST /api/videos/generate-and-schedule', () => {
       });
     });
 
-    it('sends faceless_material svg to the engine for an illustration-only faceless post', async () => {
-      const res = await post(baseBody({ options: { faceless: true, facelessMaterial: 'svg' } }));
+    it('sends video_type faceless and no material to the engine for a faceless post', async () => {
+      const res = await post(baseBody({ options: { videoType: 'faceless' } }));
       expect(res.status).toBe(200);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      expect(payload.faceless_material).toBe('svg');
+      expect(payload.video_type).toBe('faceless');
+      expect(payload).not.toHaveProperty('faceless_material');
     });
 
-    it('defaults a faceless post without a material choice to broll', async () => {
-      const res = await post(baseBody({ options: { faceless: true } }));
-      expect(res.status).toBe(200);
-      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      expect(payload.faceless_material).toBe('broll');
-    });
-
-    it('defaults a with-face post without a material choice to broll', async () => {
+    it('sends video_type hook_lipsync and no material for a with-face post', async () => {
       const res = await post(baseBody());
       expect(res.status).toBe(200);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      expect(payload.faceless_material).toBe('broll');
+      expect(payload.video_type).toBe('hook_lipsync');
+      expect(payload).not.toHaveProperty('faceless_material');
     });
 
-    it('sends lipsync: false and no persona quality for a faceless post', async () => {
-      const res = await post(baseBody({ options: { faceless: true } }));
+    it('sends video_type faceless and no persona quality for a faceless post', async () => {
+      const res = await post(baseBody({ options: { videoType: 'faceless' } }));
       expect(res.status).toBe(200);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      expect(payload.lipsync_enabled).toBe(false);
+      expect(payload.video_type).toBe('faceless');
       // No face to resolve: the persona's face quality does not apply, and no
       // image travels to the engine. Asserted on the serialized payload —
       // that is what the engine receives (an undefined key is dropped).
@@ -718,7 +746,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const calls = vi.mocked(startEngineVideoTask).mock.calls;
       expect(calls).toHaveLength(1);
       expect((calls[0][1] as Record<string, unknown>).webhook_url).toBe('https://example.com/hook');
-      expect((calls[0][1] as Record<string, unknown>).video_subject).toBe('Porto trip');
+      expect((calls[0][1] as Record<string, unknown>).video_title).toBe('Porto trip');
       // Phase 5-4: scripts come from options.segments only — no prompt
       // rides the engine payload anymore.
       expect(calls[0][1] as Record<string, unknown>).not.toHaveProperty('video_script_prompt');
@@ -755,6 +783,15 @@ describe('POST /api/videos/generate-and-schedule', () => {
   });
 
   describe('validation', () => {
+    it('rejects a title over 100 characters before any charge (engine cap, mirrored pre-charge)', async () => {
+      const res = await post(baseBody({ title: 'x'.repeat(101) }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.field).toBe('title');
+      expect(json.error).toContain('at most 100 characters');
+    });
+
     it('rejects an invalid provider', async () => {
       const res = await post(
         baseBody({ publishing: { providers: ['myspace'], accounts: {}, schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' } } }),
@@ -824,7 +861,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.field).toBe('options.audioUrl');
     });
 
-    it('sends full_lipsync to the engine for an opt-in full-mode post', async () => {
+    it('sends video_type full_lipsync to the engine for an opt-in full-mode post', async () => {
       // The preflight runs before charging: stub a fitting narration so
       // the request proceeds past it to dispatch.
       vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
@@ -839,11 +876,10 @@ describe('POST /api/videos/generate-and-schedule', () => {
         ),
       );
       try {
-        const res = await post(baseBody({ options: { fullLipsync: true } }));
+        const res = await post(baseBody({ options: { videoType: 'full_lipsync', segments: NO_MEDIA_SEGMENTS } }));
         expect(res.status).toBe(200);
         const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-        expect(payload.full_lipsync).toBe(true);
-        expect(payload.lipsync_enabled).toBe(true);
+        expect(payload.video_type).toBe('full_lipsync');
         // Full lip-sync charges the full price (8 tokens, face ok),
         // not the hook-only price (2 tokens).
         const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
@@ -857,30 +893,33 @@ describe('POST /api/videos/generate-and-schedule', () => {
       }
     });
 
-    it('rejects fullLipsync on faceless requests', async () => {
-      const res = await post(baseBody({ options: { faceless: true, fullLipsync: true } }));
+    it('rejects an unknown videoType with a 400 listing the modes and costs', async () => {
+      // No media: full lip sync leaves it optional, so the request reaches
+      // the videoType check instead of failing on media.
+      const res = await post(baseBody({ options: { videoType: 'sideways', segments: NO_MEDIA_SEGMENTS } }));
       const json = await res.json();
       expect(res.status).toBe(400);
-      expect(json.field).toBe('options.fullLipsync');
+      expect(json.field).toBe('options.videoType');
+      expect(json.error).toContain("unknown video_type 'sideways'");
+      expect(json.error).toContain('full_lipsync (8/15)');
+      expect(json.error).toContain('hook_lipsync (2/3)');
+      expect(json.error).toContain('faceless (1)');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
     it('rejects imageId on faceless requests', async () => {
-      const res = await post(baseBody({ options: { faceless: true, imageId: 'img-1' } }));
+      const res = await post(baseBody({ options: { videoType: 'faceless', imageId: 'img-1' } }));
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.field).toBe('options.imageId');
     });
 
-    it('accepts facelessMaterial svg on a with-face request and sends it with lipsync', async () => {
-      const res = await post(baseBody({ options: { facelessMaterial: 'svg' } }));
+    it('sends video_type hook_lipsync and no material on a with-face request with lipsync', async () => {
+      const res = await post(baseBody());
       expect(res.status).toBe(200);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      expect(payload).toMatchObject({ faceless_material: 'svg', lipsync_enabled: true });
-    });
-
-    it('rejects an unknown facelessMaterial value', async () => {
-      const res = await post(baseBody({ options: { faceless: true, facelessMaterial: 'stock' } }));
-      expect(res.status).toBe(400);
+      expect(payload).toMatchObject({ video_type: 'hook_lipsync' });
+      expect(payload).not.toHaveProperty('faceless_material');
     });
 
     it('rejects scriptPrompts with more than one entry (scripts come from segments only)', async () => {
@@ -896,9 +935,13 @@ describe('POST /api/videos/generate-and-schedule', () => {
       'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
     const segmentsCta = 'Save this video before your next trip to Porto.';
     const validSegments = [
-      { kind: 'hook', text: segmentsHook },
-      { kind: 'body', text: segmentsBody },
-      { kind: 'cta', text: segmentsCta },
+      { kind: 'hook', text: segmentsHook, media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
+      {
+        kind: 'body',
+        text: segmentsBody,
+        media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
+      },
+      { kind: 'cta', text: segmentsCta, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
     ];
 
     it('rejects invalid segments before any charge', async () => {
@@ -940,6 +983,30 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(400);
       expect(json.code).toBe('VALIDATION_FAILED');
       expect(String(json.field)).toContain('segments');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('rejects per-segment terms at parse time (dead with the stock path)', async () => {
+      // Search terms only existed to fetch stock material (issue #542):
+      // the schema no longer lists the field, so zod rejects it before
+      // the content validator ever sees it.
+      const withTerms = [
+        { kind: 'hook', text: segmentsHook },
+        { kind: 'body', text: segmentsBody, terms: ['restaurant kitchen'] },
+        { kind: 'cta', text: segmentsCta },
+      ];
+      const res = await post(baseBody({ options: { segments: withTerms } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            field: 'options.segments.1',
+            message: expect.stringContaining('Unrecognized key: "terms"'),
+          }),
+        ]),
+      );
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
@@ -1694,7 +1761,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const res = await post(
         baseBody({
           personaId: null,
-          options: { faceless: true },
+          options: { videoType: 'faceless' },
           publishing: {
             providers: ['youtube'],
             schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
@@ -1849,7 +1916,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // A faceless post never sends a photo to the engine, so a stored bad
       // avatar_url must not block it.
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: 'not-a-url' } });
-      const res = await post(baseBody({ options: { faceless: true } }));
+      const res = await post(baseBody({ options: { videoType: 'faceless' } }));
       expect(res.status).toBe(200);
     });
 
@@ -2393,14 +2460,18 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', errorCode: 'image_sign_failed' });
     });
 
-    it('marks the slot photo_missing when no face source exists', async () => {
+    it('rejects a face-mode request with 400 when no face source exists (pre-charge photo check)', async () => {
+      // A face mode needs a persona photo: the pre-charge check in
+      // preparePersona rejects it before any charge or slot insert, so
+      // the dispatch-stage photo_missing backstop never runs for it.
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: null, photo_path: null } });
       const res = await post(baseBody());
       const json = await res.json();
-      expect(res.status).toBe(502);
+      expect(res.status).toBe(400);
       expect(json.success).toBe(false);
-      expect(json.code).toBe('INTERNAL_ERROR');
-      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', errorCode: 'photo_missing' });
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.field).toBe('options.videoType');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
     it('marks the slot no_task_id when the engine accepts without a task id', async () => {
@@ -2566,12 +2637,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(400);
       const json = await res.json();
       expect(json.code).toBe('VALIDATION_FAILED');
-      expect(json.field).toBe('options.faceless');
+      expect(json.field).toBe('options.videoType');
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
     it('rejects a persona-less post with no voice', async () => {
-      const res = await post(baseBody({ personaId: undefined, options: { faceless: true } }));
+      const res = await post(baseBody({ personaId: undefined, options: { videoType: 'faceless' } }));
       expect(res.status).toBe(400);
       const json = await res.json();
       expect(json.code).toBe('VALIDATION_FAILED');
@@ -2616,7 +2687,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // Null is the only accepted spelling: a blank string cannot
       // half-intend a persona, it becomes the persona-less path (and must
       // still satisfy it).
-      const res = await post(baseBody({ personaId: '', options: { faceless: true, voiceId: 'chatterbox:kokoro_af_heart' } }));
+      const res = await post(baseBody({ personaId: '', options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart' } }));
       expect(res.status).toBe(200);
       const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
       expect(scheduleRows).toHaveLength(1);
@@ -2628,7 +2699,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         baseBody({
           personaId: undefined,
           options: {
-            faceless: true,
+            videoType: 'faceless',
             voiceId: 'chatterbox:kokoro_af_heart',
             language: 'en',
             niche: 'comedy',
@@ -2667,14 +2738,35 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(payload.video_language).toBe('en');
       expect(payload.video_aspect).toBe('16:9');
       expect(payload.paragraph_number).toBe(3);
-      expect(payload.lipsync_enabled).toBe(false);
+      expect(payload.video_type).toBe('faceless');
+    });
+
+    it('accepts a square 1:1 videoAspect: it is a product aspect, not just an engine one', async () => {
+      const res = await post(
+        baseBody({
+          personaId: undefined,
+          options: {
+            faceless: true,
+            voiceId: 'chatterbox:kokoro_af_heart',
+            language: 'en',
+            niche: 'comedy',
+            videoAspect: '1:1',
+            paragraphNumber: 3,
+          },
+        }),
+      );
+      expect(res.status).toBe(200);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows[0].post_video_aspect).toBe('1:1');
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.video_aspect).toBe('1:1');
     });
 
     it('skips the persona scope check for a persona-less post', async () => {
       // A scoped API key that allows nothing still creates a persona-less
       // post: there is no persona to scope against.
       vi.mocked(isPersonaAllowed).mockReturnValue(false);
-      const res = await post(baseBody({ personaId: undefined, options: { faceless: true, voiceId: 'chatterbox:kokoro_af_heart' } }));
+      const res = await post(baseBody({ personaId: undefined, options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart' } }));
       expect(res.status).toBe(200);
       expect(vi.mocked(isPersonaAllowed)).not.toHaveBeenCalled();
     });
@@ -2685,7 +2777,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const res = await post(
         baseBody({
           personaId: undefined,
-          options: { faceless: true, audioUrl: 'https://example.com/voice.mp3' },
+          options: { videoType: 'faceless', audioUrl: 'https://example.com/voice.mp3' },
         }),
       );
       expect(res.status).toBe(200);
@@ -2710,7 +2802,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('charges the faceless rate and never touches library images for a persona-less post', async () => {
-      const res = await post(baseBody({ personaId: undefined, options: { faceless: true, voiceId: 'chatterbox:kokoro_af_heart' } }));
+      const res = await post(baseBody({ personaId: undefined, options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart' } }));
       expect(res.status).toBe(200);
       const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
       expect(spends).toHaveLength(1);
@@ -2926,20 +3018,25 @@ describe('segments-only contract (Phase 4)', () => {
     'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
   const cta = 'Save this video before your next trip to Porto.';
   const segments = [
-    { kind: 'hook', text: hook },
-    { kind: 'body', text: bodyText },
-    { kind: 'cta', text: cta },
+    { kind: 'hook', text: hook, media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
+    {
+      kind: 'body',
+      text: bodyText,
+      media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
+    },
+    { kind: 'cta', text: cta, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
   ];
   function singleBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     const base: Record<string, unknown> = {
       personaId: 'persona-1',
       title: 'Porto trip',
+      description: 'Agent description.',
       publishing: {
         providers: ['youtube'],
         accounts: { youtube: ['acct-1'] },
         schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
       },
-      options: { segments },
+      options: { videoType: 'hook_lipsync', segments },
     };
     return { ...base, ...overrides };
   }
@@ -2973,7 +3070,7 @@ describe('segments-only contract (Phase 4)', () => {
   });
 
   it('rejects missing segments with 400 naming options.segments, before any charge', async () => {
-    const res = await post(singleBody({ options: {} }));
+    const res = await post(singleBody({ options: { videoType: 'hook_lipsync' } }));
     const json = await res.json();
     expect(res.status).toBe(400);
     expect(String(json.field)).toContain('options.segments');
@@ -2995,7 +3092,7 @@ describe('segments-only contract (Phase 4)', () => {
     const spend = rpcCalls.find((c) => c.name === 'spend_tokens');
     expect(spend?.args.p_amount).toBe(2);
     const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-    expect(payload.video_subject).toBe('Porto trip');
+    expect(payload.video_title).toBe('Porto trip');
     expect(payload.video_script).toBe(`${hook}\n\n${bodyText}\n\n${cta}`);
   });
 });
@@ -3022,10 +3119,10 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
 
   it('rejects a 61s full-mode narration with 400 and charges nothing', async () => {
     stubPreflight(61);
-    const res = await post(baseBody({ options: { fullLipsync: true } }));
+    const res = await post(baseBody({ options: { videoType: 'full_lipsync', segments: NO_MEDIA_SEGMENTS } }));
     const json = await res.json();
     expect(res.status).toBe(400);
-    expect(String(json.field)).toContain('options.fullLipsync');
+    expect(String(json.field)).toContain('options.videoType');
     // The charge is the proof, not just the error: no spend, no schedule
     // row, no engine dispatch happened for the rejected request.
     expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
@@ -3036,22 +3133,36 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
 
   it('charges and dispatches a full-mode narration at exactly 60s', async () => {
     stubPreflight(60);
-    const res = await post(baseBody({ options: { fullLipsync: true } }));
+    const res = await post(baseBody({ options: { videoType: 'full_lipsync', segments: NO_MEDIA_SEGMENTS } }));
     const json = await res.json();
     expect(res.status).toBe(200);
     expect(json.success).toBe(true);
     expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
     expect(vi.mocked(startEngineVideoTask)).toHaveBeenCalledTimes(1);
     const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-    expect(payload.full_lipsync).toBe(true);
+    expect(payload.video_type).toBe('full_lipsync');
   });
 
-  it('skips the preflight entirely for non-full videos', async () => {
-    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }));
-    vi.stubGlobal('fetch', fetchSpy);
+  it('skips the narration preflight for non-full videos but still checks segment ratios', async () => {
+    // The narration check (audio/preflight-duration) is full-lip-sync
+    // only; the aspect check (media/check) still runs for the segments'
+    // full-frame photos — the default persona has no face, so all 11 do.
+    const calls: Array<string> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push(String(url));
+        return new Response(
+          JSON.stringify({ status: 200, body: { code: 'ok', width: 1080, height: 1920 } }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }),
+    );
     const res = await post(baseBody());
     expect(res.status).toBe(200);
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(11);
+    expect(calls.every((url) => url.includes('/api/v1/media/check'))).toBe(true);
+    expect(calls.some((url) => url.includes('preflight-duration'))).toBe(false);
     expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
   });
 });
@@ -3070,7 +3181,7 @@ describe('POST /api/videos/generate-and-schedule — experiment link (issue #476
       personaId: 'persona-1',
       // Same deterministic schedule id the replay path uses.
       replayScheduleId: deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:exp-key`),
-      facts: { providers: ['youtube'], accountIds: { youtube: ['acct-1'] }, faceless: false, fullLipsync: false, segments: DEFAULT_SEGMENTS },
+      facts: { providers: ['youtube'], accountIds: { youtube: ['acct-1'] }, videoType: 'hook_lipsync', segments: DEFAULT_SEGMENTS },
     });
     const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
     expect(slotRows[0]).toMatchObject({ experiment_id: EXPERIMENT.experimentId, variant_id: 'hook-aggressive', experiment_pair: 2 });

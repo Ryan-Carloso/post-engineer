@@ -84,13 +84,13 @@ class DeriveTagsFromTitleTest(unittest.TestCase):
 
 class MetadataForTagsTest(unittest.TestCase):
     def test_youtube_tags_come_from_title(self) -> None:
-        metadata = fs_metadata.metadata_for("youtube", "Onde os locais comem no Porto", {})
+        metadata = fs_metadata.metadata_for("youtube", "Onde os locais comem no Porto", {}, "Agent description.")
         self.assertIsInstance(metadata, upload_publisher.YouTubeMetadata)
         self.assertEqual(metadata.tags, derive_tags_from_title("Onde os locais comem no Porto"))
         self.assertTrue(len(metadata.tags) > 0)
 
     def test_youtube_tags_keep_title_language(self) -> None:
-        metadata = fs_metadata.metadata_for("youtube", "पोर्टो में स्थानीय लोग कहाँ खाते हैं", {})
+        metadata = fs_metadata.metadata_for("youtube", "पोर्टो में स्थानीय लोग कहाँ खाते हैं", {}, "Agent description.")
         self.assertIn("पोर्टो", metadata.tags)
 
 
@@ -135,13 +135,13 @@ class ValidatePublishPlanTagsTest(unittest.TestCase):
     def test_rejects_title_without_tags_before_generation(self) -> None:
         schedule = {"providers": ["youtube"], "youtube_account_ids": ["yt-1"]}
         with self.assertRaises(ValueError) as caught:
-            fs_metadata.validate_publish_plan(schedule, "!!! ???")
+            fs_metadata.validate_publish_plan(schedule, "!!! ???", "Agent description.")
         self.assertIn("tag", str(caught.exception))
 
     def test_accepts_title_with_tags(self) -> None:
         schedule = {"providers": ["youtube"], "youtube_account_ids": ["yt-1"]}
         # does not raise: the slot may proceed to generation
-        fs_metadata.validate_publish_plan(schedule, "Onde os locais comem no Porto")
+        fs_metadata.validate_publish_plan(schedule, "Onde os locais comem no Porto", "Agent description.")
 
 
 if __name__ == "__main__":

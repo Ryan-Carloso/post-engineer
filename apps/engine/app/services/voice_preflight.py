@@ -2,7 +2,7 @@
 
 A persona with no voice, or a voice name no provider recognises (for
 example ``energetic`` or ``en-US-GuyNeural``), used to fail only in the
-audio stage, after the script, terms and web-search work had already run
+audio stage, after the script and web-search work had already run
 (and that stage is in ``GENERATION_STAGES``, so the job was retried even
 though the configuration can never become valid). This mirrors the voice
 that ``task.generate_audio`` will use and the routing ``voice.tts`` applies,

@@ -30,7 +30,9 @@ from app.services import task as tm
 
 def _persona_params(**overrides) -> VideoParams:
     return VideoParams(
-        video_subject="coffee",
+        video_title="coffee",
+        video_description="Test description.",
+        video_type="hook_lipsync",
         video_language="en-US",
         persona=PersonaParams(
             name="Ana",
@@ -43,7 +45,12 @@ def _persona_params(**overrides) -> VideoParams:
 
 
 def test_empty_script_fails_without_search_or_llm():
-    params = VideoParams(video_subject="coffee", video_script="")
+    params = VideoParams(
+        video_title="coffee",
+        video_description="Test description.",
+        video_type="faceless",
+        video_script="",
+    )
     with patch.object(tm, "_fail_task") as fail_task:
         result = tm.generate_script("empty-task", params)
 
@@ -56,7 +63,12 @@ def test_empty_script_fails_without_search_or_llm():
 
 def test_supplied_script_passes_without_llm():
     script = "Hook sentence here.\n\nBody sentence here."
-    params = VideoParams(video_subject="coffee", video_script=script)
+    params = VideoParams(
+        video_title="coffee",
+        video_description="Test description.",
+        video_type="faceless",
+        video_script=script,
+    )
     assert tm.generate_script("supplied-task", params) == script
     assert not hasattr(tm, "llm")
 
@@ -76,7 +88,9 @@ def test_single_paragraph_lipsync_script_raises_instead_of_regenerating():
 
 
 def test_lipsync_script_without_terminal_hook_punctuation_raises():
-    params = _persona_params(video_script="Hook without terminal punctuation\n\nBody sentence here.")
+    params = _persona_params(
+        video_script="Hook without terminal punctuation\n\nBody sentence here."
+    )
     with pytest.raises(ValueError, match="no valid hook"):
         tm.generate_script("hook-punct-task", params)
     assert not hasattr(tm, "llm")

@@ -4,8 +4,8 @@
 used to ask it for YouTube cross-post copy. Both are now mechanical:
 the mood comes with the request (``VideoParams.music_mood``; omitted
 means the first catalogued mood, ``"none"`` is an explicit no-music
-choice) and the YouTube metadata is the subject-only mechanical
-fallback. The tests below drive ``start()`` to the cross-post stage
+choice) and the YouTube metadata is the agent-supplied title
+and description. The tests below drive ``start()`` to the cross-post stage
 with every other stage mocked. Phase 5 PR 6 deleted the LLM core, so
 there is no LLM function left to call; the structural pin at the end
 still scans ``start()`` for any ``llm.*`` call that might reappear.
@@ -21,6 +21,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from pydantic import ValidationError
+
 from app.models.schema import MaterialInfo, VideoParams
 from app.services import music_mood as mm
 from app.services import task as tm
@@ -29,7 +31,9 @@ from app.services.intro_cost import IntroCostReport
 
 def _params(subject="Lisbon trams", music_mood=None):
     return VideoParams(
-        video_subject=subject,
+        video_title=subject,
+        video_description="Test description.",
+        video_type="faceless",
         voice_name="chatterbox:kokoro_af_heart",
         video_materials=[MaterialInfo(provider="local", url="/tmp/a.mp4", duration=0)],
         music_mood=music_mood,
@@ -37,7 +41,9 @@ def _params(subject="Lisbon trams", music_mood=None):
 
 
 class StartMusicSocialTests(unittest.TestCase):
-    def _run_start(self, platforms, subject="Lisbon trams", music_mood=None, moods=("calm", "upbeat")):
+    def _run_start(
+        self, platforms, subject="Lisbon trams", music_mood=None, moods=("calm", "upbeat")
+    ):
         """Run start() to the cross-post stage; return (result, mocks).
 
         ``moods`` is the catalog the mood resolver sees; pass
@@ -167,7 +173,7 @@ class StartMusicSocialTests(unittest.TestCase):
         complete_kwargs = complete.call_args.kwargs
         self.assertEqual(complete_kwargs["music_mood"], "none")
 
-    def test_youtube_cross_post_uses_mechanical_subject_only_metadata(self):
+    def test_youtube_cross_post_uses_agent_title_and_description(self):
         _, _, cross_post, _ = self._run_start(["youtube"])
         cross_post.assert_called_once()
         youtube_extra = cross_post.call_args.kwargs["youtube_extra"]
@@ -175,27 +181,22 @@ class StartMusicSocialTests(unittest.TestCase):
             youtube_extra,
             {
                 "youtube_title": "Lisbon trams",
-                "youtube_description": "",
+                "youtube_description": "Test description.",
                 "tags": [],
                 "privacyStatus": "public",
                 "containsSyntheticMedia": True,
             },
         )
 
-    def test_empty_subject_youtube_title_uses_generic_fallback(self):
-        # OpenCode review on this PR: the schema allows an empty subject
-        # and the upload service sends youtube_title verbatim, so the
-        # mechanical metadata must never carry an empty title. (The
-        # generic `title` argument's own whitespace hole is pre-existing
-        # and out of this PR's scope, so only youtube_title is pinned.)
-        _, _, cross_post, _ = self._run_start(["youtube"], subject="   ")
-        cross_post.assert_called_once()
-        youtube_extra = cross_post.call_args.kwargs["youtube_extra"]
-        self.assertEqual(youtube_extra["youtube_title"], "Check out this video! #shorts #viral")
+    def test_blank_title_is_rejected_without_fallback(self):
+        # The agent-supplied title is required: a blank title fails
+        # validation loudly instead of falling back to a generic title.
+        with self.assertRaises(ValidationError):
+            _params("   ")
 
     def test_cross_post_without_youtube_gets_no_youtube_extra(self):
-        # The mechanical fallback applies only to the YouTube metadata
-        # path; other platforms cross-post without youtube_extra.
+        # The agent-supplied YouTube metadata applies only to the
+        # YouTube cross-post path; other platforms get no youtube_extra.
         _, _, cross_post, _ = self._run_start(["tiktok"])
         cross_post.assert_called_once()
         self.assertIsNone(cross_post.call_args.kwargs["youtube_extra"])
@@ -241,7 +242,6 @@ class StartNoLlmMusicSocialScanTests(unittest.TestCase):
         self.assertIn("generate_music_mood", offenders[0])
 
     def test_scan_ignores_llm_calls_outside_start(self):
-        # The pin's scope stays start() only, even though generate_terms
-        # no longer calls the LLM either (Phase 5 PR 6).
-        src = "def generate_terms(task_id):\n    return llm.generate_social_metadata(subject='x')\n"
+        # The pin's scope stays start() only.
+        src = "def generate_audio(task_id):\n    return llm.generate_social_metadata(subject='x')\n"
         self.assertEqual(_llm_music_social_calls_in_start(src), [])

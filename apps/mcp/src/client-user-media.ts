@@ -23,6 +23,8 @@ export const CHECK_MEDIA_CODES = [
   'too_large',
   'timeout',
   'face_detected',
+  'wrong_aspect',
+  'media_expired',
 ] as const;
 
 export type CheckMediaCode = (typeof CHECK_MEDIA_CODES)[number];
@@ -118,12 +120,16 @@ function narrowUploadResult(result: unknown): { mediaId: string } {
 /**
  * Mechanically check one image URL through the engine (no LLM, no
  * relevance judgement): the agent, who sees the image, decides
- * relevance. Returns exactly one code; the URL never reaches output.
+ * relevance. Returns exactly one code plus the probed dimensions when
+ * the engine measured them; the URL never reaches output. With a
+ * video aspect given, a photo that cannot fill the frame returns
+ * wrong_aspect instead of ok.
  */
 export async function checkSegmentMedia(
   client: PostEngineerClient,
   url: string,
-): Promise<{ code: CheckMediaCode }> {
+  videoAspect?: '9:16' | '16:9' | '1:1',
+): Promise<{ code: CheckMediaCode; width?: number; height?: number }> {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -138,14 +144,20 @@ export async function checkSegmentMedia(
     {
       method: 'POST',
       headers: client.getHeaders(),
-      body: JSON.stringify({ url }),
+      body: JSON.stringify(
+        videoAspect === undefined ? { url } : { url, videoAspect },
+      ),
     },
     'check segment media',
   );
   return narrowCheckResult(result);
 }
 
-function narrowCheckResult(result: unknown): { code: CheckMediaCode } {
+function narrowCheckResult(result: unknown): {
+  code: CheckMediaCode;
+  width?: number;
+  height?: number;
+} {
   if (typeof result !== 'object' || result === null) {
     throw new Error('The media check endpoint returned an unexpected response.');
   }
@@ -156,5 +168,14 @@ function narrowCheckResult(result: unknown): { code: CheckMediaCode } {
   if (!(CHECK_MEDIA_CODES as ReadonlyArray<string>).includes(record.code)) {
     throw new Error('The media check endpoint returned an unknown code.');
   }
-  return { code: record.code as CheckMediaCode };
+  const narrowed: { code: CheckMediaCode; width?: number; height?: number } = {
+    code: record.code as CheckMediaCode,
+  };
+  if (typeof record.width === 'number' && Number.isFinite(record.width)) {
+    narrowed.width = record.width;
+  }
+  if (typeof record.height === 'number' && Number.isFinite(record.height)) {
+    narrowed.height = record.height;
+  }
+  return narrowed;
 }

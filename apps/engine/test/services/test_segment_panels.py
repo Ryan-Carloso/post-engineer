@@ -275,7 +275,7 @@ def test_a_failed_overlay_imposes_no_caption_band_on_the_panel_less_video(task_d
     assert segment_panels.caption_bands("t") == []
 
 
-# ---- full frame: faceless videos and the b-roll after a hook-only intro
+# ---- full frame: faceless videos and the images after a hook-only intro
 
 
 def test_full_frame_photo_is_an_opaque_frame_sized_png_at_the_origin(tmp_path):

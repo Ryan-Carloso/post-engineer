@@ -26,15 +26,21 @@ const PERSONA_PREFERENCE_FIELDS: ReadonlyArray<{
 // Unknown keys are dropped (one aggregated, capped warn) instead of
 // traveling verbatim: a mistyped engine field would otherwise surface as
 // the opaque 502, and guarding fields one by one is whack-a-mole.
-// personaId/lipsync are consumed by the route itself and never reach the
-// engine under their own names. The persona face MIX is gone entirely
-// (migration 007): `lipsync` is the one and only face-shaped switch, and the
-// route sets it from the per-post `faceless` choice.
+// personaId is consumed by the route itself and never reaches the engine
+// under its own name. The video mode rides as video_type: the engine's
+// lipsync_active rule reads it (faceless = no face, no photo needed).
 // Typed against the generated engine contract (lib/engine/types.ts): a key
 // the engine's TaskVideoRequest does not accept fails the typecheck.
 //---------------
 const REQUEST_FORWARD_FIELDS: ReadonlyArray<EngineVideoRequestField> = [
-  'video_subject',
+  // Agent-supplied publish copy (issue #542 follow-up): the video title
+  // and description ride the direct dispatch payload into the task.
+  'video_title',
+  'video_description',
+  // The one video mode (issue #542 follow-up): full_lipsync, hook_lipsync
+  // or faceless. The route always sends it; without it the engine
+  // rejects the job (the mode decides the render path and the price).
+  'video_type',
   'video_language',
   'video_aspect',
   'video_layout',
@@ -56,21 +62,13 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<EngineVideoRequestField> = [
   // the web-side slot id); it must survive the allowlist so boot orphan
   // triage can requeue web-created tasks on engine restart.
   'slot_id',
-  // faceless_material is a first-class engine field (VideoParams carries
-  // it as the per-post material choice, face or not); without it a
-  // post's svg choice would be dropped here and silently render broll.
-  'faceless_material',
-  // full_lipsync is a first-class engine field (VideoParams carries it as
-  // the opt-in whole-video talking-head switch); without it a full-mode
-  // request would be dropped here and silently render intro-only b-roll.
-  'full_lipsync',
   // music_mood is a first-class engine field (VideoParams carries it as
   // the per-post BGM mood); without it a requested mood would be dropped
   // here and the engine would default every video to the first mood.
   'music_mood',
   // segments is a first-class engine field (TaskVideoRequest carries it):
-  // without it a segments request would render stock for every segment
-  // and drop every user photo with no warning.
+  // without it a segments request would render the neutral canvas for
+  // every segment and drop every user photo with no warning.
   'segments',
 ];
 // String-keyed view for membership checks on untyped request keys.
@@ -103,12 +101,12 @@ export function buildJobPayload(
   persona: JobPersona,
   request: Record<string, unknown>,
 ): Record<string, unknown> {
-  const { personaId: _requestPersonaId, lipsync: _lipsync, ...jobRequest } = request;
+  const { personaId: _requestPersonaId, ...jobRequest } = request;
   // Allowlist: only known engine-facing keys travel to the engine. Anything
   // else is dropped so a mistyped field can never reach the engine verbatim
   // and surface as the opaque 502 — guarding fields one by one is
-  // whack-a-mole. personaId/lipsync are consumed by the route itself and
-  // never reach the engine under their own names.
+  // whack-a-mole. personaId is consumed by the route itself and never
+  // reaches the engine under its own name.
   const forwardedRequest: Record<string, unknown> = {};
   const droppedKeys: string[] = [];
   for (const [key, value] of Object.entries(jobRequest)) {
@@ -148,7 +146,7 @@ export function buildJobPayload(
   // job's video_quality only when the job actually shows the face: a faceless
   // video has no face to resolve, so its resolution is the engine's business,
   // not the persona's.
-  const showsFace = request.lipsync !== false;
+  const showsFace = request.video_type !== 'faceless';
   if (showsFace) {
     const hasQuality =
       typeof jobPayload.video_quality === 'string' &&
@@ -160,23 +158,6 @@ export function buildJobPayload(
   // Faceless: the persona's face quality does not apply. An explicit
   // request-level video_quality already in the payload is left alone —
   // explicit request beats the persona default.
-
-  // The per-post "no face" choice reaches the engine as lipsync_enabled: false.
-  // The route always sets it explicitly (it owns the faceless option), so an
-  // absent request flag stays absent rather than being invented here.
-  if (typeof request.lipsync === 'boolean') {
-    jobPayload.lipsync_enabled = request.lipsync;
-  }
-
-  // The engine requires video_subject; default it from the persona niche when
-  // the request does not provide one. null counts as absent: clients commonly
-  // serialize missing fields as null, and forwarding it verbatim would make
-  // the engine reject the job (surfacing as the opaque 502).
-  if (typeof persona.niche === 'string' && persona.niche.trim().length > 0) {
-    if (!hasNonEmptyString(jobPayload.video_subject)) {
-      jobPayload.video_subject = persona.niche.trim();
-    }
-  }
 
   // Final null pass: null counts as absent for every engine-facing field —
   // "null/empty values are never forwarded verbatim to the engine".

@@ -62,7 +62,7 @@ describe('POST /api/billing/check-tokens', () => {
   });
 
   it('retorna 400 quando userId falta', async () => {
-    const res = await POST(makePostRequest({ faceless: true }));
+    const res = await POST(makePostRequest({}));
     expect(res.status).toBe(400);
     const body = await res.json() as { error: string };
     expect(body.error).toContain('userId');
@@ -76,14 +76,14 @@ describe('POST /api/billing/check-tokens', () => {
       freeExhausted: false,
     });
 
-    const res = await POST(makePostRequest({ userId: 'u1', faceless: false, faceQuality: 'ok' }));
+    const res = await POST(makePostRequest({ userId: 'u1', videoType: 'hook_lipsync', faceQuality: 'ok' }));
     expect(res.status).toBe(402);
   });
 
   it('retorna 200 com cost quando tokens OK', async () => {
     vi.mocked(checkAndDeductTokens).mockResolvedValue({ ok: true, cost: 2 });
 
-    const res = await POST(makePostRequest({ userId: 'u1', faceless: false, faceQuality: 'ok' }));
+    const res = await POST(makePostRequest({ userId: 'u1', videoType: 'hook_lipsync', faceQuality: 'ok' }));
     expect(res.status).toBe(200);
     const body = await res.json() as { success: boolean; cost: number };
     expect(body.success).toBe(true);
@@ -93,44 +93,42 @@ describe('POST /api/billing/check-tokens', () => {
   it('chama checkAndDeductTokens com parâmetros corretos', async () => {
     vi.mocked(checkAndDeductTokens).mockResolvedValue({ ok: true, cost: 3 });
 
-    await POST(makePostRequest({ userId: 'u1-abc', faceless: false, faceQuality: 'very_good' }));
+    await POST(makePostRequest({ userId: 'u1-abc', videoType: 'hook_lipsync', faceQuality: 'very_good' }));
 
     expect(checkAndDeductTokens).toHaveBeenCalledWith(
       expect.anything(),
       'u1-abc',
       expect.any(String),
-      false,
+      'hook_lipsync',
       'very_good',
     );
   });
 
-  it('forwards faceless: true when the request is faceless', async () => {
+  it('forwards videoType faceless when the request is faceless', async () => {
     vi.mocked(checkAndDeductTokens).mockResolvedValue({ ok: true, cost: 1 });
 
-    await POST(makePostRequest({ userId: 'u1', faceless: true, faceQuality: 'ok' }));
+    await POST(makePostRequest({ userId: 'u1', videoType: 'faceless', faceQuality: 'ok' }));
 
     expect(checkAndDeductTokens).toHaveBeenCalledWith(
       expect.anything(),
       'u1',
       expect.any(String),
-      true,
+      'faceless',
       'ok',
     );
   });
 
-  it('trata qualquer valor não-true de faceless como "com rosto" (nunca cobra menos)', async () => {
-    // Only the literal true means faceless: a malformed value must fall back
-    // to the pricier faced case, never silently under-charge a generation.
+  it('retorna 400 com os modos válidos quando videoType é desconhecido', async () => {
+    // An unknown mode is rejected with the modes and their costs, never
+    // silently priced as another mode — and no charge is attempted.
     vi.mocked(checkAndDeductTokens).mockResolvedValue({ ok: true, cost: 2 });
 
-    await POST(makePostRequest({ userId: 'u1', faceless: 'yes' } as Record<string, unknown>));
+    const res = await POST(makePostRequest({ userId: 'u1', videoType: 'sideways' }));
 
-    expect(checkAndDeductTokens).toHaveBeenCalledWith(
-      expect.anything(),
-      'u1',
-      expect.any(String),
-      false,
-      'ok',
-    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain("unknown video_type 'sideways'");
+    expect(body.error).toContain('full_lipsync (8/15)');
+    expect(checkAndDeductTokens).not.toHaveBeenCalled();
   });
 });

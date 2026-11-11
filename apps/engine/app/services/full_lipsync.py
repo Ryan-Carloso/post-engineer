@@ -1,9 +1,9 @@
 """Opt-in full lip-sync rendering: the whole video is the persona talking.
 
 Today a persona video only lip-syncs the hook intro;
-the rest is b-roll background video. Full mode renders the entire
+the rest is background video. Full mode renders the entire
 narration as talking-head windows and concatenates them, so the output
-contains no b-roll stock footage at all.
+contains no background footage at all.
 
 Window arithmetic follows the intro path exactly, not a new model contract:
 a LongCat render is capped at the observed-safe 12s window (task.py
@@ -15,9 +15,9 @@ so a cut never lands mid-word when timings are available.
 
 Fail-fast contract (the user's no-silent-fallback rule): anything that
 cannot be rendered as full lip-sync raises FullLipSyncError and fails the
-task. Full mode NEVER degrades to b-roll, never drops a window, and never
-renders a partial face over stock. The caller must not catch this error
-and ship the b-roll video instead.
+task. Full mode NEVER degrades to background footage, never drops a window,
+and never renders a partial face over it. The caller must not catch this
+error and ship the background video instead.
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ FULL_LIPSYNC_MIN_WINDOW_SECONDS: float = 3.72
 # not cover unbounded GPU work: beyond 60s the job fails fast, before any
 # LongCat window is submitted (plan_windows runs first in
 # render_full_lipsync), instead of queueing an unbounded GPU bill. It never
-# truncates, never drops a window, and never degrades to b-roll.
+# truncates, never drops a window, and never degrades to background footage.
 # Enforcement layer: the engine is authoritative, on the measured TTS
 # duration. The web side cannot measure TTS seconds before charge (TTS
 # happens engine-side, the same precedent as the custom-audio 60s limit
@@ -299,8 +299,8 @@ def render_full_lipsync(
     """Render every narration window as lip-sync and join them.
 
     Returns (output_path, total_cost_usd_or_None, job_ids). Every window
-    failure propagates: the caller must fail the task, never ship b-roll
-    instead. Stock material is never read here; the output is the persona
+    failure propagates: the caller must fail the task, never ship background
+    footage instead. No background material is read here; the output is the persona
     only, silent, for the downstream final encode to mux with narration.
     """
     if params.persona is None:
@@ -370,7 +370,7 @@ def caption_params(params: VideoParams) -> VideoParams:
 
     Applies to full lip-sync and to the hook intro. The react exclusion
     is hook-only: in hook mode its center caption sits on the seam between
-    the persona (top half) and the b-roll (bottom half), so it stays. In
+    the persona (top half) and the images (bottom half), so it stays. In
     full mode the whole video is the face and there is no seam, so a full
     video in the react layout still moves. Only the default "center"
     placement moves: an explicit "top", "bottom" or "custom" choice is
@@ -378,7 +378,7 @@ def caption_params(params: VideoParams) -> VideoParams:
     """
     if params.subtitle_position != "center":
         return params
-    on_face = params.full_lipsync or (
+    on_face = params.video_type == "full_lipsync" or (
         persona_lipsync_active(params) and params.video_layout != VideoLayout.react
     )
     if not on_face:

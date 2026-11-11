@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { withTelemetryHeaders } from './analytics.js';
 import { validateSegments } from './script-segments.js';
+import type { VideoType } from './video-type.js';
 import type { McpToolResponse } from './tools-call.js';
 
 //---------------
@@ -160,7 +161,7 @@ export function withRecipeNudge<TArgs>(
 // the handler's error text.
 //---------------
 export function withScriptOutcome<
-  TArgs extends { segments: unknown; recipe?: string; facelessMaterial?: string; options?: { facelessMaterial?: string } },
+  TArgs extends { segments: unknown; recipe?: string; videoType?: VideoType; options?: { videoType?: VideoType } },
 >(
   session: RecipeSession,
   toolName: ScriptTool,
@@ -168,8 +169,8 @@ export function withScriptOutcome<
 ): (args: TArgs) => Promise<McpToolResponse> {
   return async (args: TArgs): Promise<McpToolResponse> => {
     const response = await session.run(args.recipe, () => handler(args));
-    const material = args.facelessMaterial ?? args.options?.facelessMaterial;
-    if (response.isError !== true || validateSegments(args.segments, material).ok) {
+    const videoType = args.videoType ?? args.options?.videoType ?? 'hook_lipsync';
+    if (response.isError !== true || validateSegments(args.segments, videoType).ok) {
       return response;
     }
     session.recordScriptRejected();

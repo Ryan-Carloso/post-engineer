@@ -27,8 +27,6 @@ from app.services.upload_publisher import InstagramMetadata, LinkedInMetadata, Y
 UTC = timezone.utc
 
 
-
-
 class _FakeStore:
     def __init__(self, schedules=None):
         self.schedules = schedules or []
@@ -73,8 +71,12 @@ class _FakeStore:
         self.refunded.append((user_id, generation_id, reason))
         return True
 
-    def refund_batch_tokens(self, user_id, generation_id, refund_key, amount, reason, engine_task_id=None):
-        self.refund_batch_calls.append((user_id, generation_id, refund_key, amount, reason, engine_task_id))
+    def refund_batch_tokens(
+        self, user_id, generation_id, refund_key, amount, reason, engine_task_id=None
+    ):
+        self.refund_batch_calls.append(
+            (user_id, generation_id, refund_key, amount, reason, engine_task_id)
+        )
         return True
 
     def claim_ready_slot(self, slot_id):
@@ -98,15 +100,43 @@ class BatchScheduleTests(unittest.TestCase):
             "id": "slot-batch-1",
             "slot_at": "2026-09-08T09:00:00+00:00",
             "title": title,
+            "description": "Agent description.",
+            "video_type": "hook_lipsync",
             "charged_tokens": 2,
             "segments": [
-            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-            {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-            {"kind": "cta", "text": "Save this video before your next trip to Porto."},
-        ],
+                {
+                    "kind": "hook",
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
+                    "media": [
+                        {"url": "https://example.com/h0.jpg"},
+                        {"url": "https://example.com/h1.jpg"},
+                        {"url": "https://example.com/h2.jpg"},
+                    ],
+                },
+                {
+                    "kind": "body",
+                    "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.",
+                    "media": [
+                        {"url": "https://example.com/b0.jpg"},
+                        {"url": "https://example.com/b1.jpg"},
+                        {"url": "https://example.com/b2.jpg"},
+                        {"url": "https://example.com/b3.jpg"},
+                        {"url": "https://example.com/b4.jpg"},
+                        {"url": "https://example.com/b5.jpg"},
+                    ],
+                },
+                {
+                    "kind": "cta",
+                    "text": "Save this video before your next trip to Porto.",
+                    "media": [
+                        {"url": "https://example.com/c0.jpg"},
+                        {"url": "https://example.com/c1.jpg"},
+                    ],
+                },
+            ],
             "schedules": {
                 "id": "sched-batch-1",
-                                "user_id": "user-1",
+                "user_id": "user-1",
                 "providers": ["youtube"],
                 "youtube_account_ids": ["yt-1"],
                 "personas": {
@@ -127,10 +157,10 @@ class BatchScheduleTests(unittest.TestCase):
 
     def _scheduler(self, store):
         return fs.FillScheduleScheduler(
-            store=store, task_state=MagicMock(),
+            store=store,
+            task_state=MagicMock(),
             publish_video=MagicMock(),
         )
-
 
     def test_generate_batch_slot_uses_stored_segments_no_llm_no_spend(self):
         slot = self._batch_slot()
@@ -139,9 +169,7 @@ class BatchScheduleTests(unittest.TestCase):
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        with patch.object(
-            scheduler.generator, "_dispatch_generation"
-        ) as dispatch_generation:
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
             enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         self.assertEqual(enqueued, 1)
@@ -151,7 +179,7 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertEqual(user_id, "user-1")
         self.assertIn("Batch title one", request.model_dump_json())
         self.assertNotIn("LLM topic", request.model_dump_json())
-        self.assertEqual(request.video_subject, "Batch title one")
+        self.assertEqual(request.video_title, "Batch title one")
         update = dict(store.updates[0][1])
         self.assertEqual(update["status"], "generating")
         self.assertEqual(update["title"], "Batch title one")
@@ -168,14 +196,56 @@ class BatchScheduleTests(unittest.TestCase):
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        with patch.object(
-            scheduler.generator, "_dispatch_generation"
-        ) as dispatch_generation:
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
             enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         self.assertEqual(enqueued, 1)
         _task_id, request, _user_id = dispatch_generation.call_args.args
         self.assertEqual(request.music_mood, "calm")
+
+    def test_generate_batch_slot_forwards_the_stored_description(self):
+        # A slot's agent-supplied description rides the slot row (migration
+        # 055) into the task as video_description, and the slot title rides
+        # as video_title: publish uses the agent's copy instead of the
+        # mechanical subject metadata.
+        slot = self._batch_slot()
+        slot["description"] = "Agent description."
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(enqueued, 1)
+        _task_id, request, _user_id = dispatch_generation.call_args.args
+        self.assertEqual(request.video_title, "Batch title one")
+        self.assertEqual(request.video_description, "Agent description.")
+
+    def test_generate_batch_slot_without_a_stored_description_fails_without_dispatch(self):
+        # The agent-supplied description is required (issue #542
+        # follow-up): a slot without one fails loudly in the pre-flight,
+        # like a slot without segments. No dispatch, no token spend. The
+        # only rows that can still reach this are title-less ones:
+        # migration 055 backfilled every titled pre-migration row with
+        # its title as the description.
+        slot = self._batch_slot()
+        slot["title"] = ""
+        del slot["description"]
+        store = _FakeStore()
+        store.pending_slots = lambda now: [slot]
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(enqueued, 0)
+        dispatch_generation.assert_not_called()
+        self.assertEqual(store.spent, [])
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertIn("description", store.updates[0][1]["error"])
 
     def test_generate_batch_slot_without_a_stored_mood_uses_the_engine_default(self):
         # Rows created before migration 048 have no music_mood, and a blank
@@ -189,16 +259,12 @@ class BatchScheduleTests(unittest.TestCase):
                 store = _FakeStore()
                 store.pending_slots = lambda now: [slot]
                 scheduler = self._scheduler(store)
-                scheduler.store.signed_url = MagicMock(
-                    return_value="https://signed/foto.png"
-                )
+                scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
                 with patch.object(
                     scheduler.generator, "_dispatch_generation"
                 ) as dispatch_generation:
-                    enqueued = scheduler.generate(
-                        datetime(2026, 9, 6, 12, 0, tzinfo=UTC)
-                    )
+                    enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
                 self.assertEqual(enqueued, 1)
                 _task_id, request, _user_id = dispatch_generation.call_args.args
@@ -215,9 +281,7 @@ class BatchScheduleTests(unittest.TestCase):
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        with patch.object(
-            scheduler.generator, "_dispatch_generation"
-        ) as dispatch_generation:
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
             enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         self.assertEqual(enqueued, 1)
@@ -229,7 +293,7 @@ class BatchScheduleTests(unittest.TestCase):
         # post_language snapshot column (post_identity's snapshot-first rule).
         slot = self._batch_slot()
         del slot["schedules"]["personas"]
-        slot["faceless"] = True
+        slot["video_type"] = "faceless"
         slot["schedules"].update(
             {
                 "post_voice_id": "energetic",
@@ -243,9 +307,7 @@ class BatchScheduleTests(unittest.TestCase):
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        with patch.object(
-            scheduler.generator, "_dispatch_generation"
-        ) as dispatch_generation:
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
             enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         self.assertEqual(enqueued, 1)
@@ -264,9 +326,7 @@ class BatchScheduleTests(unittest.TestCase):
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        with patch.object(
-            scheduler.generator, "_dispatch_generation"
-        ) as dispatch_generation:
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
             enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         self.assertEqual(enqueued, 0)
@@ -276,30 +336,54 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertEqual(store.updates[0][1]["status"], "failed")
         self.assertIn("segments", store.updates[0][1]["error"])
 
-    def test_generate_slot_with_segments_uses_title_as_subject(self):
+    def test_generate_slot_with_segments_uses_title_as_video_title(self):
         # Phase 4 contract: segments are the script; the title is only
-        # the slot label and the video subject, never a regeneration input.
+        # the slot label and the video title, never a regeneration input.
         slot = self._batch_slot()
         slot["title"] = "Porto trip"
         slot["segments"] = [
-            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-            {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-            {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+            {
+                "kind": "hook",
+                "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
+                "media": [
+                    {"url": "https://example.com/h0.jpg"},
+                    {"url": "https://example.com/h1.jpg"},
+                    {"url": "https://example.com/h2.jpg"},
+                ],
+            },
+            {
+                "kind": "body",
+                "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.",
+                "media": [
+                    {"url": "https://example.com/b0.jpg"},
+                    {"url": "https://example.com/b1.jpg"},
+                    {"url": "https://example.com/b2.jpg"},
+                    {"url": "https://example.com/b3.jpg"},
+                    {"url": "https://example.com/b4.jpg"},
+                    {"url": "https://example.com/b5.jpg"},
+                ],
+            },
+            {
+                "kind": "cta",
+                "text": "Save this video before your next trip to Porto.",
+                "media": [
+                    {"url": "https://example.com/c0.jpg"},
+                    {"url": "https://example.com/c1.jpg"},
+                ],
+            },
         ]
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        with patch.object(
-            scheduler.generator, "_dispatch_generation"
-        ) as dispatch_generation:
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
             enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         self.assertEqual(enqueued, 1)
         dispatch_generation.assert_called_once()
         task_id, request, user_id = dispatch_generation.call_args.args
-        self.assertEqual(request.video_subject, "Porto trip")
+        self.assertEqual(request.video_title, "Porto trip")
         self.assertIn("ninety minute line", request.video_script)
         update = dict(store.updates[0][1])
         self.assertEqual(update["status"], "generating")
@@ -317,9 +401,7 @@ class BatchScheduleTests(unittest.TestCase):
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        with patch.object(
-            scheduler.generator, "_dispatch_generation"
-        ) as dispatch_generation:
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
             # Must not raise; slot marked failed.
             enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
@@ -334,7 +416,7 @@ class BatchScheduleTests(unittest.TestCase):
         # feature is this path.
         slot = self._batch_slot()
         del slot["schedules"]["personas"]
-        slot["faceless"] = True
+        slot["video_type"] = "faceless"
         slot["schedules"].update(
             {
                 "post_voice_id": "energetic",
@@ -347,9 +429,7 @@ class BatchScheduleTests(unittest.TestCase):
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        with patch.object(
-            scheduler.generator, "_dispatch_generation"
-        ) as dispatch_generation:
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
             enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         self.assertEqual(enqueued, 1)
@@ -368,7 +448,7 @@ class BatchScheduleTests(unittest.TestCase):
     def test_generate_slot_forwards_the_snapshot_call_to_action(self):
         slot = self._batch_slot()
         del slot["schedules"]["personas"]
-        slot["faceless"] = True
+        slot["video_type"] = "faceless"
         slot["schedules"].update(
             {
                 "post_voice_id": "energetic",
@@ -398,9 +478,7 @@ class BatchScheduleTests(unittest.TestCase):
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
-        with patch.object(
-            scheduler.generator, "_dispatch_generation"
-        ) as dispatch_generation:
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
             enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         self.assertEqual(enqueued, 0)
@@ -413,11 +491,8 @@ class BatchScheduleTests(unittest.TestCase):
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
         store.refund_batch_calls = []
-        store.refund_batch_tokens = (
-            lambda *args, **kwargs: store.refund_batch_calls.append(
-                args + (kwargs.get("engine_task_id"),)
-            )
-            or True
+        store.refund_batch_tokens = lambda *args, **kwargs: (
+            store.refund_batch_calls.append(args + (kwargs.get("engine_task_id"),)) or True
         )
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
@@ -440,18 +515,21 @@ class BatchScheduleTests(unittest.TestCase):
 
     def test_generate_batch_dispatch_failure_refunds_the_stored_charge(self):
         # A full lip-sync slot lists at 8; the slot stores what it was
-        # charged (8 here), and that is what comes back.
+        # charged (8 here), and that is what comes back. Full lip-sync
+        # needs no segment media (at most 6 photos per video), so the
+        # fixture's images-mode media is stripped here.
         slot = self._batch_slot()
-        slot["full_lipsync"] = True
+        slot["video_type"] = "full_lipsync"
         slot["charged_tokens"] = 8
+        slot["segments"] = [
+            {key: value for key, value in segment.items() if key != "media"}
+            for segment in slot["segments"]
+        ]
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
         store.refund_batch_calls = []
-        store.refund_batch_tokens = (
-            lambda *args, **kwargs: store.refund_batch_calls.append(
-                args + (kwargs.get("engine_task_id"),)
-            )
-            or True
+        store.refund_batch_tokens = lambda *args, **kwargs: (
+            store.refund_batch_calls.append(args + (kwargs.get("engine_task_id"),)) or True
         )
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
@@ -493,8 +571,8 @@ class BatchScheduleTests(unittest.TestCase):
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
         store.refund_batch_calls = []
-        store.refund_batch_tokens = (
-            lambda *args, **kwargs: store.refund_batch_calls.append(args) or True
+        store.refund_batch_tokens = lambda *args, **kwargs: (
+            store.refund_batch_calls.append(args) or True
         )
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
@@ -536,16 +614,15 @@ class BatchScheduleTests(unittest.TestCase):
 
         with patch.object(support_module, "track_event") as track:
             with patch.object(
-                scheduler.generator, "_dispatch_generation",
+                scheduler.generator,
+                "_dispatch_generation",
                 side_effect=RuntimeError("dispatch down"),
             ):
                 scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
         expected_task_id = str(uuid.uuid5(uuid.NAMESPACE_URL, "fill-schedule:slot-batch-1"))
         self.assertEqual(refund_kwargs.get("engine_task_id"), expected_task_id)
-        refund_calls = [
-            c for c in track.call_args_list if c[0][0] == "refund_issued"
-        ]
+        refund_calls = [c for c in track.call_args_list if c[0][0] == "refund_issued"]
         self.assertEqual(len(refund_calls), 1)
         _, props = refund_calls[0][0]
         self.assertEqual(props["kind"], "batch_slot")
@@ -568,18 +645,14 @@ class BatchScheduleTests(unittest.TestCase):
 
         with patch.object(support_module, "track_event") as track:
             with patch.object(
-                scheduler.generator, "_dispatch_generation",
+                scheduler.generator,
+                "_dispatch_generation",
                 side_effect=RuntimeError("dispatch down"),
             ):
                 scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
-        refund_calls = [
-            c for c in track.call_args_list if c[0][0] == "refund_issued"
-        ]
+        refund_calls = [c for c in track.call_args_list if c[0][0] == "refund_issued"]
         self.assertEqual(refund_calls, [])
-
-
-
 
     def test_dispatch_generation_updates_state_and_starts_pipeline_thread(self):
         # _dispatch_generation is the immediate path: task state is created
@@ -589,7 +662,11 @@ class BatchScheduleTests(unittest.TestCase):
 
         store = _FakeStore()
         scheduler = self._scheduler(store)
-        request = TaskVideoRequest(video_subject="Batch topic one")
+        request = TaskVideoRequest(
+            video_type="faceless",
+            video_title="Batch topic one",
+            video_description="Batch description.",
+        )
 
         with (
             patch("app.services.task.start") as mock_start,
@@ -620,9 +697,7 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertTrue(kwargs["daemon"])
         # Run the thread target inline to prove the wiring.
         kwargs["target"](**kwargs["kwargs"])
-        mock_start.assert_called_once_with(
-            task_id="task-1", params=request, stop_at="video"
-        )
+        mock_start.assert_called_once_with(task_id="task-1", params=request, stop_at="video")
 
     def test_dispatch_generation_omits_blank_identity_ids(self):
         # Identity props are optional: a dispatch without slot context
@@ -631,7 +706,11 @@ class BatchScheduleTests(unittest.TestCase):
 
         store = _FakeStore()
         scheduler = self._scheduler(store)
-        request = TaskVideoRequest(video_subject="Batch topic one")
+        request = TaskVideoRequest(
+            video_type="faceless",
+            video_title="Batch topic one",
+            video_description="Batch description.",
+        )
 
         with (
             patch("app.services.task.start"),
@@ -657,7 +736,11 @@ class BatchScheduleTests(unittest.TestCase):
 
         store = _FakeStore()
         scheduler = self._scheduler(store)
-        request = TaskVideoRequest(video_subject="Batch topic one")
+        request = TaskVideoRequest(
+            video_type="faceless",
+            video_title="Batch topic one",
+            video_description="Batch description.",
+        )
 
         with (
             patch("app.services.task.start"),
@@ -691,7 +774,11 @@ class BatchScheduleTests(unittest.TestCase):
 
         store = _FakeStore()
         scheduler = self._scheduler(store)
-        request = TaskVideoRequest(video_subject="Batch topic one")
+        request = TaskVideoRequest(
+            video_type="faceless",
+            video_title="Batch topic one",
+            video_description="Batch description.",
+        )
 
         with (
             patch("app.services.task.start"),
@@ -724,7 +811,11 @@ class BatchScheduleTests(unittest.TestCase):
 
         store = _FakeStore()
         scheduler = self._scheduler(store)
-        request = TaskVideoRequest(video_subject="Batch topic one")
+        request = TaskVideoRequest(
+            video_type="faceless",
+            video_title="Batch topic one",
+            video_description="Batch description.",
+        )
 
         with (
             patch("app.services.task.start"),
@@ -749,10 +840,6 @@ class BatchScheduleTests(unittest.TestCase):
         )
 
 
-
-
-
-
 class ReconcileTests(unittest.TestCase):
     def test_complete_task_becomes_ready(self):
         slot = {"id": "slot-1", "task_id": "t-1", "schedule_id": "sched-1", "charged_tokens": 2}
@@ -761,7 +848,8 @@ class ReconcileTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {"state": 1}
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=MagicMock(),
         )
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
@@ -787,16 +875,13 @@ class ReconcileTests(unittest.TestCase):
             "cost_usd": 0.1,
         }
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=MagicMock(),
         )
         with patch.object(rec_module, "track_event") as track:
-            self.assertEqual(
-                scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1
-            )
-        generated_calls = [
-            c for c in track.call_args_list if c[0][0] == "video_generated"
-        ]
+            self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
+        generated_calls = [c for c in track.call_args_list if c[0][0] == "video_generated"]
         self.assertEqual(len(generated_calls), 1)
         _, props = generated_calls[0][0]
         self.assertEqual(props["task_id"], "t-1")
@@ -828,7 +913,7 @@ class ReconcileTests(unittest.TestCase):
                 )
                 with patch.object(rec_module, "track_event") as track:
                     scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
-                (_, props), = [c[0] for c in track.call_args_list if c[0][0] == "video_generated"]
+                ((_, props),) = [c[0] for c in track.call_args_list if c[0][0] == "video_generated"]
                 self.assertEqual(props.get("batch_id"), expected)
 
     def test_reconcile_generated_event_omits_cost_usd_when_absent(self):
@@ -846,16 +931,13 @@ class ReconcileTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {"state": 1}
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=MagicMock(),
         )
         with patch.object(rec_module, "track_event") as track:
-            self.assertEqual(
-                scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1
-            )
-        generated_calls = [
-            c for c in track.call_args_list if c[0][0] == "video_generated"
-        ]
+            self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
+        generated_calls = [c for c in track.call_args_list if c[0][0] == "video_generated"]
         self.assertEqual(len(generated_calls), 1)
         _, props = generated_calls[0][0]
         self.assertNotIn("cost_usd", props)
@@ -873,7 +955,8 @@ class ReconcileTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {"state": -1, "error": "gpu exploded"}
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=MagicMock(),
         )
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
@@ -904,7 +987,8 @@ class ReconcileTests(unittest.TestCase):
             "error": task_error,
         }
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=MagicMock(),
         )
         with patch.object(
@@ -937,7 +1021,8 @@ class ReconcileTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {"state": -1, "error": None}
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=MagicMock(),
         )
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
@@ -960,14 +1045,24 @@ class ReconcileTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {"state": -1, "error": "gpu exploded"}
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=MagicMock(),
         )
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
         self.assertEqual(store.updates[0][1]["status"], "failed")
         self.assertEqual(
             store.refund_batch_calls,
-            [("user-1", "batch:sched-1", "batch:sched-1:slot:slot-1", 2, "Batch generation failed", "t-1")],
+            [
+                (
+                    "user-1",
+                    "batch:sched-1",
+                    "batch:sched-1:slot:slot-1",
+                    2,
+                    "Batch generation failed",
+                    "t-1",
+                )
+            ],
         )
 
     def test_failed_slot_refunds_the_stored_charge_not_the_list_price(self):
@@ -977,8 +1072,7 @@ class ReconcileTests(unittest.TestCase):
             "id": "slot-d",
             "task_id": "t-d",
             "user_id": "user-1",
-            "faceless": False,
-            "full_lipsync": True,
+            "video_type": "full_lipsync",
             "schedule_id": "sched-d",
             "charged_tokens": 5,
         }
@@ -1064,7 +1158,8 @@ class ReconcileTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {"state": -1, "error": "gpu exploded"}
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=MagicMock(),
         )
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
@@ -1099,12 +1194,8 @@ class ReconcileTests(unittest.TestCase):
             store=store, task_state=state, publish_video=MagicMock()
         )
         with patch.object(support_module, "track_event") as track:
-            self.assertEqual(
-                scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1
-            )
-        refund_calls = [
-            c for c in track.call_args_list if c[0][0] == "refund_issued"
-        ]
+            self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
+        refund_calls = [c for c in track.call_args_list if c[0][0] == "refund_issued"]
         self.assertEqual(len(refund_calls), 1)
         _, props = refund_calls[0][0]
         self.assertEqual(props["kind"], "batch_slot")
@@ -1139,12 +1230,8 @@ class ReconcileTests(unittest.TestCase):
             store=store, task_state=state, publish_video=MagicMock()
         )
         with patch.object(support_module, "track_event") as track:
-            self.assertEqual(
-                scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1
-            )
-        refund_calls = [
-            c for c in track.call_args_list if c[0][0] == "refund_issued"
-        ]
+            self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
+        refund_calls = [c for c in track.call_args_list if c[0][0] == "refund_issued"]
         self.assertEqual(refund_calls, [])
 
     def test_failed_slot_no_refund_issued_when_rpc_raises(self):
@@ -1171,9 +1258,7 @@ class ReconcileTests(unittest.TestCase):
         with patch.object(support_module, "track_event") as track:
             with self.assertRaises(RuntimeError):
                 scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
-        refund_calls = [
-            c for c in track.call_args_list if c[0][0] == "refund_issued"
-        ]
+        refund_calls = [c for c in track.call_args_list if c[0][0] == "refund_issued"]
         self.assertEqual(refund_calls, [])
 
     def test_failed_batch_task_without_user_id_still_marks_failed(self):
@@ -1188,12 +1273,14 @@ class ReconcileTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {"state": -1, "error": "gpu exploded"}
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=MagicMock(),
         )
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 1)
         self.assertEqual(store.updates[0][1]["status"], "failed")
         self.assertEqual(store.refund_batch_calls, [])
+
 
 class PublishDueTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -1213,6 +1300,7 @@ class PublishDueTests(unittest.TestCase):
         return {
             "id": "slot-1",
             "title": "Tokyo coffee",
+            "description": "Tokyo coffee description.",
             "task_id": "t-1",
             "schedules": {"user_id": "user-1", "providers": ["youtube"]},
         }
@@ -1222,12 +1310,14 @@ class PublishDueTests(unittest.TestCase):
         store.ready_due_slots = lambda now: [self._slot()]
         state = MagicMock()
         state.get_task.return_value = {
-            "state": 1, "videos": [self.video_path],
+            "state": 1,
+            "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         publish = MagicMock(return_value={"success": True, "results": [{"success": True}]})
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=publish,
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
@@ -1257,11 +1347,13 @@ class PublishDueTests(unittest.TestCase):
         store.ready_due_slots = lambda now: [self._slot()]
         state = MagicMock()
         state.get_task.return_value = {
-            "state": 1, "videos": [self.video_path],
+            "state": 1,
+            "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=MagicMock(return_value={"success": True, "results": [{"success": True}]}),
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
@@ -1280,11 +1372,13 @@ class PublishDueTests(unittest.TestCase):
         store.ready_due_slots = lambda now: [slot]
         state = MagicMock()
         state.get_task.return_value = {
-            "state": 1, "videos": [self.video_path],
+            "state": 1,
+            "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=MagicMock(return_value={"success": True, "results": [{"success": True}]}),
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
@@ -1302,11 +1396,13 @@ class PublishDueTests(unittest.TestCase):
         store.ready_due_slots = lambda now: [slot]
         state = MagicMock()
         state.get_task.return_value = {
-            "state": 1, "videos": [self.video_path],
+            "state": 1,
+            "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=MagicMock(return_value={"success": True, "results": [{"success": True}]}),
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
@@ -1314,7 +1410,7 @@ class PublishDueTests(unittest.TestCase):
         scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         metadata = scheduler.publisher.publish_video.call_args.kwargs["metadata"]
         self.assertIsInstance(metadata, LinkedInMetadata)
-        self.assertEqual(metadata.caption, "Tokyo coffee")
+        self.assertEqual(metadata.caption, "Tokyo coffee description.")
         self.assertEqual(metadata.account_ids, ("urn:li:person:1", "urn:li:organization:2"))
 
     def test_transient_publish_error_stays_publishing(self):
@@ -1326,12 +1422,14 @@ class PublishDueTests(unittest.TestCase):
         store.ready_due_slots = lambda now: [self._slot()]
         state = MagicMock()
         state.get_task.return_value = {
-            "state": 1, "videos": [self.video_path],
+            "state": 1,
+            "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         publish = MagicMock(side_effect=PublishError("boom"))
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=publish,
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
@@ -1354,13 +1452,15 @@ class PublishDueTests(unittest.TestCase):
         store.ready_due_slots = lambda now: [self._slot()]
         state = MagicMock()
         state.get_task.return_value = {
-            "state": 1, "videos": [self.video_path],
+            "state": 1,
+            "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         error = PublishError("E" * 150 + " api_key=TOPSECRET123 " + "F" * 150)
         publish = MagicMock(side_effect=error)
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=publish,
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
@@ -1373,24 +1473,16 @@ class PublishDueTests(unittest.TestCase):
                 wraps=analytics_module.scrub_error_text,
             ) as scrub,
         ):
-            published = scheduler.publish_due(
-                datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
-            )
+            published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         self.assertEqual(published, 0)
         # The scrubber received the whole message, not the truncated slice.
         reason_calls = [c for c in scrub.call_args_list if c[1].get("max_chars") == 200]
-        wrapped = [
-            c[0][0]
-            for c in reason_calls
-            if str(error) in c[0][0] and "youtube" in c[0][0]
-        ]
+        wrapped = [c[0][0] for c in reason_calls if str(error) in c[0][0] and "youtube" in c[0][0]]
         self.assertTrue(wrapped)
         scrubbed_input = wrapped[0]
         self.assertIn(str(error), scrubbed_input)
         self.assertIn("youtube", scrubbed_input)
-        failed_calls = [
-            c for c in track.call_args_list if c[0][0] == "video_publish_failed"
-        ]
+        failed_calls = [c for c in track.call_args_list if c[0][0] == "video_publish_failed"]
         self.assertEqual(len(failed_calls), 1)
         _, props = failed_calls[0][0]
         self.assertIn("[redacted]", props["reason"])
@@ -1420,6 +1512,7 @@ class PublishRetryLimitTests(unittest.TestCase):
         return {
             "id": "slot-1",
             "title": "Tokyo coffee",
+            "description": "Tokyo coffee description.",
             "task_id": "t-1",
             "faceless": True,
             "charged_tokens": 1,
@@ -1445,7 +1538,8 @@ class PublishRetryLimitTests(unittest.TestCase):
         state.get_task.return_value = task
         publish = MagicMock(side_effect=PublishError("boom"))
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=publish,
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
@@ -1548,12 +1642,15 @@ class PublishRetryLimitTests(unittest.TestCase):
         store.refund_batch_tokens = fake_refund
         state = MagicMock()
         state.get_task.return_value = {
-            "state": 1, "videos": [self.video_path],
+            "state": 1,
+            "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         publish = MagicMock(side_effect=PublishError("boom"))
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state, publish_video=publish,
+            store=store,
+            task_state=state,
+            publish_video=publish,
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
         scheduler.publisher.api_secret = "secret"
@@ -1561,9 +1658,7 @@ class PublishRetryLimitTests(unittest.TestCase):
             published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         self.assertEqual(published, 0)
         self.assertEqual(refund_kwargs.get("engine_task_id"), "t-1")
-        refund_calls = [
-            c for c in track.call_args_list if c[0][0] == "refund_issued"
-        ]
+        refund_calls = [c for c in track.call_args_list if c[0][0] == "refund_issued"]
         self.assertEqual(len(refund_calls), 1)
         _, props = refund_calls[0][0]
         self.assertEqual(props["kind"], "batch_slot")
@@ -1583,21 +1678,22 @@ class PublishRetryLimitTests(unittest.TestCase):
         store.refund_batch_tokens = lambda *args, **kwargs: False
         state = MagicMock()
         state.get_task.return_value = {
-            "state": 1, "videos": [self.video_path],
+            "state": 1,
+            "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         publish = MagicMock(side_effect=PublishError("boom"))
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state, publish_video=publish,
+            store=store,
+            task_state=state,
+            publish_video=publish,
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
         scheduler.publisher.api_secret = "secret"
         with patch.object(support_module, "track_event") as track:
             published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         self.assertEqual(published, 0)
-        refund_calls = [
-            c for c in track.call_args_list if c[0][0] == "refund_issued"
-        ]
+        refund_calls = [c for c in track.call_args_list if c[0][0] == "refund_issued"]
         self.assertEqual(refund_calls, [])
 
     def test_missing_r2_archive_marks_slot_failed_and_refunds_token(self):
@@ -1618,9 +1714,7 @@ class PublishRetryLimitTests(unittest.TestCase):
         with patch.object(pub_module, "track_event") as track:
             store, published = self._run_publish(self._slot(), video_storage_path=None)
         self.assertEqual(published, 0)
-        failed_calls = [
-            c for c in track.call_args_list if c[0][0] == "video_publish_failed"
-        ]
+        failed_calls = [c for c in track.call_args_list if c[0][0] == "video_publish_failed"]
         self.assertEqual(len(failed_calls), 1)
         _, props = failed_calls[0][0]
         self.assertEqual(props["reason"], "task has no verified R2 video archive")
@@ -1639,9 +1733,7 @@ class PublishRetryLimitTests(unittest.TestCase):
         with patch.object(pub_module, "track_event") as track:
             store, published = self._run_publish(self._slot(publish_attempts=2))
         self.assertEqual(published, 0)
-        failed_calls = [
-            c for c in track.call_args_list if c[0][0] == "video_publish_failed"
-        ]
+        failed_calls = [c for c in track.call_args_list if c[0][0] == "video_publish_failed"]
         self.assertEqual(len(failed_calls), 1)
         _, props = failed_calls[0][0]
         self.assertEqual(props["attempts"], 3)
@@ -1659,12 +1751,14 @@ class PublishRetryLimitTests(unittest.TestCase):
         store.refund_batch_tokens = MagicMock(side_effect=RuntimeError("rpc down"))
         state = MagicMock()
         state.get_task.return_value = {
-            "state": 1, "videos": [self.video_path],
+            "state": 1,
+            "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         publish = MagicMock(side_effect=PublishError("boom"))
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=publish,
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
@@ -1683,33 +1777,29 @@ class PublishRetryLimitTests(unittest.TestCase):
         store.ready_due_slots = lambda now: [self._slot(publish_attempts=2)]
 
         def soft_fail(user_id, generation_id, refund_key, amount, reason, engine_task_id=None):
-            store.refund_batch_calls.append(
-                (user_id, generation_id, refund_key, amount, reason)
-            )
+            store.refund_batch_calls.append((user_id, generation_id, refund_key, amount, reason))
             return False
 
         store.refund_batch_tokens = soft_fail
         state = MagicMock()
         state.get_task.return_value = {
-            "state": 1, "videos": [self.video_path],
+            "state": 1,
+            "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         publish = MagicMock(side_effect=PublishError("boom"))
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=publish,
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
         scheduler.publisher.api_secret = "secret"
         with patch("app.services.fill_schedule.publish.logger") as mock_logger:
-            published = scheduler.publish_due(
-                datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
-            )
+            published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         self.assertEqual(published, 0)
         self.assertEqual(store.updates[-1][1]["status"], "failed")
-        error_messages = [
-            str(call.args[0]) for call in mock_logger.error.call_args_list
-        ]
+        error_messages = [str(call.args[0]) for call in mock_logger.error.call_args_list]
         self.assertTrue(
             any("refund" in message for message in error_messages),
             f"expected a loud refund-failure log, got: {error_messages}",
@@ -1730,7 +1820,8 @@ class NotifyIntegrationTests(unittest.TestCase):
 
     def _scheduler(self, store, **kwargs):
         defaults = dict(
-            store=store, task_state=MagicMock(),
+            store=store,
+            task_state=MagicMock(),
             publish_video=MagicMock(return_value={"success": True, "results": [{"success": True}]}),
         )
         defaults.update(kwargs)
@@ -1741,24 +1832,58 @@ class NotifyIntegrationTests(unittest.TestCase):
             "id": "slot-1",
             "slot_at": "2026-09-07T12:00:00+00:00",
             "title": "Batch title one",
+            "description": "Agent description.",
+            "video_type": "faceless",
             "segments": [
-                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-                {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+                {
+                    "kind": "hook",
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
+                    "media": [
+                        {"url": "https://example.com/h0.jpg"},
+                        {"url": "https://example.com/h1.jpg"},
+                        {"url": "https://example.com/h2.jpg"},
+                    ],
+                },
+                {
+                    "kind": "body",
+                    "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.",
+                    "media": [
+                        {"url": "https://example.com/b0.jpg"},
+                        {"url": "https://example.com/b1.jpg"},
+                        {"url": "https://example.com/b2.jpg"},
+                        {"url": "https://example.com/b3.jpg"},
+                        {"url": "https://example.com/b4.jpg"},
+                        {"url": "https://example.com/b5.jpg"},
+                    ],
+                },
+                {
+                    "kind": "cta",
+                    "text": "Save this video before your next trip to Porto.",
+                    "media": [
+                        {"url": "https://example.com/c0.jpg"},
+                        {"url": "https://example.com/c1.jpg"},
+                    ],
+                },
             ],
             "schedules": {
                 "id": "sched-1",
-                                "user_id": "user-1",
+                "user_id": "user-1",
                 "providers": ["youtube"],
                 "youtube_account_ids": ["yt-1"],
-                "personas": {"name": "Ana", "niche": "travel", "language": "en", "voice_id": "calm"},
+                "personas": {
+                    "name": "Ana",
+                    "niche": "travel",
+                    "language": "en",
+                    "voice_id": "calm",
+                },
             },
         }
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
         notify = MagicMock()
         scheduler = self._scheduler(
-            store, notify=notify,
+            store,
+            notify=notify,
         )
         with patch.object(scheduler.generator, "_dispatch_generation"):
             scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
@@ -1773,14 +1898,42 @@ class NotifyIntegrationTests(unittest.TestCase):
             "id": "slot-2",
             "slot_at": "2026-09-07T12:00:00+00:00",
             "title": "Batch title",
+            "description": "Agent description.",
+            "video_type": "faceless",
             "segments": [
-                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-                {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+                {
+                    "kind": "hook",
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
+                    "media": [
+                        {"url": "https://example.com/h0.jpg"},
+                        {"url": "https://example.com/h1.jpg"},
+                        {"url": "https://example.com/h2.jpg"},
+                    ],
+                },
+                {
+                    "kind": "body",
+                    "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.",
+                    "media": [
+                        {"url": "https://example.com/b0.jpg"},
+                        {"url": "https://example.com/b1.jpg"},
+                        {"url": "https://example.com/b2.jpg"},
+                        {"url": "https://example.com/b3.jpg"},
+                        {"url": "https://example.com/b4.jpg"},
+                        {"url": "https://example.com/b5.jpg"},
+                    ],
+                },
+                {
+                    "kind": "cta",
+                    "text": "Save this video before your next trip to Porto.",
+                    "media": [
+                        {"url": "https://example.com/c0.jpg"},
+                        {"url": "https://example.com/c1.jpg"},
+                    ],
+                },
             ],
             "schedules": {
                 "id": "sched-2",
-                                "user_id": "user-1",
+                "user_id": "user-1",
                 "providers": ["youtube"],
                 "youtube_account_ids": ["yt-1"],
                 "personas": {"name": "Ana", "voice_id": "calm"},
@@ -1790,7 +1943,8 @@ class NotifyIntegrationTests(unittest.TestCase):
         store.pending_slots = lambda now: [slot]
         notify = MagicMock()
         scheduler = self._scheduler(
-            store, notify=notify,
+            store,
+            notify=notify,
         )
         with patch.object(
             scheduler.generator, "_dispatch_generation", side_effect=RuntimeError("gpu down")
@@ -1808,14 +1962,42 @@ class NotifyIntegrationTests(unittest.TestCase):
             "id": "slot-3",
             "slot_at": "2026-09-07T12:00:00+00:00",
             "title": "Batch title",
+            "description": "Agent description.",
+            "video_type": "faceless",
             "segments": [
-                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-                {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+                {
+                    "kind": "hook",
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
+                    "media": [
+                        {"url": "https://example.com/h0.jpg"},
+                        {"url": "https://example.com/h1.jpg"},
+                        {"url": "https://example.com/h2.jpg"},
+                    ],
+                },
+                {
+                    "kind": "body",
+                    "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.",
+                    "media": [
+                        {"url": "https://example.com/b0.jpg"},
+                        {"url": "https://example.com/b1.jpg"},
+                        {"url": "https://example.com/b2.jpg"},
+                        {"url": "https://example.com/b3.jpg"},
+                        {"url": "https://example.com/b4.jpg"},
+                        {"url": "https://example.com/b5.jpg"},
+                    ],
+                },
+                {
+                    "kind": "cta",
+                    "text": "Save this video before your next trip to Porto.",
+                    "media": [
+                        {"url": "https://example.com/c0.jpg"},
+                        {"url": "https://example.com/c1.jpg"},
+                    ],
+                },
             ],
             "schedules": {
                 "id": "sched-3",
-                                "user_id": "user-1",
+                "user_id": "user-1",
                 "providers": [],
                 "personas": {"name": "Ana"},
             },
@@ -1839,9 +2021,10 @@ class NotifyIntegrationTests(unittest.TestCase):
         slot = {
             "id": "slot-1",
             "title": "Tokyo coffee",
+            "description": "Tokyo coffee description.",
             "task_id": "t-1",
             "schedules": {
-                                "user_id": "user-1",
+                "user_id": "user-1",
                 "providers": ["youtube", "instagram"],
                 "personas": {"name": "Ana"},
             },
@@ -1850,7 +2033,8 @@ class NotifyIntegrationTests(unittest.TestCase):
         store.ready_due_slots = lambda now: [slot]
         state = MagicMock()
         state.get_task.return_value = {
-            "state": 1, "videos": [video_path],
+            "state": 1,
+            "videos": [video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         notify = MagicMock()
@@ -1878,11 +2062,12 @@ class NotifyIntegrationTests(unittest.TestCase):
         slot = {
             "id": "slot-1",
             "title": "Tokyo coffee",
+            "description": "Tokyo coffee description.",
             "task_id": "t-1",
             "publish_attempts": 2,
             "charged_tokens": 1,
             "schedules": {
-                                "user_id": "user-1",
+                "user_id": "user-1",
                 "providers": ["youtube"],
                 "personas": {"name": "Ana"},
             },
@@ -1891,12 +2076,15 @@ class NotifyIntegrationTests(unittest.TestCase):
         store.ready_due_slots = lambda now: [slot]
         state = MagicMock()
         state.get_task.return_value = {
-            "state": 1, "videos": [video_path],
+            "state": 1,
+            "videos": [video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         notify = MagicMock()
         scheduler = self._scheduler(
-            store, task_state=state, notify=notify,
+            store,
+            task_state=state,
+            notify=notify,
             publish_video=MagicMock(side_effect=PublishError("quota exceeded")),
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
@@ -1913,24 +2101,58 @@ class NotifyIntegrationTests(unittest.TestCase):
             "id": "slot-1",
             "slot_at": "2026-09-07T12:00:00+00:00",
             "title": "Batch title",
+            "description": "Agent description.",
+            "video_type": "faceless",
             "segments": [
-                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-                {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+                {
+                    "kind": "hook",
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
+                    "media": [
+                        {"url": "https://example.com/h0.jpg"},
+                        {"url": "https://example.com/h1.jpg"},
+                        {"url": "https://example.com/h2.jpg"},
+                    ],
+                },
+                {
+                    "kind": "body",
+                    "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.",
+                    "media": [
+                        {"url": "https://example.com/b0.jpg"},
+                        {"url": "https://example.com/b1.jpg"},
+                        {"url": "https://example.com/b2.jpg"},
+                        {"url": "https://example.com/b3.jpg"},
+                        {"url": "https://example.com/b4.jpg"},
+                        {"url": "https://example.com/b5.jpg"},
+                    ],
+                },
+                {
+                    "kind": "cta",
+                    "text": "Save this video before your next trip to Porto.",
+                    "media": [
+                        {"url": "https://example.com/c0.jpg"},
+                        {"url": "https://example.com/c1.jpg"},
+                    ],
+                },
             ],
             "schedules": {
                 "id": "sched-1",
-                                "user_id": "user-1",
+                "user_id": "user-1",
                 "providers": ["youtube"],
                 "youtube_account_ids": ["yt-1"],
-                "personas": {"name": "Ana", "niche": "travel", "language": "en", "voice_id": "calm"},
+                "personas": {
+                    "name": "Ana",
+                    "niche": "travel",
+                    "language": "en",
+                    "voice_id": "calm",
+                },
             },
         }
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
         notify = MagicMock(side_effect=RuntimeError("discord exploded"))
         scheduler = self._scheduler(
-            store, notify=notify,
+            store,
+            notify=notify,
         )
         # notify raising must not interrupt the stage nor mark an error
         with patch.object(scheduler.generator, "_dispatch_generation"):
@@ -1967,9 +2189,10 @@ class CoverageGapTests(unittest.TestCase):
         return {
             "id": "slot-1",
             "title": "Tokyo coffee",
+            "description": "Tokyo coffee description.",
             "task_id": "t-1",
             "schedules": {
-                                "user_id": "user-1",
+                "user_id": "user-1",
                 "providers": ["youtube"],
                 "personas": {"name": "Ana"},
             },
@@ -1977,7 +2200,8 @@ class CoverageGapTests(unittest.TestCase):
 
     def _scheduler(self, store, **kwargs):
         defaults = dict(
-            store=store, task_state=MagicMock(),
+            store=store,
+            task_state=MagicMock(),
             publish_video=MagicMock(),
         )
         defaults.update(kwargs)
@@ -1986,8 +2210,6 @@ class CoverageGapTests(unittest.TestCase):
     # -- compute_slots with explicit times ("HH:MM") --------------------------
 
     # -- generate_topic -------------------------------------------------------
-
-
 
     # -- build_persona_params (todas as variantes) ----------------------------
     def test_persona_params_avatar_url_and_voice_id(self):
@@ -2035,9 +2257,11 @@ class CoverageGapTests(unittest.TestCase):
     def test_persona_params_faceless_drops_visual_identity(self):
         # A faceless post contributes only the voice: no avatar_url and no
         # photo_url even when the persona has both, so the engine renders
-        # stock footage. Voice resolution is unaffected.
+        # the agent's images. Voice resolution is unaffected.
         store = MagicMock()
-        store.signed_url = MagicMock(side_effect=AssertionError("must not sign a photo for a faceless post"))
+        store.signed_url = MagicMock(
+            side_effect=AssertionError("must not sign a photo for a faceless post")
+        )
         params = fs.build_persona_params(
             {
                 "name": "Ana",
@@ -2046,32 +2270,20 @@ class CoverageGapTests(unittest.TestCase):
                 "voice_id": "calm",
             },
             store=store,
-            faceless=True,
+            video_type="faceless",
         )
         self.assertEqual(params["name"], "Ana")
         self.assertEqual(params["voice_id"], "calm")
         self.assertNotIn("avatar_url", params)
         self.assertNotIn("photo_url", params)
 
-    # -- slot_faceless (per-post flag on scheduled_posts) ----------------------
-    def test_slot_faceless_requires_literal_true(self):
-        # Only the literal True counts as "no face": legacy rows (NULL, the
-        # column postdates them) and malformed values price and render the
-        # expensive with-face case, never the cheap one.
-        self.assertTrue(fs.slot_faceless({"faceless": True}))
-        self.assertFalse(fs.slot_faceless({"faceless": False}))
-        self.assertFalse(fs.slot_faceless({"faceless": None}))
-        self.assertFalse(fs.slot_faceless({}))
-        self.assertFalse(fs.slot_faceless({"faceless": 1}))
-        self.assertFalse(fs.slot_faceless({"faceless": "true"}))
-
     # -- slot_refund_amount reads the stored charge (migration 045) ----------
     def test_slot_refund_amount_returns_the_stored_charge(self):
         self.assertEqual(fs.slot_refund_amount({"id": "s", "charged_tokens": 15}), 15)
         self.assertEqual(fs.slot_refund_amount({"id": "s", "charged_tokens": 1}), 1)
 
-    def test_slot_refund_amount_ignores_the_price_flags(self):
-        slot = {"id": "s", "faceless": True, "full_lipsync": True, "charged_tokens": 7}
+    def test_slot_refund_amount_ignores_the_video_type(self):
+        slot = {"id": "s", "video_type": "faceless", "charged_tokens": 7}
         self.assertEqual(fs.slot_refund_amount(slot), 7)
 
     def test_slot_refund_amount_is_none_for_a_free_slot(self):
@@ -2099,12 +2311,18 @@ class CoverageGapTests(unittest.TestCase):
     def test_due_slot_without_videos_fails(self):
         store = _FakeStore()
         store.ready_due_slots = lambda now: [
-            {"id": "slot-x", "title": "T", "task_id": "t-1", "schedules": {"user_id": "u1", "providers": []}}
+            {
+                "id": "slot-x",
+                "title": "T",
+                "task_id": "t-1",
+                "schedules": {"user_id": "u1", "providers": []},
+            }
         ]
         state = MagicMock()
         state.get_task.return_value = {"state": 1, "videos": []}
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=MagicMock(),
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
@@ -2124,16 +2342,15 @@ class CoverageGapTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {"state": 1, "videos": []}
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=MagicMock(),
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
         scheduler.publisher.api_secret = "secret"
         with patch.object(pub_module, "track_event") as track:
             scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
-        failed_calls = [
-            c for c in track.call_args_list if c[0][0] == "video_publish_failed"
-        ]
+        failed_calls = [c for c in track.call_args_list if c[0][0] == "video_publish_failed"]
         self.assertEqual(len(failed_calls), 1)
         _, props = failed_calls[0][0]
         self.assertEqual(props["reason"], "task has no finished videos")
@@ -2145,13 +2362,12 @@ class CoverageGapTests(unittest.TestCase):
     # -- reconcile with missing task ------------------------------------------
     def test_reconcile_skips_unknown_task(self):
         store = _FakeStore()
-        store.generating_slots = lambda: [
-            {"id": "slot-1", "task_id": "ghost", "schedules": {}}
-        ]
+        store.generating_slots = lambda: [{"id": "slot-1", "task_id": "ghost", "schedules": {}}]
         state = MagicMock()
         state.get_task.return_value = None
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
+            task_state=state,
             publish_video=MagicMock(),
         )
         self.assertEqual(scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC)), 0)
@@ -2166,15 +2382,14 @@ class CoverageGapTests(unittest.TestCase):
         store.generating_slots = lambda: []
         store.ready_due_slots = lambda now: []
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=MagicMock(),
+            store=store,
+            task_state=MagicMock(),
             publish_video=MagicMock(),
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
         scheduler.publisher.api_secret = "secret"
         results = scheduler.run_once(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
-        self.assertEqual(
-            sorted(results.keys()), ["generated", "published", "reconciled"]
-        )
+        self.assertEqual(sorted(results.keys()), ["generated", "published", "reconciled"])
 
     # -- helpers ---------------------------------------------------------------
     def test_persona_for_raises_without_embed(self):
@@ -2187,6 +2402,7 @@ class CoverageGapTests(unittest.TestCase):
             "bluesky",
             "x" * 500,
             {"bluesky_account_ids": ["did:1"]},
+            "x" * 500,
         )
         from app.services.upload_publisher import BlueskyMetadata, BLUESKY_CAPTION_MAX_GRAPHEMES
 
@@ -2195,7 +2411,7 @@ class CoverageGapTests(unittest.TestCase):
 
     def test_metadata_for_unsupported_provider_raises(self):
         with self.assertRaises(RuntimeError) as ctx:
-            fs.metadata_for("tiktok", "title", {})
+            fs.metadata_for("tiktok", "title", {}, "Agent description.")
         self.assertIn("unsupported schedule provider", str(ctx.exception))
 
     # -- _validate_publish_plan with bluesky+linkedin (full path) ----------------
@@ -2208,12 +2424,12 @@ class CoverageGapTests(unittest.TestCase):
             "linkedin_account_ids": ["urn:li:person:1"],
         }
         # does not raise
-        fs.validate_publish_plan(schedule, "title")
+        fs.validate_publish_plan(schedule, "title", "Agent description.")
 
     def test_validate_publish_plan_rejects_bluesky_without_accounts(self):
         with self.assertRaises(ValueError) as ctx:
             fs.validate_publish_plan(
-                {"providers": ["bluesky"], "bluesky_account_ids": []}, ""
+                {"providers": ["bluesky"], "bluesky_account_ids": []}, "", "Agent description."
             )
         self.assertIn("bluesky", str(ctx.exception))
 
@@ -2234,7 +2450,6 @@ class CoverageGapTests(unittest.TestCase):
         time_module.sleep(0.15)  # TICK_SECONDS=60 real; thread runs 1x immediately
         self.assertGreaterEqual(len(ticks), 1)
 
-
     # -- atomic claim (C2: never re-publish) ----------------------------------
     def test_publish_claims_slot_before_publishing(self):
         store = _FakeStore()
@@ -2242,7 +2457,8 @@ class CoverageGapTests(unittest.TestCase):
         store.ready_due_slots = lambda now: [self._slot()]
         state = MagicMock()
         state.get_task.return_value = {
-            "state": 1, "videos": [self.video_path],
+            "state": 1,
+            "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         publish = MagicMock(return_value={"success": True, "results": [{"success": True}]})
@@ -2269,7 +2485,8 @@ class CoverageGapTests(unittest.TestCase):
         store.ready_due_slots = lambda now: [self._slot()]
         state = MagicMock()
         state.get_task.return_value = {
-            "state": 1, "videos": [self.video_path],
+            "state": 1,
+            "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         publish = MagicMock()
@@ -2292,12 +2509,15 @@ class CoverageGapTests(unittest.TestCase):
         store.ready_due_slots = lambda now: [self._slot()]
         state = MagicMock()
         state.get_task.return_value = {
-            "state": 1, "videos": [self.video_path],
+            "state": 1,
+            "videos": [self.video_path],
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         notify = MagicMock()
         scheduler = self._scheduler(
-            store, task_state=state, notify=notify,
+            store,
+            task_state=state,
+            notify=notify,
             publish_video=MagicMock(side_effect=PublishError("boom")),
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
@@ -2318,7 +2538,8 @@ class CoverageGapTests(unittest.TestCase):
         store.resumable_publishing_slots = MagicMock(
             side_effect=ConnectionError(
                 "HTTPSConnectionPool(host='db.example', port=443): Max retries "
-                "exceeded with url: /rest/v1/scheduled_posts?select=" + "x" * 600
+                "exceeded with url: /rest/v1/scheduled_posts?select="
+                + "x" * 600
                 + " (Caused by NameResolutionError('Failed to resolve'))"
             )
         )
@@ -2565,17 +2786,50 @@ class CoverageGapTests(unittest.TestCase):
             "id": "slot-1",
             "slot_at": "2026-09-07T12:00:00+00:00",
             "title": "Batch title",
+            "description": "Agent description.",
+            "video_type": "faceless",
             "segments": [
-                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-                {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+                {
+                    "kind": "hook",
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
+                    "media": [
+                        {"url": "https://example.com/h0.jpg"},
+                        {"url": "https://example.com/h1.jpg"},
+                        {"url": "https://example.com/h2.jpg"},
+                    ],
+                },
+                {
+                    "kind": "body",
+                    "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.",
+                    "media": [
+                        {"url": "https://example.com/b0.jpg"},
+                        {"url": "https://example.com/b1.jpg"},
+                        {"url": "https://example.com/b2.jpg"},
+                        {"url": "https://example.com/b3.jpg"},
+                        {"url": "https://example.com/b4.jpg"},
+                        {"url": "https://example.com/b5.jpg"},
+                    ],
+                },
+                {
+                    "kind": "cta",
+                    "text": "Save this video before your next trip to Porto.",
+                    "media": [
+                        {"url": "https://example.com/c0.jpg"},
+                        {"url": "https://example.com/c1.jpg"},
+                    ],
+                },
             ],
             "schedules": {
                 "id": "sched-1",
-                                "user_id": "user-1",
+                "user_id": "user-1",
                 "providers": ["youtube"],
                 "youtube_account_ids": ["yt-1"],
-                "personas": {"name": "Ana", "niche": "travel", "language": "en", "voice_id": "calm"},
+                "personas": {
+                    "name": "Ana",
+                    "niche": "travel",
+                    "language": "en",
+                    "voice_id": "calm",
+                },
             },
         }
         store = _FakeStore()
@@ -2588,9 +2842,7 @@ class CoverageGapTests(unittest.TestCase):
         task_id, _, _ = dispatch_generation.call_args.args
         # deterministic slot uuid → re-dispatch after a crash reuses the same
         # task id instead of creating a second orphan task.
-        self.assertEqual(
-            task_id, fs.new_task_id({"id": "slot-1"})
-        )
+        self.assertEqual(task_id, fs.new_task_id({"id": "slot-1"}))
 
     # -- horizon validated (M1) --------------------------------------------------
     def test_invalid_horizon_falls_back_to_default(self):
@@ -2623,9 +2875,7 @@ class CoverageGapTests(unittest.TestCase):
         # A generate failure MUST NOT block reconcile/publish in the same tick.
         store = _FakeStore()
         store.pending_slots = MagicMock(side_effect=RuntimeError("supabase down"))
-        store.generating_slots = lambda: [
-            {"id": "s1", "task_id": "t1", "schedules": {}}
-        ]
+        store.generating_slots = lambda: [{"id": "s1", "task_id": "t1", "schedules": {}}]
         store.ready_due_slots = lambda now: []
         state = MagicMock()
         state.get_task.return_value = {"state": 1}
@@ -2684,11 +2934,6 @@ class CoverageGapTests(unittest.TestCase):
         )
 
 
-
-
-
-
-
 if __name__ == "__main__":
     unittest.main()
 
@@ -2703,12 +2948,40 @@ class BatchDispatchTests(unittest.TestCase):
             "id": "slot-batch-1",
             "slot_at": "2026-09-08T09:00:00+00:00",
             "title": title,
+            "description": "Agent description.",
+            "video_type": "hook_lipsync",
             "charged_tokens": 2,
             "segments": [
-            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-            {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-            {"kind": "cta", "text": "Save this video before your next trip to Porto."},
-        ],
+                {
+                    "kind": "hook",
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
+                    "media": [
+                        {"url": "https://example.com/h0.jpg"},
+                        {"url": "https://example.com/h1.jpg"},
+                        {"url": "https://example.com/h2.jpg"},
+                    ],
+                },
+                {
+                    "kind": "body",
+                    "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.",
+                    "media": [
+                        {"url": "https://example.com/b0.jpg"},
+                        {"url": "https://example.com/b1.jpg"},
+                        {"url": "https://example.com/b2.jpg"},
+                        {"url": "https://example.com/b3.jpg"},
+                        {"url": "https://example.com/b4.jpg"},
+                        {"url": "https://example.com/b5.jpg"},
+                    ],
+                },
+                {
+                    "kind": "cta",
+                    "text": "Save this video before your next trip to Porto.",
+                    "media": [
+                        {"url": "https://example.com/c0.jpg"},
+                        {"url": "https://example.com/c1.jpg"},
+                    ],
+                },
+            ],
             "schedules": {
                 "id": "sched-batch-1",
                 "user_id": "user-1",
@@ -2762,7 +3035,6 @@ class BatchDispatchTests(unittest.TestCase):
             enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
         self.assertEqual(enqueued, 2)
         self.assertEqual(dispatch.call_count, 2)
-
 
 
 class PostIdentityTests(unittest.TestCase):

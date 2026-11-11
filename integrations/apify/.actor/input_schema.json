@@ -13,9 +13,15 @@
     "title": {
       "title": "Video title",
       "type": "string",
-      "description": "Label of the scheduled post.",
+      "description": "Label of the scheduled post (at most 100 characters).",
       "editor": "textfield",
       "prefill": "Why short videos win"
+    },
+    "description": {
+      "title": "Video description",
+      "type": "string",
+      "description": "Publish caption for the video. When omitted, the hook is used as the description.",
+      "editor": "textarea"
     },
     "hook": {
       "title": "Hook",
@@ -29,7 +35,7 @@
       "type": "string",
       "description": "Main script.",
       "editor": "textarea",
-      "prefill": "Short vertical videos stop the scroll because they show a face, a clear idea and movement in the first moments. You do not need a camera, a studio or an editor to make them every day. Write the idea once as a hook, a body and a call to action, and let an AI persona present it for you, with captions and b-roll that match what you say."
+      "prefill": "Short vertical videos stop the scroll because they show a face, a clear idea and movement in the first moments. You do not need a camera, a studio or an editor to make them every day. Write the idea once as a hook, a body and a call to action, and let an AI persona present it for you, with captions and images that match what you say."
     },
     "cta": {
       "title": "Call to action",
@@ -63,29 +69,28 @@
     "faceless": {
       "title": "Faceless video",
       "type": "boolean",
-      "description": "No face on screen, only b-roll or animated svg (cheapest). Defaults to true when no persona is set."
-    },
-    "facelessMaterial": {
-      "title": "Faceless material",
-      "type": "string",
-      "description": "What fills a faceless video: stock b-roll, animated svg scenes, or only your own images (set images).",
-      "editor": "select",
-      "enum": [
-        "broll",
-        "svg",
-        "images"
-      ],
-      "enumTitles": [
-        "Stock b-roll",
-        "Animated svg",
-        "Only my images"
-      ]
+      "description": "No face on screen: only your own images. Defaults to true when no persona is set."
     },
     "images": {
       "title": "Images",
       "type": "array",
-      "description": "Only with facelessMaterial images: public https image URLs, in order, about one image per 3 seconds of speech, at most 30. They are split across the hook, each body paragraph (split the body with blank lines) and the CTA. Each image fills the screen with a slow zoom for its share of that part; no stock is added. Use images you have the rights to.",
-      "editor": "stringList"
+      "description": "Required unless fullLipsync: public https image URLs, in order, about one image per 3 seconds of speech, at most 30. They are split across the hook, each body paragraph (split the body with blank lines) and the CTA. Each image fills the screen with a slow zoom for its share of that part; no stock is added. Replace the prefilled placeholders with your own image URLs. Use images you have the rights to.",
+      "editor": "stringList",
+      "prefill": [
+        "https://example.com/image-1.jpg",
+        "https://example.com/image-2.jpg",
+        "https://example.com/image-3.jpg",
+        "https://example.com/image-4.jpg",
+        "https://example.com/image-5.jpg",
+        "https://example.com/image-6.jpg",
+        "https://example.com/image-7.jpg",
+        "https://example.com/image-8.jpg",
+        "https://example.com/image-9.jpg",
+        "https://example.com/image-10.jpg",
+        "https://example.com/image-11.jpg",
+        "https://example.com/image-12.jpg",
+        "https://example.com/image-13.jpg"
+      ]
     },
     "fullLipsync": {
       "title": "Full lip-sync",

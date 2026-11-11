@@ -1,5 +1,5 @@
 //---------------
-// Real end-to-end for the opening layout (persona on top / b-roll below).
+// Real end-to-end for the opening layout (persona on top / images below).
 //
 // The persona is created through the UI for real and the opening layout
 // choice is asserted on the persisted persona. The old second test (post

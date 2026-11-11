@@ -1,15 +1,12 @@
-"""The images material lives in the engine validator and the shared TS validator.
-
-The web and the MCP validate segments with the shared TS file (generated
+"""The web and the MCP validate segments with the shared TS file (generated
 copies) before charging, and the engine validates again on the request. The
-material name, the media cap and the cap of the other materials must agree,
-or one side accepts an images video the other rejects.
+media cap and the cap of the other materials must agree, or one side accepts
+an images video the other rejects.
 """
 
-import re
 from pathlib import Path
 
-from app.services import faceless_material, script_segments
+from app.services import script_segments
 
 
 def _shared_text() -> str:
@@ -27,11 +24,6 @@ def _export_line(name: str) -> str:
     return line
 
 
-def test_material_name_matches_the_shared_validator():
-    match = re.search(r"=\s*'([a-z]+)';", _export_line("IMAGES_MATERIAL"))
-    assert match is not None and match.group(1) == faceless_material.IMAGES
-
-
 def test_image_density_constants_match_the_shared_validator():
     from app.services import image_density
 
@@ -41,7 +33,7 @@ def test_image_density_constants_match_the_shared_validator():
     assert _export_line("MAX_SEGMENTS") == f"export const MAX_SEGMENTS = {script_segments.MAX_SEGMENTS};"
 
 
-def test_other_materials_media_cap_matches_the_shared_validator():
+def test_full_lipsync_media_cap_matches_the_shared_validator():
     assert _export_line("MAX_MEDIAS") == f"export const MAX_MEDIAS = {script_segments.MAX_MEDIAS};"
 
 

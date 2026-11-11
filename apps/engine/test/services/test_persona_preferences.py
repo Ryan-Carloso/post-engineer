@@ -8,7 +8,9 @@ from app.models.schema import TaskVideoRequest
 class TestPersonaPreferences(unittest.TestCase):
     def test_task_accepts_persona_and_all_content_preferences(self):
         request = TaskVideoRequest(
-            video_subject="Morning in Lisbon",
+            video_title="Morning in Lisbon",
+            video_description="Test description.",
+            video_type="hook_lipsync",
             video_language="pt",
             video_aspect="16:9",
             paragraph_number=3,
@@ -26,7 +28,9 @@ class TestPersonaPreferences(unittest.TestCase):
 
     def test_missing_preferences_keep_moneyprint_defaults(self):
         request = TaskVideoRequest(
-            video_subject="Morning in Lisbon",
+            video_title="Morning in Lisbon",
+            video_description="Test description.",
+            video_type="hook_lipsync",
             persona={
                 "name": "Ana",
                 "photo_url": "https://cdn.example.test/ana.png",
@@ -49,7 +53,9 @@ class TestPersonaPreferences(unittest.TestCase):
         # not break the segments pipeline: pydantic's default extra
         # behaviour drops them instead of failing the request.
         request = TaskVideoRequest(
-            video_subject="Morning in Lisbon",
+            video_title="Morning in Lisbon",
+            video_description="Test description.",
+            video_type="hook_lipsync",
             persona={
                 "name": "Ana",
                 "photo_url": "https://cdn.example.test/ana.png",
@@ -66,13 +72,28 @@ class TestPersonaPreferences(unittest.TestCase):
 
     def test_invalid_video_aspect_is_rejected(self):
         with self.assertRaises(ValidationError):
-            TaskVideoRequest(video_subject="test", video_aspect="4:3")
+            TaskVideoRequest(
+                video_title="test",
+                video_description="Test description.",
+                video_type="faceless",
+                video_aspect="4:3",
+            )
 
     def test_paragraph_number_must_be_between_one_and_ten(self):
         with self.assertRaises(ValidationError):
-            TaskVideoRequest(video_subject="test", paragraph_number=0)
+            TaskVideoRequest(
+                video_title="test",
+                video_description="Test description.",
+                video_type="faceless",
+                paragraph_number=0,
+            )
         with self.assertRaises(ValidationError):
-            TaskVideoRequest(video_subject="test", paragraph_number=11)
+            TaskVideoRequest(
+                video_title="test",
+                video_description="Test description.",
+                video_type="faceless",
+                paragraph_number=11,
+            )
 
 
 if __name__ == "__main__":

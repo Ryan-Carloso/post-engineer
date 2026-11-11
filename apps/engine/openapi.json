@@ -362,7 +362,7 @@
             "type": "integer"
           },
           "provider": {
-            "default": "pexels",
+            "default": "local",
             "title": "Provider",
             "type": "string"
           },
@@ -377,15 +377,41 @@
       },
       "MediaCheckRequest": {
         "properties": {
+          "media_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Id"
+          },
           "url": {
-            "maxLength": 2048,
-            "title": "Url",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "video_aspect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoAspect"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
-        "required": [
-          "url"
-        ],
         "title": "MediaCheckRequest",
         "type": "object"
       },
@@ -566,20 +592,6 @@
               }
             ],
             "title": "Media"
-          },
-          "terms": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Terms"
           },
           "text": {
             "title": "Text",
@@ -981,7 +993,7 @@
                 "type": "null"
               }
             ],
-            "default": 0.2,
+            "default": 0.09,
             "title": "Bgm Volume"
           },
           "custom_audio_file": {
@@ -999,16 +1011,6 @@
             "default": 50.0,
             "title": "Custom Position",
             "type": "number"
-          },
-          "faceless_material": {
-            "default": "broll",
-            "enum": [
-              "broll",
-              "svg",
-              "images"
-            ],
-            "title": "Faceless Material",
-            "type": "string"
           },
           "font_name": {
             "anyOf": [
@@ -1030,11 +1032,6 @@
             "title": "Font Size",
             "type": "integer"
           },
-          "full_lipsync": {
-            "default": false,
-            "title": "Full Lipsync",
-            "type": "boolean"
-          },
           "generation_id": {
             "anyOf": [
               {
@@ -1045,16 +1042,6 @@
               }
             ],
             "title": "Generation Id"
-          },
-          "lipsync_enabled": {
-            "default": true,
-            "title": "Lipsync Enabled",
-            "type": "boolean"
-          },
-          "match_materials_to_script": {
-            "default": true,
-            "title": "Match Materials To Script",
-            "type": "boolean"
           },
           "music_mood": {
             "anyOf": [
@@ -1254,6 +1241,12 @@
             "title": "Video Cta",
             "type": "string"
           },
+          "video_description": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Video Description",
+            "type": "string"
+          },
           "video_language": {
             "anyOf": [
               {
@@ -1294,25 +1287,11 @@
             "title": "Video Script",
             "type": "string"
           },
-          "video_subject": {
-            "maxLength": 500,
-            "title": "Video Subject",
+          "video_title": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Video Title",
             "type": "string"
-          },
-          "video_terms": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "items": {},
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Video Terms"
           },
           "video_transition_mode": {
             "anyOf": [
@@ -1323,6 +1302,9 @@
                 "type": "null"
               }
             ]
+          },
+          "video_type": {
+            "$ref": "#/components/schemas/VideoType"
           },
           "voice_name": {
             "anyOf": [
@@ -1378,7 +1360,9 @@
           }
         },
         "required": [
-          "video_subject"
+          "video_title",
+          "video_description",
+          "video_type"
         ],
         "title": "TaskVideoRequest",
         "type": "object"
@@ -1531,6 +1515,16 @@
           "SlideOut"
         ],
         "title": "VideoTransitionMode",
+        "type": "string"
+      },
+      "VideoType": {
+        "description": "The one video mode (issue #542 follow-up): it replaces the\nfaceless / full_lipsync / lipsync_enabled boolean combination.\n\nfull_lipsync: the whole narration renders as talking head; a persona\n    with a photo is required. 8 tokens at face quality ok, 15 at\n    very_good.\nhook_lipsync: lip sync only on the hook, then the agent's images; a\n    persona with a photo is required. 2 tokens ok, 3 very_good.\nfaceless: only the agent's images; a persona is optional, and when one\n    is present only its voice and niche are used, never its face.\n    1 token.",
+        "enum": [
+          "full_lipsync",
+          "hook_lipsync",
+          "faceless"
+        ],
+        "title": "VideoType",
         "type": "string"
       }
     }
@@ -1949,7 +1943,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Mechanically check one image URL (MCP check_media)",
+        "summary": "Mechanically check one image URL or media id (MCP check_media)",
         "tags": [
           "V1"
         ]

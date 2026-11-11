@@ -22,7 +22,7 @@ override video-generation behaviour.
   other field that changes the *look, sound, or structure* of the output.
 
 ### Allowed in test files
-- `video_subject`, `video_language`, `voice_name`, `video_aspect` — i.e.
+- `video_title`, `video_description`, `video_language`, `voice_name`, `video_aspect` — i.e.
   the **what** (the topic and its language), not the **how** (rendering /
   caption style).
 - Assertions on the produced files (exists, non-empty, valid mp4).
@@ -105,7 +105,7 @@ unavailable, so this is safe on any host.
 ## 6. Tests
 
 - Test runner: `pytest`; tests may use either pytest functions or `unittest.TestCase`.
-- Integration tests (anything hitting real TTS / Pexels) MUST be gated
+- Integration tests (anything hitting real TTS) MUST be gated
   behind `MPT_RUN_INTEGRATION_TESTS=1` via `@unittest.skipUnless(...)`.
 - A test that calls `tm.start(...)` end-to-end is for verifying that the
   **production defaults** produce a valid video — not for redefining those

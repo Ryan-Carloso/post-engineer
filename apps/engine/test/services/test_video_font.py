@@ -40,7 +40,9 @@ class TestMissingFontFallback:
 
         with patch.object(video, "_resolve_font_path", side_effect=fake_resolve):
             params = video.VideoParams(
-                video_subject="test",
+                video_title="test",
+                video_description="Test description.",
+                video_type="faceless",
                 font_name="STHeitiMedium.ttc",
                 subtitle_enabled=True,
             )
@@ -53,7 +55,9 @@ class TestMissingFontFallback:
             video, "_resolve_font_path", side_effect=ValueError("file does not exist")
         ):
             params = video.VideoParams(
-                video_subject="test",
+                video_title="test",
+                video_description="Test description.",
+                video_type="faceless",
                 font_name="STHeitiMedium.ttc",
                 subtitle_enabled=True,
             )

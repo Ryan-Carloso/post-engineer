@@ -38,7 +38,12 @@ def _direct_data(**overrides):
 
 def _row(**overrides):
     row = {
-        "params": {"video_subject": "myth busting", "generation_id": "g1"},
+        "params": {
+            "video_title": "myth busting",
+            "video_description": "Agent description.",
+            "video_type": "faceless",
+            "generation_id": "g1",
+        },
         "publish_mode": "asap",
         "status": "running",
     }
@@ -123,7 +128,7 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         state.update_task.assert_not_called()
 
     def test_invalid_params_not_claimed(self):
-        state = _state_with_rows([_row(params={"video_subject": 12345})])
+        state = _state_with_rows([_row(params={"video_title": 12345})])
         with patch.object(orphan_requeue.logger, "error"):
             claimed = self._claimed(state, "t-1", _direct_data())
         self.assertFalse(claimed)
@@ -134,19 +139,29 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         # object per segment; triage normalizes it instead of dropping
         # the prepaid orphan as unvalidatable.
         params = {
-            "video_subject": "myth busting",
+            "video_title": "myth busting",
+            "video_description": "Agent description.",
+            "video_type": "full_lipsync",
             "generation_id": "g1",
+            "persona": {
+                "name": "Ana",
+                "photo_url": "https://e.com/p.jpg",
+                "voice_id": "calm",
+            },
+            # Full lip-sync: a single legacy photo can never satisfy the
+            # images density rule on a long body, and media is optional here.
             "segments": [
                 {
                     "kind": "hook",
                     "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time.",
+                    "media": [{"url": f"https://e.com/h{i}.jpg"} for i in range(3)],
                 },
                 {
                     "kind": "body",
                     "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold at sunset before heading home through the old town streets.",
                     "media": {"mediaId": "abc123def456abc123def456abc12345.jpg"},
                 },
-                {"kind": "cta", "text": "Follow for more Porto walks every week."},
+                {"kind": "cta", "text": "Follow for more Porto walks every week.", "media": [{"url": "https://e.com/c0.jpg"}]},
             ],
         }
         state = _state_with_rows([_row(params=params)])
@@ -213,7 +228,7 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         job = direct_redispatch._pending_direct_redispatches[0]
         self.assertEqual(job.task_id, "t-1")
         self.assertEqual(job.requeue_count, 1)
-        self.assertEqual(job.request.video_subject, "myth busting")
+        self.assertEqual(job.request.video_title, "myth busting")
         self.assertEqual(job.request.generation_id, "g1")
         # The persisted engine payload (buildJobPayload) carries no publish
         # plan: publishing happens exclusively via the fill-schedule slot

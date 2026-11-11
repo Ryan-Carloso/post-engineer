@@ -23,7 +23,12 @@ from test.controllers.test_task_segments_request import (
 
 class CreateTaskSegmentsDispatchTests(unittest.TestCase):
     def test_segments_job_dispatches_joined_script(self):
-        body = TaskVideoRequest(video_subject="Porto", segments=valid_segments())
+        body = TaskVideoRequest(
+            video_title="Porto",
+            video_description="Test description.",
+            video_type="faceless",
+            segments=valid_segments(),
+        )
         auth = SimpleNamespace(user_id="user-1")
         with (
             patch.object(video_controller.base, "get_task_id", return_value="req-1"),

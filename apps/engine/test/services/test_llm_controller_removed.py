@@ -1,10 +1,11 @@
-"""Phase 5 PR 5: the LLM controller is gone, the search module is trimmed
-to its place-photos client, and the controller's schema models are gone.
+"""Phase 5 PR 5: the LLM controller is gone, and the controller's schema
+models are gone.
 
 Phase 5 PR 6: the LLM core itself is gone — llm.py, llm_providers.py,
 script_prompts.py and script_language_rules.py are deleted, and task.py
-no longer imports llm: broll terms come from the calling agent or from
-the mechanical terms_fallback expansion of the script itself.
+no longer imports llm: scripts arrive as segments from the calling agent.
+
+Issue #542: the search module and its place-photos client are gone too.
 """
 
 import sys
@@ -15,7 +16,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.models import schema  # noqa: E402
 from app.router import root_api_router  # noqa: E402
-from app.services import place_photos, web_search_facts  # noqa: E402
 
 DELETED_ROUTES = {"/api/v1/scripts", "/api/v1/terms", "/api/v1/social-metadata"}
 DELETED_MODELS = (
@@ -42,47 +42,6 @@ class LlmControllerRemovedTests(unittest.TestCase):
             self.assertFalse(hasattr(schema, name), name)
 
 
-class SearchTrimmedToPlacePhotosTests(unittest.TestCase):
-    def test_fact_functions_are_gone(self):
-        self.assertFalse(hasattr(web_search_facts, "fetch_facts"))
-        self.assertFalse(hasattr(web_search_facts, "format_facts_block"))
-        self.assertFalse(hasattr(web_search_facts, "Fact"))
-
-    def test_place_photos_client_surface_is_intact(self):
-        self.assertTrue(hasattr(web_search_facts, "_HttpPostClient"))
-        self.assertTrue(hasattr(web_search_facts, "_build_client"))
-        self.assertIn("tavily", web_search_facts.PROVIDER_ENV_KEYS)
-        self.assertEqual(
-            web_search_facts.TAVILY_SEARCH_URL, "https://api.tavily.com/search"
-        )
-        self.assertTrue(callable(web_search_facts.place_photos_enabled))
-        self.assertTrue(callable(web_search_facts.validate_config))
-        # The test conftest switches search off, so place photos stay off.
-        self.assertIs(web_search_facts.place_photos_enabled(), False)
-
-    def test_place_photos_search_still_uses_the_trimmed_client(self):
-        # search_images builds its Tavily request through the trimmed module.
-        calls = []
-
-        class StubResponse:
-            def raise_for_status(self):
-                return None
-
-            def json(self):
-                return {"images": ["https://e.com/santiago.jpg"]}
-
-        class StubClient:
-            def post(self, url, json, headers):
-                calls.append(url)
-                return StubResponse()
-
-        hits = place_photos.search_images(
-            "Café Santiago", "francesinha Porto", client=StubClient()
-        )
-        self.assertEqual(calls, [web_search_facts.TAVILY_SEARCH_URL])
-        self.assertTrue(any("santiago.jpg" in hit.get("url", "") for hit in hits))
-
-
 class LlmCoreDeletedTests(unittest.TestCase):
     def test_llm_core_modules_are_gone(self):
         # P5-6 deletes the core with its prompt-constant modules: importing
@@ -101,9 +60,8 @@ class LlmCoreDeletedTests(unittest.TestCase):
 
     def test_task_still_serves_the_live_videos_pipeline(self):
         # Deleting the core must not take the live pipeline with it:
-        # POST /videos stays, and generate_terms is mechanical.
+        # POST /videos stays, and scripts arrive as segments.
         from app.controllers.v1 import video as video_controller
-        from app.services import task as tm, terms_fallback
 
         paths = {
             (getattr(route, "path", None), method)
@@ -111,5 +69,3 @@ class LlmCoreDeletedTests(unittest.TestCase):
             for method in (getattr(route, "methods", None) or set())
         }
         self.assertIn(("/api/v1/videos", "POST"), paths)
-        self.assertTrue(callable(tm.generate_terms))
-        self.assertTrue(callable(terms_fallback.expand_terms))

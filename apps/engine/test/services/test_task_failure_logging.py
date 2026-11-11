@@ -38,15 +38,18 @@ class _LogCapture:
 
 def _params_with_secret():
     return TaskVideoRequest(
-        video_subject="subject-with-s3cr3t-token",
+        video_title="subject-with-s3cr3t-token",
+        video_description="Test description.",
+        video_type="faceless",
         custom_audio_file="/tmp/signed-audio-url-with-secret",
     )
 
 
 class FailTaskLoggingTests(unittest.TestCase):
     def test_fail_task_logs_structured_error(self):
-        with _LogCapture() as capture, patch.object(
-            task_service, "send_discord", return_value=True
+        with (
+            _LogCapture() as capture,
+            patch.object(task_service, "send_discord", return_value=True),
         ):
             task_service._fail_task("t-1", "boom", stage="audio")
 
@@ -60,8 +63,9 @@ class FailTaskLoggingTests(unittest.TestCase):
 
     def test_fail_task_never_logs_params_or_secrets(self):
         params = _params_with_secret()
-        with _LogCapture() as capture, patch.object(
-            task_service, "send_discord", return_value=True
+        with (
+            _LogCapture() as capture,
+            patch.object(task_service, "send_discord", return_value=True),
         ):
             task_service._fail_task("t-2", "boom", params, stage="script")
 
@@ -72,8 +76,9 @@ class FailTaskLoggingTests(unittest.TestCase):
                 self.assertNotIn("s3cr3t-token", str(value))
 
     def test_fail_task_without_stage_defaults_to_unknown(self):
-        with _LogCapture() as capture, patch.object(
-            task_service, "send_discord", return_value=True
+        with (
+            _LogCapture() as capture,
+            patch.object(task_service, "send_discord", return_value=True),
         ):
             task_service._fail_task("t-3", "boom")
 
@@ -82,9 +87,10 @@ class FailTaskLoggingTests(unittest.TestCase):
     def test_every_fail_task_call_logs_each_step(self):
         # The user wants the failure reason visible per step in PostHog:
         # repeated notices log every time (the Discord alert stays deduped).
-        with _LogCapture() as capture, patch.object(
-            task_service, "send_discord", return_value=True
-        ) as send_discord:
+        with (
+            _LogCapture() as capture,
+            patch.object(task_service, "send_discord", return_value=True) as send_discord,
+        ):
             task_service._fail_task("t-4", "first: script broke", stage="script")
             task_service._fail_task("t-4", "second: generic", stage="pipeline")
 
@@ -101,10 +107,11 @@ class FailTaskLoggingTests(unittest.TestCase):
         failing_state = MagicMock()
         failing_state.get_task.return_value = None
         failing_state.update_task.side_effect = RuntimeError("supabase down")
-        with _LogCapture() as capture, patch.object(
-            task_service.sm, "state", failing_state
-        ), patch.object(task_service, "send_discord", return_value=True), patch.object(
-            task_service.task_webhook, "notify_terminal_task"
+        with (
+            _LogCapture() as capture,
+            patch.object(task_service.sm, "state", failing_state),
+            patch.object(task_service, "send_discord", return_value=True),
+            patch.object(task_service.task_webhook, "notify_terminal_task"),
         ):
             task_service._fail_task("t-9", "boom", stage="audio")  # must not raise
         loud = [
@@ -147,9 +154,9 @@ def _direct_failed_write_offenders(source: str) -> list[str]:
             if not isinstance(child, ast.Call):
                 continue
             func = child.func
-            is_update_task = (
-                isinstance(func, ast.Attribute)
-                and func.attr in ("update_task", "persist_state_update")
+            is_update_task = isinstance(func, ast.Attribute) and func.attr in (
+                "update_task",
+                "persist_state_update",
             )
             if not is_update_task:
                 continue
@@ -165,10 +172,7 @@ class MutmutSourceScanTests(unittest.TestCase):
     # exists under mangled names. The structural pin must see through the
     # mangling instead of reporting 184 false offenders.
 
-    _WRITE = (
-        "    sm.persist_state_update(sm.state, task_id,"
-        " state=const.TASK_STATE_FAILED)\n"
-    )
+    _WRITE = "    sm.persist_state_update(sm.state, task_id, state=const.TASK_STATE_FAILED)\n"
 
     def _mutmut_style_source(self):
         # Names exactly as mutmut 3.x mangles them: "x_" + name + "__mutmut"
@@ -221,9 +225,7 @@ class TerminalWriteWiringTests(unittest.TestCase):
                 if not isinstance(node, ast.Call):
                     continue
                 func = node.func
-                if not (
-                    isinstance(func, ast.Attribute) and func.attr == "update_task"
-                ):
+                if not (isinstance(func, ast.Attribute) and func.attr == "update_task"):
                     continue
                 for kw in node.keywords:
                     if kw.arg != "state":
@@ -239,36 +241,40 @@ class TerminalWriteWiringTests(unittest.TestCase):
 
 class StartCrashStageTests(unittest.TestCase):
     def _run_start_until_crash(self, fail_in):
-        params = TaskVideoRequest(video_subject="topic", voice_name="chatterbox:kokoro_af_heart")
+        params = TaskVideoRequest(
+            video_title="topic",
+            video_description="Test description.",
+            video_type="faceless",
+            voice_name="chatterbox:kokoro_af_heart",
+        )
         task_id = "crash-task"
         task_service.sm.state.update_task(task_id, user_id="u-1")
         with (
             patch.object(
-                task_service, "generate_script",
+                task_service,
+                "generate_script",
                 side_effect=RuntimeError("boom") if fail_in == "generate_script" else None,
                 return_value="script text",
             ),
             patch.object(
-                task_service, "generate_terms",
-                side_effect=RuntimeError("boom") if fail_in == "generate_terms" else None,
-                return_value="terms",
+                task_service,
+                "generate_audio",
+                side_effect=RuntimeError("boom") if fail_in == "generate_audio" else None,
+                return_value=("audio.mp3", 10.0, None),
             ),
             patch.object(task_service, "send_discord", return_value=True),
             patch.object(task_service, "cleanup_task_intermediates"),
             patch.object(
                 task_service.video_storage,
                 "require_r2_configuration",
-                side_effect=RuntimeError("boom")
-                if fail_in == "require_r2_configuration"
-                else None,
+                side_effect=RuntimeError("boom") if fail_in == "require_r2_configuration" else None,
             ),
             _LogCapture() as capture,
         ):
             if fail_in == "generate_script":
                 task_service.start(task_id, params, stop_at="script")
             else:
-                # script succeeds (or the crash happens even earlier),
-                # terms crashes
+                # script succeeds (or the crash happens even earlier)
                 task_service.start(task_id, params, stop_at="video")
         return capture
 
@@ -285,19 +291,24 @@ class StartCrashStageTests(unittest.TestCase):
         stages = [r["extra"].get("stage") for r in capture.errors()]
         self.assertIn("script", stages)
 
-    def test_crash_during_terms_phase_logs_terms_stage(self):
-        # Issue #198: the terms phase had started when generate_terms
-        # raised, so the failure is a terms failure, not "script".
-        capture = self._run_start_until_crash("generate_terms")
+    def test_crash_during_audio_phase_logs_audio_stage(self):
+        # Issue #198: the audio phase had started when generate_audio
+        # raised, so the failure is an audio failure, not "script".
+        capture = self._run_start_until_crash("generate_audio")
         stages = [r["extra"].get("stage") for r in capture.errors()]
-        self.assertIn("terms", stages)
+        self.assertIn("audio", stages)
 
     def test_mark_records_stage_in_task_state(self):
         # The SSE progress endpoint reads the stage from task state, so the
         # phase tracker must persist the last completed phase there on
         # complete(). Run a minimal start(): patch everything after the
         # script phase so start() returns early at stop_at="script".
-        params = TaskVideoRequest(video_subject="topic", voice_name="chatterbox:kokoro_af_heart")
+        params = TaskVideoRequest(
+            video_title="topic",
+            video_description="Test description.",
+            video_type="faceless",
+            voice_name="chatterbox:kokoro_af_heart",
+        )
         task_id = "stage-task"
         task_service.sm.state.update_task(task_id, user_id="u-1")
         with (

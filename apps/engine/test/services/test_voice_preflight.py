@@ -14,9 +14,13 @@ from app.services import task as task_service
 from app.services.voice_preflight import VoiceConfigError
 
 
-def _params(voice_id: str | None = "chatterbox:kokoro_af_heart", voice_name: str = "", **extra) -> VideoParams:
+def _params(
+    voice_id: str | None = "chatterbox:kokoro_af_heart", voice_name: str = "", **extra
+) -> VideoParams:
     return VideoParams(
-        video_subject="coffee",
+        video_title="coffee",
+        video_description="Test description.",
+        video_type="hook_lipsync",
         video_script="Hook. Body. Call to action.",
         voice_name=voice_name,
         persona=PersonaParams(
@@ -27,13 +31,19 @@ def _params(voice_id: str | None = "chatterbox:kokoro_af_heart", voice_name: str
 
 def _no_persona(voice_name: str) -> VideoParams:
     return VideoParams(
-        video_subject="coffee", video_script="Hook. Body. Call to action.", voice_name=voice_name
+        video_title="coffee",
+        video_description="Test description.",
+        video_type="faceless",
+        video_script="Hook. Body. Call to action.",
+        voice_name=voice_name,
     )
 
 
 def _sample_persona() -> VideoParams:
     return VideoParams(
-        video_subject="coffee",
+        video_title="coffee",
+        video_description="Test description.",
+        video_type="hook_lipsync",
         video_script="Hook. Body. Call to action.",
         persona=PersonaParams(
             name="Ana", photo_url="https://img.test/p.png", voice_audio_url="https://v.test/s.mp3"
@@ -110,13 +120,16 @@ class StartPreflightOrderTests(unittest.TestCase):
         with patch.object(persona_preflight, "preflight_persona_image") as image:
             start_preflight.run(phases, "t-2", params, 2048, "video")
         image.assert_called_once_with("t-2", params, 2048)
-        self.assertEqual([c.args[0] for c in phases.begin.call_args_list], ["voice", "persona_image"])
+        self.assertEqual(
+            [c.args[0] for c in phases.begin.call_args_list], ["voice", "persona_image"]
+        )
 
-    def test_script_and_terms_runs_check_nothing(self):
-        for stop_at in ("script", "terms"):
-            with self.subTest(stop_at=stop_at), patch.object(
-                persona_preflight, "preflight_persona_image"
-            ) as image:
+    def test_a_script_run_checks_nothing(self):
+        for stop_at in ("script",):
+            with (
+                self.subTest(stop_at=stop_at),
+                patch.object(persona_preflight, "preflight_persona_image") as image,
+            ):
                 phases = MagicMock()
                 start_preflight.run(phases, "t-3", _params(voice_id="energetic"), 1024, stop_at)
                 image.assert_not_called()
@@ -124,11 +137,14 @@ class StartPreflightOrderTests(unittest.TestCase):
 
     def test_audio_through_materials_runs_check_the_voice_but_not_the_image(self):
         for stop_at in ("audio", "subtitle", "materials"):
-            with self.subTest(stop_at=stop_at), patch.object(
-                persona_preflight, "preflight_persona_image"
-            ) as image:
+            with (
+                self.subTest(stop_at=stop_at),
+                patch.object(persona_preflight, "preflight_persona_image") as image,
+            ):
                 with self.assertRaises(VoiceConfigError):
-                    start_preflight.run(MagicMock(), "t-4", _params(voice_id="energetic"), 1024, stop_at)
+                    start_preflight.run(
+                        MagicMock(), "t-4", _params(voice_id="energetic"), 1024, stop_at
+                    )
                 start_preflight.run(MagicMock(), "t-4", _params(), 1024, stop_at)
                 image.assert_not_called()
 

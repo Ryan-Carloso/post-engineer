@@ -97,14 +97,6 @@ export const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{1,64}$/;
 export const METRICS_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'] as const;
 
 /**
- * What fills a video (`facelessMaterial`), mirroring the web's
- * FACELESS_MATERIALS (apps/web/lib/generation/faceless-materials.ts) that
- * POST /api/videos/generate-and-schedule and validate-script accept --
- * pinned by `faceless-material-sync.test.ts`.
- */
-export const FACELESS_MATERIALS = ['broll', 'svg', 'images'] as const;
-
-/**
  * Paired A/B experiment limits (issue #476), mirrored from
  * `apps/web/lib/experiments/limits.ts` (pinned by
  * `experiments-limits-sync.test.ts`).

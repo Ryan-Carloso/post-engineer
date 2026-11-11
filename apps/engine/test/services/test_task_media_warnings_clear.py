@@ -16,16 +16,23 @@ from unittest.mock import patch
 from app.models.schema import TaskVideoRequest, VideoParams
 from app.services import task as tm
 
+# Images mode needs about one photo per 3s (hook 19 words → 3, body 38 → 5, CTA 7 → 1).
 SEGMENTS = [
     {
         "kind": "hook",
         "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time.",
+        "media": [{"url": f"https://e.com/0-{i}.jpg"} for i in range(3)],
     },
     {
         "kind": "body",
         "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold at sunset before heading home through the old town streets.",
+        "media": [{"url": f"https://e.com/1-{i}.jpg"} for i in range(5)],
     },
-    {"kind": "cta", "text": "Follow for more Porto walks every week."},
+    {
+        "kind": "cta",
+        "text": "Follow for more Porto walks every week.",
+        "media": [{"url": "https://e.com/2-0.jpg"}],
+    },
 ]
 
 
@@ -37,30 +44,19 @@ class MediaWarningsClearTests(unittest.TestCase):
         with ExitStack() as stack:
             stack.enter_context(patch.object(tm.sm.state, "update_task"))
             stack.enter_context(patch.object(tm, "send_discord"))
-            stack.enter_context(
-                patch.object(tm.video_storage, "require_r2_configuration")
-            )
+            stack.enter_context(patch.object(tm.video_storage, "require_r2_configuration"))
             stack.enter_context(patch.object(tm, "cleanup_task_intermediates"))
             stack.enter_context(patch.object(tm, "track_generation_started"))
             stack.enter_context(patch.object(tm, "_complete_task"))
             stack.enter_context(
                 patch.object(tm, "_update_task", side_effect=lambda tid, **kw: writes.append(kw))
             )
-            stack.enter_context(
-                patch.object(tm, "generate_script", return_value="script text")
-            )
-            stack.enter_context(
-                patch.object(tm, "generate_terms", return_value="terms")
-            )
+            stack.enter_context(patch.object(tm, "generate_script", return_value="script text"))
             stack.enter_context(patch.object(tm, "save_script_data"))
             stack.enter_context(
-                patch.object(
-                    tm, "generate_audio", return_value=("audio.mp3", 10.0, None)
-                )
+                patch.object(tm, "generate_audio", return_value=("audio.mp3", 10.0, None))
             )
-            stack.enter_context(
-                patch.object(tm, "generate_subtitle", return_value="sub.srt")
-            )
+            stack.enter_context(patch.object(tm, "generate_subtitle", return_value="sub.srt"))
             stack.enter_context(
                 patch.object(tm.audio_trim, "trim_after_last_word", return_value=None)
             )
@@ -71,9 +67,7 @@ class MediaWarningsClearTests(unittest.TestCase):
                     side_effect=lambda tid, p, s, a, d, sm, sp: (s, a, d, sm, sp),
                 )
             )
-            stack.enter_context(
-                patch.object(tm, "get_video_materials", return_value=["clip.mp4"])
-            )
+            stack.enter_context(patch.object(tm, "get_video_materials", return_value=["clip.mp4"]))
             stack.enter_context(
                 patch.object(tm.user_media, "prepare_segment_panels", return_value=apply_result)
             )
@@ -81,20 +75,37 @@ class MediaWarningsClearTests(unittest.TestCase):
         return writes
 
     def test_clean_segments_retry_clears_the_previous_warnings(self):
-        params = TaskVideoRequest(video_subject="Porto walks", segments=SEGMENTS, voice_name="chatterbox:kokoro_af_heart")
+        params = TaskVideoRequest(
+            video_title="Porto walks",
+            video_description="Test description.",
+            video_type="faceless",
+            segments=SEGMENTS,
+            voice_name="chatterbox:kokoro_af_heart",
+        )
         writes = self._run_to_materials(params, [])
         warning_writes = [w for w in writes if "media_warnings" in w]
         self.assertEqual(warning_writes, [{"media_warnings": []}])
 
     def test_skips_are_still_recorded_when_present(self):
-        params = TaskVideoRequest(video_subject="Porto walks", segments=SEGMENTS, voice_name="chatterbox:kokoro_af_heart")
+        params = TaskVideoRequest(
+            video_title="Porto walks",
+            video_description="Test description.",
+            video_type="faceless",
+            segments=SEGMENTS,
+            voice_name="chatterbox:kokoro_af_heart",
+        )
         skipped = ["segment 1 media skipped: bad url"]
         writes = self._run_to_materials(params, skipped)
         warning_writes = [w for w in writes if "media_warnings" in w]
         self.assertEqual(warning_writes, [{"media_warnings": skipped}])
 
     def test_no_segments_run_writes_no_media_warnings(self):
-        params = VideoParams(video_subject="Porto walks", voice_name="chatterbox:kokoro_af_heart")
+        params = VideoParams(
+            video_title="Porto walks",
+            video_description="Test description.",
+            video_type="faceless",
+            voice_name="chatterbox:kokoro_af_heart",
+        )
         writes = self._run_to_materials(params, [])
         self.assertEqual([w for w in writes if "media_warnings" in w], [])
 

@@ -9,21 +9,27 @@ import { GeneratePersonaVideoBatchSchema, handleGeneratePersonaVideoBatch } from
 // POST /api/videos/batch-discount.
 //---------------
 
+function photos(count: number, prefix: string): Array<{ url: string }> {
+  return Array.from({ length: count }, (_, i) => ({ url: `https://example.com/${prefix}-${i + 1}.jpg` }));
+}
+
 const SEGMENTS = [
-  { kind: 'hook' as const, text: 'Here is a small squat detail that quietly changes how your legs grow over the next few months.' },
-  { kind: 'body' as const, text: 'Most people bounce at the bottom of the squat, which moves the load off the legs and onto the lower back, so slow the last inch down and pause before you drive up again. Keep your chest tall and brace before every single rep.' },
-  { kind: 'cta' as const, text: 'Follow for one fix a day.' },
+  { kind: 'hook' as const, text: 'Here is a small squat detail that quietly changes how your legs grow over the next few months.', media: photos(3, 'hook') },
+  { kind: 'body' as const, text: 'Most people bounce at the bottom of the squat, which moves the load off the legs and onto the lower back, so slow the last inch down and pause before you drive up again. Keep your chest tall and brace before every single rep.', media: photos(6, 'body') },
+  { kind: 'cta' as const, text: 'Follow for one fix a day.', media: photos(1, 'cta') },
 ];
 
 function video(title: string) {
   return {
     title,
+    description: 'Agent description.',
     segments: SEGMENTS,
     personaId: '11111111-2222-4333-8444-555555555555',
     providers: ['youtube'],
     youtubeAccountIds: ['chan-1'],
     startAt: '2026-11-10T18:00:00',
     times: ['18:00'],
+    options: { videoType: 'hook_lipsync' as const },
   };
 }
 

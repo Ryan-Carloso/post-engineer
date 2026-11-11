@@ -68,13 +68,49 @@ class VideoAspect(str, Enum):
         raise ValueError(f"unsupported video aspect: {self}")
 
 
+class VideoType(str, Enum):
+    """The one video mode (issue #542 follow-up): it replaces the
+    faceless / full_lipsync / lipsync_enabled boolean combination.
+
+    full_lipsync: the whole narration renders as talking head; a persona
+        with a photo is required. 8 tokens at face quality ok, 15 at
+        very_good.
+    hook_lipsync: lip sync only on the hook, then the agent's images; a
+        persona with a photo is required. 2 tokens ok, 3 very_good.
+    faceless: only the agent's images; a persona is optional, and when one
+        is present only its voice and niche are used, never its face.
+        1 token.
+    """
+
+    full_lipsync = "full_lipsync"
+    hook_lipsync = "hook_lipsync"
+    faceless = "faceless"
+
+
+# The invalid-value message lists every valid type WITH its token cost, so
+# the agent can choose knowing the price (issue #542 follow-up). It is kept
+# short on purpose: the MCP caps upstream error bodies at 200 chars
+# (apps/mcp/src/errors.ts MAX_ERROR_BODY_CHARS), so a long message would
+# arrive truncated. Costs mirror web lib/tokens.ts — the only price table —
+# and the web sync test pins the two together.
+VIDEO_TYPE_ERROR_SUFFIX = "use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)"
+
+
+def unknown_video_type_message(value: object) -> str:
+    """Short invalid-video_type error, costs included, under 200 chars."""
+    shown = str(value)[:32] if value is not None else ""
+    return f"unknown video_type '{shown}'; {VIDEO_TYPE_ERROR_SUFFIX}"
+
+
 class _Config:
     arbitrary_types_allowed = True
 
 
 @pydantic.dataclasses.dataclass(config=_Config)
 class MaterialInfo:
-    provider: str = "pexels"
+    # Local files only (CLI --video-materials, local_videos/): the provider
+    # is a leftover label, never read by the pipeline.
+    provider: str = "local"
     url: str = ""
     duration: int = 0
 
@@ -121,7 +157,8 @@ class PersonaParams(BaseModel):
 class VideoParams(BaseModel):
     """
     {
-      "video_subject": "",
+      "video_title": "",
+      "video_description": "",
       "video_aspect": "landscape 16:9",
       "voice_name": "female-Xiaoxiao",
       "bgm_name": "random",
@@ -133,27 +170,51 @@ class VideoParams(BaseModel):
     }
     """
 
-    video_subject: str = Field(max_length=500)
+    # Agent-supplied publish copy (issue #542 follow-up): the video title
+    # and description the agent sends with the segments. REQUIRED — a
+    # request without them fails validation loudly, like an empty script.
+    # Lengths are YouTube's limits; over-long values fail loudly, never
+    # silently truncate.
+    video_title: str = Field(min_length=1, max_length=100)
+    video_description: str = Field(min_length=1, max_length=5000)
+
+    @field_validator("video_title", "video_description", mode="before")
+    @classmethod
+    def _strip_publish_copy(cls, value: str) -> str:
+        """Measure the trimmed text, like the overlay validator below."""
+        return value.strip() if isinstance(value, str) else value
+
+    # The one video mode (issue #542 follow-up): REQUIRED, no default —
+    # the mode decides the render path AND the price, so a caller that
+    # omits it must fail loudly instead of silently getting a mode it did
+    # not ask for. Replaces the faceless / full_lipsync / lipsync_enabled
+    # boolean combination.
+    video_type: VideoType
+
+    @field_validator("video_type", mode="before")
+    @classmethod
+    def _validate_video_type(cls, value: object) -> VideoType:
+        """Reject unknown types with the costs included, never coerce."""
+        if isinstance(value, VideoType):
+            return value
+        try:
+            return VideoType(value)  # type: ignore[arg-type]
+        except (ValueError, TypeError):
+            raise ValueError(unknown_video_type_message(value)) from None
+
     video_script: str = Field(default="", max_length=20000)  # Script used to generate the video
-    video_terms: Optional[str | list] = None  # Keywords used to generate the video
     video_aspect: Optional[VideoAspect] = VideoAspect.portrait.value
     video_concat_mode: Optional[VideoConcatMode] = VideoConcatMode.random.value
     # How the persona meets the video material during the hook. "standard"
     # fills the frame with the avatar; "react" splits the frame in half
-    # (avatar on top, the post's material below: stock or drawings). Per-request only, never config.toml: an editorial choice
+    # (avatar on top, the post's material below: the agent's images).
+    # Per-request only, never config.toml: an editorial choice
     # per post, not a site-wide rendering default. The default is the enum's
     # own first member so a caller that omits the field gets the behaviour
     # every pre-existing video already had.
     video_layout: VideoLayout = VideoLayout.standard
     video_transition_mode: Optional[VideoTransitionMode] = None
     video_clip_duration: Optional[int] = Field(default=2, ge=1, le=60)
-    match_materials_to_script: bool = True
-    # Material choice, per request only (like video_layout, never
-    # config.toml), for posts with or without a face: "broll" is stock
-    # only, "svg" is only the R2 SVG catalog, "images" is only the agent's
-    # own segment images; they never mix. The web sends it on every post;
-    # a caller omitting it gets "broll".
-    faceless_material: Literal["broll", "svg", "images"] = "broll"
     video_materials: Optional[List[MaterialInfo]] = (
         None  # Materials used to generate the video
     )
@@ -162,13 +223,6 @@ class VideoParams(BaseModel):
     video_language: Optional[str] = ""  # auto detect
 
     persona: Optional[PersonaParams] = None  # Inline persona (stateless, caller-resolved refs)
-    lipsync_enabled: bool = config.app.get("persona_lipsync_enabled", True)  # False = persona voice only, no lip-sync intro
-    # Opt-in full lip-sync: the whole narration renders as talking head
-    # with no b-roll, instead of the default intro-only lip-sync over
-    # stock material. Per-request only (like video_layout, never
-    # config.toml): an editorial choice per post, not a site-wide default.
-    # False (the default) keeps every existing video's behaviour exactly.
-    full_lipsync: bool = False
     # Hook/modal pacing is product-fixed in app/services/task.py
     # (PERSONA_HOOK_* constants) — intentionally NOT
     # config-driven: the values were validated against GPU intro cost and
@@ -178,7 +232,7 @@ class VideoParams(BaseModel):
     voice_name: Optional[str] = Field(default="", max_length=200)
     voice_volume: Optional[float] = Field(default=1.0, ge=0, le=5.0)
     voice_rate: Optional[float] = Field(default=1.0, ge=0.1, le=5.0)
-    bgm_volume: Optional[float] = Field(default=0.2, ge=0, le=2.0)
+    bgm_volume: Optional[float] = Field(default=0.09, ge=0, le=2.0)
     # Background-music mood for this video, agent-supplied (issue #489).
     # Per-request only, never config.toml (like video_layout): None (the
     # default) lets the pipeline pick the first catalogued mood, "none"
@@ -246,24 +300,6 @@ class AudioRequest(BaseModel):
     voice_rate: Optional[float] = Field(default=1.2, ge=0.1, le=5.0)
 
 
-class VideoTermsParams(BaseModel):
-    """
-    {
-      "video_subject": "",
-      "video_script": "",
-      "amount": 5,
-      "match_materials_to_script": false
-    }
-    """
-
-    video_subject: Optional[str] = "春天的花海"
-    video_script: Optional[str] = (
-        "春天的花海，如诗如画般展现在眼前。万物复苏的季节里，大地披上了一袭绚丽多彩的盛装。金黄的迎春、粉嫩的樱花、洁白的梨花、艳丽的郁金香……"
-    )
-    amount: Optional[int] = Field(default=5, ge=1, le=50)
-    match_materials_to_script: bool = False
-
-
 class BaseResponse(BaseModel):
     status: int = 200
     message: Optional[str] = "success"
@@ -318,7 +354,6 @@ class ScriptSegment(BaseModel):
     kind: Literal["hook", "body", "cta"]
     text: str
     media: Optional[list[SegmentMedia]] = Field(None, max_length=MAX_IMAGES_MODE_MEDIAS)
-    terms: Optional[list[str]] = None
 
 
 class TaskVideoRequest(VideoParams, BaseModel):
@@ -343,16 +378,26 @@ class TaskVideoRequest(VideoParams, BaseModel):
         return _validate_webhook_url(value)
 
     @model_validator(mode="after")
+    def _validate_video_type_persona(self) -> "TaskVideoRequest":
+        # full_lipsync and hook_lipsync render a face: without a persona
+        # there is nothing to lip-sync. Faceless is the only mode that
+        # runs persona-less. Fails here, before the task is created.
+        if self.video_type in (VideoType.full_lipsync, VideoType.hook_lipsync) and self.persona is None:
+            raise ValueError(f"{self.video_type.value} requires a persona with a photo")
+        return self
+
+    @model_validator(mode="after")
     def _validate_segments_into_script(self) -> "TaskVideoRequest":
         if self.segments is None:
-            if self.faceless_material == "images":
-                raise ValueError("faceless_material images needs segments, each with media")
+            # Script-only direct/CLI calls keep working: the script is used
+            # as-is, with no segment panels. Web, MCP and the batch pipeline
+            # always send segments, and validate media there before charging.
             return self
         from app.services import script_segments
 
         joined = script_segments.segments_to_script(
             [segment.model_dump(exclude_none=True) for segment in self.segments],
-            self.faceless_material,
+            video_type=self.video_type,
         )
         # Pydantic v2 does not re-validate on assignment: enforce the
         # video_script cap from the field metadata, not a hardcoded value.

@@ -33,14 +33,6 @@ max_video_script_characters = 600
 # Persistent per-user BGM history database. Keep this on durable storage.
 bgm_history_db = "storage/bgm_history.sqlite3"
 
-# Persona lip-sync intro (LongCat-Video-Avatar 1.5 on GPU).
-# When true (default), jobs that include an inline persona generate the
-# lip-synced persona intro before the main video. When false, the persona
-# contributes only its voice/house voice and the video is rendered as a
-# normal stock-footage video — much faster and no GPU required.
-# Callers can also override per request with the `lipsync_enabled` field.
-persona_lipsync_enabled = true
-
 # Persona hook pacing is product-fixed in code
 # (PERSONA_HOOK_* in app/services/persona_hook.py) — the values were validated against GPU intro cost and lipsync quality windows and are
 # intentionally not tunable.
@@ -49,67 +41,9 @@ persona_lipsync_enabled = true
 hide_config = false
 
 # 是否校验外部 API 和素材下载的 TLS 证书。
-# 默认必须开启，避免 Pexels/Pixabay API key 和下载素材被中间人攻击篡改。
+# 默认必须开启，避免外部 API 密钥和下载内容被中间人攻击篡改。
 # 只有在企业代理或自签证书环境明确需要时，才临时改为 false。
 tls_verify = true
-
-# Pexels API Key
-# Register at https://www.pexels.com/api/ to get your API key.
-# You can use multiple keys to avoid rate limits.
-# For example: pexels_api_keys = ["123adsf4567adf89","abd1321cd13efgfdfhi"]
-# Use straight ASCII double quotes around each key. Smart quotes copied from rich text will break TOML parsing.
-# 请使用英文半角双引号包裹每个 Key；从富文本复制来的弯引号会导致 TOML 解析失败。
-# 特别注意格式，Key 用英文双引号括起来，多个Key用逗号隔开
-pexels_api_keys = []
-
-# Pixabay API Key
-# Register at https://pixabay.com/api/docs/ to get your API key.
-# You can use multiple keys to avoid rate limits.
-# For example: pixabay_api_keys = ["123adsf4567adf89","abd1321cd13efgfdfhi"]
-# Use straight ASCII double quotes around each key. Smart quotes copied from rich text will break TOML parsing.
-# 请使用英文半角双引号包裹每个 Key；从富文本复制来的弯引号会导致 TOML 解析失败。
-# 特别注意格式，Key 用英文双引号括起来，多个Key用逗号隔开
-pixabay_api_keys = []
-
-# Coverr API Key
-# Register at https://coverr.co/developers?ctx=header_navigation to get your API key instantly.
-# Free tier (Demo) is limited to 50 requests/hour — sufficient for a few
-# video tasks per hour. Upgrade to Pro/Ultimate subscription for 2000/hour.
-# Coverr provides free HD/4K stock videos (subject to Coverr license terms,
-# see https://coverr.co/license), mostly 16:9 landscape; if
-# you generate 9:16 short-form videos, prefer Pexels/Pixabay as primary
-# and use Coverr to widen the catalog for landscape/cinematic content.
-# You can use multiple keys to avoid rate limits.
-# For example: coverr_api_keys = ["123adsf4567adf89","abd1321cd13efgfdfhi"]
-# Use straight ASCII double quotes around each key. Smart quotes copied from rich text will break TOML parsing.
-# 请使用英文半角双引号包裹每个 Key；从富文本复制来的弯引号会导致 TOML 解析失败。
-# 特别注意格式，Key 用英文双引号括起来，多个Key用逗号隔开
-coverr_api_keys = []
-
-# TwelveLabs API Key (optional) — https://twelvelabs.io
-# TwelveLabs (可选) 视频理解 / 多模态嵌入集成。
-# Enables two opt-in features:
-#   * Marengo (multimodal embeddings) semantically reorders the auto-generated
-#     search terms by relevance to your video subject, so the most on-topic
-#     B-roll is downloaded first when the timeline budget is tight.
-#   * Pegasus (video understanding) can QA / describe a clip from its URL.
-# Leave empty to keep the default behavior completely unchanged.
-# Configure a TwelveLabs API key from the TwelveLabs dashboard (https://twelvelabs.io) and install the
-# optional dependency with `uv sync --extra twelvelabs`.
-# Register at https://playground.twelvelabs.io to get your API key.
-# You can use multiple keys to avoid rate limits.
-# For example: twelvelabs_api_keys = ["tlk_123adsf4567","tlk_abd1321cd13ef"]
-# 请使用英文半角双引号包裹每个 Key；从富文本复制来的弯引号会导致 TOML 解析失败。
-twelvelabs_api_keys = []
-
-# Reorder search terms by Marengo relevance before downloading footage.
-# Requires twelvelabs_api_keys above. Ignored in "match materials to script"
-# mode, where term order is intentionally the script's narrative order.
-twelvelabs_rerank_terms = false
-
-# Optional model overrides (defaults shown).
-# twelvelabs_marengo_model = "marengo3.0"
-# twelvelabs_pegasus_model = "pegasus1.5"
 
 ########## GNews API Key
 # Visit https://gnews.io/register to get your API key.
@@ -166,12 +100,6 @@ video_codec = "libx264"
 # Options: "ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow"
 video_preset = "veryfast"
 
-# Discards material (stock video) frames that contain a detectable human
-# face, so persona videos never show someone else's face in the B-roll
-# (the persona face belongs to its lipsync image). Requires the
-# opencv-python-headless dependency. Default false = unchanged behavior.
-material_exclude_people = false
-
 # Video encoder. libx264 is the safest default; advanced users can try hardware encoders.
 # If the selected encoder is not supported by the current FFmpeg or driver, the app falls back to libx264.
 # Available values: "libx264", "h264_nvenc", "h264_amf", "h264_qsv", "h264_mf", "h264_videotoolbox"
@@ -185,19 +113,6 @@ material_exclude_people = false
 # endpoint="https://xxxx.com"
 endpoint = ""
 
-
-# Video material storage location
-# material_directory = ""                    # Indicates that video materials will be downloaded to the default folder, the default folder is ./storage/cache_videos under the current project
-# material_directory = "/user/harry/videos"  # Indicates that video materials will be downloaded to a specified folder
-# material_directory = "task"                # Indicates that video materials will be downloaded to the current task's folder, this method does not allow sharing of already downloaded video materials
-
-# 视频素材存放位置
-# material_directory = ""                    #表示将视频素材下载到默认的文件夹，默认文件夹为当前项目下的 ./storage/cache_videos
-# material_directory = "/user/harry/videos"  #表示将视频素材下载到指定的文件夹中
-# material_directory = "task"                #表示将视频素材下载到当前任务的文件夹中，这种方式无法共享已经下载的视频素材
-
-material_directory = ""
-
 # Used for state management of the task.
 # Redis is expected to be private to this app. Do not expose it to untrusted
 # writers, because task state is deserialized for compatibility with existing
@@ -206,56 +121,6 @@ enable_redis = false
 redis_host = "localhost"
 redis_port = 6379
 
-# Private SVG catalog (Doodly bundle). The artwork and its index are licensed
-# and live in Cloudflare R2: they are fetched on demand and cached under
-# <svg_cache_dir>, and are never committed. SVG is opt-in and defaults to
-# off: without `svg_catalog_enabled` there is no SVG. When enabled, the
-# catalog serves only posts whose material is "svg"; "broll" posts stay
-# stock only and never get catalog artwork. It needs
-# `svg_r2_prefix` and the R2_* credentials — a missing one, or an unreachable
-# index, fails the render instead of silently degrading to stock.
-svg_catalog_enabled = false
-svg_r2_bucket = "videos"
-svg_r2_prefix = ""
-svg_cache_dir = "resource/svg/_cache"
-# "texto" searches the FTS5 index and needs nothing extra. "semantico" /
-# "hibrido" require an ONNX index under <index_dir>/models, which is not built
-# yet: they log a warning and degrade to "texto" rather than failing.
-svg_search_mode = "texto"
-# Fill used for the canvas a catalog still is fitted onto. The artwork is
-# fitted to the target aspect so combine_videos keeps the clip; this only
-# decides what shows in the padding around it.
-svg_canvas_background = "#FFFFFF"
-
-# Verified stock material selection. Off by default: existing behavior is
-# preserved exactly until an operator enables it. When enabled, a segment
-# is verified only when a scorer clears it (minimum score plus runner-up
-# margin, both relative scores, never probabilities). A segment that does
-# not verify is dropped, never replaced by catalog SVG or a neutral
-# background — except when no segment verifies at all: scored segments
-# then keep their best-scored clips as an unverified fallback, and only
-# unscored or scorer-unavailable segments, plus scored segments whose
-# candidates were all already taken by another segment, stay dropped.
-# R2 is the only source of SVG artwork: there is no subject mapping and
-# no bundled artwork.
-# The scorer is pluggable; the default scorer is SigLIP on ONNX (onnxruntime
-# ships with the engine). It scores the preview image that Pexels, Pixabay and
-# Coverr return for each clip (about 8 candidates per segment), so
-# verification adds about a minute per video and downloads no extra clips.
-# The model (about 220 MB, Apache-2.0, pinned revision and SHA-256 in
-# app/services/siglip_model.py) is fetched on first use, or at boot, into the
-# directory of material_verification_model_path; that directory must be
-# writable and persisted (in Docker, under the /app/storage volume). Without
-# the model the scorer fails closed (stock treated as unverified).
-# Scores are tied to the scoring model: recalibrate min_score and
-# runner_up_margin when the model changes.
-# Verification stays off by default.
-material_verification_enabled = false
-material_verification_min_score = 0.01
-material_verification_runner_up_margin = 0.005
-# Docker: "/app/storage/models/siglip/model_q4.onnx"
-material_verification_model_path = ""
-redis_db = 0
 redis_password = ""
 
 # 文生视频时的最大并发任务数
@@ -293,7 +158,7 @@ compute_type = "int8"
 
 
 [proxy]
-### Use a proxy to access the Pexels API
+### Use a proxy to access external APIs
 ### Format: "http://<username>:<password>@<proxy>:<port>"
 ### Example: "http://user:pass@proxy:1234"
 ### Doc: https://requests.readthedocs.io/en/latest/user/advanced/#proxies
@@ -459,21 +324,3 @@ intro_duration_seconds = 5
 # Automatic BGM selection uses only tracks explicitly listed in this catalog.
 catalog_file = "resource/songs/catalog.toml"
 
-[search]
-# Search client kept for place photos only (Phase 5 PR 5: the pre-script
-# fact lookup is deleted). Off by default: turning it on needs
-# TAVILY_API_KEY in the environment (never in this file) — place photos
-# use Tavily only; Exa stays in the provider map for the boot check but
-# backs no feature. With enabled = true and no key at all the engine
-# refuses to start.
-enabled = false
-providers = ["tavily", "exa"]
-timeout_seconds = 8.0
-# Photos of named places, for every video type: drawings, stock footage and persona videos
-# (a persona video keeps its face intro on screen). When the script names a
-# place the subject does not cover, one extra Tavily image search looks for its
-# photo; only an image whose title or description names the place is used, at most
-# 2 per video, in place of the clip nearest to the spoken name. The photos are
-# third-party content: whoever switches this on takes the rights risk. Off by
-# default; needs TAVILY_API_KEY (the only provider that describes its images).
-place_photos = false

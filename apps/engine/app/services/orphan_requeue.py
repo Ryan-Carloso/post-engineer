@@ -43,7 +43,6 @@ FAIL = "fail"
 GENERATION_STAGES = frozenset(
     {
         "script",
-        "terms",
         "audio",
         "custom_audio",
         "subtitle",

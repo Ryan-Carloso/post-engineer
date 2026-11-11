@@ -160,11 +160,11 @@ describe('AccountPanel', () => {
     expect(screen.getByRole('button', { name: 'EN' })).toBeInTheDocument();
   });
 
-  it('renders the API Keys row linking to the prompts hub', () => {
+  it('renders the API key row linking to the prompts hub, named like the nav tab', () => {
     render(<AccountPanel />, { wrapper: createWrapper() });
     const link = screen.getByTestId('profile-api-keys-link');
     expect(link).toHaveAttribute('href', '/recipes');
-    expect(link).toHaveTextContent('nav.apiKeys');
+    expect(link).toHaveTextContent('nav.prompts');
     expect(within(link).getByTestId('icon-key')).toBeInTheDocument();
   });
 

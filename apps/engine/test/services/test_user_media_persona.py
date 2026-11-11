@@ -1,7 +1,7 @@
 """user_media on persona videos: the panel goes at the bottom, so captions stay above it.
 
 A panel is an overlay on the finished video, so it works the same over a
-hook-only lip-sync intro, over a full lip-sync render and over stock. Where
+hook-only lip-sync intro, over a full lip-sync render and over the agent's images. Where
 the persona's face shows, the photo is a panel anchored to the bottom edge,
 so the captions above it never cover the photo.
 """
@@ -13,9 +13,9 @@ from app.services import segment_panels, user_media
 from app.services import task as tm
 
 SEGMENTS = [
-    {"kind": "hook", "text": "Welcome to Porto where the river meets the sea and every bridge tells a story of trade and wine for sure."},
-    {"kind": "body", "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold before heading home through the old town streets."},
-    {"kind": "cta", "text": "Follow for more Porto walks."},
+    {"kind": "hook", "text": "Welcome to Porto where the river meets the sea and every bridge tells a story of trade and wine for sure.", "media": [{"url": f"https://e.com/h{i}.jpg"} for i in range(3)]},
+    {"kind": "body", "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold before heading home through the old town streets.", "media": [{"url": f"https://e.com/b{i}.jpg"} for i in range(5)]},
+    {"kind": "cta", "text": "Follow for more Porto walks.", "media": [{"url": "https://e.com/c0.jpg"}]},
 ]
 
 
@@ -24,7 +24,20 @@ def _persona():
 
 
 def _request(**overrides):
-    values = dict(video_subject="Porto", segments=SEGMENTS, video_script="\n\n".join(s["text"] for s in SEGMENTS))
+    full = overrides.pop("full_lipsync", False) is True
+    values = dict(
+        video_title="Porto",
+        video_description="Test description.",
+        video_type=(
+            "full_lipsync"
+            if full
+            else "hook_lipsync"
+            if overrides.get("persona") is not None
+            else "faceless"
+        ),
+        segments=SEGMENTS,
+        video_script="\n\n".join(s["text"] for s in SEGMENTS),
+    )
     values.update(overrides)
     return TaskVideoRequest(**values)
 
@@ -34,7 +47,12 @@ def test_persona_panel_sits_at_the_bottom_in_every_layout():
     # captions above it never cover the photo.
     for layout in (VideoLayout.standard, VideoLayout.react, "react"):
         for full in (False, True):
-            params = _request(persona=_persona(), video_layout=layout, full_lipsync=full)
+            # Full lip sync caps media at 6 photos for the whole video,
+            # so its segments carry none.
+            segments = SEGMENTS
+            if full:
+                segments = [{k: v for k, v in s.items() if k != "media"} for s in SEGMENTS]
+            params = _request(persona=_persona(), video_layout=layout, full_lipsync=full, segments=segments)
             assert user_media._face_mode(params) != segment_panels.FACE_NONE
             assert segment_panels.panel_rect(1080, 1920)[1] == 1160
 

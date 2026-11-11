@@ -92,6 +92,30 @@ describe('MCP Tool Handlers', () => {
     expect(textOf(response)).toContain('persona-123');
   });
 
+  it('handleCreatePersona accepts a square 1:1 videoAspect: it is a product aspect', async () => {
+    vi.mocked(mockClient.createPersona).mockResolvedValue({
+      success: true,
+      personaId: 'persona-123',
+    });
+
+    const response = await handleCreatePersona(
+      mockClient,
+      CreatePersonaSchema.parse({
+        name: 'Alex AI',
+        avatarUrl: 'https://example.com/alex.png',
+        voiceId: 'alloy',
+        language: 'en-US',
+        videoAspect: '1:1',
+        scriptPrompt: 'Explain AI concepts',
+      })
+    );
+
+    expect(mockClient.createPersona).toHaveBeenCalledWith(
+      expect.objectContaining({ videoAspect: '1:1' })
+    );
+    expect(textOf(response)).toContain('persona-123');
+  });
+
   it('handleCreatePersona rejects an unknown voice with the exact message and never calls the client', async () => {
     vi.mocked(mockClient.createPersona).mockClear();
     vi.mocked(mockClient.listVoices).mockResolvedValue({ voices: [] });
@@ -665,7 +689,7 @@ describe('persona image library tools', () => {
 
   it('CreatePersonaSchema rejects a missing avatarUrl at parse time', () => {
     // avatarUrl is always required: every persona has a face, and "no face"
-    // is a per-video choice (generate_persona_video options.faceless),
+    // is a per-video choice (generate_persona_video options.videoType 'faceless'),
     // never a persona one. There is no images-specific rule anymore — the
     // missing required field fails the parse on its own.
     expect(() =>

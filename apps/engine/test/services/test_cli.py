@@ -12,67 +12,74 @@ class TestCli(unittest.TestCase):
     def test_build_video_params_with_local_materials(self):
         args = cli.parse_args(
             [
-                "--video-subject",
+                "--video-title",
                 "测试主题",
+                "--video-description",
+                "测试描述",
+                "--video-type",
+                "faceless",
                 "--video-materials",
                 "a.mp4, ,b.jpg,",
-                "--video-terms",
-                "foo, bar",
             ]
         )
 
         params = cli.build_video_params(args)
         materials = params.video_materials
 
-        self.assertEqual(params.video_subject, "测试主题")
+        self.assertEqual(params.video_title, "测试主题")
         self.assertEqual([m.url for m in materials], ["a.mp4", "b.jpg"])
         self.assertTrue(all(m.provider == "local" for m in materials))
-        self.assertEqual(params.video_terms, ["foo", "bar"])
 
     def test_run_cli_dispatches_task_start(self):
         with patch.object(cli.tm, "start", return_value={"script": "ok"}) as start, patch.object(
             cli.utils, "get_uuid", return_value="task-123"
         ), patch("builtins.print") as print_mock:
-            code = cli.run_cli(["--video-subject", "命令行测试", "--stop-at", "script"])
+            code = cli.run_cli(
+                ["--video-title", "命令行测试", "--video-description", "命令行描述", "--video-type", "faceless", "--stop-at", "script"]
+            )
 
         self.assertEqual(code, 0)
         self.assertTrue(start.called)
         kwargs = start.call_args.kwargs
         self.assertEqual(kwargs["task_id"], "task-123")
         self.assertEqual(kwargs["stop_at"], "script")
-        self.assertEqual(kwargs["params"].video_subject, "命令行测试")
+        self.assertEqual(kwargs["params"].video_title, "命令行测试")
         print_mock.assert_called_once()
 
     def test_run_cli_returns_error_when_task_fails(self):
         with patch.object(cli.tm, "start", return_value=None), patch.object(
             cli.utils, "get_uuid", return_value="task-456"
         ), patch.object(cli.logger, "error") as log_error:
-            code = cli.run_cli(["--video-subject", "失败场景"])
+            code = cli.run_cli(
+                ["--video-title", "失败场景", "--video-description", "失败描述", "--video-type", "faceless"]
+            )
 
         self.assertEqual(code, 1)
         log_error.assert_called_once()
 
     def test_subtitle_enabled_by_default(self):
-        args = cli.parse_args(["--video-subject", "test"])
+        args = cli.parse_args(["--video-title", "test", "--video-description", "d", "--video-type", "faceless"])
         params = cli.build_video_params(args)
         self.assertTrue(params.subtitle_enabled)
 
     def test_subtitle_disabled_with_no_flag(self):
-        args = cli.parse_args(["--video-subject", "test", "--no-subtitle-enabled"])
+        args = cli.parse_args(
+            ["--video-title", "test", "--video-description", "d", "--video-type", "faceless", "--no-subtitle-enabled"]
+        )
         params = cli.build_video_params(args)
         self.assertFalse(params.subtitle_enabled)
 
     def test_video_source_flags_are_removed(self):
         """
-        Source selection is fixed in the engine (3 sources shuffled in
-        cascade) — the --video-source and --video-source-mix flags no
-        longer exist in the CLI.
+        There is no remote source selection anymore (issue #542) — the
+        --video-source and --video-source-mix flags no longer exist in
+        the CLI.
         """
         with self.assertRaises(SystemExit):
-            cli.parse_args(["--video-subject", "test", "--video-source", "pexels"])
+            cli.parse_args(["--video-title", "test", "--video-description", "d", "--video-type", "faceless", "--video-source", "pexels"])
         with self.assertRaises(SystemExit):
             cli.parse_args(
-                ["--video-subject", "test", "--video-source-mix", "pexels,pixabay"]
+                ["--video-title", "test", "--video-description", "d", "--video-type", "faceless", "--video-source-mix", "pexels,pixabay"]
             )
 
     def test_script_prompt_flags_are_removed(self):
@@ -84,35 +91,22 @@ class TestCli(unittest.TestCase):
         """
         with self.assertRaises(SystemExit):
             cli.parse_args(
-                ["--video-subject", "test", "--video-script-prompt", "be punchy"]
+                ["--video-title", "test", "--video-description", "d", "--video-type", "faceless", "--video-script-prompt", "be punchy"]
             )
         with self.assertRaises(SystemExit):
             cli.parse_args(
-                ["--video-subject", "test", "--custom-system-prompt", "be concise"]
-            )
-
-    def test_materials_with_stop_at_terms_is_rejected(self):
-        """
-        Local materials don't generate search terms — --stop-at terms
-        makes no sense together with --video-materials.
-        """
-        with self.assertRaises(SystemExit):
-            cli.parse_args(
-                [
-                    "--video-subject",
-                    "test",
-                    "--video-materials",
-                    "a.mp4",
-                    "--stop-at",
-                    "terms",
-                ]
+                ["--video-title", "test", "--video-description", "d", "--video-type", "faceless", "--custom-system-prompt", "be concise"]
             )
 
     def test_build_video_params_with_script_video_and_audio_options(self):
         args = cli.parse_args(
             [
-                "--video-subject",
+                "--video-title",
                 "test",
+                "--video-description",
+                "d",
+                "--video-type",
+                "faceless",
                 "--video-language",
                 "en",
                 "--paragraph-number",
@@ -123,7 +117,6 @@ class TestCli(unittest.TestCase):
                 "fade-in",
                 "--video-clip-duration",
                 "4",
-                "--match-materials-to-script",
                 "--voice-volume",
                 "1.2",
                 "--voice-rate",
@@ -140,7 +133,6 @@ class TestCli(unittest.TestCase):
         self.assertEqual(params.video_concat_mode, "sequential")
         self.assertEqual(params.video_transition_mode, "FadeIn")
         self.assertEqual(params.video_clip_duration, 4)
-        self.assertTrue(params.match_materials_to_script)
         self.assertEqual(params.voice_volume, 1.2)
         self.assertEqual(params.voice_rate, 1.1)
         self.assertEqual(params.bgm_volume, 0.3)
@@ -148,8 +140,12 @@ class TestCli(unittest.TestCase):
     def test_build_video_params_with_subtitle_style_options(self):
         args = cli.parse_args(
             [
-                "--video-subject",
+                "--video-title",
                 "test",
+                "--video-description",
+                "d",
+                "--video-type",
+                "faceless",
                 "--font-name",
                 "MicrosoftYaHeiBold.ttc",
                 "--subtitle-position",
@@ -185,8 +181,12 @@ class TestCli(unittest.TestCase):
     def test_subtitle_background_can_be_disabled_from_cli(self):
         args = cli.parse_args(
             [
-                "--video-subject",
+                "--video-title",
                 "test",
+                "--video-description",
+                "d",
+                "--video-type",
+                "faceless",
                 "--no-subtitle-background-enabled",
                 "--rounded-subtitle-background",
             ]
