@@ -86,7 +86,7 @@ export const FULL_SETUP_PROMPT = [
   '6. Call generate_persona_video once with that personaId, the validated',
   '   segments unchanged, the confirmed title and description, language "en", the confirmed',
   '   providers with their account IDs from list_social_accounts, and the',
-  '   confirmed mode. Then call get_video_task_progress until done and share the',
+  '   confirmed mode. Then call wait_for_video_tasks with the taskId and share the',
   '   get_video_status URL.',
 ].join('\n');
 
@@ -112,7 +112,7 @@ export const DAILY_NEWS_PROMPT = [
   '   segments unchanged, the confirmed title and description, language "en", the confirmed',
   '   providers with account IDs from list_social_accounts, and the confirmed',
   '   mode.',
-  '5. Poll get_video_task_progress on the taskId until done, then share the',
+  '5. Call wait_for_video_tasks with the taskId, then share the',
   '   final video URL from get_video_status.',
 ].join('\n');
 
@@ -150,8 +150,8 @@ export const PLACE_SPOTLIGHT_PROMPT = [
   '   same with its reasons.',
   '5. Call generate_persona_video with the validated segments unchanged,',
   '   the confirmed title and description, language "en", the confirmed providers with',
-  '   account IDs from list_social_accounts, and the confirmed mode. Poll',
-  '   get_video_task_progress until done and share the get_video_status',
+  '   account IDs from list_social_accounts, and the confirmed mode. Call',
+  '   wait_for_video_tasks with the taskId and share the get_video_status',
   '   URL.',
 ].join('\n');
 
@@ -195,8 +195,8 @@ export const SUBJECT_SPOTLIGHT_PROMPT = [
   '   its reasons.',
   '5. Call generate_persona_video with the validated segments unchanged,',
   '   the confirmed title and description, language "en", the confirmed providers with',
-  '   account IDs from list_social_accounts, and the confirmed mode. Poll',
-  '   get_video_task_progress until done and share the get_video_status',
+  '   account IDs from list_social_accounts, and the confirmed mode. Call',
+  '   wait_for_video_tasks with the taskId and share the get_video_status',
   '   URL.',
 ].join('\n');
 
@@ -244,8 +244,8 @@ export const LAST_30_DAYS_PROMPT = [
   '5. Call generate_persona_video once with the confirmed personaId, the',
   '   validated segments unchanged, the confirmed title and description, language "en",',
   '   the confirmed providers with their account IDs from',
-  '   list_social_accounts, and the confirmed mode. Poll',
-  '   get_video_task_progress until done and share the get_video_status',
+  '   list_social_accounts, and the confirmed mode. Call',
+  '   wait_for_video_tasks with the taskId and share the get_video_status',
   '   URL.',
 ].join('\n');
 
@@ -279,8 +279,8 @@ export const MULTI_REDE_PROMPT = [
   '6. Call generate_persona_video once per network with the confirmed',
   '   personaId, the validated segments unchanged, the confirmed title and description,',
   '   language "en", the confirmed providers with their account IDs from',
-  '   list_social_accounts, and the confirmed mode. Poll',
-  '   get_video_task_progress until done and share the get_video_status',
+  '   list_social_accounts, and the confirmed mode. Call',
+  '   wait_for_video_tasks with the taskId and share the get_video_status',
   '   URL for each video.',
 ].join('\n');
 
@@ -327,6 +327,6 @@ export const VIRAL_SHORTS_PROMPT = [
   '   beyond a short quoted hook for analysis.',
   '6. Then follow the base: validate_script, score_draft, show me persona,',
   '   accounts, title, description, and time, wait for my yes, and call',
-  '   generate_persona_video once. Poll get_video_task_progress until done',
+  '   generate_persona_video once. Call wait_for_video_tasks with the taskId',
   '   and share the get_video_status URL.',
 ].join('\n');

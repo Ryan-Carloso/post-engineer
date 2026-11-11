@@ -999,6 +999,29 @@ describe('generate and schedule video client', () => {
     expect(error.message).toContain('title must be a non-empty string');
     expect(error.message).toContain('Invalid provider: "myspace"');
   });
+
+  it('carries status and delivered into ApiError on a delivered 410', async () => {
+    const { ApiError } = await import('../errors.js');
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 410,
+      text: async () =>
+        JSON.stringify({
+          success: false,
+          terminal: true,
+          delivered: true,
+          error: 'The video task no longer exists on the generation engine.',
+        }),
+    });
+
+    const error: unknown = await client.getVideoStatus('task-abc-123').catch((e: unknown) => e);
+
+    if (!(error instanceof ApiError)) {
+      throw new Error(`expected ApiError, got: ${String(error)}`);
+    }
+    expect(error.status).toBe(410);
+    expect(error.delivered).toBe(true);
+  });
 });
 
   it('retrieves video task status', async () => {

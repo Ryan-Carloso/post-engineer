@@ -61,7 +61,8 @@
   ],
   "GET /api/persona/video-status/[taskId]": [
     "get_video_status",
-    "get_video_task_progress"
+    "get_video_task_progress",
+    "wait_for_video_tasks"
   ],
   "GET /api/persona/voices": [
     "list_voices"

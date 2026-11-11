@@ -22,12 +22,24 @@ export class ApiError extends Error {
   readonly code: string | null;
   /** Dot-path of the offending input field, when the API names one. */
   readonly field: string | null;
+  /** HTTP status of the failed response (e.g. 410 when the engine lost the task). */
+  readonly status: number | null;
+  /** True when the error body says the video was delivered before the task was lost (410 only). */
+  readonly delivered: boolean;
 
-  constructor(message: string, code: string | null, field: string | null) {
+  constructor(
+    message: string,
+    code: string | null,
+    field: string | null,
+    status: number | null = null,
+    delivered: boolean = false,
+  ) {
     super(message);
     this.name = 'ApiError';
     this.code = code;
     this.field = field;
+    this.status = status;
+    this.delivered = delivered;
   }
 }
 
@@ -99,9 +111,11 @@ export function readApiFailure(errorText: string): {
   detail: string;
   code: string | null;
   field: string | null;
+  delivered: boolean;
 } {
   let code: string | null = null;
   let field: string | null = null;
+  let delivered = false;
   let detail = errorText.slice(0, MAX_ERROR_BODY_CHARS);
   try {
     const parsed: unknown = JSON.parse(errorText);
@@ -114,9 +128,10 @@ export function readApiFailure(errorText: string): {
       if (listed.length > 1) detail = listed.join(' ').slice(0, MAX_ERROR_BODY_CHARS);
       if (typeof record.code === 'string') code = record.code;
       if (typeof record.field === 'string') field = record.field;
+      if (record.delivered === true) delivered = true;
     }
   } catch {
     // Non-JSON body: detail stays the capped raw text.
   }
-  return { detail, code, field };
+  return { detail, code, field, delivered };
 }

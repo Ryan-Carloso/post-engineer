@@ -77,7 +77,9 @@ import {
 } from './tools-posts.js';
 import {
   CancelVideoTaskShape,
+  WaitForVideoTasksShape,
   handleCancelVideoTask,
+  handleWaitForVideoTasks,
 } from './video-task-tools.js';
 import { GeneratePersonaVideoShape, ValidateScriptShape, ValidateScriptDescription, ScoreDraftShape, ScoreDraftDescription, handleGeneratePersonaVideo, handleValidateScript, handleScoreDraft } from './tools-single-video.js';
 import { CheckMediaDescription, CheckMediaShape, UploadMediaDescription, UploadMediaShape, handleCheckMedia, handleUploadMedia } from './tools-user-media.js';
@@ -363,7 +365,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'generate_persona_video',
-    'Generate and schedule ONE persona video from a complete script. Product rule: generation is always tied to publishing — one call generates the video AND schedules its automatic publish; there is no orphan generation. Send the full script as segments (first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation) — no LLM expands it. title is the slot label for this video. Pass providers plus per-provider account IDs (see list_social_accounts), startAt (ISO datetime, wall-clock in timezone when naive), times (HH:MM, 24h), and timezone. Set mode to \'asap\' to publish the video the moment its generation finishes instead of scheduling it — startAt and times must NOT be set then. The slot must be 3h-30d ahead. idempotencyKey is generated automatically; reuse it to retry without generating twice (replayed: true). If the request is a topic rather than a ready script, call list_prompts first and follow the matching recipe with get_prompt instead of improvising the script — recipes pre-validate the script, media, and price facts before any token is spent; then pass its slug as recipe. Poll the slot\'s taskId with get_video_task_progress.',
+    'Generate and schedule ONE persona video from a complete script. Product rule: generation is always tied to publishing — one call generates the video AND schedules its automatic publish; there is no orphan generation. Send the full script as segments (first hook, then body, last CTA; 60-200 words total, body at least 30, CTA 5-20, hook 15-40 words ending with terminal punctuation) — no LLM expands it. title is the slot label for this video. Pass providers plus per-provider account IDs (see list_social_accounts), startAt (ISO datetime, wall-clock in timezone when naive), times (HH:MM, 24h), and timezone. Set mode to \'asap\' to publish the video the moment its generation finishes instead of scheduling it — startAt and times must NOT be set then. The slot must be 3h-30d ahead. idempotencyKey is generated automatically; reuse it to retry without generating twice (replayed: true). If the request is a topic rather than a ready script, call list_prompts first and follow the matching recipe with get_prompt instead of improvising the script — recipes pre-validate the script, media, and price facts before any token is spent; then pass its slug as recipe. Wait for the slot\'s taskId with wait_for_video_tasks — it blocks until the video completes or fails and reports the outcome.',
     GeneratePersonaVideoShape,
     withTracking('generate_persona_video', withScriptOutcome(recipeSession, 'generate_persona_video', async (args) => handleGeneratePersonaVideo(apiClient, args))),
   );
@@ -382,10 +384,19 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'get_video_task_progress',
-    'Poll one video task for its machine-readable progress: returns {task_id, state, progress, stage, error}. error is the engine failure reason when state is -1 (failed), null otherwise. Use for the video after generate_persona_video; prefer this over get_video_status when only progress matters.',
+    'Poll one video task for its machine-readable progress: returns {task_id, state, progress, stage, error}. error is the engine failure reason when state is -1 (failed), null otherwise. Use for the video after generate_persona_video; prefer this over get_video_status when only progress matters. Prefer wait_for_video_tasks when you need the final outcome instead of progress snapshots.',
     GetVideoTaskProgressShape,
     withTracking('get_video_task_progress', async (args) => {
       return handleGetVideoTaskProgress(apiClient, args);
+    })
+  );
+
+  server.tool(
+    'wait_for_video_tasks',
+    'Wait for one or more video tasks to reach a terminal state: blocks until every taskId completes (state 1) or fails (state -1, or gone from the engine), or the timeout elapses. Returns {summary, allTerminal, timedOut, results} with one entry per taskId: {task_id, state, outcome, progress, stage, error}. error is the engine failure reason when outcome is failed. Use after generate_persona_video or generate_persona_video_batch instead of polling get_video_task_progress. On timeout the results are partial: call again with the unfinished taskIds.',
+    WaitForVideoTasksShape,
+    withTracking('wait_for_video_tasks', async (args) => {
+      return handleWaitForVideoTasks(apiClient, args);
     })
   );
 

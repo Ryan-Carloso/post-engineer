@@ -1030,7 +1030,7 @@ export function sanitizeEngineError(error: string): string {
  * error carries the engine failure reason when the task failed. A body
  * without them (empty-body sentinel, 404 shape) is reported with
  * explicit nulls rather than silently dropping fields. */
-function narrowTaskProgress(result: unknown): {
+export function narrowTaskProgress(result: unknown): {
   task_id: string | null;
   state: number | null;
   progress: number | null;

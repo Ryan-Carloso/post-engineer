@@ -61,6 +61,7 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'get_prompt', descKey: 'apiKeys.toolDescGetPrompt', Icon: ComposeIcon },
   { id: 'get_video_status', descKey: 'apiKeys.toolDescGetVideoStatus', Icon: CheckIcon },
   { id: 'get_video_task_progress', descKey: 'apiKeys.toolDescGetVideoTaskProgress', Icon: SpinnerIcon },
+  { id: 'wait_for_video_tasks', descKey: 'apiKeys.toolDescWaitForVideoTasks', Icon: SpinnerIcon },
   { id: 'list_social_accounts', descKey: 'apiKeys.toolDescListSocialAccounts', Icon: GlobeIcon },
   { id: 'list_pinterest_boards', descKey: 'apiKeys.toolDescListPinterestBoards', Icon: GlobeIcon },
   { id: 'get_persona_publishing_accounts', descKey: 'apiKeys.toolDescGetPersonaPublishingAccounts', Icon: GlobeIcon },
