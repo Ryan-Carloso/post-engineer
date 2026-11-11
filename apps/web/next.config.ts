@@ -83,6 +83,13 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'i.pinimg.com',
       },
+      // Fanvue account avatars: the API returns avatarUrl, and Fanvue
+      // serves media from media.fanvue.com (API reference). A host
+      // missing here makes next/image refuse the card picture.
+      {
+        protocol: 'https',
+        hostname: 'media.fanvue.com',
+      },
     ],
   },
   async redirects() {

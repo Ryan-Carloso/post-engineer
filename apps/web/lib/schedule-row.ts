@@ -20,6 +20,7 @@ export interface ScheduleRow {
   pinterest_board_id: string | null;
   threespeak_account_ids: string[];
   rumble_account_ids: string[];
+  fanvue_account_ids: string[];
   days_of_week: number[] | null;
   start_hour: number | null;
   end_hour: number | null;
@@ -30,7 +31,11 @@ export interface ScheduleRow {
   publish_mode: string | null;
 }
 
-export function mapSchedule(row: ScheduleRow): ScheduleConfig {
+// The fanvue ids ride an intersection, not ScheduleConfig itself:
+// lib/api.ts is grandfathered over the 500-line cap and may not grow, so
+// its ScheduleConfig cannot gain the field here — the extraction that
+// moves the schedule shapes out of lib/api.ts adds it there.
+export function mapSchedule(row: ScheduleRow): ScheduleConfig & { fanvueAccountIds: string[] } {
   return {
     id: row.id,
     personaId: row.persona_id,
@@ -45,6 +50,7 @@ export function mapSchedule(row: ScheduleRow): ScheduleConfig {
     pinterestBoardId: row.pinterest_board_id ?? null,
     threespeakAccountIds: row.threespeak_account_ids ?? [],
     rumbleAccountIds: row.rumble_account_ids ?? [],
+    fanvueAccountIds: row.fanvue_account_ids ?? [],
     daysOfWeek: row.days_of_week ?? [],
     startHour: row.start_hour ?? null,
     endHour: row.end_hour ?? null,

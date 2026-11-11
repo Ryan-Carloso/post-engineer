@@ -27,6 +27,7 @@ export const THUMBNAIL_HOST_ALLOWLIST = [
   'cdn.bsky.app',
   'media.licdn.com',
   'i.pinimg.com',
+  'media.fanvue.com',
 ] as const;
 
 // Wildcard hosts in next/image remotePatterns (next.config.ts): the
@@ -35,7 +36,7 @@ export const THUMBNAIL_HOST_SUFFIXES = ['.cdninstagram.com', '.fbcdn.net'] as co
 
 const LABEL_CAP = 200;
 
-export type AccountProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble';
+export type AccountProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue';
 
 export type AccountLabelOrigin = 'stored' | 'provider_id';
 

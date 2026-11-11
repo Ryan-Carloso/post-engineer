@@ -42,6 +42,7 @@ describe('account-columns', () => {
       facebook_account_ids: ['111', '222'],
       pinterest_account_ids: [],
       threespeak_account_ids: [],
+      fanvue_account_ids: [],
     });
   });
 

@@ -16,6 +16,8 @@
 //              https://www.pinterest.com/pin/<id>/
 //   3speak    → permalink  ready-made watch URL (best-effort; the video id alone builds no URL)
 //   rumble    → permalink  the monetized URL from the upload response (best-effort; no URL can be derived from the id)
+//   fanvue    → permalink  ready-made post URL (best-effort; no URL can be derived from the id —
+//              the Fanvue post-URL format is unknown, so no derivation is attempted)
 //
 // So three providers arrive with a URL and two need one derived. A provider
 // entry with neither is omitted rather than rendered as a dead link.
@@ -26,7 +28,7 @@
 // and it must stay safe to import from a client component.
 //---------------
 
-export type PublishProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble';
+export type PublishProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue';
 
 export interface PublishLink {
   provider: PublishProvider;
@@ -42,6 +44,7 @@ const PROVIDERS: ReadonlySet<string> = new Set<PublishProvider>([
   'facebook',
   'pinterest',
   '3speak', 'rumble',
+  'fanvue',
 ]);
 
 //---------------
@@ -134,6 +137,8 @@ export function resolvePublishLinks(
 
     const postId = readString(record, 'postId');
     if (postId === null) continue;
+    // Fanvue has no derivation here on purpose: the post-URL format is
+    // unknown, so only a provider-supplied permalink ever links.
     const derived =
       typed === 'bluesky'
         ? blueskyPostUrl(postId)

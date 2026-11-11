@@ -20,7 +20,7 @@ import { BLUESKY_CAPTION_MAX_GRAPHEMES, countBlueskyGraphemes } from './bluesky'
 // check constraint, re-created with the full list by the latest provider
 // migration, 053). The scorer buckets are universal;
 // only the publish check varies by network.
-export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble';
+export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue';
 
 // What the text is: a post body, or a video script (segments joined by
 // newlines, hook first, CTA last). A script is spoken, so hashtags do not
@@ -36,13 +36,15 @@ const SCORE_PROFILES = {
   script: { hook: 25, hookWords: [15, 40], length: 20, words: [60, 200], nearWords: [40, 250], slop: 25 },
 } as const;
 
-export const PUBLISH_NETWORKS: PublishNetwork[] = ['linkedin', 'youtube', 'instagram', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'];
+export const PUBLISH_NETWORKS: PublishNetwork[] = ['linkedin', 'youtube', 'instagram', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'];
 
 import { LINKEDIN_POST_MAX_CHARS, THREADS_POST_MAX_CHARS, FACEBOOK_POST_MAX_CHARS, PINTEREST_DESCRIPTION_MAX_CHARS } from './draft-ceilings';
 export { LINKEDIN_POST_MAX_CHARS, THREADS_POST_MAX_CHARS, FACEBOOK_POST_MAX_CHARS, PINTEREST_DESCRIPTION_MAX_CHARS };
 // Rumble has no documented description ceiling, so the publish check has
 // no failure branch for it — the 100-character title ceiling lives at the
-// publish boundary instead (lib/rumble.ts, publish_rumble.py).
+// publish boundary instead (lib/rumble.ts, publish_rumble.py). Fanvue has
+// no documented caption ceiling either, so it also takes the default
+// branch: no failure branch, nothing invented.
 // The feed shows roughly the first 210 characters on desktop (~140 on
 // mobile) before the "see more" fold: a first line longer than this is
 // a warning, never a failure — the fold is a display cut, not a cap.
@@ -51,7 +53,7 @@ export const LINKEDIN_SEE_MORE_FOLD_CHARS = 210;
 // code, so their ceilings below are the platforms' documented limits
 // (YouTube video descriptions, Instagram captions) and are warnings
 // only — never invented blocks. Only caps with in-repo evidence
-// (LinkedIn, Bluesky, Threads, Facebook, Pinterest) fail the check; 3Speak has no documented post-body cap, so it has no case here.
+// (LinkedIn, Bluesky, Threads, Facebook, Pinterest) fail the check; 3Speak and Fanvue have no documented post-body cap, so they have no case here.
 export const YOUTUBE_DESCRIPTION_MAX_CHARS = 5000;
 export const INSTAGRAM_CAPTION_MAX_CHARS = 2200;
 // The route rejects drafts over this input cap with a 400 instead of

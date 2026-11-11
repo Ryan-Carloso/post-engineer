@@ -109,6 +109,26 @@ describe('generate_persona_video tool', () => {
     expect(input.pinterestBoardId).toBe('b1');
   });
 
+  it('passes the fanvue account ids through to the client', async () => {
+    const client = mockClient();
+    const response = await handleGeneratePersonaVideo(client, {
+      personaId: 'persona-1',
+      segments,
+      title: 'Porto trip',
+      description: 'Agent description.',
+      language: 'en-US',
+      providers: ['fanvue'],
+      fanvueAccountIds: ['fanvue-9'],
+      mode: 'scheduled',
+      startAt: '2026-10-30T18:00:00',
+      times: ['18:00'],
+      timezone: 'Europe/Lisbon',
+    });
+    expect(response.isError).toBeUndefined();
+    const input = vi.mocked(client.generatePersonaVideo).mock.calls[0][0];
+    expect(input.fanvueAccountIds).toEqual(['fanvue-9']);
+  });
+
   it('fails fast for pinterest without a board id without calling the client (no token debit)', async () => {
     const client = mockClient();
     const response = await handleGeneratePersonaVideo(client, {

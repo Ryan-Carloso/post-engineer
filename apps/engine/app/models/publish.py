@@ -1,4 +1,4 @@
-"""Publish metadata models for task requests (YouTube / Instagram / Bluesky / LinkedIn / Threads / Facebook / Pinterest / 3Speak / Rumble)."""
+"""Publish metadata models for task requests (YouTube / Instagram / Bluesky / LinkedIn / Threads / Facebook / Pinterest / 3Speak / Rumble / Fanvue)."""
 
 from typing import Literal, Optional
 
@@ -78,11 +78,19 @@ class RumblePublish(BaseModel):
     account_ids: list[str] = Field(min_length=1)
 
 
+class FanvuePublish(BaseModel):
+    """Fanvue publish fields required by the internal upload API."""
+
+    title: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1, max_length=800)
+    account_ids: list[str] = Field(min_length=1)
+
+
 class PublishParams(BaseModel):
-    """Optional publish selection for a task (YouTube/Instagram/Bluesky/LinkedIn/Threads/Facebook/Pinterest/3Speak/Rumble)."""
+    """Optional publish selection for a task (YouTube/Instagram/Bluesky/LinkedIn/Threads/Facebook/Pinterest/3Speak/Rumble/Fanvue)."""
 
     providers: list[
-        Literal["youtube", "instagram", "bluesky", "linkedin", "threads", "facebook", "pinterest", "3speak", "rumble"]
+        Literal["youtube", "instagram", "bluesky", "linkedin", "threads", "facebook", "pinterest", "3speak", "rumble", "fanvue"]
     ] = Field(min_length=1)
     youtube: Optional[YouTubePublish] = None
     instagram: Optional[InstagramPublish] = None
@@ -93,6 +101,7 @@ class PublishParams(BaseModel):
     pinterest: Optional[PinterestPublish] = None
     threespeak: Optional[ThreespeakPublish] = None
     rumble: Optional[RumblePublish] = None
+    fanvue: Optional[FanvuePublish] = None
 
     @model_validator(mode="after")
     def check_provider_metadata(self) -> "PublishParams":
@@ -114,4 +123,6 @@ class PublishParams(BaseModel):
             raise ValueError("3speak provider requires 3speak metadata")
         if "rumble" in self.providers and self.rumble is None:
             raise ValueError("rumble provider requires rumble metadata")
+        if "fanvue" in self.providers and self.fanvue is None:
+            raise ValueError("fanvue provider requires fanvue metadata")
         return self

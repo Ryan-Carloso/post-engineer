@@ -679,3 +679,139 @@ describe('oauth-connect logging', () => {
     );
   });
 });
+
+//---------------
+// Fanvue PKCE — the code verifier must survive from /start (or from the
+// connect-url store) to the callback, in both flows. The shared
+// test/oauth-state-store fake carries the code_verifier column (migration
+// 057), so the round-trips below use it.
+//---------------
+
+describe('oauth-connect — fanvue PKCE', () => {
+  const FANVUE_REDIRECT = 'https://post-engineer.com/api/fanvue-auth/callback';
+
+  it('buildOAuthConnectUrl for Fanvue returns the auth URL plus the PKCE verifier', async () => {
+    vi.stubEnv('FANVUE_CLIENT_ID', 'fan-app-id');
+    vi.stubEnv('FANVUE_CLIENT_SECRET', 'fan-app-secret');
+    const { createHash } = await import('node:crypto');
+    const { buildOAuthConnectUrl } = await import('@/lib/oauth-connect');
+    const { decodeOAuthState } = await import('@/lib/oauth-utils');
+    const result = await buildOAuthConnectUrl('fanvue', FANVUE_REDIRECT);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const url = new URL(result.authUrl);
+      expect(`${url.origin}${url.pathname}`).toBe('https://auth.fanvue.com/oauth2/auth');
+      expect(url.searchParams.get('client_id')).toBe('fan-app-id');
+      expect(url.searchParams.get('redirect_uri')).toBe(FANVUE_REDIRECT);
+      expect(url.searchParams.get('response_type')).toBe('code');
+      expect(url.searchParams.get('code_challenge_method')).toBe('S256');
+      expect(url.searchParams.get('state')).toBe(result.state);
+      expect(result.codeVerifier).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      // The challenge in the URL is the S256 of the returned verifier.
+      // False positive: this hashes the PKCE code verifier (a random
+      // 43-char string) to assert the RFC 7636 S256 challenge, not a
+      // password. SHA-256 is the mandated hash here.
+      expect(url.searchParams.get('code_challenge')).toBe(
+        // codeql[js/insufficient-password-hash]
+        createHash('sha256').update(result.codeVerifier as string, 'utf8').digest('base64url'),
+      );
+      expect(decodeOAuthState(result.state)).toMatchObject({ provider: 'fanvue', redirectUri: FANVUE_REDIRECT });
+    }
+    vi.unstubAllEnvs();
+  });
+
+  it('buildOAuthConnectUrl for Fanvue fails without Fanvue credentials', async () => {
+    vi.stubEnv('FANVUE_CLIENT_ID', undefined);
+    vi.stubEnv('FANVUE_CLIENT_SECRET', undefined);
+    const { buildOAuthConnectUrl } = await import('@/lib/oauth-connect');
+    const result = await buildOAuthConnectUrl('fanvue', FANVUE_REDIRECT);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('FANVUE_CLIENT_ID');
+    vi.unstubAllEnvs();
+  });
+
+  it('storeOAuthState + consumeOAuthState round-trips the Fanvue code verifier', async () => {
+    const { storeOAuthState, consumeOAuthState } = await import('@/lib/oauth-connect');
+    const store = makeStore();
+    await storeOAuthState(store as never, {
+      state: 'raw-state-fan',
+      userId: 'user-1',
+      provider: 'fanvue',
+      nonce: 'nonce-fan',
+      redirectUri: FANVUE_REDIRECT,
+      codeVerifier: 'verifier-fan-1',
+    });
+    const consumed = await consumeOAuthState(store as never, 'raw-state-fan', 'user-1');
+    expect(consumed).toMatchObject({
+      userId: 'user-1',
+      provider: 'fanvue',
+      nonce: 'nonce-fan',
+      redirectUri: FANVUE_REDIRECT,
+      codeVerifier: 'verifier-fan-1',
+    });
+    // Single-use: the verifier is gone with the row.
+    expect(await consumeOAuthState(store as never, 'raw-state-fan', 'user-1')).toBeNull();
+  });
+
+  it('consumeOAuthState returns no verifier for a state stored without one', async () => {
+    const { storeOAuthState, consumeOAuthState } = await import('@/lib/oauth-connect');
+    const store = makeStore();
+    await storeOAuthState(store as never, {
+      state: 'raw-state-pin',
+      userId: 'user-1',
+      provider: 'pinterest',
+      nonce: 'nonce-pin',
+      redirectUri: 'https://post-engineer.com/api/pinterest-auth/callback',
+    });
+    const consumed = await consumeOAuthState(store as never, 'raw-state-pin', 'user-1');
+    expect(consumed).toMatchObject({ provider: 'pinterest' });
+    expect(consumed?.codeVerifier).toBeUndefined();
+  });
+
+  it('resolveOAuthCallbackAuth web flow returns the Fanvue verifier from its cookie', async () => {
+    const { createOAuthState } = await import('@/lib/oauth-utils');
+    const { NextRequest } = await import('next/server');
+    const { resolveOAuthCallbackAuth } = await import('@/lib/oauth-connect');
+    const { state, nonce } = createOAuthState({ provider: 'fanvue', redirectUri: FANVUE_REDIRECT });
+    const request = new NextRequest(FANVUE_REDIRECT, {
+      headers: { cookie: `oauth_state_nonce=${nonce}; fanvue_code_verifier=verifier-cookie-1` },
+    });
+    const resolved = await resolveOAuthCallbackAuth(request, state, 'user-1', () => {
+      throw new Error('web flow must not touch the store');
+    }, 'fanvue');
+    expect(resolved).toEqual({
+      ok: true,
+      userId: 'user-1',
+      viaMcp: false,
+      redirectUri: FANVUE_REDIRECT,
+      codeVerifier: 'verifier-cookie-1',
+    });
+  });
+
+  it('resolveOAuthCallbackAuth MCP flow returns the Fanvue verifier from the stored state', async () => {
+    const { storeOAuthState, resolveOAuthCallbackAuth } = await import('@/lib/oauth-connect');
+    const { createOAuthState } = await import('@/lib/oauth-utils');
+    const { NextRequest } = await import('next/server');
+    const store = makeStore();
+    const { state, nonce } = createOAuthState({ provider: 'fanvue', redirectUri: FANVUE_REDIRECT });
+    // The verifier the start stored: the nonce cookie is absent here
+    // (API-key flow), so the stored row is the only source.
+    await storeOAuthState(store as never, {
+      state,
+      userId: 'api-key-owner',
+      provider: 'fanvue',
+      nonce,
+      redirectUri: FANVUE_REDIRECT,
+      codeVerifier: 'verifier-stored-1',
+    });
+    const request = new NextRequest(FANVUE_REDIRECT);
+    const resolved = await resolveOAuthCallbackAuth(request, state, 'api-key-owner', () => store as never, 'fanvue');
+    expect(resolved).toEqual({
+      ok: true,
+      userId: 'api-key-owner',
+      viaMcp: true,
+      redirectUri: FANVUE_REDIRECT,
+      codeVerifier: 'verifier-stored-1',
+    });
+  });
+});

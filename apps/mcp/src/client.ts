@@ -562,7 +562,7 @@ export class PostEngineerClient {
   async disconnectAccount(provider: string, providerAccountId: string): Promise<unknown> {
     // The route 400s INVALID_PROVIDER / INVALID_PARAMS — fail fast with the
     // field named before any fetch goes out.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'];
     if (!validProviders.includes(provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }
@@ -600,7 +600,7 @@ export class PostEngineerClient {
     // record. Only set entries the caller provided: the server enforces
     // which providers need accounts and rejects unknown ones.
     const accounts: Record<string, string[]> = {};
-    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, pinterest: input.pinterestAccountIds, '3speak': input.threespeakAccountIds, rumble: input.rumbleAccountIds };
+    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, pinterest: input.pinterestAccountIds, fanvue: input.fanvueAccountIds, '3speak': input.threespeakAccountIds, rumble: input.rumbleAccountIds };
     for (const [provider, ids] of Object.entries(byProvider)) if (ids !== undefined) accounts[provider] = ids;
     // A stray schedule plan in ASAP mode is a caller bug: the server 400s
     // ("publishing.schedule must not be set"), so fail fast with the same
@@ -756,7 +756,7 @@ export class PostEngineerClient {
     // Direct publish of a user-provided video — no generation, no schedule.
     // Mirrors the server-side 400s: provider-specific required fields and
     // per-provider account-id field names fail fast here, before any fetch.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'];
+    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'];
     if (!validProviders.includes(input.provider)) {
       throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
     }

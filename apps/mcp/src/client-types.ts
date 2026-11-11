@@ -66,7 +66,7 @@ export interface GeneratePersonaVideoInput {
   description: string;
   /** Paired A/B experiment link (issue #476); checked server-side before the charge. */
   experiment?: { experimentId: string; variantId: string; pair: number };
-  providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble')[];
+  providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' | '3speak' | 'rumble')[];
   youtubeAccountIds?: string[];
   instagramAccountIds?: string[];
   linkedinAccountIds?: string[];
@@ -76,6 +76,7 @@ export interface GeneratePersonaVideoInput {
   pinterestAccountIds?: string[];
   /** Pinterest only: the board the pin goes to (the id from list_pinterest_boards). Required when pinterest is selected. */
   pinterestBoardId?: string;
+  fanvueAccountIds?: string[];
   threespeakAccountIds?: string[];
   rumbleAccountIds?: string[];
   /**
@@ -132,14 +133,14 @@ export interface UpdatePersonaInput {
 
 /** Input for publishing a user-provided video directly, without generation. */
 export interface PublishVideoDirectInput {
-  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble';
+  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' | '3speak' | 'rumble';
   /** Local path to the video file (.mp4 or .mov, max 2GB). */
   videoPath: string;
-  /** Target accounts (channel IDs / IG user IDs / DIDs / LinkedIn member IDs or org URNs / Threads user IDs / Facebook Page IDs / Pinterest user IDs / Hive usernames / Rumble Channel IDs). */
+  /** Target accounts (channel IDs / IG user IDs / DIDs / LinkedIn member IDs or org URNs / Threads user IDs / Facebook Page IDs / Pinterest user IDs / Fanvue account IDs / Hive usernames / Rumble Channel IDs). */
   accountIds: string[];
-  /** YouTube and Rumble: required. Pinterest: pin title (optional). */
+  /** YouTube, Rumble and Fanvue: required. Pinterest: pin title (optional). */
   title?: string;
-  /** YouTube and Rumble: required. Pinterest: pin description (optional; caption is used when omitted). */
+  /** YouTube, Rumble and Fanvue: required. Pinterest: pin description (optional; caption is used when omitted). */
   description?: string;
   /** YouTube only: required, at least one tag. */
   tags?: string[];

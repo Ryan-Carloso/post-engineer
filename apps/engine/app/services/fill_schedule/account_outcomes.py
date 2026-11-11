@@ -32,6 +32,7 @@ _ACCOUNT_COLUMNS = {
     "pinterest": "pinterest_account_ids",
     "3speak": "threespeak_account_ids",
     "rumble": "rumble_account_ids",
+    "fanvue": "fanvue_account_ids",
 }
 _LABELS = {
     "youtube": "YouTube",
@@ -43,6 +44,7 @@ _LABELS = {
     "pinterest": "Pinterest",
     "3speak": "3Speak",
     "rumble": "Rumble",
+    "fanvue": "Fanvue",
 }
 _LINK_FIELDS = ("videoUrl", "permalink", "postId")
 

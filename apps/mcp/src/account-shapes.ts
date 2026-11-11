@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 export const DisconnectAccountShape = {
   provider: z
-    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'])
+    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'])
     .describe('The social platform of the account to disconnect.'),
   providerAccountId: z
     .string()

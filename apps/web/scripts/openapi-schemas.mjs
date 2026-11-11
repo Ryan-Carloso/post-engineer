@@ -158,7 +158,7 @@ const scheduleSummary = object({
 });
 
 const anyObject = { type: 'object', additionalProperties: true };
-const providers = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'];
+const providers = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'];
 // Engine-backed routes proxy the engine response, wrapped as BaseResponse.
 const engineEnvelope = object({
   status: { type: 'integer' },
@@ -331,7 +331,7 @@ export const operationSchemas = {
   },
   // apps/web/app/api/account/connect-url/route.ts
   'POST /api/account/connect-url': {
-    request: object({ provider: { type: 'string', enum: ['youtube', 'instagram', 'linkedin', 'threads', 'facebook'] } }, ['provider']),
+    request: object({ provider: { type: 'string', enum: ['youtube', 'instagram', 'linkedin', 'threads', 'facebook', 'pinterest', 'fanvue'] } }, ['provider']),
     response: success({ auth_url: { type: 'string', format: 'uri', description: 'https URL to open in a browser.' } }),
   },
   // apps/web/app/api/bluesky-connect/route.ts (JSON or form body)

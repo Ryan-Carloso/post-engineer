@@ -87,6 +87,12 @@ vi.mock('@/lib/oauth/pinterest-handler', () => ({
 vi.mock('@/lib/pinterest-accounts', () => ({
   usePinterestAccountsQuery: vi.fn(),
 }));
+vi.mock('@/lib/oauth/fanvue-handler', () => ({
+  useFanvueOAuth: vi.fn(),
+}));
+vi.mock('@/lib/fanvue-accounts', () => ({
+  useFanvueAccountsQuery: vi.fn(),
+}));
 vi.mock('@/lib/oauth/linkedin-handler', () => ({
   useLinkedInOAuth: vi.fn(() => ({
     startOAuth: vi.fn().mockResolvedValue(undefined),
@@ -159,6 +165,8 @@ import { useThreadsOAuth } from '@/lib/oauth/threads-handler';
 import { useFacebookOAuth } from '@/lib/oauth/facebook-handler';
 import { usePinterestOAuth } from '@/lib/oauth/pinterest-handler';
 import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
+import { useFanvueOAuth } from '@/lib/oauth/fanvue-handler';
+import { useFanvueAccountsQuery } from '@/lib/fanvue-accounts';
 
 function createWrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -204,6 +212,8 @@ beforeEach(() => {
   vi.mocked(useFacebookOAuth).mockReturnValue(facebookOAuth);
   vi.mocked(usePinterestAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
   vi.mocked(usePinterestOAuth).mockReturnValue(pinterestOAuth);
+  vi.mocked(useFanvueAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
+  vi.mocked(useFanvueOAuth).mockReturnValue(fanvueOAuth);
   vi.mocked(useRumbleAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
   vi.mocked(useLinkedInOAuth).mockReturnValue({
     startOAuth: vi.fn().mockResolvedValue(undefined),
@@ -219,6 +229,7 @@ beforeEach(() => {
 const threadsOAuth = { isLoading: false, error: null, startOAuth: vi.fn() } as unknown as ReturnType<typeof useThreadsOAuth>;
 const facebookOAuth = { isLoading: false, error: null, startOAuth: vi.fn() } as unknown as ReturnType<typeof useFacebookOAuth>;
 const pinterestOAuth = { isLoading: false, error: null, startOAuth: vi.fn() } as unknown as ReturnType<typeof usePinterestOAuth>;
+const fanvueOAuth = { isLoading: false, error: null, startOAuth: vi.fn() } as unknown as ReturnType<typeof useFanvueOAuth>;
 
 describe('app/(main)/accounts/page — AccountsPage', () => {
   it('renders page header', () => {
@@ -237,14 +248,19 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     expect(screen.getByText('accounts.instagramLabel')).toBeTruthy();
   });
 
+  it('renders Fanvue section label', () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(screen.getByText('accounts.fanvueLabel')).toBeTruthy();
+  });
+
   it('shows the shared connection slot when YouTube has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(9);
+    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(10);
   });
 
   it('shows the shared connection slot when Instagram has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(9);
+    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(10);
   });
 
   it('shows loading skeletons while loading', () => {
@@ -720,7 +736,7 @@ describe('Threads accounts section', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.getByText('accounts.threadsLabel')).toBeTruthy();
     expect(screen.getByText('accounts.threadsDescription')).toBeTruthy();
-    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak, rumble.
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, fanvue, 3speak, rumble.
     fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[4]);
     expect(threadsOAuth.startOAuth).toHaveBeenCalledTimes(1);
   });
@@ -782,7 +798,7 @@ describe('Facebook Pages accounts section', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.getByText('accounts.facebookLabel')).toBeTruthy();
     expect(screen.getByText('accounts.facebookDescription')).toBeTruthy();
-    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak, rumble.
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, fanvue, 3speak, rumble.
     fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[5]);
     expect(facebookOAuth.startOAuth).toHaveBeenCalledTimes(1);
   });
@@ -825,7 +841,7 @@ describe('Facebook Pages accounts section', () => {
   it('disables the connect button while the OAuth popup is opening', () => {
     vi.mocked(useFacebookOAuth).mockReturnValue({ ...facebookOAuth, isLoading: true });
     render(<AccountsPage />, { wrapper: createWrapper() });
-    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak, rumble.
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, fanvue, 3speak, rumble.
     const button = screen.getAllByRole('button', { name: 'accounts.connectFirst' })[5] as HTMLButtonElement;
     expect(button).toBeDisabled();
   });
@@ -906,8 +922,8 @@ describe('Facebook Pages accounts section', () => {
     const fetchMock = vi.fn(async () => ({ ok: false, status, json: async () => body }));
     vi.stubGlobal('fetch', fetchMock);
     render(<AccountsPage />, { wrapper: createWrapper() });
-    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak, rumble.
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[7]);
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, fanvue, 3speak, rumble.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[8]);
     fireEvent.change(await screen.findByTestId('threespeak-handle-input'), { target: { value: 'alice' } });
     fireEvent.change(screen.getByTestId('threespeak-password-input'), { target: { value: '5K-posting-key' } });
     fireEvent.click(screen.getByTestId('threespeak-connect-button'));
@@ -917,7 +933,7 @@ describe('Facebook Pages accounts section', () => {
 
   it('3speak connect dialog shows its title, hint, labels and security note', async () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[7]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[8]);
     expect(await screen.findByRole('dialog', { name: 'accounts.threespeakConnectTitle' })).toBeInTheDocument();
     expect(screen.getByText('accounts.threespeakConnectHint')).toBeInTheDocument();
     expect(screen.getByText('accounts.threespeakHandleLabel')).toBeInTheDocument();
@@ -953,7 +969,7 @@ describe('Facebook Pages accounts section', () => {
     const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ success: true, accountId: 'row-1', username: 'alice' }) }));
     vi.stubGlobal('fetch', fetchMock);
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[7]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[8]);
     fireEvent.change(await screen.findByTestId('threespeak-handle-input'), { target: { value: 'alice' } });
     fireEvent.change(screen.getByTestId('threespeak-password-input'), { target: { value: '5K-posting-key' } });
     fireEvent.click(screen.getByTestId('threespeak-connect-button'));
@@ -966,7 +982,7 @@ describe('Facebook Pages accounts section', () => {
     const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }));
     vi.stubGlobal('fetch', fetchMock);
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[7]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[8]);
     fireEvent.click(await screen.findByTestId('threespeak-connect-button'));
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -999,7 +1015,7 @@ describe('Pinterest accounts section', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.getByText('accounts.pinterestLabel')).toBeTruthy();
     expect(screen.getByText('accounts.pinterestDescription')).toBeTruthy();
-    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak, rumble.
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, fanvue, 3speak, rumble.
     fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[6] as HTMLElement);
     expect(pinterestOAuth.startOAuth).toHaveBeenCalledTimes(1);
   });
@@ -1044,6 +1060,37 @@ describe('Pinterest accounts section', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     const button = screen.getAllByRole('button', { name: 'accounts.connectFirst' })[6] as HTMLButtonElement;
     expect(button).toBeDisabled();
+  });
+});
+
+describe('Fanvue accounts section', () => {
+  it('renders the section with its localized copy and starts OAuth from its button', () => {
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    expect(screen.getByText('accounts.fanvueLabel')).toBeTruthy();
+    expect(screen.getByText('accounts.fanvueDescription')).toBeTruthy();
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, fanvue, 3speak, rumble.
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[7] as HTMLElement);
+    expect(fanvueOAuth.startOAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists each connected Fanvue account, marking a stored name or the account id', () => {
+    vi.mocked(useFanvueAccountsQuery, { partial: true }).mockReturnValue({
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'fanvue', recordId: 'r1', providerAccountId: 'fv-1', accountName: 'Maker', profilePictureUrl: 'https://media.fanvue.com/a.jpg', connectedAt: 0, lastUsed: 0 },
+          { provider: 'fanvue', recordId: 'r2', providerAccountId: 'fv-2', accountName: null, connectedAt: 0, lastUsed: 0 },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const cards = screen.getAllByTestId('account-card').filter((el) => el.getAttribute('data-provider') === 'fanvue');
+    expect(cards).toHaveLength(2);
+    expect(within(cards[0]).getByText('Maker')).toBeTruthy();
+    expect(within(cards[1]).getByText('fv-2')).toBeTruthy();
   });
 });
 

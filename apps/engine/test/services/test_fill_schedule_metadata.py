@@ -24,6 +24,7 @@ SCHEDULE = {
     "pinterest_board_id": "board-1",
     "threespeak_account_ids": ["hive-1"],
     "rumble_account_ids": ["rum-1"],
+    "fanvue_account_ids": ["fv-1"],
     "instagram_account_ids": ["ig-1"],
     "bluesky_account_ids": ["did:1"],
 }
@@ -42,6 +43,11 @@ class MetadataForDescriptionTests(unittest.TestCase):
 
     def test_rumble_uses_the_agent_description(self):
         metadata = metadata_for("rumble", "Slot title", SCHEDULE, "Agent description.")
+        self.assertEqual(metadata.description, "Agent description.")
+
+    def test_fanvue_uses_the_agent_description(self):
+        metadata = metadata_for("fanvue", "Slot title", SCHEDULE, "Agent description.")
+        self.assertEqual(metadata.title, "Slot title")
         self.assertEqual(metadata.description, "Agent description.")
 
     def test_caption_providers_use_the_agent_description(self):

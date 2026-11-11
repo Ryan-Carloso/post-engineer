@@ -18,6 +18,7 @@ export const PROVIDER_LABELS: Record<SocialProvider, string> = {
   pinterest: 'Pinterest',
   '3speak': '3Speak',
   rumble: 'Rumble',
+  fanvue: 'Fanvue',
 };
 
 // Every account a schedule targets, across all networks.
@@ -31,6 +32,7 @@ export function scheduleAccountIds(schedule: {
   pinterestAccountIds?: string[];
   threespeakAccountIds?: string[];
   rumbleAccountIds?: string[];
+  fanvueAccountIds?: string[];
 }): string[] {
   return [
     ...(schedule.youtubeAccountIds ?? []),
@@ -42,6 +44,7 @@ export function scheduleAccountIds(schedule: {
     ...(schedule.pinterestAccountIds ?? []),
     ...(schedule.threespeakAccountIds ?? []),
     ...(schedule.rumbleAccountIds ?? []),
+    ...(schedule.fanvueAccountIds ?? []),
   ];
 }
 
@@ -73,6 +76,9 @@ export function accountOption(account: PublicAccountItem): AccountOption {
   }
   if (account.provider === 'pinterest') {
     return { id: account.providerAccountId, provider: 'pinterest', label: account.accountName ?? account.providerAccountId };
+  }
+  if (account.provider === 'fanvue') {
+    return { id: account.providerAccountId, provider: 'fanvue', label: account.accountName ?? account.providerAccountId };
   }
   if (account.provider === '3speak') {
     return { id: account.providerAccountId, provider: '3speak', label: account.accountName ?? account.providerAccountId };

@@ -10,7 +10,7 @@ import { getErrorMessage } from './errors.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
 export const ConnectAccountShape = {
-  provider: z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', '3speak', 'rumble']).describe('The social platform to connect'),
+  provider: z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'fanvue', '3speak', 'rumble']).describe('The social platform to connect'),
   handle: z.string().min(1).optional().describe('Bluesky handle (e.g. user.bsky.social). Required only for bluesky.'),
   appPassword: z.string().min(1).optional().describe('Bluesky app password (Settings > App passwords). Required only for bluesky. Never shared or logged.'),
   username: z.string().min(1).optional().describe('Hive username (e.g. alice). Required only for 3speak.'),

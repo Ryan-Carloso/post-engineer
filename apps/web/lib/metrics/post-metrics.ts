@@ -176,6 +176,9 @@ const TARGET_EXTRACTORS: Record<MeasuredProvider, (record: Record<string, unknow
   // other non-YouTube providers (see lib/threespeak.ts).
   '3speak': (record) => readString(record, 'postId'),
   rumble: (record) => readString(record, 'postId'),
+  // Same shape as the other non-YouTube providers: the publish result
+  // stores the video id as postId.
+  fanvue: (record) => readString(record, 'postId'),
 };
 
 function isMeasuredProvider(value: unknown): value is MeasuredProvider {

@@ -114,6 +114,39 @@ describe('buildDirectPublishForm', () => {
     expect(form.get('video')).toBeInstanceOf(Blob);
   });
 
+  it('sends title + description to fanvueAccountIds for fanvue', () => {
+    expect(() =>
+      requireDirectPublishFields({ provider: 'fanvue', videoPath: 'clip.mp4', accountIds: ['fan-1'] }),
+    ).toThrow(/title is required for fanvue/);
+    expect(() =>
+      requireDirectPublishFields({
+        provider: 'fanvue',
+        videoPath: 'clip.mp4',
+        accountIds: ['fan-1'],
+        title: 'Fan post',
+      }),
+    ).toThrow(/description is required for fanvue/);
+    const fields = requireDirectPublishFields({
+      provider: 'fanvue',
+      videoPath: 'clip.mp4',
+      accountIds: ['fan-1'],
+      title: ' Fan post ',
+      description: ' hello fanvue ',
+    });
+    const form = buildDirectPublishForm(
+      { provider: 'fanvue', videoPath: 'clip.mp4', accountIds: ['fan-1'], title: 'Fan post', description: 'hello fanvue' },
+      fields,
+      video,
+      'clip.mp4',
+    );
+    expect(form.get('provider')).toBe('fanvue');
+    expect(form.getAll('fanvueAccountIds')).toEqual(['fan-1']);
+    expect(form.get('title')).toBe('Fan post');
+    expect(form.get('description')).toBe('hello fanvue');
+    expect(form.get('caption')).toBeNull();
+    expect(form.get('video')).toBeInstanceOf(Blob);
+  });
+
   it('keeps the youtube tags/privacyStatus shape and the instagram file + caption shape', () => {
     const ytFields = requireDirectPublishFields({
       provider: 'youtube',

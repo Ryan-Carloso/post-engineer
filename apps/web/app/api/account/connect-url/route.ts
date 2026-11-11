@@ -19,7 +19,7 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 // a new social account. Built for the MCP flow: authenticates via API key
 // (or session), without depending on the browser's httpOnly nonce cookie.
 // The state is stored server-side (oauth_states table) and the callback
-// consumes it as a fallback. Body: { provider: 'youtube' | 'instagram' | 'linkedin' | 'threads' | 'facebook' }.
+// consumes it as a fallback. Body: { provider: 'youtube' | 'instagram' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' }.
 // Bluesky uses an app password: POST /api/bluesky-connect.
 // Rumble uses a manual access token: POST /api/rumble-connect.
 //
@@ -65,6 +65,7 @@ const REDIRECT_ENV: Record<OAuthConnectProvider, [string, string]> = {
   threads: ['THREADS_REDIRECT_URI_LOCAL', 'THREADS_REDIRECT_URI'],
   facebook: ['FACEBOOK_REDIRECT_URI_LOCAL', 'FACEBOOK_REDIRECT_URI'],
   pinterest: ['PINTEREST_REDIRECT_URI_LOCAL', 'PINTEREST_REDIRECT_URI'],
+  fanvue: ['FANVUE_REDIRECT_URI_LOCAL', 'FANVUE_REDIRECT_URI'],
 };
 
 async function postHandler(request: NextRequest): Promise<NextResponse> {
@@ -121,6 +122,9 @@ async function postHandler(request: NextRequest): Promise<NextResponse> {
         provider,
         nonce: built.nonce,
         redirectUri,
+        // Fanvue only: the PKCE verifier must be stored server-side so
+        // the callback can exchange the code without a browser cookie.
+        ...(built.codeVerifier !== undefined ? { codeVerifier: built.codeVerifier } : {}),
       });
     } catch (storeError) {
       return errorResponse(

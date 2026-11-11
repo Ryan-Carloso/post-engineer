@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger';
 import {
   createOAuthState,
   decodeOAuthState,
+  getFanvueCodeVerifier,
   verifyOAuthNonce,
 } from './oauth-utils';
 
@@ -18,7 +19,7 @@ import {
 // not exist — only for a browser signed in as that same owner.
 //---------------
 
-export const OAUTH_CONNECT_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'threads', 'facebook', 'pinterest'] as const;
+export const OAUTH_CONNECT_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'threads', 'facebook', 'pinterest', 'fanvue'] as const;
 export type OAuthConnectProvider = (typeof OAUTH_CONNECT_PROVIDERS)[number];
 
 export function isOAuthConnectProvider(value: unknown): value is OAuthConnectProvider {
@@ -33,6 +34,11 @@ export interface StoredOAuthState {
   provider: string;
   nonce: string;
   redirectUri: string;
+  // PKCE code verifier (Fanvue only, the first outbound PKCE flow).
+  // Stored server-side so the MCP flow can exchange the code without a
+  // browser cookie; the column is nullable (migration 057) and absent
+  // for every non-PKCE provider.
+  codeVerifier?: string;
 }
 
 const OAUTH_STATE_TTL_SECONDS = 15 * 60;
@@ -59,6 +65,11 @@ export async function storeOAuthState(
     nonce: string;
     redirectUri: string;
     expiresInSeconds?: number;
+    // PKCE code verifier (Fanvue only). Only written when present: the
+    // code_verifier column lands in migration 057, and an insert naming
+    // it for a provider that never sets it would fail before that
+    // migration applies.
+    codeVerifier?: string;
   }
 ): Promise<void> {
   const ttl = input.expiresInSeconds ?? OAUTH_STATE_TTL_SECONDS;
@@ -70,6 +81,7 @@ export async function storeOAuthState(
     nonce: input.nonce,
     redirect_uri: input.redirectUri,
     expires_at: expiresAt,
+    ...(input.codeVerifier !== undefined ? { code_verifier: input.codeVerifier } : {}),
   });
   if (error) {
     // The message stays server-side (the route maps it to a stable error
@@ -106,7 +118,7 @@ export async function consumeOAuthState(
     .eq('state_hash', stateHash)
     .eq('user_id', ownerUserId)
     .gt('expires_at', nowIso)
-    .select('state_hash,user_id,provider,nonce,redirect_uri');
+    .select('state_hash,user_id,provider,nonce,redirect_uri,code_verifier');
   if (!error && data && data.length > 0) {
     const row = data[0];
     logger.info('[oauth-connect] state consumed', {
@@ -119,6 +131,9 @@ export async function consumeOAuthState(
       provider: row.provider,
       nonce: row.nonce,
       redirectUri: row.redirect_uri,
+      ...(typeof row.code_verifier === 'string' && row.code_verifier !== ''
+        ? { codeVerifier: row.code_verifier }
+        : {}),
     };
   }
   if (error) {
@@ -173,7 +188,7 @@ export async function consumeOAuthState(
 }
 
 export type BuildOAuthConnectUrlResult =
-  | { ok: true; authUrl: string; state: string; nonce: string }
+  | { ok: true; authUrl: string; state: string; nonce: string; codeVerifier?: string }
   | { ok: false; error: string };
 
 // Generates the OAuth auth URL for a provider, without depending on a session.
@@ -245,6 +260,22 @@ export async function buildOAuthConnectUrl(
       const authUrl = buildPinterestAuthorizationUrl(state, redirectUri);
       return { ok: true, authUrl, state, nonce };
     }
+    if (provider === 'fanvue') {
+      if (!process.env.FANVUE_CLIENT_ID || !process.env.FANVUE_CLIENT_SECRET) {
+        return {
+          ok: false,
+          error:
+            'Fanvue credentials are not configured (FANVUE_CLIENT_ID / FANVUE_CLIENT_SECRET).',
+        };
+      }
+      const { buildFanvueAuthUrl } = await import('./fanvue');
+      const { state, nonce } = createOAuthState({ provider: 'fanvue', redirectUri });
+      const { authUrl, codeVerifier } = buildFanvueAuthUrl(state, redirectUri);
+      // The verifier is returned alongside the URL so the caller can
+      // store it server-side (oauth_states.code_verifier); it must never
+      // be embedded in the client-visible state.
+      return { ok: true, authUrl, state, nonce, codeVerifier };
+    }
     // linkedin
     if (!process.env.LINKEDIN_CLIENT_ID || !process.env.LINKEDIN_CLIENT_SECRET) {
       return {
@@ -264,7 +295,7 @@ export async function buildOAuthConnectUrl(
 }
 
 export type ResolveOAuthCallbackAuthResult =
-  | { ok: true; userId: string; viaMcp: boolean; redirectUri?: string }
+  | { ok: true; userId: string; viaMcp: boolean; redirectUri?: string; codeVerifier?: string }
   | { ok: false; error: string; status: number };
 
 // Resolves who is completing the OAuth in the callback.
@@ -315,7 +346,18 @@ export async function resolveOAuthCallbackAuth(
       provider: expectedProvider,
       stateRef,
     });
-    return { ok: true, userId: sessionUserId, viaMcp: false, redirectUri: payload.redirectUri };
+    // Fanvue is the only PKCE provider: its verifier rides the httpOnly
+    // cookie the /start route set (never the client-visible state). Other
+    // providers have no verifier to return.
+    const codeVerifier =
+      expectedProvider === 'fanvue' ? (getFanvueCodeVerifier(request) ?? undefined) : undefined;
+    return {
+      ok: true,
+      userId: sessionUserId,
+      viaMcp: false,
+      redirectUri: payload.redirectUri,
+      ...(codeVerifier !== undefined ? { codeVerifier } : {}),
+    };
   }
 
   // MCP fallback: the state was created via API key and stored server-side.
@@ -374,5 +416,13 @@ export async function resolveOAuthCallbackAuth(
     userId: sessionUserId,
     stateRef,
   });
-  return { ok: true, userId: sessionUserId, viaMcp: true, redirectUri: stored.redirectUri };
+  // The verifier comes from the stored state (server-side), never from
+  // the decoded payload: only the state owner could have stored it.
+  return {
+    ok: true,
+    userId: sessionUserId,
+    viaMcp: true,
+    redirectUri: stored.redirectUri,
+    ...(stored.codeVerifier !== undefined ? { codeVerifier: stored.codeVerifier } : {}),
+  };
 }

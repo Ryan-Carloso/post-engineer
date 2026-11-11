@@ -298,7 +298,7 @@ describe('POST /api/upload-content', () => {
     expect(res.status).toBe(400);
     expect(mockBuildUploadErrorResponse).toHaveBeenCalled();
     const err = mockBuildUploadErrorResponse.mock.calls[0][0] as Error;
-    expect(err.message).toBe('Invalid provider. Use one of: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak, rumble');
+    expect(err.message).toBe('Invalid provider. Use one of: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak, rumble, fanvue');
     // The validation error carries the offending field for the client.
     expect((err as ValidationError).field).toBe('provider');
   });

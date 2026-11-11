@@ -15,6 +15,8 @@ vi.mock('@/lib/bluesky-profile', () => ({ fetchBlueskyPublicProfile: vi.fn() }))
 vi.mock('@/lib/youtube', () => ({ createGoogleOAuth2Client: vi.fn() }));
 vi.mock('@/lib/youtube-channel', () => ({ fetchYouTubeChannel: vi.fn() }));
 vi.mock('@/lib/pinterest', () => ({ fetchPinterestUserProfile: vi.fn(), refreshPinterestAccessToken: vi.fn() }));
+vi.mock('@/lib/fanvue', () => ({ fetchFanvueProfile: vi.fn() }));
+vi.mock('@/lib/fanvue-tokens', () => ({ getValidFanvueAccessToken: vi.fn() }));
 
 import { PROFILE_SOURCES } from '@/lib/account-profile-sources';
 import { getSocialAccountTokens, updateSocialAccountTokens, type SocialAccountRecord } from '@/lib/social-accounts';
@@ -25,6 +27,8 @@ import { fetchBlueskyPublicProfile } from '@/lib/bluesky-profile';
 import { createGoogleOAuth2Client } from '@/lib/youtube';
 import { fetchYouTubeChannel } from '@/lib/youtube-channel';
 import { fetchPinterestUserProfile, refreshPinterestAccessToken } from '@/lib/pinterest';
+import { fetchFanvueProfile } from '@/lib/fanvue';
+import { getValidFanvueAccessToken } from '@/lib/fanvue-tokens';
 import { SOCIAL_PROVIDERS, YOUTUBE_PLACEHOLDER_ACCOUNT_ID } from '@/lib/providers/registry';
 
 const supabase = {} as never;
@@ -43,6 +47,8 @@ describe('PROFILE_SOURCES', () => {
     vi.mocked(updateSocialAccountTokens).mockReset();
     vi.mocked(fetchPinterestUserProfile).mockReset();
     vi.mocked(refreshPinterestAccessToken).mockReset();
+    vi.mocked(fetchFanvueProfile).mockReset();
+    vi.mocked(getValidFanvueAccessToken).mockReset();
   });
 
   it('covers every provider', () => {
@@ -208,6 +214,28 @@ describe('PROFILE_SOURCES', () => {
     );
     expect(fetchPinterestUserProfile).toHaveBeenCalledWith('new');
     expect(fetched.accountName).toBe('maker');
+  });
+
+  it('fanvue prefers the display name over the username, like connect, and keeps the avatar url', async () => {
+    vi.mocked(getValidFanvueAccessToken).mockResolvedValue('tok');
+    vi.mocked(fetchFanvueProfile).mockResolvedValue({ uuid: 'u-1', username: 'maker', displayName: 'Maker', email: null, avatarUrl: 'https://media.fanvue.com/a.jpg', isCreator: true, createdAt: null });
+    const fetched = await PROFILE_SOURCES.fanvue.fetch(supabase, 'u1', record('fanvue', 'fv-1'));
+    expect(getValidFanvueAccessToken).toHaveBeenCalledWith(supabase, 'u1', 'fv-1');
+    expect(fetchFanvueProfile).toHaveBeenCalledWith('tok');
+    expect(fetched).toEqual({
+      accountName: 'Maker',
+      pictureUrl: 'https://media.fanvue.com/a.jpg',
+      metadata: { name: 'Maker', profilePictureUrl: 'https://media.fanvue.com/a.jpg' },
+    });
+    expect(PROFILE_SOURCES.fanvue.pictureKey).toBe('profilePictureUrl');
+  });
+
+  it('fanvue falls back to the username when the display name is null', async () => {
+    vi.mocked(getValidFanvueAccessToken).mockResolvedValue('tok');
+    vi.mocked(fetchFanvueProfile).mockResolvedValue({ uuid: 'u-1', username: 'maker', displayName: null, email: null, avatarUrl: null, isCreator: true, createdAt: null });
+    const fetched = await PROFILE_SOURCES.fanvue.fetch(supabase, 'u1', record('fanvue', 'fv-1'));
+    expect(fetched.accountName).toBe('maker');
+    expect(fetched.metadata.name).toBe('maker');
   });
 
   it('rumble never resyncs: there is no profile API, so the stored channel id stands', async () => {

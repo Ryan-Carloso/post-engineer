@@ -23,8 +23,8 @@ describe('Accounts — UI', () => {
     cy.wait('@getAccounts');
 
     cy.contains('h1', 'Contas').should('be.visible');
-    // One connect slot per section: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak, rumble.
-    cy.get('button[aria-label="Conectar uma conta"]').should('have.length', 9);
+    // One connect slot per section: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, fanvue, 3speak, rumble.
+    cy.get('button[aria-label="Conectar uma conta"]').should('have.length', 10);
   });
 
   it('renderiza lista de contas conectadas com botão + Conectar outra', () => {

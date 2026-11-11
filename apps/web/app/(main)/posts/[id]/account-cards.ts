@@ -11,6 +11,7 @@ import {
 } from '@/lib/api';
 import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
 import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
+import { useFanvueAccountsQuery } from '@/lib/fanvue-accounts';
 import type { SocialProvider } from '@/lib/providers/registry';
 
 //---------------
@@ -38,6 +39,7 @@ export function usePostAccountCards(): AccountCardData[] {
   const facebookQuery = useFacebookAccountsQuery();
   const pinterestQuery = usePinterestAccountsQuery();
   const rumbleQuery = useRumbleAccountsQuery();
+  const fanvueQuery = useFanvueAccountsQuery();
 
   return useMemo(
     () => [
@@ -89,7 +91,13 @@ export function usePostAccountCards(): AccountCardData[] {
         type: 'rumble' as const,
         name: account.accountName ?? account.providerAccountId,
       })),
+      ...(fanvueQuery.data?.accounts ?? []).map((account) => ({
+        id: account.providerAccountId,
+        type: 'fanvue' as const,
+        name: account.accountName ?? account.providerAccountId,
+        thumbnail: account.profilePictureUrl,
+      })),
     ],
-    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data, threadsQuery.data, facebookQuery.data, pinterestQuery.data, rumbleQuery.data],
+    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data, threadsQuery.data, facebookQuery.data, pinterestQuery.data, rumbleQuery.data, fanvueQuery.data],
   );
 }

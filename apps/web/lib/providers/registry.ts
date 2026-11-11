@@ -9,7 +9,7 @@ import type { AccountData, InstagramAccountData } from '@/lib/types';
 // client guards and the OAuth union all derive from here.
 //---------------
 
-export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'] as const;
+export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'] as const;
 
 export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
 
@@ -96,6 +96,16 @@ export interface RumbleAccountData {
   lastUsed: number;
 }
 
+export interface FanvueAccountData {
+  provider: 'fanvue';
+  recordId: string;
+  providerAccountId: string;
+  accountName: string | null;
+  profilePictureUrl?: string;
+  connectedAt: number;
+  lastUsed: number;
+}
+
 export type PublicAccountItem =
   | AccountData
   | InstagramAccountData
@@ -105,7 +115,8 @@ export type PublicAccountItem =
   | FacebookAccountData
   | PinterestAccountData
   | ThreespeakAccountData
-  | RumbleAccountData;
+  | RumbleAccountData
+  | FanvueAccountData;
 
 //---------------
 // ProviderDef — contract every provider must implement.
@@ -319,6 +330,25 @@ const rumbleDef: ProviderDef<false> = {
   },
 };
 
+// Fanvue connects via OAuth 2.0 + PKCE; the uuid from GET /users/me is
+// the provider account id. Avatar/cover/bio are not managed (no
+// endpoints), so the card shows only the name and the avatar Fanvue
+// returned at connect time.
+const fanvueDef: ProviderDef<true> = {
+  supportsOAuthCallback: true,
+  toPublicAccount(record) {
+    return {
+      provider: 'fanvue',
+      recordId: record.id,
+      providerAccountId: record.providerAccountId,
+      accountName: record.accountName,
+      profilePictureUrl: asOptionalString(record.accountMetadata.profilePictureUrl),
+      connectedAt: createdAtTimestamp(record),
+      lastUsed: lastUsedTimestamp(record),
+    };
+  },
+};
+
 //---------------
 // PROVIDER_REGISTRY — exhaustive by construction: a provider in the union without
 // an entry here (or vice versa) = compile error.
@@ -334,6 +364,7 @@ export const PROVIDER_REGISTRY = {
   pinterest: pinterestDef,
   '3speak': threespeakDef,
   rumble: rumbleDef,
+  fanvue: fanvueDef,
 } satisfies Record<SocialProvider, ProviderDef>;
 
 // OAuthProvider — derived from the registry: whoever has supportsOAuthCallback: true.

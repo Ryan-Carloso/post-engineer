@@ -178,6 +178,7 @@ export async function generatePersonaVideoOutcome(
         facebookAccountIds: args.facebookAccountIds,
         pinterestAccountIds: args.pinterestAccountIds,
         pinterestBoardId: args.pinterestBoardId,
+        fanvueAccountIds: args.fanvueAccountIds,
         threespeakAccountIds: args.threespeakAccountIds,
         rumbleAccountIds: args.rumbleAccountIds,
         mode,
@@ -274,7 +275,7 @@ export const ScoreDraftShape = {
     .max(10000, 'draft must be at most 10000 characters')
     .describe('The text to score: a post body, or with kind "script" the video segments joined by newlines, hook first, CTA last.'),
   network: z
-    .enum(['linkedin', 'youtube', 'instagram', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'])
+    .enum(['linkedin', 'youtube', 'instagram', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'])
     .optional()
     .describe('Network the draft is for; the publish check uses that network\'s rules. Defaults to linkedin.'),
   personaId: z

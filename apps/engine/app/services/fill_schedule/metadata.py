@@ -6,6 +6,7 @@ from typing import Any
 
 from app.services import upload_publisher
 from app.services.fill_schedule.youtube_tags import derive_tags_from_title
+from app.services.publish_fanvue import validate_fanvue_metadata
 from app.services.publish_pinterest import validate_pinterest_metadata
 
 
@@ -51,6 +52,12 @@ def metadata_for(provider: str, title: str, schedule: dict[str, Any], descriptio
             description=copy[: upload_publisher.PINTEREST_DESCRIPTION_MAX_LENGTH],
             board_id=str(schedule.get("pinterest_board_id") or ""),
             account_ids=tuple(str(value) for value in schedule.get("pinterest_account_ids", [])),
+        )
+    if provider == upload_publisher.FANVUE_PROVIDER:
+        return upload_publisher.FanvueMetadata(
+            title=title[: upload_publisher.FANVUE_TITLE_MAX_LENGTH],
+            description=copy[: upload_publisher.FANVUE_DESCRIPTION_MAX_LENGTH],
+            account_ids=tuple(str(value) for value in schedule.get("fanvue_account_ids", [])),
         )
     if provider == upload_publisher.THREESPEAK_PROVIDER:
         return upload_publisher.ThreespeakMetadata(
@@ -118,6 +125,12 @@ def validate_publish_plan(schedule: dict[str, Any], title: str, description: str
             threespeak = metadata
         elif isinstance(metadata, upload_publisher.RumbleMetadata):
             rumble = metadata
+        elif isinstance(metadata, upload_publisher.FanvueMetadata):
+            # Fanvue is validated here, not in validate_publish_metadata:
+            # upload_publisher.py is at the 500-line file-size cap, so
+            # its validator takes no new provider parameter. The pre-flight
+            # is the only production caller, so this is the whole gate.
+            validate_fanvue_metadata(metadata)
     upload_publisher.validate_publish_metadata(
         providers,
         youtube,

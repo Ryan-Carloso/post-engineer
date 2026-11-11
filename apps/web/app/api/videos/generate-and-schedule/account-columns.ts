@@ -17,6 +17,7 @@ export const PROVIDER_ACCOUNT_COLUMNS = {
   pinterest: 'pinterest_account_ids',
   '3speak': 'threespeak_account_ids',
   rumble: 'rumble_account_ids',
+  fanvue: 'fanvue_account_ids',
 } as const satisfies Record<Provider, string>;
 
 export type ScheduleAccountColumns = {
@@ -38,5 +39,6 @@ export function scheduleAccountColumns(
     pinterest_account_ids: accountIds.pinterest ?? [],
     threespeak_account_ids: accountIds['3speak'] ?? [],
     rumble_account_ids: accountIds.rumble ?? [],
+    fanvue_account_ids: accountIds.fanvue ?? [],
   };
 }

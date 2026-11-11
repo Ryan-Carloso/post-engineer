@@ -10,6 +10,7 @@ const mockQueries = vi.hoisted(() => ({
   facebook: { data: undefined as undefined | { accounts: unknown[] } },
   pinterest: { data: undefined as undefined | { accounts: unknown[] } },
   rumble: { data: undefined as undefined | { accounts: unknown[] } },
+  fanvue: { data: undefined as undefined | { accounts: unknown[] } },
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -27,6 +28,10 @@ vi.mock('@/lib/social-accounts-queries', () => ({
 
 vi.mock('@/lib/pinterest-accounts', () => ({
   usePinterestAccountsQuery: () => mockQueries.pinterest,
+}));
+
+vi.mock('@/lib/fanvue-accounts', () => ({
+  useFanvueAccountsQuery: () => mockQueries.fanvue,
 }));
 
 import { usePostAccountCards } from '../account-cards';
@@ -66,6 +71,7 @@ describe('usePostAccountCards', () => {
         ],
       },
     };
+    mockQueries.fanvue = { data: { accounts: [{ providerAccountId: 'fv-1', accountName: 'Maker', profilePictureUrl: 'https://fv/p.png' }] } };
 
     const { result } = renderHook(() => usePostAccountCards());
 
@@ -80,6 +86,7 @@ describe('usePostAccountCards', () => {
       { id: 'pin-1', type: 'pinterest', name: 'Maker', thumbnail: 'https://pin/p.png' },
       { id: 'chan-1', type: 'rumble', name: 'My Channel' },
       { id: 'chan-2', type: 'rumble', name: 'chan-2' },
+      { id: 'fv-1', type: 'fanvue', name: 'Maker', thumbnail: 'https://fv/p.png' },
     ]);
   });
 
