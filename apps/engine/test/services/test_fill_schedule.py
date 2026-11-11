@@ -225,11 +225,13 @@ class BatchScheduleTests(unittest.TestCase):
 
     def test_generate_batch_slot_without_a_stored_description_fails_without_dispatch(self):
         # The agent-supplied description is required (issue #542
-        # follow-up): a slot without one — e.g. a row created before
-        # migration 055 — fails loudly in the pre-flight, like a slot
-        # without segments. No dispatch, no token spend, no fallback to
-        # the title.
+        # follow-up): a slot without one fails loudly in the pre-flight,
+        # like a slot without segments. No dispatch, no token spend. The
+        # only rows that can still reach this are title-less ones:
+        # migration 055 backfilled every titled pre-migration row with
+        # its title as the description.
         slot = self._batch_slot()
+        slot["title"] = ""
         del slot["description"]
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]

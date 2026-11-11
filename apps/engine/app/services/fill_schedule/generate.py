@@ -21,6 +21,7 @@ from app.services.fill_schedule.constants import (
 from app.services.fill_schedule.metadata import validate_publish_plan
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.language_gate import ENGLISH_ONLY_VIDEO_MESSAGE, is_english_language
+from app.services.persona_image import is_engine_usable_persona_image_url
 from app.services.script_segments import legacy_media_list
 from app.services.fill_schedule.support import (
     build_persona_params,
@@ -98,9 +99,11 @@ class BatchGenerator:
             # nothing needs refunding.
             title = str(slot.get("title") or "").strip()
             # Agent-supplied publish copy (migration 055): the description
-            # rides the slot row into the task as video_description. A
-            # pre-migration row carries none and the slot fails loudly
-            # in validate_publish_plan — there is no fallback.
+            # rides the slot row into the task as video_description. Rows
+            # created before migration 055 were backfilled with the slot
+            # title as their description; only a row with no title at all
+            # still fails loudly in validate_publish_plan — there is no
+            # fallback for new rows.
             description = str(slot.get("description") or "").strip()
             # The one video mode (migration 056): a row without a valid
             # value fails loudly here, before any dispatch or spend.
@@ -179,15 +182,26 @@ class BatchGenerator:
             try:
                 # Face modes need a face: the photo comes only from the
                 # persona embed (the snapshot carries no photo). A slot
-                # whose persona has none can never generate, so it fails
-                # here, inside the refund block, so its prepaid cost
-                # comes back — same as the language gate below. The 056
-                # backfill keeps photo-less rows faceless, so this only
-                # fires for a row that asked for a face it never had.
-                if video_type in ("full_lipsync", "hook_lipsync") and not (
-                    identity.get("avatar_url") or identity.get("photo_path")
-                ):
-                    raise RuntimeError(f"{video_type} requires a persona with a photo")
+                # whose persona has none — or one the engine can never
+                # fetch (a relative path, a non-http scheme) — can never
+                # generate, so it fails here, inside the refund block,
+                # so its prepaid cost comes back — same as the language
+                # gate below. A stored photo_path is always usable (the
+                # filler signs it into a URL); only avatar_url needs the
+                # shape check (mirror of the web pre-charge guard). The
+                # 056 backfill keeps photo-less rows faceless, so this
+                # only fires for a row that asked for a face it never had.
+                if video_type in ("full_lipsync", "hook_lipsync"):
+                    avatar_url = identity.get("avatar_url")
+                    if avatar_url:
+                        if not is_engine_usable_persona_image_url(avatar_url):
+                            raise RuntimeError(
+                                f"{video_type} requires a usable persona photo"
+                            )
+                    elif not identity.get("photo_path"):
+                        raise RuntimeError(
+                            f"{video_type} requires a persona with a photo"
+                        )
                 # English-only launch: a slot scheduled before the launch can
                 # still carry a non-English language. It fails here, inside
                 # the refund block, so its prepaid cost comes back — and

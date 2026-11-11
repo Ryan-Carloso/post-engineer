@@ -204,6 +204,27 @@ class BatchDispatchVideoTypeTests(unittest.TestCase):
         self.assertEqual(len(store.refund_batch_calls), 1)
         self.assertEqual(store.refund_batch_calls[0][3], 2)
 
+    def test_hook_lipsync_slot_with_an_unusable_persona_photo_fails_with_a_refund(self):
+        # A stored avatar_url the engine can never fetch (a relative
+        # path, a non-http scheme) fails in the same refund block as a
+        # missing photo, instead of dispatching and dying mid-pipeline.
+        slot = _slot(charged_tokens=2)
+        slot["schedules"]["personas"]["photo_path"] = None
+        slot["schedules"]["personas"]["avatar_url"] = "not-a-url"
+        store = self._failed_slot(slot)
+        self.assertIn("requires a usable persona photo", store.updates[0][1]["error"])
+        self.assertEqual(len(store.refund_batch_calls), 1)
+        self.assertEqual(store.refund_batch_calls[0][3], 2)
+
+    def test_hook_lipsync_slot_with_a_house_face_avatar_dispatches(self):
+        # A house-face path is usable: the engine resolves it to an
+        # absolute URL at download time.
+        slot = _slot()
+        slot["schedules"]["personas"]["photo_path"] = None
+        slot["schedules"]["personas"]["avatar_url"] = "/caracter-samples/file-1.png"
+        request = self._dispatched_request(slot)
+        self.assertEqual(request.video_type, "hook_lipsync")
+
 
 if __name__ == "__main__":
     unittest.main()

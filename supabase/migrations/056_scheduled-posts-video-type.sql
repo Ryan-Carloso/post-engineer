@@ -23,7 +23,10 @@
 -- without a photo: full lip-sync requires a face by design, and the
 -- filler refunds that failure (see generate.py) instead of silently
 -- downgrading the requested mode. The column is NOT NULL with the same
--- 'hook_lipsync' default and a check pinning the three values.
+-- 'hook_lipsync' default and a check pinning the three values. The
+-- check is added NOT VALID and validated separately, so the drop/re-add
+-- window never leaves the column unvalidated and the validation scan
+-- does not take a full exclusive lock (migration 005 precedent).
 -- Idempotent: rerunning re-adds the same column, check, and backfill
 -- (a row already carrying the derived value keeps it).
 -- ============================================================================
@@ -50,4 +53,7 @@ alter table public.scheduled_posts
 
 alter table public.scheduled_posts
   add constraint scheduled_posts_video_type_check
-  check (video_type in ('full_lipsync', 'hook_lipsync', 'faceless'));
+  check (video_type in ('full_lipsync', 'hook_lipsync', 'faceless')) not valid;
+
+alter table public.scheduled_posts
+  validate constraint scheduled_posts_video_type_check;
