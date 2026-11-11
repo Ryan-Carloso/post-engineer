@@ -3,12 +3,13 @@
 Every segment carries an image (validated before charging), and each photo
 is on screen for its segment's spoken interval (user_media). Two things can
 still leave a gap after TTS: the short pauses between segments, and a photo
-that is dropped (download failed, too small, could not be drawn). Nothing
-tops a gap up with fetched footage, so the neighbour photo covers it:
+that is dropped (download failed, too small, could not be drawn). A dropped
+photo is never covered: in the images modes it fails the task (see below).
+Only the pauses between surviving photos are stretched over:
 
 - the first full-frame photo starts where the face hands over (0 on a
   faceless video, the hook's end on a hook-only persona video);
-- every photo runs until the next one starts;
+- every surviving photo runs until the next one starts;
 - the last photo runs to the end of the audio.
 
 A gap is just a pause: stretching a panel over it needs no warning.
