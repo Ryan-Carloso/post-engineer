@@ -6,7 +6,6 @@ A persona arrives inline on the job payload (stateless) and resolves to:
 - photo/avatar ref for the video material (passed through for the pipeline)
 """
 
-
 import pytest
 from unittest.mock import patch
 from pydantic import ValidationError
@@ -22,14 +21,21 @@ from app.services.task import (
 
 def _params(**persona_fields) -> VideoParams:
     if not persona_fields:
-        return VideoParams(video_subject="viagem", video_aspect="9:16")
+        return VideoParams(
+            video_title="viagem",
+            video_description="Test description.",
+            video_type="faceless",
+            video_aspect="9:16",
+        )
     fields = {
         "name": "Ana",
         "photo_url": "https://supabase.test/signed/foto.png",
         **persona_fields,
     }
     return VideoParams(
-        video_subject="viagem",
+        video_title="viagem",
+        video_description="Test description.",
+        video_type="hook_lipsync",
         video_aspect="9:16",
         persona=PersonaParams(**fields),
     )
@@ -117,17 +123,11 @@ class TestResolvePersonaAudio:
         assert voice_audio is None
 
     def test_voice_audio_url_becomes_custom_audio(self):
-        params = _params(
-            name="Ana", voice_audio_url="https://supabase.test/signed/voz.mp3"
-        )
+        params = _params(name="Ana", voice_audio_url="https://supabase.test/signed/voz.mp3")
 
         voice_name, voice_audio = resolve_persona_audio(params)
 
         assert voice_audio == "https://supabase.test/signed/voz.mp3"
-
-
-
-
 
 
 class TestPersonaHookBoundary:
@@ -163,21 +163,20 @@ class TestPersonaHookBoundary:
         assert tail[tail.index("-ss") + 1] == "5.6"
 
 
-
 class TestPersonaLipsyncGate:
-    """lipsync_enabled=False keeps the persona voice but skips the
+    """Faceless keeps the persona voice but skips the
     LongCat intro entirely (no GPU work)."""
 
     def test_persona_with_default_lipsync_is_active(self):
         assert task_service.persona_lipsync_active(_params(voice_id="calm")) is True
 
-    def test_persona_with_lipsync_disabled_is_inactive(self):
+    def test_persona_with_faceless_is_inactive(self):
         params = _params(voice_id="calm")
-        params.lipsync_enabled = False
+        params.video_type = "faceless"
         assert task_service.persona_lipsync_active(params) is False
 
     def test_faceless_persona_without_visual_is_inactive(self):
-        """Faceless mode: without photo/avatar, even with lipsync enabled, there is
+        """Faceless mode: without photo/avatar there is
         no intro lip-sync and no face exclusion (exclude_faces=False)."""
         params = _params(name="Canal Ninja", voice_id="calm", photo_url=None)
         assert task_service.persona_lipsync_active(params) is False
@@ -187,17 +186,19 @@ class TestPersonaLipsyncGate:
         assert task_service.persona_lipsync_active(params) is True
 
     def test_no_persona_is_never_active(self):
-        params = VideoParams(video_subject="viagem", lipsync_enabled=False)
+        params = VideoParams(
+            video_title="viagem", video_description="Test description.", video_type="faceless"
+        )
         assert task_service.persona_lipsync_active(params) is False
 
 
 class TestPersonaHookGate:
-    """With lipsync disabled the script skips the persona hook contract:
+    """In faceless mode the script skips the persona hook contract:
     no paragraph constraints, no hook validation, and no LLM calls."""
 
-    def test_lipsync_disabled_skips_hook_validation(self):
+    def test_faceless_skips_hook_validation(self):
         params = _params(name="Ana", voice_id="calm")
-        params.lipsync_enabled = False
+        params.video_type = "faceless"
         params.video_script = "A single paragraph without hook rules."
         assert not hasattr(task_service, "llm")
         result = generate_script("normal-video", params)
@@ -295,6 +296,8 @@ class TestPersonaPacingConstants:
         assert task_service.PERSONA_HOOK_MAX_SECONDS <= task_service.PERSONA_LIPSYNC_MAX_SECONDS
 
     def test_video_params_has_no_pacing_fields(self):
-        params = VideoParams(video_subject="viagem")
+        params = VideoParams(
+            video_title="viagem", video_description="Test description.", video_type="faceless"
+        )
         assert not hasattr(params, "persona_hook_min_seconds")
         assert not hasattr(params, "persona_hook_max_seconds")

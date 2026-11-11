@@ -104,19 +104,19 @@ describe('resolveConfig', () => {
     );
   });
 
-  it('defaults faceless to false', () => {
+  it('defaults to hook_lipsync', () => {
     const cfg = resolveConfig(baseEnv());
-    assert.equal(cfg.faceless, false);
+    assert.equal(cfg.videoType, 'hook_lipsync');
   });
 
-  it('enables faceless mode when TEST_FLIGHT_FACELESS=true', () => {
+  it('uses faceless videoType when TEST_FLIGHT_FACELESS=true', () => {
     const cfg = resolveConfig(baseEnv({ TEST_FLIGHT_FACELESS: 'true' }));
-    assert.equal(cfg.faceless, true);
+    assert.equal(cfg.videoType, 'faceless');
   });
 
   it('ignores non-true TEST_FLIGHT_FACELESS values', () => {
     const cfg = resolveConfig(baseEnv({ TEST_FLIGHT_FACELESS: 'yes' }));
-    assert.equal(cfg.faceless, false);
+    assert.equal(cfg.videoType, 'hook_lipsync');
   });
 });
 
@@ -245,6 +245,11 @@ describe('resolveScript', () => {
     assert.equal(script.title, TEST_SCRIPT.title);
     assert.equal(script.source, 'llm');
     assert.deepEqual(script.segments, TEST_SCRIPT.segments);
+    // The route requires a description; the flight uses the script text.
+    assert.equal(
+      script.description,
+      TEST_SCRIPT.segments.map((segment) => segment.text).join('\n\n'),
+    );
   });
 
   it('reads the script from a file when no inline JSON is set', () => {
@@ -279,6 +284,7 @@ describe('buildAsapPayload', () => {
     const payload = buildAsapPayload({
       personaId: 'p1',
       title: 'Porto in one day',
+      description: 'Porto in one day, on foot.',
       segments: TEST_SCRIPT.segments,
       accounts: { bluesky: ['b1'] },
       idempotencyKey: 'k1',
@@ -287,21 +293,24 @@ describe('buildAsapPayload', () => {
     assert.ok(!('schedule' in payload.publishing));
     assert.ok(!('topics' in payload));
     assert.equal(payload.title, 'Porto in one day');
-    assert.deepEqual(payload.options, { segments: TEST_SCRIPT.segments });
+    assert.equal(payload.description, 'Porto in one day, on foot.');
+    assert.deepEqual(payload.options, { segments: TEST_SCRIPT.segments, videoType: 'hook_lipsync' });
     assert.equal(payload.idempotencyKey, 'k1');
   });
 
-  it('sets options.faceless=true alongside segments when faceless (persona kept for voice + accounts)', () => {
+  it('sets options.videoType faceless alongside segments when faceless (persona kept for voice + accounts)', () => {
     const payload = buildAsapPayload({
       personaId: 'p1',
       title: 'Porto in one day',
+      description: 'Porto in one day, on foot.',
       segments: TEST_SCRIPT.segments,
       accounts: { bluesky: ['b1'] },
       idempotencyKey: 'k1',
-      faceless: true,
+      videoType: 'faceless',
     });
     assert.equal(payload.personaId, 'p1');
-    assert.deepEqual(payload.options, { segments: TEST_SCRIPT.segments, faceless: true });
+    assert.equal(payload.description, 'Porto in one day, on foot.');
+    assert.deepEqual(payload.options, { segments: TEST_SCRIPT.segments, videoType: 'faceless' });
     assert.equal(payload.publishing.mode, 'asap');
   });
 });
@@ -324,6 +333,7 @@ describe('buildScheduledPayload', () => {
     const payload = buildScheduledPayload({
       personaId: 'p1',
       title: 'Porto in one day',
+      description: 'Porto in one day, on foot.',
       segments: TEST_SCRIPT.segments,
       accounts: { youtube: ['y1'] },
       idempotencyKey: 'k2',
@@ -336,21 +346,24 @@ describe('buildScheduledPayload', () => {
       timezone: 'UTC',
     });
     assert.ok(!('topics' in payload));
-    assert.deepEqual(payload.options, { segments: TEST_SCRIPT.segments });
+    assert.equal(payload.description, 'Porto in one day, on foot.');
+    assert.deepEqual(payload.options, { segments: TEST_SCRIPT.segments, videoType: 'hook_lipsync' });
   });
 
-  it('sets options.faceless=true alongside segments when faceless', () => {
+  it('sets options.videoType faceless alongside segments when faceless', () => {
     const payload = buildScheduledPayload({
       personaId: 'p1',
       title: 'Porto in one day',
+      description: 'Porto in one day, on foot.',
       segments: TEST_SCRIPT.segments,
       accounts: { youtube: ['y1'] },
       idempotencyKey: 'k2',
       schedule: { startAt: '2026-10-17', times: ['13:10'], timezone: 'UTC' },
-      faceless: true,
+      videoType: 'faceless',
     });
     assert.equal(payload.personaId, 'p1');
-    assert.deepEqual(payload.options, { segments: TEST_SCRIPT.segments, faceless: true });
+    assert.equal(payload.description, 'Porto in one day, on foot.');
+    assert.deepEqual(payload.options, { segments: TEST_SCRIPT.segments, videoType: 'faceless' });
     assert.equal(payload.publishing.mode, 'scheduled');
   });
 });

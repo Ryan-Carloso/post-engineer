@@ -21,17 +21,16 @@ from app.services.fill_schedule.constants import (
 from app.services.fill_schedule.metadata import validate_publish_plan
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.language_gate import ENGLISH_ONLY_VIDEO_MESSAGE, is_english_language
+from app.services.persona_image import is_engine_usable_persona_image_url
 from app.services.script_segments import legacy_media_list
 from app.services.fill_schedule.support import (
     build_persona_params,
     notify_safe,
     post_identity,
-    slot_faceless,
-    slot_full_lipsync,
-    slot_material,
     slot_music_mood,
     slot_refund_amount,
     slot_user_id,
+    slot_video_type,
     track_refund_issued,
     voice_for,
 )
@@ -99,6 +98,16 @@ class BatchGenerator:
             # loudly here — before dispatch, so nothing is spent and
             # nothing needs refunding.
             title = str(slot.get("title") or "").strip()
+            # Agent-supplied publish copy (migration 055): the description
+            # rides the slot row into the task as video_description. Rows
+            # created before migration 055 were backfilled with the slot
+            # title as their description; only a row with no title at all
+            # still fails loudly in validate_publish_plan — there is no
+            # fallback for new rows.
+            description = str(slot.get("description") or "").strip()
+            # The one video mode (migration 056): a row without a valid
+            # value fails loudly here, before any dispatch or spend.
+            video_type = slot_video_type(slot)
             # Rows stored before the media-list contract carry one object
             # per segment; normalize so a prepaid slot renders instead of
             # failing on a Pydantic list_type error with no refund. A
@@ -109,7 +118,7 @@ class BatchGenerator:
             # Pre-flight before anything about the job itself: a slot that
             # could never publish is the more fundamental failure, and this
             # check is free.
-            validate_publish_plan(schedule, title)
+            validate_publish_plan(schedule, title, description)
             # `PersonaParams` requires exactly one of voice_id / voice_audio_url,
             # so a schedule that resolves no voice can never generate. Checked
             # before the dispatch: failing the slot now gives a readable reason
@@ -117,10 +126,18 @@ class BatchGenerator:
             # (No refund on this path: the slot never reached the dispatch a
             # refund is anchored to.)
             voice_for(identity)
-            faceless = slot_faceless(slot)
             request = TaskVideoRequest(
-                video_subject=title,
-                persona=build_persona_params(identity, self.store, faceless),
+                # Pre-migration rows were created when the engine cap was
+                # 500 (video_subject) and the web had none, so a stored
+                # title can legally exceed the 100-char video_title cap.
+                # Publish truncates the YouTube title to the same 100
+                # (metadata_for), so the request carries the truncated
+                # title and the row keeps generating instead of failing
+                # validation before the refund block (migration 055).
+                video_title=title[:100],
+                video_description=description,
+                video_type=video_type,
+                persona=build_persona_params(identity, self.store, video_type),
                 video_aspect=identity.get("video_aspect") or "9:16",
                 # Layout resolves through post_identity() like every other
                 # editorial field: snapshot first, persona embed second. The
@@ -128,14 +145,6 @@ class BatchGenerator:
                 # before migration 018) and a NULL persona column, which is
                 # the behaviour every existing video already has.
                 video_layout=identity.get("video_layout") or "standard",
-                # Per-post material (scheduled_posts, migration 029), forwarded
-                # exactly like the web's direct dispatch does.
-                faceless_material=slot_material(slot),
-                # Per-post full lip-sync (migration 035), like direct
-                # dispatch. Without it a tick-dispatched or requeued slot
-                # silently renders intro-only; a pre-migration row
-                # renders intro-only, as every earlier video did.
-                full_lipsync=slot_full_lipsync(slot),
                 # Per-post BGM mood (migration 045), like direct dispatch.
                 # Without it a tick-dispatched or requeued slot silently
                 # renders the engine's default mood instead of the
@@ -171,6 +180,28 @@ class BatchGenerator:
             generation_id = f"batch:{schedule['id']}"
             task_id = new_task_id(slot)
             try:
+                # Face modes need a face: the photo comes only from the
+                # persona embed (the snapshot carries no photo). A slot
+                # whose persona has none — or one the engine can never
+                # fetch (a relative path, a non-http scheme) — can never
+                # generate, so it fails here, inside the refund block,
+                # so its prepaid cost comes back — same as the language
+                # gate below. A stored photo_path is always usable (the
+                # filler signs it into a URL); only avatar_url needs the
+                # shape check (mirror of the web pre-charge guard). The
+                # 056 backfill keeps photo-less rows faceless, so this
+                # only fires for a row that asked for a face it never had.
+                if video_type in ("full_lipsync", "hook_lipsync"):
+                    avatar_url = identity.get("avatar_url")
+                    if avatar_url:
+                        if not is_engine_usable_persona_image_url(avatar_url):
+                            raise RuntimeError(
+                                f"{video_type} requires a usable persona photo"
+                            )
+                    elif not identity.get("photo_path"):
+                        raise RuntimeError(
+                            f"{video_type} requires a persona with a photo"
+                        )
                 # English-only launch: a slot scheduled before the launch can
                 # still carry a non-English language. It fails here, inside
                 # the refund block, so its prepaid cost comes back — and

@@ -89,7 +89,7 @@ def test_validate_segments_rejects_more_than_thirty_photos_and_seven_on_full_lip
         {"kind": "cta", "text": _words(8, "cta")},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
-        validate_segments(full_lipsync, full_lipsync=True)
+        validate_segments(full_lipsync, video_type="full_lipsync")
     assert exc_info.value.rule == "At most 6 medias are allowed."
 
 

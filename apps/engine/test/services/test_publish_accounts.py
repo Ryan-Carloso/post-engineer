@@ -88,6 +88,7 @@ class AccountRetryTests(unittest.TestCase):
         return {
             "id": "slot-1",
             "title": "Porto coffee",
+            "description": "Porto coffee description.",
             "task_id": "t-1",
             "charged_tokens": 1,
             "publish_attempts": 0,

@@ -828,7 +828,7 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
       SNAPSHOT_SCHEDULE_ROW,
     );
     expect(generation).toEqual({
-      faceless: true, material: 'images',
+      faceless: true,
       language: 'pt-BR',
       voiceId: 'ana_neural',
       videoAspect: '9:16',
@@ -840,8 +840,8 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
   });
 
   it('reports faceless as true only for the literal true', async () => {
-    // Mirrors the engine's slot_faceless rule (support.py: only
-    // `slot.get("faceless") is True` counts), so a legacy NULL row — or a
+    // Only the literal true counts (the derived flag slot-rows.ts
+    // writes from the stored video_type), so a legacy NULL row — or a
     // stray string — is never misread as faceless.
     for (const faceless of [true, false, null, 'true', 1]) {
       const generation = await getGeneration({ ...SLOT_DETAIL_ROW, faceless }, SCHEDULE_ROW);
@@ -855,7 +855,7 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
     // never has to feature-detect.
     const generation = await getGeneration(SLOT_DETAIL_ROW, SCHEDULE_ROW);
     expect(generation).toEqual({
-      faceless: false, material: 'images',
+      faceless: false,
       language: null,
       voiceId: null,
       videoAspect: null,
@@ -1141,7 +1141,7 @@ describe('slot id normalization', () => {
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'select')
         .map((c) => c.args),
-    ).toEqual([['id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, faceless_material, publish_outcomes']]);
+    ).toEqual([['id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, publish_outcomes']]);
     expect(
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'eq')

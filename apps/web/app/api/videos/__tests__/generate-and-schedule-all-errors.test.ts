@@ -41,16 +41,18 @@ function futureISO(hours: number): string {
 }
 
 function body(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const { options: optionsOverrides, ...rest } = overrides;
   return {
     personaId: 'persona-1',
     title: 'Porto trip',
+    description: 'Agent description.',
     publishing: {
       providers: ['youtube'],
       accounts: { youtube: ['acct-1'] },
       schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
     },
-    options: { segments },
-    ...overrides,
+    options: { videoType: 'hook_lipsync', segments, ...((optionsOverrides ?? {}) as Record<string, unknown>) },
+    ...rest,
   };
 }
 
@@ -163,7 +165,7 @@ describe('generate-and-schedule reports every validation problem in one 400 (#35
     const res = await post(body({ personaId: undefined, options: { segments } }));
     expect(res.status).toBe(400);
     const json = (await res.json()) as { errors: Array<{ field: string }> };
-    expect(json.errors.map((e) => e.field)).toEqual(['options.faceless', 'options.voiceId']);
+    expect(json.errors.map((e) => e.field)).toEqual(['options.videoType', 'options.voiceId']);
   });
 
   it('does not echo a huge provider list', async () => {
@@ -264,9 +266,10 @@ describe('generate-and-schedule reports every validation problem in one 400 (#35
   it('a valid request produces no errors', async () => {
     const outcome = checkSemantics({
       title: 'Porto trip',
+      description: 'Agent description.',
       segments,
       providers: ['youtube'],
-      options: {},
+      options: { videoType: 'hook_lipsync' },
       personaId: 'persona-1',
     });
     expect(outcome.ok).toBe(true);
@@ -277,9 +280,10 @@ describe('checkSemantics (direct)', () => {
   it('collects every failing group in the documented order', () => {
     const outcome = checkSemantics({
       title: '',
+      description: 'Agent description.',
       segments: undefined,
       providers: [],
-      options: { faceless: 'yes' as unknown as boolean },
+      options: {},
       personaId: null,
     });
     expect(outcome.ok).toBe(false);
@@ -289,29 +293,31 @@ describe('checkSemantics (direct)', () => {
       'title',
       'options.segments',
       'publishing.providers',
-      'options.faceless',
+      'options.videoType',
     ]);
   });
 
   it('skips the persona-less rules when the options themselves are invalid', () => {
     const outcome = checkSemantics({
       title: 'ok',
+      description: 'Agent description.',
       segments,
       providers: ['youtube'],
-      options: { faceless: 'yes' as unknown as boolean },
+      options: {},
       personaId: null,
     });
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
-    expect(outcome.issues.map((i) => i.field)).toEqual(['options.faceless']);
+    expect(outcome.issues.map((i) => i.field)).toEqual(['options.videoType']);
   });
 
   it('requires a Pinterest board even when the provider name has surrounding whitespace', () => {
     const outcome = checkSemantics({
       title: 'Porto trip',
+      description: 'Agent description.',
       segments,
       providers: [' pinterest '],
-      options: {},
+      options: { videoType: 'hook_lipsync' },
       personaId: 'persona-1',
     });
     expect(outcome.ok).toBe(false);
@@ -322,9 +328,10 @@ describe('checkSemantics (direct)', () => {
   it('accepts a whitespace-padded Pinterest provider once the board is set', () => {
     const outcome = checkSemantics({
       title: 'Porto trip',
+      description: 'Agent description.',
       segments,
       providers: [' pinterest '],
-      options: {},
+      options: { videoType: 'hook_lipsync' },
       personaId: 'persona-1',
       pinterestBoardId: 'b1',
     });

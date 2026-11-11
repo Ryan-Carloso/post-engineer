@@ -360,8 +360,8 @@ def _json_accounts(response_body: str | None) -> list[dict[str, Any]] | None:
     return [item for item in results if isinstance(item, dict)]
 
 
-def _metadata(provider: str, title: str, schedule: dict[str, Any], account_ids: list[str]) -> Any:
-    metadata = metadata_for(provider, title, schedule)
+def _metadata(provider: str, title: str, schedule: dict[str, Any], account_ids: list[str], description: str) -> Any:
+    metadata = metadata_for(provider, title, schedule, description)
     real = tuple(account_id for account_id in account_ids if account_id)
     if real and hasattr(metadata, "account_ids"):
         metadata.account_ids = real

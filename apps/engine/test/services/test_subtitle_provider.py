@@ -21,7 +21,13 @@ def task_dir(tmp_path):
 
 
 def _params(enabled=True):
-    return VideoParams(video_subject="s", video_script="Hello world.", subtitle_enabled=enabled)
+    return VideoParams(
+        video_title="s",
+        video_description="Test description.",
+        video_type="faceless",
+        video_script="Hello world.",
+        subtitle_enabled=enabled,
+    )
 
 
 def _write(path_arg):
@@ -43,20 +49,23 @@ def _build(provider, sub_maker, params=None):
 
 
 def test_disabled_subtitles_return_empty_and_call_nobody(task_dir):
-    with patch.object(subtitle_provider.subtitle, "create") as whisper, patch.object(
-        subtitle_provider.voice, "create_subtitle"
-    ) as edge:
+    with (
+        patch.object(subtitle_provider.subtitle, "create") as whisper,
+        patch.object(subtitle_provider.voice, "create_subtitle") as edge,
+    ):
         assert _build("whisper", object(), _params(enabled=False)) == ""
     whisper.assert_not_called()
     edge.assert_not_called()
 
 
 def test_whisper_success_creates_then_corrects(task_dir):
-    with patch.object(
-        subtitle_provider.subtitle, "create", side_effect=_write("subtitle_file")
-    ) as create, patch.object(subtitle_provider.subtitle, "correct") as correct, patch.object(
-        subtitle_provider.voice, "create_subtitle"
-    ) as edge:
+    with (
+        patch.object(
+            subtitle_provider.subtitle, "create", side_effect=_write("subtitle_file")
+        ) as create,
+        patch.object(subtitle_provider.subtitle, "correct") as correct,
+        patch.object(subtitle_provider.voice, "create_subtitle") as edge,
+    ):
         result = _build("whisper", object())
     assert result == str(task_dir / "subtitle.srt")
     create.assert_called_once_with(audio_file="audio.mp3", subtitle_file=result)
@@ -65,11 +74,14 @@ def test_whisper_success_creates_then_corrects(task_dir):
 
 
 def test_whisper_without_a_file_falls_back_to_edge_and_logs_an_error(task_dir):
-    with patch.object(subtitle_provider.subtitle, "create", return_value=None), patch.object(
-        subtitle_provider.subtitle, "correct"
-    ) as correct, patch.object(
-        subtitle_provider.voice, "create_subtitle", side_effect=_write("subtitle_file")
-    ) as edge, patch.object(subtitle_provider.logger, "error") as log_error:
+    with (
+        patch.object(subtitle_provider.subtitle, "create", return_value=None),
+        patch.object(subtitle_provider.subtitle, "correct") as correct,
+        patch.object(
+            subtitle_provider.voice, "create_subtitle", side_effect=_write("subtitle_file")
+        ) as edge,
+        patch.object(subtitle_provider.logger, "error") as log_error,
+    ):
         result = _build("whisper", object())
     assert result == str(task_dir / "subtitle.srt")
     edge.assert_called_once()
@@ -78,11 +90,15 @@ def test_whisper_without_a_file_falls_back_to_edge_and_logs_an_error(task_dir):
 
 
 def test_whisper_raising_falls_back_to_edge_and_logs_an_error(task_dir):
-    with patch.object(
-        subtitle_provider.subtitle, "create", side_effect=RuntimeError("model load failed")
-    ), patch.object(
-        subtitle_provider.voice, "create_subtitle", side_effect=_write("subtitle_file")
-    ) as edge, patch.object(subtitle_provider.logger, "error") as log_error:
+    with (
+        patch.object(
+            subtitle_provider.subtitle, "create", side_effect=RuntimeError("model load failed")
+        ),
+        patch.object(
+            subtitle_provider.voice, "create_subtitle", side_effect=_write("subtitle_file")
+        ) as edge,
+        patch.object(subtitle_provider.logger, "error") as log_error,
+    ):
         result = _build("whisper", object())
     assert result == str(task_dir / "subtitle.srt")
     edge.assert_called_once()
@@ -91,9 +107,11 @@ def test_whisper_raising_falls_back_to_edge_and_logs_an_error(task_dir):
 
 def test_whisper_failing_with_custom_audio_has_no_edge_fallback(task_dir):
     # No TTS timeline exists for custom audio, so there is nothing to fall back to.
-    with patch.object(subtitle_provider.subtitle, "create", return_value=None), patch.object(
-        subtitle_provider.voice, "create_subtitle"
-    ) as edge, patch.object(subtitle_provider.logger, "error") as log_error:
+    with (
+        patch.object(subtitle_provider.subtitle, "create", return_value=None),
+        patch.object(subtitle_provider.voice, "create_subtitle") as edge,
+        patch.object(subtitle_provider.logger, "error") as log_error,
+    ):
         result = _build("whisper", None)
     assert result == ""
     edge.assert_not_called()
@@ -101,17 +119,22 @@ def test_whisper_failing_with_custom_audio_has_no_edge_fallback(task_dir):
 
 
 def test_both_providers_failing_returns_empty_and_logs_an_error(task_dir):
-    with patch.object(subtitle_provider.subtitle, "create", return_value=None), patch.object(
-        subtitle_provider.voice, "create_subtitle"
-    ), patch.object(subtitle_provider.logger, "error") as log_error:
+    with (
+        patch.object(subtitle_provider.subtitle, "create", return_value=None),
+        patch.object(subtitle_provider.voice, "create_subtitle"),
+        patch.object(subtitle_provider.logger, "error") as log_error,
+    ):
         assert _build("whisper", object()) == ""
     assert log_error.called
 
 
 def test_edge_success_does_not_touch_whisper(task_dir):
-    with patch.object(
-        subtitle_provider.voice, "create_subtitle", side_effect=_write("subtitle_file")
-    ) as edge, patch.object(subtitle_provider.subtitle, "create") as whisper:
+    with (
+        patch.object(
+            subtitle_provider.voice, "create_subtitle", side_effect=_write("subtitle_file")
+        ) as edge,
+        patch.object(subtitle_provider.subtitle, "create") as whisper,
+    ):
         result = _build("edge", object())
     assert result == str(task_dir / "subtitle.srt")
     edge.assert_called_once()
@@ -119,27 +142,33 @@ def test_edge_success_does_not_touch_whisper(task_dir):
 
 
 def test_edge_without_a_file_falls_back_to_whisper(task_dir):
-    with patch.object(subtitle_provider.voice, "create_subtitle"), patch.object(
-        subtitle_provider.subtitle, "create", side_effect=_write("subtitle_file")
-    ) as whisper, patch.object(subtitle_provider.subtitle, "correct"):
+    with (
+        patch.object(subtitle_provider.voice, "create_subtitle"),
+        patch.object(
+            subtitle_provider.subtitle, "create", side_effect=_write("subtitle_file")
+        ) as whisper,
+        patch.object(subtitle_provider.subtitle, "correct"),
+    ):
         result = _build("edge", object())
     assert result == str(task_dir / "subtitle.srt")
     whisper.assert_called_once()
 
 
 def test_edge_with_custom_audio_is_skipped(task_dir):
-    with patch.object(subtitle_provider.voice, "create_subtitle") as edge, patch.object(
-        subtitle_provider.subtitle, "create"
-    ) as whisper:
+    with (
+        patch.object(subtitle_provider.voice, "create_subtitle") as edge,
+        patch.object(subtitle_provider.subtitle, "create") as whisper,
+    ):
         assert _build("edge", None) == ""
     edge.assert_not_called()
     whisper.assert_not_called()
 
 
 def test_an_empty_provider_generates_nothing(task_dir):
-    with patch.object(subtitle_provider.voice, "create_subtitle") as edge, patch.object(
-        subtitle_provider.subtitle, "create"
-    ) as whisper:
+    with (
+        patch.object(subtitle_provider.voice, "create_subtitle") as edge,
+        patch.object(subtitle_provider.subtitle, "create") as whisper,
+    ):
         assert _build("", object()) == ""
     edge.assert_not_called()
     whisper.assert_not_called()

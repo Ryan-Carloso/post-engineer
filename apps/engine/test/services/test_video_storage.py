@@ -39,13 +39,16 @@ def _isolated_environ(overrides):
 
 
 def _params(persona=None):
-    return VideoParams(video_subject="s", persona=persona)
+    return VideoParams(
+        video_title="s",
+        video_description="Test description.",
+        video_type="faceless",
+        persona=persona,
+    )
 
 
 def _visual_persona(pid="persona-1"):
-    return PersonaParams(
-        id=pid, name="P", photo_url="https://x/y.jpg", voice_id="v1"
-    )
+    return PersonaParams(id=pid, name="P", photo_url="https://x/y.jpg", voice_id="v1")
 
 
 def _faceless_persona(pid="persona-2"):
@@ -114,9 +117,7 @@ class R2ConfigurationTests(unittest.TestCase):
                 "R2_SECRET_ACCESS_KEY": "s",
             }
         ):
-            self.assertEqual(
-                vs.r2_endpoint(), "https://acct123.r2.cloudflarestorage.com"
-            )
+            self.assertEqual(vs.r2_endpoint(), "https://acct123.r2.cloudflarestorage.com")
 
     def test_missing_credentials_fail_explicitly(self):
         with _isolated_environ({}):
@@ -170,17 +171,19 @@ class R2ConfigurationTests(unittest.TestCase):
 
 class R2UploadTests(unittest.TestCase):
     def setUp(self):
-        self.enterContext(_isolated_environ({
+        self.enterContext(
+            _isolated_environ(
+                {
                     "R2_ACCOUNT_ID": "acct",
-                "R2_ACCESS_KEY_ID": "key-id",
-                "R2_SECRET_ACCESS_KEY": "secret",
-            }))
+                    "R2_ACCESS_KEY_ID": "key-id",
+                    "R2_SECRET_ACCESS_KEY": "secret",
+                }
+            )
+        )
         # The archive is a precondition of a servable video, so the upload path
         # now stats the local file and HEADs the object back. Both are mocked:
         # a size that matches is what makes the upload count as verified.
-        self.stat = patch(
-            "app.services.video_storage.os.path.getsize", return_value=1024
-        )
+        self.stat = patch("app.services.video_storage.os.path.getsize", return_value=1024)
         self.stat.start()
         self.addCleanup(self.stat.stop)
 
@@ -274,9 +277,7 @@ class R2UploadTests(unittest.TestCase):
     def test_wrapper_delegates_to_r2_upload_with_both_paths(self):
         # upload_final_video is a thin wrapper; the object path must reach
         # the R2 upload unchanged (a None-swapped argument must fail).
-        with patch.object(
-            vs, "upload_final_video_r2", return_value="u1/f/t/final-1.mp4"
-        ) as upload:
+        with patch.object(vs, "upload_final_video_r2", return_value="u1/f/t/final-1.mp4") as upload:
             self.assertEqual(
                 vs.upload_final_video("u1/f/t/final-1.mp4", "/tmp/final-1.mp4"),
                 "u1/f/t/final-1.mp4",
@@ -286,11 +287,15 @@ class R2UploadTests(unittest.TestCase):
 
 class R2SignedUrlTests(unittest.TestCase):
     def setUp(self):
-        self.enterContext(_isolated_environ({
+        self.enterContext(
+            _isolated_environ(
+                {
                     "R2_ACCOUNT_ID": "acct",
-                "R2_ACCESS_KEY_ID": "key-id",
-                "R2_SECRET_ACCESS_KEY": "secret",
-            }))
+                    "R2_ACCESS_KEY_ID": "key-id",
+                    "R2_SECRET_ACCESS_KEY": "secret",
+                }
+            )
+        )
 
     def test_presigned_url_targets_r2_endpoint(self):
         client = MagicMock()
@@ -302,9 +307,7 @@ class R2SignedUrlTests(unittest.TestCase):
         self.assertIn("X-Amz-Signature", url)
         # The S3 operation name is positional: signing anything but
         # "get_object" would mint an unusable URL.
-        self.assertEqual(
-            client.generate_presigned_url.call_args[0][0], "get_object"
-        )
+        self.assertEqual(client.generate_presigned_url.call_args[0][0], "get_object")
         kwargs = client.generate_presigned_url.call_args.kwargs
         self.assertEqual(kwargs["Params"]["Bucket"], vs.STORAGE_BUCKET)
         self.assertEqual(kwargs["Params"]["Key"], "u1/faceless/t/final-1.mp4")
@@ -334,9 +337,7 @@ class R2SignedUrlTests(unittest.TestCase):
     def test_serving_wrapper_delegates_with_path_and_ttl(self):
         # The wrapper must forward both arguments unchanged; a dropped or
         # None-swapped argument would sign the wrong object (or TTL).
-        with patch.object(
-            vs, "create_signed_url_r2", return_value="https://signed"
-        ) as sign:
+        with patch.object(vs, "create_signed_url_r2", return_value="https://signed") as sign:
             self.assertEqual(
                 vs.create_signed_url("u1/f/t/final-1.mp4", expires_in=123),
                 "https://signed",
@@ -356,9 +357,7 @@ class ArchiveFinalVideosAlertTests(unittest.TestCase):
         from app.services import task as task_mod
 
         with patch.object(task_mod.sm.state, "get_task", return_value={"user_id": "u1"}):
-            with patch.object(
-                task_mod.video_storage, "upload_final_video", return_value=None
-            ):
+            with patch.object(task_mod.video_storage, "upload_final_video", return_value=None):
                 with patch.object(task_mod, "_update_task") as update:
                     task_mod.archive_final_videos(
                         "task-1", ["/tmp/final-1.mp4"], _params(_faceless_persona())
@@ -388,11 +387,15 @@ class ArchiveFinalVideosAlertTests(unittest.TestCase):
 
 class ReadFinalVideoR2Tests(unittest.TestCase):
     def setUp(self):
-        self.enterContext(_isolated_environ({
-                "R2_ACCOUNT_ID": "acct",
-                "R2_ACCESS_KEY_ID": "key-id",
-                "R2_SECRET_ACCESS_KEY": "secret",
-            }))
+        self.enterContext(
+            _isolated_environ(
+                {
+                    "R2_ACCOUNT_ID": "acct",
+                    "R2_ACCESS_KEY_ID": "key-id",
+                    "R2_SECRET_ACCESS_KEY": "secret",
+                }
+            )
+        )
 
     def test_reads_and_closes_r2_body(self):
         body = MagicMock()

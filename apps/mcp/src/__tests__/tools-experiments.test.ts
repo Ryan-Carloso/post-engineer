@@ -50,6 +50,7 @@ function pairArgs(overrides: Record<string, unknown> = {}) {
     experimentId: EXPERIMENT_ID,
     pair: 1,
     title: 'Gym',
+    description: 'Agent description.',
     segments: BODY,
     hooks: [
       { variantId: 'hook-calm', text: 'Here is a small squat detail that quietly changes how your legs grow over the next few months.', media: photos(3, 'hook-calm') },
@@ -61,6 +62,7 @@ function pairArgs(overrides: Record<string, unknown> = {}) {
     startAt: '2026-11-10T18:00:00',
     times: ['18:00'],
     timezone: 'Europe/Lisbon',
+    options: { videoType: 'hook_lipsync' as const },
     ...overrides,
   });
 }

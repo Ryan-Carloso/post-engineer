@@ -33,39 +33,24 @@ class TestVideoLayout(unittest.TestCase):
 
     def test_video_params_default_is_standard(self):
         self.assertEqual(
-            VideoParams(video_subject="test").video_layout, VideoLayout.standard
+            VideoParams(
+                video_title="test",
+                video_description="Test description.",
+                video_type="faceless",
+            ).video_layout,
+            VideoLayout.standard,
         )
-
-
-class TestVideoParamsLipsyncEnabled(unittest.TestCase):
-    def test_default_is_true(self):
-        self.assertTrue(VideoParams(video_subject="test").lipsync_enabled)
-
-    def test_accepts_false(self):
-        params = VideoParams(video_subject="test", lipsync_enabled=False)
-        self.assertFalse(params.lipsync_enabled)
-
-    def test_accepts_true(self):
-        params = VideoParams(video_subject="test", lipsync_enabled=True)
-        self.assertTrue(params.lipsync_enabled)
 
 
 class TestSchemaBounds(unittest.TestCase):
     """Numeric and length bounds guard the public API against absurd inputs
-    (e.g. a 501-char subject or a 20001-char script)."""
+    (e.g. a 101-char title or a 20001-char script)."""
 
     def _params(self, **kwargs):
-        kwargs.setdefault("video_subject", "test")
+        kwargs.setdefault("video_title", "test")
+        kwargs.setdefault("video_description", "Test description.")
+        kwargs.setdefault("video_type", "faceless")
         return VideoParams(**kwargs)
-
-    # VideoParams.video_subject: max 500 chars
-
-    def test_video_subject_rejects_501_chars(self):
-        with self.assertRaises(ValidationError):
-            self._params(video_subject="x" * 501)
-
-    def test_video_subject_accepts_500_chars(self):
-        self.assertEqual(len(self._params(video_subject="x" * 500).video_subject), 500)
 
     # VideoParams.video_script: max 20000 chars
 

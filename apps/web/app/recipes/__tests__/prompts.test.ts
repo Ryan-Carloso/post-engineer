@@ -229,11 +229,14 @@ describe('prompts hub data', () => {
     expect(text).not.toContain('issue #');
   });
 
-  it('says images is the only material and keeps the full-lip-sync media cap', () => {
+  it('says images is the only material and names the video types with the full-lip-sync media cap', () => {
     const baseText = SHARED_PROMPT_BASE.join('\n');
     expect(baseText).toContain('images is the only material');
     expect(baseText).toContain('no stock footage and no drawn material');
-    expect(baseText).toContain('fullLipsync true on validate_script and as options.fullLipsync on generate_persona_video');
+    expect(baseText).toContain('options.videoType on generate_persona_video: full_lipsync');
+    expect(baseText).toContain('media optional, at most 6 photos in total');
+    expect(baseText).toContain('hook_lipsync (lip sync only on the hook');
+    expect(baseText).toContain('faceless (only the agent\'s photos, no face');
     expect(baseText).toContain('one photo per idea in its segment');
     expect(baseText).toContain('while it is spoken');
     expect(baseText).toContain('each segment idea, not once for the whole topic');

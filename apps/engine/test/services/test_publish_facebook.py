@@ -91,19 +91,19 @@ class FacebookFillScheduleTest(unittest.TestCase):
     schedule = {"providers": ["facebook"], "facebook_account_ids": ["123"]}
 
     def test_metadata_reads_the_caption_and_accounts(self) -> None:
-        metadata = metadata_for("facebook", "title", self.schedule)
+        metadata = metadata_for("facebook", "title", self.schedule, "Agent description.")
         self.assertIsInstance(metadata, upload_publisher.FacebookMetadata)
-        self.assertEqual(metadata.caption, "title")
+        self.assertEqual(metadata.caption, "Agent description.")
         self.assertEqual(metadata.account_ids, ("123",))
 
-    def test_metadata_cuts_the_title_to_the_limit(self) -> None:
-        metadata = metadata_for("facebook", "a" * 70000, self.schedule)
+    def test_metadata_cuts_the_caption_to_the_limit(self) -> None:
+        metadata = metadata_for("facebook", "title", self.schedule, "a" * 70000)
         self.assertEqual(len(metadata.caption), 63206)
 
     def test_preflight_passes_with_accounts_and_fails_without(self) -> None:
-        validate_publish_plan(self.schedule, "title")
+        validate_publish_plan(self.schedule, "title", "Agent description.")
         with self.assertRaisesRegex(ValueError, "at least one account id"):
-            validate_publish_plan({"providers": ["facebook"]}, "title")
+            validate_publish_plan({"providers": ["facebook"]}, "title", "Agent description.")
 
     def test_slot_select_reads_the_facebook_column(self) -> None:
         from app.services.fill_schedule.store import ScheduleStore

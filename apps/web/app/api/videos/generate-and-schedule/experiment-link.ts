@@ -6,12 +6,12 @@
 //
 // Fairness is checked per pair: when the other variant's video of the same
 // pair already exists, this video must match it in everything except the
-// hook — providers, accounts, voice (id and audio URL), faceless, faceless
-// material, full lip-sync, title, aspect, layout, paragraph number, face
-// quality, language, niche, CTA text and every non-hook segment — and its
-// hook must differ. Persona is checked against the experiment for every
-// video. The pinned `options.imageId` is NOT compared: it is not stored on
-// the schedule or the slot, so the server cannot see the partner's value.
+// hook — providers, accounts, voice (id and audio URL), video type, title,
+// aspect, layout, paragraph number, face quality, language, niche, CTA text
+// and every non-hook segment — and its hook must differ. Persona is checked
+// against the experiment for every video. The pinned `options.imageId` is
+// NOT compared: it is not stored on the schedule or the slot, so the server
+// cannot see the partner's value.
 //
 // Two concurrent calls for the two variants can both see an empty pair, so
 // verifyExperimentPairAfterInsert re-runs the comparison once this video's
@@ -26,6 +26,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from '@/lib/experiments/limits';
 import { logger } from '@/lib/logger';
+import { isVideoType, type VideoType } from '@/lib/tokens';
 import type { PersonaPrep } from './persona-prep';
 import { PROVIDER_ACCOUNT_COLUMNS } from './account-columns';
 
@@ -46,12 +47,9 @@ export interface PairFacts {
   /** null = no Pinterest board (the video does not publish to Pinterest). */
   pinterestBoardId: string | null;
   voiceId: string | null;
-  faceless: boolean;
-  fullLipsync: boolean;
+  videoType: VideoType;
   segments: unknown;
   title: string;
-  /** null = column default (`images`, migration 054). */
-  facelessMaterial: string | null;
   voiceAudioUrl: string | null;
   videoAspect: string | null;
   videoLayout: string | null;
@@ -62,13 +60,9 @@ export interface PairFacts {
   ctaText: string | null;
 }
 
-/** scheduled_posts.faceless_material default (migration 054). */
-const DEFAULT_FACELESS_MATERIAL = 'images';
-
 /** Scalar settings a pair must share, in check order, with their request field. */
 const SCALAR_SETTINGS: ReadonlyArray<{ field: string; label: string; read: (facts: PairFacts) => string | number | null }> = [
   { field: 'title', label: 'title', read: (facts) => facts.title },
-  { field: 'options.facelessMaterial', label: 'faceless material', read: (facts) => facts.facelessMaterial ?? DEFAULT_FACELESS_MATERIAL },
   { field: 'options.audioUrl', label: 'voice audio URL', read: (facts) => facts.voiceAudioUrl },
   { field: 'options.videoAspect', label: 'video aspect', read: (facts) => facts.videoAspect },
   { field: 'options.videoLayout', label: 'video layout', read: (facts) => facts.videoLayout },
@@ -87,7 +81,7 @@ export function buildPairFacts(input: {
   prep: PersonaPrep;
   title: string;
   segments: unknown;
-  fullLipsync: boolean | undefined;
+  videoType: VideoType;
   audioUrl: string | undefined;
 }): PairFacts {
   const { prep } = input;
@@ -96,11 +90,9 @@ export function buildPairFacts(input: {
     accountIds: input.accountIds,
     pinterestBoardId: input.pinterestBoardId ?? null,
     voiceId: prep.voiceIdValue ?? null,
-    faceless: prep.faceless,
-    fullLipsync: input.fullLipsync === true,
+    videoType: input.videoType,
     segments: input.segments,
     title: input.title,
-    facelessMaterial: 'images',
     voiceAudioUrl: input.audioUrl ?? null,
     videoAspect: prep.videoAspect,
     videoLayout: prep.videoLayout,
@@ -161,8 +153,8 @@ export function pairMismatch(partner: PairFacts, current: PairFacts): { field: s
   if (partner.voiceId !== current.voiceId) {
     return { field: 'options.voiceId', message: 'Both videos of a pair must use the same voice.' };
   }
-  if (partner.faceless !== current.faceless || partner.fullLipsync !== current.fullLipsync) {
-    return { field: 'options', message: 'Both videos of a pair must use the same faceless and full lip-sync settings.' };
+  if (partner.videoType !== current.videoType) {
+    return { field: 'options.videoType', message: 'Both videos of a pair must use the same video type.' };
   }
   for (const setting of SCALAR_SETTINGS) {
     if (setting.read(partner) !== setting.read(current)) {
@@ -251,13 +243,11 @@ export async function checkExperimentLink(
 interface PartnerSlot {
   schedule_id: string;
   segments: unknown;
-  faceless: boolean;
-  full_lipsync: boolean;
+  video_type: string;
   title: string;
-  faceless_material: string | null;
 }
 
-const PAIR_SLOT_COLUMNS = 'schedule_id, variant_id, status, segments, faceless, full_lipsync, title, faceless_material';
+const PAIR_SLOT_COLUMNS = 'schedule_id, variant_id, status, segments, video_type, title';
 
 async function comparePartner(
   supabase: SupabaseClient,
@@ -278,17 +268,22 @@ async function comparePartner(
   }
   const accountIds: Record<string, string[]> = {};
   for (const [provider, column] of Object.entries(PROVIDER_ACCOUNT_COLUMNS)) accountIds[provider] = schedule[column];
+  // The video_type CHECK (migration 056) admits only the three modes, so
+  // an unknown value means a corrupt row: fail loudly instead of
+  // comparing it as a mode the pair can never match.
+  if (!isVideoType(partner.video_type)) {
+    logger.error('[generate-and-schedule] experiment partner slot has an unknown video_type', undefined, { experimentId: link.experimentId });
+    return failure(500, 'Failed to load the experiment pair.', 'experiment.pair');
+  }
   const mismatch = pairMismatch(
     {
       providers: schedule.providers,
       accountIds,
       pinterestBoardId: schedule.pinterest_board_id ?? null,
       voiceId: schedule.post_voice_id,
-      faceless: partner.faceless,
-      fullLipsync: partner.full_lipsync,
+      videoType: partner.video_type,
       segments: partner.segments,
       title: partner.title,
-      facelessMaterial: partner.faceless_material,
       voiceAudioUrl: schedule.post_voice_audio_url,
       videoAspect: schedule.post_video_aspect,
       videoLayout: schedule.post_video_layout,

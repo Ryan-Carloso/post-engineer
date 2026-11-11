@@ -18,7 +18,9 @@ from app.services.full_lipsync import FullLipSyncError
 
 def _params() -> VideoParams:
     return VideoParams(
-        video_subject="Porto food",
+        video_title="Porto food",
+        video_description="Test description.",
+        video_type="full_lipsync",
         video_script="Hook. Body text here. Call to action.",
         persona=PersonaParams(
             name="Ana",
@@ -26,7 +28,6 @@ def _params() -> VideoParams:
             voice_id="calm",
         ),
         video_quality=LipSyncQuality.ok,
-        full_lipsync=True,
     )
 
 
@@ -209,9 +210,7 @@ class RenderTests(unittest.TestCase):
         # failure is logged.
         def fake_run(argv, **kwargs):
             if kwargs.get("check"):
-                raise subprocess.CalledProcessError(
-                    1, argv, stderr="ffmpeg boom"
-                )
+                raise subprocess.CalledProcessError(1, argv, stderr="ffmpeg boom")
             return MagicMock(
                 returncode=1,
                 stderr="/app/tasks/t1/full-lipsync-clip-0.mp4: ffmpeg boom",
@@ -281,13 +280,18 @@ class RenderTests(unittest.TestCase):
 class CaptionParamsTest(unittest.TestCase):
     @staticmethod
     def _params(**fields: object) -> VideoParams:
-        persona = PersonaParams(
-            name="p", photo_url="https://example.com/p.png", voice_id="calm"
+        persona = PersonaParams(name="p", photo_url="https://example.com/p.png", voice_id="calm")
+        video_type = fields.pop("video_type", "hook_lipsync")
+        return VideoParams(
+            video_title="x",
+            video_description="Test description.",
+            video_type=video_type,
+            persona=persona,
+            **fields,
         )
-        return VideoParams(video_subject="x", persona=persona, **fields)
 
     def test_full_lipsync_center_moves_caption_below_face(self) -> None:
-        params = self._params(full_lipsync=True, subtitle_position="center")
+        params = self._params(video_type="full_lipsync", subtitle_position="center")
         moved = full_lipsync.caption_params(params)
         self.assertEqual(moved.subtitle_position, "custom")
         self.assertEqual(moved.custom_position, full_lipsync.LIPSYNC_CAPTION_POSITION)
@@ -304,27 +308,29 @@ class CaptionParamsTest(unittest.TestCase):
     def test_full_lipsync_react_layout_still_moves_caption(self) -> None:
         # Full mode has no persona/background seam: the whole video is the
         # face, so the react exclusion applies to the hook only.
-        params = self._params(
-            full_lipsync=True, subtitle_position="center", video_layout="react"
-        )
+        params = self._params(video_type="full_lipsync", subtitle_position="center", video_layout="react")
         moved = full_lipsync.caption_params(params)
         self.assertEqual(moved.subtitle_position, "custom")
         self.assertEqual(moved.custom_position, full_lipsync.LIPSYNC_CAPTION_POSITION)
 
     def test_explicit_user_position_is_kept(self) -> None:
         for position in ("top", "bottom", "custom"):
-            params = self._params(full_lipsync=True, subtitle_position=position)
+            params = self._params(video_type="full_lipsync", subtitle_position=position)
             self.assertIs(full_lipsync.caption_params(params), params)
 
-    def test_lipsync_disabled_keeps_center(self) -> None:
-        params = self._params(lipsync_enabled=False, subtitle_position="center")
+    def test_faceless_keeps_center(self) -> None:
+        params = self._params(video_type="faceless", subtitle_position="center")
         self.assertIs(full_lipsync.caption_params(params), params)
 
     def test_no_persona_keeps_center(self) -> None:
-        params = VideoParams(video_subject="x", subtitle_position="center")
+        params = VideoParams(
+            video_title="x",
+            video_description="Test description.",
+            video_type="faceless",
+            subtitle_position="center",
+        )
         self.assertIs(full_lipsync.caption_params(params), params)
 
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -1022,12 +1022,25 @@
                     "type": "jsonb",
                     "default": "'[]'::jsonb",
                     "notNull": true
+                },
+                {
+                    "name": "description",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "video_type",
+                    "type": "text",
+                    "default": "'hook_lipsync'::text",
+                    "notNull": true
                 }
             ],
             "policies": {
             },
             "constraints": {
                 "scheduled_posts_pkey": "PRIMARY KEY (id)",
+                "scheduled_posts_video_type_check": "CHECK ((video_type = ANY (ARRAY['full_lipsync'::text, 'hook_lipsync'::text, 'faceless'::text])))",
                 "scheduled_posts_charged_tokens_check": "CHECK ((charged_tokens >= 0))",
                 "scheduled_posts_discount_tokens_check": "CHECK ((discount_tokens >= 0))",
                 "scheduled_posts_experiment_link_check": "CHECK ((((experiment_id IS NULL) = (variant_id IS NULL)) AND ((experiment_id IS NULL) OR (experiment_pair IS NOT NULL)) AND ((experiment_pair IS NULL) OR (experiment_pair >= 1))))",

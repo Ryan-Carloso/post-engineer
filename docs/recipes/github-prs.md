@@ -33,7 +33,7 @@ spent.
   chat, prompt, or this repo. Use `npx -y post-engineer-mcp@latest` so the MCP
   is the newest version instead of a stale cached copy.
 - A persona (`personaId` from `list_personas`), or a faceless setup
-  (`options.faceless` plus `options.voiceId` or `options.audioUrl`).
+  (`options.videoType: 'faceless'` plus `options.voiceId` or `options.audioUrl`).
 - A token balance that covers one video: check with `get_token_balance`
   before generating. Generation costs tokens; `validate_script` does not.
 

@@ -34,7 +34,7 @@ export async function signedUrl(
 
 export interface PersonaPrep {
   personaName: string;
-  /** Per-post "no face" choice (options.faceless). */
+  /** Per-post "no face" choice, derived from options.videoType. */
   faceless: boolean;
   faceQuality: FaceQuality;
   voiceAudioUrl?: string;
@@ -83,7 +83,6 @@ export async function resolvePublishingAccounts(
 }
 
 export function resolvePostWithoutPersona(opts: {
-  faceless: boolean;
   audioUrl?: string;
   voiceId?: string;
   videoAspect?: '9:16' | '16:9';

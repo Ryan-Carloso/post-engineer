@@ -665,7 +665,7 @@ describe('persona image library tools', () => {
 
   it('CreatePersonaSchema rejects a missing avatarUrl at parse time', () => {
     // avatarUrl is always required: every persona has a face, and "no face"
-    // is a per-video choice (generate_persona_video options.faceless),
+    // is a per-video choice (generate_persona_video options.videoType 'faceless'),
     // never a persona one. There is no images-specific rule anymore — the
     // missing required field fails the parse on its own.
     expect(() =>

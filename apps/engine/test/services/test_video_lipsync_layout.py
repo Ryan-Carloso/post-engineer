@@ -186,17 +186,29 @@ class VideoParamsLayoutTest(unittest.TestCase):
     """The field itself: default, and the NULL-means-standard contract."""
 
     def test_default_layout_is_standard(self) -> None:
-        params = VideoParams(video_subject="coins")
+        params = VideoParams(
+            video_title="coins", video_description="Test description.", video_type="faceless"
+        )
         self.assertEqual(params.video_layout, "standard")
 
     def test_layout_rejects_unknown_value(self) -> None:
         with self.assertRaises(ValueError):
-            VideoParams(video_subject="coins", video_layout="cinematic")
+            VideoParams(
+                video_title="coins",
+                video_description="Test description.",
+                video_type="faceless",
+                video_layout="cinematic",
+            )
 
     def test_layout_accepts_both_documented_values(self) -> None:
         for value in ("standard", "react"):
             self.assertEqual(
-                VideoParams(video_subject="coins", video_layout=value).video_layout,
+                VideoParams(
+                    video_title="coins",
+                    video_description="Test description.",
+                    video_type="faceless",
+                    video_layout=value,
+                ).video_layout,
                 value,
             )
 

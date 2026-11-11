@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  IMAGES_MATERIAL,
   MAX_IMAGES_MODE_MEDIAS,
   MAX_MEDIAS,
   MIN_WORDS_PER_IMAGE,
@@ -46,7 +45,6 @@ function manyMedia(count: number): Array<Record<string, unknown>> {
 
 describe('validateSegments with the images material', () => {
   it('names the rhythm: one image per 8 words, at most 30', () => {
-    expect(IMAGES_MATERIAL).toBe('images');
     expect(WORDS_PER_IMAGE).toBe(8);
     expect(MIN_WORDS_PER_IMAGE).toBe(3);
     expect(MAX_IMAGES_MODE_MEDIAS).toBe(30);
@@ -149,13 +147,14 @@ describe('validateSegments with the images material', () => {
   it('keeps media optional for full lip sync, required otherwise', () => {
     const segments = withMedia();
     delete segments[1].media;
-    expect(validateSegments(segments, true).ok).toBe(true);
-    expect(validateSegments(segments, false).ok).toBe(false);
+    expect(validateSegments(segments, 'full_lipsync').ok).toBe(true);
+    expect(validateSegments(segments, 'hook_lipsync').ok).toBe(false);
+    expect(validateSegments(segments, 'faceless').ok).toBe(false);
     expect(validateSegments(segments).ok).toBe(false);
   });
 
   it('still caps full lip sync at six medias', () => {
-    const capped = validateSegments(manyMedia(5), true);
+    const capped = validateSegments(manyMedia(5), 'full_lipsync');
     expect(capped.ok).toBe(false);
     if (!capped.ok) {
       expect(capped.error.rule).toBe(`at most ${MAX_MEDIAS} medias are allowed per video`);
@@ -170,6 +169,6 @@ describe('validateSegments with the images material', () => {
       { kind: 'cta', text: cta, media: photos(1, 'c') },
     ];
     expect(() => joinSegments(segments)).toThrow('segments.0.media');
-    expect(joinSegments(segments, true)).toBe(`${hook}\n\n${body}\n\n${cta}`);
+    expect(joinSegments(segments, 'full_lipsync')).toBe(`${hook}\n\n${body}\n\n${cta}`);
   });
 });

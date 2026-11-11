@@ -19,13 +19,13 @@ describe('validateSegments', () => {
   it('accepts a valid hook, body and CTA and joins them with blank lines', () => {
     // Full lip sync leaves media optional: these fixtures carry no media
     // on purpose, so the content rules are what this pins.
-    const result = validateSegments(validSegments(), true);
+    const result = validateSegments(validSegments(), 'full_lipsync');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.hookText).toBe(hook);
     expect(result.value.ctaText).toBe(cta);
     expect(result.value.bodyWords).toBeGreaterThanOrEqual(30);
-    expect(joinSegments(validSegments(), true)).toBe(`${hook}\n\n${body}\n\n${cta}`);
+    expect(joinSegments(validSegments(), 'full_lipsync')).toBe(`${hook}\n\n${body}\n\n${cta}`);
   });
 
   it('strips padding before joining, matching the engine join the TaskVideoRequest validator compares against', () => {
@@ -34,7 +34,7 @@ describe('validateSegments', () => {
       { kind: 'body', text: `  ${body} ` },
       { kind: 'cta', text: `${cta}   ` },
     ];
-    expect(joinSegments(padded, true)).toBe(`${hook}\n\n${body}\n\n${cta}`);
+    expect(joinSegments(padded, 'full_lipsync')).toBe(`${hook}\n\n${body}\n\n${cta}`);
   });
 
   it('rejects empty segments with the segments field', () => {
@@ -174,7 +174,7 @@ describe('validateSegments', () => {
         { kind: 'body', text: body, media: [{ mediaId: 'abc', url: 'https://example.com/x.jpg' }] },
         { kind: 'cta', text: cta },
       ],
-      true,
+      'full_lipsync',
     );
     expect(both.ok).toBe(false);
     if (!both.ok) expect(both.error.field).toBe('segments.1.media.0');
@@ -193,7 +193,7 @@ describe('validateSegments', () => {
       });
     }
     segments.push({ kind: 'cta', text: 'Save this video now please.' });
-    const result = validateSegments(segments, true);
+    const result = validateSegments(segments, 'full_lipsync');
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.field).toBe('segments');
@@ -207,28 +207,28 @@ describe('validateSegments', () => {
       { kind: 'hook', text: hook },
       { kind: 'body', text: body, media: [{ mediaId: 'abc', url: '' }] },
       { kind: 'cta', text: cta },
-    ], true);
+    ], 'full_lipsync');
     expect(blankUrl.ok).toBe(false);
     if (!blankUrl.ok) expect(blankUrl.error.field).toBe('segments.1.media.0');
     const blankId = validateSegments([
       { kind: 'hook', text: hook },
       { kind: 'body', text: body, media: [{ mediaId: '   ' }] },
       { kind: 'cta', text: cta },
-    ], true);
+    ], 'full_lipsync');
     expect(blankId.ok).toBe(false);
     if (!blankId.ok) expect(blankId.error.field).toBe('segments.1.media.0');
     const neither = validateSegments([
       { kind: 'hook', text: hook },
       { kind: 'body', text: body, media: [{}] },
       { kind: 'cta', text: cta },
-    ], true);
+    ], 'full_lipsync');
     expect(neither.ok).toBe(false);
     if (!neither.ok) expect(neither.error.field).toBe('segments.1.media.0');
     const nullMedia = validateSegments([
       { kind: 'hook', text: hook },
       { kind: 'body', text: body, media: null },
       { kind: 'cta', text: cta },
-    ], true);
+    ], 'full_lipsync');
     expect(nullMedia.ok).toBe(true);
   });
 
@@ -262,7 +262,7 @@ describe('validateSegments', () => {
         { kind: 'body', text: `${body} Second part.`, media: [{ url: 'https://example.com/x.jpg' }] },
         { kind: 'cta', text: cta },
       ],
-      true,
+      'full_lipsync',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -289,7 +289,7 @@ describe('validateSegments', () => {
         { kind: 'body', text: body, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
         { kind: 'cta', text: cta },
       ],
-      true,
+      'full_lipsync',
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -308,7 +308,7 @@ describe('validateSegments', () => {
         { kind: 'body', text: baseBody.replace(/ /g, '  ') },
         { kind: 'cta', text: cta },
       ],
-      true,
+      'full_lipsync',
     );
     expect(doubleSpaced.ok).toBe(true);
     const underscore = validateSegments(
@@ -318,7 +318,7 @@ describe('validateSegments', () => {
         { kind: 'body', text: baseBody.replace('hello_world', 'helloworld') },
         { kind: 'cta', text: cta },
       ],
-      true,
+      'full_lipsync',
     );
     expect(underscore.ok).toBe(true);
   });

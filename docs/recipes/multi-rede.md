@@ -36,7 +36,7 @@ week is confirmed once before generating.
   (`list_social_accounts`): LinkedIn, YouTube, Instagram, Bluesky. A
   network with no connected account is skipped for that week.
 - A persona (`personaId` from `list_personas`), or a faceless setup
-  (`options.faceless` plus `options.voiceId` or `options.audioUrl`).
+  (`options.videoType: 'faceless'` plus `options.voiceId` or `options.audioUrl`).
 - A token balance that covers one video per network: check with
   `get_token_balance` before generating. Generation costs tokens;
   `validate_script` and `score_draft` do not debit tokens.

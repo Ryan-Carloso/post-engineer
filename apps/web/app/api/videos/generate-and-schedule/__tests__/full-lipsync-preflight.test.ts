@@ -69,13 +69,13 @@ describe('checkFullLipsyncNarration', () => {
     expect(calls[0].init.headers).toMatchObject({ 'x-user-id': 'user-1' });
   });
 
-  it('rejects a 61s narration with a 400 naming options.fullLipsync', async () => {
+  it('rejects a 61s narration with a 400 naming options.videoType', async () => {
     stubFetch(engineBody(61));
     const result = await checkFullLipsyncNarration(INPUT);
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(400);
     const payload = (await (result as NextResponse).json()) as { error?: string };
-    expect(payload.error).toContain('options.fullLipsync');
+    expect(payload.error).toContain('options.videoType');
   });
 
   it('maps an engine 400 (voice-audio rejection) to a 400, not a proceed', async () => {

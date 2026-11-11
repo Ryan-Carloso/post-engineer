@@ -11,7 +11,9 @@ from app.models.schema import TaskVideoRequest
 
 
 def _body(**kwargs):
-    return TaskVideoRequest(video_subject="viagem", **kwargs)
+    return TaskVideoRequest(
+        video_title="viagem", video_description="Test description.", video_type="faceless", **kwargs
+    )
 
 
 class TestSlotIdSchema:
@@ -26,14 +28,13 @@ class TestSlotIdSchema:
 
 class TestSlotTrackingKwargs:
     def test_returns_slot_id_when_present(self):
-        assert _tracking_kwargs(_body(slot_id="slot-123")) == {
-            "slot_id": "slot-123"
-        }
+        assert _tracking_kwargs(_body(slot_id="slot-123")) == {"slot_id": "slot-123"}
 
     def test_returns_both_ids_when_present(self):
-        assert _tracking_kwargs(
-            _body(slot_id="slot-123", generation_id="gen-456")
-        ) == {"slot_id": "slot-123", "generation_id": "gen-456"}
+        assert _tracking_kwargs(_body(slot_id="slot-123", generation_id="gen-456")) == {
+            "slot_id": "slot-123",
+            "generation_id": "gen-456",
+        }
 
     def test_omits_when_absent(self):
         assert _tracking_kwargs(_body()) == {}

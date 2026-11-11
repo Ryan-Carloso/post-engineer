@@ -14,7 +14,6 @@ from app.models.schema import VideoConcatMode, VideoParams
 from app.services import (
     audio_trim,
     faceless_material,
-    social_metadata,
     start_preflight,
     longcat,
     persona_hook,
@@ -413,7 +412,7 @@ def _fail_task(
     )
     if not _should_send_failure_alert(task_id):
         return
-    subject = params.video_subject if params and params.video_subject else ""
+    subject = params.video_title if params else ""
     if not send_discord(task_failed_msg(task_id, error, subject)):
         # The alert never went out (network blip, webhook misconfigured):
         # release the reservation so a later failure notice re-alerts.
@@ -741,15 +740,11 @@ def generate_final_videos(
     )
 
     video_for_render = combined_video_path
-    if params.full_lipsync:
-        # Full mode replaces the images canvas entirely: every narration
-        # window renders as talking head and the windows concatenate into
-        # the video the final encode muxes with narration. Any failure
-        # here propagates and fails the task; it NEVER falls through to
-        # the intro path below.
+    if params.video_type == "full_lipsync":
+        # Full mode renders every window as talking head; failures fail the task, never falling through to the intro path.
         if not persona_lipsync_active(params):
             raise ValueError(
-                "full_lipsync requires a persona with a photo and lipsync enabled"
+                "full_lipsync requires a persona with a photo"
             )
         logger.info("generating full lip-sync video (no background footage)")
         full_image = full_lipsync.resolve_persona_image(task_id, params, _PERSONA_IMAGE_MAX_BYTES)
@@ -768,6 +763,10 @@ def generate_final_videos(
             cost_usd=full_cost,
             job_id=full_job_ids[0] if full_job_ids else None,
         )
+    elif params.video_type == "hook_lipsync" and not persona_lipsync_active(params):
+        # Hook needs a face too: fail loudly instead of silently rendering
+        # images-only for a face mode (full_lipsync raises above).
+        raise ValueError("hook_lipsync requires a persona with a photo")
     elif persona_lipsync_active(params):
         logger.info("generating persona lip-sync intro")
         intro = prepare_persona_lipsync_video(
@@ -1097,14 +1096,12 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
             youtube_extra = None
             if any(p.startswith("youtube") for p in platforms):
-                # Phase 5: mechanical subject-only metadata, no LLM call.
-                metadata = social_metadata.mechanical_social_metadata(
-                    video_subject=params.video_subject,
-                )
+                # Title/description come from the agent; tags are empty
+                # (mechanical metadata died with video_subject — open decision).
                 youtube_extra = {
-                    "youtube_title": metadata.get("title", params.video_subject),
-                    "youtube_description": metadata.get("caption", ""),
-                    "tags": metadata.get("hashtags", []),
+                    "youtube_title": params.video_title,
+                    "youtube_description": params.video_description,
+                    "tags": [],
                     "privacyStatus": upload_post.upload_post_service.youtube_privacy_status,
                     "containsSyntheticMedia": True,
                 }
@@ -1119,7 +1116,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
                 video_bytes = video_storage.read_final_video_r2(object_path)
                 result = upload_post.cross_post_video(
                     video_path=video_path,
-                    title=params.video_subject or "Check out this video! #shorts #viral",
+                    title=params.video_title,
                     video_bytes=video_bytes,
                     youtube_extra=youtube_extra,
                 )
@@ -1185,7 +1182,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 if __name__ == "__main__":
     task_id = "task_id"
     params = VideoParams(
-        video_subject="金钱的作用",
+        video_title="金钱的作用",
+        video_description="金钱的作用",
+        video_type="faceless",
         voice_name="zh-CN-XiaoyiNeural-Female",
         voice_rate=1.0,
     )

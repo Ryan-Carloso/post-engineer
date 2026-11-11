@@ -18,8 +18,8 @@ export function PersonaTokensSection() {
   // The persona always has a face, so this is the with-face price (faceless is
   // a per-post choice, priced on the post screen). Full lip-sync is also a
   // per-post choice, priced here so the dashboard shows both modes.
-  const cost = computeVideoTokens(false, faceQuality);
-  const fullLipsyncCost = computeVideoTokens(false, faceQuality, true);
+  const cost = computeVideoTokens('hook_lipsync', faceQuality);
+  const fullLipsyncCost = computeVideoTokens('full_lipsync', faceQuality);
 
   return (
     <section>

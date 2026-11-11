@@ -20,7 +20,12 @@ from app.services import state as sm
 
 
 def _params():
-    return VideoParams(video_subject="test subject", video_script="script")
+    return VideoParams(
+        video_title="test subject",
+        video_description="Test description.",
+        video_type="faceless",
+        video_script="script",
+    )
 
 
 class RequestedTests(unittest.TestCase):
@@ -114,9 +119,7 @@ class RequestedTests(unittest.TestCase):
 class StartedTests(unittest.TestCase):
     def setUp(self):
         self.task_id = "started-task-1"
-        sm.state.update_task(
-            self.task_id, user_id="user-1", flow="direct", pipeline="video"
-        )
+        sm.state.update_task(self.task_id, user_id="user-1", flow="direct", pipeline="video")
 
     def tearDown(self):
         sm.state.delete_task(self.task_id)
@@ -139,9 +142,7 @@ class ProgressMilestoneTests(unittest.TestCase):
     def setUp(self):
         tm._progress_milestones.clear()
         self.task_id = "progress-task-1"
-        sm.state.update_task(
-            self.task_id, user_id="user-1", flow="direct", pipeline="video"
-        )
+        sm.state.update_task(self.task_id, user_id="user-1", flow="direct", pipeline="video")
         self.track = patch.object(tm, "track_event").start()
 
     def tearDown(self):
@@ -222,9 +223,7 @@ class CompleteTaskTests(unittest.TestCase):
     def setUp(self):
         tm._progress_milestones.clear()
         self.task_id = "complete-task-1"
-        sm.state.update_task(
-            self.task_id, user_id="user-1", flow="direct", pipeline="video"
-        )
+        sm.state.update_task(self.task_id, user_id="user-1", flow="direct", pipeline="video")
 
     def tearDown(self):
         tm._progress_milestones.clear()
@@ -339,9 +338,7 @@ class FailTaskTests(unittest.TestCase):
         tm._progress_milestones.clear()
         tm._failed_event_emitted_tasks.clear()
         self.task_id = "fail-task-1"
-        sm.state.update_task(
-            self.task_id, user_id="user-1", flow="direct", pipeline="video"
-        )
+        sm.state.update_task(self.task_id, user_id="user-1", flow="direct", pipeline="video")
 
     def tearDown(self):
         tm._progress_milestones.clear()
@@ -411,7 +408,6 @@ class FailTaskTests(unittest.TestCase):
         self.assertEqual(task["state"], const.TASK_STATE_FAILED)
 
 
-
 class CreateTaskControllerTests(unittest.TestCase):
     """POST /videos (and siblings) report requested via add_task's on_accepted."""
 
@@ -421,18 +417,20 @@ class CreateTaskControllerTests(unittest.TestCase):
         from app.controllers.v1 import video as video_controller
         from app.models.schema import TaskVideoRequest
 
-        body = TaskVideoRequest(video_subject="subject", video_script="script")
+        body = TaskVideoRequest(
+            video_title="subject",
+            video_description="Test description.",
+            video_type="faceless",
+            video_script="script",
+        )
         auth = SimpleNamespace(user_id="user-1")
         with (
-            patch.object(
-                video_controller.base, "get_task_id", return_value="req-1"
-            ),
-            patch.object(
-                video_controller.base, "get_auth_context", return_value=auth
-            ),
+            patch.object(video_controller.base, "get_task_id", return_value="req-1"),
+            patch.object(video_controller.base, "get_auth_context", return_value=auth),
             patch.object(video_controller.task_manager, "add_task") as add_task,
             patch.object(tm, "track_generation_requested") as requested,
         ):
+
             def fake_add_task(func, *args, **kwargs):
                 # Mirror TaskManager: the on_accepted callback fires on
                 # acceptance, strictly before the worker could start.
@@ -467,18 +465,17 @@ class CreateTaskControllerTests(unittest.TestCase):
         from app.models.exception import HttpException
         from app.models.schema import TaskVideoRequest
 
-        body = TaskVideoRequest(video_subject="subject", video_script="script")
+        body = TaskVideoRequest(
+            video_title="subject",
+            video_description="Test description.",
+            video_type="faceless",
+            video_script="script",
+        )
         auth = SimpleNamespace(user_id="user-1")
         with (
-            patch.object(
-                video_controller.base, "get_task_id", return_value="req-2"
-            ),
-            patch.object(
-                video_controller.base, "get_auth_context", return_value=auth
-            ),
-            patch.object(
-                video_controller.utils, "get_uuid", return_value="task-429-1"
-            ),
+            patch.object(video_controller.base, "get_task_id", return_value="req-2"),
+            patch.object(video_controller.base, "get_auth_context", return_value=auth),
+            patch.object(video_controller.utils, "get_uuid", return_value="task-429-1"),
             patch.object(
                 video_controller.task_manager,
                 "add_task",
@@ -503,10 +500,38 @@ class BatchRequestedTests(unittest.TestCase):
             "id": "slot-batch-req-1",
             "slot_at": "2026-09-08T09:00:00+00:00",
             "title": "Batch title one",
+            "description": "Agent description.",
+            "video_type": "hook_lipsync",
             "segments": [
-                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.", "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}]},
-                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.", "media": [{"url": "https://example.com/b0.jpg"}, {"url": "https://example.com/b1.jpg"}, {"url": "https://example.com/b2.jpg"}, {"url": "https://example.com/b3.jpg"}, {"url": "https://example.com/b4.jpg"}, {"url": "https://example.com/b5.jpg"}]},
-                {"kind": "cta", "text": "Save this video before your next trip to Porto.", "media": [{"url": "https://example.com/c0.jpg"}, {"url": "https://example.com/c1.jpg"}]},
+                {
+                    "kind": "hook",
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
+                    "media": [
+                        {"url": "https://example.com/h0.jpg"},
+                        {"url": "https://example.com/h1.jpg"},
+                        {"url": "https://example.com/h2.jpg"},
+                    ],
+                },
+                {
+                    "kind": "body",
+                    "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.",
+                    "media": [
+                        {"url": "https://example.com/b0.jpg"},
+                        {"url": "https://example.com/b1.jpg"},
+                        {"url": "https://example.com/b2.jpg"},
+                        {"url": "https://example.com/b3.jpg"},
+                        {"url": "https://example.com/b4.jpg"},
+                        {"url": "https://example.com/b5.jpg"},
+                    ],
+                },
+                {
+                    "kind": "cta",
+                    "text": "Save this video before your next trip to Porto.",
+                    "media": [
+                        {"url": "https://example.com/c0.jpg"},
+                        {"url": "https://example.com/c1.jpg"},
+                    ],
+                },
             ],
             "schedules": {
                 "id": "sched-batch-1",
@@ -558,9 +583,7 @@ class BatchRequestedTests(unittest.TestCase):
             )
             # The funnel entry fires before the worker thread is spawned.
             call_order = [c[0] for c in order.mock_calls]
-            self.assertLess(
-                call_order.index("requested"), call_order.index("thread_cls")
-            )
+            self.assertLess(call_order.index("requested"), call_order.index("thread_cls"))
             # The batch task state carries the funnel context.
             _, kwargs = generator.task_state.update_task.call_args
             self.assertEqual(kwargs["flow"], "batch")
@@ -575,10 +598,38 @@ class BatchFailedTests(unittest.TestCase):
             "id": "slot-batch-fail-1",
             "slot_at": "2026-09-08T09:00:00+00:00",
             "title": "Batch title one",
+            "description": "Agent description.",
+            "video_type": "hook_lipsync",
             "segments": [
-                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.", "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}]},
-                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.", "media": [{"url": "https://example.com/b0.jpg"}, {"url": "https://example.com/b1.jpg"}, {"url": "https://example.com/b2.jpg"}, {"url": "https://example.com/b3.jpg"}, {"url": "https://example.com/b4.jpg"}, {"url": "https://example.com/b5.jpg"}]},
-                {"kind": "cta", "text": "Save this video before your next trip to Porto.", "media": [{"url": "https://example.com/c0.jpg"}, {"url": "https://example.com/c1.jpg"}]},
+                {
+                    "kind": "hook",
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
+                    "media": [
+                        {"url": "https://example.com/h0.jpg"},
+                        {"url": "https://example.com/h1.jpg"},
+                        {"url": "https://example.com/h2.jpg"},
+                    ],
+                },
+                {
+                    "kind": "body",
+                    "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.",
+                    "media": [
+                        {"url": "https://example.com/b0.jpg"},
+                        {"url": "https://example.com/b1.jpg"},
+                        {"url": "https://example.com/b2.jpg"},
+                        {"url": "https://example.com/b3.jpg"},
+                        {"url": "https://example.com/b4.jpg"},
+                        {"url": "https://example.com/b5.jpg"},
+                    ],
+                },
+                {
+                    "kind": "cta",
+                    "text": "Save this video before your next trip to Porto.",
+                    "media": [
+                        {"url": "https://example.com/c0.jpg"},
+                        {"url": "https://example.com/c1.jpg"},
+                    ],
+                },
             ],
             "schedules": {
                 "id": "sched-batch-1",
@@ -624,15 +675,11 @@ class BatchFailedTests(unittest.TestCase):
         with (
             patch.object(gen_module.tm, "track_generation_requested"),
             patch.object(gen_module, "track_event") as track,
-            patch.object(
-                generator, "_dispatch_generation", side_effect=boom
-            ),
+            patch.object(generator, "_dispatch_generation", side_effect=boom),
         ):
             label = generator._generate_slot(self._slot())
         self.assertIsNone(label)
-        failed_calls = [
-            c for c in track.call_args_list if c[0][0] == "video_generation_failed"
-        ]
+        failed_calls = [c for c in track.call_args_list if c[0][0] == "video_generation_failed"]
         self.assertEqual(len(failed_calls), 1)
         _, props = failed_calls[0][0]
         self.assertEqual(props["flow"], "batch")
@@ -642,7 +689,6 @@ class BatchFailedTests(unittest.TestCase):
         self.assertIn("task_id", props)
         self.assertIn("[redacted]", props["reason"])
         self.assertNotIn("TOPSECRET123", props["reason"])
-
 
     def test_dispatch_failure_scrubs_full_message_before_truncation(self):
         # The batch call site must pin the scrub-then-truncate order too:
@@ -672,9 +718,7 @@ class BatchFailedTests(unittest.TestCase):
         # The scrubber received the whole message, not the truncated slice —
         # for both the stored slot error and the telemetry reason.
         self.assertIn(call(str(error)), scrub.call_args_list)
-        failed_calls = [
-            c for c in track.call_args_list if c[0][0] == "video_generation_failed"
-        ]
+        failed_calls = [c for c in track.call_args_list if c[0][0] == "video_generation_failed"]
         self.assertEqual(len(failed_calls), 1)
         _, props = failed_calls[0][0]
         self.assertIn("[redacted]", props["reason"])
@@ -741,9 +785,7 @@ class BatchFailedTests(unittest.TestCase):
         ):
             self.assertIsNone(generator._generate_slot(self._slot()))
             self.assertIsNone(generator._generate_slot(self._slot()))
-        failed_calls = [
-            c for c in track.call_args_list if c[0][0] == "video_generation_failed"
-        ]
+        failed_calls = [c for c in track.call_args_list if c[0][0] == "video_generation_failed"]
         self.assertEqual(len(failed_calls), 1)
 
     def test_pipeline_failure_after_redispatch_emits_terminal_event(self):
@@ -762,9 +804,7 @@ class BatchFailedTests(unittest.TestCase):
         )
         slot = self._slot()
         task_id = gen_module.new_task_id(slot)
-        sm.state.update_task(
-            task_id, user_id="user-1", flow="batch", pipeline="video"
-        )
+        sm.state.update_task(task_id, user_id="user-1", flow="batch", pipeline="video")
         self.addCleanup(sm.state.delete_task, task_id)
         boom = RuntimeError("transient dispatch blip")
         with (
@@ -785,14 +825,10 @@ class BatchFailedTests(unittest.TestCase):
             # Tick 3: the re-dispatched task genuinely fails in the pipeline.
             tm._fail_task(task_id, "gpu exploded", _params(), stage="render")
         dispatch_failed = [
-            c
-            for c in gen_track.call_args_list
-            if c[0][0] == "video_generation_failed"
+            c for c in gen_track.call_args_list if c[0][0] == "video_generation_failed"
         ]
         terminal_failed = [
-            c
-            for c in task_track.call_args_list
-            if c[0][0] == "video_generation_failed"
+            c for c in task_track.call_args_list if c[0][0] == "video_generation_failed"
         ]
         self.assertEqual(len(dispatch_failed), 1)
         self.assertEqual(len(terminal_failed), 1)
@@ -814,9 +850,7 @@ class BatchFailedTests(unittest.TestCase):
         )
         slot = self._slot()
         task_id = gen_module.new_task_id(slot)
-        sm.state.update_task(
-            task_id, user_id="user-1", flow="batch", pipeline="video"
-        )
+        sm.state.update_task(task_id, user_id="user-1", flow="batch", pipeline="video")
         self.addCleanup(sm.state.delete_task, task_id)
         boom = RuntimeError("transient dispatch blip")
         with (
@@ -834,9 +868,7 @@ class BatchFailedTests(unittest.TestCase):
         ):
             tm._fail_task(task_id, "gpu exploded", _params(), stage="render")
         terminal_failed = [
-            c
-            for c in task_track.call_args_list
-            if c[0][0] == "video_generation_failed"
+            c for c in task_track.call_args_list if c[0][0] == "video_generation_failed"
         ]
         self.assertEqual(len(terminal_failed), 1)
 
@@ -875,9 +907,7 @@ class TestDispatchFailedGuardLockFallback(unittest.TestCase):
     def test_lock_unavailable_emits_failed_event(self):
         tm._dispatch_failed_event_emitted_tasks_lock.acquire()
         try:
-            self.assertTrue(
-                tm._should_emit_dispatch_failed_event("task-locked")
-            )
+            self.assertTrue(tm._should_emit_dispatch_failed_event("task-locked"))
         finally:
             tm._dispatch_failed_event_emitted_tasks_lock.release()
 

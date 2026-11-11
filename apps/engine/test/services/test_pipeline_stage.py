@@ -71,9 +71,7 @@ class StartPhaseAttributionTests(unittest.TestCase):
             with ExitStack() as stack:
                 stack.enter_context(patch.object(tm.sm.state, "update_task"))
                 stack.enter_context(patch.object(tm, "send_discord"))
-                stack.enter_context(
-                    patch.object(tm.video_storage, "require_r2_configuration")
-                )
+                stack.enter_context(patch.object(tm.video_storage, "require_r2_configuration"))
                 stack.enter_context(patch.object(tm, "cleanup_task_intermediates"))
                 track = stack.enter_context(patch.object(tm, "track_event"))
                 for name, kwargs in patches.items():
@@ -82,15 +80,18 @@ class StartPhaseAttributionTests(unittest.TestCase):
         finally:
             tm._failed_event_emitted_tasks.clear()
         return [
-            c[0][1]["stage"]
-            for c in track.call_args_list
-            if c[0][0] == "video_generation_failed"
+            c[0][1]["stage"] for c in track.call_args_list if c[0][0] == "video_generation_failed"
         ]
 
     def test_crash_during_script_phase_reports_script_stage(self):
         # The script phase had started when generate_script raised, so the
         # failure must say "script", not "start".
-        params = VideoParams(video_subject="Lisbon trams", voice_name="chatterbox:kokoro_af_heart")
+        params = VideoParams(
+            video_title="Lisbon trams",
+            video_description="Test description.",
+            video_type="faceless",
+            voice_name="chatterbox:kokoro_af_heart",
+        )
         stages = self._track_failed_stages(
             "task-script-stage",
             params,
@@ -102,7 +103,12 @@ class StartPhaseAttributionTests(unittest.TestCase):
     def test_crash_during_audio_phase_reports_audio_stage(self):
         # script completes, then generate_audio raises: the failure must say
         # "audio". This also pins the script-completion path.
-        params = VideoParams(video_subject="Lisbon trams", voice_name="chatterbox:kokoro_af_heart")
+        params = VideoParams(
+            video_title="Lisbon trams",
+            video_description="Test description.",
+            video_type="faceless",
+            voice_name="chatterbox:kokoro_af_heart",
+        )
         stages = self._track_failed_stages(
             "task-audio-stage",
             params,

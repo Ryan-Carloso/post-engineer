@@ -23,22 +23,26 @@ RUN_INTEGRATION_TESTS = os.environ.get("MPT_RUN_INTEGRATION_TESTS", "").lower() 
     "yes",
 }
 
+
 class TestTaskService(unittest.TestCase):
     def setUp(self):
         pass
-    
+
     def tearDown(self):
         pass
 
-
     def test_generate_final_videos_does_not_rerecord_old_bgm(self):
         task_id = "bgm-history-no-selection"
-        params = VideoParams(video_subject="test")
-        with patch.object(tm.sm.state, "get_task", return_value={"user_id": "alice"}), \
-            patch.object(tm.history_repository, "recent", return_value=["old.mp3"]), \
-            patch.object(tm.history_repository, "record") as record, \
-            patch.object(tm.video, "combine_videos"), \
-            patch.object(tm.video, "generate_video"):
+        params = VideoParams(
+            video_title="test", video_description="Test description.", video_type="faceless"
+        )
+        with (
+            patch.object(tm.sm.state, "get_task", return_value={"user_id": "alice"}),
+            patch.object(tm.history_repository, "recent", return_value=["old.mp3"]),
+            patch.object(tm.history_repository, "record") as record,
+            patch.object(tm.video, "combine_videos"),
+            patch.object(tm.video, "generate_video"),
+        ):
             tm.generate_final_videos(
                 task_id, params, ["clip.mp4"], "voice.mp3", "sub.srt", "script", "none"
             )
@@ -53,10 +57,10 @@ class TestTaskService(unittest.TestCase):
             audio.write(b"fake audio")
 
         params = VideoParams(
-            video_subject="custom audio",
+            video_title="custom audio",
+            video_description="Test description.",
+            video_type="faceless",
             video_script="",
-            # Basename-only contract: the file lives in the task directory
-            # and is referenced by name, never by absolute path.
             custom_audio_file="custom-audio.mp3",
             voice_name="test-voice",
         )
@@ -66,9 +70,7 @@ class TestTaskService(unittest.TestCase):
                 patch.object(tm.voice, "tts") as tts,
                 patch.object(tm.voice, "get_audio_duration", return_value=7),
             ):
-                audio_file, audio_duration, sub_maker = tm.generate_audio(
-                    task_id, params, "script"
-                )
+                audio_file, audio_duration, sub_maker = tm.generate_audio(task_id, params, "script")
         finally:
             shutil.rmtree(task_dir, ignore_errors=True)
 
@@ -88,7 +90,9 @@ class TestTaskService(unittest.TestCase):
             server_audio.write(b"fake audio")
             server_audio.flush()
             params = VideoParams(
-                video_subject="custom audio",
+                video_title="custom audio",
+                video_description="Test description.",
+                video_type="faceless",
                 video_script="",
                 custom_audio_file=server_audio.name,
                 voice_name="test-voice",
@@ -127,10 +131,10 @@ class TestTaskService(unittest.TestCase):
         task_id = "test-custom-audio-missing"
         task_dir = utils.task_dir(task_id)
         params = VideoParams(
-            video_subject="custom audio",
+            video_title="custom audio",
+            video_description="Test description.",
+            video_type="faceless",
             video_script="",
-            # Basename-only contract: a missing base name inside the task
-            # directory must surface "does not exist", not an absolute path.
             custom_audio_file="missing.mp3",
             voice_name="test-voice",
         )
@@ -175,7 +179,9 @@ class TestTaskService(unittest.TestCase):
         audio_file = os.path.join(task_dir, "custom-audio.mp3")
         Path(audio_file).write_bytes(b"fake audio")
         params = VideoParams(
-            video_subject="custom audio",
+            video_title="custom audio",
+            video_description="Test description.",
+            video_type="faceless",
             video_script="Hello world.",
             subtitle_enabled=True,
         )
@@ -193,9 +199,7 @@ class TestTaskService(unittest.TestCase):
                     "app",
                     dict(tm.config.app, subtitle_provider="whisper"),
                 ),
-                patch.object(
-                    tm.subtitle, "create", side_effect=fake_whisper_create
-                ) as create,
+                patch.object(tm.subtitle, "create", side_effect=fake_whisper_create) as create,
                 patch.object(tm.subtitle, "correct") as correct,
             ):
                 subtitle_path = tm.generate_subtitle(
@@ -210,9 +214,7 @@ class TestTaskService(unittest.TestCase):
 
         self.assertTrue(subtitle_path.endswith("subtitle.srt"))
         create.assert_called_once_with(audio_file=audio_file, subtitle_file=subtitle_path)
-        correct.assert_called_once_with(
-            subtitle_file=subtitle_path, video_script="Hello world."
-        )
+        correct.assert_called_once_with(subtitle_file=subtitle_path, video_script="Hello world.")
 
     def test_generate_subtitle_skips_edge_provider_without_sub_maker(self):
         """
@@ -225,7 +227,9 @@ class TestTaskService(unittest.TestCase):
         audio_file = os.path.join(task_dir, "custom-audio.mp3")
         Path(audio_file).write_bytes(b"fake audio")
         params = VideoParams(
-            video_subject="custom audio",
+            video_title="custom audio",
+            video_description="Test description.",
+            video_type="faceless",
             video_script="Hello world.",
             subtitle_enabled=True,
         )
@@ -260,16 +264,18 @@ class TestTaskService(unittest.TestCase):
     )
     def test_task_local_materials(self):
         task_id = "00000000-0000-0000-0000-000000000000"
-        video_materials=[]
+        video_materials = []
         for i in range(1, 4):
-            video_materials.append(MaterialInfo(
-                provider="local",
-                url=os.path.join(resources_dir, f"{i}.png"),
-                duration=0
-            ))
+            video_materials.append(
+                MaterialInfo(
+                    provider="local", url=os.path.join(resources_dir, f"{i}.png"), duration=0
+                )
+            )
 
         params = VideoParams(
-            video_subject="金钱的作用",
+            video_title="金钱的作用",
+            video_description="Test description.",
+            video_type="faceless",
             video_script="金钱不仅是交换媒介，更是社会资源的分配工具。它能满足基本生存需求，如食物和住房，也能提供教育、医疗等提升生活品质的机会。拥有足够的金钱意味着更多选择权，比如职业自由或创业可能。但金钱的作用也有边界，它无法直接购买幸福、健康或真诚的人际关系。过度追逐财富可能导致价值观扭曲，忽视精神层面的需求。理想的状态是理性看待金钱，将其作为实现目标的工具而非终极目的。",
             video_aspect="9:16",
             video_concat_mode="random",
@@ -291,11 +297,11 @@ class TestTaskService(unittest.TestCase):
             stroke_color="#000000",
             stroke_width=1.5,
             n_threads=2,
-            paragraph_number=1
+            paragraph_number=1,
         )
         result = tm.start(task_id=task_id, params=params)
         print(result)
-    
+
 
 class TestGetVideoMaterials(unittest.TestCase):
     """
@@ -306,7 +312,12 @@ class TestGetVideoMaterials(unittest.TestCase):
 
     def test_provided_materials_skip_download(self):
         material_info = MaterialInfo(provider="local", url="/tmp/a.mp4", duration=0)
-        params = VideoParams(video_subject="x", video_materials=[material_info])
+        params = VideoParams(
+            video_title="x",
+            video_description="Test description.",
+            video_type="faceless",
+            video_materials=[material_info],
+        )
 
         with patch.object(tm.video, "preprocess_video", return_value=[material_info]) as preprocess:
             result = tm.get_video_materials(
@@ -319,7 +330,11 @@ class TestGetVideoMaterials(unittest.TestCase):
         preprocess.assert_called_once()
 
     def test_images_mode_returns_the_neutral_canvas(self):
-        params = VideoParams(video_subject="x", faceless_material="images")
+        params = VideoParams(
+            video_title="x",
+            video_description="Test description.",
+            video_type="faceless",
+        )
 
         with patch.object(
             tm.faceless_material, "images_canvas", return_value=["canvas.mp4"]
@@ -334,7 +349,11 @@ class TestGetVideoMaterials(unittest.TestCase):
         canvas.assert_called_once()
 
     def test_images_mode_canvas_failure_returns_none(self):
-        params = VideoParams(video_subject="x", faceless_material="images")
+        params = VideoParams(
+            video_title="x",
+            video_description="Test description.",
+            video_type="faceless",
+        )
 
         with patch.object(tm.faceless_material, "images_canvas", return_value=[]):
             result = tm.get_video_materials(
@@ -353,7 +372,12 @@ class TestGenerateFinalVideosSingleOutput(unittest.TestCase):
     """
 
     def _run(self, **params_kwargs):
-        params = VideoParams(video_subject="x", **params_kwargs)
+        params = VideoParams(
+            video_title="x",
+            video_description="Test description.",
+            video_type=params_kwargs.pop("video_type", "faceless"),
+            **params_kwargs,
+        )
         with (
             patch.object(tm.sm.state, "get_task", return_value={"user_id": "u1"}),
             patch.object(tm.sm.state, "update_task"),
@@ -373,9 +397,7 @@ class TestGenerateFinalVideosSingleOutput(unittest.TestCase):
         return final_paths, combined_paths, combine, generate
 
     def test_produces_exactly_one_combined_and_final_video(self):
-        final_paths, combined_paths, combine, generate = self._run(
-            video_concat_mode="sequential"
-        )
+        final_paths, combined_paths, combine, generate = self._run(video_concat_mode="sequential")
 
         task_dir = tm.utils.task_dir("single-video")
         self.assertEqual(final_paths, [os.path.join(task_dir, "final-1.mp4")])
@@ -394,6 +416,19 @@ class TestGenerateFinalVideosSingleOutput(unittest.TestCase):
             tm.VideoConcatMode.random,
         )
 
+    def test_hook_lipsync_with_a_photo_less_persona_fails_before_any_render(self):
+        # A hook video needs a face, like full lip-sync: without a photo
+        # there is nothing to lip-sync, so fail loudly instead of
+        # silently rendering images-only for a face mode.
+        with self.assertRaises(ValueError) as caught:
+            self._run(
+                video_type="hook_lipsync",
+                persona=PersonaParams(name="Ana", voice_id="calm"),
+            )
+        self.assertIn(
+            "hook_lipsync requires a persona with a photo", str(caught.exception)
+        )
+
 
 class TestGenerateFinalVideosCaptionWiring(unittest.TestCase):
     """The moved caption must actually reach the final encode.
@@ -405,7 +440,9 @@ class TestGenerateFinalVideosCaptionWiring(unittest.TestCase):
 
     def test_center_caption_arrives_at_generate_video_as_custom_70(self):
         params = VideoParams(
-            video_subject="x",
+            video_title="x",
+            video_description="Test description.",
+            video_type="hook_lipsync",
             subtitle_position="center",
             persona=PersonaParams(
                 name="Ana",
@@ -440,7 +477,9 @@ class TestGenerateFinalVideosCaptionWiring(unittest.TestCase):
 class _FakeStreamResponse:
     """Fake requests.get(stream=True) response for download_persona_voice."""
 
-    def __init__(self, content_type="audio/mpeg", chunks=(b"\x00" * 1024,), status_code=200, headers=None):
+    def __init__(
+        self, content_type="audio/mpeg", chunks=(b"\x00" * 1024,), status_code=200, headers=None
+    ):
         self.status_code = status_code
         self.headers = {"content-type": content_type, **(headers or {})}
         self._chunks = chunks
@@ -499,8 +538,7 @@ class TestDownloadPersonaVoice(unittest.TestCase):
             else patch(
                 "socket.getaddrinfo",
                 return_value=[
-                    (socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, 0))
-                    for ip in resolved_ips
+                    (socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, 0)) for ip in resolved_ips
                 ],
             )
         )
@@ -554,18 +592,16 @@ class TestDownloadPersonaVoice(unittest.TestCase):
     def test_rejects_when_ffprobe_fails(self):
         import subprocess
 
-        result = self._download(
-            probe_side_effect=subprocess.CalledProcessError(1, ["ffprobe"])
-        )
+        result = self._download(probe_side_effect=subprocess.CalledProcessError(1, ["ffprobe"]))
 
         self.assertIsNone(result)
         self.assertEqual(os.listdir(self.tmp), [])
 
-    #---------------
+    # ---------------
     # SSRF: the URL must resolve to a public address. Literal private IP,
     # hostname resolving to a private IP, unresolvable host, and redirect
     # to a private destination are rejected without any fetch.
-    #---------------
+    # ---------------
 
     def test_rejects_private_ip_literal(self):
         result = self._download(url="http://127.0.0.1/voz.mp3")
@@ -609,16 +645,21 @@ class TestDownloadPersonaVoice(unittest.TestCase):
         self.assertEqual(os.listdir(self.tmp), [])
 
     def test_generate_audio_reports_rejection_reason_to_user(self):
-        params = VideoParams(video_subject="voz rejeitada", video_script="")
+        params = VideoParams(
+            video_title="voz rejeitada",
+            video_description="Test description.",
+            video_type="faceless",
+            video_script="",
+        )
         persona = {"voice_audio_url": "http://127.0.0.1/voz.mp3"}
 
         with (
-            patch.object(tm, "resolve_persona_audio", return_value=(None, persona["voice_audio_url"])),
+            patch.object(
+                tm, "resolve_persona_audio", return_value=(None, persona["voice_audio_url"])
+            ),
             patch.object(tm.sm.state, "update_task") as update_task,
         ):
-            audio_file, audio_duration, sub_maker = tm.generate_audio(
-                "task-ssrf", params, "script"
-            )
+            audio_file, audio_duration, sub_maker = tm.generate_audio("task-ssrf", params, "script")
 
         self.assertIsNone(audio_file)
         self.assertIsNone(audio_duration)
@@ -646,7 +687,12 @@ class TestGenerateAudioMissingVoice(unittest.TestCase):
         return result, tts, update_task
 
     def test_fails_fast_with_clear_reason_when_no_voice_configured(self):
-        params = VideoParams(video_subject="no voice", video_script="")
+        params = VideoParams(
+            video_title="no voice",
+            video_description="Test description.",
+            video_type="faceless",
+            video_script="",
+        )
 
         (audio_file, audio_duration, sub_maker), tts, update_task = self._run(
             params, "task-no-voice"
@@ -668,7 +714,9 @@ class TestGenerateAudioMissingVoice(unittest.TestCase):
         # falls back to the empty voice_name default — the same TTS crash
         # as having no voice at all.
         params = VideoParams(
-            video_subject="empty voice id",
+            video_title="empty voice id",
+            video_description="Test description.",
+            video_type="hook_lipsync",
             video_script="",
             persona=PersonaParams(name="X", voice_id=""),
         )
@@ -698,7 +746,9 @@ class TestGenerateAudioTtsFailureReason(unittest.TestCase):
 
     def _run(self, tts_result, task_id):
         params = VideoParams(
-            video_subject="reason propagation",
+            video_title="reason propagation",
+            video_description="Test description.",
+            video_type="faceless",
             video_script="",
             voice_name="elevenlabs:bad-id",
         )
@@ -712,11 +762,9 @@ class TestGenerateAudioTtsFailureReason(unittest.TestCase):
         return result, tts, update_task, track
 
     def test_specific_tts_reason_reaches_stored_task_error(self):
-        (audio_file, audio_duration, sub_maker), tts, update_task, track = (
-            self._run(
-                vs.TtsResult(error="unknown voice 'bad-id'"),
-                "task-tts-reason-stored",
-            )
+        (audio_file, audio_duration, sub_maker), tts, update_task, track = self._run(
+            vs.TtsResult(error="unknown voice 'bad-id'"),
+            "task-tts-reason-stored",
         )
 
         self.assertIsNone(audio_file)
@@ -732,11 +780,9 @@ class TestGenerateAudioTtsFailureReason(unittest.TestCase):
 
     def test_specific_tts_reason_reaches_posthog_failure_event(self):
         reason = "ElevenLabs TTS request rejected (status 401, unauthorized)"
-        (audio_file, audio_duration, sub_maker), tts, update_task, track = (
-            self._run(
-                vs.TtsResult(error=reason),
-                "task-tts-reason-event",
-            )
+        (audio_file, audio_duration, sub_maker), tts, update_task, track = self._run(
+            vs.TtsResult(error=reason),
+            "task-tts-reason-event",
         )
 
         self.assertIsNone(audio_file)
@@ -773,7 +819,9 @@ class TestFailTaskDiscordDedupe(unittest.TestCase):
         self.assertIn("boom", message)
 
     def test_fail_task_alert_includes_subject(self):
-        params = VideoParams(video_subject="Lisbon trams")
+        params = VideoParams(
+            video_title="Lisbon trams", video_description="Test description.", video_type="faceless"
+        )
         with (
             patch.object(tm.sm.state, "update_task"),
             patch.object(tm, "send_discord") as send_discord,
@@ -830,7 +878,9 @@ class TestCompleteTaskCostReason(unittest.TestCase):
     """video_generated carries cost_usd or cost_missing_reason, never both."""
 
     def _complete(self, task_id, **kwargs):
-        params = VideoParams(video_subject="t")
+        params = VideoParams(
+            video_title="t", video_description="Test description.", video_type="faceless"
+        )
         with (
             patch.object(tm.sm.state, "update_task"),
             patch.object(tm.sm.state, "get_task", return_value={"flow": "direct"}),
@@ -868,7 +918,9 @@ class TestCompleteTaskCostReason(unittest.TestCase):
 
     def test_reason_is_persisted_on_the_task_row(self):
         # The batch reconciler reads the row, so the reason must be stored.
-        params = VideoParams(video_subject="t")
+        params = VideoParams(
+            video_title="t", video_description="Test description.", video_type="faceless"
+        )
         with (
             patch.object(tm.sm.state, "update_task") as update_task,
             patch.object(tm.sm.state, "get_task", return_value={"flow": "direct"}),
@@ -1012,7 +1064,6 @@ class TestFailTaskConcurrentDedupe(unittest.TestCase):
         send_discord.assert_called_once()
 
 
-
 class TestStartR2Requirement(unittest.TestCase):
     """start() fails fast when video generation needs R2 but it is unconfigured."""
 
@@ -1028,7 +1079,9 @@ class TestStartR2Requirement(unittest.TestCase):
         # require_r2_configuration guard must fire before any generation
         # work starts. A mutant removing the guard would let the pipeline
         # proceed to generate_script.
-        params = VideoParams(video_subject="s")
+        params = VideoParams(
+            video_title="s", video_description="Test description.", video_type="faceless"
+        )
         with (
             self._no_r2_env(),
             patch.object(tm.sm.state, "update_task"),
@@ -1046,7 +1099,9 @@ class TestStartR2Requirement(unittest.TestCase):
         # stop_at != "video" means no video will be generated, so the R2
         # guard must not fire. A mutant flipping the condition would fail
         # partial runs that never touch R2.
-        params = VideoParams(video_subject="s")
+        params = VideoParams(
+            video_title="s", video_description="Test description.", video_type="faceless"
+        )
         with (
             self._no_r2_env(),
             patch.object(tm.sm.state, "update_task"),
@@ -1111,7 +1166,9 @@ class TestArchiveFinalVideos(unittest.TestCase):
     def test_uploads_final_video_and_records_storage_path(self):
         task_id = "archive-task-1"
         tm.sm.state.update_task(task_id, user_id="user-9", persona_id="persona-3")
-        params = VideoParams(video_subject="s")
+        params = VideoParams(
+            video_title="s", video_description="Test description.", video_type="faceless"
+        )
         try:
             with patch(
                 "app.services.task.video_storage.upload_final_video",
@@ -1131,7 +1188,9 @@ class TestArchiveFinalVideos(unittest.TestCase):
     def test_upload_failure_is_best_effort_and_records_nothing(self):
         task_id = "archive-task-2"
         tm.sm.state.update_task(task_id, user_id="user-9")
-        params = VideoParams(video_subject="s")
+        params = VideoParams(
+            video_title="s", video_description="Test description.", video_type="faceless"
+        )
         try:
             with patch(
                 "app.services.task.video_storage.upload_final_video",
@@ -1145,9 +1204,14 @@ class TestArchiveFinalVideos(unittest.TestCase):
 
     def test_empty_paths_do_nothing(self):
         with patch("app.services.task.video_storage.upload_final_video") as upload:
-            tm.archive_final_videos("archive-task-3", [], VideoParams(video_subject="s"))
+            tm.archive_final_videos(
+                "archive-task-3",
+                [],
+                VideoParams(
+                    video_title="s", video_description="Test description.", video_type="faceless"
+                ),
+            )
             upload.assert_not_called()
-
 
     def test_generate_final_videos_degrades_when_the_hook_is_unmeasurable(self):
         """No intro (hook end neither measured nor estimated) ships the
@@ -1155,22 +1219,24 @@ class TestArchiveFinalVideos(unittest.TestCase):
 
         task_id = "ceiling-degrade"
         params = VideoParams(
-            video_subject="test",
+            video_title="test",
+            video_description="Test description.",
+            video_type="hook_lipsync",
             persona=PersonaParams(
                 name="Ana",
                 photo_url="https://supabase.test/signed/foto.png",
                 voice_id="test-voice",
             ),
         )
-        with patch.object(tm.sm.state, "get_task", return_value={"user_id": "alice"}), \
-            patch.object(tm.history_repository, "recent", return_value=[]), \
-            patch.object(tm, "_update_task"), \
-            patch.object(tm.video, "combine_videos"), \
-            patch.object(
-                tm, "prepare_persona_lipsync_video", return_value=None
-            ), \
-            patch.object(tm.persona_hook, "track_event") as track, \
-            patch.object(tm.video, "generate_video") as generate_video:
+        with (
+            patch.object(tm.sm.state, "get_task", return_value={"user_id": "alice"}),
+            patch.object(tm.history_repository, "recent", return_value=[]),
+            patch.object(tm, "_update_task"),
+            patch.object(tm.video, "combine_videos"),
+            patch.object(tm, "prepare_persona_lipsync_video", return_value=None),
+            patch.object(tm.persona_hook, "track_event") as track,
+            patch.object(tm.video, "generate_video") as generate_video,
+        ):
             final_paths, combined_paths, intro_report = tm.generate_final_videos(
                 task_id, params, ["clip.mp4"], "voice.mp3", "sub.srt", "script", "none"
             )
@@ -1180,11 +1246,10 @@ class TestArchiveFinalVideos(unittest.TestCase):
         self.assertEqual(len(combined_paths), 1)
         self.assertFalse(intro_report.ran)
         generate_video.assert_called_once()
-        self.assertEqual(
-            generate_video.call_args.kwargs["video_path"], combined_paths[0]
-        )
+        self.assertEqual(generate_video.call_args.kwargs["video_path"], combined_paths[0])
         # The skip was already reported inside the intro step.
         track.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

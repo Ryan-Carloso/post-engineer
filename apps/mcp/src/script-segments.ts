@@ -20,7 +20,6 @@ export const MAX_SEGMENTS = 12;
 // least ~1s (3 words), at most 30 photos per video. Same numbers as
 // image_density.py.
 export const MAX_MEDIAS = 6;
-export const IMAGES_MATERIAL = 'images';
 export const WORDS_PER_IMAGE = 8;
 export const MIN_WORDS_PER_IMAGE = 3;
 export const MAX_IMAGES_MODE_MEDIAS = 30;
@@ -247,7 +246,14 @@ function normalize(text: string): string {
   return text.toLowerCase().replace(/[^\p{L}\p{N}_\s]/gu, '').trim();
 }
 
-export function validateSegments(input: unknown, fullLipsync = false): SegmentsResult {
+/** The one video mode (issue #542 follow-up). Defined here so this shared
+ *  file stays dependency-free: the web and MCP copies are byte-identical
+ *  generated files and cannot import either app's VideoType. Structurally
+ *  identical to the VideoType in web lib/tokens.ts and MCP video-type.ts;
+ *  the literal values are pinned together by the video-type sync tests. */
+export type VideoType = 'full_lipsync' | 'hook_lipsync' | 'faceless';
+
+export function validateSegments(input: unknown, videoType: VideoType = 'hook_lipsync'): SegmentsResult {
   if (!Array.isArray(input) || input.length === 0) {
     return fail(
       'segments',
@@ -380,7 +386,7 @@ export function validateSegments(input: unknown, fullLipsync = false): SegmentsR
       'Merge body segments until the count fits.',
     );
   }
-  const imagesMode = !fullLipsync;
+  const imagesMode = videoType !== 'full_lipsync';
   const mediaCap = imagesMode ? MAX_IMAGES_MODE_MEDIAS : MAX_MEDIAS;
   let mediaCount = 0;
   const seenPhotos = new Set<string>();
@@ -441,8 +447,8 @@ export function validateSegments(input: unknown, fullLipsync = false): SegmentsR
   };
 }
 
-export function joinSegments(input: unknown, fullLipsync = false): string {
-  const result = validateSegments(input, fullLipsync);
+export function joinSegments(input: unknown, videoType: VideoType = 'hook_lipsync'): string {
+  const result = validateSegments(input, videoType);
   if (!result.ok) {
     throw new Error(`${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`);
   }

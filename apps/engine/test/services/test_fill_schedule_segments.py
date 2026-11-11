@@ -38,6 +38,8 @@ def _slot(**extra):
         "id": "slot-1",
         "slot_at": "2026-09-08T09:00:00+00:00",
         "title": "Batch title one",
+        "description": "Agent description.",
+        "video_type": "hook_lipsync",
         "schedules": {
             "id": "sched-1",
             "user_id": "user-1",
@@ -93,7 +95,7 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
         return dispatch.call_args[0][1]
 
     def test_segment_slot_dispatches_segments_and_joined_script(self):
-        request = self._dispatched_request(_slot(faceless=True, segments=SEGMENTS))
+        request = self._dispatched_request(_slot(video_type="faceless", segments=SEGMENTS))
         self.assertIsNotNone(request.segments)
         self.assertEqual(
             [segment.kind for segment in request.segments],
@@ -115,7 +117,7 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
         )
 
     def test_slot_without_segments_fails_without_dispatch(self):
-        store = _Store(_slot(faceless=True))
+        store = _Store(_slot(video_type="faceless"))
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=MagicMock(), publish_video=MagicMock()
         )
@@ -140,7 +142,7 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
             dict(SEGMENTS[2]),
         ]
         request = self._dispatched_request(
-            _slot(faceless=True, full_lipsync=True, segments=legacy)
+            _slot(video_type="full_lipsync", segments=legacy)
         )
         self.assertIsNotNone(request.segments)
         self.assertEqual(

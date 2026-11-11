@@ -62,16 +62,16 @@ class ThreadsPublisherTest(unittest.TestCase):
 class ThreadsFillScheduleTest(unittest.TestCase):
     schedule = {"providers": ["threads"], "threads_account_ids": ["42"]}
 
-    def test_metadata_cuts_the_title_to_the_limit_and_reads_accounts(self) -> None:
-        metadata = metadata_for("threads", "a" * 600, self.schedule)
+    def test_metadata_cuts_the_caption_to_the_limit_and_reads_accounts(self) -> None:
+        metadata = metadata_for("threads", "title", self.schedule, "a" * 600)
         self.assertIsInstance(metadata, upload_publisher.ThreadsMetadata)
         self.assertEqual(len(metadata.caption), 500)
         self.assertEqual(metadata.account_ids, ("42",))
 
     def test_preflight_passes_with_accounts_and_fails_without(self) -> None:
-        validate_publish_plan(self.schedule, "title")
+        validate_publish_plan(self.schedule, "title", "Agent description.")
         with self.assertRaisesRegex(ValueError, "at least one account id"):
-            validate_publish_plan({"providers": ["threads"]}, "title")
+            validate_publish_plan({"providers": ["threads"]}, "title", "Agent description.")
 
 
 if __name__ == "__main__":

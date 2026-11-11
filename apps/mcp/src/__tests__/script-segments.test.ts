@@ -17,9 +17,9 @@ describe('validateSegments (shared module)', () => {
       { kind: 'body', text: body },
       { kind: 'cta', text: cta },
     ];
-    const result = validateSegments(segments, true);
+    const result = validateSegments(segments, 'full_lipsync');
     expect(result.ok).toBe(true);
-    expect(joinSegments(segments, true)).toBe(`${hook}\n\n${body}\n\n${cta}`);
+    expect(joinSegments(segments, 'full_lipsync')).toBe(`${hook}\n\n${body}\n\n${cta}`);
   });
 
   it('strips padding before joining, matching the engine join the TaskVideoRequest validator compares against', () => {
@@ -28,7 +28,7 @@ describe('validateSegments (shared module)', () => {
       { kind: 'body', text: `  ${body} ` },
       { kind: 'cta', text: `${cta}   ` },
     ];
-    expect(joinSegments(padded, true)).toBe(`${hook}\n\n${body}\n\n${cta}`);
+    expect(joinSegments(padded, 'full_lipsync')).toBe(`${hook}\n\n${body}\n\n${cta}`);
   });
 
   it('rejects a segment with an unknown key, like the engine does', () => {
@@ -51,7 +51,7 @@ describe('validateSegments (shared module)', () => {
         { kind: 'body', text: body, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
         { kind: 'cta', text: cta },
       ],
-      true,
+      'full_lipsync',
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -68,7 +68,7 @@ describe('validateSegments (shared module)', () => {
         { kind: 'body', text: baseBody.replace(/ /g, '  ') },
         { kind: 'cta', text: cta },
       ],
-      true,
+      'full_lipsync',
     );
     expect(doubleSpaced.ok).toBe(true);
     const underscore = validateSegments(
@@ -78,7 +78,7 @@ describe('validateSegments (shared module)', () => {
         { kind: 'body', text: baseBody.replace('hello_world', 'helloworld') },
         { kind: 'cta', text: cta },
       ],
-      true,
+      'full_lipsync',
     );
     expect(underscore.ok).toBe(true);
   });
@@ -102,21 +102,21 @@ describe('validateSegments (shared module)', () => {
       { kind: 'hook', text: hook },
       { kind: 'body', text: body, media: [{ mediaId: 'abc', url: '' }] },
       { kind: 'cta', text: cta },
-    ], true);
+    ], 'full_lipsync');
     expect(blankUrl.ok).toBe(false);
     if (!blankUrl.ok) expect(blankUrl.error.field).toBe('segments.1.media.0');
     const blankId = validateSegments([
       { kind: 'hook', text: hook },
       { kind: 'body', text: body, media: [{ mediaId: '   ' }] },
       { kind: 'cta', text: cta },
-    ], true);
+    ], 'full_lipsync');
     expect(blankId.ok).toBe(false);
     if (!blankId.ok) expect(blankId.error.field).toBe('segments.1.media.0');
     const nullMedia = validateSegments([
       { kind: 'hook', text: hook },
       { kind: 'body', text: body, media: null },
       { kind: 'cta', text: cta },
-    ], true);
+    ], 'full_lipsync');
     expect(nullMedia.ok).toBe(true);
   });
 
@@ -158,7 +158,7 @@ describe('validateSegments (shared module)', () => {
       });
     }
     mediaSegments.push({ kind: 'cta', text: 'Save this video now please.' });
-    const manyMedia = validateSegments(mediaSegments, true);
+    const manyMedia = validateSegments(mediaSegments, 'full_lipsync');
     expect(manyMedia.ok).toBe(false);
     if (!manyMedia.ok) expect(manyMedia.error.rule).toBe('at most 6 medias are allowed per video');
   });
@@ -253,7 +253,7 @@ describe('validateSegments (fail paths reformatted by the shared copy)', () => {
         { kind: 'body', text: body, media: [{}] },
         { kind: 'cta', text: cta },
       ],
-      true,
+      'full_lipsync',
     );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.field).toBe('segments.1.media.0');
@@ -268,7 +268,9 @@ describe('tool schemas (strict segment objects)', () => {
       { kind: 'cta', text: cta },
     ],
     title: 'Porto food',
+    description: 'Agent description.',
     providers: ['youtube'],
+    options: { videoType: 'hook_lipsync' as const },
   };
 
   it('rejects unknown segment and media keys at parse time instead of stripping them', () => {

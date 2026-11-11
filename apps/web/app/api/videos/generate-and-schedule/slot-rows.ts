@@ -5,15 +5,18 @@
 
 import type { DistributedSlot } from '@/lib/schedule/slot-distribution';
 import type { ScriptSegment } from '@/lib/generation/script-segments';
+import type { VideoType } from '@/lib/tokens';
 import type { ExperimentLink } from './experiment-link';
 
 export interface SlotRowInput {
   slots: DistributedSlot[];
   title: string;
+  /** Agent-supplied video description (issue #542 follow-up): required. */
+  description: string;
   scheduleId: string;
   userId: string;
-  faceless: boolean;
-  fullLipsync?: boolean;
+  /** The one video mode (issue #542 follow-up). */
+  videoType: VideoType;
   /** Requested BGM mood (issue #489); null means the engine default. */
   musicMood?: string;
   /** Tokens this slot was charged (migration 045); every refund reads it. */
@@ -25,17 +28,22 @@ export interface SlotRowInput {
 
 // One row per slot, pending. The id is database-generated; the returned
 // rows carry it for the per-slot dispatch below.
-// `faceless` is stored ON the slot, not derived from the persona at read
+// `video_type` is stored ON the slot, not derived from the persona at read
 // time: it is a per-post choice the engine's batch pipeline reads back.
 // `charged_tokens` (migration 045) is what the slot was charged: every
 // refund path reads it instead of recomputing a price. `segments` rides
 // the same row so the batch pipeline can forward it (migration 030), and
-// `title` is the slot label (migration 031). `fullLipsync` rides the same
-// row (migration 035) so a tick-dispatched or requeued slot keeps full
-// lip-sync instead of silently falling back to intro-only images.
+// `title` is the slot label (migration 031). `video_type` rides the same
+// row (migration 056) so a tick-dispatched or requeued slot keeps its mode
+// instead of silently falling back to another one.
 // `musicMood` rides the same row (migration 048) so a tick-dispatched or
 // requeued slot keeps the requested BGM mood instead of silently falling
 // back to the engine's default mood.
+// The `faceless` / `full_lipsync` columns are derived storage, not the
+// contract: the batch-discount reader (lib/billing/batch-discount.ts)
+// reads the literal columns, so the mode is written in both forms. The
+// `faceless_material` column is not written here: its default is 'images'
+// (migration 054) and no live reader needs the explicit write.
 export function buildSlotRows(input: SlotRowInput) {
   return input.slots.map((slot) => ({
     schedule_id: input.scheduleId,
@@ -43,9 +51,10 @@ export function buildSlotRows(input: SlotRowInput) {
     slot_at: slot.slotAtISO,
     status: 'pending',
     title: input.title,
-    faceless: input.faceless,
-    faceless_material: 'images',
-    full_lipsync: input.fullLipsync ?? false,
+    description: input.description,
+    video_type: input.videoType,
+    faceless: input.videoType === 'faceless',
+    full_lipsync: input.videoType === 'full_lipsync',
     music_mood: input.musicMood ?? null,
     charged_tokens: input.chargedTokens,
     segments: input.segments ?? null,

@@ -110,24 +110,24 @@ class PinterestFillScheduleTest(unittest.TestCase):
     }
 
     def test_metadata_reads_the_title_description_board_and_accounts(self) -> None:
-        metadata = metadata_for("pinterest", "title", self.schedule)
+        metadata = metadata_for("pinterest", "title", self.schedule, "Agent description.")
         self.assertIsInstance(metadata, upload_publisher.PinterestMetadata)
         self.assertEqual(metadata.title, "title")
-        self.assertEqual(metadata.description, "title")
+        self.assertEqual(metadata.description, "Agent description.")
         self.assertEqual(metadata.board_id, "b1")
         self.assertEqual(metadata.account_ids, ("user-9",))
 
     def test_metadata_cuts_the_title_and_description_to_the_limits(self) -> None:
-        metadata = metadata_for("pinterest", "a" * 900, self.schedule)
+        metadata = metadata_for("pinterest", "a" * 900, self.schedule, "a" * 900)
         self.assertEqual(len(metadata.title), 100)
         self.assertEqual(len(metadata.description), 800)
 
     def test_preflight_passes_with_board_and_accounts_and_fails_without(self) -> None:
-        validate_publish_plan(self.schedule, "title")
+        validate_publish_plan(self.schedule, "title", "Agent description.")
         with self.assertRaisesRegex(ValueError, "at least one account id"):
-            validate_publish_plan({"providers": ["pinterest"], "pinterest_board_id": "b1"}, "title")
+            validate_publish_plan({"providers": ["pinterest"], "pinterest_board_id": "b1"}, "title", "Agent description.")
         with self.assertRaisesRegex(ValueError, "requires a board id"):
-            validate_publish_plan({"providers": ["pinterest"], "pinterest_account_ids": ["user-9"]}, "title")
+            validate_publish_plan({"providers": ["pinterest"], "pinterest_account_ids": ["user-9"]}, "title", "Agent description.")
 
     def test_slot_select_reads_the_pinterest_columns(self) -> None:
         from app.services.fill_schedule.store import ScheduleStore

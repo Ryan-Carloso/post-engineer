@@ -1,4 +1,3 @@
-import type { FacelessMaterial } from '@/lib/generation/faceless-materials';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enrichSlot } from './schedule-slot-presentation';
 import {
@@ -84,7 +83,6 @@ export interface SlotPostDetail {
   persona: { id: string; name: string } | null;
   generation: {
     faceless: boolean;
-    material: FacelessMaterial;
     language: string | null;
     voiceId: string | null;
     videoAspect: string | null;
@@ -170,7 +168,7 @@ export async function getSlotPost(
 ): Promise<SlotPostDetail | null> {
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, faceless_material, publish_outcomes')
+    .select('id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, publish_outcomes')
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();
@@ -188,7 +186,6 @@ export async function getSlotPost(
     published_at: string | null;
     task_id: string | null;
     faceless: boolean | null;
-    faceless_material: string | null;
     publish_outcomes: unknown;
   };
 

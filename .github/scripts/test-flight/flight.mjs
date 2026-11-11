@@ -45,7 +45,7 @@
 //   TEST_FLIGHT_SCHEDULED_ACTION   'cancel' (default) or 'leave'.
 //   TEST_FLIGHT_FACELESS             'true' to generate faceless videos
 //                                  (persona kept for voice + account
-//                                  routing, but options.faceless=true
+//                                  routing, but options.videoType='faceless'
 //                                  skips the GPU lipsync render). Used by
 //                                  the test-flight-faceless workflow;
 //                                  unset/false for the persona flight.
@@ -134,7 +134,7 @@ export function resolveConfig(env) {
     throw new FlightError(`test-flight: TEST_FLIGHT_API_BASE_URL must be https (got '${apiBaseUrl}')`);
   }
   // Faceless mode: persona is still passed (for voice + account routing) but
-  // options.faceless=true skips the GPU lipsync render — used by the
+  // options.videoType='faceless' skips the GPU lipsync render — used by the
   // test-flight-faceless workflow when Modal/GPU is unavailable.
   const faceless = optionalEnv(env, 'TEST_FLIGHT_FACELESS') === 'true';
   return {
@@ -143,7 +143,7 @@ export function resolveConfig(env) {
     accounts,
     scheduledAction,
     apiBaseUrl,
-    faceless,
+    videoType: faceless ? 'faceless' : 'hook_lipsync',
     runId: optionalEnv(env, 'TEST_FLIGHT_RUN_ID') || `manual-${Date.now()}`,
     pollTimeoutMs: parsePositiveInt(optionalEnv(env, 'TEST_FLIGHT_POLL_TIMEOUT_MIN'), 'TEST_FLIGHT_POLL_TIMEOUT_MIN', DEFAULT_POLL_TIMEOUT_MS / 60000) * 60000,
     pollIntervalMs: parsePositiveInt(optionalEnv(env, 'TEST_FLIGHT_POLL_INTERVAL_SEC'), 'TEST_FLIGHT_POLL_INTERVAL_SEC', DEFAULT_POLL_INTERVAL_MS / 1000) * 1000,
@@ -195,8 +195,12 @@ export function resolveScript(env, { readFile = readFileSync } = {}) {
       throw new FlightError('test-flight: every script segment must be { kind: hook|body|cta, text: non-empty }');
     }
   }
+  // The script JSON carries no description, and the route requires one:
+  // the flight is a smoke test, so the script text itself is the publish
+  // caption (segments joined with blank lines, like the engine's script).
   return {
     title,
+    description: segments.map((segment) => segment.text).join('\n\n'),
     segments,
     topic: typeof parsed?.topic === 'string' ? parsed.topic : '',
     source: typeof parsed?.source === 'string' ? parsed.source : 'unknown',
@@ -261,10 +265,11 @@ export async function resolveFlightAccounts({ explicit, client, discover = disco
 // Payloads
 //---------------
 
-export function buildAsapPayload({ personaId, title, segments, accounts, idempotencyKey, faceless = false }) {
+export function buildAsapPayload({ personaId, title, description, segments, accounts, idempotencyKey, videoType = 'hook_lipsync' }) {
   return {
     personaId,
     title,
+    description,
     publishing: {
       mode: 'asap',
       providers: Object.keys(accounts),
@@ -272,7 +277,7 @@ export function buildAsapPayload({ personaId, title, segments, accounts, idempot
     },
     options: {
       segments,
-      ...(faceless ? { faceless: true } : {}),
+      videoType,
     },
     idempotencyKey,
   };
@@ -289,10 +294,11 @@ export function scheduledTarget(now = new Date()) {
   };
 }
 
-export function buildScheduledPayload({ personaId, title, segments, accounts, idempotencyKey, schedule, faceless = false }) {
+export function buildScheduledPayload({ personaId, title, description, segments, accounts, idempotencyKey, schedule, videoType = 'hook_lipsync' }) {
   return {
     personaId,
     title,
+    description,
     publishing: {
       mode: 'scheduled',
       providers: Object.keys(accounts),
@@ -305,7 +311,7 @@ export function buildScheduledPayload({ personaId, title, segments, accounts, id
     },
     options: {
       segments,
-      ...(faceless ? { faceless: true } : {}),
+      videoType,
     },
     idempotencyKey,
   };
@@ -520,16 +526,17 @@ export async function runFlight(env = process.env, options = {}) {
   const providers = Object.keys(accounts);
   const summary = [`script source: ${script.source}${script.topic ? ` (topic: ${script.topic})` : ''}`];
 
-  console.log(`test-flight: leg 1/2 (ASAP) title="${script.title}" source=${script.source} providers=${providers.join(',')}${cfg.faceless ? ' faceless' : ''}`);
+  console.log(`test-flight: leg 1/2 (ASAP) title="${script.title}" source=${script.source} providers=${providers.join(',')}${cfg.videoType === 'faceless' ? ' faceless' : ''}`);
   const asapBody = await apiJson(client, '/api/videos/generate-and-schedule', {
     method: 'POST',
     body: buildAsapPayload({
       personaId: cfg.personaId,
       title: script.title,
+      description: script.description,
       segments: script.segments,
       accounts,
       idempotencyKey: `test-flight-${cfg.runId}-asap`,
-      faceless: cfg.faceless,
+      videoType: cfg.videoType,
     }),
   });
   const asapSlot = singleSlot(asapBody, 'ASAP');
@@ -552,11 +559,12 @@ export async function runFlight(env = process.env, options = {}) {
       body: buildScheduledPayload({
         personaId: cfg.personaId,
         title: script.title,
+        description: script.description,
         segments: script.segments,
         accounts,
         idempotencyKey: `test-flight-${cfg.runId}-scheduled`,
         schedule: target,
-        faceless: cfg.faceless,
+        videoType: cfg.videoType,
       }),
     });
     const scheduleId = scheduledBody.schedule !== null && typeof scheduledBody.schedule === 'object'

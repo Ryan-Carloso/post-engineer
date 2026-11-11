@@ -348,7 +348,7 @@ def _face_mode(params: Any) -> str:
     """How the persona's face appears: never, for the hook only, or all video."""
     if getattr(params, "persona", None) is None or not persona_lipsync_active(params):
         return segment_panels.FACE_NONE
-    if getattr(params, "full_lipsync", False) is True:
+    if getattr(params, "video_type", None) == "full_lipsync":
         return segment_panels.FACE_FULL
     return segment_panels.FACE_HOOK
 

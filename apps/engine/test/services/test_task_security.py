@@ -28,7 +28,9 @@ def _addrinfo(*ips):
 
 
 class _FakeImageResponse:
-    def __init__(self, status_code=200, content_type="image/png", chunks=(b"\x89PNG" + b"\x00" * 100,)):
+    def __init__(
+        self, status_code=200, content_type="image/png", chunks=(b"\x89PNG" + b"\x00" * 100,)
+    ):
         self.status_code = status_code
         self.headers = {"Content-Type": content_type}
         self._chunks = chunks
@@ -46,10 +48,13 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def _params(self, avatar_url):
-        persona = PersonaParams(
-            id="p1", name="Test", avatar_url=avatar_url, voice_id="voice-1"
+        persona = PersonaParams(id="p1", name="Test", avatar_url=avatar_url, voice_id="voice-1")
+        return VideoParams(
+            video_title="test",
+            video_description="Test description.",
+            video_type="faceless",
+            persona=persona,
         )
-        return VideoParams(video_subject="test", persona=persona)
 
     def _run(self, avatar_url, resolved_ips=("93.184.216.34",), response=None):
         patches = [
@@ -63,9 +68,7 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
                 "generate_intro_with_container",
                 return_value=("intro.mp4", 0.05, "job-1", None),
             ),
-            patch.object(
-                tm.video, "replace_video_intro_with_lipsync", return_value="final.mp4"
-            ),
+            patch.object(tm.video, "replace_video_intro_with_lipsync", return_value="final.mp4"),
         ]
         self.started = [p.start() for p in patches]
         for p in patches:
@@ -87,9 +90,7 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
 
     def test_rejects_hostname_resolving_to_private_ip(self):
         with self.assertRaises(tm.longcat.LongCatError):
-            self._run(
-                "https://avatar.internal.test/pic.png", resolved_ips=("10.1.2.3",)
-            )
+            self._run("https://avatar.internal.test/pic.png", resolved_ips=("10.1.2.3",))
         self.assertEqual(os.listdir(self.tmp), [])
 
     def test_rejects_non_image_content_type(self):
@@ -114,7 +115,7 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         # The web persona picker stores house faces as a path relative to the
         # web app; the engine fetches them from the web's public URL.
         with patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": "https://web.example.com/"}):
-             result, _, _, _ = self._run("/caracter-samples/file-3.png")
+            result, _, _, _ = self._run("/caracter-samples/file-3.png")
         self.assertEqual(result, "final.mp4")
         requests_get = self.started[2]
         self.assertEqual(
@@ -163,7 +164,9 @@ class TestResolveCustomAudioFile(unittest.TestCase):
     def test_accepts_file_in_task_dir(self):
         self._touch(self.tmp, "custom.mp3")
         resolved = self._resolve("custom.mp3")
-        self.assertEqual(os.path.realpath(resolved), os.path.realpath(self.tmp) + os.sep + "custom.mp3")
+        self.assertEqual(
+            os.path.realpath(resolved), os.path.realpath(self.tmp) + os.sep + "custom.mp3"
+        )
 
     def test_accepts_file_in_local_videos(self):
         self._touch(self.local_videos, "shared.mp3")

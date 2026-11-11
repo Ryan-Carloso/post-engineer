@@ -5,9 +5,9 @@
 // ratchet. tools.ts re-exports every name here, so existing import sites
 // keep working.
 import { z } from 'zod';
-
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { VIDEO_LAYOUTS } from './limits.js';
+import { VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, unknownVideoTypeMessage } from './video-type.js';
 import { personaVoiceField } from './voice-filters.js';
 
 export const ListSchedulesShape = {};
@@ -99,17 +99,26 @@ function httpsUrlField(fieldName: string) {
 }
 
 export const GeneratePersonaVideoOptionsShape = {
-  faceless: z.boolean().optional().describe('Generate faceless (no face). With a persona this drops only the face — the persona voice and niche still apply. Without a persona it is REQUIRED.'),
-  fullLipsync: z
-    .boolean()
-    .optional()
-    .describe('Render the whole video as the persona talking: every narration window is lip-synced to the persona face. Requires a persona with a photo and lip-sync enabled, so it cannot be combined with faceless (there is no face to render). Narration over 60 seconds is rejected by the engine before any GPU spend. Full lip-sync costs 8 tokens per video at face quality ok and 15 tokens at very_good, instead of the hook-only 2 and 3 tokens.'),
+  // The one video mode (issue #542 follow-up): required — it decides the
+  // render path and the price. The errorMap gives the missing/invalid
+  // message with every mode and its cost, so the agent can choose knowing
+  // the price.
+  videoType: z
+    .enum(VIDEO_TYPES, {
+      errorMap: (issue, ctx) => ({
+        message:
+          issue.code === 'invalid_type' && ctx.data === undefined
+            ? `options.videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}`
+            : unknownVideoTypeMessage(ctx.data),
+      }),
+    })
+    .describe('The one video mode: full_lipsync = the whole video is the persona talking (requires a persona with a photo; 8 tokens at face quality ok, 15 at very_good); hook_lipsync = lip sync on the hook only, agent images after (requires a persona with a photo; 2 tokens ok, 3 very_good); faceless = agent images only, no face (persona optional — with one, its voice and niche still apply; 1 token). Required: the mode decides the render path and the price.'),
   musicMood: z
     .string()
     .min(1)
     .max(64)
     .optional()
-    .describe('Background-music mood for the video: a mood from the engine BGM catalog, or "none" for explicit no music. Omitted lets the engine pick the first catalogued mood; an unknown mood is rejected by the engine with a 400. Works with faceless videos too.'),
+    .describe('Background-music mood for the video: a mood from the engine BGM catalog, or "none" for explicit no music. Omitted lets the engine pick the first catalogued mood; an unknown mood is rejected with a 400 naming the valid moods. Works with faceless videos too.'),
   audioUrl: httpsUrlField('audioUrl').optional().describe('Public URL of custom audio for the videos (overrides the persona voice).'),
   imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to use for every video (overrides the deterministic per-video selection; see list_persona_images).'),
   voiceId: personaVoiceField().optional().describe('Voice ID override: id or label from list_voices. Never type a provider prefix.'),

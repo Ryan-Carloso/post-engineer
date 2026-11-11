@@ -19,25 +19,32 @@ from app.services import task as task_service
 _MAX_BYTES = 20 * 1024 * 1024
 
 
-def _params(lipsync_enabled: bool = True, photo: str | None = "https://img.test/p.png") -> VideoParams:
+def _params(
+    video_type: str = "hook_lipsync", photo: str | None = "https://img.test/p.png"
+) -> VideoParams:
     return VideoParams(
-        video_subject="coffee",
+        video_title="coffee",
+        video_description="Test description.",
+        video_type=video_type,
         video_script="Hook. Body. Call to action.",
-        lipsync_enabled=lipsync_enabled,
         persona=PersonaParams(name="Ana", photo_url=photo, voice_id="chatterbox:kokoro_af_heart"),
     )
 
 
 class PreflightPersonaImageTests(unittest.TestCase):
     def test_downloads_the_image_when_lipsync_is_active(self):
-        with patch.object(full_lipsync, "resolve_persona_image", return_value="/t/img.png") as resolve:
+        with patch.object(
+            full_lipsync, "resolve_persona_image", return_value="/t/img.png"
+        ) as resolve:
             params = _params()
             persona_preflight.preflight_persona_image("task-1", params, _MAX_BYTES)
         resolve.assert_called_once_with("task-1", params, _MAX_BYTES)
 
-    def test_skips_when_lipsync_is_disabled(self):
+    def test_skips_when_faceless(self):
         with patch.object(full_lipsync, "resolve_persona_image") as resolve:
-            persona_preflight.preflight_persona_image("task-2", _params(lipsync_enabled=False), _MAX_BYTES)
+            persona_preflight.preflight_persona_image(
+                "task-2", _params(video_type="faceless"), _MAX_BYTES
+            )
         resolve.assert_not_called()
 
     def test_skips_when_the_persona_has_no_image(self):
@@ -91,7 +98,9 @@ class StartAbortsOnDeadImageTests(unittest.TestCase):
     def _run_start(self, stop_at: str, preflight_side_effect=None):
         generate_script = MagicMock(return_value="script")
         with (
-            patch.object(persona_preflight, "preflight_persona_image", side_effect=preflight_side_effect) as preflight,
+            patch.object(
+                persona_preflight, "preflight_persona_image", side_effect=preflight_side_effect
+            ) as preflight,
             patch.object(task_service.video_storage, "require_r2_configuration"),
             patch.object(task_service, "generate_script", generate_script),
             patch.object(task_service, "track_generation_started"),
@@ -138,7 +147,9 @@ class DownloadFailureReasonTests(unittest.TestCase):
 
     def test_a_network_error_message_loses_the_request_url(self):
         reason = self._resolve_with(
-            OSError("Max retries exceeded with url https://img.test/p.png?token=abc123 (Caused by X)")
+            OSError(
+                "Max retries exceeded with url https://img.test/p.png?token=abc123 (Caused by X)"
+            )
         )
         self.assertIn("persona image download failed", reason)
         self.assertNotIn("img.test", reason)
@@ -149,7 +160,9 @@ class DownloadFailureReasonTests(unittest.TestCase):
         self.assertIn("HTTP 404", self._resolve_with(OSError("HTTP 404")))
 
     def test_a_rejected_unsafe_url_loses_the_url_too(self):
-        reason = self._resolve_with(full_lipsync.ssrf.UnsafeUrlError("blocked http://10.0.0.1/secret.png"))
+        reason = self._resolve_with(
+            full_lipsync.ssrf.UnsafeUrlError("blocked http://10.0.0.1/secret.png")
+        )
         self.assertIn("persona image download rejected", reason)
         self.assertNotIn("10.0.0.1", reason)
 
@@ -157,7 +170,7 @@ class DownloadFailureReasonTests(unittest.TestCase):
 class IntroOnlyJobsArePreflightedTests(unittest.TestCase):
     def test_a_dead_image_fails_an_intro_only_video_run_at_the_start(self):
         params = _params()
-        self.assertFalse(params.full_lipsync)  # intro-only: no full lip-sync
+        self.assertEqual(params.video_type, "hook_lipsync")  # intro-only: no full lip-sync
         failure = longcat.LongCatError("persona image download failed: HTTP 404")
         with (
             patch.object(persona_preflight, "preflight_persona_image", side_effect=failure),

@@ -24,7 +24,20 @@ def _persona():
 
 
 def _request(**overrides):
-    values = dict(video_subject="Porto", segments=SEGMENTS, video_script="\n\n".join(s["text"] for s in SEGMENTS))
+    full = overrides.pop("full_lipsync", False) is True
+    values = dict(
+        video_title="Porto",
+        video_description="Test description.",
+        video_type=(
+            "full_lipsync"
+            if full
+            else "hook_lipsync"
+            if overrides.get("persona") is not None
+            else "faceless"
+        ),
+        segments=SEGMENTS,
+        video_script="\n\n".join(s["text"] for s in SEGMENTS),
+    )
     values.update(overrides)
     return TaskVideoRequest(**values)
 

@@ -46,7 +46,7 @@ def task_dir(tmp_path, monkeypatch):
 def _params(segments=SEGMENTS):
     return SimpleNamespace(
         video_aspect="9:16", font_name="x.ttf", segments=segments, persona=None,
-        faceless_material="images", video_script="\n\n".join(s["text"] for s in segments),
+        video_script="\n\n".join(s["text"] for s in segments),
     )
 
 

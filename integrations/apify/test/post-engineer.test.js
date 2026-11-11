@@ -77,8 +77,9 @@ describe('parseInput', () => {
     assert.equal(input.apiUrl, DEFAULT_API_URL);
     assert.equal(input.mode, 'asap');
     // No persona: faceless by default (generate-and-schedule refuses otherwise).
-    assert.equal(input.faceless, true);
-    assert.equal(input.fullLipsync, false);
+    assert.equal(input.videoType, 'faceless');
+    // Description defaults to the hook when omitted.
+    assert.equal(input.description, 'Stop scrolling.');
     assert.equal(input.waitForCompletion, true);
     assert.equal(input.timeoutMinutes, 30);
     assert.equal(input.schedule, undefined);
@@ -130,9 +131,11 @@ describe('buildGenerateBody', () => {
   it('sends segments hook, body, cta in order with the idempotency key', () => {
     const body = buildGenerateBody(parseInput({ ...baseInput(), faceless: true }), 'apify-run-abc');
     assert.deepEqual(body.options.segments.map((s) => s.kind), ['hook', 'body', 'cta']);
-    assert.equal(body.options.faceless, true);
+    assert.equal(body.options.videoType, 'faceless');
     assert.equal(body.options.voiceId, 'chatterbox:kokoro_af_heart');
+    assert.equal('faceless' in body.options, false);
     assert.equal('fullLipsync' in body.options, false);
+    assert.equal(body.description, 'Stop scrolling.');
     assert.equal(body.idempotencyKey, 'apify-run-abc');
     assert.deepEqual(body.publishing, { mode: 'asap', providers: ['youtube'] });
     assert.equal('personaId' in body, false);
@@ -140,12 +143,25 @@ describe('buildGenerateBody', () => {
 });
 
 describe('buildGenerateBody look options', () => {
-  it('sends a persona video with full lip-sync and no faceless flag', () => {
+  it('sends faceless videoType when faceless is true even with a persona (voice-only, 1 token)', () => {
+    const body = buildGenerateBody(parseInput({ ...baseInput(), personaId: 'p1', faceless: true }));
+    assert.equal(body.personaId, 'p1');
+    assert.equal(body.options.videoType, 'faceless');
+    assert.equal(body.options.voiceId, 'chatterbox:kokoro_af_heart');
+    assert.equal('faceless' in body.options, false);
+  });
+
+  it('sends a persona video with full lip-sync videoType and no faceless flag', () => {
     const body = buildGenerateBody(parseInput({ ...baseInput(), voiceId: undefined, personaId: 'p1', fullLipsync: true, images: undefined }));
     assert.equal(body.personaId, 'p1');
-    assert.equal(body.options.fullLipsync, true);
+    assert.equal(body.options.videoType, 'full_lipsync');
     assert.equal('faceless' in body.options, false);
     assert.equal('voiceId' in body.options, false);
+  });
+
+  it('passes an explicit description through instead of the hook', () => {
+    const body = buildGenerateBody(parseInput({ ...baseInput(), description: 'My caption.' }));
+    assert.equal(body.description, 'My caption.');
   });
 
   it('sends no material: images is the only material', () => {
@@ -479,7 +495,7 @@ describe('images material', () => {
     assert.equal(buildGenerateBody(input).options.segments.length, 12);
   });
 
-  it('sends fullLipsync to validate-script so a missing image costs nothing', async () => {
+  it('sends videoType to validate-script so a missing image costs nothing', async () => {
     const { promise, calls } = runWith(
       {
         'POST /api/videos/validate-script': jsonResponse(400, { success: false, error: 'images need media on every segment' }),
@@ -489,19 +505,21 @@ describe('images material', () => {
     await assert.rejects(promise);
     assert.equal(calls.length, 1);
     const sent = JSON.parse(calls[0].init.body);
-    assert.equal(sent.fullLipsync, false);
+    // No persona in the input: the Actor's videoType is faceless.
+    assert.equal(sent.videoType, 'faceless');
     assert.equal('facelessMaterial' in sent, false);
     assert.equal(sent.segments.length, 4);
   });
 
-  it('sends fullLipsync false to validate-script for an images video', async () => {
+  it('sends videoType faceless to validate-script for an images video', async () => {
     const { promise, calls } = runWith(
       { 'POST /api/videos/validate-script': jsonResponse(400, { success: false, error: 'Script too short.' }) },
       baseInput(),
     );
     await assert.rejects(promise);
     const sent = JSON.parse(calls[0].init.body);
-    assert.equal(sent.fullLipsync, false);
+    // No persona in the input: the Actor's videoType is faceless.
+    assert.equal(sent.videoType, 'faceless');
     assert.equal('facelessMaterial' in sent, false);
   });
 

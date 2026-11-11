@@ -62,7 +62,9 @@ class TestSubtitleBackgroundSettings(unittest.TestCase):
         dependency or type changes don't break the WebUI/rendering contract.
         """
         base_params = {
-            "video_subject": "subtitle background smoke",
+            "video_title": "subtitle background smoke",
+            "video_description": "Test description.",
+            "video_type": "faceless",
         }
 
         disabled_params = VideoParams(

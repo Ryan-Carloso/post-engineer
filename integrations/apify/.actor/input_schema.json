@@ -13,9 +13,15 @@
     "title": {
       "title": "Video title",
       "type": "string",
-      "description": "Label of the scheduled post.",
+      "description": "Label of the scheduled post (at most 100 characters).",
       "editor": "textfield",
       "prefill": "Why short videos win"
+    },
+    "description": {
+      "title": "Video description",
+      "type": "string",
+      "description": "Publish caption for the video. When omitted, the hook is used as the description.",
+      "editor": "textarea"
     },
     "hook": {
       "title": "Hook",
