@@ -1040,12 +1040,12 @@
             },
             "constraints": {
                 "scheduled_posts_pkey": "PRIMARY KEY (id)",
+                "scheduled_posts_video_type_check": "CHECK ((video_type = ANY (ARRAY['full_lipsync'::text, 'hook_lipsync'::text, 'faceless'::text])))",
                 "scheduled_posts_charged_tokens_check": "CHECK ((charged_tokens >= 0))",
                 "scheduled_posts_discount_tokens_check": "CHECK ((discount_tokens >= 0))",
                 "scheduled_posts_experiment_link_check": "CHECK ((((experiment_id IS NULL) = (variant_id IS NULL)) AND ((experiment_id IS NULL) OR (experiment_pair IS NOT NULL)) AND ((experiment_pair IS NULL) OR (experiment_pair >= 1))))",
                 "scheduled_posts_experiment_variant_fkey": "FOREIGN KEY (experiment_id, variant_id) REFERENCES experiment_variants(experiment_id, variant_id) ON DELETE SET NULL",
                 "scheduled_posts_faceless_material_check": "CHECK ((faceless_material = 'images'::text))",
-                "scheduled_posts_video_type_check": "CHECK ((video_type = ANY (ARRAY['full_lipsync'::text, 'hook_lipsync'::text, 'faceless'::text])))",
                 "scheduled_posts_experiment_pair_variant_key": "UNIQUE (experiment_id, experiment_pair, variant_id)"
             }
         },
