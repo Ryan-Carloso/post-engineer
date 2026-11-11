@@ -15,7 +15,9 @@
 // - Anything else: 426 with MCP_VERSION_MISMATCH and the exact npx
 //   command that installs the required version. An older MCP is stale; a
 //   newer one means npm already has a release the web has not deployed
-//   yet, which the deploy closes within minutes.
+//   yet, which the deploy closes within minutes. release-mcp.yml never
+//   publishes a version below npm's latest (mcp-release-not-older.sh), so
+//   the required version only moves forward.
 // - REQUIRED_MCP_VERSION missing or malformed: throws (no fallback). The
 //   web compose file refuses to start without it, so this only fires on a
 //   misconfigured local setup.

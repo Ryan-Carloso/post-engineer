@@ -3,8 +3,9 @@
 # against a throwaway git repo, with `gh` stubbed on PATH (offline):
 #   - the version is VERSION MAJOR.MINOR + the PR of the LAST commit
 #     touching apps/mcp/, not of HEAD
-#   - an unmerged/missing PR, a malformed package.json version and a missing
+#   - an unmerged/missing PR, a malformed VERSION file and a missing
 #     GITHUB_REPOSITORY fail loudly instead of inventing a version
+#   - mcp-release-not-older.sh refuses a version below npm's latest
 #   - the stamp writes the version into package.json and both server.json
 #     fields, and refuses a malformed version
 # Usage: bash .github/scripts/test-mcp-release-version.sh
@@ -90,6 +91,19 @@ printf 'next\n' > "$REPO/VERSION"
 if out="$(bash "$VERSION_SCRIPT" "$REPO" 2>&1)"; then fail "malformed VERSION must fail, got: $out"; else
   if grep -q 'is not MAJOR.MINOR' <<< "$out"; then pass "malformed VERSION fails loudly"; else fail "malformed VERSION error text: $out"; fi
 fi
+
+echo "--- never publish below npm latest ---"
+GUARD="$ROOT/.github/scripts/mcp-release-not-older.sh"
+if bash "$GUARD" 1.52.571 1.52.570 > /dev/null 2>&1; then pass "a higher version passes"; else fail "a higher version must pass"; fi
+if bash "$GUARD" 1.52.571 "" > /dev/null 2>&1; then pass "nothing published yet passes"; else fail "an empty latest must pass"; fi
+if bash "$GUARD" 1.53.1 1.52.900 > /dev/null 2>&1; then pass "a new release line passes despite a lower patch"; else fail "1.53.1 must beat 1.52.900"; fi
+if out="$(bash "$GUARD" 1.52.570 1.52.571 2>&1)"; then fail "a lower version must fail"; else
+  if grep -q "::error::Release version 1.52.570 is lower than npm latest 1.52.571" <<< "$out"; then pass "a lower version fails loudly"; else fail "lower version error text: $out"; fi
+fi
+if out="$(bash "$GUARD" latest 1.52.1 2>&1)"; then fail "a malformed version must fail"; else
+  if grep -q 'Release version "latest" is not MAJOR.MINOR.PATCH' <<< "$out"; then pass "a malformed version fails loudly"; else fail "malformed guard text: $out"; fi
+fi
+if bash "$GUARD" 1.52.99 1.52.100 > /dev/null 2>&1; then fail "comparison must be numeric"; else pass "comparison is numeric, not text"; fi
 
 echo "=== $PASS passed, $FAIL failed ==="
 [ "$FAIL" = "0" ]

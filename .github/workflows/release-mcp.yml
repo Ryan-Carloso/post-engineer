@@ -61,6 +61,7 @@ jobs:
     permissions:
       contents: write # push the mcp-v<version> tag
       id-token: write # npm trusted publishing / provenance
+      pull-requests: read # commits/{sha}/pulls in mcp-release-version.sh
     outputs:
       version: ${{ steps.version.outputs.version }}
       published_now: ${{ steps.published.outputs.published_now }}
@@ -96,6 +97,18 @@ jobs:
               echo "npm already serves post-engineer-mcp@${VERSION}: nothing to publish."
               ;;
             404)
+              # Never move `latest` back: an older apps/mcp/ PR merged after
+              # a newer one computes a lower version (mcp-release-not-older.sh).
+              latest_status="$(curl -s -o "$RUNNER_TEMP/latest.json" -w '%{http_code}' --max-time 30 "https://registry.npmjs.org/post-engineer-mcp/latest" || true)"
+              case "$latest_status" in
+                200) published="$(node -p "JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).version" "$RUNNER_TEMP/latest.json")" ;;
+                404) published="" ;;
+                *)
+                  echo "::error::npm answered HTTP ${latest_status:-none} for post-engineer-mcp@latest; the next run retries."
+                  exit 1
+                  ;;
+              esac
+              bash .github/scripts/mcp-release-not-older.sh "$VERSION" "$published"
               echo "exists=false" >> "$GITHUB_OUTPUT"
               echo "npm does not serve post-engineer-mcp@${VERSION} yet: publishing."
               ;;
