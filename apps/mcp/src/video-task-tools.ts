@@ -152,8 +152,9 @@ export async function handleWaitForVideoTasks(
             }
             // The engine lost the task (restart with the in-memory state
             // backend) and nothing proves the video finished: the web route
-            // already failed it and refunded, so this is terminal — waiting
-            // longer can never complete it.
+            // already recorded the terminal failed verdict (refunding direct
+            // generations; batch charges are left to the billing reconcile
+            // cron), so this is terminal — waiting longer can never complete it.
             return {
               taskId,
               result: {
