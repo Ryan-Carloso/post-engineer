@@ -272,4 +272,19 @@ describe('checkPreChargePreflights', () => {
     expect(checkFullLipsyncNarration).not.toHaveBeenCalled();
     expect(calls).toHaveLength(0);
   });
+
+  it('fails fast with a 400 when the persona stores an unknown aspect, never silently checks as portrait', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920)]);
+    vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
+    const result = await checkPreChargePreflights({
+      ...COMBINED,
+      prep: { ...PREP, videoAspect: '4:3' },
+    });
+    expect(result).not.toBeNull();
+    expect(result?.status).toBe(400);
+    const payload = (await result?.json()) as Record<string, unknown>;
+    expect(payload.code).toBe('VALIDATION_FAILED');
+    expect(payload.field).toBe('personaId');
+    expect(calls).toHaveLength(0);
+  });
 });

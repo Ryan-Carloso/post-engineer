@@ -18,6 +18,10 @@ def ratio_matches(width: int, height: int, aspect: VideoAspect) -> bool:
     dimensions reject immediately; a wider photo is accepted only while
     the horizontal bars stay within MAX_LETTERBOX_BARS. Shared by the
     engine's aspect gate (media_aspect) and video.py's fit check.
+
+    Callers pass probed dimensions, never None: _probe_size returns
+    None only when the image cannot be opened, and _validate_photo
+    calls mismatch_detail only after a successful open.
     """
     if width <= 0 or height <= 0:
         return False

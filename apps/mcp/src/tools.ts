@@ -78,7 +78,7 @@ export const CreatePersonaShape = {
     .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })
     .default('en-US')
     .describe('Language code — English only for now (e.g. en-US, en-GB)'),
-  videoAspect: z.enum(['9:16', '16:9']).default('9:16').describe('Video aspect ratio'),
+  videoAspect: z.enum(['9:16', '16:9', '1:1']).default('9:16').describe('Video aspect ratio'),
   videoLayout: z
     .enum(VIDEO_LAYOUTS)
     .default('standard')
