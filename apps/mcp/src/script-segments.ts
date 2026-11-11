@@ -207,6 +207,14 @@ export function countWords(text: string): number {
   return text.trim().split(/\s+/).filter((word) => word.length > 0).length;
 }
 
+// True when the text carries a spoken word: a Unicode letter or digit.
+// Mirrors the engine's token test (script_segments._has_spoken_words,
+// the same [^\W_] class user_media._tokens uses): punctuation-only text
+// has no spoken words, so its photo gets no seconds at render.
+export function hasSpokenWords(text: string): boolean {
+  return /[\p{L}\p{N}]/u.test(text);
+}
+
 function hasForbiddenContent(text: string): boolean {
   const lower = text.toLowerCase();
   if (
@@ -419,6 +427,13 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
     if (imagesMode) {
       const density = imageDensityError(countWords(segments[i].text), media.length);
       if (density !== null) return fail(`segments.${i}.media`, density.rule, density.fix);
+      if (!hasSpokenWords(segments[i].text)) {
+        return fail(
+          `segments.${i}.text`,
+          'The images material needs spoken words on every segment that carries media.',
+          'Write real words for this segment, or move its photo to another segment.',
+        );
+      }
     }
     mediaCount += media.length;
   }

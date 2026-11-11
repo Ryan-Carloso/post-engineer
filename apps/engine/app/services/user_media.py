@@ -249,8 +249,9 @@ def check_media_detail(
     that blocks the SSRF-safe download reports blocked_403 and the agent
     retries with upload_media bytes fetched on its own machine. Never
     logs the URL. A media id that expired or never existed reports
-    "media_expired": the caller lets the existing skip-warning path
-    handle it, it never blocks the video.
+    "media_expired": in the images modes the skip now fails the task
+    (images_do_not_cover_audio names the photo); full lip sync only
+    records the warning.
     """
     if media_id is not None:
         source, reason = _media_id_path(media_id)
