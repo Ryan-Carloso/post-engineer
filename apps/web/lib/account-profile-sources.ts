@@ -203,10 +203,10 @@ const fanvue: ProfileSource = {
       await getValidFanvueAccessToken(supabase, userId, record.providerAccountId),
     );
     return {
-      accountName: profile.username,
+      accountName: profile.displayName ?? profile.username,
       pictureUrl: profile.avatarUrl,
       metadata: {
-        name: profile.username,
+        name: profile.displayName ?? profile.username,
         profilePictureUrl: profile.avatarUrl,
       },
     };

@@ -19,7 +19,9 @@ from dataclasses import dataclass
 
 FANVUE_PROVIDER: str = "fanvue"
 # Fanvue title/description ceilings, mirroring the Pinterest contract
-# (publish_pinterest.py); the web handler pins the same values.
+# (publish_pinterest.py). Engine-side only: the web handler truncates
+# nothing (Fanvue documents no ceiling), so these caps are what the
+# engine sends, not a route contract.
 FANVUE_TITLE_MAX_LENGTH: int = 100
 FANVUE_DESCRIPTION_MAX_LENGTH: int = 800
 
