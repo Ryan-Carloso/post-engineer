@@ -104,6 +104,21 @@ class ImagesMaterialStartTests(unittest.TestCase):
         mocks["complete"].assert_not_called()
         mocks["cleanup"].assert_called_with("task-images", ())
 
+    def test_a_detailed_coverage_failure_reaches_the_task_error_verbatim(self):
+        detail = (
+            "no full-frame image survived; "
+            "2 sent, 0 survived, 2 skipped (download blocked x2); "
+            "segment 0 image 0 media skipped: download blocked"
+        )
+        mocks = self._run(
+            _params(),
+            panels={"side_effect": image_coverage.ImagesDoNotCoverAudio(detail)},
+        )
+        mocks["fail"].assert_called_once()
+        args, _kwargs = mocks["fail"].call_args
+        self.assertEqual(args[1], f"images_do_not_cover_audio: {detail}")
+        mocks["complete"].assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

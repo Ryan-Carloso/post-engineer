@@ -414,6 +414,15 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
             if problem is not None:
                 rule, fix = problem
                 raise SegmentValidationError(f"segments.{index}.media", rule, fix)
+            # Punctuation-only text has no spoken words (same token
+            # test the render path uses, user_media._tokens), so its
+            # photo gets no seconds at render and would fail the task.
+            if not re.search(r"[^\W_]", texts[index]):
+                raise SegmentValidationError(
+                    f"segments.{index}.text",
+                    "The images material needs spoken words on every segment that carries media.",
+                    "Write real words for this segment, or move its photo to another segment.",
+                )
         media_count += counted
     if media_count > media_cap:
         fix = f"Remove medias until there are at most {media_cap}."

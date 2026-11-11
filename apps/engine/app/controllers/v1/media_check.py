@@ -3,7 +3,7 @@
 The MCP check_media tool's engine side: the web route authenticates the
 user, then calls here with the server secret, and this endpoint runs
 the SSRF-safe download and the mechanical checks in user_media
-(download refusal, real image type, size bounds, face detection) and
+(download refusal, real image type, size bounds) and
 returns a single code plus the probed dimensions. No judgement, no
 relevance score, and the URL is never logged: a URL can carry
 credentials in its query string.
@@ -11,8 +11,9 @@ credentials in its query string.
 With video_aspect given, a photo that cannot fill the frame reports
 wrong_aspect instead of ok, so the caller can reject it before any
 token is charged. A media id that expired or never existed reports
-media_expired: the caller lets the existing skip-warning path handle
-it, it never blocks the video.
+media_expired: in the images modes the skip fails the task
+(images_do_not_cover_audio names the photo); full lip sync only
+records the warning.
 """
 
 import tempfile

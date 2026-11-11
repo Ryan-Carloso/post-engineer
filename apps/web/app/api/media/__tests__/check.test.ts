@@ -48,7 +48,7 @@ beforeEach(() => {
   vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
   global.fetch = vi.fn().mockResolvedValue({
     ok: true,
-    json: async () => ({ status: 200, body: { code: 'face_detected' } }),
+    json: async () => ({ status: 200, body: { code: 'ok', width: 1080, height: 1920 } }),
   });
 });
 
@@ -64,7 +64,7 @@ describe('POST /api/media/check', () => {
     expect(response.status).toBe(200);
     const payload = (await response.json()) as Record<string, unknown>;
     expect(payload.success).toBe(true);
-    expect(payload.code).toBe('face_detected');
+    expect(payload.code).toBe('ok');
     expect(JSON.stringify(payload)).not.toContain('secret-value');
     const fetchCall = vi.mocked(global.fetch).mock.calls[0];
     expect(fetchCall?.[0]).toBe('https://engine.test/api/v1/media/check');
