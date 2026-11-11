@@ -73,6 +73,84 @@ class TestCtaSafeTrim:
 
         assert result == closing
 
+    def test_multi_sentence_cta_paragraph_survives_whole(self):
+        # Issue #534 defect 2: the CTA is a paragraph, not one sentence.
+        # The old trim kept only its last sentence and silently dropped
+        # the CTA's opening sentence into the trimmed body.
+        script = (
+            "Hook forte aqui.\n\n"
+            "Corpo um longo. Corpo dois longo. Corpo três longo.\n\n"
+            "Ideia grande. Segue pra mais."
+        )
+        result = persona_hook._limit_generated_script(script)
+
+        assert len(result) <= 60
+        assert result == "Hook forte aqui.\n\nIdeia grande. Segue pra mais."
+        assert "Corpo três" not in result
+
+    def test_cta_paragraph_ships_alone_when_no_head_fits(self):
+        # The closing paragraph fits on its own (59 chars of a 60 budget)
+        # but no head text fits next to it: it ships alone, whole — the
+        # old trim kept only its last sentence next to the hook instead.
+        closing = "Small study, big idea, start tonight. Follow HabitLoom now."
+        script = f"Hook forte aqui.\n\n{closing}"
+        result = persona_hook._limit_generated_script(script)
+
+        assert result == closing
+
+    def test_overlong_cta_paragraph_falls_back_to_last_sentence(self):
+        # The closing paragraph itself (68 chars) exceeds the 60 budget,
+        # so the paragraph cannot ship whole: its last sentence is still
+        # preserved instead of a plain cut that ends before it.
+        script = (
+            "Hook forte aqui.\n\n"
+            "Corpo longo demais para caber neste orçamento curto. Segue pra mais."
+        )
+        result = persona_hook._limit_generated_script(script)
+
+        assert len(result) <= 60
+        assert result == "Hook forte aqui.\n\nSegue pra mais."
+
+    def test_habitloom_shaped_script_keeps_full_cta_at_prod_limit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        # Issue #534 defect 2, representative shape of the HabitLoom video
+        # (task 42daee48-6ad9-4006-8bec-cfd7668be0a7): 98 words — hook 17,
+        # body 66, CTA 15 — 615 chars, over the prod 600-char limit. The
+        # full Video C text is not recoverable, so this rebuilds its shape:
+        # same word counts, same last spoken body line, same two-sentence
+        # CTA. The whole CTA paragraph must survive the trim.
+        monkeypatch.setitem(config.app, "max_video_script_characters", 600)
+        hook = "Go to bed an hour earlier and lose more bodyweight, reports a brand new 2026 study now."
+        body = (
+            "Investigators followed 196 participants aged 21 to 64 with prediabetes who slept "
+            "under six and a half hours a nighttime. "
+            "For eight weeks everyone followed the same lifestyle intervention while tracking "
+            "bedtimes and bodyweight. "
+            "Every hour earlier they fell asleep meant zero point six kilograms more lost, "
+            "without sleeping longer. "
+            "But this is an association, not proof, so try this tonight, lights out one hour earlier."
+        )
+        cta = "Small study, big idea, start with sleep tonight. Follow HabitLoom for straightforward daily health habits."
+        script = "\n\n".join([hook, body, cta])
+
+        assert len(script.split()) == 98
+        assert len(hook.split()) == 17
+        assert len(body.split()) == 66
+        assert len(cta.split()) == 15
+        assert len(script) == 615
+
+        result = persona_hook._limit_generated_script(script)
+
+        assert len(result) <= 600
+        assert result.endswith(cta)
+        assert "Small study, big idea" in result
+        # The trim's cost lands on the body, never the CTA: the last body
+        # sentence ("lights out one hour earlier") is cut so the whole CTA
+        # paragraph fits, while the earlier body sentences survive.
+        assert "without sleeping longer" in result
+        assert "lights out one hour earlier" not in result
+
 
 def _repo_root() -> Path:
     # Walk up instead of counting parents: mutmut runs the suite from a

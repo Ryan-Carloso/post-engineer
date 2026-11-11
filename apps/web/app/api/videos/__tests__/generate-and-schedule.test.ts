@@ -2746,7 +2746,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         baseBody({
           personaId: undefined,
           options: {
-            faceless: true,
+            videoType: 'faceless',
             voiceId: 'chatterbox:kokoro_af_heart',
             language: 'en',
             niche: 'comedy',
