@@ -31,8 +31,9 @@ describe('public/openapi.json', () => {
     expect(spec).toEqual(generator.buildSpec(mapping, generator.API_SPEC_VERSION));
   });
 
-  // The MCP auto-bump rewrites apps/mcp/package.json only; tying the spec
-  // version to it would make every bump PR ship a stale openapi.json.
+  // The MCP release stamps its generated version into apps/mcp/package.json
+  // only inside the publish job; tying the spec version to it would ship a
+  // stale openapi.json.
   it('does not take its version from the MCP package', () => {
     const generatorSource = readFileSync(join(root, 'apps/web/scripts/generate-openapi.mjs'), 'utf8');
     expect(generatorSource.includes('apps/mcp/package.json')).toBe(false);

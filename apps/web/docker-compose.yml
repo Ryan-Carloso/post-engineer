@@ -34,6 +34,12 @@ services:
       - .env
     environment:
       TZ: UTC
+      # The one MCP version this web accepts (lib/mcp-version-gate.ts).
+      # deploy.sh computes it (VERSION MAJOR.MINOR + the PR of
+      # the last merge touching apps/mcp/) and exports it only once npm
+      # serves that version. No default: without it compose refuses to
+      # start, and the running web stays up.
+      REQUIRED_MCP_VERSION: ${REQUIRED_MCP_VERSION:?REQUIRED_MCP_VERSION must be exported by the deploy (see lib/mcp-version-gate.ts)}
     logging:
       driver: json-file
       options:

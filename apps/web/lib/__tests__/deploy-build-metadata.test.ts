@@ -88,4 +88,17 @@ describe('deployment build metadata contract', () => {
       expect(asgi, `engine asgi.py must read ${name}`).toContain(`"${name}"`);
     }
   });
+
+  it('requires REQUIRED_MCP_VERSION at runtime in the web container', () => {
+    // deploy.sh exports REQUIRED_MCP_VERSION only once npm serves that MCP
+    // version. The `:?` form makes `docker compose up` fail before it
+    // touches the running container when the deploy did not export it, so
+    // a misconfigured deploy keeps the old web up instead of starting one
+    // that 500s every MCP call.
+    const compose = read('apps', 'web', 'docker-compose.yml');
+    const environment = compose.slice(compose.indexOf('    environment:'));
+    expect(environment).toContain('REQUIRED_MCP_VERSION: ${REQUIRED_MCP_VERSION:?');
+    const gate = read('apps', 'web', 'lib', 'mcp-version-gate.ts');
+    expect(gate).toContain('process.env.REQUIRED_MCP_VERSION');
+  });
 });

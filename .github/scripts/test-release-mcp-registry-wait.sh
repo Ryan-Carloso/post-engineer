@@ -18,7 +18,7 @@ trap 'rm -rf "$SIM"' EXIT
 python3 -c "
 import yaml
 d = yaml.safe_load(open('$WORKFLOW'))
-steps = d['jobs']['publish']['steps']
+steps = d['jobs']['registry']['steps']
 wait = [s for s in steps if s.get('name') == 'Wait for npm propagation']
 assert len(wait) == 1, 'expected exactly one Wait for npm propagation step'
 open('$SIM/wait.sh', 'w').write(wait[0]['run'])
