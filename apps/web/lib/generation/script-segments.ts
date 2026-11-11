@@ -208,8 +208,9 @@ export function countWords(text: string): number {
 }
 
 // True when the text carries a spoken word: a Unicode letter or digit.
-// Mirrors the engine's token test (script_segments._has_spoken_words,
-// the same [^\W_] class user_media._tokens uses): punctuation-only text
+// Mirrors the engine's images-mode check (the inline
+// re.search(r"[^\W_]", text) in script_segments.validate_segments, the
+// same [^\W_] class user_media._tokens uses): punctuation-only text
 // has no spoken words, so its photo gets no seconds at render.
 export function hasSpokenWords(text: string): boolean {
   return /[\p{L}\p{N}]/u.test(text);
