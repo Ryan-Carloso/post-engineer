@@ -21,9 +21,13 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 // Observing a terminal state also advances the video_generations history
 // row (completed, or failed with the engine error + refund flag).
 // An engine 404 (the task is gone — almost always an engine restart with
-// the in-memory state backend) is terminal too: the generation is failed
-// with engine_restart and the tokens refunded, and the caller gets
-// 410 Gone so it stops polling instead of 404ing forever.
+// the in-memory state backend) is settled by gone-settle: delivered
+// (durable COMPLETE render or a published slot) records completed and is
+// never refunded; an unverifiable state answers non-terminal 502 so the
+// next poll retries; only otherwise is the generation failed with
+// engine_restart and the tokens refunded. Every terminal verdict answers
+// 410 Gone (with delivered: true on the delivered branch) so the caller
+// stops polling instead of 404ing forever.
 //---------------
 
 async function getHandler(
