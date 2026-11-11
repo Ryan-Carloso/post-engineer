@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Prints the npm version of post-engineer-mcp for the checked-out commit:
 #
-#   MAJOR.MINOR  from apps/mcp/package.json (edited by hand only when
-#                cutting a new release line; its PATCH is ignored)
+#   MAJOR.MINOR  from the repo-root VERSION file — the same release line the
+#                web and engine deploy versions use, so a PR that touches
+#                apps/mcp/ ships web, engine and MCP as one number
 #   PATCH        the number of the merged PR that introduced the LAST commit
 #                touching apps/mcp/ (resolved through the GitHub API for that
 #                exact commit, never "the latest PR")
@@ -32,10 +33,10 @@ fail() {
 
 [ -n "${GITHUB_REPOSITORY:-}" ] || fail "GITHUB_REPOSITORY is not set (expected owner/name)."
 
-package_version="$(node -p "require('./apps/mcp/package.json').version")" ||
-  fail "Could not read the version from apps/mcp/package.json."
-if [[ ! "$package_version" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+$ ]]; then
-  fail "apps/mcp/package.json version \"$package_version\" is not MAJOR.MINOR.PATCH."
+[ -f VERSION ] || fail "The repo-root VERSION file is missing."
+release_line="$(tr -d '[:space:]' < VERSION)"
+if [[ ! "$release_line" =~ ^([0-9]+)\.([0-9]+)(\.[0-9]+)?$ ]]; then
+  fail "VERSION \"$release_line\" is not MAJOR.MINOR."
 fi
 base="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
 

@@ -6,7 +6,7 @@ name: release-mcp
 # (org Ryan-Carloso, repo post-engineer, workflow release-mcp.yml).
 #
 # VERSION — generated, never committed (.github/scripts/mcp-release-version.sh):
-#   MAJOR.MINOR from apps/mcp/package.json + the number of the merged PR that
+#   MAJOR.MINOR from the repo-root VERSION file + the number of the merged PR that
 #   introduced the last commit touching apps/mcp/ (e.g. 1.52.560). No
 #   version-bump commit, no bump PR, no manual tag. The publish job stamps the
 #   version into package.json/server.json in its own workspace only.

@@ -35,7 +35,7 @@ services:
     environment:
       TZ: UTC
       # The one MCP version this web accepts (lib/mcp-version-gate.ts).
-      # deploy.sh computes it (apps/mcp/package.json MAJOR.MINOR + the PR of
+      # deploy.sh computes it (VERSION MAJOR.MINOR + the PR of
       # the last merge touching apps/mcp/) and exports it only once npm
       # serves that version. No default: without it compose refuses to
       # start, and the running web stays up.

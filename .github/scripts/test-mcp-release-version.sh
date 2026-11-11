@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests .github/scripts/mcp-release-version.sh and mcp-release-stamp.sh
 # against a throwaway git repo, with `gh` stubbed on PATH (offline):
-#   - the version is package.json MAJOR.MINOR + the PR of the LAST commit
+#   - the version is VERSION MAJOR.MINOR + the PR of the LAST commit
 #     touching apps/mcp/, not of HEAD
 #   - an unmerged/missing PR, a malformed package.json version and a missing
 #     GITHUB_REPOSITORY fail loudly instead of inventing a version
@@ -39,7 +39,8 @@ mkdir -p "$REPO/apps/mcp" "$REPO/apps/web"
 git -C "$REPO" init -q
 git -C "$REPO" config user.email test@example.com
 git -C "$REPO" config user.name test
-printf '{\n  "name": "post-engineer-mcp",\n  "version": "1.52.0"\n}\n' > "$REPO/apps/mcp/package.json"
+printf '1.52\n' > "$REPO/VERSION"
+printf '{\n  "name": "post-engineer-mcp",\n  "version": "1.0.0"\n}\n' > "$REPO/apps/mcp/package.json"
 printf '{\n  "version": "1.52.0",\n  "packages": [{ "version": "1.52.0" }]\n}\n' > "$REPO/apps/mcp/server.json"
 git -C "$REPO" add -A && git -C "$REPO" commit -qm "mcp change"
 MCP_SHA="$(git -C "$REPO" rev-parse HEAD)"
@@ -84,10 +85,10 @@ fi
 echo "--- stamp refuses a malformed version ---"
 if bash "$STAMP_SCRIPT" latest "$REPO" > /dev/null 2>&1; then fail "stamp must refuse 'latest'"; else pass "stamp refuses a malformed version"; fi
 
-echo "--- a malformed package.json version fails ---"
-printf '{\n  "name": "post-engineer-mcp",\n  "version": "next"\n}\n' > "$REPO/apps/mcp/package.json"
-if out="$(bash "$VERSION_SCRIPT" "$REPO" 2>&1)"; then fail "malformed package version must fail, got: $out"; else
-  if grep -q 'is not MAJOR.MINOR.PATCH' <<< "$out"; then pass "malformed package version fails loudly"; else fail "malformed version error text: $out"; fi
+echo "--- a malformed VERSION fails ---"
+printf 'next\n' > "$REPO/VERSION"
+if out="$(bash "$VERSION_SCRIPT" "$REPO" 2>&1)"; then fail "malformed VERSION must fail, got: $out"; else
+  if grep -q 'is not MAJOR.MINOR' <<< "$out"; then pass "malformed VERSION fails loudly"; else fail "malformed VERSION error text: $out"; fi
 fi
 
 echo "=== $PASS passed, $FAIL failed ==="

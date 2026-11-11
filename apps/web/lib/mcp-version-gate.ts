@@ -4,7 +4,7 @@
 // Every request the MCP sends carries its package version in the
 // X-MCP-Version header (apps/mcp/src/analytics.ts). The VPS deploy
 // computes the version the web requires (REQUIRED_MCP_VERSION:
-// apps/mcp/package.json MAJOR.MINOR + the PR number of the last merge
+// the repo-root VERSION MAJOR.MINOR + the PR number of the last merge
 // that touched apps/mcp/, the same rule .github/scripts/mcp-release-version.sh
 // publishes to npm with) and only deploys the web once npm serves that
 // version, so the version this gate asks for always exists on npm.
