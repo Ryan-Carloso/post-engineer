@@ -385,9 +385,8 @@ def test_two_photos_split_the_segment_and_a_dropped_one_is_covered(tmp_path):
         )
     assert skipped == ["segment 0 image 0 media skipped: download blocked"]
     assert [(panel.start, panel.end) for panel in prepared] == [(2.0, 4.0)]
-    covered, warnings = image_coverage.extend_over_gaps(prepared, 0.0, 4.0)
+    covered = image_coverage.extend_over_gaps(prepared, 0.0, 4.0)
     assert [(panel.start, panel.end) for panel in covered] == [(0.0, 4.0)]
-    assert warnings == ["segment 0 image extended: a neighbour image covers a missing image"]
 
 
 # ---- aspect ratio (issue #538): a photo that fills the frame must match it

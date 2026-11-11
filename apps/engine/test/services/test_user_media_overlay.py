@@ -206,7 +206,7 @@ def test_prepare_segment_panels_resolves_the_subtitle_font_only_when_a_card_is_w
     ):
         warnings = user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
     assert seen == ["BeVietnamPro-Medium.ttf"]
-    assert warnings == ["segment 0 image extended: a neighbour image covers a missing image"]
+    assert warnings == []
     panels, stored_warnings = segment_panels._read_manifest("task-1")
     assert [panel.index for panel in panels] == [0, 1]
     assert stored_warnings == warnings
@@ -238,7 +238,6 @@ def test_prepare_segment_panels_warns_and_keeps_the_photo_when_the_font_is_missi
         warnings = user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
     assert warnings == [
         "segment 0 image 0 media overlay skipped: overlay font unavailable",
-        "segment 0 image extended: a neighbour image covers a missing image",
     ]
     panels, stored = segment_panels._read_manifest("task-1")
     assert len(panels) == 2 and stored == warnings
@@ -404,6 +403,6 @@ def test_prepare_segment_panels_uses_the_video_type_to_pick_panel_or_full_frame(
         patch.object(image_fetch, "download_image", side_effect=_download),
     ):
         warnings = user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
-    assert warnings == ["segment 1 image extended: a neighbour image covers a missing image"]
+    assert warnings == []
     panels, _ = segment_panels._read_manifest("task-1")
     assert [(panel.index, _is_full_frame(panel)) for panel in panels] == [(0, False), (1, True)]

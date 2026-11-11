@@ -452,8 +452,9 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
     """Materials-stage step for tm.start: draw the panels, persist them, report warnings.
 
     They are overlaid when the final video is assembled (segment_panels.overlay_onto).
-    With the images material, raises image_coverage.ImagesDoNotCoverAudio when no
-    full-frame photo survived or a segment kept too few, naming the skip reasons.
+    With the images material, raises image_coverage.ImagesDoNotCoverAudio when any
+    sent photo was skipped at render, naming the skip reasons. Full lip sync
+    keeps the lenient behavior: a skipped photo is a warning there.
     """
     segments = getattr(params, "segments", None)
     if not segments:
@@ -469,20 +470,13 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
         face=face, video_script=video_script,
         font_for=_overlay_font(params, segments),
     )
-    # The photos are the whole picture: neighbours cover gaps; too few
-    # survivors fail the task with the skip reasons, never silently.
+    # The photos are the whole picture: every sent photo must survive;
+    # a skipped one fails the task with the skip reasons, never silently.
     hook_end = _hook_end(video_script, subtitle_path, audio_duration) if face == segment_panels.FACE_HOOK else 0.0
     sent = sum(len(_media_list(_segment_dict(s).get("media"))) for s in segments)
-    # Same word count the density rule is validated with
-    # (script_segments._word_count, shared/script-segments countWords):
-    # whitespace words, not subtitle-walk tokens — _tokens splits
-    # contractions and hyphenated words, which would demand more photos
-    # at render than validation charged for.
-    words_per_segment = [len(str(_segment_dict(s).get("text", "")).split()) for s in segments]
-    panels, gap_warnings = image_coverage.ensure_coverage(
+    panels = image_coverage.ensure_coverage(
         panels, face=face, hook_end=hook_end, audio_duration=audio_duration,
-        words_per_segment=words_per_segment, sent=sent, skipped=warnings,
+        sent=sent, skipped=warnings,
     )
-    warnings = [*warnings, *gap_warnings]
     segment_panels.write_manifest(task_id, panels, warnings)
     return warnings

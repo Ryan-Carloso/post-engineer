@@ -59,15 +59,15 @@ def test_images_material_photos_cover_the_whole_audio_and_zoom(task_dir):
     warnings = _run(task_dir, _params())
     panels, stored = segment_panels._read_manifest("task-1")
     assert [(p.index, p.start, p.end, p.motion) for p in panels] == [(0, 0.0, 5.0, "in"), (1, 5.0, 6.0, "out")]
-    # The hook photo runs on over the 3.8 s silence before the CTA: worth a warning.
-    assert warnings == ["segment 0 image extended: a neighbour image covers a missing image"]
+    # The hook photo runs on over the 3.8 s silence before the CTA: the
+    # neighbour covers it, with no warning — a gap is just a pause.
+    assert warnings == []
     assert stored == warnings
 
 
-def test_a_dropped_photo_keeps_its_skip_warning_and_the_neighbour_covers_it(task_dir):
-    # The hook keeps one of its two photos, so it still meets its
-    # density minimum; the dropped one is a warning and the neighbour
-    # covers its slice. A segment that kept none would fail instead.
+def test_a_dropped_photo_fails_the_task_naming_the_photo(task_dir):
+    # All-must-survive: one dropped photo fails the task even though the
+    # neighbour could cover its seconds. The error names the photo.
     segments = [
         {
             "kind": "hook",
@@ -82,11 +82,13 @@ def test_a_dropped_photo_keeps_its_skip_warning_and_the_neighbour_covers_it(task
             raise OSError("blocked")
         return _download(url, dest_path, session)
 
-    warnings = _run(task_dir, _params(segments=segments), download=only_kept)
-    panels, _ = segment_panels._read_manifest("task-1")
-    assert [(p.index, p.start, p.end) for p in panels] == [(0, 0.0, 5.0), (1, 5.0, 6.0)]
-    assert warnings[0].startswith("segment 0 image 0 media skipped: ")
-    assert warnings[1:] == ["segment 0 image extended: a neighbour image covers a missing image"]
+    with pytest.raises(image_coverage.ImagesDoNotCoverAudio) as exc_info:
+        _run(task_dir, _params(segments=segments), download=only_kept)
+    message = str(exc_info.value)
+    assert message.startswith("images_do_not_cover_audio: ")
+    assert "3 sent, 2 survived, 1 skipped (download blocked x1)" in message
+    assert "segment 0 image 0 media skipped: download blocked" in message
+    assert segment_panels._read_manifest("task-1") == ([], [])
 
 
 def test_no_surviving_photo_reports_every_skip_reason(task_dir):
@@ -103,10 +105,10 @@ def test_no_surviving_photo_reports_every_skip_reason(task_dir):
     assert segment_panels._read_manifest("task-1") == ([], [])
 
 
-def test_thin_survivors_fail_with_the_segment_minimum_and_skip_reasons(task_dir):
-    # Body: 33 words, so it needs at least 5 photos (one per ~3s); four
-    # of its five are blocked, so one survivor is too thin even though
-    # a photo remains to stretch over the audio.
+def test_blocked_photos_fail_with_the_counts_and_every_skip_reason(task_dir):
+    # All-must-survive: four of the body's five photos are blocked, so
+    # the task fails even though one survivor remains to stretch over
+    # the audio. The error carries the counts and every skip line.
     body = (
         "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste "
         "francesinha where the locals eat, and finish with port wine as the river "
@@ -131,41 +133,10 @@ def test_thin_survivors_fail_with_the_segment_minimum_and_skip_reasons(task_dir)
         _run(task_dir, _params(segments=segments), download=mostly_blocked, words=[])
     message = str(exc_info.value)
     assert message.startswith("images_do_not_cover_audio: ")
-    assert "segment 1 has 1 surviving image but needs at least 5 images (one per ~3s)" in message
     assert "7 sent, 3 survived, 4 skipped (download blocked x4)" in message
     assert "segment 1 image 1 media skipped: download blocked" in message
+    assert "segment 1 image 4 media skipped: download blocked" in message
     assert segment_panels._read_manifest("task-1") == ([], [])
-
-
-def test_density_uses_whitespace_words_like_validation_not_subtitle_tokens(task_dir):
-    # The body is 32 whitespace words but 33 subtitle tokens ("port-wine"
-    # splits in two): validation needs 4 photos, the token count needs 5.
-    # Four surviving photos must render — counting tokens would fail a
-    # task that passed pre-charge validation with every photo intact.
-    body = (
-        "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste "
-        "francesinha where the locals eat, and finish with port-wine as the river "
-        "turns gold at sunset before heading home."
-    )
-    segments = [
-        {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/hook.jpg"}]},
-        {
-            "kind": "body",
-            "text": body,
-            "media": [{"url": f"https://e.com/body{i}.jpg"} for i in range(4)],
-        },
-        {"kind": "cta", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
-    ]
-    words = [
-        ("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2),
-        ("Where", 2.0, 2.3), ("the", 2.3, 2.5), ("river", 2.5, 3.0),
-        ("Visit", 5.0, 5.4), ("Porto", 5.4, 5.9),
-    ]
-    warnings = _run(task_dir, _params(segments=segments), words=words)
-    panels, stored = segment_panels._read_manifest("task-1")
-    assert len(panels) == 6, "hook + 4 body + CTA, all surviving"
-    assert stored == warnings
-    assert not any("media skipped" in w for w in warnings)
 
 
 def test_hook_persona_coverage_starts_where_the_face_hands_over(task_dir):
@@ -204,10 +175,9 @@ def test_images_material_landscape_photos_fail_the_video(task_dir):
     assert segment_panels._read_manifest("task-1") == ([], [])
 
 
-def test_a_wrong_ratio_photo_is_skipped_and_the_neighbour_covers_it(task_dir):
-    # The hook keeps one of its two photos, so it still meets its
-    # density minimum; the wrong-ratio one is a warning naming both
-    # ratios. A segment that kept none would fail instead.
+def test_a_wrong_ratio_photo_fails_the_task_naming_the_ratios(task_dir):
+    # All-must-survive: one wrong-ratio photo fails the task, and the
+    # error names both ratios so the agent sends the right one next time.
     segments = [
         {
             "kind": "hook",
@@ -222,21 +192,22 @@ def test_a_wrong_ratio_photo_is_skipped_and_the_neighbour_covers_it(task_dir):
             return _download(url, dest_path, session, width=1920, height=1080)
         return _download(url, dest_path, session)
 
-    warnings = _run(task_dir, _params(segments=segments), download=mixed)
-    panels, _ = segment_panels._read_manifest("task-1")
-    assert [(p.index, p.start, p.end) for p in panels] == [(0, 0.0, 5.0), (1, 5.0, 6.0)]
-    assert warnings[0] == (
+    with pytest.raises(image_coverage.ImagesDoNotCoverAudio) as exc_info:
+        _run(task_dir, _params(segments=segments), download=mixed)
+    message = str(exc_info.value)
+    assert "3 sent, 2 survived, 1 skipped" in message
+    assert (
         "segment 0 image 0 media skipped: wrong aspect ratio "
         "(1920x1080 (16:9); expected 9:16 (1080x1920))"
-    )
-    assert warnings[1:] == ["segment 0 image extended: a neighbour image covers a missing image"]
+    ) in message
+    assert segment_panels._read_manifest("task-1") == ([], [])
 
 
 def test_a_landscape_hook_photo_stays_a_panel_when_the_face_shows(task_dir):
     # Hook (panel over the face) + body (full frame) + CTA (full frame):
-    # only the full-frame photos are gated, so the landscape hook photo
-    # stays while the landscape CTA photo is skipped — and the CTA keeps
-    # its second photo, so it still meets its density minimum.
+    # the landscape hook photo stays — a panel over the face is never
+    # aspect-gated — while every full-frame photo matches the aspect,
+    # so nothing is skipped and the task renders.
     words = [
         ("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2),
         ("Where", 2.0, 2.3), ("the", 2.3, 2.5), ("river", 2.5, 3.0),
@@ -245,15 +216,11 @@ def test_a_landscape_hook_photo_stays_a_panel_when_the_face_shows(task_dir):
     segments = [
         {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/hook.jpg"}]},
         {"kind": "body", "text": "Where the river.", "media": [{"url": "https://e.com/body.jpg"}]},
-        {
-            "kind": "cta",
-            "text": "Visit Porto.",
-            "media": [{"url": "https://e.com/cta-bad.jpg"}, {"url": "https://e.com/cta-good.jpg"}],
-        },
+        {"kind": "cta", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
     ]
 
     def mixed(url, dest_path, session=None):
-        if "bad" in url:
+        if "hook" in url:
             return _download(url, dest_path, session, width=1920, height=1080)
         return _download(url, dest_path, session)
 
@@ -266,6 +233,5 @@ def test_a_landscape_hook_photo_stays_a_panel_when_the_face_shows(task_dir):
     framed = [p for p in panels if p.caption_bottom is not None]
     full = [p for p in panels if p.caption_bottom is None]
     assert [(p.index, p.start, p.end) for p in framed] == [(0, 0.0, 1.2)]
-    assert [(p.index, p.start, p.end) for p in full] == [(1, 1.5, 5.45), (2, 5.45, 6.0)]
-    assert warnings[0].startswith("segment 2 image 0 media skipped: wrong aspect ratio")
-    assert warnings[1:] == ["segment 1 image extended: a neighbour image covers a missing image"]
+    assert [(p.index, p.start, p.end) for p in full] == [(1, 1.5, 5.0), (2, 5.0, 6.0)]
+    assert warnings == []
