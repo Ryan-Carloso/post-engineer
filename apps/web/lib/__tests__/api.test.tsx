@@ -832,7 +832,7 @@ describe('api', () => {
     const payload = await fetchPostDetail('slot-1');
     if (payload?.kind !== 'slot') throw new Error('expected slot');
     expect(payload.generation).toEqual({
-      faceless: true, material: 'images',
+      faceless: true,
       language: 'pt-BR',
       voiceId: 'ana_neural',
       videoAspect: '9:16',
@@ -863,7 +863,7 @@ describe('api', () => {
     const payload = await fetchPostDetail('slot-1');
     if (payload?.kind !== 'slot') throw new Error('expected slot');
     expect(payload.generation).toEqual({
-      faceless: false, material: 'images',
+      faceless: false,
       language: null,
       voiceId: null,
       videoAspect: null,
@@ -888,7 +888,7 @@ describe('api', () => {
     const payload = await fetchPostDetail('slot-1');
     if (payload?.kind !== 'slot') throw new Error('expected slot');
     expect(payload.generation).toEqual({
-      faceless: false, material: 'images',
+      faceless: false,
       language: null,
       voiceId: null,
       videoAspect: null,

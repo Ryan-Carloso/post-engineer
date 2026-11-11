@@ -51,23 +51,25 @@ function post(options: Record<string, unknown>): Promise<Response> {
       body: JSON.stringify({
         personaId: 'persona-1',
         title: 'Porto trip',
+        description: 'Agent description.',
         publishing: {
           providers: ['youtube'],
           accounts: { youtube: ['acct-1'] },
           schedule: { startAt: new Date(Date.now() + 48 * 3600_000).toISOString(), times: ['18:00'], timezone: 'Europe/Lisbon' },
         },
-        options,
+        options: { videoType: 'hook_lipsync', ...options },
       }),
     }),
   );
 }
 
-function semantics(segments: unknown, fullLipsync?: boolean) {
+function semantics(segments: unknown, videoType: 'full_lipsync' | 'hook_lipsync' = 'hook_lipsync') {
   return checkSemantics({
     title: 'Porto trip',
+    description: 'Agent description.',
     segments,
     providers: ['youtube'],
-    options: fullLipsync === undefined ? {} : { fullLipsync },
+    options: { videoType },
     personaId: 'persona-1',
   });
 }
@@ -97,8 +99,8 @@ describe('generate-and-schedule with the images material', () => {
   });
 
   it('keeps media optional for full lip sync, required otherwise', () => {
-    expect(semantics(bodyWithoutMedia, true).ok).toBe(true);
-    expect(semantics(bodyWithoutMedia, false).ok).toBe(false);
+    expect(semantics(bodyWithoutMedia, 'full_lipsync').ok).toBe(true);
+    expect(semantics(bodyWithoutMedia, 'hook_lipsync').ok).toBe(false);
     expect(semantics(bodyWithoutMedia).ok).toBe(false);
   });
 });

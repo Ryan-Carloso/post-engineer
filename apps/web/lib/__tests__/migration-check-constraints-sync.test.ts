@@ -3,10 +3,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
-import { FACELESS_MATERIALS } from '@/lib/generation/faceless-materials';
 import { GENERATION_PUBLISH_MODES } from '@/lib/generation/video-generation';
 import { ANALYTICS_STATUSES, METRICS_WINDOWS } from '@/lib/metrics/metrics-query';
 import { VIDEO_LAYOUTS } from '@/lib/persona-schema';
+import { VIDEO_TYPES } from '@/lib/tokens';
 
 //---------------
 // Every enum-like CHECK constraint the database really has must match the
@@ -83,7 +83,12 @@ const EXPECTED: Record<string, readonly string[]> = {
   schedules_publish_mode_check: GENERATION_PUBLISH_MODES,
   video_generations_publish_mode_check: GENERATION_PUBLISH_MODES,
   personas_video_layout_check: VIDEO_LAYOUTS,
-  scheduled_posts_faceless_material_check: FACELESS_MATERIALS,
+  // No TypeScript list exists anymore: the material is not a user choice
+  // since issue #542 (migration 054 narrowed the check to 'images' and
+  // the route stopped writing the column, relying on its default), so
+  // this literal is the pinned contract.
+  scheduled_posts_faceless_material_check: ['images'],
+  scheduled_posts_video_type_check: VIDEO_TYPES,
   post_metrics_metrics_window_check: METRICS_WINDOWS,
   post_metrics_done_metrics_window_check: METRICS_WINDOWS,
   post_metrics_analytics_status_check: ANALYTICS_STATUSES,

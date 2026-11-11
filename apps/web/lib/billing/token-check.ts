@@ -1,18 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { computeVideoTokens, toFiniteNumber, type FaceQuality } from '@/lib/tokens';
+import { computeVideoTokens, toFiniteNumber, type FaceQuality, type VideoType } from '@/lib/tokens';
 import { logger } from '@/lib/logger';
 
 export async function checkAndDeductTokens(
   supabase: SupabaseClient,
   userId: string,
   generationId: string,
-  faceless: boolean,
+  videoType: VideoType,
   faceQuality: FaceQuality,
 ): Promise<
   | { ok: true; cost: number }
   | { ok: false; error: string; statusCode: number; freeExhausted: boolean }
 > {
-  const cost = computeVideoTokens(faceless, faceQuality);
+  const cost = computeVideoTokens(videoType, faceQuality);
 
   // Lazy one-time grant: every account gets 3 free tokens on first use.
   // Best-effort — if the RPC does not exist yet (pending migration), the flow continues.

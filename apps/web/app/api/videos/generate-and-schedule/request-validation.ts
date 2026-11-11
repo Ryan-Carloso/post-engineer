@@ -20,7 +20,7 @@ import { resolveTitle } from './request-title';
 import { validateSegmentsRequest } from './segments-validation';
 import { validateProviders, validatePinterestBoard, type Provider } from './providers-validation';
 import { validateOptions, type OptionsInput, type ValidatedOptions } from './options-validation';
-import { MAX_REPORTED_ISSUES, type Checked, type ValidationIssue } from './validation-issues';
+import { invalid, MAX_REPORTED_ISSUES, type Checked, type ValidationIssue } from './validation-issues';
 
 export { MAX_REPORTED_ISSUES };
 
@@ -36,6 +36,8 @@ export function shapeIssues(error: z.ZodError): ValidationIssue[] {
 
 export interface SemanticInput {
   title: string;
+  /** Agent-supplied video description (issue #542 follow-up): required, non-blank. */
+  description: string;
   segments: unknown;
   providers: string[];
   options: OptionsInput;
@@ -47,6 +49,8 @@ export interface SemanticInput {
 
 export interface CheckedRequest {
   title: string;
+  /** Trimmed agent description. */
+  description: string;
   script: string;
   providers: Provider[];
   options: ValidatedOptions;
@@ -56,11 +60,11 @@ export interface CheckedRequest {
 /** A post without a persona has no face and no voice: both are required. */
 function personaLessIssues(options: ValidatedOptions): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  if (!options.faceless) {
+  if (options.videoType !== 'faceless') {
     issues.push({
       code: 'VALIDATION_FAILED',
-      message: 'A post without a persona must be faceless: set options.faceless to true.',
-      field: 'options.faceless',
+      message: 'A post without a persona must be faceless: set options.videoType to \'faceless\'.',
+      field: 'options.videoType',
     });
   }
   if (options.voiceId === undefined && options.audioUrl === undefined) {
@@ -73,11 +77,26 @@ function personaLessIssues(options: ValidatedOptions): ValidationIssue[] {
   return issues;
 }
 
+/** Trimmed description; blank is rejected, never treated as absent: the
+ *  agent must send the publish copy (issue #542 follow-up). */
+function resolveDescription(description: string): Checked<string> {
+  const trimmed = description.trim();
+  if (trimmed.length === 0) {
+    return {
+      ok: false,
+      issues: [invalid('description must be a non-empty string: the publish copy for this video.', 'description')],
+    };
+  }
+  return { ok: true, value: trimmed };
+}
+
 export function checkSemantics(input: SemanticInput): Checked<CheckedRequest> {
   const issues: ValidationIssue[] = [];
   const title = resolveTitle(input.title);
   if (!title.ok) issues.push(...title.issues);
-  const segments = validateSegmentsRequest(input.segments, input.options.fullLipsync === true);
+  const description = resolveDescription(input.description);
+  if (!description.ok) issues.push(...description.issues);
+  const segments = validateSegmentsRequest(input.segments, input.options.videoType);
   if (!segments.ok) issues.push(...segments.issues);
   const providers = validateProviders(input.providers);
   if (!providers.ok) issues.push(...providers.issues);
@@ -86,12 +105,12 @@ export function checkSemantics(input: SemanticInput): Checked<CheckedRequest> {
   const options = validateOptions(input.options);
   if (!options.ok) issues.push(...options.issues);
   if (options.ok && input.personaId === null) issues.push(...personaLessIssues(options.value));
-  if (issues.length > 0 || !title.ok || !segments.ok || !providers.ok || !pinterestBoardId.ok || !options.ok) {
+  if (issues.length > 0 || !title.ok || !description.ok || !segments.ok || !providers.ok || !pinterestBoardId.ok || !options.ok) {
     return { ok: false, issues };
   }
   return {
     ok: true,
-    value: { title: title.value, script: segments.value, providers: providers.value, options: options.value, pinterestBoardId: pinterestBoardId.value },
+    value: { title: title.value, description: description.value, script: segments.value, providers: providers.value, options: options.value, pinterestBoardId: pinterestBoardId.value },
   };
 }
 

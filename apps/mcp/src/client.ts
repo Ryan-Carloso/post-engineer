@@ -25,7 +25,7 @@ import type {
   PersonaLibraryImageInput,
   PostEngineerClientOptions,
   PublishVideoDirectInput,
-  UpdatePersonaInput,
+  UpdatePersonaInput, VideoType,
 } from './client-types.js';
 import { buildDirectPublishForm, requireDirectPublishFields } from './direct-publish-form.js';
 
@@ -581,16 +581,15 @@ export class PostEngineerClient {
     );
   }
 
-  async validateScript(segments: unknown, fullLipsync = false): Promise<unknown> {
-    // Mechanical validation only: the web route debits no tokens,
-    // schedules nothing and calls no engine — it re-runs the same
-    // mechanical validation the generate route runs.
+  async validateScript(segments: unknown, videoType: VideoType = 'hook_lipsync'): Promise<unknown> {
+    // Mechanical validation only: the web route debits no tokens and
+    // schedules nothing — it re-runs the generate route's validation.
     return this.request(
       '/api/videos/validate-script',
       {
         method: 'POST',
         headers: this.getHeaders(),
-        body: JSON.stringify({ segments, fullLipsync }),
+        body: JSON.stringify({ segments, videoType }),
       },
       'validate script'
     );
@@ -626,6 +625,7 @@ export class PostEngineerClient {
           // same thing, but omitting keeps the payload honest.
           ...(input.personaId !== undefined ? { personaId: input.personaId } : {}),
           title,
+          description: input.description,
           publishing: {
             mode,
             providers: input.providers, ...(input.pinterestBoardId ? { pinterestBoardId: input.pinterestBoardId } : {}),

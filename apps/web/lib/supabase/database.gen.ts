@@ -516,6 +516,8 @@ export interface Database {
         discount_tokens: number;
         music_mood: string | null;
         publish_outcomes: Json;
+        description: string | null;
+        video_type: 'full_lipsync' | 'hook_lipsync' | 'faceless';
         };
         Insert: {
         id?: string;
@@ -543,6 +545,8 @@ export interface Database {
         discount_tokens?: number;
         music_mood?: string | null;
         publish_outcomes?: Json;
+        description?: string | null;
+        video_type?: 'full_lipsync' | 'hook_lipsync' | 'faceless';
         };
         Update: {
         id?: string;
@@ -570,6 +574,8 @@ export interface Database {
         discount_tokens?: number;
         music_mood?: string | null;
         publish_outcomes?: Json;
+        description?: string | null;
+        video_type?: 'full_lipsync' | 'hook_lipsync' | 'faceless';
         };
         Relationships: [];
       };

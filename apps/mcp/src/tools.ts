@@ -70,7 +70,7 @@ const PersonaLibraryImageInputShape = z.object(LibraryImageFields);
 
 export const CreatePersonaShape = {
   name: z.string().min(1, 'Name is required').describe('Name of the persona'),
-  // Every persona has a face (avatarUrl or avatarPath); faceless is per video.
+  // Every persona has a face (avatarUrl or avatarPath); faceless is a per-video mode (options.videoType).
   ...CreatePersonaAvatarFields,
   voiceId: personaVoiceField('voiceId is required').describe('id or label from list_voices. Never type a provider prefix.'),
   language: z

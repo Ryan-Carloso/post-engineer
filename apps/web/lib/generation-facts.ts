@@ -1,5 +1,3 @@
-import { toFacelessMaterial, type FacelessMaterial } from '@/lib/generation/faceless-materials';
-
 // Generation facts for one slot: the read-only record of what the post
 // was generated with.
 //
@@ -15,7 +13,7 @@ import { toFacelessMaterial, type FacelessMaterial } from '@/lib/generation/face
 // in getHandler is the thing that 500s.
 //---------------
 export function buildGenerationFacts(
-  row: { faceless: boolean | null; faceless_material?: string | null },
+  row: { faceless: boolean | null },
   scheduleRow: {
     post_language: string | null;
     post_voice_id: string | null;
@@ -27,7 +25,6 @@ export function buildGenerationFacts(
   },
 ): {
   faceless: boolean;
-  material: FacelessMaterial;
   language: string | null;
   voiceId: string | null;
   videoAspect: string | null;
@@ -42,10 +39,6 @@ export function buildGenerationFacts(
   // report object-literal property lines, so this keeps every fact visible
   // to the coverage gate.
   const faceless = row.faceless === true;
-  // Only an exact 'images' counts — mirrors the engine's slot_material
-  // rule; every stored row reads as the images material since migration
-  // 054 backfilled them.
-  const material = toFacelessMaterial(row.faceless_material);
   const language = scheduleRow.post_language ?? null;
   const voiceId = scheduleRow.post_voice_id ?? null;
   const videoAspect = scheduleRow.post_video_aspect ?? null;
@@ -58,6 +51,6 @@ export function buildGenerationFacts(
   const paragraphNumber = scheduleRow.post_paragraph_number ?? null;
   const faceQuality = scheduleRow.post_face_quality ?? null;
   return {
-    faceless, material, language, voiceId, videoAspect, videoLayout, niche, paragraphNumber, faceQuality,
+    faceless, language, voiceId, videoAspect, videoLayout, niche, paragraphNumber, faceQuality,
   };
 }

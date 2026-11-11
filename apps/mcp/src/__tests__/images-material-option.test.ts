@@ -19,7 +19,9 @@ import type { McpToolResponse } from '../tools.js';
 // only the segment images, so every segment needs media. The MCP checks
 // it locally before any client call (no token is ever charged for a script
 // the web would reject) and forwards full lip sync to the web when the
-// video is full lip sync (media optional there).
+// video is full lip sync (media optional there). The mode is options.
+// videoType now: 'faceless' and 'hook_lipsync' need media on every
+// segment, 'full_lipsync' makes it optional.
 //---------------
 const hook =
   'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
@@ -45,6 +47,7 @@ const bodyWithoutMedia = withMedia.map((segment, index) =>
 const baseArgs = {
   personaId: 'persona-123',
   title: 'Porto trip',
+  description: 'Agent description.',
   providers: ['youtube'] as 'youtube'[],
   youtubeAccountIds: ['chan-1'],
   startAt: '2026-10-05T20:00:00',
@@ -80,14 +83,19 @@ beforeEach(() => {
 
 describe('generate_persona_video with the images material', () => {
   it('strips a facelessMaterial option: it is no longer a choice', () => {
-    const parsed = GeneratePersonaVideoSchema.parse({ ...baseArgs, segments: withMedia, options: { facelessMaterial: 'images' } });
+    const parsed = GeneratePersonaVideoSchema.parse({
+      ...baseArgs,
+      segments: withMedia,
+      options: { videoType: 'hook_lipsync', facelessMaterial: 'images' },
+    });
     expect(parsed.options).not.toHaveProperty('facelessMaterial');
+    expect(parsed.options?.videoType).toBe('hook_lipsync');
   });
 
   it('rejects a segment without media before any client call', async () => {
     const client = mockClient();
     const response = await handleGeneratePersonaVideo(client, {
-      ...baseArgs, segments: bodyWithoutMedia, options: { faceless: true },
+      ...baseArgs, segments: bodyWithoutMedia, options: { videoType: 'faceless' },
     });
     expect(response.isError).toBe(true);
     expect(textOf(response)).toContain('segments.1.media: the images material needs media on every segment');
@@ -97,30 +105,30 @@ describe('generate_persona_video with the images material', () => {
   it('forwards the options to the client when every segment carries media', async () => {
     const client = mockClient();
     const response = await handleGeneratePersonaVideo(client, {
-      ...baseArgs, segments: withMedia, options: { faceless: true },
+      ...baseArgs, segments: withMedia, options: { videoType: 'faceless' },
     });
     expect(response.isError).toBeUndefined();
-    expect(vi.mocked(client.generatePersonaVideo).mock.calls[0][0].options).toMatchObject({ faceless: true });
+    expect(vi.mocked(client.generatePersonaVideo).mock.calls[0][0].options).toMatchObject({ videoType: 'faceless' });
     expect(vi.mocked(client.generatePersonaVideo).mock.calls[0][0].options).not.toHaveProperty('facelessMaterial');
   });
 
   it('sends the options without a material to generate-and-schedule', async () => {
-    const parsed = GeneratePersonaVideoSchema.parse({ ...baseArgs, segments: withMedia, options: {} });
+    const parsed = GeneratePersonaVideoSchema.parse({ ...baseArgs, segments: withMedia, options: { videoType: 'hook_lipsync' } });
     await new PostEngineerClient({ apiKey: 'test-token-123' }).generatePersonaVideo(parsed);
     const init = vi.mocked(global.fetch).mock.calls[0][1] as { body: string };
-    expect(JSON.parse(init.body).options).toEqual({});
+    expect(JSON.parse(init.body).options).toEqual({ videoType: 'hook_lipsync' });
   });
 
   it('keeps media optional for full lip sync', async () => {
     const client = mockClient();
     const response = await handleGeneratePersonaVideo(client, {
-      ...baseArgs, segments: bodyWithoutMedia, options: { fullLipsync: true },
+      ...baseArgs, segments: bodyWithoutMedia, options: { videoType: 'full_lipsync' },
     });
     expect(response.isError).toBeUndefined();
   });
 });
 
-describe('validate_script with fullLipsync', () => {
+describe('validate_script with videoType', () => {
   it('rejects a segment without media locally, without calling the web', async () => {
     const client = mockClient();
     const response = await handleValidateScript(client, { segments: bodyWithoutMedia });
@@ -134,23 +142,23 @@ describe('validate_script with fullLipsync', () => {
     // forwarded segments carry none.
     const bare = withMedia.map((segment) => ({ kind: segment.kind, text: segment.text }));
     const client = mockClient();
-    const response = await handleValidateScript(client, { segments: bare, fullLipsync: true });
+    const response = await handleValidateScript(client, { segments: bare, videoType: 'full_lipsync' });
     expect(response.isError).toBeUndefined();
-    expect(vi.mocked(client.validateScript)).toHaveBeenCalledWith(bare, true);
+    expect(vi.mocked(client.validateScript)).toHaveBeenCalledWith(bare, 'full_lipsync');
   });
 
-  it('accepts fullLipsync in the schema and posts it in the body', async () => {
-    expect(ValidateScriptSchema.parse({ segments: withMedia, fullLipsync: true }).fullLipsync).toBe(true);
-    expect(ValidateScriptSchema.safeParse({ segments: withMedia, fullLipsync: 'yes' }).success).toBe(false);
-    await new PostEngineerClient({ apiKey: 'test-token-123' }).validateScript(withMedia, true);
+  it('accepts videoType in the schema and posts it in the body', async () => {
+    expect(ValidateScriptSchema.parse({ segments: withMedia, videoType: 'full_lipsync' }).videoType).toBe('full_lipsync');
+    expect(ValidateScriptSchema.safeParse({ segments: withMedia, videoType: 'yes' }).success).toBe(false);
+    await new PostEngineerClient({ apiKey: 'test-token-123' }).validateScript(withMedia, 'full_lipsync');
     const init = vi.mocked(global.fetch).mock.calls[0][1] as { body: string };
-    expect(JSON.parse(init.body)).toEqual({ segments: withMedia, fullLipsync: true });
+    expect(JSON.parse(init.body)).toEqual({ segments: withMedia, videoType: 'full_lipsync' });
   });
 
-  it('sends fullLipsync false in the body when unset', async () => {
+  it('sends hook_lipsync in the body when unset', async () => {
     await new PostEngineerClient({ apiKey: 'test-token-123' }).validateScript(sparseMedia);
     const init = vi.mocked(global.fetch).mock.calls[0][1] as { body: string };
-    expect(JSON.parse(init.body)).toEqual({ segments: sparseMedia, fullLipsync: false });
+    expect(JSON.parse(init.body)).toEqual({ segments: sparseMedia, videoType: 'hook_lipsync' });
   });
 });
 

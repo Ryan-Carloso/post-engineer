@@ -5,6 +5,13 @@
 
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import { isHttpUrl } from '@/lib/generation/custom-audio';
+import { isMusicMood, MUSIC_MOOD_NONE, unknownMusicMoodMessage } from '@/lib/generation/music-moods';
+import {
+  VIDEO_TYPE_REQUIRED_MESSAGE,
+  isVideoType,
+  unknownVideoTypeMessage,
+  type VideoType,
+} from '@/lib/tokens';
 import { MAX_TITLE_CHARS } from './prepare-persona';
 import { invalid, type Checked, type ValidationIssue } from './validation-issues';
 
@@ -13,10 +20,13 @@ import { invalid, type Checked, type ValidationIssue } from './validation-issues
 // validation error into a 400 that names the field.
 const MAX_LANGUAGE_CHARS = 32;
 
-/** Raw options as parsed from the request body (subset validateOptions reads). */
+/** Raw options as parsed from the request body (subset validateOptions reads).
+ *  videoType is an untrusted string here: the shape parse already rejects
+ *  an invalid value with the same message, but an absent options object
+ *  never reaches the shape, so this validator is the one that rejects a
+ *  missing mode — with the same values + costs message. */
 export interface OptionsInput {
-  faceless?: boolean;
-  fullLipsync?: boolean;
+  videoType?: string;
   musicMood?: string;
   audioUrl?: string;
   imageId?: string;
@@ -32,9 +42,8 @@ export interface OptionsInput {
 /** Validated options. videoLayout stays unset here (as before): preparePost
  *  falls back to the persona's layout when it is absent. */
 export interface ValidatedOptions {
-  faceless: boolean;
-  /** Opt-in full lip-sync (whole video talking head). */
-  fullLipsync?: boolean;
+  /** The one video mode: full_lipsync, hook_lipsync or faceless. */
+  videoType: VideoType;
   /** BGM mood (issue #489): a catalogued mood, or "none" for no music; omitted = engine default. */
   musicMood?: string;
   audioUrl?: string;
@@ -52,8 +61,7 @@ export interface ValidatedOptions {
 
 export function validateOptions(options: OptionsInput): Checked<ValidatedOptions> {
   const {
-    faceless = false,
-    fullLipsync,
+    videoType,
     musicMood,
     audioUrl,
     imageId,
@@ -65,21 +73,30 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
     niche,
   } = options;
   const issues: ValidationIssue[] = [];
-  if (typeof faceless !== 'boolean') {
-    issues.push(invalid('options.faceless must be a boolean.', 'options.faceless'));
-  }
-  if (fullLipsync === true && faceless) {
-    issues.push(
-      invalid('options.fullLipsync cannot be used with faceless videos: there is no face to render.', 'options.fullLipsync'),
-    );
+  // The mode is narrowed once, here: a missing or invalid mode always
+  // pushes an issue above, so reaching the return below with no mode is
+  // impossible — the guard after the issues check is fail-closed, not an
+  // assertion.
+  const mode = videoType !== undefined && isVideoType(videoType) ? videoType : undefined;
+  if (videoType === undefined) {
+    issues.push(invalid(VIDEO_TYPE_REQUIRED_MESSAGE, 'options.videoType'));
+  } else if (mode === undefined) {
+    issues.push(invalid(unknownVideoTypeMessage(videoType), 'options.videoType'));
   }
   if (audioUrl !== undefined && !isHttpUrl(audioUrl)) {
     issues.push(invalid('options.audioUrl must be a valid http(s) URL.', 'options.audioUrl'));
   }
+  // The mood must name a catalogued mood (or "none" for no music): the
+  // engine rejects unknown moods at dispatch, after the charge, so this
+  // pre-charge check is what makes the 400 — with the valid list — reach
+  // the caller instead of a failed, refunded slot.
+  if (musicMood !== undefined && musicMood !== MUSIC_MOOD_NONE && !isMusicMood(musicMood)) {
+    issues.push(invalid(unknownMusicMoodMessage(musicMood), 'options.musicMood'));
+  }
   if (imageId !== undefined && imageId.trim().length === 0) {
     issues.push(invalid('options.imageId must be a non-empty string.', 'options.imageId'));
   }
-  if (faceless && imageId !== undefined) {
+  if (videoType === 'faceless' && imageId !== undefined) {
     issues.push(
       invalid('options.imageId cannot be used with faceless videos: there is no face to render.', 'options.imageId'),
     );
@@ -104,11 +121,14 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
     issues.push(invalid(`options.niche must be at most ${MAX_TITLE_CHARS} characters.`, 'options.niche'));
   }
   if (issues.length > 0) return { ok: false, issues };
+  if (mode === undefined) {
+    // Unreachable: a missing or invalid mode always pushed an issue above.
+    return { ok: false, issues: [invalid(VIDEO_TYPE_REQUIRED_MESSAGE, 'options.videoType')] };
+  }
   return {
     ok: true,
     value: {
-      faceless,
-      fullLipsync,
+      videoType: mode,
       musicMood,
       audioUrl,
       imageId: imageId?.trim(),

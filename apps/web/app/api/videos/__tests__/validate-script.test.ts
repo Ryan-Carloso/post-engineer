@@ -124,7 +124,7 @@ describe('POST /api/videos/validate-script', () => {
     expect(source).not.toContain('from \'@/lib/engine');
   });
 
-  describe('fullLipsync', () => {
+  describe('videoType', () => {
     it('accepts images mode when every segment carries media', async () => {
       const response = await POST(authRequest({ segments }));
       expect(response.status).toBe(200);
@@ -142,16 +142,25 @@ describe('POST /api/videos/validate-script', () => {
 
     it('keeps media optional for full lip sync', async () => {
       const bare = segments.map((segment) => ({ kind: segment.kind, text: segment.text }));
-      const response = await POST(authRequest({ segments: bare, fullLipsync: true }));
+      const response = await POST(authRequest({ segments: bare, videoType: 'full_lipsync' }));
       expect(response.status).toBe(200);
     });
 
-    it('rejects a non-boolean fullLipsync instead of reading it as false', async () => {
-      const response = await POST(authRequest({ segments, fullLipsync: 'yes' }));
+    it('keeps media required for faceless', async () => {
+      const bare = segments.map((segment) => ({ kind: segment.kind, text: segment.text }));
+      const response = await POST(authRequest({ segments: bare, videoType: 'faceless' }));
+      expect(response.status).toBe(400);
+      const payload = (await response.json()) as { field?: string };
+      expect(payload.field).toBe('segments.0.media');
+    });
+
+    it('rejects an unknown videoType with a 400 listing the modes and costs', async () => {
+      const response = await POST(authRequest({ segments, videoType: 'sideways' }));
       expect(response.status).toBe(400);
       const payload = (await response.json()) as { field?: string; error?: string };
-      expect(payload.field).toBe('fullLipsync');
-      expect(payload.error).toBe('fullLipsync must be a boolean.');
+      expect(payload.field).toBe('videoType');
+      expect(payload.error).toContain("unknown video_type 'sideways'");
+      expect(payload.error).toContain('full_lipsync (8/15)');
     });
   });
 });

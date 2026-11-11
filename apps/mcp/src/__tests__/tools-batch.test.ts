@@ -22,12 +22,14 @@ const SEGMENTS = [
 function video(title: string) {
   return {
     title,
+    description: 'Agent description.',
     segments: SEGMENTS,
     personaId: '11111111-2222-4333-8444-555555555555',
     providers: ['youtube'],
     youtubeAccountIds: ['chan-1'],
     startAt: '2026-11-10T18:00:00',
     times: ['18:00'],
+    options: { videoType: 'hook_lipsync' as const },
   };
 }
 

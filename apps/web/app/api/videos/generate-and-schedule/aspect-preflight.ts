@@ -32,6 +32,7 @@ import { NextResponse } from 'next/server';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { engineAuthHeaders } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
+import type { VideoType } from '@/lib/tokens';
 import { coded, validationFailed } from './prepare-persona';
 import { checkFullLipsyncNarration } from './full-lipsync-preflight';
 import type { PersonaPrep } from './persona-prep';
@@ -51,8 +52,8 @@ export interface SegmentMediaAspectInput {
   videoAspect: VideoAspectOption;
   /** True when the persona's face shows in this video. */
   hasFace: boolean;
-  /** True when the face fills the whole video (full lip-sync). */
-  fullLipsync?: boolean;
+  /** The one video mode: a full lip-sync face fills the whole video. */
+  videoType: VideoType;
 }
 
 interface SegmentMediaRef {
@@ -82,9 +83,9 @@ function aspectResolution(aspect: VideoAspectOption): [number, number] {
 function fullFrameMedia(
   segments: unknown,
   hasFace: boolean,
-  fullLipsync?: boolean,
+  videoType: VideoType,
 ): SegmentMediaRef[] {
-  if (fullLipsync === true) return [];
+  if (videoType === 'full_lipsync') return [];
   if (!Array.isArray(segments)) return [];
   const refs: SegmentMediaRef[] = [];
   segments.forEach((segment, segmentIndex) => {
@@ -117,7 +118,7 @@ function fullFrameMedia(
 export async function checkSegmentMediaAspect(
   input: SegmentMediaAspectInput,
 ): Promise<null | NextResponse> {
-  const refs = fullFrameMedia(input.segments, input.hasFace, input.fullLipsync);
+  const refs = fullFrameMedia(input.segments, input.hasFace, input.videoType);
   // No full-frame photo to check (text-only segments, panels under the
   // face, full lip-sync) needs no engine call — and must not fail a
   // request that never touches the engine.
@@ -206,7 +207,7 @@ export interface PreChargePreflightInput {
 export async function checkPreChargePreflights(
   input: PreChargePreflightInput,
 ): Promise<null | NextResponse> {
-  if (input.options.fullLipsync === true) {
+  if (input.options.videoType === 'full_lipsync') {
     const narration = await checkFullLipsyncNarration({
       userId: input.userId,
       script: input.script,
@@ -228,7 +229,7 @@ export async function checkPreChargePreflights(
       effectiveAspect === '16:9' || effectiveAspect === '1:1'
         ? effectiveAspect
         : '9:16',
-    hasFace: !input.options.faceless && input.prep.photoPath !== null,
-    fullLipsync: input.options.fullLipsync,
+    hasFace: input.options.videoType !== 'faceless' && input.prep.photoPath !== null,
+    videoType: input.options.videoType,
   });
 }

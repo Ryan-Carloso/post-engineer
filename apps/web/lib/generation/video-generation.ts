@@ -1,56 +1,15 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { engineAuthHeaders } from '@/lib/request-auth';
-import { checkAndDeductTokens, refundTokens } from '@/lib/billing/token-check';
-import type { FaceQuality } from '@/lib/tokens';
+import { refundTokens } from '@/lib/billing/token-check';
 import { logger } from '@/lib/logger';
 
 //---------------
 // Shared video-generation core — used by the unified generate+schedule
-// flow (/api/videos/generate-and-schedule): token gate, engine task
-// creation, refunds. One implementation serves every caller, so
-// moderation → token charging → task creation is always identical.
+// flow (/api/videos/generate-and-schedule): engine task creation, refunds
+// and history. (The token gate lives in the route itself: it spends once,
+// atomically, for the whole operation.)
 //---------------
-
-export interface GenerationGateInput {
-  supabase: SupabaseClient;
-  userId: string;
-  generationId: string;
-  /** Per-post "no face" choice — prices the video (faceless is the flat rate). */
-  faceless: boolean;
-  faceQuality: FaceQuality;
-}
-
-export type GenerationGateResult =
-  | { ok: true; cost: number }
-  | { ok: false; response: NextResponse };
-
-//---------------
-// gateGeneration — validates and reserves tokens before creating the engine task.
-//---------------
-export async function gateGeneration(input: GenerationGateInput): Promise<GenerationGateResult> {
-  const tokenResult = await checkAndDeductTokens(
-    input.supabase,
-    input.userId,
-    input.generationId,
-    input.faceless,
-    input.faceQuality,
-  );
-  if (!tokenResult.ok) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        {
-          success: false,
-          error: tokenResult.error,
-          code: tokenResult.freeExhausted ? 'FREE_EXHAUSTED' : 'INSUFFICIENT',
-        },
-        { status: tokenResult.statusCode },
-      ),
-    };
-  }
-  return { ok: true, cost: tokenResult.cost };
-}
 
 export type EngineTaskResult =
   | { ok: true; taskId?: string; body: unknown }

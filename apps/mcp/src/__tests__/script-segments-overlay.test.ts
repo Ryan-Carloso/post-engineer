@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 // Full lip sync leaves media optional: the overlay shape is what these
-// tests pin, so every call runs with fullLipsync true.
+// tests pin, so every call runs with videoType 'full_lipsync'.
 import {
   MAX_OVERLAY_BADGE_CHARS,
   MAX_OVERLAY_SUBTITLE_CHARS,
@@ -27,14 +27,14 @@ describe('segment media overlay', () => {
   it('accepts a full card and counts it as one media', () => {
     const result = validateSegments(
       withOverlay({ title: 'Sushi Kinoshita', subtitle: 'Rua das Flores 12, Porto', badge: 'about 35 EUR' }),
-      true,
+      'full_lipsync',
     );
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.mediaCount).toBe(1);
   });
 
   it('accepts a card with only a title', () => {
-    expect(validateSegments(withOverlay({ title: 'Sushi Kinoshita' }), true).ok).toBe(true);
+    expect(validateSegments(withOverlay({ title: 'Sushi Kinoshita' }), 'full_lipsync').ok).toBe(true);
   });
 
   it.each([
@@ -48,7 +48,7 @@ describe('segment media overlay', () => {
     ['a blank badge', { title: 'Sushi', badge: '  ' }],
     ['an unknown key', { title: 'Sushi', price: '10' }],
   ])('rejects %s on the overlay field', (_name, overlay) => {
-    const result = validateSegments(withOverlay(overlay), true);
+    const result = validateSegments(withOverlay(overlay), 'full_lipsync');
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.field).toBe('segments.1.media.0.overlay');
   });
@@ -58,8 +58,8 @@ describe('segment media overlay', () => {
     ['subtitle', MAX_OVERLAY_SUBTITLE_CHARS],
     ['badge', MAX_OVERLAY_BADGE_CHARS],
   ])('accepts %s at its limit and rejects one character over', (key, limit) => {
-    expect(validateSegments(withOverlay({ title: 'Sushi', [key]: 'x'.repeat(limit) }), true).ok).toBe(true);
-    const over = validateSegments(withOverlay({ title: 'Sushi', [key]: 'x'.repeat(limit + 1) }), true);
+    expect(validateSegments(withOverlay({ title: 'Sushi', [key]: 'x'.repeat(limit) }), 'full_lipsync').ok).toBe(true);
+    const over = validateSegments(withOverlay({ title: 'Sushi', [key]: 'x'.repeat(limit + 1) }), 'full_lipsync');
     expect(over.ok).toBe(false);
     if (!over.ok) {
       expect(over.error.field).toBe('segments.1.media.0.overlay');
@@ -74,7 +74,7 @@ describe('segment media overlay', () => {
         { kind: 'body', text: body, media: [{ overlay: { title: 'Sushi' } }] },
         { kind: 'cta', text: cta },
       ],
-      true,
+      'full_lipsync',
     );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.field).toBe('segments.1.media.0');
@@ -87,7 +87,12 @@ describe('overlay in the tool schema', () => {
     { kind: 'body', text: body, media: [{ url: 'https://example.com/x.jpg', overlay }] },
     { kind: 'cta', text: cta },
   ];
-  const base = { title: 'Porto food', providers: ['youtube'] };
+  const base = {
+    title: 'Porto food',
+    description: 'Agent description.',
+    providers: ['youtube'],
+    options: { videoType: 'hook_lipsync' as const },
+  };
 
   it('parses a card and keeps it in the parsed segments', () => {
     const parsed = GeneratePersonaVideoSchema.parse({

@@ -5,7 +5,6 @@
 // payload at the fetch boundary: a malformed or missing block narrows to a
 // safe default instead of handing the UI an undefined it would have to
 // feature-detect at every render.
-import { toFacelessMaterial, type FacelessMaterial } from '@/lib/generation/faceless-materials';
 import { isPublishProvider, type PublishLink } from '@/lib/publish-links';
 
 //---------------
@@ -26,8 +25,6 @@ export interface ProgressHistoryEntry {
 // to feature-detect.
 export interface GenerationFacts {
   faceless: boolean;
-  /** Only the post's own images (migrations 029, 043, 054); 'images' for older posts. */
-  material: FacelessMaterial;
   language: string | null;
   voiceId: string | null;
   videoAspect: string | null;
@@ -99,7 +96,6 @@ export function narrowProgressHistory(value: unknown): ProgressHistoryEntry[] {
 export function narrowGeneration(value: unknown): GenerationFacts {
   const fallback: GenerationFacts = {
     faceless: false,
-    material: 'images',
     language: null,
     voiceId: null,
     videoAspect: null,
@@ -117,7 +113,6 @@ export function narrowGeneration(value: unknown): GenerationFacts {
     // Only the literal true counts — mirrors the route and the engine's
     // slot_faceless rule.
     faceless: record.faceless === true,
-    material: toFacelessMaterial(record.material),
     language: text('language'),
     voiceId: text('voiceId'),
     videoAspect: text('videoAspect'),

@@ -13,25 +13,27 @@ describe('generate_persona_video options (Phase 5-4)', () => {
   it('drops a stale scriptPrompt from parsed options instead of forwarding it', () => {
     const parsed = GeneratePersonaVideoSchema.safeParse({
       title: 'Porto trip',
+      description: 'Agent description.',
       providers: ['youtube'],
       mode: 'asap',
       segments: [{ kind: 'hook', text: 'Stop scrolling, this Porto kitchen changes everything.' }],
-      options: { scriptPrompt: 'Be funny', faceless: true },
+      options: { scriptPrompt: 'Be funny', videoType: 'faceless' },
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.options).not.toHaveProperty('scriptPrompt');
-      expect(parsed.data.options?.faceless).toBe(true);
+      expect(parsed.data.options?.videoType).toBe('faceless');
     }
   });
 
   it('drops stale scriptPrompts from parsed options instead of forwarding them', () => {
     const parsed = GeneratePersonaVideoSchema.safeParse({
       title: 'Porto trip',
+      description: 'Agent description.',
       providers: ['youtube'],
       mode: 'asap',
       segments: [{ kind: 'hook', text: 'Stop scrolling, this Porto kitchen changes everything.' }],
-      options: { scriptPrompts: ['Be funny'], faceless: true },
+      options: { scriptPrompts: ['Be funny'], videoType: 'hook_lipsync' },
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {

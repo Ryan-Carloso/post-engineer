@@ -239,9 +239,11 @@ describe('recipe adoption through the registered server', () => {
     personaId: 'persona-1',
     segments: validSegments,
     title: 'Porto trip',
+    description: 'Agent description.',
     providers: ['youtube'],
     youtubeAccountIds: ['acct-1'],
     mode: 'asap',
+    options: { videoType: 'hook_lipsync' },
   };
 
   it('nudges on list_personas, attributes list_prompts to it, then stops nudging', async () => {

@@ -2,23 +2,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   attachGenerationTask,
-  gateGeneration,
   refundFailedGeneration,
   startEngineVideoTask,
   uploadEngineTempAsset,
 } from '../video-generation';
-import { checkAndDeductTokens, refundTokens } from '@/lib/billing/token-check';
+import { refundTokens } from '@/lib/billing/token-check';
 import { logger } from '@/lib/logger';
 
 vi.mock('@/lib/billing/token-check', () => ({
-  checkAndDeductTokens: vi.fn(),
   refundTokens: vi.fn(),
 }));
 vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-const mockCheckAndDeduct = vi.mocked(checkAndDeductTokens);
 const mockRefund = vi.mocked(refundTokens);
 const logError = vi.mocked(logger.error);
 
@@ -32,72 +29,6 @@ function engineResponse(payload: string, status = 200): Response {
     headers: { 'content-type': 'application/json' },
   });
 }
-
-describe('gateGeneration', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
-    mockCheckAndDeduct.mockReset();
-  });
-
-  const input = {
-    supabase: mockSupabase(),
-    userId: 'user-1',
-    generationId: 'gen-1',
-    faceless: false,
-    faceQuality: 'ok' as const,
-  };
-
-  it('passes through the cost when the token gate succeeds', async () => {
-    mockCheckAndDeduct.mockResolvedValue({ ok: true, cost: 3 });
-    const result = await gateGeneration(input);
-    expect(result).toEqual({ ok: true, cost: 3 });
-    expect(mockCheckAndDeduct).toHaveBeenCalledWith(
-      input.supabase,
-      'user-1',
-      'gen-1',
-      false,
-      'ok',
-    );
-  });
-
-  it('returns FREE_EXHAUSTED with the gate status when free tokens ran out', async () => {
-    mockCheckAndDeduct.mockResolvedValue({
-      ok: false,
-      error: 'free tokens exhausted',
-      statusCode: 402,
-      freeExhausted: true,
-    });
-    const result = await gateGeneration(input);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.response.status).toBe(402);
-      expect(await result.response.json()).toEqual({
-        success: false,
-        error: 'free tokens exhausted',
-        code: 'FREE_EXHAUSTED',
-      });
-    }
-  });
-
-  it('returns INSUFFICIENT when tokens are insufficient for other reasons', async () => {
-    mockCheckAndDeduct.mockResolvedValue({
-      ok: false,
-      error: 'not enough tokens',
-      statusCode: 402,
-      freeExhausted: false,
-    });
-    const result = await gateGeneration(input);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(await result.response.json()).toEqual({
-        success: false,
-        error: 'not enough tokens',
-        code: 'INSUFFICIENT',
-      });
-    }
-  });
-});
 
 describe('startEngineVideoTask — error branches', () => {
   afterEach(() => {

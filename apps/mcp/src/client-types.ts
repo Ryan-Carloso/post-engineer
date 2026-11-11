@@ -4,6 +4,9 @@
 // ratchet. client.ts re-exports every name here, so existing import sites
 // (`./client.js`) keep working.
 import { VIDEO_LAYOUTS } from './limits.js';
+import type { VideoType } from './video-type.js';
+
+export type { VideoType } from './video-type.js';
 
 export interface PostEngineerClientOptions {
   apiKey?: string;
@@ -54,11 +57,13 @@ export interface GeneratePersonaVideoInput {
    * Optional. Omit it for a faceless post defined entirely by `options` —
    * the persona is then not just a face: it is where the voice, the
    * aspect ratio and the niche come from. A post without one
-   * MUST set options.faceless and one of options.voiceId / options.audioUrl.
+   * MUST set options.videoType to 'faceless' and one of options.voiceId / options.audioUrl.
    */
   personaId?: string;
   /** The slot label for the single video. */
   title: string;
+  /** Agent-supplied video description (issue #542 follow-up): the publish copy. Required — there is no fallback to the title. */
+  description: string;
   /** Paired A/B experiment link (issue #476); checked server-side before the charge. */
   experiment?: { experimentId: string; variantId: string; pair: number };
   providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble')[];
@@ -86,9 +91,8 @@ export interface GeneratePersonaVideoInput {
   /** IANA timezone for a naive startAt and the times (display-only in 'asap' mode). Defaults to UTC. */
   timezone?: string;
   options?: {
-    faceless?: boolean;
-    /** Render the whole video as the persona talking: every narration window is lip-synced to the persona face. Requires a persona with a photo and lip-sync enabled; cannot be combined with faceless. */
-    fullLipsync?: boolean;
+    /** The one video mode: full_lipsync, hook_lipsync or faceless. Required — it decides the render path and the price. */
+    videoType: VideoType;
     /** Background-music mood: a mood from the engine BGM catalog, or "none" for explicit no music. Omitted lets the engine pick the first catalogued mood. */
     musicMood?: string;
     audioUrl?: string;

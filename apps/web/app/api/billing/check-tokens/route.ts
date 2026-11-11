@@ -4,21 +4,20 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { checkAndDeductTokens } from '@/lib/billing/token-check';
 import { secretsMatch } from '@/lib/secrets';
 import { logger } from '@/lib/logger';
-import type { FaceQuality } from '@/lib/tokens';
+import { isVideoType, unknownVideoTypeMessage, type FaceQuality, type VideoType } from '@/lib/tokens';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // POST /api/billing/check-tokens — checks and deducts tokens.
-// Used by the engine (Python) before generating scheduled videos.
 // Authentication: MONEYPRINT_API_SECRET in the x-engine-secret header
 // (compared in constant time — never a plain === on secrets).
 //---------------
 
 //---------------
-// Body contract: { userId, generationId?, faceless?, faceQuality? }.
-// "No face" is a per-post boolean now that the persona face mix is gone
-// (migration 007). Anything that is not the literal true is priced as a faced
-// video — the expensive case, so a malformed field can never under-charge.
+// Body contract: { userId, generationId?, videoType?, faceQuality? }.
+// videoType is the one video mode (issue #542 follow-up); absent means
+// hook_lipsync (the old default: a faced video). An unknown mode is a 400
+// naming every mode with its cost, never silently priced as another mode.
 //---------------
 
 function getEngineSecret(): string {
@@ -48,7 +47,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     );
   }
 
-  let body: { userId?: unknown; generationId?: unknown; faceless?: unknown; faceQuality?: unknown };
+  let body: { userId?: unknown; generationId?: unknown; videoType?: unknown; faceQuality?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -69,10 +68,16 @@ async function postHandler(request: Request): Promise<NextResponse> {
     ? body.generationId
     : randomUUID();
 
-  // "No face" is a per-post boolean (personas are always faced). Anything that
-  // is not the literal true is treated as "with the persona's face" — the
-  // expensive case, so a malformed field can never under-charge a generation.
-  const faceless = body.faceless === true;
+  let videoType: VideoType = 'hook_lipsync';
+  if (body.videoType !== undefined) {
+    if (!isVideoType(body.videoType)) {
+      return NextResponse.json(
+        { success: false, error: unknownVideoTypeMessage(body.videoType) },
+        { status: 400 },
+      );
+    }
+    videoType = body.videoType;
+  }
   const faceQuality: FaceQuality =
     body.faceQuality === 'very_good' ? 'very_good' : 'ok';
 
@@ -82,7 +87,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     supabase,
     body.userId,
     generationId,
-    faceless,
+    videoType,
     faceQuality,
   );
 

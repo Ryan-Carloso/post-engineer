@@ -6,7 +6,7 @@ const t = (key: string): string => key;
 
 describe('buildGenerationRows', () => {
   it('shows persona and face, with no material row: every video is the agent images', () => {
-    const rows = buildGenerationRows({ ...narrowGeneration(null), material: 'images' }, 'Ana', t);
+    const rows = buildGenerationRows(narrowGeneration(null), 'Ana', t);
     expect(rows).toEqual([
       { label: 'posts.generationPersonaLabel', value: 'Ana' },
       { label: 'posts.generationFaceLabel', value: 'posts.generationWithFace' },

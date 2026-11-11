@@ -19,6 +19,7 @@ import { NextResponse } from 'next/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
+import { isVideoType, unknownVideoTypeMessage, type VideoType } from '@/lib/tokens';
 import {
   HOOK_MAX_SECONDS,
   HOOK_MIN_SECONDS,
@@ -49,19 +50,23 @@ async function postHandler(request: Request): Promise<NextResponse> {
       route: ROUTE,
     });
   }
-  const fields = typeof body === 'object' && body !== null ? (body as { segments?: unknown; fullLipsync?: unknown }) : {};
-  // Optional, like on generate-and-schedule: full lip sync leaves media
-  // optional, while images mode (the default) needs media on every segment.
-  // A non-boolean value is a 400, never silently read as false.
-  const fullLipsync = fields.fullLipsync;
-  if (fullLipsync !== undefined && typeof fullLipsync !== 'boolean') {
-    return apiErrorResponse(400, 'fullLipsync must be a boolean.', {
-      code: ERROR_CODES.VALIDATION_FAILED,
-      field: 'fullLipsync',
-      route: ROUTE,
-    });
+  const fields = typeof body === 'object' && body !== null ? (body as { segments?: unknown; videoType?: unknown }) : {};
+  // Optional, unlike generate-and-schedule (where the mode is required):
+  // absent means hook lip sync, the images mode that needs media on every
+  // segment. Full lip sync leaves media optional. An unknown value is a
+  // 400 naming every mode with its cost, never silently read as hook.
+  let videoType: VideoType = 'hook_lipsync';
+  if (fields.videoType !== undefined) {
+    if (!isVideoType(fields.videoType)) {
+      return apiErrorResponse(400, unknownVideoTypeMessage(fields.videoType), {
+        code: ERROR_CODES.VALIDATION_FAILED,
+        field: 'videoType',
+        route: ROUTE,
+      });
+    }
+    videoType = fields.videoType;
   }
-  const result = validateSegments(fields.segments, fullLipsync === true);
+  const result = validateSegments(fields.segments, videoType);
   if (!result.ok) {
     return apiErrorResponse(400, `${result.error.rule} Fix: ${result.error.fix}`, {
       code: ERROR_CODES.VALIDATION_FAILED,

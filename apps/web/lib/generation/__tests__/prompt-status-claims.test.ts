@@ -26,7 +26,10 @@ const STALE_STATUS_PHRASES = ['currently being fixed', 'being fixed', 'issue #',
 // reason recorded here instead of silently passing an unknown token.
 // retention_evidence is an output field the viral-shorts prompt asks the
 // agent to print ('unavailable' for another creator's video), not a tool.
-const NON_TOOL_TOKENS = new Set(['face_detected', 'retention_evidence']);
+// full_lipsync / hook_lipsync are video_type enum values and very_good is
+// a face-quality value from the video-type cost line (issue #542
+// follow-up), never tools.
+const NON_TOOL_TOKENS = new Set(['face_detected', 'retention_evidence', 'full_lipsync', 'hook_lipsync', 'very_good']);
 
 function servedPromptTexts(): Array<{ name: string; text: string }> {
   const texts: Array<{ name: string; text: string }> = [];

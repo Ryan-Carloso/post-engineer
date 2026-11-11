@@ -72,7 +72,7 @@ export async function handleValidateScript(
 ): Promise<McpToolResponse> {
   // Mechanical pre-check first: a rejected script never reaches the web
   // route and never debits tokens.
-  const result = validateSegments(args.segments, args.fullLipsync === true);
+  const result = validateSegments(args.segments, args.videoType ?? 'hook_lipsync');
   if (!result.ok) {
     return errorResponse(
       `Script validation failed: ${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`,
@@ -80,7 +80,7 @@ export async function handleValidateScript(
   }
   let payload: ValidatedScriptPayload | string | null;
   try {
-    payload = narrowValidateScriptPayload(await client.validateScript(args.segments, args.fullLipsync === true));
+    payload = narrowValidateScriptPayload(await client.validateScript(args.segments, args.videoType ?? 'hook_lipsync'));
   } catch (error) {
     return errorResponse(`Error validating the script: ${sanitizeEngineError(getErrorMessage(error))}`);
   }
@@ -129,22 +129,23 @@ export async function generatePersonaVideoOutcome(
     }
     // Mechanical validation before the client call: a rejected script
     // never debits tokens and never reaches Modal.
-    const fullLipsync = args.options?.fullLipsync === true;
-    const result = validateSegments(args.segments, fullLipsync);
+    const videoType = args.options?.videoType ?? 'hook_lipsync';
+    const result = validateSegments(args.segments, videoType);
     if (!result.ok) {
       throw new Error(`${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`);
     }
-    // Full lip-sync mirrors the web route's validation, here, before any
-    // client call: a rejected combination never debits tokens. The web
-    // route re-validates server-side; this check is the MCP-side guard
-    // so an agent gets the failure without spending anything.
-    if (args.options?.fullLipsync === true && args.options?.faceless === true) {
-      throw new Error('options.fullLipsync cannot be used with faceless videos: there is no face to render.');
+    // The video-type guards mirror the web route's validation, here,
+    // before any client call: a rejected combination never debits tokens.
+    // The web route re-validates server-side; these checks are the
+    // MCP-side guard so an agent gets the failure without spending
+    // anything.
+    if (args.personaId === undefined && videoType !== 'faceless') {
+      throw new Error('A post without a persona must be faceless: set options.videoType to \'faceless\'.');
     }
-    if (args.options?.fullLipsync === true && args.personaId === undefined) {
-      throw new Error('options.fullLipsync requires a persona with a photo and lip-sync enabled.');
+    if (args.personaId === undefined && args.options?.voiceId === undefined && args.options?.audioUrl === undefined) {
+      throw new Error('A post without a persona must have a voice: set options.voiceId (or options.audioUrl).');
     }
-    const script = joinSegments(args.segments, fullLipsync);
+    const script = joinSegments(args.segments, videoType);
     // Pinterest needs exactly one board for the batch (a pin cannot exist
     // without one); the web route 400s without it, so fail fast here.
     if (args.providers.includes('pinterest') && (args.pinterestBoardId === undefined || args.pinterestBoardId.trim() === '')) {
@@ -167,6 +168,7 @@ export async function generatePersonaVideoOutcome(
       await client.generatePersonaVideo({
         personaId: args.personaId,
         title: args.title,
+        description: args.description,
         providers: args.providers,
         youtubeAccountIds: args.youtubeAccountIds,
         instagramAccountIds: args.instagramAccountIds,
@@ -184,6 +186,10 @@ export async function generatePersonaVideoOutcome(
         timezone: args.timezone,
         options: {
           ...args.options,
+          // The shape requires videoType, but the field is optional on the
+          // inferred args (options itself is optional): pin it here so the
+          // web always receives a mode, never an absent one.
+          videoType,
           voiceId,
           segments: args.segments,
           ...(language === undefined ? {} : { language }),

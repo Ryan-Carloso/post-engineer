@@ -54,6 +54,7 @@ const INPUT = {
   segments: SEGMENTS,
   videoAspect: '9:16' as const,
   hasFace: false,
+  videoType: 'hook_lipsync' as const,
 };
 
 const PREP: PersonaPrep = {
@@ -72,7 +73,7 @@ const PREP: PersonaPrep = {
 };
 
 const OPTIONS: ValidatedOptions = {
-  faceless: false,
+  videoType: 'hook_lipsync',
 };
 
 describe('checkSegmentMediaAspect', () => {
@@ -168,7 +169,7 @@ describe('checkSegmentMediaAspect', () => {
     const result = await checkSegmentMediaAspect({
       ...INPUT,
       hasFace: true,
-      fullLipsync: true,
+      videoType: 'full_lipsync',
     });
     expect(result).toBeNull();
     expect(calls).toHaveLength(0);
@@ -227,7 +228,7 @@ describe('checkPreChargePreflights', () => {
     vi.mocked(checkFullLipsyncNarration).mockResolvedValue(failure);
     const result = await checkPreChargePreflights({
       ...COMBINED,
-      options: { ...OPTIONS, fullLipsync: true },
+      options: { ...OPTIONS, videoType: 'full_lipsync' },
     });
     expect(result).toBe(failure);
     expect(checkFullLipsyncNarration).toHaveBeenCalledTimes(1);
@@ -239,7 +240,7 @@ describe('checkPreChargePreflights', () => {
     vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
     const result = await checkPreChargePreflights({
       ...COMBINED,
-      options: { ...OPTIONS, fullLipsync: true },
+      options: { ...OPTIONS, videoType: 'full_lipsync' },
     });
     expect(result).toBeNull();
     expect(checkFullLipsyncNarration).toHaveBeenCalledTimes(1);

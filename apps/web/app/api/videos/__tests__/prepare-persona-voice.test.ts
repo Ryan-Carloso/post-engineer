@@ -109,7 +109,7 @@ describe('preparePersona catalog fetch', () => {
     vi.mocked(fetchPersonaVoiceCatalogIds).mockResolvedValue(undefined);
   });
 
-  const opts = { faceless: true };
+  const opts = { videoType: 'faceless' as const };
 
   it.each([
     ['no-voice'],
@@ -135,5 +135,55 @@ describe('preparePersona catalog fetch', () => {
       opts,
     );
     expect(fetchPersonaVoiceCatalogIds).toHaveBeenCalledWith(USER_ID);
+  });
+});
+
+describe('preparePersona face-mode photo check', () => {
+  function photoLessClient(): SupabaseClient {
+    const chain: Record<string, unknown> = {
+      select: () => chain,
+      eq: () => chain,
+      single: async () => ({
+        data: {
+          id: PERSONA_ID,
+          name: 'Ana',
+          photo_path: null,
+          avatar_url: null,
+          voice_id: 'no-voice',
+          voice_audio_path: null,
+          language: 'en',
+          video_aspect: '9:16',
+          video_layout: null,
+          script_prompt: null,
+          cta_text: null,
+          paragraph_number: 5,
+          niche: 'fitness',
+          face_quality: 'ok',
+        },
+        error: null,
+      }),
+    };
+    return { from: vi.fn(() => chain) } as unknown as SupabaseClient;
+  }
+
+  it('rejects a face mode with 400 naming options.videoType when the persona has no photo', async () => {
+    for (const videoType of ['hook_lipsync', 'full_lipsync'] as const) {
+      const result = await preparePersona(photoLessClient(), USER_ID, PERSONA_ID, { videoType });
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(400);
+      const payload = (await (result as Response).json()) as { field?: string; error?: string };
+      expect(payload.field).toBe('options.videoType');
+      expect(payload.error).toContain(`options.videoType ${videoType} requires a persona with a photo.`);
+    }
+  });
+
+  it('passes a faceless post with the same photo-less persona (no face is sent)', async () => {
+    const result = await preparePersona(photoLessClient(), USER_ID, PERSONA_ID, { videoType: 'faceless' });
+    expect(result).not.toBeInstanceOf(Response);
+  });
+
+  it('passes a face mode when a library image is pinned (it replaces the persona photo)', async () => {
+    const result = await preparePersona(photoLessClient(), USER_ID, PERSONA_ID, { videoType: 'hook_lipsync', imageId: 'img-1' });
+    expect(result).not.toBeInstanceOf(Response);
   });
 });

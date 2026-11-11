@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 //  - Full lip-sync, face ok               = 8 tokens
 //  - Full lip-sync, face very good        = 15 tokens
 // No face MIX anymore: personas are always faced, so the price is a lookup on
-// (faceless, face quality, fullLipsync). It is the only copy: the engine
+// (videoType, face quality). It is the only copy: the engine
 // refunds the charged amount stored on the slot, never a recomputed price.
 //---------------
 
@@ -20,6 +20,10 @@ import {
   FACE_QUALITY_PRICES,
   FULL_LIPSYNC_PRICES,
   DEFAULT_TOKEN_BALANCE,
+  VIDEO_TYPE_ERROR_SUFFIX,
+  VIDEO_TYPE_REQUIRED_MESSAGE,
+  unknownVideoTypeMessage,
+  type VideoType,
 } from '@/lib/tokens';
 
 describe('constant prices', () => {
@@ -44,41 +48,67 @@ describe('constant prices', () => {
 
 describe('computeVideoTokens', () => {
   it('faceless custa 1 token, em qualquer qualidade (não há rosto a resolver)', () => {
-    expect(computeVideoTokens(true, 'ok')).toBe(1);
-    expect(computeVideoTokens(true, 'very_good')).toBe(1);
+    expect(computeVideoTokens('faceless', 'ok')).toBe(1);
+    expect(computeVideoTokens('faceless', 'very_good')).toBe(1);
   });
 
-  it('com o rosto, ok custa 2 tokens', () => {
-    expect(computeVideoTokens(false, 'ok')).toBe(2);
-  });
-
-  it('com o rosto, very_good custa 3 tokens', () => {
-    expect(computeVideoTokens(false, 'very_good')).toBe(3);
+  it('hook lip-sync custa 2 tokens ok e 3 tokens very_good', () => {
+    expect(computeVideoTokens('hook_lipsync', 'ok')).toBe(2);
+    expect(computeVideoTokens('hook_lipsync', 'very_good')).toBe(3);
   });
 
   it('full lip-sync custa 8 tokens ok e 15 tokens very_good', () => {
-    expect(computeVideoTokens(false, 'ok', true)).toBe(8);
-    expect(computeVideoTokens(false, 'very_good', true)).toBe(15);
-  });
-
-  it('full lip-sync com faceless continua a custar 1 token (combinação rejeitada antes da cobrança)', () => {
-    expect(computeVideoTokens(true, 'ok', true)).toBe(1);
-    expect(computeVideoTokens(true, 'very_good', true)).toBe(1);
+    expect(computeVideoTokens('full_lipsync', 'ok')).toBe(8);
+    expect(computeVideoTokens('full_lipsync', 'very_good')).toBe(15);
   });
 
   it('o preço nunca é zero nem fracionário', () => {
     // The function returns a whole-token lookup; both branches are integers,
     // so the previous "round up so fractions are never charged" rule is
     // structural now, not arithmetic.
-    for (const faceless of [true, false]) {
+    for (const videoType of ['faceless', 'hook_lipsync', 'full_lipsync'] as const) {
       for (const quality of ['ok', 'very_good'] as const) {
-        for (const full of [false, true]) {
-          const cost = computeVideoTokens(faceless, quality, full);
-          expect(Number.isInteger(cost)).toBe(true);
-          expect(cost).toBeGreaterThanOrEqual(1);
-        }
+        const cost = computeVideoTokens(videoType, quality);
+        expect(Number.isInteger(cost)).toBe(true);
+        expect(cost).toBeGreaterThanOrEqual(1);
       }
     }
+  });
+});
+
+describe('video_type error messages', () => {
+  it('unknownVideoTypeMessage names the bad value and lists every type with its cost', () => {
+    expect(unknownVideoTypeMessage('bogus')).toBe(
+      "unknown video_type 'bogus'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)",
+    );
+  });
+
+  it('unknownVideoTypeMessage clips a long bad value so the message survives the 200-char MCP cap', () => {
+    const message = unknownVideoTypeMessage('x'.repeat(100));
+    expect(message.length).toBeLessThan(200);
+    expect(message).toContain("unknown video_type 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';");
+  });
+
+  it('unknownVideoTypeMessage never renders null or undefined as the value', () => {
+    expect(unknownVideoTypeMessage(null)).toBe(`unknown video_type ''; ${VIDEO_TYPE_ERROR_SUFFIX}`);
+    expect(unknownVideoTypeMessage(undefined)).toBe(`unknown video_type ''; ${VIDEO_TYPE_ERROR_SUFFIX}`);
+  });
+
+  it('the required message lists every type with its cost', () => {
+    expect(VIDEO_TYPE_REQUIRED_MESSAGE).toBe(`videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}`);
+    expect(VIDEO_TYPE_REQUIRED_MESSAGE.length).toBeLessThan(200);
+  });
+
+  it('the suffix costs match the price tables', () => {
+    // The suffix is hand-written prose, so the prices it quotes must be
+    // derived from the same tables computeVideoTokens reads.
+    expect(VIDEO_TYPE_ERROR_SUFFIX).toContain(
+      `full_lipsync (${FULL_LIPSYNC_PRICES.ok}/${FULL_LIPSYNC_PRICES.very_good})`,
+    );
+    expect(VIDEO_TYPE_ERROR_SUFFIX).toContain(
+      `hook_lipsync (${FACE_QUALITY_PRICES.ok}/${FACE_QUALITY_PRICES.very_good})`,
+    );
+    expect(VIDEO_TYPE_ERROR_SUFFIX).toContain(`faceless (${FACELESS_PRICE})`);
   });
 });
 

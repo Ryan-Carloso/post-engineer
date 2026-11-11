@@ -41,22 +41,42 @@ describe('buildJobPayload — request allowlist', () => {
     warn.mockClear();
   });
 
-  it('forwards only known engine fields and drops personaId/lipsync/junk', () => {
+  it('forwards only known engine fields and drops personaId/junk', () => {
     const payload = buildJobPayload(persona(), {
-      video_subject: 'myth busting',
+      video_title: 'myth busting',
       personaId: 'persona-1',
-      lipsync: true,
       junk_field: 'junk',
     });
-    expect(payload.video_subject).toBe('myth busting');
+    expect(payload.video_title).toBe('myth busting');
     expect(payload).not.toHaveProperty('personaId');
-    expect(payload).not.toHaveProperty('lipsync');
     expect(payload).not.toHaveProperty('junk_field');
+  });
+
+  it('drops the dead contract fields instead of forwarding them', () => {
+    // video_subject, lipsync, full_lipsync, faceless_material and
+    // lipsync_enabled are gone from the contract (issue #542 follow-up):
+    // a stale caller still sending them must not reach the engine, and
+    // the drop is warned about instead of silent.
+    const payload = buildJobPayload(persona(), {
+      video_title: 'Porto trip',
+      video_subject: 'Porto trip',
+      lipsync: false,
+      full_lipsync: true,
+      faceless_material: 'images',
+      lipsync_enabled: false,
+    });
+    expect(payload).not.toHaveProperty('video_subject');
+    expect(payload).not.toHaveProperty('lipsync');
+    expect(payload).not.toHaveProperty('full_lipsync');
+    expect(payload).not.toHaveProperty('faceless_material');
+    expect(payload).not.toHaveProperty('lipsync_enabled');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('dropping 5 unknown request field(s)');
   });
 
   it('forwards video_script so a segments request takes the supplied-script engine path', () => {
     const payload = buildJobPayload(persona(), {
-      video_subject: 'Porto trip',
+      video_title: 'Porto trip',
       video_script: 'Hook.\n\nBody.\n\nCTA.',
     });
     expect(payload.video_script).toBe('Hook.\n\nBody.\n\nCTA.');
@@ -64,7 +84,7 @@ describe('buildJobPayload — request allowlist', () => {
 
   it('forwards slot_id so boot orphan triage can requeue web-created tasks', () => {
     const payload = buildJobPayload(persona(), {
-      video_subject: 'myth busting',
+      video_title: 'myth busting',
       generation_id: 'gen-1',
       slot_id: 'slot-123',
     });
@@ -72,32 +92,36 @@ describe('buildJobPayload — request allowlist', () => {
     expect(payload.generation_id).toBe('gen-1');
   });
 
-  it('forwards full_lipsync so a full-mode request is not dropped into intro-only images', () => {
+  it('forwards video_type so a full-mode request is not dropped into intro-only images', () => {
     const payload = buildJobPayload(persona(), {
-      video_subject: 'myth busting',
-      lipsync: true,
-      full_lipsync: true,
+      video_title: 'myth busting',
+      video_type: 'full_lipsync',
     });
-    expect(payload.full_lipsync).toBe(true);
+    expect(payload.video_type).toBe('full_lipsync');
+  });
+
+  it('forwards video_type for every mode', () => {
+    for (const videoType of ['full_lipsync', 'hook_lipsync', 'faceless'] as const) {
+      const payload = buildJobPayload(persona(), { video_title: 'Porto trip', video_type: videoType });
+      expect(payload.video_type).toBe(videoType);
+    }
   });
 
   it('forwards music_mood so a requested BGM mood is not lost to the engine default', () => {
     const payload = buildJobPayload(persona(), {
-      video_subject: 'myth busting',
-      lipsync: true,
+      video_title: 'myth busting',
       music_mood: 'calm',
     });
     expect(payload.music_mood).toBe('calm');
   });
 
-  it('forwards faceless_material so the images choice is not dropped', () => {
+  it('forwards video_title and video_description so publish uses the agent copy', () => {
     const payload = buildJobPayload(persona(), {
-      video_subject: 'myth busting',
-      lipsync: false,
-      faceless_material: 'images',
+      video_title: 'Porto in 30 seconds',
+      video_description: 'Watch to the end.',
     });
-    expect(payload.faceless_material).toBe('images');
-    expect(payload).not.toHaveProperty('lipsync');
+    expect(payload.video_title).toBe('Porto in 30 seconds');
+    expect(payload.video_description).toBe('Watch to the end.');
   });
 
   it('forwards segments next to the joined script so the engine can render per-segment media', () => {
@@ -107,7 +131,7 @@ describe('buildJobPayload — request allowlist', () => {
       { kind: 'cta', text: 'Visit Porto soon.' },
     ];
     const payload = buildJobPayload(persona(), {
-      video_subject: 'Porto trip',
+      video_title: 'Porto trip',
       video_script: 'Welcome to Porto.\n\nWhere the river meets the sea.\n\nVisit Porto soon.',
       segments,
     });
@@ -122,7 +146,7 @@ describe('buildJobPayload — request allowlist', () => {
   });
 
   it('does not warn when every key is known', () => {
-    buildJobPayload(persona(), { video_subject: 'x' });
+    buildJobPayload(persona(), { video_title: 'x' });
     expect(warn).not.toHaveBeenCalled();
   });
 
@@ -215,9 +239,9 @@ describe('buildJobPayload — persona preference defaults', () => {
   });
 });
 
-describe('buildJobPayload — face quality and lipsync', () => {
+describe('buildJobPayload — face quality and video_type', () => {
   it('maps very_good face quality to the engine kebab-case when the face shows', () => {
-    const payload = buildJobPayload(persona({ face_quality: 'very_good' }), { lipsync: true });
+    const payload = buildJobPayload(persona({ face_quality: 'very_good' }), { video_type: 'hook_lipsync' });
     expect(payload.video_quality).toBe('very-good');
   });
 
@@ -234,63 +258,50 @@ describe('buildJobPayload — face quality and lipsync', () => {
   });
 
   it('does not invent video_quality from the persona for faceless videos', () => {
-    const payload = buildJobPayload(persona({ face_quality: 'very_good' }), { lipsync: false });
+    const payload = buildJobPayload(persona({ face_quality: 'very_good' }), { video_type: 'faceless' });
     expect(payload).not.toHaveProperty('video_quality');
-    expect(payload.lipsync_enabled).toBe(false);
   });
 
   it('leaves an explicit request video_quality alone on faceless videos', () => {
     const payload = buildJobPayload(persona({ face_quality: 'very_good' }), {
-      lipsync: false,
+      video_type: 'faceless',
       video_quality: 'ok',
     });
     expect(payload.video_quality).toBe('ok');
   });
 
-  it('sets lipsync_enabled only from an explicit boolean request flag', () => {
-    expect(buildJobPayload(persona(), { lipsync: true }).lipsync_enabled).toBe(true);
-    expect(buildJobPayload(persona(), {})).not.toHaveProperty('lipsync_enabled');
-    expect(buildJobPayload(persona(), { lipsync: 'yes' })).not.toHaveProperty('lipsync_enabled');
+  it('shows the face for full lip sync too', () => {
+    const payload = buildJobPayload(persona({ face_quality: 'very_good' }), { video_type: 'full_lipsync' });
+    expect(payload.video_quality).toBe('very-good');
   });
 });
 
-describe('buildJobPayload — niche and subject defaults', () => {
-  it('derives the subject from the niche when missing, and no script prompt', () => {
-    // Phase 5-4: the "The content niche is: ..." LLM prompt default is
-    // gone. The niche still defaults the subject, never a prompt.
-    const payload = buildJobPayload(persona({ niche: '  finance  ' }), {});
-    expect(payload).not.toHaveProperty('video_script_prompt');
-    expect(payload.video_subject).toBe('finance');
-  });
-
-  it('drops a stale request script prompt and keeps an existing subject', () => {
+describe('buildJobPayload — niche and script prompt', () => {
+  it('drops a stale request script prompt', () => {
     const payload = buildJobPayload(persona({ niche: 'finance' }), {
       video_script_prompt: 'custom script',
-      video_subject: 'custom subject',
+      video_title: 'custom title',
     });
     expect(payload).not.toHaveProperty('video_script_prompt');
-    expect(payload.video_subject).toBe('custom subject');
+    expect(payload.video_title).toBe('custom title');
   });
 
-  it('ignores a blank niche for the defaults', () => {
+  it('ignores a blank niche in the engine persona', () => {
     const payload = buildJobPayload(persona({ niche: '   ' }), {});
     expect(payload).not.toHaveProperty('video_script_prompt');
-    expect(payload).not.toHaveProperty('video_subject');
+    expect(payload.persona).not.toHaveProperty('niche');
   });
 });
 
 describe('buildJobPayload — final null pass', () => {
   it('drops null engine-facing fields instead of forwarding them', () => {
-    // lipsync: false keeps the face-quality defaulting out of the picture,
-    // so the null pass is what removes video_quality.
+    // video_type faceless keeps the face-quality defaulting out of the
+    // picture, so the null pass is what removes video_quality.
     const payload = buildJobPayload(persona({ niche: 'finance' }), {
-      lipsync: false,
-      video_subject: null,
+      video_type: 'faceless',
       video_quality: null,
       webhook_url: 'https://hooks.test/done',
     });
-    // video_subject is re-defaulted from the niche; the null never travels.
-    expect(payload.video_subject).toBe('finance');
     expect(payload).not.toHaveProperty('video_quality');
     expect(payload.webhook_url).toBe('https://hooks.test/done');
   });
@@ -308,7 +319,7 @@ describe('buildJobPayload — final null pass', () => {
   });
 
   it('deletes an empty-string video_quality on faceless videos instead of defaulting it', () => {
-    const payload = buildJobPayload(persona(), { lipsync: false, video_quality: '   ' });
+    const payload = buildJobPayload(persona(), { video_type: 'faceless', video_quality: '   ' });
     expect(payload).not.toHaveProperty('video_quality');
   });
 });

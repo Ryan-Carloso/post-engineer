@@ -63,7 +63,7 @@ export interface FullLipsyncPreflightInput {
 /**
  * Measure the full-mode narration before charging. Returns the measured
  * duration in seconds when it fits the cap, otherwise a NextResponse:
- * 400 naming options.fullLipsync when the narration exceeds 60s (or the
+ * 400 naming options.videoType when the narration exceeds 60s (or the
  * voice-audio download rejects it), 502 when the duration is unknown.
  * Callers must return the response without charging on any failure.
  */
@@ -102,8 +102,8 @@ export async function checkFullLipsyncNarration(
   if (upstream.status === 400) {
     return validationFailed(
       ERROR_CODES.VALIDATION_FAILED,
-      'options.fullLipsync narration exceeds the 60s full lip-sync limit, or the narration audio was rejected: shorten the script or use audio under 60s.',
-      'options.fullLipsync',
+      'options.videoType narration exceeds the 60s full lip-sync limit, or the narration audio was rejected: shorten the script or use audio under 60s.',
+      'options.videoType',
     );
   }
   if (!upstream.ok) {
@@ -122,8 +122,8 @@ export async function checkFullLipsyncNarration(
   if (duration > FULL_LIPSYNC_MAX_SECONDS) {
     return validationFailed(
       ERROR_CODES.VALIDATION_FAILED,
-      `options.fullLipsync narration is ${duration}s long — the full lip-sync limit is ${FULL_LIPSYNC_MAX_SECONDS}s. Shorten the script.`,
-      'options.fullLipsync',
+      `options.videoType narration is ${duration}s long — the full lip-sync limit is ${FULL_LIPSYNC_MAX_SECONDS}s. Shorten the script.`,
+      'options.videoType',
     );
   }
   return duration;

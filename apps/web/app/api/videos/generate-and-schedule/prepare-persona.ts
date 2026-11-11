@@ -18,7 +18,7 @@ import { getPostHogServer } from '@/lib/posthog-server';
 import { logger } from '@/lib/logger';
 import { trackApiEvent } from '@/lib/analytics';
 import { scrubSecrets, redactCredentialFragments } from '@/lib/scrub';
-import type { FaceQuality } from '@/lib/tokens';
+import type { FaceQuality, VideoType } from '@/lib/tokens';
 import {
   resolvePersonaVoice,
   VOICE_FALLBACK_REASONS,
@@ -84,7 +84,7 @@ export async function preparePersona(
   userId: string,
   personaId: string,
   opts: {
-    faceless: boolean;
+    videoType: VideoType;
     audioUrl?: string;
     imageId?: string;
     voiceId?: string;
@@ -143,9 +143,16 @@ export async function preparePersona(
   // charge ("persona image download rejected"). Fail fast here instead.
   // Skipped for faceless posts (no photo is sent) and for a pinned library
   // image, which replaces the persona photo and is checked separately below.
+  const faceless = opts.videoType === 'faceless';
   const avatarUrl = (persona.avatar_url as string | null) ?? null;
-  if (!opts.faceless && !opts.imageId && avatarUrl && !isEngineUsablePersonaImageUrl(avatarUrl)) {
+  if (!faceless && !opts.imageId && avatarUrl && !isEngineUsablePersonaImageUrl(avatarUrl)) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona image URL must be a valid http(s) URL or a data:image/ URI: update the persona.', 'personaId');
+  }
+  // Face modes need a photo on the persona (or a pinned library image):
+  // without one the engine filler fails the slot after the spend.
+  const photoPath = (persona.photo_path as string | null) ?? null;
+  if (!faceless && !opts.imageId && avatarUrl === null && photoPath === null) {
+    return validationFailed(ERROR_CODES.VALIDATION_FAILED, `options.videoType ${opts.videoType} requires a persona with a photo.`, 'options.videoType');
   }
   // Voice: custom per-request audio wins; otherwise the persona voice.
   // The engine requires exactly one of voice_id / voice_audio_url.
@@ -224,13 +231,13 @@ export async function preparePersona(
     // The per-post choice, carried through to pricing, the engine payload and
     // the slot row (the engine's batch pipeline reads it from there). There
     // is no persona-level mix anymore: a persona is always faced.
-    faceless: opts.faceless,
+    faceless,
     faceQuality,
     voiceAudioUrl,
     voiceIdValue,
     voiceFallback,
     avatarUrl,
-    photoPath: (persona.photo_path as string | null) ?? null,
+    photoPath,
     // The persona's editorial definition, each overridable per post. These
     // resolved values are snapshotted onto the schedule (not re-read at tick
     // time), so a persona edited after this moment cannot rewrite this video.
@@ -244,7 +251,7 @@ export async function preparePersona(
     paragraphNumber: opts.paragraphNumber ?? paragraphNumber,
     // Every persona is faced, so a post WITH the face must resolve one; only a
     // faceless post may proceed without any image.
-    photoRequired: !opts.faceless,
+    photoRequired: !faceless,
   };
 }
 
@@ -320,7 +327,7 @@ export async function preparePost(
   userId: string,
   personaId: string | null,
   opts: {
-    faceless: boolean;
+    videoType: VideoType;
     audioUrl?: string;
     imageId?: string;
     voiceId?: string;
