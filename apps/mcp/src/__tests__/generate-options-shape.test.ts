@@ -44,10 +44,11 @@ describe('generate_persona_video options (Phase 5-4)', () => {
   it('accepts a square 1:1 videoAspect: it is a product aspect, not just an engine one', () => {
     const parsed = GeneratePersonaVideoSchema.safeParse({
       title: 'Porto trip',
+      description: 'Agent description.',
       providers: ['youtube'],
       mode: 'asap',
       segments: [{ kind: 'hook', text: 'Stop scrolling, this Porto kitchen changes everything.' }],
-      options: { videoAspect: '1:1' },
+      options: { videoType: 'faceless', videoAspect: '1:1' },
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
