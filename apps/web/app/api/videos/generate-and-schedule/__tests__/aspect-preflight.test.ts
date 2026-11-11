@@ -73,7 +73,6 @@ const PREP: PersonaPrep = {
 
 const OPTIONS: ValidatedOptions = {
   faceless: false,
-  facelessMaterial: 'broll',
 };
 
 describe('checkSegmentMediaAspect', () => {

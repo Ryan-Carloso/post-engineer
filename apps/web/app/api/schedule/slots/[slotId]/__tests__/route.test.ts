@@ -828,7 +828,7 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
       SNAPSHOT_SCHEDULE_ROW,
     );
     expect(generation).toEqual({
-      faceless: true, material: 'broll',
+      faceless: true, material: 'images',
       language: 'pt-BR',
       voiceId: 'ana_neural',
       videoAspect: '9:16',
@@ -855,7 +855,7 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
     // never has to feature-detect.
     const generation = await getGeneration(SLOT_DETAIL_ROW, SCHEDULE_ROW);
     expect(generation).toEqual({
-      faceless: false, material: 'broll',
+      faceless: false, material: 'images',
       language: null,
       voiceId: null,
       videoAspect: null,

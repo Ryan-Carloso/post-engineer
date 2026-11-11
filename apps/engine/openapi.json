@@ -362,7 +362,7 @@
             "type": "integer"
           },
           "provider": {
-            "default": "pexels",
+            "default": "local",
             "title": "Provider",
             "type": "string"
           },
@@ -592,20 +592,6 @@
               }
             ],
             "title": "Media"
-          },
-          "terms": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Terms"
           },
           "text": {
             "title": "Text",
@@ -1027,12 +1013,8 @@
             "type": "number"
           },
           "faceless_material": {
-            "default": "broll",
-            "enum": [
-              "broll",
-              "svg",
-              "images"
-            ],
+            "const": "images",
+            "default": "images",
             "title": "Faceless Material",
             "type": "string"
           },
@@ -1075,11 +1057,6 @@
           "lipsync_enabled": {
             "default": true,
             "title": "Lipsync Enabled",
-            "type": "boolean"
-          },
-          "match_materials_to_script": {
-            "default": true,
-            "title": "Match Materials To Script",
             "type": "boolean"
           },
           "music_mood": {
@@ -1324,21 +1301,6 @@
             "maxLength": 500,
             "title": "Video Subject",
             "type": "string"
-          },
-          "video_terms": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "items": {},
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Video Terms"
           },
           "video_transition_mode": {
             "anyOf": [

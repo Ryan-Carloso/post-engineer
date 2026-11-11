@@ -13,7 +13,6 @@ from app.models.schema import (
     VideoAspect,
     VideoLayout,
     VideoParams,
-    VideoTermsParams,
 )
 
 
@@ -53,30 +52,11 @@ class TestVideoParamsLipsyncEnabled(unittest.TestCase):
 
 class TestSchemaBounds(unittest.TestCase):
     """Numeric and length bounds guard the public API against absurd inputs
-    (e.g. amount=10**9 fanning out into a billion material searches)."""
+    (e.g. a 501-char subject or a 20001-char script)."""
 
     def _params(self, **kwargs):
         kwargs.setdefault("video_subject", "test")
         return VideoParams(**kwargs)
-
-    # VideoTermsParams.amount: 1..50
-
-    def test_terms_amount_rejects_huge_value(self):
-        with self.assertRaises(ValidationError):
-            VideoTermsParams(amount=10**9)
-
-    def test_terms_amount_rejects_zero(self):
-        with self.assertRaises(ValidationError):
-            VideoTermsParams(amount=0)
-
-    def test_terms_amount_rejects_above_max(self):
-        with self.assertRaises(ValidationError):
-            VideoTermsParams(amount=51)
-
-    def test_terms_amount_accepts_edges_and_default(self):
-        self.assertEqual(VideoTermsParams(amount=1).amount, 1)
-        self.assertEqual(VideoTermsParams(amount=50).amount, 50)
-        self.assertEqual(VideoTermsParams().amount, 5)
 
     # VideoParams.video_subject: max 500 chars
 

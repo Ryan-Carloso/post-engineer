@@ -72,7 +72,7 @@ describe('buildJobPayload — request allowlist', () => {
     expect(payload.generation_id).toBe('gen-1');
   });
 
-  it('forwards full_lipsync so a full-mode request is not dropped into intro-only b-roll', () => {
+  it('forwards full_lipsync so a full-mode request is not dropped into intro-only images', () => {
     const payload = buildJobPayload(persona(), {
       video_subject: 'myth busting',
       lipsync: true,
@@ -90,13 +90,13 @@ describe('buildJobPayload — request allowlist', () => {
     expect(payload.music_mood).toBe('calm');
   });
 
-  it('forwards faceless_material so an svg choice is not dropped into broll', () => {
+  it('forwards faceless_material so the images choice is not dropped', () => {
     const payload = buildJobPayload(persona(), {
       video_subject: 'myth busting',
       lipsync: false,
-      faceless_material: 'svg',
+      faceless_material: 'images',
     });
-    expect(payload.faceless_material).toBe('svg');
+    expect(payload.faceless_material).toBe('images');
     expect(payload).not.toHaveProperty('lipsync');
   });
 

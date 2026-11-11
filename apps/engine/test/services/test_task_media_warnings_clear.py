@@ -16,16 +16,23 @@ from unittest.mock import patch
 from app.models.schema import TaskVideoRequest, VideoParams
 from app.services import task as tm
 
+# Images mode needs about one photo per 3s (hook 19 words → 3, body 38 → 5, CTA 7 → 1).
 SEGMENTS = [
     {
         "kind": "hook",
         "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time.",
+        "media": [{"url": f"https://e.com/0-{i}.jpg"} for i in range(3)],
     },
     {
         "kind": "body",
         "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold at sunset before heading home through the old town streets.",
+        "media": [{"url": f"https://e.com/1-{i}.jpg"} for i in range(5)],
     },
-    {"kind": "cta", "text": "Follow for more Porto walks every week."},
+    {
+        "kind": "cta",
+        "text": "Follow for more Porto walks every week.",
+        "media": [{"url": "https://e.com/2-0.jpg"}],
+    },
 ]
 
 
@@ -48,9 +55,6 @@ class MediaWarningsClearTests(unittest.TestCase):
             )
             stack.enter_context(
                 patch.object(tm, "generate_script", return_value="script text")
-            )
-            stack.enter_context(
-                patch.object(tm, "generate_terms", return_value="terms")
             )
             stack.enter_context(patch.object(tm, "save_script_data"))
             stack.enter_context(

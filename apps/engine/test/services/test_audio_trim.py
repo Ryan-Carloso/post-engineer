@@ -339,10 +339,3 @@ def test_task_start_copies_shared_audio_before_the_word_cut():
     word_cut = source.index("audio_trim.trim_after_last_word(")
     assert copy_call < word_cut
     assert "if task_local is not None:" in source
-
-
-def test_media_duration_probes_any_media_file():
-    # place_photos reads clip lengths through it to find the slot of a photo.
-    with patch.object(audio_trim, "_duration", return_value=4.5) as probe:
-        assert audio_trim.media_duration("clip.mp4") == 4.5
-    probe.assert_called_once_with("clip.mp4")

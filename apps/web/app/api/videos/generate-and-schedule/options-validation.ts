@@ -3,7 +3,6 @@
 // every failing check is reported (not just the first one).
 //---------------
 
-import type { FacelessMaterial } from '@/lib/generation/faceless-materials';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import { isHttpUrl } from '@/lib/generation/custom-audio';
 import { MAX_TITLE_CHARS } from './prepare-persona';
@@ -17,7 +16,6 @@ const MAX_LANGUAGE_CHARS = 32;
 /** Raw options as parsed from the request body (subset validateOptions reads). */
 export interface OptionsInput {
   faceless?: boolean;
-  facelessMaterial?: FacelessMaterial;
   fullLipsync?: boolean;
   musicMood?: string;
   audioUrl?: string;
@@ -35,10 +33,7 @@ export interface OptionsInput {
  *  falls back to the persona's layout when it is absent. */
 export interface ValidatedOptions {
   faceless: boolean;
-  /** Resolved here: 'broll' when omitted. Applies to every post, with or
-   *  without a face (stock only, illustrations only, or only the segment images). */
-  facelessMaterial: FacelessMaterial;
-  /** Opt-in full lip-sync (whole video talking head, no b-roll). */
+  /** Opt-in full lip-sync (whole video talking head). */
   fullLipsync?: boolean;
   /** BGM mood (issue #489): a catalogued mood, or "none" for no music; omitted = engine default. */
   musicMood?: string;
@@ -58,7 +53,6 @@ export interface ValidatedOptions {
 export function validateOptions(options: OptionsInput): Checked<ValidatedOptions> {
   const {
     faceless = false,
-    facelessMaterial,
     fullLipsync,
     musicMood,
     audioUrl,
@@ -114,7 +108,6 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
     ok: true,
     value: {
       faceless,
-      facelessMaterial: facelessMaterial ?? 'broll',
       fullLipsync,
       musicMood,
       audioUrl,

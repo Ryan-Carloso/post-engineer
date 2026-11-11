@@ -1,4 +1,4 @@
-"""Lip-sync intro layout: how the persona hook meets the b-roll.
+"""Lip-sync intro layout: how the persona hook meets the background footage.
 
 Extracted from app.services.video so the video module stays under the
 file-size ratchet. The command builder takes the resolved codec, preset
@@ -13,7 +13,7 @@ LAYOUT_STANDARD = "standard"
 LAYOUT_REACT = "react"
 VIDEO_LAYOUTS = frozenset({LAYOUT_STANDARD, LAYOUT_REACT})
 
-# Divider drawn on the seam between the persona and the b-roll in the react
+# Divider drawn on the seam between the persona and the images in the react
 # layout. Without it the two blocks read as two videos stapled together; a 2px
 # line at the seam reads as one frame. Sized in output pixels so it stays the
 # same visual weight at any resolution.
@@ -22,7 +22,7 @@ REACT_DIVIDER_COLOR = "white@0.85"
 
 
 def _react_split_filter(width: int, height: int) -> str:
-    """Filter graph for the react layout: persona on top, b-roll below.
+    """Filter graph for the react layout: persona on top, images below.
 
     The persona block scales by WIDTH and is cropped from the top edge, so it
     keeps head and shoulders and drops the torso — the least valuable part of
@@ -35,12 +35,12 @@ def _react_split_filter(width: int, height: int) -> str:
     half = height // 2
     divider_y = half - REACT_DIVIDER_PX // 2
     return (
-        # b-roll (input 0) fills the lower block, cover-fit then centre-crop.
+        # background footage (input 0) fills the lower block, cover-fit then centre-crop.
         f"[0:v]scale={width}:{half}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{half},setsar=1[broll];"
+        f"crop={width}:{half},setsar=1[bg];"
         # persona (input 1): scale by width, crop the torso off the bottom.
         f"[1:v]scale={width}:-2,crop={width}:{half},setsar=1[avatar];"
-        f"[avatar][broll]vstack=inputs=2[stacked];"
+        f"[avatar][bg]vstack=inputs=2[stacked];"
         f"[stacked]drawbox=x=0:y={divider_y}:w={width}:h={REACT_DIVIDER_PX}"
         f":color={REACT_DIVIDER_COLOR}:t=fill[vout]"
     )
@@ -80,8 +80,8 @@ def _build_lipsync_intro_command(
             "-filter_complex",
             _react_split_filter(width, height),
             # Video from the filter output; audio from INPUT 1 (the persona).
-            # A Pexels b-roll clip carries its own audio, so mapping 0:a?
-            # buries the narration under stock footage sound.
+            # A background clip carries its own audio, so mapping 0:a?
+            # buries the narration under background footage sound.
             "-map",
             "[vout]",
             "-map",

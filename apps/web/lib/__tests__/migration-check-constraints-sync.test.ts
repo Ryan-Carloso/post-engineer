@@ -25,9 +25,10 @@ import { VIDEO_LAYOUTS } from '@/lib/persona-schema';
 // of parsing SQL, honors every drop/add and every `do $$ ... if not exists`
 // guard exactly as Postgres does. This test then pins:
 //
-//   1. every enum check (`col = ANY (ARRAY[...])`) found in the snapshot
-//      is registered below, so a new constraint cannot land without a
-//      pinned expected list;
+//   1. every enum check (`col = ANY (ARRAY[...])`, or the single-value
+//      form `col = 'value'` Postgres rewrites a one-element `IN (...)`
+//      into) found in the snapshot is registered below, so a new
+//      constraint cannot land without a pinned expected list;
 //   2. every registered constraint exists in the snapshot;
 //   3. the database list equals the code's list.
 //
@@ -58,10 +59,17 @@ function parseEnumChecks(): Map<string, EnumCheck> {
   for (const [table, definition] of Object.entries(snapshot.tables)) {
     for (const [name, text] of Object.entries(definition.constraints)) {
       if (!text.startsWith('CHECK')) continue;
-      const match = /(\w+) = ANY \(ARRAY\[([^\]]*)\]\)/.exec(text);
-      if (match === null) continue;
-      const values = [...match[2].matchAll(/'([^']*)'::text/g)].map((value) => value[1]);
-      checks.set(name, { table, column: match[1], values });
+      const list = /(\w+) = ANY \(ARRAY\[([^\]]*)\]\)/.exec(text);
+      if (list !== null) {
+        const values = [...list[2].matchAll(/'([^']*)'::text/g)].map((value) => value[1]);
+        checks.set(name, { table, column: list[1], values });
+        continue;
+      }
+      // Postgres rewrites a one-element `IN ('x')` as `col = 'x'::text`.
+      const single = /(\w+) = '([^']*)'::text/.exec(text);
+      if (single !== null) {
+        checks.set(name, { table, column: single[1], values: [single[2]] });
+      }
     }
   }
   return checks;
@@ -82,6 +90,9 @@ const EXPECTED: Record<string, readonly string[]> = {
   // No TypeScript list exists: the status is written by the engine voice
   // registration, so this literal is the pinned contract.
   cloned_voices_status_check: ['pending', 'ready', 'failed'],
+  // No TypeScript list exists: the experiment variable is always 'hook'
+  // (migration 041, issue #476), so this literal is the pinned contract.
+  experiments_variable_check: ['hook'],
 };
 
 describe('database enum checks match the code', () => {

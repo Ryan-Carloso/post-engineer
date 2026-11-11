@@ -10,14 +10,16 @@ const cta = 'Save this video before your next trip to Porto.';
 
 describe('validateSegments (shared module)', () => {
   it('accepts a valid hook, body and CTA and joins them with blank lines', () => {
+    // Full lip sync leaves media optional: these fixtures carry no media
+    // on purpose, so the content rules are what this pins.
     const segments = [
       { kind: 'hook', text: hook },
       { kind: 'body', text: body },
       { kind: 'cta', text: cta },
     ];
-    const result = validateSegments(segments);
+    const result = validateSegments(segments, true);
     expect(result.ok).toBe(true);
-    expect(joinSegments(segments)).toBe(`${hook}\n\n${body}\n\n${cta}`);
+    expect(joinSegments(segments, true)).toBe(`${hook}\n\n${body}\n\n${cta}`);
   });
 
   it('strips padding before joining, matching the engine join the TaskVideoRequest validator compares against', () => {
@@ -26,22 +28,7 @@ describe('validateSegments (shared module)', () => {
       { kind: 'body', text: `  ${body} ` },
       { kind: 'cta', text: `${cta}   ` },
     ];
-    expect(joinSegments(padded)).toBe(`${hook}\n\n${body}\n\n${cta}`);
-  });
-
-  it('rejects too many terms on a media-less segment, like the engine does', () => {
-    const result = validateSegments([
-      { kind: 'hook', text: hook },
-      {
-        kind: 'body',
-        text: body,
-        terms: ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven'],
-      },
-      { kind: 'cta', text: cta },
-    ]);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.field).toBe('segments.1.terms');
+    expect(joinSegments(padded, true)).toBe(`${hook}\n\n${body}\n\n${cta}`);
   });
 
   it('rejects a segment with an unknown key, like the engine does', () => {
@@ -56,11 +43,16 @@ describe('validateSegments (shared module)', () => {
   });
 
   it('rejects media with an unknown key, like the generation route does', () => {
-    const result = validateSegments([
-      { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
-      { kind: 'cta', text: cta },
-    ]);
+    // Full lip sync leaves the hook media optional, so the unknown key on
+    // the body is the error that fires.
+    const result = validateSegments(
+      [
+        { kind: 'hook', text: hook },
+        { kind: 'body', text: body, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
+        { kind: 'cta', text: cta },
+      ],
+      true,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.field).toBe('segments.1.media.0');
@@ -69,19 +61,25 @@ describe('validateSegments (shared module)', () => {
   it('does not treat double-space or underscore differences as repeats, like the engine does', () => {
     const baseBody =
       'The hello_world kitchen in Porto serves fresh fish with local bread and sweet dessert after lunch today while guests enjoy stories music and warm light before they walk home happy tonight.';
-    const doubleSpaced = validateSegments([
-      { kind: 'hook', text: hook },
-      { kind: 'body', text: baseBody },
-      { kind: 'body', text: baseBody.replace(/ /g, '  ') },
-      { kind: 'cta', text: cta },
-    ]);
+    const doubleSpaced = validateSegments(
+      [
+        { kind: 'hook', text: hook },
+        { kind: 'body', text: baseBody },
+        { kind: 'body', text: baseBody.replace(/ /g, '  ') },
+        { kind: 'cta', text: cta },
+      ],
+      true,
+    );
     expect(doubleSpaced.ok).toBe(true);
-    const underscore = validateSegments([
-      { kind: 'hook', text: hook },
-      { kind: 'body', text: baseBody },
-      { kind: 'body', text: baseBody.replace('hello_world', 'helloworld') },
-      { kind: 'cta', text: cta },
-    ]);
+    const underscore = validateSegments(
+      [
+        { kind: 'hook', text: hook },
+        { kind: 'body', text: baseBody },
+        { kind: 'body', text: baseBody.replace('hello_world', 'helloworld') },
+        { kind: 'cta', text: cta },
+      ],
+      true,
+    );
     expect(underscore.ok).toBe(true);
   });
 
@@ -104,21 +102,21 @@ describe('validateSegments (shared module)', () => {
       { kind: 'hook', text: hook },
       { kind: 'body', text: body, media: [{ mediaId: 'abc', url: '' }] },
       { kind: 'cta', text: cta },
-    ]);
+    ], true);
     expect(blankUrl.ok).toBe(false);
     if (!blankUrl.ok) expect(blankUrl.error.field).toBe('segments.1.media.0');
     const blankId = validateSegments([
       { kind: 'hook', text: hook },
       { kind: 'body', text: body, media: [{ mediaId: '   ' }] },
       { kind: 'cta', text: cta },
-    ]);
+    ], true);
     expect(blankId.ok).toBe(false);
     if (!blankId.ok) expect(blankId.error.field).toBe('segments.1.media.0');
     const nullMedia = validateSegments([
       { kind: 'hook', text: hook },
       { kind: 'body', text: body, media: null },
       { kind: 'cta', text: cta },
-    ]);
+    ], true);
     expect(nullMedia.ok).toBe(true);
   });
 
@@ -160,7 +158,7 @@ describe('validateSegments (shared module)', () => {
       });
     }
     mediaSegments.push({ kind: 'cta', text: 'Save this video now please.' });
-    const manyMedia = validateSegments(mediaSegments);
+    const manyMedia = validateSegments(mediaSegments, true);
     expect(manyMedia.ok).toBe(false);
     if (!manyMedia.ok) expect(manyMedia.error.rule).toBe('at most 6 medias are allowed per video');
   });
@@ -247,11 +245,16 @@ describe('validateSegments (fail paths reformatted by the shared copy)', () => {
   });
 
   it('rejects media with neither mediaId nor url', () => {
-    const result = validateSegments([
-      { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: [{}] },
-      { kind: 'cta', text: cta },
-    ]);
+    // Full lip sync leaves the hook media optional, so the empty media
+    // item on the body is the error that fires.
+    const result = validateSegments(
+      [
+        { kind: 'hook', text: hook },
+        { kind: 'body', text: body, media: [{}] },
+        { kind: 'cta', text: cta },
+      ],
+      true,
+    );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.field).toBe('segments.1.media.0');
   });

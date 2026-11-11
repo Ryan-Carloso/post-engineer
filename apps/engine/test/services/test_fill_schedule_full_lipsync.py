@@ -3,7 +3,7 @@
 scheduled_posts.full_lipsync (migration 035) is written by the web and
 must reach the engine request on the batch path too, or a tick-dispatched
 pending slot — or a slot requeued after an engine restart mid-generation
-— silently renders intro-only b-roll even though the user asked for the
+— silently renders intro-only even though the user asked for the
 whole video as talking head.
 """
 
@@ -27,9 +27,9 @@ def _slot(**extra):
         "slot_at": "2026-09-08T09:00:00+00:00",
         "title": "Batch title one",
         "segments": [
-            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-            {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-            {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.", "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}]},
+            {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.", "media": [{"url": "https://example.com/b0.jpg"}, {"url": "https://example.com/b1.jpg"}, {"url": "https://example.com/b2.jpg"}, {"url": "https://example.com/b3.jpg"}, {"url": "https://example.com/b4.jpg"}, {"url": "https://example.com/b5.jpg"}]},
+            {"kind": "cta", "text": "Save this video before your next trip to Porto.", "media": [{"url": "https://example.com/c0.jpg"}, {"url": "https://example.com/c1.jpg"}]},
         ],
         "schedules": {
             "id": "sched-1",
@@ -94,7 +94,12 @@ class BatchDispatchFullLipsyncTests(unittest.TestCase):
         return dispatch.call_args[0][1]
 
     def test_full_lipsync_slot_dispatches_full_lipsync(self):
-        request = self._dispatched_request(_slot(full_lipsync=True))
+        # Full lip sync needs no media (at most 6 photos for the whole
+        # video), so the slot dispatches with the media stripped.
+        slot = _slot(full_lipsync=True)
+        for segment in slot["segments"]:
+            segment.pop("media", None)
+        request = self._dispatched_request(slot)
         self.assertTrue(request.full_lipsync)
 
     def test_legacy_slot_without_the_column_dispatches_intro_only(self):

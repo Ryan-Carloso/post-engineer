@@ -3,8 +3,7 @@
 combine_videos trims the last clip of its first pass to the remaining budget,
 but when the material is short it looped WHOLE clips: a 6s clip could
 overshoot the voiceover by up to 6s of picture over silence (v14: 54.0s of
-video for a 49.4s voice). The loop now trims its last clip to the budget and
-never repeats a place photo (a photo shown eight times reads as a mistake).
+video for a 49.4s voice). The loop now trims its last clip to the budget.
 """
 
 import inspect
@@ -16,7 +15,6 @@ from unittest.mock import patch
 import pytest
 
 from app.services import image_material, video, video_loop
-from app.services.place_names import PHOTO_FILE_PREFIX
 from app.services.video import SubClippedVideoClip
 
 needs_ffmpeg = pytest.mark.skipif(
@@ -78,17 +76,8 @@ def test_a_sliver_under_a_few_hundredths_is_not_worth_a_clip():
     assert total == 13.97 and len(processed) == 1
 
 
-def test_place_photos_are_never_looped_when_drawings_exist():
-    photo = _clip("photo", 6, source=f"/src/{PHOTO_FILE_PREFIX}0.jpg.mp4")
-    processed = [photo, _clip("d", 6)]
-    total, _ = _extend(processed, 30.0)
-    assert total == pytest.approx(30.0)
-    assert [clip.source_file_path for clip in processed[2:]] == ["/src/d.mp4"] * 3
-
-
-def test_only_photos_still_loop_rather_than_leave_the_voice_uncovered():
-    photo = _clip("photo", 6, source=f"/src/{PHOTO_FILE_PREFIX}0.jpg.mp4")
-    processed = [photo]
+def test_a_single_clip_loops_rather_than_leave_the_voice_uncovered():
+    processed = [_clip("a", 6)]
     total, _ = _extend(processed, 12.0)
     assert total == pytest.approx(12.0) and len(processed) == 2
 
@@ -135,8 +124,8 @@ def test_combine_videos_loops_through_video_loop():
     assert "itertools.cycle(" not in source
 
 
-def test_a_photo_clip_is_named_after_its_still():
-    # video_loop finds photo clips by the name prefix of their SOURCE file: the
-    # clip rendered from place-photo-0.jpg must stay place-photo-0.jpg.mp4.
+def test_a_still_clip_is_named_after_its_still():
+    # image_material names the rendered clip after its still: the clip
+    # rendered from photo-0.jpg must stay photo-0.jpg.mp4.
     source = Path(image_material.__file__).read_text(encoding="utf-8")
     assert 'video_file = f"{image_path}.mp4"' in source

@@ -4,7 +4,7 @@ Every segment carries an image (validated before charging), and each photo
 is on screen for its segment's spoken interval (user_media). Two things can
 still leave a gap after TTS: the short pauses between segments, and a photo
 that is dropped (download failed, too small, could not be drawn). Nothing
-tops a gap up with stock, so the neighbour photo covers it:
+tops a gap up with fetched footage, so the neighbour photo covers it:
 
 - the first full-frame photo starts where the face hands over (0 on a
   faceless video, the hook's end on a hook-only persona video);

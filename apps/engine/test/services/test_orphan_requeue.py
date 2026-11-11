@@ -52,7 +52,6 @@ class ClassifyOrphanTests(unittest.TestCase):
     def test_generation_stages_with_slot_requeue(self):
         for stage in [
             "script",
-            "terms",
             "audio",
             "custom_audio",
             "subtitle",

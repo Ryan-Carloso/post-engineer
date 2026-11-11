@@ -100,9 +100,9 @@ class BatchScheduleTests(unittest.TestCase):
             "title": title,
             "charged_tokens": 2,
             "segments": [
-            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-            {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-            {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.", "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}]},
+            {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.", "media": [{"url": "https://example.com/b0.jpg"}, {"url": "https://example.com/b1.jpg"}, {"url": "https://example.com/b2.jpg"}, {"url": "https://example.com/b3.jpg"}, {"url": "https://example.com/b4.jpg"}, {"url": "https://example.com/b5.jpg"}]},
+            {"kind": "cta", "text": "Save this video before your next trip to Porto.", "media": [{"url": "https://example.com/c0.jpg"}, {"url": "https://example.com/c1.jpg"}]},
         ],
             "schedules": {
                 "id": "sched-batch-1",
@@ -282,9 +282,9 @@ class BatchScheduleTests(unittest.TestCase):
         slot = self._batch_slot()
         slot["title"] = "Porto trip"
         slot["segments"] = [
-            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-            {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-            {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.", "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}]},
+            {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.", "media": [{"url": "https://example.com/b0.jpg"}, {"url": "https://example.com/b1.jpg"}, {"url": "https://example.com/b2.jpg"}, {"url": "https://example.com/b3.jpg"}, {"url": "https://example.com/b4.jpg"}, {"url": "https://example.com/b5.jpg"}]},
+            {"kind": "cta", "text": "Save this video before your next trip to Porto.", "media": [{"url": "https://example.com/c0.jpg"}, {"url": "https://example.com/c1.jpg"}]},
         ]
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
@@ -440,10 +440,16 @@ class BatchScheduleTests(unittest.TestCase):
 
     def test_generate_batch_dispatch_failure_refunds_the_stored_charge(self):
         # A full lip-sync slot lists at 8; the slot stores what it was
-        # charged (8 here), and that is what comes back.
+        # charged (8 here), and that is what comes back. Full lip-sync
+        # needs no segment media (at most 6 photos per video), so the
+        # fixture's images-mode media is stripped here.
         slot = self._batch_slot()
         slot["full_lipsync"] = True
         slot["charged_tokens"] = 8
+        slot["segments"] = [
+            {key: value for key, value in segment.items() if key != "media"}
+            for segment in slot["segments"]
+        ]
         store = _FakeStore()
         store.pending_slots = lambda now: [slot]
         store.refund_batch_calls = []
@@ -1742,9 +1748,9 @@ class NotifyIntegrationTests(unittest.TestCase):
             "slot_at": "2026-09-07T12:00:00+00:00",
             "title": "Batch title one",
             "segments": [
-                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-                {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.", "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}]},
+                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.", "media": [{"url": "https://example.com/b0.jpg"}, {"url": "https://example.com/b1.jpg"}, {"url": "https://example.com/b2.jpg"}, {"url": "https://example.com/b3.jpg"}, {"url": "https://example.com/b4.jpg"}, {"url": "https://example.com/b5.jpg"}]},
+                {"kind": "cta", "text": "Save this video before your next trip to Porto.", "media": [{"url": "https://example.com/c0.jpg"}, {"url": "https://example.com/c1.jpg"}]},
             ],
             "schedules": {
                 "id": "sched-1",
@@ -1774,9 +1780,9 @@ class NotifyIntegrationTests(unittest.TestCase):
             "slot_at": "2026-09-07T12:00:00+00:00",
             "title": "Batch title",
             "segments": [
-                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-                {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.", "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}]},
+                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.", "media": [{"url": "https://example.com/b0.jpg"}, {"url": "https://example.com/b1.jpg"}, {"url": "https://example.com/b2.jpg"}, {"url": "https://example.com/b3.jpg"}, {"url": "https://example.com/b4.jpg"}, {"url": "https://example.com/b5.jpg"}]},
+                {"kind": "cta", "text": "Save this video before your next trip to Porto.", "media": [{"url": "https://example.com/c0.jpg"}, {"url": "https://example.com/c1.jpg"}]},
             ],
             "schedules": {
                 "id": "sched-2",
@@ -1809,9 +1815,9 @@ class NotifyIntegrationTests(unittest.TestCase):
             "slot_at": "2026-09-07T12:00:00+00:00",
             "title": "Batch title",
             "segments": [
-                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-                {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.", "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}]},
+                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.", "media": [{"url": "https://example.com/b0.jpg"}, {"url": "https://example.com/b1.jpg"}, {"url": "https://example.com/b2.jpg"}, {"url": "https://example.com/b3.jpg"}, {"url": "https://example.com/b4.jpg"}, {"url": "https://example.com/b5.jpg"}]},
+                {"kind": "cta", "text": "Save this video before your next trip to Porto.", "media": [{"url": "https://example.com/c0.jpg"}, {"url": "https://example.com/c1.jpg"}]},
             ],
             "schedules": {
                 "id": "sched-3",
@@ -1914,9 +1920,9 @@ class NotifyIntegrationTests(unittest.TestCase):
             "slot_at": "2026-09-07T12:00:00+00:00",
             "title": "Batch title",
             "segments": [
-                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-                {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.", "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}]},
+                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.", "media": [{"url": "https://example.com/b0.jpg"}, {"url": "https://example.com/b1.jpg"}, {"url": "https://example.com/b2.jpg"}, {"url": "https://example.com/b3.jpg"}, {"url": "https://example.com/b4.jpg"}, {"url": "https://example.com/b5.jpg"}]},
+                {"kind": "cta", "text": "Save this video before your next trip to Porto.", "media": [{"url": "https://example.com/c0.jpg"}, {"url": "https://example.com/c1.jpg"}]},
             ],
             "schedules": {
                 "id": "sched-1",
@@ -2035,7 +2041,7 @@ class CoverageGapTests(unittest.TestCase):
     def test_persona_params_faceless_drops_visual_identity(self):
         # A faceless post contributes only the voice: no avatar_url and no
         # photo_url even when the persona has both, so the engine renders
-        # stock footage. Voice resolution is unaffected.
+        # the agent's images. Voice resolution is unaffected.
         store = MagicMock()
         store.signed_url = MagicMock(side_effect=AssertionError("must not sign a photo for a faceless post"))
         params = fs.build_persona_params(
@@ -2566,9 +2572,9 @@ class CoverageGapTests(unittest.TestCase):
             "slot_at": "2026-09-07T12:00:00+00:00",
             "title": "Batch title",
             "segments": [
-                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-                {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+                {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.", "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}]},
+                {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.", "media": [{"url": "https://example.com/b0.jpg"}, {"url": "https://example.com/b1.jpg"}, {"url": "https://example.com/b2.jpg"}, {"url": "https://example.com/b3.jpg"}, {"url": "https://example.com/b4.jpg"}, {"url": "https://example.com/b5.jpg"}]},
+                {"kind": "cta", "text": "Save this video before your next trip to Porto.", "media": [{"url": "https://example.com/c0.jpg"}, {"url": "https://example.com/c1.jpg"}]},
             ],
             "schedules": {
                 "id": "sched-1",
@@ -2705,9 +2711,9 @@ class BatchDispatchTests(unittest.TestCase):
             "title": title,
             "charged_tokens": 2,
             "segments": [
-            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."},
-            {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."},
-            {"kind": "cta", "text": "Save this video before your next trip to Porto."},
+            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.", "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}]},
+            {"kind": "body", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.", "media": [{"url": "https://example.com/b0.jpg"}, {"url": "https://example.com/b1.jpg"}, {"url": "https://example.com/b2.jpg"}, {"url": "https://example.com/b3.jpg"}, {"url": "https://example.com/b4.jpg"}, {"url": "https://example.com/b5.jpg"}]},
+            {"kind": "cta", "text": "Save this video before your next trip to Porto.", "media": [{"url": "https://example.com/c0.jpg"}, {"url": "https://example.com/c1.jpg"}]},
         ],
             "schedules": {
                 "id": "sched-batch-1",

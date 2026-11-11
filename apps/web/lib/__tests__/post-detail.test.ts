@@ -67,7 +67,7 @@ const SLOT_ROW = {
   error: null,
   published_at: null,
   task_id: 'task-1',
-  faceless: false, faceless_material: 'svg',
+  faceless: false, faceless_material: 'images',
 };
 
 const SCHEDULE_ROW = {
@@ -129,7 +129,7 @@ describe('getSlotPost', () => {
     expect(detail?.slot.stage).toBe('video');
     expect(detail?.schedule.publishMode).toBe('scheduled');
     expect(detail?.persona?.name).toBe('Viva Leve');
-    expect(detail?.generation).toMatchObject({ faceless: false, material: 'svg' });
+    expect(detail?.generation).toMatchObject({ faceless: false, material: 'images' });
   });
 
   it('returns the schedule facebook page ids, empty when the column is absent', async () => {

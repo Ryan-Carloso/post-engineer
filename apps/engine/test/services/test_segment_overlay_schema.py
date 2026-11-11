@@ -81,16 +81,9 @@ def test_images_request_with_a_segment_missing_media_is_rejected():
         TaskVideoRequest(video_subject="Porto", faceless_material="images", segments=_request_segments(False))
 
 
-def test_images_request_without_segments_is_rejected():
-    import pydantic
-
-    from app.models.schema import TaskVideoRequest
-
-    with pytest.raises(pydantic.ValidationError, match="faceless_material images needs segments"):
-        TaskVideoRequest(video_subject="Porto", faceless_material="images", video_script="Some script.")
-
-
-def test_broll_request_without_segments_is_still_accepted():
+def test_request_without_segments_is_accepted_for_script_only_calls():
+    # Script-only direct/CLI calls carry no segments: the script is used
+    # as-is. Web, MCP and the batch pipeline always send segments.
     from app.models.schema import TaskVideoRequest
 
     assert TaskVideoRequest(video_subject="Porto", video_script="Some script.").segments is None

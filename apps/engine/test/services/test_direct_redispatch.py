@@ -136,17 +136,21 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         params = {
             "video_subject": "myth busting",
             "generation_id": "g1",
+            # Full lip-sync: a single legacy photo can never satisfy the
+            # images density rule on a long body, and media is optional here.
+            "full_lipsync": True,
             "segments": [
                 {
                     "kind": "hook",
                     "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time.",
+                    "media": [{"url": f"https://e.com/h{i}.jpg"} for i in range(3)],
                 },
                 {
                     "kind": "body",
                     "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold at sunset before heading home through the old town streets.",
                     "media": {"mediaId": "abc123def456abc123def456abc12345.jpg"},
                 },
-                {"kind": "cta", "text": "Follow for more Porto walks every week."},
+                {"kind": "cta", "text": "Follow for more Porto walks every week.", "media": [{"url": "https://e.com/c0.jpg"}]},
             ],
         }
         state = _state_with_rows([_row(params=params)])

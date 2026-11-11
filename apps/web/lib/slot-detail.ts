@@ -26,7 +26,7 @@ export interface ProgressHistoryEntry {
 // to feature-detect.
 export interface GenerationFacts {
   faceless: boolean;
-  /** Stock only, drawings only, or only the post's own images (migrations 029, 043); 'broll' for older posts. */
+  /** Only the post's own images (migrations 029, 043, 054); 'images' for older posts. */
   material: FacelessMaterial;
   language: string | null;
   voiceId: string | null;
@@ -99,7 +99,7 @@ export function narrowProgressHistory(value: unknown): ProgressHistoryEntry[] {
 export function narrowGeneration(value: unknown): GenerationFacts {
   const fallback: GenerationFacts = {
     faceless: false,
-    material: 'broll',
+    material: 'images',
     language: null,
     voiceId: null,
     videoAspect: null,

@@ -1,7 +1,7 @@
 """Fail a lip-sync job at the start when its persona image cannot be loaded.
 
-The persona image used to be downloaded only after the script, terms, TTS
-and stock-video stages had already run, so a dead image URL (HTTP 404/400)
+The persona image used to be downloaded only after the script, TTS
+and material stages had already run, so a dead image URL (HTTP 404/400)
 failed the job late, after spending LLM and TTS cost. Downloading it first
 fails the job before any of that. The file lands in the task directory and
 ``full_lipsync.resolve_persona_image`` reuses it, so the image is fetched

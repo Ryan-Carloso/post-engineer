@@ -87,9 +87,7 @@ export interface GeneratePersonaVideoInput {
   timezone?: string;
   options?: {
     faceless?: boolean;
-    /** Stock footage only ('broll'), drawn illustrations only ('svg') or only the segment images ('images'), with or without a face. */
-    facelessMaterial?: 'broll' | 'svg' | 'images';
-    /** Render the whole video as the persona talking, with no b-roll: every narration window is lip-synced to the persona face. Requires a persona with a photo and lip-sync enabled; cannot be combined with faceless. */
+    /** Render the whole video as the persona talking: every narration window is lip-synced to the persona face. Requires a persona with a photo and lip-sync enabled; cannot be combined with faceless. */
     fullLipsync?: boolean;
     /** Background-music mood: a mood from the engine BGM catalog, or "none" for explicit no music. Omitted lets the engine pick the first catalogued mood. */
     musicMood?: string;
@@ -107,7 +105,6 @@ export interface GeneratePersonaVideoInput {
       kind: 'hook' | 'body' | 'cta';
       text: string;
       media?: Array<{ mediaId?: string; url?: string; overlay?: { title: string; subtitle?: string; badge?: string } }>;
-      terms?: string[];
     }>;
   };
   /** Omitted: a UUID is generated per call, so a retry cannot double-generate. */

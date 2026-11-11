@@ -20,7 +20,6 @@ never spends a TTS call. The hook window constants come from
 import re
 from typing import Any, Callable, Sequence
 
-from app.services.faceless_material import IMAGES
 from app.services.image_density import MAX_IMAGES_MODE_MEDIAS, density_error
 from app.services.persona_hook import (
     PERSONA_HOOK_MAX_SECONDS,
@@ -28,9 +27,12 @@ from app.services.persona_hook import (
 )
 
 MAX_SEGMENTS = 12
+# Full lip-sync videos show the talking head, so segment photos are
+# optional panels: at most 6 per video. Every other video is built only
+# from the agent's segment images — the photos are the whole picture,
+# so the cap and the per-segment rhythm (one photo per ~3s) live in
+# image_density.
 MAX_MEDIAS = 6
-# Images material: the photos are the whole picture. The cap and the
-# per-segment rhythm (one photo per ~3s) live in image_density.
 MIN_TOTAL_WORDS = 60
 MAX_TOTAL_WORDS = 200
 MIN_BODY_WORDS = 30
@@ -38,7 +40,6 @@ MIN_CTA_WORDS = 5
 MAX_CTA_WORDS = 20
 MIN_HOOK_WORDS = 15
 MAX_HOOK_WORDS = 40
-MAX_TERMS_PER_SEGMENT = 10
 # The info card painted inside a segment photo's panel (media_overlay). The limits are
 # what the card can show at a readable size; the TS validators and the
 # MCP schema pin the same numbers (see shared/script-segments).
@@ -258,7 +259,7 @@ def legacy_media_list(segments: Any) -> Any:
     return normalized
 
 
-def validate_segments(segments: Any, material: str = "broll") -> dict[str, Any]:
+def validate_segments(segments: Any, full_lipsync: bool = False) -> dict[str, Any]:
     """Validate segments in rule order and return the normalized result.
 
     Rule order is deliberate: shape, then forbidden content, then hook
@@ -267,9 +268,11 @@ def validate_segments(segments: Any, material: str = "broll") -> dict[str, Any]:
     A caller that fixes the first reported error and resubmits converges
     without guessing.
 
-    With the "images" material every segment must carry media (the photos
-    are the whole picture, nothing tops them up). Each segment needs about
-    one image per 3 seconds of speech, and the video cap is 30 images.
+    Every segment must carry media (the photos are the whole picture,
+    nothing tops them up). Each segment needs about one image per 3
+    seconds of speech, and the video cap is 30 images. A full lip-sync
+    video is the exception: it shows the talking head, so segment photos
+    are optional panels capped at 6 per video.
     """
     if not isinstance(segments, list) or not segments:
         raise SegmentValidationError(
@@ -285,7 +288,7 @@ def validate_segments(segments: Any, material: str = "broll") -> dict[str, Any]:
             raise SegmentValidationError(
                 field, "Segment must be an object.", "Send each segment as { kind, text }."
             )
-        unknown = sorted(set(segment) - {"kind", "text", "media", "terms"})
+        unknown = sorted(set(segment) - {"kind", "text", "media"})
         if unknown:
             raise SegmentValidationError(
                 field,
@@ -309,18 +312,6 @@ def validate_segments(segments: Any, material: str = "broll") -> dict[str, Any]:
             )
         texts.append(text.strip())
         _check_text_content(text, f"{field}.text")
-        terms = segment.get("terms")
-        if terms is not None:
-            if (
-                not isinstance(terms, list)
-                or len(terms) > MAX_TERMS_PER_SEGMENT
-                or any(not isinstance(term, str) or not term.strip() for term in terms)
-            ):
-                raise SegmentValidationError(
-                    f"{field}.terms",
-                    "Terms must be a list of non-empty strings.",
-                    "Send terms as a short list of non-empty search terms.",
-                )
     if kinds[0] != "hook":
         raise SegmentValidationError(
             "segments.0.kind",
@@ -404,7 +395,7 @@ def validate_segments(segments: Any, material: str = "broll") -> dict[str, Any]:
             f"At most {MAX_SEGMENTS} segments are allowed.",
             "Merge segments until there are at most 12.",
         )
-    images_mode = material == IMAGES
+    images_mode = not full_lipsync
     media_cap = MAX_IMAGES_MODE_MEDIAS if images_mode else MAX_MEDIAS
     media_count = 0
     seen_photos: set[tuple[str, str]] = set()
@@ -416,7 +407,7 @@ def validate_segments(segments: Any, material: str = "broll") -> dict[str, Any]:
             raise SegmentValidationError(
                 f"segments.{index}.media",
                 "The images material needs media on every segment.",
-                "Send images for this segment as a list of { mediaId } or { url }, or use another material.",
+                "Send images for this segment as a list of { mediaId } or { url }.",
             )
         if images_mode and counted > 0:
             problem = density_error(_word_count(texts[index]), counted)
@@ -450,7 +441,7 @@ def validate_segments(segments: Any, material: str = "broll") -> dict[str, Any]:
     }
 
 
-def segments_to_script(segments: Sequence[dict[str, Any]], material: str = "broll") -> str:
+def segments_to_script(segments: Sequence[dict[str, Any]], full_lipsync: bool = False) -> str:
     """Validate and join segment texts into the single spoken script.
 
     This function runs the full mechanical validation itself and raises
@@ -458,7 +449,7 @@ def segments_to_script(segments: Sequence[dict[str, Any]], material: str = "brol
     body paragraphs, and CTA with blank lines, which is the paragraph
     layout the existing TTS and subtitle pipeline reads.
     """
-    validated = validate_segments(list(segments), material)
+    validated = validate_segments(list(segments), full_lipsync)
     parts = [validated["hook_text"], *validated["body_texts"], validated["cta_text"]]
     return "\n\n".join(parts)
 

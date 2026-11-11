@@ -241,7 +241,6 @@ class StartNoLlmMusicSocialScanTests(unittest.TestCase):
         self.assertIn("generate_music_mood", offenders[0])
 
     def test_scan_ignores_llm_calls_outside_start(self):
-        # The pin's scope stays start() only, even though generate_terms
-        # no longer calls the LLM either (Phase 5 PR 6).
-        src = "def generate_terms(task_id):\n    return llm.generate_social_metadata(subject='x')\n"
+        # The pin's scope stays start() only.
+        src = "def generate_audio(task_id):\n    return llm.generate_social_metadata(subject='x')\n"
         self.assertEqual(_llm_music_social_calls_in_start(src), [])

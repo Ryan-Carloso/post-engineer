@@ -1,7 +1,7 @@
 """Persona image preflight: a dead image URL fails the job at the start.
 
-Before the preflight the image was downloaded only after the script, terms,
-TTS and stock-video stages, so a 404/400 image failed the job late, after
+Before the preflight the image was downloaded only after the script, TTS
+and material stages, so a 404/400 image failed the job late, after
 spending LLM and TTS cost. These tests pin: the preflight only acts for an
 active lip-sync persona, the download happens once per task, and a failed
 download aborts start() before any generation stage runs.

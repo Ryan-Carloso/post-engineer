@@ -7,12 +7,14 @@ import { findRepoRoot } from '@/test/repo-root';
 // scheduled_posts.faceless_material — written by generate-and-schedule at
 // slot creation and read by the engine batch pipeline. The insert key must
 // exist in the schema, and the CHECK must allow exactly the values the API
-// accepts, or a valid "svg" or "images" post fails its slot insert.
+// accepts, or a valid "images" post fails its slot insert. Migration 054
+// (issue #542) backfilled every stored row to 'images' and narrowed the
+// check to that one value.
 //---------------
 const root = findRepoRoot(import.meta.url);
 const migration = readFileSync(join(root, 'supabase/migrations/029_scheduled-posts-material.sql'), 'utf8');
-// 043 drops and re-adds the 029 check with 'images' (issue #481).
-const imagesMigration = readFileSync(join(root, 'supabase/migrations/043_scheduled-posts-images-material.sql'), 'utf8');
+// 054 drops and re-adds the 043 check with 'images' only (issue #542).
+const imagesMigration = readFileSync(join(root, 'supabase/migrations/054_scheduled-posts-images-only-material.sql'), 'utf8');
 const route = readFileSync(join(root, 'apps/web/app/api/videos/generate-and-schedule/route.ts'), 'utf8');
 const slotRows = readFileSync(join(root, 'apps/web/app/api/videos/generate-and-schedule/slot-rows.ts'), 'utf8');
 
@@ -24,17 +26,16 @@ describe('scheduled_posts.faceless_material', () => {
 
   it('allows exactly the values the API accepts', () => {
     expect(imagesMigration).toContain('drop constraint if exists scheduled_posts_faceless_material_check');
-    expect(imagesMigration).toContain("check (faceless_material in ('broll', 'svg', 'images'))");
-    // The route validates through the shared FACELESS_MATERIALS list, not
-    // an inline literal — pin the list and the enum call, so a one-sided
-    // change still fails here.
+    expect(imagesMigration).toContain("check (faceless_material in ('images'))");
+    // The material is no longer a user choice: pin the narrowed list and
+    // the literal the route sends, so a one-sided change still fails here.
     const materials = readFileSync(join(root, 'apps/web/lib/generation/faceless-materials.ts'), 'utf8');
-    expect(materials).toContain("export const FACELESS_MATERIALS = ['broll', 'svg', 'images'] as const;");
-    expect(route).toContain('facelessMaterial: z.enum(FACELESS_MATERIALS).optional()');
+    expect(materials).toContain("export const FACELESS_MATERIALS = ['images'] as const;");
+    expect(route).toContain("faceless_material: 'images',");
   });
 
   it('is written on every slot insert', () => {
-    expect(slotRows).toContain('faceless_material: input.facelessMaterial,');
+    expect(slotRows).toContain("faceless_material: 'images',");
     expect(route).toContain('buildSlotRows({');
   });
 });

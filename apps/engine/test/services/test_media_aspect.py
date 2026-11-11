@@ -1,6 +1,6 @@
 """media_aspect: one ratio rule for every agent image shown full-frame.
 
-The rule is the stock rule from material_verification: a photo narrower
+The rule is the letterbox rule from letterbox.py: a photo narrower
 than the canvas (pillarbox) is always rejected; a wider photo is
 accepted only while the horizontal bars stay within MAX_LETTERBOX_BARS.
 """

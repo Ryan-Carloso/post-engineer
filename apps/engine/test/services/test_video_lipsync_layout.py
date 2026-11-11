@@ -5,9 +5,9 @@ the filter graph is the contract, and argv assertions are what pin it. A real
 render is covered separately in test_video_lipsync_splice.py's style, which
 needs committed fixtures.
 
-The bug this guards hardest is the audio map. A Pexels background clip HAS its
+The bug this guards hardest is the audio map. A background clip HAS its
 own audio track, so `-map 0:a?` silently produces a video where the persona
-speaks over stock footage audio. The prototype hit exactly that.
+speaks over the background clip's audio. The prototype hit exactly that.
 """
 
 import os
@@ -76,7 +76,7 @@ class LayoutCommandTest(unittest.TestCase):
     # react layout
     # ------------------------------------------------------------------
 
-    def test_react_vstacks_avatar_over_broll(self) -> None:
+    def test_react_vstacks_avatar_over_background(self) -> None:
         vd.compose_lipsync_layout(
             background_video="bg.mp4",
             lipsync_video="face.mp4",
@@ -118,10 +118,10 @@ class LayoutCommandTest(unittest.TestCase):
         self.assertIn("y=958", graph)
 
     def test_react_maps_audio_from_the_lipsync_input(self) -> None:
-        """Input 1 is the avatar. Input 0 is the Pexels clip, which has sound.
+        """Input 1 is the avatar. Input 0 is the background clip, which has sound.
 
         Mapping 0:a? produces a video where the narration is drowned by the
-        stock footage's own audio. This is the assertion that keeps that from
+        background clip's own audio. This is the assertion that keeps that from
         coming back.
         """
         vd.compose_lipsync_layout(
@@ -153,7 +153,7 @@ class LayoutCommandTest(unittest.TestCase):
             self.assertNotIn("vstack", joined)
 
     def test_standard_layout_keeps_the_splice_tail(self) -> None:
-        """standard still splices: intro replaces the head of the b-roll."""
+        """standard still splices: intro replaces the head of the background footage."""
         vd.compose_lipsync_layout(
             background_video="bg.mp4",
             lipsync_video="face.mp4",
