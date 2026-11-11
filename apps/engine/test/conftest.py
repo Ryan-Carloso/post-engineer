@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.config import config
 from app.services import analytics
 
 
