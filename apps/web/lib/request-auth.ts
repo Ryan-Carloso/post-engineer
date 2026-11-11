@@ -8,6 +8,7 @@ import { getOAuthKeys } from '@/lib/oauth/keys';
 import { verifyAccessToken } from '@/lib/oauth/tokens';
 import { getMcpResource } from '@/lib/oauth/config';
 import { trackMcpToolCall } from '@/lib/mcp-tool-telemetry';
+import { checkMcpVersion } from '@/lib/mcp-version-gate';
 
 interface SupabaseSessionAuth {
   userId: string;
@@ -45,6 +46,11 @@ export type SupabaseSessionAuthResult =
 
 export async function requireSupabaseSession(request?: Request): Promise<SupabaseSessionAuthResult> {
   if (request) {
+    // A request from an MCP whose version differs from the one this deploy
+    // requires is refused before any credential lookup (mcp-version-gate.ts).
+    const versionMismatch = checkMcpVersion(request);
+    if (versionMismatch !== null) return { auth: null, error: versionMismatch };
+
     const authHeader = request.headers.get('authorization');
     const xApiKey = request.headers.get('x-api-key');
     let candidateKey: string | null = null;

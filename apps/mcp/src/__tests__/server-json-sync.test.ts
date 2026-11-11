@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest';
 
 // server.json is the MCP Registry metadata. The registry rejects a publish
 // whose name differs from package.json mcpName, and release-mcp.yml refuses
-// to publish when the versions drift, so pin both here (and the auto-bump
-// workflow that rewrites them) before a release ever runs.
+// to publish when the versions drift, so pin both here (and the release
+// stamp script that rewrites them) before a release ever runs.
 const here = dirname(fileURLToPath(import.meta.url));
 const mcpRoot = join(here, '..', '..');
 const repoRoot = join(mcpRoot, '..', '..');
@@ -59,26 +59,25 @@ describe('server.json (MCP Registry metadata)', () => {
   });
 });
 
-describe('release workflows keep server.json in step', () => {
-  const autoBump = readFileSync(join(repoRoot, '.github/workflows/release-mcp-auto.yml'), 'utf8');
+describe('release workflow keeps server.json in step', () => {
   const release = readFileSync(join(repoRoot, '.github/workflows/release-mcp.yml'), 'utf8');
+  const stamp = readFileSync(join(repoRoot, '.github/scripts/mcp-release-stamp.sh'), 'utf8');
 
-  it('auto-bump rewrites both server.json versions and stages the file', () => {
-    expect(autoBump.includes('server.version = version;')).toBe(true);
-    expect(autoBump.includes('server.packages[0].version = version;')).toBe(true);
-    expect(autoBump.includes('git add apps/mcp/package.json apps/mcp/server.json')).toBe(true);
+  it('the stamp rewrites package.json and both server.json versions', () => {
+    expect(stamp.includes('pkg.version = version;')).toBe(true);
+    expect(stamp.includes('server.version = version;')).toBe(true);
+    expect(stamp.includes('server.packages[0].version = version;')).toBe(true);
   });
 
-  it('auto-release treats a package.json edit without a new version as a real change', () => {
-    expect(autoBump.includes('if [ "$OLD_VERSION" = "$NEW_PKG_VERSION" ]; then')).toBe(true);
-  });
-
-  it('auto-release still releases a merge that changes server.json without package.json', () => {
-    expect(
-      autoBump.includes(
-        `elif [ "$PKG_CHANGED" = "no" ] && printf '%s\\n' "$CHANGED" | grep -qx 'apps/mcp/server.json'; then`,
-      ),
-    ).toBe(true);
+  it('stamps before building, and in the registry job before publishing metadata', () => {
+    const stampStep = release.indexOf('bash .github/scripts/mcp-release-stamp.sh');
+    const build = release.indexOf('run: pnpm build');
+    expect(stampStep).toBeGreaterThan(-1);
+    expect(stampStep).toBeLessThan(build);
+    const registryJob = release.indexOf('\n  registry:\n');
+    const registryStamp = release.indexOf('bash .github/scripts/mcp-release-stamp.sh', registryJob);
+    expect(registryStamp).toBeGreaterThan(registryJob);
+    expect(registryStamp).toBeLessThan(release.indexOf('./mcp-publisher publish'));
   });
 
   it('release publishes to the MCP Registry after npm, with OIDC login', () => {

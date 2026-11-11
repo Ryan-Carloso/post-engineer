@@ -76,6 +76,8 @@ Replace `<MY_API_KEY>` with the key you generated on https://post-engineer.com/r
 
 > The `@latest` tag matters: `npx` caches the package on first run and reuses the cached copy on later runs without checking for updates. Without `@latest` you can stay stuck on an old version (e.g. pre-1.12.0 tools that no longer exist server-side) with no error telling you why.
 
+> **The server accepts exactly one MCP version.** Every release of this package ships together with the server that expects it, and any other version gets HTTP 426 `MCP_VERSION_MISMATCH` on every call, with the exact version to install (for example `npx -y post-engineer-mcp@1.52.560`). A long-running agent keeps the version it started with, so restart the MCP when you see that error; with `@latest` the restart picks up the right version. Versions are `MAJOR.MINOR.PR`: the patch number is the pull request that last changed this package.
+
 ### OpenCode
 
 OpenCode uses `mcp` instead of `mcpServers`. Its local MCP tool-discovery timeout defaults to 5 seconds, which can be too short while `npx` downloads the package on the first launch. Set a longer timeout:

@@ -1,103 +1,119 @@
 name: release-mcp
 
-# Publishes post-engineer-mcp to npm via trusted publishing (GitHub OIDC, no token).
-#
-# How to cut a release (after the changes are merged to main):
-#   AUTOMATIC (preferred): the release-mcp-auto.yml workflow tags every main
-#   merge that touches apps/mcp/ — no manual steps needed. When the tag for
-#   the current version already exists, it opens a minor version-bump PR
-#   with auto-merge enabled instead of skipping; merging that PR tags the
-#   new version. A merge that touches only apps/mcp/package.json is tagged
-#   directly, so a version-bump PR publishes on merge with no manual tag.
-#   NOTE: the auto workflow pushes tags with MCP_RELEASE_TOKEN (a
-#   fine-grained PAT), never with GITHUB_TOKEN — GitHub does not start
-#   workflow runs for events created with GITHUB_TOKEN, so a tag pushed
-#   with it would never start this workflow. If that secret is missing,
-#   the auto job fails loudly instead of pushing anything.
-#   MANUAL (fallback):
-#     1. Bump the version in apps/mcp/package.json (e.g. 1.2.0 -> 1.3.0) AND
-#        both version fields in apps/mcp/server.json (version and
-#        packages[0].version), then push.
-#     2. git tag -a mcp-v1.3.0 -m "post-engineer-mcp v1.3.0"
-#     3. git push origin mcp-v1.3.0
-#   REGISTRY-ONLY RE-PUBLISH (manual): if the npm publish succeeded but the
-#   MCP Registry step failed — e.g. the npm-propagation 404 that failed
-#   every release from 1.39.0 to 1.42.0 while the Registry stayed on 1.32.0 —
-#   re-run ONLY the registry publish without touching npm: Actions ->
-#   release-mcp -> Run workflow -> tag mcp-vX.Y.Z
-#   (or: gh workflow run release-mcp.yml --ref main -f tag=mcp-vX.Y.Z).
-#   The tag must already exist and the version must already be on npm; the
-#   npm publish step is skipped on workflow_dispatch.
-# The registry publish waits for npm to serve the new version (up to 10
-# minutes) and retries the publish up to 3 times: the Registry verifies the
-# version against npm and 404s until it propagates, and the publish step
-# runs seconds after `npm publish` otherwise.
-#
-# The tag version MUST match apps/mcp/package.json, and server.json must
-# match package.json (name and both versions), or the job fails before
-# publishing. One-time npm setup required: on npmjs.com, add this repo as a
-# trusted publisher for the post-engineer-mcp package
+# Publishes post-engineer-mcp to npm via trusted publishing (GitHub OIDC, no
+# token), then to the official MCP Registry. The filename is load-bearing:
+# npm's trusted publisher for the package names this exact workflow file
 # (org Ryan-Carloso, repo post-engineer, workflow release-mcp.yml).
+#
+# VERSION — generated, never committed (.github/scripts/mcp-release-version.sh):
+#   MAJOR.MINOR from apps/mcp/package.json + the number of the merged PR that
+#   introduced the last commit touching apps/mcp/ (e.g. 1.52.560). No
+#   version-bump commit, no bump PR, no manual tag. The publish job stamps the
+#   version into package.json/server.json in its own workspace only.
+#
+# ONE VERSION, WEB AND MCP — the web accepts exactly one MCP version
+# (apps/web/lib/mcp-version-gate.ts, X-MCP-Version vs REQUIRED_MCP_VERSION).
+# The VPS deploy (deployment repo, deploy.sh) computes REQUIRED_MCP_VERSION
+# with the same rule and deploys the web only once npm serves it, so a failed
+# publish leaves the previous web (and the previous MCP) running instead of
+# locking every agent out.
+#
+# SELF-HEALING — the run is level-triggered, like the deploy's .deploy-state:
+# on every push to main that touches apps/mcp/, every 10 minutes, and on
+# demand, it computes the version for main's HEAD and asks npm whether it
+# already exists. Present: the run ends in seconds. Missing: build, test,
+# publish. A transient npm or GitHub failure is retried by the next tick
+# without anyone re-running anything; only a real breakage needs a human,
+# and the deploy reports that wait on Discord.
+#
+# The MCP Registry (metadata only) runs in its own job after npm and never
+# affects the deploy. If it fails, re-run it with Run workflow ->
+# republish_registry.
 
 on:
   push:
-    tags:
-      - 'mcp-v*'
+    branches: [main]
+    paths:
+      - 'apps/mcp/**'
+  schedule:
+    - cron: '*/10 * * * *'
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Tag to re-publish to the MCP Registry only, e.g. mcp-v1.42.0. Skips npm publish; the version must already be on npm.'
-        required: true
-        type: string
+      republish_registry:
+        description: 'Publish the current version to the MCP Registry even when npm already has it.'
+        required: false
+        type: boolean
+        default: false
+
+# One release at a time: a push run and a scheduled run must never publish
+# the same version concurrently.
+concurrency:
+  group: mcp-release
+  cancel-in-progress: false
 
 permissions:
   contents: read
-  id-token: write # required for npm trusted publishing / provenance
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    defaults:
-      run:
-        shell: bash
-        working-directory: apps/mcp
+    permissions:
+      contents: write # push the mcp-v<version> tag
+      id-token: write # npm trusted publishing / provenance
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      published_now: ${{ steps.published.outputs.published_now }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
         with:
-          # Tag pushes check out the tag; a manual registry-only re-publish
-          # checks out the tag given as input instead.
-          ref: ${{ inputs.tag || github.ref }}
+          # Always main's HEAD: a scheduled or re-run job publishes what is
+          # merged now, which is also what the deploy computes.
+          ref: main
+          # git log over apps/mcp/ needs the history.
+          fetch-depth: 0
 
-      - name: Verify tag matches package version
+      - name: Resolve the release version
+        id: version
         env:
-          # Passed via env, never interpolated into the script: a dispatch
-          # input is free text and must not reach the shell unquoted.
-          INPUT_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ -n "$INPUT_TAG" ]; then
-            if ! printf '%s' "$INPUT_TAG" | grep -qE '^mcp-v[0-9]+\.[0-9]+\.[0-9]+$'; then
-              echo "::error::inputs.tag must look like mcp-v1.2.3, got '${INPUT_TAG}'."
+          VERSION="$(bash .github/scripts/mcp-release-version.sh)"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "post-engineer-mcp release version: ${VERSION}"
+
+      - name: Check whether npm already serves this version
+        id: npm
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          status="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "https://registry.npmjs.org/post-engineer-mcp/${VERSION}" || true)"
+          case "$status" in
+            200)
+              echo "exists=true" >> "$GITHUB_OUTPUT"
+              echo "npm already serves post-engineer-mcp@${VERSION}: nothing to publish."
+              ;;
+            404)
+              echo "exists=false" >> "$GITHUB_OUTPUT"
+              echo "npm does not serve post-engineer-mcp@${VERSION} yet: publishing."
+              ;;
+            *)
+              # Neither answer is trustworthy: never publish on a guess. The
+              # next scheduled run asks again.
+              echo "::error::npm answered HTTP ${status:-none} for post-engineer-mcp@${VERSION}; the next run retries."
               exit 1
-            fi
-            TAG_VERSION="${INPUT_TAG#mcp-v}"
-          else
-            TAG_VERSION="${GITHUB_REF_NAME#mcp-v}"
-          fi
-          PKG_VERSION="$(node -p "require('./package.json').version")"
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::Tag mcp-v${TAG_VERSION} does not match apps/mcp/package.json version ${PKG_VERSION}. Bump the version first, then tag."
-            exit 1
-          fi
-          echo "Releasing post-engineer-mcp v${PKG_VERSION}"
-          echo "PKG_VERSION=${PKG_VERSION}" >> "$GITHUB_ENV"
+              ;;
+          esac
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        if: steps.npm.outputs.exists == 'false'
         with:
           version: 10.22.0
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.npm.outputs.exists == 'false'
         with:
           node-version: '22'
           cache: pnpm
@@ -105,52 +121,120 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
+        if: steps.npm.outputs.exists == 'false'
         run: pnpm install --frozen-lockfile
 
+      - name: Stamp the release version
+        if: steps.npm.outputs.exists == 'false'
+        run: bash .github/scripts/mcp-release-stamp.sh "${{ steps.version.outputs.version }}"
+
       - name: Build
+        if: steps.npm.outputs.exists == 'false'
+        working-directory: apps/mcp
         run: pnpm build
 
       - name: Lint
+        if: steps.npm.outputs.exists == 'false'
+        working-directory: apps/mcp
         run: pnpm lint
 
       - name: Typecheck
+        if: steps.npm.outputs.exists == 'false'
+        working-directory: apps/mcp
         run: pnpm exec nx run mcp:typecheck
 
       - name: Unit tests
+        if: steps.npm.outputs.exists == 'false'
+        working-directory: apps/mcp
         run: pnpm test
 
       # Before npm publish: a server.json drift must stop the release before
-      # anything ships, not leave npm ahead of a skipped registry publish.
+      # anything ships, not leave npm ahead of the registry metadata.
       - name: Verify server.json matches the package
+        if: steps.npm.outputs.exists == 'false'
+        working-directory: apps/mcp
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           node -e "
             const pkg = require('./package.json');
             const server = require('./server.json');
+            const version = process.env.VERSION;
             const fail = (msg) => { console.error('::error::' + msg); process.exit(1); };
+            if (pkg.version !== version) fail('package.json version ' + pkg.version + ' != release version ' + version);
             if (server.name !== pkg.mcpName) fail('server.json name ' + server.name + ' != package.json mcpName ' + pkg.mcpName);
             if (server.version !== pkg.version) fail('server.json version ' + server.version + ' != package.json version ' + pkg.version);
             if (server.packages[0].version !== pkg.version) fail('server.json packages[0].version != package.json version');
           "
 
       - name: Publish to npm (trusted publishing)
-        # A manual registry-only re-publish must never re-run npm publish:
-        # the version is already on npm and publish would fail as duplicate.
-        if: github.event_name == 'push'
+        if: steps.npm.outputs.exists == 'false'
+        working-directory: apps/mcp
         run: |
           set -euo pipefail
           # npm CLI bundled with Node 22 predates OIDC trusted publishing; upgrade first.
           npm install -g npm@latest
           npm publish --provenance --access public
 
-      # The official MCP Registry stores metadata only and verifies it
-      # against the npm package just published (mcpName in package.json
-      # must equal server.json name). GitHub OIDC login needs no secret:
-      # the id-token: write permission above covers it.
+      - name: Record the publish
+        id: published
+        if: steps.npm.outputs.exists == 'false'
+        run: echo "published_now=true" >> "$GITHUB_OUTPUT"
+
+      # Idempotent and run on every tick, so a tag push that failed after a
+      # successful npm publish is created by the next run instead of never.
+      # The tag marks the commit the version was computed from; the stamped
+      # package.json is never committed.
+      - name: Tag the release
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if ! curl -sf -o /dev/null --max-time 30 "https://registry.npmjs.org/post-engineer-mcp/${VERSION}"; then
+            echo "npm does not serve ${VERSION} yet: the tag waits for the next run."
+            exit 0
+          fi
+          TAG="mcp-v${VERSION}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" > /dev/null; then
+            echo "${TAG} already exists."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          SHA="$(git log -1 --format=%H -- apps/mcp/)"
+          git tag -a "${TAG}" -m "post-engineer-mcp v${VERSION}" "${SHA}"
+          git push origin "${TAG}"
+          echo "Pushed ${TAG}."
+
+  registry:
+    needs: publish
+    if: needs.publish.outputs.published_now == 'true' || (github.event_name == 'workflow_dispatch' && inputs.republish_registry)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write # MCP Registry GitHub OIDC login
+    defaults:
+      run:
+        shell: bash
+    env:
+      PKG_VERSION: ${{ needs.publish.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+        with:
+          ref: main
+
+      # The registry reads server.json from the working directory, so it
+      # needs the same stamped version npm received.
+      - name: Stamp the release version
+        run: bash .github/scripts/mcp-release-stamp.sh "${PKG_VERSION}"
+
       # Pinned by SHA-256 like the SHA-pinned actions: this job holds
       # id-token: write, so a re-pointed release tag must not run here.
       # Hash computed from the v1.8.7 tarball when it was pinned.
       - name: Install mcp-publisher
+        working-directory: apps/mcp
         run: |
           set -euo pipefail
           curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.7/mcp-publisher_linux_amd64.tar.gz" -o "$RUNNER_TEMP/mcp-publisher.tar.gz"
@@ -181,6 +265,7 @@ jobs:
           exit 1
 
       - name: Publish to the MCP Registry
+        working-directory: apps/mcp
         run: |
           set -euo pipefail
           # The Registry re-validates the npm version on every attempt, so a

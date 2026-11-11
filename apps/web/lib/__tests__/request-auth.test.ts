@@ -255,3 +255,71 @@ describe('requireSupabaseSession with OAuth access tokens', () => {
     expect(result.error?.status).toBe(401);
   });
 });
+
+describe('requireSupabaseSession MCP version gate', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    trackMcpToolCall.mockClear();
+    vi.stubEnv('REQUIRED_MCP_VERSION', '1.52.560');
+  });
+
+  afterAll(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('rejects a mismatched MCP with 426 before resolving its API key', async () => {
+    const resolveApiKey = vi.spyOn(apiKeysModule, 'resolveApiKey');
+    const request = new Request('http://localhost:3434/api/account', {
+      headers: {
+        authorization: 'Bearer pe_live_1234567890abcdef1234567890abcdef',
+        'x-mcp-version': '1.52.0',
+      },
+    });
+
+    const result = await requireSupabaseSession(request);
+    expect(result.auth).toBeNull();
+    expect(result.error?.status).toBe(426);
+    const json = (await result.error?.json()) as Record<string, unknown>;
+    expect(json.code).toBe('MCP_VERSION_MISMATCH');
+    expect(json.requiredVersion).toBe('1.52.560');
+    expect(resolveApiKey).not.toHaveBeenCalled();
+    expect(trackMcpToolCall).not.toHaveBeenCalled();
+  });
+
+  it('authenticates an MCP whose version matches', async () => {
+    vi.mocked(createSupabaseServiceClient).mockReturnValue({} as unknown as SupabaseClient);
+    vi.spyOn(apiKeysModule, 'resolveApiKey').mockResolvedValue({
+      userId: 'user-api-key-123',
+      keyId: 'key-1',
+      personaIds: null,
+    });
+    const request = new Request('http://localhost:3434/api/account', {
+      headers: {
+        authorization: 'Bearer pe_live_1234567890abcdef1234567890abcdef',
+        'x-mcp-version': '1.52.560',
+      },
+    });
+
+    const result = await requireSupabaseSession(request);
+    expect(result.error).toBeNull();
+    expect(result.auth?.userId).toBe('user-api-key-123');
+  });
+
+  it('never gates a cookie session request that sends no MCP version', async () => {
+    vi.stubEnv('REQUIRED_MCP_VERSION', undefined);
+    const mockServerClient = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'user-cookie-456' } }, error: null }),
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { access_token: 'cookie-session-token' } },
+          error: null,
+        }),
+      },
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(mockServerClient as unknown as SupabaseClient);
+
+    const result = await requireSupabaseSession(new Request('http://localhost:3434/api/persona/list'));
+    expect(result.error).toBeNull();
+    expect(result.auth?.userId).toBe('user-cookie-456');
+  });
+});

@@ -30,6 +30,7 @@ export const ERROR_CODES = {
   UNKNOWN_VOICE: 'UNKNOWN_VOICE',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   ENGINE_UNAVAILABLE: 'ENGINE_UNAVAILABLE',
+  MCP_VERSION_MISMATCH: 'MCP_VERSION_MISMATCH',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -59,6 +60,9 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   // technical detail goes to server logs (and errorId) only.
   INTERNAL_ERROR: 'Something went wrong. Please try again later.',
   ENGINE_UNAVAILABLE: 'Video generation is temporarily unavailable. Please try again later.',
+  // The gate (mcp-version-gate.ts) always sends a specific message naming
+  // both versions; this default only names the fix.
+  MCP_VERSION_MISMATCH: 'This post-engineer-mcp version does not match the server. Restart the MCP with the version the server requires.',
 };
 
 /** Default human-readable message for a code. */

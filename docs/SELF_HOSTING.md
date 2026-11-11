@@ -217,5 +217,9 @@ Back up regularly:
    the engine; the web takes the same vars as Docker build args):
    `VERSION=<major.minor>.<pr> PR_NUMBER=<pr> BUILD=<pr> COMMIT=$(git rev-parse HEAD)`
    before `docker compose up -d --build`.
+   The web container also requires `REQUIRED_MCP_VERSION` (its compose file
+   refuses to start without it): the one `post-engineer-mcp` version your
+   web accepts. Set it to the version your agents run; any other MCP version
+   gets 426 `MCP_VERSION_MISMATCH` (see `apps/web/lib/mcp-version-gate.ts`).
 4. Check the release notes for breaking config changes (new required env vars
    are documented in the `.env.example` files).
