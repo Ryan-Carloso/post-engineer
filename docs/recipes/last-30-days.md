@@ -36,7 +36,7 @@ those results support. Validation runs before any token is spent.
   agent's own environment as `YOUR_TAVILY_API_KEY` or `YOUR_EXA_API_KEY`;
   it is never pasted, never committed, and never appears in examples.
 - A persona (`personaId` from `list_personas`), or a faceless setup
-  (`options.faceless` plus `options.voiceId` or `options.audioUrl`).
+  (`options.videoType: 'faceless'` plus `options.voiceId` or `options.audioUrl`).
 - A token balance that covers one video: check with `get_token_balance`
   before generating. Generation costs tokens; `validate_script` and
   `score_draft` do not debit tokens.

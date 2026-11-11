@@ -783,6 +783,15 @@ describe('POST /api/videos/generate-and-schedule', () => {
   });
 
   describe('validation', () => {
+    it('rejects a title over 100 characters before any charge (engine cap, mirrored pre-charge)', async () => {
+      const res = await post(baseBody({ title: 'x'.repeat(101) }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.field).toBe('title');
+      expect(json.error).toContain('at most 100 characters');
+    });
+
     it('rejects an invalid provider', async () => {
       const res = await post(
         baseBody({ publishing: { providers: ['myspace'], accounts: {}, schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' } } }),

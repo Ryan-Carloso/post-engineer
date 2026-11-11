@@ -8,14 +8,15 @@ This Actor is a thin client for the [Post Engineer API](https://post-engineer.co
 
 1. Create an account at [post-engineer.com](https://post-engineer.com) and connect the social accounts you want to post to.
 2. Create an API key at [post-engineer.com/recipes](https://post-engineer.com/recipes). It starts with `pe_live_`.
-3. Make sure the account has tokens. A faceless video costs 1 token, a persona video 2 or 3, depending on face quality.
+3. Make sure the account has tokens. A faceless video costs 1 token, a persona video 2 or 3 depending on face quality, and full lip-sync 8 or 15.
 
 ## Input
 
 | Field | Required | What it does |
 |---|---|---|
 | `apiKey` | to create a video | Your Post Engineer API key, stored as a secret input. Without it the run is a **dry run**: it validates the input and returns the request it would send, with nothing generated, published or charged. |
-| `title` | yes | Label of the scheduled post. |
+| `title` | yes | Label of the scheduled post (at most 100 characters). |
+| `description` | no | Publish caption for the video. When omitted, the hook is used as the description. |
 | `hook`, `body`, `cta` | yes | The script. 60 to 200 words in total. It is validated before any token is spent. |
 | `providers` | yes | Any of `youtube`, `instagram`, `linkedin`, `bluesky`, `threads`, `facebook`, `3speak`. |
 | `personaId` | no | AI persona that presents the video. Leave empty for a faceless video. |

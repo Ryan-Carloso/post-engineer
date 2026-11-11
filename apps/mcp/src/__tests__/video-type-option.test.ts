@@ -159,6 +159,17 @@ describe('generate_persona_video videoType shape', () => {
     }
   });
 
+  it('rejects a title over 100 characters (engine cap, mirrored pre-charge)', () => {
+    const result = GeneratePersonaVideoSchema.safeParse({ ...baseArgs, title: 'x'.repeat(101) });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const issue = result.error.issues.find((i) => i.path.join('.') === 'title');
+      expect(issue).toBeDefined();
+      expect(issue?.message).toBe('title must be at most 100 characters');
+    }
+    expect(GeneratePersonaVideoSchema.safeParse({ ...baseArgs, title: 'x'.repeat(100) }).success).toBe(true);
+  });
+
   it('rejects an unknown videoType with the costs message', () => {
     const result = GeneratePersonaVideoSchema.safeParse({ ...baseArgs, options: { videoType: 'sideways' } });
     expect(result.success).toBe(false);

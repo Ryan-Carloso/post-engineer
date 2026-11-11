@@ -31,7 +31,7 @@ const optionalText = <T extends z.ZodType>(schema: T) =>
 // faceless mode and a face-mix percentage, and both keys are now IGNORED
 // (zod strips unknown keys). Every persona is faced — creation requires
 // exactly one image source (validateVisualCues) — and "no face" is a per-post
-// choice (options.faceless), so there is nothing for a caller to configure
+// choice (options.videoType: 'faceless'), so there is nothing for a caller to configure
 // here. A stale client sending personaMode=faceless still gets a faced
 // persona, which is the only persona this product makes.
 //---------------

@@ -53,7 +53,7 @@ export const GeneratePersonaVideoShape = {
     .min(1, 'Provide at least one segment')
     .max(12, 'At most 12 segments per video')
     .describe('The complete script as segments: first hook, then body segments, last CTA. Total 60-200 words, body at least 30, CTA 5-20, hook 15-40 words before TTS. The hook must end with terminal punctuation. No LLM expands this script.'),
-  title: z.string().min(1, 'title must be a non-empty string').describe('Video title: the slot label sent to the web route (one call is one video).'),
+  title: z.string().min(1, 'title must be a non-empty string').max(100, 'title must be at most 100 characters').describe('Video title: the slot label sent to the web route (one call is one video).'),
   // Agent-supplied video description (issue #542 follow-up): REQUIRED —
   // the publish copy, sent top-level to the web route. The 5000-char cap
   // mirrors the engine's VideoParams.video_description max_length. There

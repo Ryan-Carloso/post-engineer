@@ -124,7 +124,8 @@ const BodySchema = z.object({
   // The slot label. A `topics` key is rejected explicitly in
   // postHandler before this parse (a plain zod object would strip it
   // silently and the caller would think videos were created).
-  title: z.string(),
+  // At most 100 chars (YouTube's cap): the engine rejects longer titles at dispatch, so fail here, pre-charge.
+  title: z.string().max(100, 'title must be at most 100 characters.'),
   // Agent-supplied video description (issue #542 follow-up), REQUIRED: the publish copy. Zod v4 dropped required_error, so the missing-value message lives in `error`.
   description: z.string({ error: (issue) => (issue.input === undefined ? 'description is required: the publish copy for this video.' : undefined) }).min(1, 'description must be a non-empty string: the publish copy for this video.').max(5000, 'description must be at most 5000 characters.'),
   publishing: PublishingSchema,
@@ -901,8 +902,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         face_quality: prep.faceQuality,
       };
       const payload = buildJobPayload(jobPersona, {
-        video_title: title,
-        video_description: description,
+        video_title: title, video_description: description,
         video_type: validatedOptions.videoType,
         video_script: segmentsScript,
         webhook_url: validatedOptions.webhookUrl,
