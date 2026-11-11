@@ -156,7 +156,10 @@ function parseLook(raw, personaId) {
   if (fullLipsync && (faceless || personaId === undefined)) {
     throw new ActorInputError('fullLipsync needs a persona with a face, so it cannot be used with faceless videos.');
   }
-  const videoType = personaId === undefined ? 'faceless' : fullLipsync ? 'full_lipsync' : 'hook_lipsync';
+  // faceless wins: a persona video with faceless on is voice-only (the old
+  // options.faceless contract) — never silently upgraded to hook_lipsync,
+  // which would show the face and charge the hook price instead of 1 token.
+  const videoType = faceless ? 'faceless' : fullLipsync ? 'full_lipsync' : 'hook_lipsync';
   return { videoType, voiceId };
 }
 

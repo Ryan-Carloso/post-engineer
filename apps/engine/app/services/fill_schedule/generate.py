@@ -123,13 +123,6 @@ class BatchGenerator:
             # (No refund on this path: the slot never reached the dispatch a
             # refund is anchored to.)
             voice_for(identity)
-            # Face modes need a face: the photo comes only from the persona
-            # embed (the snapshot carries no photo), so a persona-less slot
-            # in full_lipsync or hook_lipsync fails here, before dispatch.
-            if video_type in ("full_lipsync", "hook_lipsync") and not (
-                identity.get("avatar_url") or identity.get("photo_path")
-            ):
-                raise RuntimeError(f"{video_type} requires a persona with a photo")
             request = TaskVideoRequest(
                 video_title=title,
                 video_description=description,
@@ -177,6 +170,17 @@ class BatchGenerator:
             generation_id = f"batch:{schedule['id']}"
             task_id = new_task_id(slot)
             try:
+                # Face modes need a face: the photo comes only from the
+                # persona embed (the snapshot carries no photo). A slot
+                # whose persona has none can never generate, so it fails
+                # here, inside the refund block, so its prepaid cost
+                # comes back — same as the language gate below. The 056
+                # backfill keeps photo-less rows faceless, so this only
+                # fires for a row that asked for a face it never had.
+                if video_type in ("full_lipsync", "hook_lipsync") and not (
+                    identity.get("avatar_url") or identity.get("photo_path")
+                ):
+                    raise RuntimeError(f"{video_type} requires a persona with a photo")
                 # English-only launch: a slot scheduled before the launch can
                 # still carry a non-English language. It fails here, inside
                 # the refund block, so its prepaid cost comes back — and

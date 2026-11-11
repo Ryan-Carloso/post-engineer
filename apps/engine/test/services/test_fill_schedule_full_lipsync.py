@@ -63,12 +63,21 @@ class _Store:
     def __init__(self, slot):
         self._slot = slot
         self.updates = []
+        self.refund_batch_calls = []
 
     def pending_slots(self, now):
         return [self._slot]
 
     def update_slot(self, slot_id, **fields):
         self.updates.append((slot_id, fields))
+
+    def refund_batch_tokens(
+        self, user_id, generation_id, refund_key, amount, reason, engine_task_id=None
+    ):
+        self.refund_batch_calls.append(
+            (user_id, generation_id, refund_key, amount, reason, engine_task_id)
+        )
+        return True
 
     def spend_tokens(self, *args):
         return True
@@ -147,6 +156,44 @@ class BatchDispatchVideoTypeTests(unittest.TestCase):
         dispatch.assert_not_called()
         self.assertEqual(store.updates[0][1]["status"], "failed")
         self.assertIn(VIDEO_TYPE_ERROR_SUFFIX, store.updates[0][1]["error"])
+
+    def _failed_slot(self, slot):
+        store = _Store(slot)
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=MagicMock(), publish_video=MagicMock()
+        )
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(enqueued, 0)
+        dispatch.assert_not_called()
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+        return store
+
+    def _photo_less(self, slot):
+        slot["schedules"]["personas"]["photo_path"] = None
+        slot["schedules"]["personas"]["avatar_url"] = None
+        return slot
+
+    def test_full_lipsync_slot_without_a_persona_photo_fails_with_a_refund(self):
+        # Full lip-sync needs a face by design, so a photo-less persona
+        # fails — but inside the refund block, so the prepaid 8 tokens
+        # come back instead of stranding the slot (pre-migration rows
+        # asked for a face they never had).
+        slot = self._photo_less(_slot(video_type="full_lipsync", charged_tokens=8))
+        for segment in slot["segments"]:
+            segment.pop("media", None)
+        store = self._failed_slot(slot)
+        self.assertIn("requires a persona with a photo", store.updates[0][1]["error"])
+        self.assertEqual(len(store.refund_batch_calls), 1)
+        self.assertEqual(store.refund_batch_calls[0][3], 8)
+
+    def test_hook_lipsync_slot_without_a_persona_photo_fails_with_a_refund(self):
+        slot = self._photo_less(_slot(charged_tokens=2))
+        store = self._failed_slot(slot)
+        self.assertIn("requires a persona with a photo", store.updates[0][1]["error"])
+        self.assertEqual(len(store.refund_batch_calls), 1)
+        self.assertEqual(store.refund_batch_calls[0][3], 2)
 
 
 if __name__ == "__main__":

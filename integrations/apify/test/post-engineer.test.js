@@ -143,6 +143,14 @@ describe('buildGenerateBody', () => {
 });
 
 describe('buildGenerateBody look options', () => {
+  it('sends faceless videoType when faceless is true even with a persona (voice-only, 1 token)', () => {
+    const body = buildGenerateBody(parseInput({ ...baseInput(), personaId: 'p1', faceless: true }));
+    assert.equal(body.personaId, 'p1');
+    assert.equal(body.options.videoType, 'faceless');
+    assert.equal(body.options.voiceId, 'chatterbox:kokoro_af_heart');
+    assert.equal('faceless' in body.options, false);
+  });
+
   it('sends a persona video with full lip-sync videoType and no faceless flag', () => {
     const body = buildGenerateBody(parseInput({ ...baseInput(), voiceId: undefined, personaId: 'p1', fullLipsync: true, images: undefined }));
     assert.equal(body.personaId, 'p1');
