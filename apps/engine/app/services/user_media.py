@@ -473,7 +473,12 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
     # survivors fail the task with the skip reasons, never silently.
     hook_end = _hook_end(video_script, subtitle_path, audio_duration) if face == segment_panels.FACE_HOOK else 0.0
     sent = sum(len(_media_list(_segment_dict(s).get("media"))) for s in segments)
-    words_per_segment = [len(_tokens(str(_segment_dict(s).get("text", "")))) for s in segments]
+    # Same word count the density rule is validated with
+    # (script_segments._word_count, shared/script-segments countWords):
+    # whitespace words, not subtitle-walk tokens — _tokens splits
+    # contractions and hyphenated words, which would demand more photos
+    # at render than validation charged for.
+    words_per_segment = [len(str(_segment_dict(s).get("text", "")).split()) for s in segments]
     panels, gap_warnings = image_coverage.ensure_coverage(
         panels, face=face, hook_end=hook_end, audio_duration=audio_duration,
         words_per_segment=words_per_segment, sent=sent, skipped=warnings,

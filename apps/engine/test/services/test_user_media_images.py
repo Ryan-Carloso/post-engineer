@@ -137,6 +137,37 @@ def test_thin_survivors_fail_with_the_segment_minimum_and_skip_reasons(task_dir)
     assert segment_panels._read_manifest("task-1") == ([], [])
 
 
+def test_density_uses_whitespace_words_like_validation_not_subtitle_tokens(task_dir):
+    # The body is 32 whitespace words but 33 subtitle tokens ("port-wine"
+    # splits in two): validation needs 4 photos, the token count needs 5.
+    # Four surviving photos must render — counting tokens would fail a
+    # task that passed pre-charge validation with every photo intact.
+    body = (
+        "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste "
+        "francesinha where the locals eat, and finish with port-wine as the river "
+        "turns gold at sunset before heading home."
+    )
+    segments = [
+        {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/hook.jpg"}]},
+        {
+            "kind": "body",
+            "text": body,
+            "media": [{"url": f"https://e.com/body{i}.jpg"} for i in range(4)],
+        },
+        {"kind": "cta", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
+    ]
+    words = [
+        ("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2),
+        ("Where", 2.0, 2.3), ("the", 2.3, 2.5), ("river", 2.5, 3.0),
+        ("Visit", 5.0, 5.4), ("Porto", 5.4, 5.9),
+    ]
+    warnings = _run(task_dir, _params(segments=segments), words=words)
+    panels, stored = segment_panels._read_manifest("task-1")
+    assert len(panels) == 6, "hook + 4 body + CTA, all surviving"
+    assert stored == warnings
+    assert not any("media skipped" in w for w in warnings)
+
+
 def test_hook_persona_coverage_starts_where_the_face_hands_over(task_dir):
     params = _params()
     with patch.object(user_media, "_face_mode", return_value=segment_panels.FACE_HOOK), patch.object(
