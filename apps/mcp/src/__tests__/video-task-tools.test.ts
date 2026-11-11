@@ -164,7 +164,7 @@ describe('wait_for_video_tasks', () => {
     });
   });
 
-  it('treats a 410 (engine lost the task) as a terminal failure', async () => {
+  it('treats a 410 (engine lost the task, not delivered) as a terminal failure', async () => {
     const clock = fakeClock();
     vi.mocked(mockClient.getVideoStatus).mockRejectedValue(
       new ApiError(
@@ -192,6 +192,65 @@ describe('wait_for_video_tasks', () => {
       stage: null,
       error: 'The video task no longer exists on the generation engine.',
     });
+  });
+
+  it('treats a delivered 410 (video finished before the engine lost it) as completed', async () => {
+    const clock = fakeClock();
+    vi.mocked(mockClient.getVideoStatus).mockRejectedValue(
+      new ApiError(
+        'Failed to get video status: 410 The video task no longer exists on the generation engine.',
+        null,
+        null,
+        410,
+        true,
+      ),
+    );
+
+    const response = await handleWaitForVideoTasks(
+      mockClient,
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }),
+      { now: clock.now, sleep: clock.sleep },
+    );
+
+    const result = parsed(response);
+    expect(result.allTerminal).toBe(true);
+    expect(result.timedOut).toBe(false);
+    expect(result.results[0]).toEqual({
+      task_id: 'task-1',
+      state: 1,
+      outcome: 'completed',
+      progress: 100,
+      stage: null,
+      error: null,
+    });
+  });
+
+  it('fails the task at once on a deterministic 4xx instead of retrying until the timeout', async () => {
+    const clock = fakeClock();
+    const sleep = vi.fn(clock.sleep);
+    vi.mocked(mockClient.getVideoStatus).mockRejectedValue(
+      new ApiError('Failed to get video status: 400 Invalid taskId.', null, null, 400),
+    );
+
+    const response = await handleWaitForVideoTasks(
+      mockClient,
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }),
+      { now: clock.now, sleep },
+    );
+
+    const result = parsed(response);
+    expect(result.allTerminal).toBe(true);
+    expect(result.timedOut).toBe(false);
+    expect(result.results[0]).toEqual({
+      task_id: 'task-1',
+      state: -1,
+      outcome: 'failed',
+      progress: null,
+      stage: null,
+      error: 'Failed to get video status: 400 Invalid taskId.',
+    });
+    expect(sleep).not.toHaveBeenCalled();
+    expect(vi.mocked(mockClient.getVideoStatus)).toHaveBeenCalledTimes(1);
   });
 
   it('retries after a transient fetch failure instead of failing the wait', async () => {

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
 import { cancelVideoTask } from './client-video-task.js';
-import { ApiError } from './errors.js';
+import { ApiError, getErrorMessage } from './errors.js';
 import { MAX_BATCH_VIDEOS } from './limits.js';
 import { narrowTaskProgress } from './tools.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
@@ -36,11 +36,12 @@ export async function handleCancelVideoTask(
 //
 // The agent alternative to polling get_video_task_progress: one call waits
 // for all taskIds (a single video, or every video of a batch) and only
-// returns when each is completed (state 1) or failed (state -1, or gone
-// from the engine), or when timeoutSeconds elapses. On timeout the
-// results are partial — the still-running entries keep their last known
-// progress/stage — so the agent calls again with the unfinished taskIds
-// instead of polling from scratch.
+// returns when each is completed (state 1, or a 410 whose body says the
+// video was delivered before the engine lost it) or failed (state -1, or
+// gone from the engine without delivery proof), or when timeoutSeconds
+// elapses. On timeout the results are partial — the still-running entries
+// keep their last known progress/stage — so the agent calls again with the
+// unfinished taskIds instead of polling from scratch.
 //---------------
 
 export const WaitForVideoTasksShape = {
@@ -132,9 +133,27 @@ export async function handleWaitForVideoTasks(
           return { taskId, result: toWaitResult(taskId, narrowTaskProgress(await client.getVideoStatus(taskId))) };
         } catch (error) {
           if (error instanceof ApiError && error.status === 410) {
+            if (error.delivered) {
+              // The video finished (durable COMPLETE render, or a published
+              // slot) before the engine lost the task: the web route already
+              // recorded it completed and never refunded — report completed,
+              // not failed, so the agent never regenerates a published video.
+              return {
+                taskId,
+                result: {
+                  task_id: taskId,
+                  state: 1,
+                  outcome: 'completed',
+                  progress: 100,
+                  stage: null,
+                  error: null,
+                } satisfies TaskWaitResult,
+              };
+            }
             // The engine lost the task (restart with the in-memory state
-            // backend): the web route already failed it and refunded, so
-            // this is terminal — waiting longer can never complete it.
+            // backend) and nothing proves the video finished: the web route
+            // already failed it and refunded, so this is terminal — waiting
+            // longer can never complete it.
             return {
               taskId,
               result: {
@@ -144,6 +163,30 @@ export async function handleWaitForVideoTasks(
                 progress: null,
                 stage: null,
                 error: ENGINE_TASK_GONE_MESSAGE,
+              } satisfies TaskWaitResult,
+            };
+          }
+          if (
+            error instanceof ApiError &&
+            error.status !== null &&
+            error.status >= 400 &&
+            error.status < 500 &&
+            error.status !== 410 &&
+            error.status !== 429
+          ) {
+            // Deterministic client error (bad taskId, bad key): retrying can
+            // never succeed — fail this task now with the capped detail.
+            // 429 stays transient: the next round may succeed once the
+            // limit resets.
+            return {
+              taskId,
+              result: {
+                task_id: taskId,
+                state: -1,
+                outcome: 'failed',
+                progress: null,
+                stage: null,
+                error: getErrorMessage(error),
               } satisfies TaskWaitResult,
             };
           }

@@ -79,7 +79,7 @@ describe('prompts hub data', () => {
       'media overlay',
       'validate_script',
       'score_draft',
-      'get_video_task_progress',
+      'wait_for_video_tasks',
       'get_video_status',
     ].map((needle) => text.indexOf(needle));
     expect(positions.every((i) => i >= 0)).toBe(true);
@@ -137,7 +137,7 @@ describe('prompts hub data', () => {
       'media overlay',
       'validate_script',
       'score_draft',
-      'get_video_task_progress',
+      'wait_for_video_tasks',
       'get_video_status',
     ].map((needle) => text.indexOf(needle));
     expect(positions.every((i) => i >= 0)).toBe(true);
@@ -219,7 +219,7 @@ describe('prompts hub data', () => {
       'generate_persona_video',
       'confirmed title',
       'account IDs',
-      'get_video_task_progress',
+      'wait_for_video_tasks',
       'get_video_status',
     ].map((needle) => text.indexOf(needle));
     expect(positions.every((i) => i >= 0)).toBe(true);
@@ -362,7 +362,7 @@ describe('prompts hub data', () => {
       'validate_script',
       'score_draft',
       'generate_persona_video',
-      'get_video_task_progress',
+      'wait_for_video_tasks',
       'get_video_status',
     ].map((needle) => text.indexOf(needle));
     expect(positions.every((i) => i >= 0)).toBe(true);
@@ -413,7 +413,7 @@ describe('prompts hub data', () => {
       'score_draft',
       'wait for my yes',
       'generate_persona_video',
-      'get_video_task_progress',
+      'wait_for_video_tasks',
       'get_video_status',
     ].map((needle) => text.indexOf(needle));
     expect(positions.every((i) => i >= 0)).toBe(true);
@@ -472,7 +472,7 @@ describe('prompts hub data', () => {
       'validate_script',
       'score_draft',
       'generate_persona_video',
-      'get_video_task_progress',
+      'wait_for_video_tasks',
     ].map((needle) => text.indexOf(needle));
     expect(positions.every((i) => i >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);

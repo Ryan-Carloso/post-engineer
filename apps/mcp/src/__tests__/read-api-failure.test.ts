@@ -51,4 +51,19 @@ describe('readApiFailure', () => {
     expect(failure.detail).toHaveLength(200);
     expect(failure.detail.startsWith('a'.repeat(180))).toBe(true);
   });
+
+  it('reads the delivered flag from the body when present', () => {
+    const failure = readApiFailure(JSON.stringify({
+      success: false,
+      terminal: true,
+      delivered: true,
+      error: 'The video task no longer exists on the generation engine.',
+    }));
+    expect(failure.delivered).toBe(true);
+  });
+
+  it('defaults delivered to false when the body carries no flag', () => {
+    const failure = readApiFailure(JSON.stringify({ error: 'Invalid taskId.' }));
+    expect(failure.delivered).toBe(false);
+  });
 });

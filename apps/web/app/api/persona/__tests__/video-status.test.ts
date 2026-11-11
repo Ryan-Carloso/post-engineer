@@ -569,7 +569,9 @@ describe('GET /api/persona/video-status/:taskId', () => {
       try {
         const response = await poll();
         expect(response.status).toBe(410);
-        expect(await response.json()).toMatchObject({ success: false, terminal: true });
+        const body = await response.json();
+        expect(body).toMatchObject({ success: false, terminal: true });
+        expect(body.delivered).toBeUndefined();
         expect(refundTokens).toHaveBeenCalledWith(serviceClient, USER_ID, 'gen-1');
         expect(updateSpy).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -599,7 +601,11 @@ describe('GET /api/persona/video-status/:taskId', () => {
       try {
         const response = await poll();
         expect(response.status).toBe(410);
-        expect(await response.json()).toMatchObject({ success: false, terminal: true });
+        expect(await response.json()).toMatchObject({
+          success: false,
+          terminal: true,
+          delivered: true,
+        });
         expect(updateSpy).toHaveBeenCalledWith(
           expect.objectContaining({
             generationId: 'gen-1',
@@ -655,7 +661,11 @@ describe('GET /api/persona/video-status/:taskId', () => {
       try {
         const response = await poll();
         expect(response.status).toBe(410);
-        expect(await response.json()).toMatchObject({ success: false, terminal: true });
+        expect(await response.json()).toMatchObject({
+          success: false,
+          terminal: true,
+          delivered: true,
+        });
         expect(updateSpy).toHaveBeenCalledWith(
           expect.objectContaining({
             generationId: 'gen-1',

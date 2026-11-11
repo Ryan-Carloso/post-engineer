@@ -102,10 +102,14 @@ async function getHandler(
             });
           }
         }
+        // The 410 body carries delivered: true so a caller that only sees
+        // the status (e.g. the MCP wait tool) can tell a finished video
+        // apart from a failed one — both answer 410 with the same message.
         return NextResponse.json(
           {
             success: false,
             terminal: true,
+            delivered: true,
             error: 'The video task no longer exists on the generation engine.',
           },
           { status: 410 },
