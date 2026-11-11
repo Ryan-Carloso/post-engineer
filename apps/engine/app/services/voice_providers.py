@@ -9,6 +9,7 @@ too; ``voice.py`` re-imports them for the ``tts()`` dispatcher.
 
 import os
 import re
+import tempfile
 from dataclasses import dataclass
 
 import requests
@@ -18,6 +19,12 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from app.config import config
 from app.services import subtitle_cues
 from app.services.analytics import scrub_error_text, scrub_secret_values
+from app.services.chatterbox_chunks import (
+    CHATTERBOX_TIMEOUT_SECONDS,
+    concatenate_audio_files,
+    ensure_file_path_exists,
+    split_chatterbox_script,
+)
 from app.utils import utils
 
 
@@ -126,18 +133,6 @@ def _preprocess_text_for_tts(text: str) -> str:
         processed = processed.replace(placeholder, original_text)
 
     return processed
-
-
-def ensure_file_path_exists(file_path: str) -> None:
-    """Make sure the output file's directory exists.
-
-    This is a standalone safety net: the writers below open the target file
-    directly, so a missing directory would fail on the local file path and
-    mask the real outcome.
-    """
-    dir_path = os.path.dirname(file_path)
-    if dir_path:
-        os.makedirs(dir_path, exist_ok=True)
 
 
 def populate_legacy_submaker_with_full_text(
@@ -371,6 +366,9 @@ def chatterbox_tts(
     Like ElevenLabs, Chatterbox does not return word-level timestamps, so the
     subtitle path falls back to the full-text SubMaker. For tighter subtitle
     sync set ``subtitle_provider = "whisper"``.
+
+    Long scripts are split into per-sentence chunks (see ``chatterbox_chunks``):
+    each chunk gets its own POST, in script order, then the audios are joined.
     """
     text = (text or "").strip()
     if not text:
@@ -394,9 +392,8 @@ def chatterbox_tts(
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    payload = {
+    payload_base = {
         "model": model_id,
-        "input": text,
         "voice": voice,
         "response_format": "mp3",
         # OpenAI speech API accepts speed 0.25-4.0; MoneyPrinterTurbo's rate is a
@@ -408,70 +405,94 @@ def chatterbox_tts(
     # field, so Chatterbox servers ignore it. Adjust loudness via voice_rate
     # (speed) or in post-processing instead.
 
-    last_error: str | None = None
-    for i in range(3):
-        try:
-            logger.info(f"start chatterbox tts, voice: {voice}, try: {i + 1}")
-            ensure_file_path_exists(voice_file)
+    def _synthesize_chunk(chunk_text: str, target_file: str) -> str | None:
+        """POST one chunk with the old 3-attempt retry loop. None = success."""
+        payload = {**payload_base, "input": chunk_text}
+        last_error: str | None = None
+        for i in range(3):
+            try:
+                logger.info(f"start chatterbox tts, voice: {voice}, try: {i + 1}")
+                ensure_file_path_exists(target_file)
 
-            response = requests.post(url, json=payload, headers=headers, timeout=120)
-            if response.status_code != 200:
-                # The verdict is ONLY included after the credential scrubber:
-                # an upstream body may echo rejected credentials (keys,
-                # "user:pass@host" URLs) — saving it raw would leak them into
-                # the history row and the logs. Both the log line and the
-                # stored error consume the SAME scrubbed text.
-                body = _scrubbed_response_body(response.text)
-                if body:
-                    last_error = f"status {response.status_code}: {body}"
-                else:
-                    last_error = f"status {response.status_code}"
-                logger.error(
-                    f"chatterbox tts failed with status {response.status_code}: {body}"
+                response = requests.post(
+                    url, json=payload, headers=headers, timeout=CHATTERBOX_TIMEOUT_SECONDS
                 )
-                # A 4xx means the request itself is wrong (bad voice, bad
-                # model, auth): retrying the identical request can never
-                # change the answer, so fail fast on the first attempt
-                # instead of burning 3 attempts before giving up. Transient
-                # client errors (408 request timeout, 429 rate limited) are
-                # excluded and keep the normal retry loop, matching
-                # elevenlabs_tts and openrouter_tts.
-                if (
-                    400 <= response.status_code < 500
-                    and response.status_code not in (408, 429)
-                ):
-                    return TtsResult(
-                        error=f"Chatterbox TTS failed after 1 attempt ({last_error or 'unknown error'})"
+                if response.status_code != 200:
+                    # The verdict is ONLY included after the credential scrubber:
+                    # an upstream body may echo rejected credentials (keys,
+                    # "user:pass@host" URLs) — saving it raw would leak them into
+                    # the history row and the logs. Both the log line and the
+                    # stored error consume the SAME scrubbed text.
+                    body = _scrubbed_response_body(response.text)
+                    if body:
+                        last_error = f"status {response.status_code}: {body}"
+                    else:
+                        last_error = f"status {response.status_code}"
+                    logger.error(
+                        f"chatterbox tts failed with status {response.status_code}: {body}"
                     )
-                continue
+                    # A 4xx means the request itself is wrong (bad voice, bad
+                    # model, auth): retrying the identical request can never
+                    # change the answer, so fail fast on the first attempt
+                    # instead of burning 3 attempts before giving up. Transient
+                    # client errors (408 request timeout, 429 rate limited) are
+                    # excluded and keep the normal retry loop, matching
+                    # elevenlabs_tts and openrouter_tts.
+                    if (
+                        400 <= response.status_code < 500
+                        and response.status_code not in (408, 429)
+                    ):
+                        return f"Chatterbox TTS failed after 1 attempt ({last_error or 'unknown error'})"
+                    continue
 
-            with open(voice_file, "wb") as f:
-                f.write(response.content)
-
-            audio_clip = AudioFileClip(voice_file)
-            audio_duration = audio_clip.duration
-            audio_clip.close()
-
-            sub_maker = SubMaker()
-            logger.success(f"chatterbox tts succeeded: {voice_file}")
-            return TtsResult(
-                sub_maker=populate_legacy_submaker_with_full_text(
-                    sub_maker=sub_maker,
-                    text=text,
-                    audio_duration_seconds=audio_duration,
+                with open(target_file, "wb") as f:
+                    f.write(response.content)
+                return None
+            except Exception as e:
+                # Scrub before the 200-cut: a cut landing mid-secret defeats the
+                # scrubber and leaks the raw remainder.
+                last_error = scrub_secret_values(str(e))[:200]
+                # The record carries the SAME appendage the stored error does: an
+                # exception can embed the request URL with credentials (review
+                # nit — scrub_error_text also strips machine-local paths).
+                logger.error(
+                    f"chatterbox tts failed: {scrub_error_text(str(e), max_chars=200)}"
                 )
-            )
-        except Exception as e:
-            # Scrub before the 200-cut: a cut landing mid-secret defeats the
-            # scrubber and leaks the raw remainder.
-            last_error = scrub_secret_values(str(e))[:200]
-            # The record carries the SAME appendage the stored error does: an
-            # exception can embed the request URL with credentials (review
-            # nit — scrub_error_text also strips machine-local paths).
-            logger.error(
-                f"chatterbox tts failed: {scrub_error_text(str(e), max_chars=200)}"
-            )
 
+        return f"Chatterbox TTS failed after 3 attempts ({last_error or 'unknown error'})"
+
+    chunks = split_chatterbox_script(text)
+    if len(chunks) == 1:
+        # Short scripts keep the old path: one POST straight to voice_file.
+        error = _synthesize_chunk(chunks[0], voice_file)
+        if error is not None:
+            return TtsResult(error=error)
+    else:
+        logger.info(f"chatterbox tts: {len(chunks)} chunks for {len(text)} chars, voice: {voice}")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            part_files = []
+            for index, chunk in enumerate(chunks):
+                part_file = os.path.join(tmp_dir, f"chunk-{index:03d}.mp3")
+                error = _synthesize_chunk(chunk, part_file)
+                if error is not None:
+                    return TtsResult(error=error)
+                part_files.append(part_file)
+            try:
+                concatenate_audio_files(part_files, voice_file)
+            except Exception as e:
+                logger.error(f"chatterbox tts join failed: {scrub_error_text(str(e), max_chars=200)}")
+                return TtsResult(error="Chatterbox TTS failed: could not join audio chunks")
+
+    audio_clip = AudioFileClip(voice_file)
+    audio_duration = audio_clip.duration
+    audio_clip.close()
+
+    sub_maker = SubMaker()
+    logger.success(f"chatterbox tts succeeded: {voice_file}")
     return TtsResult(
-        error=f"Chatterbox TTS failed after 3 attempts ({last_error or 'unknown error'})"
+        sub_maker=populate_legacy_submaker_with_full_text(
+            sub_maker=sub_maker,
+            text=text,
+            audio_duration_seconds=audio_duration,
+        )
     )
