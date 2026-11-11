@@ -59,7 +59,7 @@ class ScheduleStore:
     SLOT_IDENTITY_SELECT = (
         "id,user_id,persona_id,providers,youtube_account_ids,"
         "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,threads_account_ids,facebook_account_ids,pinterest_account_ids,pinterest_board_id,threespeak_account_ids,"
-        "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,threads_account_ids,facebook_account_ids,pinterest_account_ids,pinterest_board_id,rumble_account_ids,"
+        "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,threads_account_ids,facebook_account_ids,pinterest_account_ids,pinterest_board_id,rumble_account_ids,fanvue_account_ids,"
         "post_voice_id,post_niche,post_language,"
         "post_video_aspect,post_video_layout,post_paragraph_number,post_face_quality,"
         "post_voice_audio_url,post_cta_text,"

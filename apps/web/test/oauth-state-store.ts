@@ -14,6 +14,9 @@ export interface OAuthStateRow {
   nonce: string;
   redirect_uri: string;
   expires_at: string;
+  // PKCE code verifier (Fanvue only, migration 057). Absent/null for every
+  // non-PKCE provider row.
+  code_verifier?: string | null;
 }
 
 type RowColumn = keyof OAuthStateRow;
@@ -27,8 +30,10 @@ export interface FakeOAuthStateStore {
 
 interface DeleteChain {
   eq: (column: RowColumn, value: string) => DeleteChain;
-  gt: (column: RowColumn, value: string) => DeleteChain;
-  lte: (column: RowColumn, value: string) => Promise<{ error: null }>;
+  // Time comparisons only ever run on expires_at (the atomic consume and
+  // the expired cleanup); narrowing the column keeps row[column] a string.
+  gt: (column: 'expires_at', value: string) => DeleteChain;
+  lte: (column: 'expires_at', value: string) => Promise<{ error: null }>;
   select: (columns: string) => Promise<{ data: Array<Partial<OAuthStateRow>>; error: null }>;
 }
 
@@ -51,7 +56,10 @@ function pickColumns(row: OAuthStateRow, columns: string): Partial<OAuthStateRow
   const picked: Partial<OAuthStateRow> = {};
   for (const raw of columns.split(',')) {
     const column = raw.trim();
-    if (column === 'state_hash' || column === 'user_id' || column === 'provider' ||
+    if (column === 'code_verifier') {
+      // Nullable in the database: an absent verifier reads back as null.
+      picked.code_verifier = row.code_verifier ?? null;
+    } else if (column === 'state_hash' || column === 'user_id' || column === 'provider' ||
         column === 'nonce' || column === 'redirect_uri' || column === 'expires_at') {
       picked[column] = row[column];
     }

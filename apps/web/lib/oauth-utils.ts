@@ -15,6 +15,14 @@ import { isOAuthProvider } from '@/lib/providers/registry';
 
 export const OAUTH_NONCE_COOKIE = 'oauth_state_nonce';
 
+// Fanvue is the first outbound PKCE flow: its code verifier must be
+// available at callback time. The web flow keeps it in an httpOnly cookie
+// (same pattern as the nonce cookie); the MCP flow keeps it in the
+// oauth_states row (code_verifier column, migration 057). The verifier is
+// a secret for this flow only — it is never embedded in the client-visible
+// state.
+export const FANVUE_CODE_VERIFIER_COOKIE = 'fanvue_code_verifier';
+
 // Nonce cookie TTL: 10 minutes covers the OAuth flow with margin
 const OAUTH_NONCE_MAX_AGE = 600;
 
@@ -53,6 +61,41 @@ export function setOAuthNonceCookie(response: NextResponse, nonce: string): void
     sameSite: 'lax',
     path: '/',
     maxAge: OAUTH_NONCE_MAX_AGE,
+  });
+}
+
+//---------------
+// setFanvueCodeVerifierCookie / getFanvueCodeVerifier — stores and reads
+// the PKCE code verifier for the Fanvue web flow, mirroring the nonce
+// cookie (httpOnly, same TTL, same path). The callback reads it back and
+// presents it at the token exchange; without it the code cannot be
+// exchanged.
+//---------------
+
+export function setFanvueCodeVerifierCookie(response: NextResponse, codeVerifier: string): void {
+  response.cookies.set({
+    name: FANVUE_CODE_VERIFIER_COOKIE,
+    value: codeVerifier,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: OAUTH_NONCE_MAX_AGE,
+  });
+}
+
+export function getFanvueCodeVerifier(request: NextRequest): string | null {
+  const value = request.cookies.get(FANVUE_CODE_VERIFIER_COOKIE)?.value;
+  return value !== undefined && value !== '' ? value : null;
+}
+
+function clearFanvueCodeVerifierCookie(response: NextResponse): void {
+  response.cookies.set({
+    name: FANVUE_CODE_VERIFIER_COOKIE,
+    value: '',
+    httpOnly: true,
+    path: '/',
+    maxAge: 0,
   });
 }
 
@@ -186,6 +229,10 @@ export function oauthPopupResponse(
     path: '/',
     maxAge: 0,
   });
+
+  // The PKCE verifier is single-use too: a Fanvue callback consumes it
+  // exactly once, so it is cleared on any outcome as well.
+  clearFanvueCodeVerifierCookie(response);
 
   return response;
 }

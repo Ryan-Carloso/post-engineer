@@ -114,6 +114,28 @@ describe('buildDirectPublishForm', () => {
     expect(form.get('video')).toBeInstanceOf(Blob);
   });
 
+  it('sends the caption to fanvueAccountIds for fanvue', () => {
+    expect(() =>
+      requireDirectPublishFields({ provider: 'fanvue', videoPath: 'clip.mp4', accountIds: ['fan-1'] }),
+    ).toThrow(/caption is required for fanvue/);
+    const fields = requireDirectPublishFields({
+      provider: 'fanvue',
+      videoPath: 'clip.mp4',
+      accountIds: ['fan-1'],
+      caption: ' hello fanvue ',
+    });
+    const form = buildDirectPublishForm(
+      { provider: 'fanvue', videoPath: 'clip.mp4', accountIds: ['fan-1'], caption: 'hello fanvue' },
+      fields,
+      video,
+      'clip.mp4',
+    );
+    expect(form.get('provider')).toBe('fanvue');
+    expect(form.getAll('fanvueAccountIds')).toEqual(['fan-1']);
+    expect(form.get('caption')).toBe('hello fanvue');
+    expect(form.get('video')).toBeInstanceOf(Blob);
+  });
+
   it('keeps the youtube tags/privacyStatus shape and the instagram file + caption shape', () => {
     const ytFields = requireDirectPublishFields({
       provider: 'youtube',

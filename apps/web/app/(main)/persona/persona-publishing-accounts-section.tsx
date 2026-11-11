@@ -19,6 +19,7 @@ import {
 } from '@/lib/api';
 import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
 import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
+import { useFanvueAccountsQuery } from '@/lib/fanvue-accounts';
 import { useI18n } from '@/lib/i18n/provider';
 import { SpinnerIcon } from '@/lib/ui';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
@@ -49,6 +50,7 @@ const PROVIDERS: readonly { provider: PublishingProvider; label: string }[] = [
   { provider: 'pinterest', label: 'Pinterest' },
   { provider: '3speak', label: '3Speak' },
   { provider: 'rumble', label: 'Rumble' },
+  { provider: 'fanvue', label: 'Fanvue' },
 ];
 
 const EMPTY_DEFAULTS: PublishingDefaults = emptyPersonaDefaultAccounts();
@@ -141,6 +143,7 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
   const pinterest = usePinterestAccountsQuery();
   const threespeak = useThreespeakAccountsQuery();
   const rumble = useRumbleAccountsQuery();
+  const fanvue = useFanvueAccountsQuery();
 
   const [selection, setSelection] = useState<PublishingDefaults>(EMPTY_DEFAULTS);
   const [loading, setLoading] = useState(true);
@@ -315,10 +318,24 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId: str
         />
       ),
     })),
+    fanvue: (fanvue.data?.accounts ?? []).map((account) => ({
+      id: account.providerAccountId,
+      card: (
+        <AccountCard
+          key={`fanvue:${account.providerAccountId}`}
+          type="fanvue"
+          name={account.accountName ?? account.providerAccountId}
+          labelOrigin={account.accountName ? 'stored' : 'provider_id'}
+          thumbnail={account.profilePictureUrl}
+          selected={selection.fanvue.includes(account.providerAccountId)}
+          onSelect={() => toggle('fanvue', account.providerAccountId)}
+        />
+      ),
+    })),
   };
 
   const accountsLoading =
-    youtube.isLoading || instagram.isLoading || bluesky.isLoading || linkedin.isLoading || threads.isLoading || facebook.isLoading || pinterest.isLoading || threespeak.isLoading || rumble.isLoading;
+    youtube.isLoading || instagram.isLoading || bluesky.isLoading || linkedin.isLoading || threads.isLoading || facebook.isLoading || pinterest.isLoading || threespeak.isLoading || rumble.isLoading || fanvue.isLoading;
 
   return (
     <section>

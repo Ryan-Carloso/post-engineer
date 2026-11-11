@@ -7,7 +7,7 @@ import { MAX_UPLOAD_VIDEO_GB } from './limits.js';
 
 export const PublishVideoDirectShape = {
   provider: z
-    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble'])
+    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'])
     .describe('The social platform to publish the video to.'),
   videoPath: z
     .string()
@@ -19,7 +19,7 @@ export const PublishVideoDirectShape = {
     .array(z.string().min(1))
     .min(1, 'At least one account ID is required')
     .describe(
-      'Target accounts: the IDs from list_social_accounts (channel IDs for YouTube, IG user IDs for Instagram, DIDs for Bluesky, member IDs or org URNs for LinkedIn, user IDs for Threads, Page IDs for Facebook, user IDs for Pinterest, Hive usernames for 3Speak, Channel IDs for Rumble).',
+      'Target accounts: the IDs from list_social_accounts (channel IDs for YouTube, IG user IDs for Instagram, DIDs for Bluesky, member IDs or org URNs for LinkedIn, user IDs for Threads, Page IDs for Facebook, user IDs for Pinterest, Fanvue account IDs, Hive usernames for 3Speak, Channel IDs for Rumble).',
     ),
   title: z
     .string()
@@ -40,7 +40,7 @@ export const PublishVideoDirectShape = {
   caption: z
     .string()
     .optional()
-    .describe('Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak: required caption. Pinterest: used as the pin description when description is omitted.'),
+    .describe('Instagram/Bluesky/LinkedIn/Threads/Facebook/Fanvue/3Speak: required caption. Pinterest: used as the pin description when description is omitted.'),
   boardId: z
     .string()
     .optional()

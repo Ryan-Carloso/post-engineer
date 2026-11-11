@@ -10,8 +10,8 @@ import { findRepoRoot } from '@/test/repo-root';
 // chain no longer defines can linger in production, so a plain add would
 // leave the old list in force). A shipped migration is never edited, so
 // this test pins the seven providers 050 shipped with; the file is frozen,
-// so it must NOT track SOCIAL_PROVIDERS (053 adds rumble after it). The
-// live pin is the 053 test. The schedule also carries one board id: a pin
+// so it must NOT track SOCIAL_PROVIDERS (053 adds rumble after it, 057 adds
+// fanvue). The live pin is the 057 test. The schedule also carries one board id: a pin
 // cannot exist without a board.
 //---------------
 

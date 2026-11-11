@@ -24,6 +24,8 @@ Wire contract (multipart/form-data):
 - Rumble: ``provider=rumble``, ``video`` (file), ``title``,
   ``description``, ``license_type`` (``0`` = Personal Use), repeated
   ``rumbleAccountIds`` fields (see ``publish_rumble``).
+- Fanvue: ``provider=fanvue``, ``video`` (file), ``title``, ``description``,
+  repeated ``fanvueAccountIds`` fields (see ``publish_fanvue``; validated by ``fill_schedule/metadata.py``).
 
 This module owns only types, validation and multipart part builders; the HTTP
 transport lives in the client function of the same module.
@@ -45,6 +47,7 @@ from app.services.publish_facebook import (  # noqa: F401 - re-exported for call
     facebook_fields, validate_facebook_metadata,
 )
 from app.services.publish_pinterest import PINTEREST_DESCRIPTION_MAX_LENGTH, PINTEREST_PROVIDER, PINTEREST_TITLE_MAX_LENGTH, PinterestMetadata, pinterest_fields  # noqa: F401 - re-exported for callers
+from app.services.publish_fanvue import FANVUE_DESCRIPTION_MAX_LENGTH, FANVUE_PROVIDER, FANVUE_TITLE_MAX_LENGTH, FanvueMetadata, fanvue_fields  # noqa: F401 - re-exported for callers
 from app.services.publish_threespeak import (  # noqa: F401 - re-exported for callers
     THREESPEAK_PROVIDER, ThreespeakMetadata,
     threespeak_fields, validate_threespeak_metadata,
@@ -80,6 +83,7 @@ VALID_PROVIDERS: tuple[str, ...] = (
     PINTEREST_PROVIDER,
     THREESPEAK_PROVIDER,
     RUMBLE_PROVIDER,
+    FANVUE_PROVIDER,
 )
 
 
@@ -373,6 +377,7 @@ _PART_BUILDERS: _PartBuilders = {
     PINTEREST_PROVIDER: (PinterestMetadata, lambda metadata: MultipartParts(fields=pinterest_fields(metadata))),
     THREESPEAK_PROVIDER: (ThreespeakMetadata, lambda metadata: MultipartParts(fields=threespeak_fields(metadata))),
     RUMBLE_PROVIDER: (RumbleMetadata, lambda metadata: MultipartParts(fields=rumble_fields(metadata))),
+    FANVUE_PROVIDER: (FanvueMetadata, lambda metadata: MultipartParts(fields=fanvue_fields(metadata))),
 }
 
 
@@ -380,7 +385,7 @@ def publish_video(
     base_url: str,
     api_secret: str,
     owner_user_id: str,
-    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | PinterestMetadata | ThreespeakMetadata | RumbleMetadata,
+    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | PinterestMetadata | ThreespeakMetadata | RumbleMetadata | FanvueMetadata,
     video_path: str,
     video_bytes: bytes,
     content_type: str,

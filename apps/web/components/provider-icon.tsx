@@ -77,6 +77,12 @@ const PROVIDER_GLYPHS: Record<SocialProvider, ProviderGlyph> = {
     path:
       'M5 2h14a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3ZM10 8.2v7.6L16.8 12 10 8.2Z',
   },
+  fanvue: {
+    label: 'fanvue',
+    className: 'text-foreground',
+    // Simplified mark, not the official logo: a bold F letterform.
+    path: 'M6 3h12v3.5H10v3.5h6v3.5h-6V21H6V3Z',
+  },
 } satisfies Record<SocialProvider, ProviderGlyph>;
 
 export function ProviderIcon({ provider }: { provider: SocialProvider }) {

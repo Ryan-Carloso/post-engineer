@@ -94,6 +94,7 @@ describe('getPersonaDefaultAccounts', () => {
       pinterest: [],
       '3speak': [],
       rumble: [],
+      fanvue: [],
     });
   });
 
@@ -218,6 +219,7 @@ describe('emptyPersonaDefaultAccounts', () => {
       pinterest: [],
       '3speak': [],
       rumble: [],
+      fanvue: [],
     });
   });
 });

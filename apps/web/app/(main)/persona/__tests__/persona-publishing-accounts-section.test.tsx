@@ -66,6 +66,7 @@ const mockQueries = vi.hoisted(() => ({
   pinterest: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
   threespeak: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
   rumble: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
+  fanvue: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -80,6 +81,10 @@ vi.mock('@/lib/api', () => ({
 
 vi.mock('@/lib/pinterest-accounts', () => ({
   usePinterestAccountsQuery: () => mockQueries.pinterest,
+}));
+
+vi.mock('@/lib/fanvue-accounts', () => ({
+  useFanvueAccountsQuery: () => mockQueries.fanvue,
 }));
 
 vi.mock('@/lib/social-accounts-queries', () => ({
@@ -158,6 +163,7 @@ function setConnectedAccounts() {
   mockQueries.threespeak = { ...connectedAccounts.threespeak };
   mockQueries.pinterest = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
   mockQueries.rumble = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
+  mockQueries.fanvue = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
 }
 
 beforeEach(() => {
@@ -331,7 +337,7 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': ['alice'], rumble: [] },
+            accounts: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': ['alice'], rumble: [], fanvue: [] },
           }),
         }),
       );
@@ -493,7 +499,7 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: ['fb-1', 'fb-2'], pinterest: [], '3speak': [], rumble: [] },
+            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: ['fb-1', 'fb-2'], pinterest: [], '3speak': [], rumble: [], fanvue: [] },
           }),
         }),
       );
@@ -548,7 +554,63 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: ['pin-1', 'pin-2'], '3speak': [], rumble: [] },
+            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: ['pin-1', 'pin-2'], '3speak': [], rumble: [], fanvue: [] },
+          }),
+        }),
+      );
+    });
+  });
+
+  it('renders fanvue accounts, preselects saved ones and saves the toggled selection', async () => {
+    const fetchMock = mockFetchOnce({
+      success: true,
+      defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], fanvue: ['fv-1'] },
+    });
+    mockQueries.youtube = { data: { accounts: [] }, isLoading: false };
+    mockQueries.instagram = { data: { accounts: [] }, isLoading: false };
+    mockQueries.bluesky = { data: { accounts: [] }, isLoading: false };
+    mockQueries.facebook = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
+    mockQueries.threespeak = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
+    mockQueries.pinterest = { data: { authenticated: true, accounts: [] }, isLoading: false, error: null };
+    mockQueries.fanvue = {
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'fanvue', providerAccountId: 'fv-1', accountName: 'Maker' },
+          { provider: 'fanvue', providerAccountId: 'fv-2' },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    };
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    await screen.findByTestId('publishing-accounts-save');
+
+    const checkboxes = () => screen.getAllByTestId('account-card-select') as HTMLInputElement[];
+    expect(checkboxes()).toHaveLength(2);
+    expect(checkboxes()[0].checked).toBe(true);
+    expect(checkboxes()[1].checked).toBe(false);
+    expect(screen.getByText('Maker')).toBeInTheDocument();
+    expect(reportAccountCardDisplay).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'fanvue',
+      shownLabel: 'fv-2',
+      labelOrigin: 'provider_id',
+    }));
+
+    fireEvent.click(checkboxes()[1]);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ success: true, defaults: { fanvue: ['fv-1', 'fv-2'] } }),
+    });
+    fireEvent.click(screen.getByTestId('publishing-accounts-save'));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        DEFAULTS_URL,
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({
+            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: ['fv-1', 'fv-2'] },
           }),
         }),
       );
@@ -602,7 +664,7 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: ['chan-1', 'chan-2'] },
+            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: ['chan-1', 'chan-2'], fanvue: [] },
           }),
         }),
       );

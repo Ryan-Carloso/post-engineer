@@ -91,6 +91,13 @@ export class PinterestError extends Error {
   }
 }
 
+export class FanvueError extends Error {
+  constructor(message: string, public statusCode: number) {
+    super(message);
+    this.name = 'FanvueError';
+  }
+}
+
 export class RumbleError extends Error {
   readonly code: 'invalid_token' | 'upload_failed' | 'unknown';
 

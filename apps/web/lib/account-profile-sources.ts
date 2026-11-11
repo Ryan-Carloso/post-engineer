@@ -16,6 +16,8 @@ import { fetchThreadsProfile } from './threads';
 import { fetchFacebookPageProfile } from './facebook';
 import { fetchPinterestUserProfile } from './pinterest';
 import { getValidPinterestAccessToken } from './pinterest-tokens';
+import { fetchFanvueProfile } from './fanvue';
+import { getValidFanvueAccessToken } from './fanvue-tokens';
 import { fetchLinkedInMemberProfile } from './linkedin';
 import { fetchBlueskyPublicProfile } from './bluesky-profile';
 import { createGoogleOAuth2Client } from './youtube';
@@ -193,6 +195,24 @@ const rumble: ProfileSource = {
   },
 };
 
+const fanvue: ProfileSource = {
+  pictureKey: 'profilePictureUrl',
+  applies: always,
+  async fetch(supabase, userId, record) {
+    const profile = await fetchFanvueProfile(
+      await getValidFanvueAccessToken(supabase, userId, record.providerAccountId),
+    );
+    return {
+      accountName: profile.username,
+      pictureUrl: profile.avatarUrl,
+      metadata: {
+        name: profile.username,
+        profilePictureUrl: profile.avatarUrl,
+      },
+    };
+  },
+};
+
 export const PROFILE_SOURCES: Record<SocialProvider, ProfileSource> = {
   instagram,
   threads,
@@ -203,4 +223,5 @@ export const PROFILE_SOURCES: Record<SocialProvider, ProfileSource> = {
   pinterest,
   '3speak': threespeak,
   rumble,
+  fanvue,
 };

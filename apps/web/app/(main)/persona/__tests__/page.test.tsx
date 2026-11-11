@@ -78,6 +78,10 @@ vi.mock('@/lib/pinterest-accounts', () => ({
   usePinterestAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
 }));
 
+vi.mock('@/lib/fanvue-accounts', () => ({
+  useFanvueAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
+}));
+
 vi.mock('@/lib/ui', () => ({
   AlertIcon: () => <span data-testid="icon-alert" />,
   CheckIcon: () => <span data-testid="icon-check" />,

@@ -392,6 +392,25 @@ describe('MCP Tool Handlers', () => {
     expect(text).toContain('list_social_accounts');
   });
 
+  it('handleConnectAccount returns the OAuth authorization URL for fanvue', async () => {
+    vi.mocked(mockClient.getOAuthConnectUrl).mockResolvedValue({
+      success: true,
+      auth_url: 'https://www.fanvue.com/oauth/authorize?state=abc',
+    });
+
+    const response = await handleConnectAccount(mockClient, { provider: 'fanvue' });
+
+    expect(mockClient.getOAuthConnectUrl).toHaveBeenCalledWith('fanvue');
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response)).toContain('https://www.fanvue.com/oauth/authorize?state=abc');
+  });
+
+  it('ConnectAccountSchema accepts fanvue as an OAuth provider', async () => {
+    const { ConnectAccountSchema } = await import('../tools.js');
+    expect(ConnectAccountSchema.safeParse({ provider: 'fanvue' }).success).toBe(true);
+    expect(ConnectAccountSchema.safeParse({ provider: 'myspace' }).success).toBe(false);
+  });
+
   it('handleConnectAccount rejects non-https auth_url schemes', async () => {
     vi.mocked(mockClient.getOAuthConnectUrl).mockResolvedValue({
       success: true,
@@ -1491,6 +1510,9 @@ describe('disconnect account tool', () => {
     const { DisconnectAccountSchema } = await import('../tools.js');
     expect(
       DisconnectAccountSchema.safeParse({ provider: 'bluesky', providerAccountId: 'did:plc:abc' }).success
+    ).toBe(true);
+    expect(
+      DisconnectAccountSchema.safeParse({ provider: 'fanvue', providerAccountId: 'fan-1' }).success
     ).toBe(true);
     expect(
       DisconnectAccountSchema.safeParse({ provider: 'myspace', providerAccountId: 'acc-1' }).success

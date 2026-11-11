@@ -818,6 +818,21 @@ describe('generate and schedule video client', () => {
     expect(publishing.providers).toEqual(['rumble']);
   });
 
+  it('nests the fanvue account array under its own provider', async () => {
+    await client.generatePersonaVideo({
+      ...baseInput,
+      providers: ['fanvue'],
+      fanvueAccountIds: ['fan-1'],
+    });
+    const publishing = lastRequestBody().publishing as Record<string, unknown>;
+    expect(publishing.accounts).toEqual({
+      youtube: ['chan-1'],
+      bluesky: ['did:plc:abc'],
+      fanvue: ['fan-1'],
+    });
+    expect(publishing.providers).toEqual(['fanvue']);
+  });
+
   it('omits personaId entirely when the caller sends no persona', async () => {
     // A persona-less post is signalled by the ABSENT key, not by an empty
     // string: the API reads absence as "no persona", and sending `""` would
@@ -2122,6 +2137,30 @@ describe('publishVideoDirect', () => {
     expect(formData.getAll('threespeakAccountIds')).toEqual(['alice']);
     expect(formData.get('caption')).toBe('hello 3speak');
     expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('maps account ids to the fanvue field name and sends the caption', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect({
+      provider: 'fanvue',
+      videoPath,
+      accountIds: ['fan-1'],
+      caption: 'hello fanvue',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('provider')).toBe('fanvue');
+    expect(formData.getAll('fanvueAccountIds')).toEqual(['fan-1']);
+    expect(formData.get('caption')).toBe('hello fanvue');
+    expect(formData.get('video')).toBeInstanceOf(Blob);
+  });
+
+  it('fails fast for fanvue without a caption, without fetching', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    await expect(
+      client.publishVideoDirect({ provider: 'fanvue', videoPath, accountIds: ['fan-1'] }),
+    ).rejects.toThrow(/caption is required for fanvue/);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('maps account ids to the rumble field name and sends title + description instead of a caption', async () => {

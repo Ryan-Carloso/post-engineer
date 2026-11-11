@@ -201,7 +201,9 @@
                       "instagram",
                       "linkedin",
                       "threads",
-                      "facebook"
+                      "facebook",
+                      "pinterest",
+                      "fanvue"
                     ]
                   }
                 },
@@ -381,7 +383,11 @@
                 "linkedin",
                 "bluesky",
                 "threads",
-                "facebook"
+                "facebook",
+                "pinterest",
+                "3speak",
+                "rumble",
+                "fanvue"
               ]
             }
           },
@@ -4945,7 +4951,11 @@
                       "linkedin",
                       "bluesky",
                       "threads",
-                      "facebook"
+                      "facebook",
+                      "pinterest",
+                      "3speak",
+                      "rumble",
+                      "fanvue"
                     ]
                   },
                   "userId": {

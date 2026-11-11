@@ -15,6 +15,7 @@ import {
   RumbleAccountsSection,
 } from './credential-accounts-sections';
 import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
+import { useFanvueAccountsQuery } from '@/lib/fanvue-accounts';
 import { useUploadStore } from '@/lib/store';
 import { useYouTubeOAuth } from '@/lib/oauth/google-handler';
 import { useInstagramOAuth } from '@/lib/oauth/instagram-handler';
@@ -22,6 +23,7 @@ import { useLinkedInOAuth } from '@/lib/oauth/linkedin-handler';
 import { useThreadsOAuth } from '@/lib/oauth/threads-handler';
 import { useFacebookOAuth } from '@/lib/oauth/facebook-handler';
 import { usePinterestOAuth } from '@/lib/oauth/pinterest-handler';
+import { useFanvueOAuth } from '@/lib/oauth/fanvue-handler';
 import { ProviderIcon } from '@/components/provider-icon';
 import { useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
 import { useI18n } from '@/lib/i18n/provider';
@@ -41,6 +43,7 @@ export default function AccountsPage(): React.ReactElement {
         <ThreadsAccountsSection />
         <FacebookAccountsSection />
         <PinterestAccountsSection />
+        <FanvueAccountsSection />
         <ThreespeakAccountsSection />
         <RumbleAccountsSection />
       </main>
@@ -261,6 +264,40 @@ function PinterestAccountsSection(): ReactNode {
       connectedLabel={connectedLabel(t, accounts.length)}
       count={accounts.length}
       accounts={accounts.map((account) => <AccountCard key={account.recordId} type="pinterest" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
+      isLoading={query.isLoading}
+      loadError={query.error?.message ?? null}
+      connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
+      connectError={oauth.error}
+      disconnectError={flow.disconnectError}
+      connectDisabled={oauth.isLoading}
+      retryLabel={t('accounts.tryAgain')}
+      onConnect={() => void oauth.startOAuth()}
+      onRetry={() => void query.refetch()}
+      dialog={flow.dialog}
+    />
+  );
+}
+
+//---------------
+// Fanvue: one query and one OAuth flow. Connecting once adds the
+// Fanvue account; videos publish to the account, no board involved.
+//---------------
+
+function FanvueAccountsSection(): ReactNode {
+  const { t } = useI18n();
+  const query = useFanvueAccountsQuery();
+  const oauth = useFanvueOAuth();
+  const flow = useDisconnectFlow('fanvue');
+  const accounts = query.data?.accounts ?? [];
+  useAccountListErrorTelemetry('fanvue', query.error?.message ?? null);
+  return (
+    <SocialAccountsSection
+      icon={<BrandIcon className="bg-muted"><ProviderIcon provider="fanvue" /></BrandIcon>}
+      label={t('accounts.fanvueLabel')}
+      description={t('accounts.fanvueDescription')}
+      connectedLabel={connectedLabel(t, accounts.length)}
+      count={accounts.length}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="fanvue" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}

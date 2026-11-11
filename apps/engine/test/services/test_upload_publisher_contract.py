@@ -66,6 +66,17 @@ class PublishMetadataValidationTest(unittest.TestCase):
         )
         self.assertEqual(metadata.providers, ("pinterest",))
 
+    def test_accepts_fanvue_without_a_metadata_gate_here(self) -> None:
+        # Fanvue takes no parameter on validate_publish_metadata: its gate
+        # is fill_schedule.metadata.validate_publish_plan, so a fanvue-only
+        # call passes here even with no fanvue metadata attached.
+        metadata = upload_publisher.validate_publish_metadata(
+            providers=["fanvue"],
+            youtube=None,
+            instagram=None,
+        )
+        self.assertEqual(metadata.providers, ("fanvue",))
+
     def test_rejects_instagram_provider_without_metadata(self) -> None:
         self.assert_validation_error(
             "instagram provider requires instagram metadata",

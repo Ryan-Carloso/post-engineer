@@ -1,11 +1,13 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import {
   createOAuthState,
   decodeOAuthState,
+  getFanvueCodeVerifier,
   isLocalHostname,
   oauthPopupResponse,
   resolveOAuthRedirectUri,
+  setFanvueCodeVerifierCookie,
 } from '@/lib/oauth-utils';
 
 describe('OAuth redirect resolution', () => {
@@ -106,5 +108,37 @@ describe('oauthPopupResponse (XSS hardening)', () => {
     expect(response.headers.get('content-type')).toContain('text/html');
     const setCookie = response.headers.get('set-cookie') ?? '';
     expect(setCookie).toContain('oauth_state_nonce');
+  });
+});
+
+describe('Fanvue PKCE code verifier cookie', () => {
+  it('stores the verifier in an httpOnly cookie', () => {
+    const json = NextResponse.json({ ok: true });
+    setFanvueCodeVerifierCookie(json, 'verifier-1');
+    const setCookie = json.headers.get('set-cookie') ?? '';
+    expect(setCookie).toContain('fanvue_code_verifier=verifier-1');
+    expect(setCookie).toContain('HttpOnly');
+  });
+
+  it('reads the verifier back from the request cookies', () => {
+    const request = new NextRequest('https://post-engineer.com/api/fanvue-auth/callback', {
+      headers: { cookie: 'fanvue_code_verifier=verifier-1' },
+    });
+    expect(getFanvueCodeVerifier(request)).toBe('verifier-1');
+  });
+
+  it('returns null when the verifier cookie is absent or empty', () => {
+    expect(getFanvueCodeVerifier(new NextRequest('https://post-engineer.com/api/fanvue-auth/callback'))).toBeNull();
+    const empty = new NextRequest('https://post-engineer.com/api/fanvue-auth/callback', {
+      headers: { cookie: 'fanvue_code_verifier=' },
+    });
+    expect(getFanvueCodeVerifier(empty)).toBeNull();
+  });
+
+  it('oauthPopupResponse clears the verifier cookie on any outcome', async () => {
+    const response = oauthPopupResponse('fanvue-oauth-success', {});
+    const setCookie = response.headers.get('set-cookie') ?? '';
+    expect(setCookie).toContain('fanvue_code_verifier');
+    expect(setCookie).toContain('Max-Age=0');
   });
 });

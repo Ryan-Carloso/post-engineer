@@ -257,7 +257,7 @@ async function comparePartner(
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
     .select(
-      'providers, post_voice_id, post_voice_audio_url, post_video_aspect, post_video_layout, post_paragraph_number, post_face_quality, post_language, post_niche, post_cta_text, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids',
+      'providers, post_voice_id, post_voice_audio_url, post_video_aspect, post_video_layout, post_paragraph_number, post_face_quality, post_language, post_niche, post_cta_text, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids, fanvue_account_ids',
     )
     .eq('id', partner.schedule_id)
     .eq('user_id', userId)

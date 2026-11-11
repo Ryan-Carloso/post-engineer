@@ -173,6 +173,12 @@ export const COUNTER_FETCHERS: Record<MeasuredProvider, CounterFetcher> = {
     // of failing the run on every Rumble video.
     return { views: null, likes: null, comments: null, saves: null };
   },
+  async fanvue() {
+    // Fanvue exposes no per-post metrics the collector can read, so a
+    // published Fanvue video is measured as unknown on every counter
+    // rather than failing the whole metrics run.
+    return { views: null, likes: null, comments: null, saves: null };
+  },
 };
 
 export async function fetchProviderCounters(

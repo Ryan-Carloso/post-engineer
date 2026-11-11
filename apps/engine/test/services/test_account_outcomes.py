@@ -50,6 +50,13 @@ class UserNoticeTests(unittest.TestCase):
             "This is a problem with your account. Only you can fix it: reconnect Rumble.",
         )
 
+    def test_fanvue_notice_names_the_provider(self) -> None:
+        self.assertEqual(
+            user_notice("fanvue", "token_expired"),
+            "Fanvue did not publish because the account needs to be reconnected. "
+            "This is a problem with your account. Only you can fix it: reconnect Fanvue.",
+        )
+
     def test_reconnect_notice_for_every_other_user_code(self) -> None:
         for code in USER_CODES - {"email_not_verified"}:
             self.assertEqual(
@@ -134,6 +141,9 @@ class AccountIdsTests(unittest.TestCase):
 
     def test_rumble_reads_the_schedule_column_not_the_synthetic_target(self) -> None:
         self.assertEqual(_account_ids("rumble", {"rumble_account_ids": ["123", "456"]}), ["123", "456"])
+
+    def test_fanvue_reads_the_schedule_column_not_the_synthetic_target(self) -> None:
+        self.assertEqual(_account_ids("fanvue", {"fanvue_account_ids": ["123", "456"]}), ["123", "456"])
 
     def test_no_account_list_is_one_synthetic_target(self) -> None:
         self.assertEqual(_account_ids("threads", {}), [""])
