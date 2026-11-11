@@ -138,20 +138,26 @@ class StoreRequestsTests(unittest.TestCase):
         # C2: atomic claim — only transitions if the slot is still 'ready'.
         # A conditional PATCH (id + status=eq.ready) returns the row if the
         # race is won; returns [] if another worker/publish took the slot.
+        # The claim also re-checks due-ness (slot_at <= now, issue #555):
+        # a ready slot rescheduled to the future between the due snapshot
+        # and this claim must not publish at its old time.
+        now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
         self.requests.request.return_value = _response(json_data=[{"id": "slot-1"}])
-        claimed = self.store.claim_ready_slot("slot-1")
+        claimed = self.store.claim_ready_slot("slot-1", now)
         self.assertTrue(claimed)
         method, url, kwargs = self._last_call()
         self.assertEqual(method, "PATCH")
         self.assertEqual(kwargs["params"]["id"], "eq.slot-1")
         self.assertEqual(kwargs["params"]["status"], "eq.ready")
+        self.assertEqual(kwargs["params"]["slot_at"], f"lte.{now.isoformat()}")
         self.assertEqual(kwargs["json"]["status"], "publishing")
         self.assertIn("representation", kwargs["headers"]["Prefer"])
 
     def test_claim_ready_slot_returns_false_when_lost(self):
         # Slot already claimed (or published) → PostgREST returns [].
+        now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
         self.requests.request.return_value = _response(json_data=[])
-        self.assertFalse(self.store.claim_ready_slot("slot-1"))
+        self.assertFalse(self.store.claim_ready_slot("slot-1", now))
 
     def test_resumable_publishing_slots_reads_due_publishing_rows(self):
         # A publishing slot is resumed once its backoff or crash lease

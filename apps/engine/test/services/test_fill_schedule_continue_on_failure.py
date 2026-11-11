@@ -25,7 +25,7 @@ class _FakeStore:
     def __init__(self):
         self.updates = []
 
-    def claim_ready_slot(self, slot_id):
+    def claim_ready_slot(self, slot_id, now_utc=None):
         return True
 
     def update_slot(self, slot_id, **fields):

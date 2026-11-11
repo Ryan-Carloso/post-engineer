@@ -272,18 +272,27 @@ class ScheduleStore:
         )
         return isinstance(result, dict) and result.get("refunded") is True
 
-    def claim_ready_slot(self, slot_id: str) -> bool:
+    def claim_ready_slot(self, slot_id: str, now_utc: datetime) -> bool:
         """Atomic ready→publishing claim (C2: avoids duplicate posts).
 
-        Conditional PATCH: only transitions if the slot is STILL 'ready'.
-        PostgREST returns the row when it wins the race, [] when another
-        tick/process already claimed (or published) the slot.
+        Conditional PATCH: only transitions if the slot is STILL 'ready'
+        AND still due (slot_at <= now). The due re-check closes the
+        reschedule race (issue #555): a ready slot rescheduled to the
+        future between the due snapshot and this claim must not publish
+        at its old time — the claim loses and the slot is picked up on a
+        later tick at its new time. PostgREST returns the row when it
+        wins the race, [] when another tick/process already claimed (or
+        published) the slot, or when the slot is no longer due.
         """
         rows = self._request(
             "PATCH",
             "scheduled_posts",
             json={"status": SLOT_PUBLISHING},
-            params={"id": f"eq.{slot_id}", "status": f"eq.{SLOT_READY}"},
+            params={
+                "id": f"eq.{slot_id}",
+                "status": f"eq.{SLOT_READY}",
+                "slot_at": f"lte.{now_utc.isoformat()}",
+            },
             headers={
                 **self._headers,
                 "Prefer": "return=representation",

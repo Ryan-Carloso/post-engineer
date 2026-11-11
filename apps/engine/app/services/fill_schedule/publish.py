@@ -95,7 +95,7 @@ class BatchPublisher:
             claim = getattr(self.store, "claim_resumable_slot", None)
             if not callable(claim) or not claim(str(slot["id"]), now.isoformat(), lease_iso(now)):
                 return 0
-        elif not self.store.claim_ready_slot(str(slot["id"])):
+        elif not self.store.claim_ready_slot(str(slot["id"]), now):
             return 0
         if not resumed:
             # Once per publish: a resume (backoff, crash lease) is the same publish.

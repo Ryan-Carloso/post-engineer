@@ -365,8 +365,15 @@ describe('GET /api/persona/video-status/:taskId', () => {
       try {
         const response = await poll();
         expect(response.status).toBe(200);
-        const body = (await response.json()) as { postUrl: string | null };
-        expect(body.postUrl).toBe('http://localhost/posts/slot-1');
+        // Inside the envelope's body, where BaseResponse readers look: the
+        // MCP narrows result.body, so a top-level postUrl would never reach
+        // get_video_task_progress or wait_for_video_tasks (OpenCode #556).
+        const envelope = (await response.json()) as {
+          body: { postUrl: string | null };
+          postUrl?: unknown;
+        };
+        expect(envelope.body.postUrl).toBe('http://localhost/posts/slot-1');
+        expect(envelope.postUrl).toBeUndefined();
       } finally {
         updateSpy.mockRestore();
       }
@@ -385,8 +392,12 @@ describe('GET /api/persona/video-status/:taskId', () => {
       try {
         const response = await poll();
         expect(response.status).toBe(200);
-        const body = (await response.json()) as { postUrl: string | null };
-        expect(body.postUrl).toBeNull();
+        const envelope = (await response.json()) as {
+          body: { postUrl: string | null };
+          postUrl?: unknown;
+        };
+        expect(envelope.body.postUrl).toBeNull();
+        expect(envelope.postUrl).toBeUndefined();
       } finally {
         updateSpy.mockRestore();
       }

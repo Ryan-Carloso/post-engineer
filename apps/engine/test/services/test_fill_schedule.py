@@ -79,7 +79,7 @@ class _FakeStore:
         )
         return True
 
-    def claim_ready_slot(self, slot_id):
+    def claim_ready_slot(self, slot_id, now_utc=None):
         # by default the claim always wins (single-worker behavior)
         return True
 
@@ -2469,7 +2469,9 @@ class CoverageGapTests(unittest.TestCase):
         published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         self.assertEqual(published, 1)
         # claim happens BEFORE the first publish_video
-        store.claim_ready_slot.assert_called_once_with("slot-1")
+        store.claim_ready_slot.assert_called_once_with(
+            "slot-1", datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
+        )
         self.assertLess(
             store.claim_ready_slot.call_args.call_index or 0,
             1,

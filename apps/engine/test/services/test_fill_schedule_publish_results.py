@@ -28,7 +28,7 @@ class _FakeStore:
     def ready_due_slots(self, now):  # type: ignore[no-untyped-def]
         return []
 
-    def claim_ready_slot(self, slot_id: str) -> bool:
+    def claim_ready_slot(self, slot_id: str, now_utc=None) -> bool:
         self.claimed.append(slot_id)
         return True
 

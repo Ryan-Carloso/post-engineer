@@ -212,12 +212,20 @@ async function resolvePostUrl(userId: string, taskId: string, origin: string): P
 }
 
 //---------------
-// attachPostUrl — top-level postUrl on an object status body (issue #555).
-// A non-object body (a bare string or array) passes through untouched.
+// attachPostUrl — postUrl inside the envelope's body (issue #555), where
+// BaseResponse readers look: the MCP narrows result.body, so a top-level
+// postUrl on the envelope would never reach get_video_task_progress or
+// wait_for_video_tasks. A non-envelope body (a bare string, an array, or
+// an envelope without an object body) passes through untouched.
 //---------------
-function attachPostUrl(body: unknown, postUrl: string | null): unknown {
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) return body;
-  return { ...(body as Record<string, unknown>), postUrl };
+function attachPostUrl(envelope: unknown, postUrl: string | null): unknown {
+  if (typeof envelope !== 'object' || envelope === null || Array.isArray(envelope)) return envelope;
+  const inner = (envelope as Record<string, unknown>).body;
+  if (typeof inner !== 'object' || inner === null || Array.isArray(inner)) return envelope;
+  return {
+    ...(envelope as Record<string, unknown>),
+    body: { ...(inner as Record<string, unknown>), postUrl },
+  };
 }
 
 //---------------
