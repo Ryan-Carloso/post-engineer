@@ -581,7 +581,7 @@ export class PostEngineerClient {
     );
   }
 
-  async validateScript(segments: unknown, facelessMaterial?: string): Promise<unknown> {
+  async validateScript(segments: unknown, fullLipsync = false): Promise<unknown> {
     // Mechanical validation only: the web route debits no tokens,
     // schedules nothing and calls no engine — it re-runs the same
     // mechanical validation the generate route runs.
@@ -590,7 +590,7 @@ export class PostEngineerClient {
       {
         method: 'POST',
         headers: this.getHeaders(),
-        body: JSON.stringify({ segments, facelessMaterial }),
+        body: JSON.stringify({ segments, fullLipsync }),
       },
       'validate script'
     );

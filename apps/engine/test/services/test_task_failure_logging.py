@@ -249,9 +249,9 @@ class StartCrashStageTests(unittest.TestCase):
                 return_value="script text",
             ),
             patch.object(
-                task_service, "generate_terms",
-                side_effect=RuntimeError("boom") if fail_in == "generate_terms" else None,
-                return_value="terms",
+                task_service, "generate_audio",
+                side_effect=RuntimeError("boom") if fail_in == "generate_audio" else None,
+                return_value=("audio.mp3", 10.0, None),
             ),
             patch.object(task_service, "send_discord", return_value=True),
             patch.object(task_service, "cleanup_task_intermediates"),
@@ -267,8 +267,7 @@ class StartCrashStageTests(unittest.TestCase):
             if fail_in == "generate_script":
                 task_service.start(task_id, params, stop_at="script")
             else:
-                # script succeeds (or the crash happens even earlier),
-                # terms crashes
+                # script succeeds (or the crash happens even earlier)
                 task_service.start(task_id, params, stop_at="video")
         return capture
 
@@ -285,12 +284,12 @@ class StartCrashStageTests(unittest.TestCase):
         stages = [r["extra"].get("stage") for r in capture.errors()]
         self.assertIn("script", stages)
 
-    def test_crash_during_terms_phase_logs_terms_stage(self):
-        # Issue #198: the terms phase had started when generate_terms
-        # raised, so the failure is a terms failure, not "script".
-        capture = self._run_start_until_crash("generate_terms")
+    def test_crash_during_audio_phase_logs_audio_stage(self):
+        # Issue #198: the audio phase had started when generate_audio
+        # raised, so the failure is an audio failure, not "script".
+        capture = self._run_start_until_crash("generate_audio")
         stages = [r["extra"].get("stage") for r in capture.errors()]
-        self.assertIn("terms", stages)
+        self.assertIn("audio", stages)
 
     def test_mark_records_stage_in_task_state(self):
         # The SSE progress endpoint reads the stage from task state, so the

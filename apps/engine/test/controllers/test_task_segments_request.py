@@ -18,11 +18,17 @@ BODY = (
 CTA = "Save this video before your next trip to Porto."
 
 
+def _photos(prefix, count):
+    return [{"url": f"https://example.com/{prefix}{i}.jpg"} for i in range(count)]
+
+
 def valid_segments():
+    # Images mode needs about one photo per 3s: hook 24 words → 3,
+    # body 42 → 6, CTA 9 → 2.
     return [
-        {"kind": "hook", "text": HOOK},
-        {"kind": "body", "text": BODY},
-        {"kind": "cta", "text": CTA},
+        {"kind": "hook", "text": HOOK, "media": _photos("h", 3)},
+        {"kind": "body", "text": BODY, "media": _photos("b", 6)},
+        {"kind": "cta", "text": CTA, "media": _photos("c", 2)},
     ]
 
 
@@ -86,9 +92,9 @@ def test_segments_joining_beyond_video_script_cap_is_rejected():
     # supplied video_script.
     long_body = "x" * 20001 + " " + " ".join(["word"] * 29) + "."
     segments = [
-        {"kind": "hook", "text": HOOK},
-        {"kind": "body", "text": long_body},
-        {"kind": "cta", "text": CTA},
+        {"kind": "hook", "text": HOOK, "media": _photos("h", 3)},
+        {"kind": "body", "text": long_body, "media": _photos("b", 4)},
+        {"kind": "cta", "text": CTA, "media": _photos("c", 2)},
     ]
     with pytest.raises(ValidationError, match="video_script"):
         TaskVideoRequest(video_subject="Porto", segments=segments)

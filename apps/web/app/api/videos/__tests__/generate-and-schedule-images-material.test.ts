@@ -62,12 +62,12 @@ function post(options: Record<string, unknown>): Promise<Response> {
   );
 }
 
-function semantics(segments: unknown, facelessMaterial?: 'broll' | 'svg' | 'images') {
+function semantics(segments: unknown, fullLipsync?: boolean) {
   return checkSemantics({
     title: 'Porto trip',
     segments,
     providers: ['youtube'],
-    options: facelessMaterial === undefined ? {} : { facelessMaterial },
+    options: fullLipsync === undefined ? {} : { fullLipsync },
     personaId: 'persona-1',
   });
 }
@@ -79,7 +79,7 @@ beforeEach(() => {
 
 describe('generate-and-schedule with the images material', () => {
   it('rejects a segment without media with a 400 naming it, before auth or any charge', async () => {
-    const res = await post({ segments: bodyWithoutMedia, facelessMaterial: 'images' });
+    const res = await post({ segments: bodyWithoutMedia });
     expect(res.status).toBe(400);
     const json = (await res.json()) as { field: string; error: string };
     expect(json.field).toBe('options.segments.1.media');
@@ -89,17 +89,16 @@ describe('generate-and-schedule with the images material', () => {
   });
 
   it('accepts media on every segment and joins the script', () => {
-    const checked = semantics(withMedia, 'images');
+    const checked = semantics(withMedia);
     expect(checked.ok).toBe(true);
     if (checked.ok) {
-      expect(checked.value.options.facelessMaterial).toBe('images');
       expect(checked.value.script).toBe(`${hook}\n\n${bodyText}\n\n${cta}`);
     }
   });
 
-  it('keeps media optional for broll, svg and an omitted material', () => {
-    for (const material of ['broll', 'svg', undefined] as const) {
-      expect(semantics(bodyWithoutMedia, material).ok).toBe(true);
-    }
+  it('keeps media optional for full lip sync, required otherwise', () => {
+    expect(semantics(bodyWithoutMedia, true).ok).toBe(true);
+    expect(semantics(bodyWithoutMedia, false).ok).toBe(false);
+    expect(semantics(bodyWithoutMedia).ok).toBe(false);
   });
 });

@@ -41,7 +41,7 @@ def test_image_density_constants_match_the_shared_validator():
     assert _export_line("MAX_SEGMENTS") == f"export const MAX_SEGMENTS = {script_segments.MAX_SEGMENTS};"
 
 
-def test_other_materials_media_cap_matches_the_shared_validator():
+def test_full_lipsync_media_cap_matches_the_shared_validator():
     assert _export_line("MAX_MEDIAS") == f"export const MAX_MEDIAS = {script_segments.MAX_MEDIAS};"
 
 

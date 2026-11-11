@@ -105,7 +105,7 @@ unavailable, so this is safe on any host.
 ## 6. Tests
 
 - Test runner: `pytest`; tests may use either pytest functions or `unittest.TestCase`.
-- Integration tests (anything hitting real TTS / Pexels) MUST be gated
+- Integration tests (anything hitting real TTS) MUST be gated
   behind `MPT_RUN_INTEGRATION_TESTS=1` via `@unittest.skipUnless(...)`.
 - A test that calls `tm.start(...)` end-to-end is for verifying that the
   **production defaults** produce a valid video — not for redefining those

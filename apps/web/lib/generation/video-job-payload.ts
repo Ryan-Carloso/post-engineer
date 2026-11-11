@@ -57,20 +57,21 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<EngineVideoRequestField> = [
   // triage can requeue web-created tasks on engine restart.
   'slot_id',
   // faceless_material is a first-class engine field (VideoParams carries
-  // it as the per-post material choice, face or not); without it a
-  // post's svg choice would be dropped here and silently render broll.
+  // it as the per-post material choice, face or not); without it a post's
+  // images choice would be dropped here and the engine would fall back to
+  // its default.
   'faceless_material',
   // full_lipsync is a first-class engine field (VideoParams carries it as
   // the opt-in whole-video talking-head switch); without it a full-mode
-  // request would be dropped here and silently render intro-only b-roll.
+  // request would be dropped here and silently render intro-only images.
   'full_lipsync',
   // music_mood is a first-class engine field (VideoParams carries it as
   // the per-post BGM mood); without it a requested mood would be dropped
   // here and the engine would default every video to the first mood.
   'music_mood',
   // segments is a first-class engine field (TaskVideoRequest carries it):
-  // without it a segments request would render stock for every segment
-  // and drop every user photo with no warning.
+  // without it a segments request would render the neutral canvas for
+  // every segment and drop every user photo with no warning.
   'segments',
 ];
 // String-keyed view for membership checks on untyped request keys.

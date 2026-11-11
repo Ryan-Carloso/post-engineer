@@ -160,7 +160,7 @@ export function withRecipeNudge<TArgs>(
 // the handler's error text.
 //---------------
 export function withScriptOutcome<
-  TArgs extends { segments: unknown; recipe?: string; facelessMaterial?: string; options?: { facelessMaterial?: string } },
+  TArgs extends { segments: unknown; recipe?: string; fullLipsync?: boolean; options?: { fullLipsync?: boolean } },
 >(
   session: RecipeSession,
   toolName: ScriptTool,
@@ -168,8 +168,8 @@ export function withScriptOutcome<
 ): (args: TArgs) => Promise<McpToolResponse> {
   return async (args: TArgs): Promise<McpToolResponse> => {
     const response = await session.run(args.recipe, () => handler(args));
-    const material = args.facelessMaterial ?? args.options?.facelessMaterial;
-    if (response.isError !== true || validateSegments(args.segments, material).ok) {
+    const fullLipsync = args.fullLipsync === true || args.options?.fullLipsync === true;
+    if (response.isError !== true || validateSegments(args.segments, fullLipsync).ok) {
       return response;
     }
     session.recordScriptRejected();

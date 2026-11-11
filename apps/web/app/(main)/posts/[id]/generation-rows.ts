@@ -4,16 +4,9 @@ import type { TranslationKey } from '@/lib/i18n';
 //---------------
 // buildGenerationRows — the label/value rows of the post's generation facts,
 // in display order. Extracted from page.tsx (grandfathered over the
-// file-size cap). The material row is always shown, face or not: the video
-// is stock only, drawings only, or only the post's own images, and the post
-// says which.
+// file-size cap). There is no material row: every video is the agent's own
+// images since migration 054, so there is nothing to choose between.
 //---------------
-const MATERIAL_LABELS: Record<SlotDetailPayload['generation']['material'], TranslationKey> = {
-  broll: 'posts.generationMaterialBroll',
-  svg: 'posts.generationMaterialSvg',
-  images: 'posts.generationMaterialImages',
-};
-
 export interface GenerationRow {
   label: string;
   value: string;
@@ -29,10 +22,6 @@ export function buildGenerationRows(
     {
       label: t('posts.generationFaceLabel'),
       value: generation.faceless ? t('posts.generationFaceless') : t('posts.generationWithFace'),
-    },
-    {
-      label: t('posts.generationMaterialLabel'),
-      value: t(MATERIAL_LABELS[generation.material]),
     },
   ];
   if (generation.language !== null) {

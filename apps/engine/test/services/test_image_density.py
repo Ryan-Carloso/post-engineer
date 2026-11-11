@@ -59,37 +59,37 @@ def test_validate_segments_reports_the_same_density_counts():
         {"kind": "cta", "text": _words(8, "cta"), "media": _photos(1, "c")},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
-        validate_segments(segments, "images")
+        validate_segments(segments)
     assert exc_info.value.field == "segments.1.media"
     assert exc_info.value.rule == (
         "segment has 32 words (~12s) and needs at least 4 images (one per ~3s); it has 1."
     )
     assert exc_info.value.fix == "Add 3 more images to this segment's media array."
     segments[1]["media"] = _photos(4, "b")
-    assert validate_segments(segments, "images")["media_count"] == 8
+    assert validate_segments(segments)["media_count"] == 8
     segments[1]["media"] = _photos(11, "b")
     with pytest.raises(SegmentValidationError) as exc_info:
-        validate_segments(segments, "images")
+        validate_segments(segments)
     assert "at most 10" in exc_info.value.rule and "it has 11" in exc_info.value.rule
 
 
-def test_validate_segments_rejects_more_than_thirty_photos_and_seven_on_broll():
+def test_validate_segments_rejects_more_than_thirty_photos_and_seven_on_full_lipsync():
     segments = [
         {"kind": "hook", "text": _words(40, "hook"), "media": _photos(13, "h")},
         {"kind": "body", "text": _words(140, "body"), "media": _photos(18, "b")},
         {"kind": "cta", "text": _words(20, "cta"), "media": _photos(6, "c")},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
-        validate_segments(segments, "images")
+        validate_segments(segments)
     assert exc_info.value.field == "segments"
     assert "30" in exc_info.value.rule
-    broll = [
+    full_lipsync = [
         {"kind": "hook", "text": _words(24, "hook"), "media": _photos(7, "h")},
         {"kind": "body", "text": _words(32, "body")},
         {"kind": "cta", "text": _words(8, "cta")},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
-        validate_segments(broll, "broll")
+        validate_segments(full_lipsync, full_lipsync=True)
     assert exc_info.value.rule == "At most 6 medias are allowed."
 
 
@@ -100,7 +100,7 @@ def test_an_item_without_a_reference_fails_on_that_item():
         {"kind": "cta", "text": _words(8, "cta"), "media": _photos(1, "c")},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
-        validate_segments(segments, "images")
+        validate_segments(segments)
     assert exc_info.value.field == "segments.1.media.0"
 
 

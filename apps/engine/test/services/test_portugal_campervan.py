@@ -2,14 +2,16 @@
 End-to-end flow test for the Portugal campervan theme.
 
 Runs the FULL Post Engineer pipeline in-process (no HTTP server, no Docker):
-    subject → supplied script → search terms → Pexels footage download
-            → narration → subtitles → moviepy/ffmpeg render → final .mp4
+    subject → supplied script → narration → subtitles → neutral canvas
+            → moviepy/ffmpeg render → final .mp4
 
 The script arrives with the job (LLM script generation was removed in
 Phase 5 PR 1); the test still exercises the real downstream providers.
+With no segments and no local materials the video is the neutral canvas
+only (issue #542).
 
 Gated behind MPT_RUN_INTEGRATION_TESTS=1 because it calls real providers
-(Pexels, TTS) and takes several minutes. Run with:
+(TTS) and takes several minutes. Run with:
 
     MPT_RUN_INTEGRATION_TESTS=1 uv run python -m unittest \
         test.services.test_portugal_campervan -v

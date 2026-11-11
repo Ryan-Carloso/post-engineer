@@ -13,7 +13,7 @@ from app.services.pipeline_stage import PhaseTracker
 
 
 # Runs that stop before the audio stage never synthesize speech.
-_STOPS_BEFORE_AUDIO = ("script", "terms")
+_STOPS_BEFORE_AUDIO = ("script",)
 
 
 def run(

@@ -1,11 +1,11 @@
 """Aspect-ratio gate for agent-supplied images.
 
 One rule, shared by every entry point that shows an agent image
-full-frame: the stock ratio rule from material_verification. A photo
-narrower than the canvas (pillarbox) is always rejected; a wider photo
-is accepted only while the horizontal bars stay within
-MAX_LETTERBOX_BARS. The check is mechanical: no cropping, no judgement,
-and the mismatch names both sides so the agent can send the right image.
+full-frame: the letterbox rule in letterbox.py. A photo narrower than
+the canvas (pillarbox) is always rejected; a wider photo is accepted
+only while the horizontal bars stay within MAX_LETTERBOX_BARS. The
+check is mechanical: no cropping, no judgement, and the mismatch names
+both sides so the agent can send the right image.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import Optional, Union
 
 from app.models.schema import VideoAspect
 from app.services.image_material import MIN_MATERIAL_EDGE
-from app.services.material_verification import ratio_matches
+from app.services.letterbox import ratio_matches
 
 
 # Mirrored in the web preflight (aspect-preflight.ts: ratioLabel and

@@ -29,7 +29,7 @@ from PIL import Image, ImageDraw, ImageFont
 from app.config import config
 from app.models import const
 from app.services import caption_layout, image_material, media_aspect, subtitle_sizing, video_loop
-from app.services.material import MAX_LETTERBOX_BARS
+from app.services.letterbox import MAX_LETTERBOX_BARS
 from app.models.schema import (
     MaterialInfo,
     VideoAspect,
@@ -594,11 +594,11 @@ def replace_video_intro_with_lipsync(
 ) -> str:
     """Replace the beginning of a background video with a talking avatar.
 
-    ``layout`` picks how the avatar meets the b-roll during the hook.
+    ``layout`` picks how the avatar meets the background footage during the hook.
     The default is ``standard``, matching ``VideoParams.video_layout``.
 
     ``standard``
-        The avatar fills the frame (scale + pad). The b-roll's first
+        The avatar fills the frame (scale + pad). The background footage's first
         ``duration`` seconds are replaced outright.
     ``react``
         The frame is split in half: the avatar on top, the video material below.

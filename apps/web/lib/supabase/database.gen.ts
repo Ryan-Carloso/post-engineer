@@ -504,7 +504,7 @@ export interface Database {
         faceless: boolean;
         publish_attempts: number;
         publish_not_before: string | null;
-        faceless_material: 'broll' | 'svg' | 'images';
+        faceless_material: string;
         segments: Json | null;
         title: string | null;
         full_lipsync: boolean;
@@ -531,7 +531,7 @@ export interface Database {
         faceless?: boolean;
         publish_attempts?: number;
         publish_not_before?: string | null;
-        faceless_material?: 'broll' | 'svg' | 'images';
+        faceless_material?: string;
         segments?: Json | null;
         title?: string | null;
         full_lipsync?: boolean;
@@ -558,7 +558,7 @@ export interface Database {
         faceless?: boolean;
         publish_attempts?: number;
         publish_not_before?: string | null;
-        faceless_material?: 'broll' | 'svg' | 'images';
+        faceless_material?: string;
         segments?: Json | null;
         title?: string | null;
         full_lipsync?: boolean;

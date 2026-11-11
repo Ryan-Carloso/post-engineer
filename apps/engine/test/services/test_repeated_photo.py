@@ -38,7 +38,7 @@ def test_repeated_media_id_across_segments_names_the_second_item():
     segments[0]["media"] = [{"mediaId": "photo-1"}]
     segments[1]["media"] = [{"mediaId": "photo-1"}]
     with pytest.raises(SegmentValidationError) as exc_info:
-        script_segments.validate_segments(segments)
+        script_segments.validate_segments(segments, full_lipsync=True)
     assert exc_info.value.field == "segments.1.media.0"
     assert exc_info.value.rule == REPEAT_RULE
     assert exc_info.value.fix == REPEAT_FIX
@@ -51,7 +51,7 @@ def test_repeated_url_inside_one_segment_points_at_the_second_item():
         {"url": "https://example.com/a.jpg"},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
-        script_segments.validate_segments(segments)
+        script_segments.validate_segments(segments, full_lipsync=True)
     assert exc_info.value.field == "segments.1.media.1"
     assert exc_info.value.rule == REPEAT_RULE
     assert exc_info.value.fix == REPEAT_FIX
@@ -62,7 +62,7 @@ def test_trimmed_media_id_matches_the_untrimmed_copy():
     segments[0]["media"] = [{"mediaId": "photo-1"}]
     segments[2]["media"] = [{"mediaId": "  photo-1  "}]
     with pytest.raises(SegmentValidationError) as exc_info:
-        script_segments.validate_segments(segments)
+        script_segments.validate_segments(segments, full_lipsync=True)
     assert exc_info.value.field == "segments.2.media.0"
     assert exc_info.value.rule == REPEAT_RULE
     assert exc_info.value.fix == REPEAT_FIX
@@ -72,7 +72,7 @@ def test_same_string_as_media_id_and_url_is_not_the_same_photo():
     segments = _segments()
     segments[0]["media"] = [{"mediaId": "photo-1"}]
     segments[1]["media"] = [{"url": "photo-1"}, {"url": "https://example.com/b.jpg"}]
-    result = script_segments.validate_segments(segments)
+    result = script_segments.validate_segments(segments, full_lipsync=True)
     assert result["media_count"] == 3
 
 
@@ -87,7 +87,7 @@ def test_images_mode_rejects_a_repeated_url_when_the_count_would_pass():
         {"url": "https://example.com/a.jpg"},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
-        script_segments.validate_segments(segments, "images")
+        script_segments.validate_segments(segments)
     assert exc_info.value.field == "segments.0.media.2"
     assert exc_info.value.rule == REPEAT_RULE
     assert exc_info.value.fix == REPEAT_FIX

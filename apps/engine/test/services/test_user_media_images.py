@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 from PIL import Image
 
-from app.services import image_coverage, place_photos, segment_panels, user_media
+from app.services import image_coverage, image_fetch, segment_panels, user_media
 
 # Hook spoken 0.0-1.2 s, CTA 5.0-5.9 s, audio 6.0 s.
 WORDS = [("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2), ("Visit", 5.0, 5.4), ("Porto", 5.4, 5.9)]
@@ -43,33 +43,27 @@ def task_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
-def _params(material, segments=SEGMENTS):
+def _params(segments=SEGMENTS):
     return SimpleNamespace(
         video_aspect="9:16", font_name="x.ttf", segments=segments, persona=None,
-        faceless_material=material, video_script="\n\n".join(s["text"] for s in segments),
+        faceless_material="images", video_script="\n\n".join(s["text"] for s in segments),
     )
 
 
 def _run(task_dir, params, download=_download, words=WORDS):
-    with patch.object(place_photos, "download_image", side_effect=download), patch(
+    with patch.object(image_fetch, "download_image", side_effect=download), patch(
         "app.services.user_media.face_detect.image_contains_face", return_value=False
     ):
         return user_media.prepare_segment_panels("task-1", params, _subtitle(task_dir, words), 6.0)
 
 
 def test_images_material_photos_cover_the_whole_audio_and_zoom(task_dir):
-    warnings = _run(task_dir, _params("images"))
+    warnings = _run(task_dir, _params())
     panels, stored = segment_panels._read_manifest("task-1")
     assert [(p.index, p.start, p.end, p.motion) for p in panels] == [(0, 0.0, 5.0, "in"), (1, 5.0, 6.0, "out")]
     # The hook photo runs on over the 3.8 s silence before the CTA: worth a warning.
     assert warnings == ["segment 0 image extended: a neighbour image covers a missing image"]
     assert stored == warnings
-
-
-def test_broll_material_keeps_photos_to_their_spoken_seconds_without_zoom(task_dir):
-    assert _run(task_dir, _params("broll")) == []
-    panels, _ = segment_panels._read_manifest("task-1")
-    assert [(p.index, p.start, p.end, p.motion) for p in panels] == [(0, 0.0, 1.2, None), (1, 5.0, 5.9, None)]
 
 
 def test_a_dropped_photo_keeps_its_skip_warning_and_the_neighbour_covers_it(task_dir):
@@ -78,7 +72,7 @@ def test_a_dropped_photo_keeps_its_skip_warning_and_the_neighbour_covers_it(task
             raise OSError("blocked")
         return _download(url, dest_path, session)
 
-    warnings = _run(task_dir, _params("images"), download=only_cta)
+    warnings = _run(task_dir, _params(), download=only_cta)
     panels, _ = segment_panels._read_manifest("task-1")
     assert [(p.index, p.start, p.end) for p in panels] == [(1, 0.0, 6.0)]
     assert warnings[0].startswith("segment 0 image 0 media skipped: ")
@@ -90,12 +84,12 @@ def test_no_surviving_photo_fails_the_images_material_without_writing_a_manifest
         raise OSError("blocked")
 
     with pytest.raises(image_coverage.ImagesDoNotCoverAudio):
-        _run(task_dir, _params("images"), download=refuse)
+        _run(task_dir, _params(), download=refuse)
     assert segment_panels._read_manifest("task-1") == ([], [])
 
 
 def test_hook_persona_coverage_starts_where_the_face_hands_over(task_dir):
-    params = _params("images")
+    params = _params()
     with patch.object(user_media, "_face_mode", return_value=segment_panels.FACE_HOOK), patch.object(
         user_media, "_hook_end", return_value=1.5
     ) as hook_end:
@@ -113,7 +107,7 @@ def test_full_lipsync_has_nothing_to_cover_and_never_fails(task_dir):
         raise OSError("blocked")
 
     with patch.object(user_media, "_face_mode", return_value=segment_panels.FACE_FULL):
-        warnings = _run(task_dir, _params("images"), download=refuse)
+        warnings = _run(task_dir, _params(), download=refuse)
     assert len(warnings) == 2 and all("media skipped" in w for w in warnings)
 
 
@@ -125,7 +119,7 @@ def test_images_material_landscape_photos_fail_the_video(task_dir):
         return _download(url, dest_path, session, width=1920, height=1080)
 
     with pytest.raises(image_coverage.ImagesDoNotCoverAudio):
-        _run(task_dir, _params("images"), download=landscape)
+        _run(task_dir, _params(), download=landscape)
     assert segment_panels._read_manifest("task-1") == ([], [])
 
 
@@ -135,7 +129,7 @@ def test_a_wrong_ratio_photo_is_skipped_and_the_neighbour_covers_it(task_dir):
             return _download(url, dest_path, session, width=1920, height=1080)
         return _download(url, dest_path, session)
 
-    warnings = _run(task_dir, _params("images"), download=mixed)
+    warnings = _run(task_dir, _params(), download=mixed)
     panels, _ = segment_panels._read_manifest("task-1")
     assert [(p.index, p.start, p.end) for p in panels] == [(1, 0.0, 6.0)]
     assert warnings[0] == (
@@ -165,7 +159,7 @@ def test_a_landscape_hook_photo_stays_a_panel_when_the_face_shows(task_dir):
             return _download(url, dest_path, session)
         return _download(url, dest_path, session, width=1920, height=1080)
 
-    params = _params("images", segments=segments)
+    params = _params(segments=segments)
     with patch.object(user_media, "_face_mode", return_value=segment_panels.FACE_HOOK), patch.object(
         user_media, "_hook_end", return_value=1.5
     ):

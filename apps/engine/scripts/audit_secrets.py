@@ -4,8 +4,7 @@ Compares apps/engine/.env.example and config.example.toml against
 secrets/{prod,dev}/engine/{.env,config.toml}, prints ONLY the names of
 the keys that are missing, and exits 1 when anything is missing. Never
 prints, logs, or compares values: the operator decides which gaps to
-fill (some are deliberate — e.g. the SVG catalog off by default in
-production).
+fill (some are deliberate — e.g. an optional webhook left unset in dev).
 
 Usage (from apps/engine):
     .venv/bin/python -m scripts.audit_secrets            # both trees

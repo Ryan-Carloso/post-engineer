@@ -10,7 +10,6 @@ from unittest.mock import ANY, patch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import task as tm
-from app.services import terms_fallback
 from app.services import voice as vs
 from app.services.intro_cost import IntroCostReport, completion_cost_kwargs
 from app.services import intro_cost as intro_cost_module
@@ -46,96 +45,6 @@ class TestTaskService(unittest.TestCase):
 
         record.assert_not_called()
 
-    _SCRIPT = (
-        "Morning light over Porto riverside cafes. "
-        "We taste warm francesinha sandwiches near busy Bolhao market stalls. "
-        "Afternoon walks along Douro river bridges end with sweet custard tarts."
-    )
-
-    def test_generate_terms_expands_missing_agent_terms_mechanically_in_script_order(self):
-        """
-        With no agent terms, generate_terms expands mechanically from the
-        script itself, in script narrative order, and records an
-        auto-generated warning in the task status. No LLM is involved:
-        the task module has no llm attribute at all.
-        """
-        self.assertFalse(hasattr(tm, "llm"))
-        params = VideoParams(
-            video_subject="Porto food tour",
-            video_script="",
-            match_materials_to_script=True,
-        )
-
-        with patch.object(tm, "_update_task") as update:
-            result = tm.generate_terms("task-id", params, self._SCRIPT)
-
-        self.assertEqual(len(result), 20)
-        self.assertEqual(result[0], "morning light")
-        update.assert_called_once_with(
-            "task-id", terms_warning=terms_fallback.TERMS_AUTO_GENERATED_WARNING
-        )
-
-    def test_generate_terms_expands_few_agent_terms_and_records_warning(self):
-        params = VideoParams(
-            video_subject="Porto food tour",
-            video_script="",
-            video_terms=["Porto street"],
-            match_materials_to_script=True,
-        )
-
-        with patch.object(tm, "_update_task") as update:
-            result = tm.generate_terms("task-id", params, self._SCRIPT)
-
-        self.assertEqual(len(result), 20)
-        self.assertEqual(result[0], "Porto street")
-        update.assert_called_once_with(
-            "task-id", terms_warning=terms_fallback.TERMS_EXPANDED_WARNING
-        )
-
-    def test_generate_terms_uses_twenty_agent_terms_untouched_and_clears_stale_warning(self):
-        # 20+ agent terms are used verbatim with no new warning — but the
-        # key is still written (as None) so a retry clears a stale warning
-        # recorded by an earlier run, the same contract as media_warnings.
-        words = [
-            "morning", "light", "riverside", "cafes", "taste", "warm",
-            "francesinha", "sandwiches", "busy", "bolhao", "market", "stalls",
-            "afternoon", "walks", "douro", "river", "bridges", "sweet",
-            "custard", "tarts",
-        ]
-        supplied = [f"Porto {word}" for word in words]
-        params = VideoParams(
-            video_subject="Porto food tour",
-            video_script="",
-            video_terms=supplied,
-            match_materials_to_script=True,
-        )
-
-        with patch.object(tm, "_update_task") as update:
-            result = tm.generate_terms("task-id", params, self._SCRIPT)
-
-        self.assertEqual(result, supplied)
-        update.assert_called_once_with("task-id", terms_warning=None)
-
-    def test_generate_terms_with_empty_expansion_fails_loudly(self):
-        # A script with no distinctive words yields no terms at all: the
-        # task fails at the terms stage instead of inventing topics.
-        params = VideoParams(
-            video_subject="Porto food tour",
-            video_script="",
-            match_materials_to_script=True,
-        )
-
-        with (
-            patch.object(tm, "_update_task"),
-            patch.object(tm, "_fail_task") as fail_task,
-        ):
-            result = tm.generate_terms("task-id", params, "the and of")
-
-        self.assertIsNone(result)
-        fail_task.assert_called_once_with(
-            "task-id", "failed to generate video terms", params, stage="terms"
-        )
-    
     def test_generate_audio_uses_custom_file_inside_task_directory(self):
         task_id = "test-custom-audio-safe"
         task_dir = utils.task_dir(task_id)
@@ -362,7 +271,6 @@ class TestTaskService(unittest.TestCase):
         params = VideoParams(
             video_subject="金钱的作用",
             video_script="金钱不仅是交换媒介，更是社会资源的分配工具。它能满足基本生存需求，如食物和住房，也能提供教育、医疗等提升生活品质的机会。拥有足够的金钱意味着更多选择权，比如职业自由或创业可能。但金钱的作用也有边界，它无法直接购买幸福、健康或真诚的人际关系。过度追逐财富可能导致价值观扭曲，忽视精神层面的需求。理想的状态是理性看待金钱，将其作为实现目标的工具而非终极目的。",
-            video_terms="money importance, wealth and society, financial freedom, money and happiness, role of money",
             video_aspect="9:16",
             video_concat_mode="random",
             video_transition_mode="None",
@@ -389,193 +297,54 @@ class TestTaskService(unittest.TestCase):
         print(result)
     
 
-class TestGetVideoMaterialsRandomSourceCascade(unittest.TestCase):
+class TestGetVideoMaterials(unittest.TestCase):
     """
-    Broll mode (the default) keeps the previous behaviour: remote download
-    uses the 3 stock sources (pexels, pixabay, coverr) in shuffled order —
-    starting source drawn per task, rest in cascade. Svg mode instead
-    queries the R2 catalog only (source_mix ["svg"]); local materials
-    (video_materials) replace the download in both modes.
+    Local materials replace the download; otherwise the images mode renders
+    only the neutral canvas the agent's segment photos cover. There is no
+    remote download anymore (issue #542).
     """
-
-    def test_remote_download_always_uses_shuffled_three_sources(self):
-        params = VideoParams(video_subject="cidade ao pôr do sol")
-
-        with (
-            patch.object(tm.random, "shuffle", side_effect=lambda seq: seq.reverse()),
-            patch.object(tm.material, "download_videos", return_value=["v.mp4"]) as dv,
-        ):
-            result = tm.get_video_materials(
-                task_id="random-cascade",
-                params=params,
-                video_terms=["cidade ao pôr do sol"],
-                audio_duration=10,
-            )
-
-        self.assertEqual(result, ["v.mp4"])
-        self.assertEqual(
-            dv.call_args.kwargs.get("source_mix"),
-            ["coverr", "pixabay", "pexels"],
-        )
-        self.assertNotIn("source", dv.call_args.kwargs)
-
-    def test_source_order_follows_shuffle_result(self):
-        with patch.object(tm.material, "download_videos", return_value=["v.mp4"]) as dv:
-            with patch.object(
-                tm.random, "shuffle", side_effect=lambda seq: seq.reverse()
-            ):
-                tm.get_video_materials(
-                    task_id="shuffled",
-                    params=VideoParams(video_subject="x"),
-                    video_terms=["x"],
-                    audio_duration=10,
-                )
-                shuffled_order = tuple(dv.call_args.kwargs.get("source_mix"))
-            with patch.object(tm.random, "shuffle", side_effect=lambda seq: None):
-                tm.get_video_materials(
-                    task_id="original",
-                    params=VideoParams(video_subject="x"),
-                    video_terms=["x"],
-                    audio_duration=10,
-                )
-                original_order = tuple(dv.call_args.kwargs.get("source_mix"))
-
-        self.assertNotEqual(shuffled_order, original_order)
-        self.assertEqual(sorted(original_order), ["coverr", "pexels", "pixabay"])
-        self.assertEqual(sorted(shuffled_order), ["coverr", "pexels", "pixabay"])
 
     def test_provided_materials_skip_download(self):
         material_info = MaterialInfo(provider="local", url="/tmp/a.mp4", duration=0)
         params = VideoParams(video_subject="x", video_materials=[material_info])
 
-        with (
-            patch.object(tm.video, "preprocess_video", return_value=[material_info]) as preprocess,
-            patch.object(tm.material, "download_videos") as dv,
-        ):
+        with patch.object(tm.video, "preprocess_video", return_value=[material_info]) as preprocess:
             result = tm.get_video_materials(
                 task_id="local-materials",
                 params=params,
-                video_terms=["x"],
                 audio_duration=10,
             )
 
         self.assertEqual(result, ["/tmp/a.mp4"])
         preprocess.assert_called_once()
-        dv.assert_not_called()
 
-    def test_svg_mode_queries_catalog_only(self):
-        params = VideoParams(video_subject="x", faceless_material="svg")
+    def test_images_mode_returns_the_neutral_canvas(self):
+        params = VideoParams(video_subject="x", faceless_material="images")
 
-        with (
-            patch.object(tm.random, "shuffle") as shuffle,
-            patch.object(tm.material, "download_videos", return_value=["s.mp4"]) as dv,
-        ):
+        with patch.object(
+            tm.faceless_material, "images_canvas", return_value=["canvas.mp4"]
+        ) as canvas:
             result = tm.get_video_materials(
-                task_id="svg-only",
+                task_id="images-canvas",
                 params=params,
-                video_terms=["x"],
                 audio_duration=10,
             )
 
-        self.assertEqual(result, ["s.mp4"])
-        self.assertEqual(dv.call_args.kwargs.get("source_mix"), ["svg"])
-        shuffle.assert_not_called()
+        self.assertEqual(result, ["canvas.mp4"])
+        canvas.assert_called_once()
 
-    def test_svg_mode_empty_catalog_with_default_aspect_falls_back_to_neutral(self):
-        import os
-        import tempfile
+    def test_images_mode_canvas_failure_returns_none(self):
+        params = VideoParams(video_subject="x", faceless_material="images")
 
-        # VideoParams defaults video_aspect to the unvalidated string
-        # "9:16"; the shared neutral renderer must coerce it, or the
-        # catalog-empty svg task fails instead of getting its clip.
-        params = VideoParams(video_subject="x", faceless_material="svg")
-        self.assertEqual(params.video_aspect, "9:16")
-        with tempfile.TemporaryDirectory() as tmp:
-            with (
-                patch.object(tm.material, "download_videos", return_value=[]),
-                patch.object(tm.utils, "task_dir", return_value=tmp),
-                patch(
-                    "app.services.image_material.render_image_file_to_mp4",
-                    return_value=os.path.join(tmp, "neutral.mp4"),
-                ),
-                patch.object(tm, "_fail_task") as fail_task,
-            ):
-                result = tm.get_video_materials(
-                    task_id="svg-str-aspect",
-                    params=params,
-                    video_terms=["x"],
-                    audio_duration=10,
-                )
-        self.assertEqual(result, [os.path.join(tmp, "neutral.mp4")])
-        fail_task.assert_not_called()
-
-    def test_svg_mode_empty_catalog_falls_back_to_neutral(self):
-        params = VideoParams(video_subject="x", faceless_material="svg")
-
-        with (
-            patch.object(tm.material, "download_videos", return_value=[]) as dv,
-            patch.object(
-                tm.material.material_verification,
-                "render_neutral_clip",
-                return_value="neutral.mp4",
-            ) as neutral,
-            patch.object(tm, "_fail_task") as fail_task,
-        ):
+        with patch.object(tm.faceless_material, "images_canvas", return_value=[]):
             result = tm.get_video_materials(
-                task_id="svg-neutral",
+                task_id="images-canvas-fail",
                 params=params,
-                video_terms=["x"],
-                audio_duration=10,
-            )
-
-        self.assertEqual(result, ["neutral.mp4"])
-        dv.assert_called_once()
-        neutral.assert_called_once()
-        fail_task.assert_not_called()
-
-    def test_svg_mode_neutral_failure_fails_task(self):
-        params = VideoParams(video_subject="x", faceless_material="svg")
-
-        with (
-            patch.object(tm.material, "download_videos", return_value=[]),
-            patch.object(
-                tm.material.material_verification,
-                "render_neutral_clip",
-                return_value="",
-            ),
-            patch.object(tm, "_fail_task") as fail_task,
-        ):
-            result = tm.get_video_materials(
-                task_id="svg-fail",
-                params=params,
-                video_terms=["x"],
                 audio_duration=10,
             )
 
         self.assertIsNone(result)
-        fail_task.assert_called_once()
 
-    def test_broll_mode_never_uses_neutral(self):
-        params = VideoParams(video_subject="x", faceless_material="broll")
-
-        with (
-            patch.object(tm.material, "download_videos", return_value=[]) as dv,
-            patch.object(
-                tm.material.material_verification, "render_neutral_clip"
-            ) as neutral,
-            patch.object(tm, "_fail_task") as fail_task,
-        ):
-            result = tm.get_video_materials(
-                task_id="broll-fail",
-                params=params,
-                video_terms=["x"],
-                audio_duration=10,
-            )
-
-        self.assertIsNone(result)
-        dv.assert_called_once()
-        neutral.assert_not_called()
-        fail_task.assert_called_once()
 
 class TestGenerateFinalVideosSingleOutput(unittest.TestCase):
     """
@@ -618,19 +387,8 @@ class TestGenerateFinalVideosSingleOutput(unittest.TestCase):
             os.path.join(task_dir, "final-1.mp4"),
         )
 
-    def test_match_materials_to_script_forces_sequential(self):
-        _, _, combine, _ = self._run(
-            video_concat_mode="random", match_materials_to_script=True
-        )
-        self.assertEqual(
-            combine.call_args.kwargs.get("video_concat_mode"),
-            tm.VideoConcatMode.sequential,
-        )
-
-    def test_concat_mode_passthrough_without_match(self):
-        _, _, combine, _ = self._run(
-            video_concat_mode="random", match_materials_to_script=False
-        )
+    def test_concat_mode_passthrough(self):
+        _, _, combine, _ = self._run(video_concat_mode="random")
         self.assertEqual(
             combine.call_args.kwargs.get("video_concat_mode"),
             tm.VideoConcatMode.random,

@@ -101,12 +101,6 @@
                 }
               }
             }
-          },
-          "terms": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           }
         }
       }
@@ -5203,15 +5197,6 @@
                       "faceless": {
                         "type": "boolean"
                       },
-                      "facelessMaterial": {
-                        "type": "string",
-                        "enum": [
-                          "broll",
-                          "svg",
-                          "images"
-                        ],
-                        "description": "'images' renders only the segment images: a media list on every segment, about one image per ~3s, at most 30."
-                      },
                       "fullLipsync": {
                         "type": "boolean",
                         "description": "Persona talks for the whole video, not only the hook. Not with faceless."
@@ -5605,14 +5590,9 @@
                       "$ref": "#/components/schemas/Segment"
                     }
                   },
-                  "facelessMaterial": {
-                    "type": "string",
-                    "enum": [
-                      "broll",
-                      "svg",
-                      "images"
-                    ],
-                    "description": "Optional. 'images' needs a media list on every segment: about one image per ~3s, at most 30."
+                  "fullLipsync": {
+                    "type": "boolean",
+                    "description": "Optional. Media is optional when true (full lip sync); otherwise every segment needs a media list, about one image per ~3s, at most 30."
                   }
                 },
                 "required": [

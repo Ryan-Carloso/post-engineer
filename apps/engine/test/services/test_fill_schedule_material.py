@@ -1,8 +1,8 @@
 """The batch pipeline forwards the per-post material choice.
 
 scheduled_posts.faceless_material (migration 029) is written by the web
-and must reach the engine request on the batch path too, or an "svg"
-post dispatched here would silently render stock.
+and must reach the engine request on the batch path too. Migration 054
+backfills every stored row to "images", the only material left.
 """
 
 import sys
@@ -72,14 +72,11 @@ class _Store:
 
 
 class SlotMaterialTests(unittest.TestCase):
-    def test_only_literal_svg_selects_illustrations(self):
-        self.assertEqual(slot_material({"faceless_material": "svg"}), "svg")
-        for value in ("broll", None, "SVG", "IMAGES", "image", True, ""):
-            self.assertEqual(slot_material({"faceless_material": value}), "broll")
-        self.assertEqual(slot_material({}), "broll")
-
-    def test_only_literal_images_selects_the_agent_images(self):
+    def test_every_slot_renders_images(self):
+        for value in ("svg", "broll", None, "SVG", "IMAGES", "image", True, ""):
+            self.assertEqual(slot_material({"faceless_material": value}), "images")
         self.assertEqual(slot_material({"faceless_material": "images"}), "images")
+        self.assertEqual(slot_material({}), "images")
 
 
 class BatchDispatchMaterialTests(unittest.TestCase):
@@ -94,15 +91,6 @@ class BatchDispatchMaterialTests(unittest.TestCase):
         self.assertEqual(enqueued, 1)
         return dispatch.call_args[0][1]
 
-    def test_svg_slot_with_face_dispatches_svg(self):
-        request = self._dispatched_request(_slot(faceless=False, faceless_material="svg"))
-        self.assertEqual(request.faceless_material, "svg")
-        self.assertTrue(request.lipsync_enabled)
-
-    def test_faceless_svg_slot_dispatches_svg(self):
-        request = self._dispatched_request(_slot(faceless=True, faceless_material="svg"))
-        self.assertEqual(request.faceless_material, "svg")
-
     def test_images_slot_with_media_on_every_segment_dispatches_images(self):
         slot = _slot(faceless=True, faceless_material="images")
         counts = (3, 6, 2)
@@ -115,9 +103,15 @@ class BatchDispatchMaterialTests(unittest.TestCase):
         self.assertEqual([len(segment.media) for segment in request.segments], [3, 6, 2])
         self.assertEqual(request.segments[0].media[0].url, "https://example.com/0-0.jpg")
 
-    def test_legacy_slot_without_the_column_dispatches_broll(self):
-        request = self._dispatched_request(_slot())
-        self.assertEqual(request.faceless_material, "broll")
+    def test_legacy_slot_without_the_column_dispatches_images(self):
+        slot = _slot()
+        counts = (3, 6, 2)
+        slot["segments"] = [
+            {**segment, "media": [{"url": f"https://example.com/{index}-{n}.jpg"} for n in range(counts[index])]}
+            for index, segment in enumerate(slot["segments"])
+        ]
+        request = self._dispatched_request(slot)
+        self.assertEqual(request.faceless_material, "images")
 
 
 if __name__ == "__main__":

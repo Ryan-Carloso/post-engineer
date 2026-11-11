@@ -34,7 +34,6 @@ export const segmentsRequestSchema = z.array(
         )
         .max(MAX_IMAGES_MODE_MEDIAS)
         .optional(),
-      terms: z.array(z.string()).optional(),
     })
     .strict(),
 ).max(MAX_SEGMENTS);

@@ -25,7 +25,6 @@ import {
   validateSegments,
 } from '@/lib/generation/script-segments';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import { FACELESS_MATERIALS, type FacelessMaterial } from '@/lib/generation/faceless-materials';
 
 const ROUTE = 'POST /api/videos/validate-script';
 
@@ -33,10 +32,6 @@ const ROUTE = 'POST /api/videos/validate-script';
 // response field and the MCP description cannot drift apart in wording.
 export const MEASURED_DURATION_PENDING_REASON =
   'No hook-only TTS endpoint exists yet, so the measured hook duration cannot be checked in this phase.';
-
-function isFacelessMaterial(value: unknown): value is FacelessMaterial {
-  return FACELESS_MATERIALS.some((material) => material === value);
-}
 
 async function postHandler(request: Request): Promise<NextResponse> {
   // Auth first: the same session-or-API-key auth as the other video
@@ -54,18 +49,19 @@ async function postHandler(request: Request): Promise<NextResponse> {
       route: ROUTE,
     });
   }
-  const fields = typeof body === 'object' && body !== null ? (body as { segments?: unknown; facelessMaterial?: unknown }) : {};
-  // Optional, like on generate-and-schedule: "images" needs media on every
-  // segment. An unknown value is a 400, never silently read as "broll".
-  const material = fields.facelessMaterial;
-  if (material !== undefined && !isFacelessMaterial(material)) {
-    return apiErrorResponse(400, `facelessMaterial must be one of: ${FACELESS_MATERIALS.join(', ')}.`, {
+  const fields = typeof body === 'object' && body !== null ? (body as { segments?: unknown; fullLipsync?: unknown }) : {};
+  // Optional, like on generate-and-schedule: full lip sync leaves media
+  // optional, while images mode (the default) needs media on every segment.
+  // A non-boolean value is a 400, never silently read as false.
+  const fullLipsync = fields.fullLipsync;
+  if (fullLipsync !== undefined && typeof fullLipsync !== 'boolean') {
+    return apiErrorResponse(400, 'fullLipsync must be a boolean.', {
       code: ERROR_CODES.VALIDATION_FAILED,
-      field: 'facelessMaterial',
+      field: 'fullLipsync',
       route: ROUTE,
     });
   }
-  const result = validateSegments(fields.segments, material);
+  const result = validateSegments(fields.segments, fullLipsync === true);
   if (!result.ok) {
     return apiErrorResponse(400, `${result.error.rule} Fix: ${result.error.fix}`, {
       code: ERROR_CODES.VALIDATION_FAILED,

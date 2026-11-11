@@ -107,7 +107,7 @@ const PARTNER_SLOT = {
   faceless: false,
   full_lipsync: false,
   title: 'Squat form',
-  faceless_material: 'broll',
+  faceless_material: 'images',
   segments: [
     { text: SEGMENTS[0].text, kind: 'hook' },
     { media: [{ url: 'https://x/a.png' }], text: SEGMENTS[1].text, kind: 'body' },
@@ -264,7 +264,7 @@ describe('pairMismatch', () => {
     expect(pairMismatch(partner, facts({ faceless: true }))?.field).toBe('options');
     expect(pairMismatch(partner, facts({ fullLipsync: true }))?.field).toBe('options');
     expect(pairMismatch(partner, facts({ title: 'Other title' }))?.field).toBe('title');
-    expect(pairMismatch(partner, facts({ facelessMaterial: 'svg' }))?.field).toBe('options.facelessMaterial');
+    expect(pairMismatch(partner, facts({ facelessMaterial: 'not-images' }))?.field).toBe('options.facelessMaterial');
     expect(pairMismatch(partner, facts({ voiceAudioUrl: 'https://x/v.mp3' }))?.field).toBe('options.audioUrl');
     expect(pairMismatch(partner, facts({ videoAspect: '16:9' }))?.field).toBe('options.videoAspect');
     expect(pairMismatch(partner, facts({ videoLayout: 'react' }))?.field).toBe('options.videoLayout');
@@ -287,8 +287,8 @@ describe('pairMismatch', () => {
 });
 
 describe('pairMismatch faceless material default', () => {
-  it('treats an omitted material as the stored default broll', () => {
-    const partner = facts({ facelessMaterial: 'broll', segments: SEGMENTS });
+  it('treats an omitted material as the stored default images', () => {
+    const partner = facts({ facelessMaterial: 'images', segments: SEGMENTS });
     expect(pairMismatch(partner, facts({ facelessMaterial: null }))).toBeNull();
   });
 });
@@ -359,10 +359,10 @@ describe('verifyExperimentPairAfterInsert', () => {
 });
 
 describe('buildPairFacts', () => {
-  it('defaults a missing voice id, full lip-sync flag, material and audio URL to null/false', () => {
+  it('defaults a missing voice id and audio URL to null, full lip-sync to false, and the material to images', () => {
     const prep = { faceless: false, faceQuality: null, voiceIdValue: undefined, niche: null, ctaText: null, language: null, videoAspect: null, videoLayout: null, paragraphNumber: null } as unknown as PersonaPrep;
-    expect(buildPairFacts({ providers: [], accountIds: {}, pinterestBoardId: undefined, prep, title: 'T', segments: [], fullLipsync: undefined, facelessMaterial: 'svg', audioUrl: 'https://x/v.mp3' })).toMatchObject({
-      voiceId: null, fullLipsync: false, facelessMaterial: 'svg', voiceAudioUrl: 'https://x/v.mp3', pinterestBoardId: null,
+    expect(buildPairFacts({ providers: [], accountIds: {}, pinterestBoardId: undefined, prep, title: 'T', segments: [], fullLipsync: undefined, audioUrl: 'https://x/v.mp3' })).toMatchObject({
+      voiceId: null, fullLipsync: false, facelessMaterial: 'images', voiceAudioUrl: 'https://x/v.mp3', pinterestBoardId: null,
     });
   });
 
@@ -372,10 +372,10 @@ describe('buildPairFacts', () => {
       videoAspect: '9:16', videoLayout: 'standard', paragraphNumber: 3,
     } as unknown as PersonaPrep;
     expect(
-      buildPairFacts({ providers: ['youtube'], accountIds: { youtube: ['a'] }, pinterestBoardId: 'b1', prep, title: 'T', segments: [], fullLipsync: true, facelessMaterial: undefined, audioUrl: undefined }),
+      buildPairFacts({ providers: ['youtube'], accountIds: { youtube: ['a'] }, pinterestBoardId: 'b1', prep, title: 'T', segments: [], fullLipsync: true, audioUrl: undefined }),
     ).toEqual({
       providers: ['youtube'], accountIds: { youtube: ['a'] }, pinterestBoardId: 'b1', voiceId: 'v1', faceless: true, fullLipsync: true, segments: [], title: 'T',
-      facelessMaterial: null, voiceAudioUrl: null, videoAspect: '9:16', videoLayout: 'standard', paragraphNumber: 3, faceQuality: 'ok',
+      facelessMaterial: 'images', voiceAudioUrl: null, videoAspect: '9:16', videoLayout: 'standard', paragraphNumber: 3, faceQuality: 'ok',
       language: 'en-US', niche: 'fitness', ctaText: 'Go.',
     });
   });

@@ -15,7 +15,7 @@ import { pinterestStrings } from './pinterest-i18n';
 import { rumbleStrings } from './rumble-i18n';
 import { promptsStrings } from './nav-prompts-i18n';
 import { voiceFallbackStrings } from './voice-fallback-i18n';
-import { facelessMaterialStrings } from './faceless-material-i18n';
+import { personaLayoutHintStrings } from './persona-layout-hint-i18n';
 import { pricingContactStrings } from './pricing-contact-i18n';
 import { fullLipsyncPriceStrings } from './full-lipsync-price-i18n';
 import { themeStrings } from './theme-i18n';
@@ -26,8 +26,8 @@ import type { Locale } from './types';
 // Per-persona default publishing accounts (issue #212): en.ts/pt.ts are
 // grandfathered over the 500-line file-size cap and may not grow a single
 // line, so the feature's copy lives in ./publishing-accounts and is merged
-// here. The faceless material copy follows the same pattern
-// (./faceless-material-i18n, merged into newPost/posts/personas below). The exported
+// here. The persona layout hint follows the same pattern
+// (./persona-layout-hint-i18n, merged into personas below). The exported
 // dictionaries stay reference-identical per locale
 // (dictionaries.pt === ptDictionary), and the Dictionary/TranslationKey
 // contract below covers the merged keys.
@@ -38,13 +38,13 @@ export const ptDictionary = {
   tokens: { ...basePtDictionary.tokens, ...fullLipsyncPriceStrings.pt.tokens },
   apiKeys: { ...basePtDictionary.apiKeys, ...publishingAccountsStrings.pt.apiKeys, ...pinterestStrings.pt.apiKeys },
   persona: { ...basePtDictionary.persona, ...publishingAccountsStrings.pt.persona, ...voiceFallbackStrings.pt.persona },
-  newPost: { ...voiceFallbackStrings.pt.newPost, ...facelessMaterialStrings.pt.newPost },
+  newPost: { ...voiceFallbackStrings.pt.newPost },
   nav: { ...basePtDictionary.nav, ...metricsStrings.pt.nav, ...promptsStrings.pt.nav, ...experimentsStrings.pt.nav },
   metrics: { ...metricsStrings.pt.metrics, ...metricsCoverageStrings.pt.metrics, ...metricsFiltersStrings.pt.metrics },
   experiments: experimentsStrings.pt.experiments,
   accounts: { ...basePtDictionary.accounts, ...threadsStrings.pt.accounts, ...facebookStrings.pt.accounts, ...pinterestStrings.pt.accounts, ...rumbleStrings.pt.accounts },
-  posts: { ...basePtDictionary.posts, ...facelessMaterialStrings.pt.posts, ...postsCalendarStrings.pt.posts },
-  personas: { ...basePtDictionary.personas, ...facelessMaterialStrings.pt.personas },
+  posts: { ...basePtDictionary.posts, ...postsCalendarStrings.pt.posts },
+  personas: { ...basePtDictionary.personas, ...personaLayoutHintStrings.pt.personas },
   landing: { ...basePtDictionary.landing, ...pricingContactStrings.pt.landing },
   theme: themeStrings.pt.theme,
 };
@@ -54,13 +54,13 @@ export const enDictionary = {
   tokens: { ...baseEnDictionary.tokens, ...fullLipsyncPriceStrings.en.tokens },
   apiKeys: { ...baseEnDictionary.apiKeys, ...publishingAccountsStrings.en.apiKeys, ...pinterestStrings.en.apiKeys },
   persona: { ...baseEnDictionary.persona, ...publishingAccountsStrings.en.persona, ...voiceFallbackStrings.en.persona },
-  newPost: { ...voiceFallbackStrings.en.newPost, ...facelessMaterialStrings.en.newPost },
+  newPost: { ...voiceFallbackStrings.en.newPost },
   nav: { ...baseEnDictionary.nav, ...metricsStrings.en.nav, ...promptsStrings.en.nav, ...experimentsStrings.en.nav },
   metrics: { ...metricsStrings.en.metrics, ...metricsCoverageStrings.en.metrics, ...metricsFiltersStrings.en.metrics },
   experiments: experimentsStrings.en.experiments,
   accounts: { ...baseEnDictionary.accounts, ...threadsStrings.en.accounts, ...facebookStrings.en.accounts, ...pinterestStrings.en.accounts, ...rumbleStrings.en.accounts },
-  posts: { ...baseEnDictionary.posts, ...facelessMaterialStrings.en.posts, ...postsCalendarStrings.en.posts },
-  personas: { ...baseEnDictionary.personas, ...facelessMaterialStrings.en.personas },
+  posts: { ...baseEnDictionary.posts, ...postsCalendarStrings.en.posts },
+  personas: { ...baseEnDictionary.personas, ...personaLayoutHintStrings.en.personas },
   landing: { ...baseEnDictionary.landing, ...pricingContactStrings.en.landing },
   theme: themeStrings.en.theme,
 };
@@ -73,7 +73,7 @@ type MetricsFiltersKeys = typeof metricsFiltersStrings.en;
 type ThreadsKeys = typeof threadsStrings.en & typeof facebookStrings.en & typeof pinterestStrings.en & typeof rumbleStrings.en;
 type PromptsKeys = typeof promptsStrings.en;
 type VoiceFallbackKeys = typeof voiceFallbackStrings.en;
-type FacelessMaterialKeys = typeof facelessMaterialStrings.en;
+type PersonaLayoutHintKeys = typeof personaLayoutHintStrings.en;
 type PricingContactKeys = typeof pricingContactStrings.en;
 type FullLipsyncPriceKeys = typeof fullLipsyncPriceStrings.en;
 type ThemeKeys = typeof themeStrings.en;
@@ -111,8 +111,8 @@ export type Dictionary = BaseDictionary & {
     [Key in keyof VoiceFallbackKeys[Section]]: string;
   };
 } & {
-  [Section in keyof FacelessMaterialKeys]: {
-    [Key in keyof FacelessMaterialKeys[Section]]: string;
+  [Section in keyof PersonaLayoutHintKeys]: {
+    [Key in keyof PersonaLayoutHintKeys[Section]]: string;
   };
 } & {
   [Section in keyof PricingContactKeys]: {
