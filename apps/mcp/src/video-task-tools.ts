@@ -37,11 +37,13 @@ export async function handleCancelVideoTask(
 // The agent alternative to polling get_video_task_progress: one call waits
 // for all taskIds (a single video, or every video of a batch) and only
 // returns when each is completed (state 1, or a 410 whose body says the
-// video was delivered before the engine lost it) or failed (state -1, or
-// gone from the engine without delivery proof), or when timeoutSeconds
-// elapses. On timeout the results are partial — the still-running entries
-// keep their last known progress/stage — so the agent calls again with the
-// unfinished taskIds instead of polling from scratch.
+// video was delivered before the engine lost it) or failed (state -1, gone
+// from the engine without delivery proof, or a task-scoped client error
+// such as a bad taskId), or when timeoutSeconds elapses. A call-wide error
+// (bad key, wrong route) aborts the whole wait as a tool error instead of
+// failing any video. On timeout the results are partial — the still-running
+// entries keep their last known progress/stage — so the agent calls again
+// with the unfinished taskIds instead of polling from scratch.
 //---------------
 
 export const WaitForVideoTasksShape = {
@@ -100,6 +102,12 @@ function toWaitResult(
   };
 }
 
+/** One poll round's outcome per task: a verdict, a call-wide error, or retry-later. */
+type PollOutcome =
+  | { taskId: string; result: TaskWaitResult }
+  | { taskId: string; callError: ApiError }
+  | null;
+
 export async function handleWaitForVideoTasks(
   client: PostEngineerClient,
   args: z.infer<typeof WaitForVideoTasksSchema>,
@@ -128,7 +136,7 @@ export async function handleWaitForVideoTasks(
     // One round polls every unfinished task concurrently: a slow engine
     // response for one video must not stall the other eleven behind it.
     const settled = await Promise.allSettled(
-      unfinished.map(async (taskId) => {
+      unfinished.map(async (taskId): Promise<PollOutcome> => {
         try {
           return { taskId, result: toWaitResult(taskId, narrowTaskProgress(await client.getVideoStatus(taskId))) };
         } catch (error) {
@@ -169,16 +177,17 @@ export async function handleWaitForVideoTasks(
           }
           if (
             error instanceof ApiError &&
-            error.status !== null &&
-            error.status >= 400 &&
-            error.status < 500 &&
-            error.status !== 410 &&
-            error.status !== 429
+            (error.status === 401 || error.status === 403 || error.status === 404 || error.status === 405)
           ) {
-            // Deterministic client error (bad taskId, bad key): retrying can
-            // never succeed — fail this task now with the capped detail.
-            // 429 stays transient: the next round may succeed once the
-            // limit resets.
+            // Call-wide: the key, route or method is wrong for every
+            // taskId, so this says nothing about the video itself. Report
+            // it as a tool error, never as a failed render — a revoked key
+            // must not make the agent regenerate a video that was never broken.
+            return { taskId, callError: error };
+          }
+          if (error instanceof ApiError && (error.status === 400 || error.status === 422)) {
+            // Task-scoped client error (bad taskId): retrying can never
+            // succeed — fail this task now with the capped detail.
             return {
               taskId,
               result: {
@@ -191,14 +200,31 @@ export async function handleWaitForVideoTasks(
               } satisfies TaskWaitResult,
             };
           }
-          // Any other fetch failure is transient: keep the last known
-          // state and retry next round instead of failing the whole wait.
+          // Anything else (network errors, 5xx, 429, 408/425) is transient:
+          // keep the last known state and retry next round instead of
+          // failing the whole wait.
           return null;
         }
       }),
     );
+    let callError: ApiError | null = null;
     for (const entry of settled) {
-      if (entry.status === 'fulfilled' && entry.value !== null) last.set(entry.value.taskId, entry.value.result);
+      if (entry.status !== 'fulfilled' || entry.value === null) continue;
+      const value = entry.value;
+      if ('callError' in value) {
+        if (callError === null) callError = value.callError;
+      } else {
+        last.set(value.taskId, value.result);
+      }
+    }
+    if (callError !== null) {
+      const fatal = callError;
+      return handleLibraryCall(
+        async () => {
+          throw fatal;
+        },
+        'waiting for video tasks',
+      );
     }
     const results = taskIds.map(
       (taskId): TaskWaitResult =>

@@ -253,6 +253,85 @@ describe('wait_for_video_tasks', () => {
     expect(vi.mocked(mockClient.getVideoStatus)).toHaveBeenCalledTimes(1);
   });
 
+  it.each([401, 403, 404, 405])(
+    'returns a tool error at once on a call-wide %i instead of failing the video',
+    async (status) => {
+      const clock = fakeClock();
+      const sleep = vi.fn(clock.sleep);
+      vi.mocked(mockClient.getVideoStatus).mockRejectedValue(
+        new ApiError(`Failed to get video status: ${status} call-wide error.`, null, null, status),
+      );
+
+      const response = await handleWaitForVideoTasks(
+        mockClient,
+        WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }),
+        { now: clock.now, sleep },
+      );
+
+      // A revoked key or a wrong route is broken for every taskId: the
+      // video itself may be fine, so this must never read as a failed
+      // render (the agent would regenerate a video that was never broken).
+      expect(response.isError).toBe(true);
+      expect(textOf(response)).toContain(
+        `Error waiting for video tasks: Failed to get video status: ${status}`,
+      );
+      expect(sleep).not.toHaveBeenCalled();
+      expect(vi.mocked(mockClient.getVideoStatus)).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('fails the task at once on a task-scoped 422 instead of retrying until the timeout', async () => {
+    const clock = fakeClock();
+    const sleep = vi.fn(clock.sleep);
+    vi.mocked(mockClient.getVideoStatus).mockRejectedValue(
+      new ApiError('Failed to get video status: 422 Unprocessable Entity.', null, null, 422),
+    );
+
+    const response = await handleWaitForVideoTasks(
+      mockClient,
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }),
+      { now: clock.now, sleep },
+    );
+
+    const result = parsed(response);
+    expect(result.allTerminal).toBe(true);
+    expect(result.timedOut).toBe(false);
+    expect(result.results[0]).toEqual({
+      task_id: 'task-1',
+      state: -1,
+      outcome: 'failed',
+      progress: null,
+      stage: null,
+      error: 'Failed to get video status: 422 Unprocessable Entity.',
+    });
+    expect(sleep).not.toHaveBeenCalled();
+    expect(vi.mocked(mockClient.getVideoStatus)).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a 408 instead of failing the task', async () => {
+    const clock = fakeClock();
+    const sleep = vi.fn(clock.sleep);
+    vi.mocked(mockClient.getVideoStatus)
+      .mockRejectedValueOnce(
+        new ApiError('Failed to get video status: 408 Request Timeout.', null, null, 408),
+      )
+      // Persistent (not once): the pre-fix code fails the task on the 408
+      // and never polls again, which would leave a queued once-value
+      // behind to pollute the next test.
+      .mockResolvedValue(statusBody('task-1', 1, 100, null));
+
+    const response = await handleWaitForVideoTasks(
+      mockClient,
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }),
+      { now: clock.now, sleep },
+    );
+
+    const result = parsed(response);
+    expect(result.allTerminal).toBe(true);
+    expect(result.results[0]?.outcome).toBe('completed');
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
   it('retries after a transient fetch failure instead of failing the wait', async () => {
     const clock = fakeClock();
     vi.mocked(mockClient.getVideoStatus)
