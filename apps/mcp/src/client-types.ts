@@ -138,15 +138,15 @@ export interface PublishVideoDirectInput {
   videoPath: string;
   /** Target accounts (channel IDs / IG user IDs / DIDs / LinkedIn member IDs or org URNs / Threads user IDs / Facebook Page IDs / Pinterest user IDs / Fanvue account IDs / Hive usernames / Rumble Channel IDs). */
   accountIds: string[];
-  /** YouTube and Rumble: required. Pinterest: pin title (optional). */
+  /** YouTube, Rumble and Fanvue: required. Pinterest: pin title (optional). */
   title?: string;
-  /** YouTube and Rumble: required. Pinterest: pin description (optional; caption is used when omitted). */
+  /** YouTube, Rumble and Fanvue: required. Pinterest: pin description (optional; caption is used when omitted). */
   description?: string;
   /** YouTube only: required, at least one tag. */
   tags?: string[];
   /** YouTube only: required. */
   privacyStatus?: 'public' | 'private' | 'unlisted';
-  /** Instagram/Bluesky/LinkedIn/Threads/Facebook/Fanvue/3Speak: required. Pinterest: pin description when description is omitted. */
+  /** Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak: required. Pinterest: pin description when description is omitted. */
   caption?: string;
   /** Pinterest only: required. The board the pin goes to (the id from list_pinterest_boards). */
   boardId?: string;

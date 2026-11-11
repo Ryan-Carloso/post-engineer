@@ -24,11 +24,11 @@ export const PublishVideoDirectShape = {
   title: z
     .string()
     .optional()
-    .describe('YouTube/Rumble: required video title. Pinterest: pin title (optional).'),
+    .describe('YouTube/Rumble/Fanvue: required video title. Pinterest: pin title (optional).'),
   description: z
     .string()
     .optional()
-    .describe('YouTube/Rumble: required video description. Pinterest: pin description (optional; caption is used when omitted).'),
+    .describe('YouTube/Rumble/Fanvue: required video description. Pinterest: pin description (optional; caption is used when omitted).'),
   tags: z
     .array(z.string())
     .optional()
@@ -40,7 +40,7 @@ export const PublishVideoDirectShape = {
   caption: z
     .string()
     .optional()
-    .describe('Instagram/Bluesky/LinkedIn/Threads/Facebook/Fanvue/3Speak: required caption. Pinterest: used as the pin description when description is omitted.'),
+    .describe('Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak: required caption. Pinterest: used as the pin description when description is omitted.'),
   boardId: z
     .string()
     .optional()

@@ -2,8 +2,9 @@
 // for publish_video_direct.
 //
 // Extracted from client.ts so client.ts stays under the file-size ratchet.
-// Rumble takes title + description (like YouTube, minus tags and
-// privacyStatus); Pinterest takes a boardId plus a description that falls
+// Rumble and Fanvue take title + description (like YouTube, minus tags and
+// privacyStatus) — the Fanvue web handler rejects a request without a title;
+// Pinterest takes a boardId plus a description that falls
 // back to the caption; Instagram takes a file + caption; the rest take a
 // video + caption.
 import type { PublishVideoDirectInput } from './client-types.js';
@@ -36,7 +37,7 @@ export function requireDirectPublishFields(input: PublishVideoDirectInput): Dire
   let privacyStatus = '';
   let caption = '';
   let boardId = '';
-  if (input.provider === 'youtube' || input.provider === 'rumble') {
+  if (input.provider === 'youtube' || input.provider === 'rumble' || input.provider === 'fanvue') {
     ({ title, description } = requireTitleAndDescription(input));
     if (input.provider === 'youtube') {
       if (input.tags === undefined || input.tags.length === 0) {
@@ -96,8 +97,8 @@ export function buildDirectPublishForm(
   } else {
     const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds', facebook: 'facebookAccountIds', pinterest: 'pinterestAccountIds', fanvue: 'fanvueAccountIds', '3speak': 'threespeakAccountIds', rumble: 'rumbleAccountIds' }[input.provider];
     formData.append('video', videoBlob, filename);
-    // Rumble takes title + description, not a caption.
-    if (input.provider === 'rumble') {
+    // Rumble and Fanvue take title + description, not a caption.
+    if (input.provider === 'rumble' || input.provider === 'fanvue') {
       formData.append('title', fields.title);
       formData.append('description', fields.description);
     } else {

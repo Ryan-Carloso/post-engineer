@@ -188,8 +188,9 @@ def validate_publish_metadata(
     """Validate provider selection and per-provider metadata.
 
     Raises:
-        ValueError: when providers are unknown/empty, or a selected provider other than pinterest
-            (see fill_schedule/metadata.py) has no metadata, or metadata violates the contract.
+        ValueError: when providers are unknown/empty, or a selected provider other than
+            pinterest/fanvue (both gated in fill_schedule/metadata.py) has no metadata,
+            or metadata violates the contract.
     """
     if not providers:
         raise ValueError("at least one publish provider is required")

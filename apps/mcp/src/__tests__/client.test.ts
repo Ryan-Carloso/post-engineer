@@ -2139,27 +2139,30 @@ describe('publishVideoDirect', () => {
     expect(formData.get('video')).toBeInstanceOf(Blob);
   });
 
-  it('maps account ids to the fanvue field name and sends the caption', async () => {
+  it('maps account ids to the fanvue field name and sends title + description', async () => {
     const videoPath = await writeTempVideo('clip.mp4');
     await client.publishVideoDirect({
       provider: 'fanvue',
       videoPath,
       accountIds: ['fan-1'],
-      caption: 'hello fanvue',
+      title: 'Fan post',
+      description: 'hello fanvue',
     });
 
     const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
     expect(formData.get('provider')).toBe('fanvue');
     expect(formData.getAll('fanvueAccountIds')).toEqual(['fan-1']);
-    expect(formData.get('caption')).toBe('hello fanvue');
+    expect(formData.get('title')).toBe('Fan post');
+    expect(formData.get('description')).toBe('hello fanvue');
+    expect(formData.get('caption')).toBeNull();
     expect(formData.get('video')).toBeInstanceOf(Blob);
   });
 
-  it('fails fast for fanvue without a caption, without fetching', async () => {
+  it('fails fast for fanvue without a title, without fetching', async () => {
     const videoPath = await writeTempVideo('clip.mp4');
     await expect(
       client.publishVideoDirect({ provider: 'fanvue', videoPath, accountIds: ['fan-1'] }),
-    ).rejects.toThrow(/caption is required for fanvue/);
+    ).rejects.toThrow(/title is required for fanvue/);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 

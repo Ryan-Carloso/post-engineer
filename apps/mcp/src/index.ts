@@ -427,7 +427,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'publish_video_direct',
-    `Publish a ready-made video file directly to social accounts — no generation, no schedule. Reads a local video (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB) and posts it immediately via POST /api/upload-content. YouTube requires title, description, tags, and privacyStatus; Rumble requires title and description; Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak require caption.`,
+    `Publish a ready-made video file directly to social accounts — no generation, no schedule. Reads a local video (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB) and posts it immediately via POST /api/upload-content. YouTube requires title, description, tags, and privacyStatus; Rumble and Fanvue require title and description; Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak require caption.`,
     PublishVideoDirectShape,
     withTracking('publish_video_direct', async (args) => {
       return handlePublishVideoDirect(apiClient, args);
