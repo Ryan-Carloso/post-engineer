@@ -1,0 +1,181 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
+import { findRepoRoot } from '@/test/repo-root';
+import {
+  PUBLISH_ACCOUNT_FIELDS,
+  PUBLISH_IN_PROGRESS_CODE,
+  PUBLISH_LEDGER_LEASE_SECONDS,
+  claimPublishAttempt,
+  isValidPublishScopeKey,
+  publishInProgressResult,
+  publishLedgerKey,
+  recordPublishAttempt,
+} from '@/lib/upload/publish-ledger';
+import type { SocialProvider } from '@/lib/providers/registry';
+
+const root = findRepoRoot(import.meta.url);
+const read = (path: string): string => readFileSync(join(root, path), 'utf8');
+
+function mockSupabase(rpc: ReturnType<typeof vi.fn>) {
+  return { rpc } as never;
+}
+
+describe('publishLedgerKey', () => {
+  it('names the scope, provider and account', () => {
+    expect(publishLedgerKey('slot:s1:video:v.mp4', 'fanvue', 'acc-1')).toBe(
+      'publish:slot:s1:video:v.mp4:fanvue:acc-1',
+    );
+  });
+});
+
+describe('isValidPublishScopeKey', () => {
+  it('accepts the engine slot key and direct keys', () => {
+    expect(isValidPublishScopeKey('slot:slot-1:video:final.mp4')).toBe(true);
+    expect(isValidPublishScopeKey('direct:550e8400-e29b-41d4-a716-446655440000')).toBe(true);
+  });
+
+  it('rejects anything that is not a scope key', () => {
+    expect(isValidPublishScopeKey(undefined)).toBe(false);
+    expect(isValidPublishScopeKey('')).toBe(false);
+    expect(isValidPublishScopeKey('slot:slot-1')).toBe(false);
+    expect(isValidPublishScopeKey('slot:slot-1:video:')).toBe(false);
+    expect(isValidPublishScopeKey('random-key')).toBe(false);
+    expect(isValidPublishScopeKey('slot:slot 1:video:v.mp4')).toBe(false);
+    expect(isValidPublishScopeKey(`slot:${'x'.repeat(300)}:video:v.mp4`)).toBe(false);
+  });
+});
+
+describe('claimPublishAttempt', () => {
+  const input = { scopeKey: 'slot:s1:video:v.mp4', provider: 'fanvue', accountId: 'acc-1', userId: 'user-1' };
+
+  it('claims a fresh key with a 30-minute lease', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: { outcome: 'claimed' }, error: null });
+    const claim = await claimPublishAttempt(mockSupabase(rpc), input);
+    expect(claim.outcome).toBe('claimed');
+    expect(claim.claimToken).toMatch(/^[0-9a-f-]{36}$/);
+    expect(claim.result).toBeNull();
+    expect(rpc).toHaveBeenCalledWith('claim_publish_ledger', {
+      p_key: 'publish:slot:s1:video:v.mp4:fanvue:acc-1',
+      p_provider: 'fanvue',
+      p_account_id: 'acc-1',
+      p_user_id: 'user-1',
+      p_lease_seconds: PUBLISH_LEDGER_LEASE_SECONDS,
+      p_token: claim.claimToken,
+    });
+    expect(PUBLISH_LEDGER_LEASE_SECONDS).toBe(30 * 60);
+  });
+
+  it('replays the recorded post instead of publishing again', async () => {
+    const stored = { accountId: 'acc-1', success: true, postId: 'post-1' };
+    const rpc = vi.fn().mockResolvedValue({ data: { outcome: 'published', result: stored }, error: null });
+    const claim = await claimPublishAttempt(mockSupabase(rpc), input);
+    expect(claim).toEqual({ outcome: 'published', claimToken: null, result: stored });
+  });
+
+  it('reports an in-flight attempt with no token', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: { outcome: 'in_progress' }, error: null });
+    const claim = await claimPublishAttempt(mockSupabase(rpc), input);
+    expect(claim).toEqual({ outcome: 'in_progress', claimToken: null, result: null });
+  });
+
+  it('throws when the claim RPC fails', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { message: 'db down' } });
+    await expect(claimPublishAttempt(mockSupabase(rpc), input)).rejects.toThrow(
+      'claim_publish_ledger failed: db down',
+    );
+  });
+
+  it('throws on an unknown outcome and on a malformed recorded result', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: { outcome: 'weird' }, error: null });
+    await expect(claimPublishAttempt(mockSupabase(rpc), input)).rejects.toThrow('unknown outcome');
+    rpc.mockResolvedValue({ data: { outcome: 'published', result: 'not-a-record' }, error: null });
+    await expect(claimPublishAttempt(mockSupabase(rpc), input)).rejects.toThrow(
+      'malformed recorded result',
+    );
+  });
+});
+
+describe('recordPublishAttempt', () => {
+  const base = {
+    scopeKey: 'slot:s1:video:v.mp4',
+    provider: 'fanvue',
+    accountId: 'acc-1',
+    claimToken: 'token-1',
+  };
+
+  it('records a published result with its post id', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const result = { accountId: 'acc-1', success: true, postId: 'post-1' };
+    await expect(recordPublishAttempt(mockSupabase(rpc), { ...base, result })).resolves.toBe(true);
+    expect(rpc).toHaveBeenCalledWith('record_publish_ledger', {
+      p_key: 'publish:slot:s1:video:v.mp4:fanvue:acc-1',
+      p_token: 'token-1',
+      p_status: 'published',
+      p_result: result,
+      p_error: null,
+      p_error_code: null,
+    });
+  });
+
+  it('records a failure so the next retry can claim a fresh attempt', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const result = { accountId: 'acc-1', success: false, error: 'Fanvue 503', errorCode: 'transient' };
+    await expect(recordPublishAttempt(mockSupabase(rpc), { ...base, result })).resolves.toBe(true);
+    expect(rpc).toHaveBeenCalledWith('record_publish_ledger', {
+      p_key: 'publish:slot:s1:video:v.mp4:fanvue:acc-1',
+      p_token: 'token-1',
+      p_status: 'failed',
+      p_result: null,
+      p_error: 'Fanvue 503',
+      p_error_code: 'transient',
+    });
+  });
+
+  it('returns false instead of throwing when the record is lost', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
+    const result = { accountId: 'acc-1', success: true, postId: 'post-1' };
+    await expect(recordPublishAttempt(mockSupabase(rpc), { ...base, result })).resolves.toBe(false);
+    const failing = vi.fn().mockResolvedValue({ data: null, error: { message: 'db down' } });
+    await expect(recordPublishAttempt(mockSupabase(failing), { ...base, result })).resolves.toBe(false);
+  });
+});
+
+describe('publishInProgressResult', () => {
+  it('is a failure the engine waits on, not a user error', () => {
+    const result = publishInProgressResult('acc-1');
+    expect(result.accountId).toBe('acc-1');
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe(PUBLISH_IN_PROGRESS_CODE);
+    expect(result.errorCode).toBe('publish_in_progress');
+  });
+});
+
+describe('publish account fields stay in sync with the handlers', () => {
+  const singleHandlerFiles: Array<[SocialProvider, string]> = [
+    ['bluesky', 'apps/web/lib/upload/bluesky-handler.ts'],
+    ['linkedin', 'apps/web/lib/upload/linkedin-handler.ts'],
+    ['threads', 'apps/web/lib/upload/threads-handler.ts'],
+    ['facebook', 'apps/web/lib/upload/facebook-handler.ts'],
+    ['pinterest', 'apps/web/lib/upload/pinterest-handler.ts'],
+    ['fanvue', 'apps/web/lib/upload/fanvue-handler.ts'],
+    ['3speak', 'apps/web/lib/upload/threespeak-handler.ts'],
+    ['rumble', 'apps/web/lib/upload/rumble-handler.ts'],
+  ];
+
+  it('each single-handler provider reads the field the ledger map names', () => {
+    for (const [provider, path] of singleHandlerFiles) {
+      const matches = [...read(path).matchAll(/getAccountIdsFromFormData\(formData, '([^']+)'\)/g)];
+      expect(matches).toHaveLength(1);
+      expect(PUBLISH_ACCOUNT_FIELDS[provider]).toBe(matches[0][1]);
+    }
+  });
+
+  it('youtube and instagram read the fields the ledger map names', () => {
+    const source = read('apps/web/lib/upload/handlers.ts');
+    const fields = [...source.matchAll(/parseAccountIds\(formData, '([^']+)'\)/g)].map((match) => match[1]);
+    expect(fields.sort()).toEqual(['accountIds', 'igAccountIds']);
+    expect(PUBLISH_ACCOUNT_FIELDS.youtube).toBe('accountIds');
+    expect(PUBLISH_ACCOUNT_FIELDS.instagram).toBe('igAccountIds');
+  });
+});

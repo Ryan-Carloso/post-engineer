@@ -1,0 +1,171 @@
+import { randomUUID } from 'node:crypto';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import type { SocialProvider } from '@/lib/providers/registry';
+import { accountFailure } from '@/lib/upload/account-error';
+import type { ContentUploadAccountResult } from '@/lib/upload/content-upload-result';
+
+//---------------
+// publish-ledger — one recorded publish per (scope key, provider, account).
+//
+// The engine's 600s upload timeout can fire while this route is still
+// publishing: the scheduler marks the account transient and retries 30s
+// later, and the retry would post a second identical video. The ledger
+// makes the retry answer from recorded state instead of posting again.
+// The first request claims the key (in_progress, 30-min lease, fenced by
+// a random token) and records its result when it finishes; a retry replays
+// the recorded post, waits for the in-flight attempt, or — after a failed
+// attempt or an expired lease — claims a fresh attempt. Only the request
+// that holds the lease can record, so a first attempt whose lease was
+// taken over cannot overwrite the winner's post.
+//
+// The key comes from the caller: the engine sends
+// `slot:<slotId>:video:<name>` (deterministic across retries of the same
+// slot/video); a direct caller sends `direct:<key>`. A request without a
+// scope key publishes exactly as before, with no ledger.
+//---------------
+
+// The first publish can outlive the engine's 600s timeout by a lot (a
+// Fanvue upload is unbounded: up to 256 parts at 10 min each), so the
+// lease matches the 30 minutes the engine gives an in-flight attempt
+// (ATTEMPT_LEASE_SECONDS in fill_schedule/account_outcomes.py). A retry
+// inside the lease waits instead of posting again.
+export const PUBLISH_LEDGER_LEASE_SECONDS = 30 * 60;
+
+/** The web route is still publishing this account under an earlier request. */
+export const PUBLISH_IN_PROGRESS_CODE = 'publish_in_progress';
+
+export type PublishLedgerOutcome = 'claimed' | 'published' | 'in_progress';
+
+export interface PublishLedgerClaim {
+  outcome: PublishLedgerOutcome;
+  /** Fencing token for the claim; null unless this request holds the lease. */
+  claimToken: string | null;
+  /** The recorded post, when a retry replays an already-published account. */
+  result: ContentUploadAccountResult | null;
+}
+
+export function publishLedgerKey(scopeKey: string, provider: string, accountId: string): string {
+  return `publish:${scopeKey}:${provider}:${accountId}`;
+}
+
+// Scope keys come from the engine (`slot:<slotId>:video:<name>`) or a
+// direct caller (`direct:<key>`). Anything else is not a key the ledger
+// can trust: the caller publishes without dedup, exactly as before.
+const SCOPE_KEY_PATTERN = /^(slot:[^:\s]+:video:.+|direct:.+)$/;
+export function isValidPublishScopeKey(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 200 && SCOPE_KEY_PATTERN.test(value);
+}
+
+// The multipart field each provider's accounts arrive under. Pinned to the
+// handlers by publish-ledger.test.ts — a rename in a handler without a
+// rename here would silently skip the ledger for that provider.
+export const PUBLISH_ACCOUNT_FIELDS: Record<SocialProvider, string> = {
+  youtube: 'accountIds',
+  instagram: 'igAccountIds',
+  bluesky: 'did',
+  linkedin: 'linkedinAccountIds',
+  threads: 'threadsAccountIds',
+  facebook: 'facebookAccountIds',
+  pinterest: 'pinterestAccountIds',
+  fanvue: 'fanvueAccountIds',
+  '3speak': 'threespeakAccountIds',
+  rumble: 'rumbleAccountIds',
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function toAccountResult(value: unknown, accountId: string): ContentUploadAccountResult {
+  if (!isRecord(value) || value.success !== true) {
+    throw new Error('claim_publish_ledger returned a malformed recorded result');
+  }
+  return { ...value, accountId } as ContentUploadAccountResult;
+}
+
+export interface ClaimPublishAttemptInput {
+  scopeKey: string;
+  provider: string;
+  accountId: string;
+  userId: string;
+}
+
+export async function claimPublishAttempt(
+  supabase: SupabaseClient,
+  input: ClaimPublishAttemptInput,
+): Promise<PublishLedgerClaim> {
+  const token = randomUUID();
+  const { data, error } = await supabase.rpc('claim_publish_ledger', {
+    p_key: publishLedgerKey(input.scopeKey, input.provider, input.accountId),
+    p_provider: input.provider,
+    p_account_id: input.accountId,
+    p_user_id: input.userId,
+    p_lease_seconds: PUBLISH_LEDGER_LEASE_SECONDS,
+    p_token: token,
+  });
+  // supabase-js rpc() never throws — always check the error.
+  if (error) throw new Error(`claim_publish_ledger failed: ${error.message}`);
+  if (!isRecord(data)) throw new Error('claim_publish_ledger returned no result');
+  const outcome = data.outcome;
+  if (outcome === 'claimed') return { outcome, claimToken: token, result: null };
+  if (outcome === 'published') {
+    return { outcome, claimToken: null, result: toAccountResult(data.result, input.accountId) };
+  }
+  if (outcome === 'in_progress') return { outcome, claimToken: null, result: null };
+  throw new Error(`claim_publish_ledger returned unknown outcome: ${String(outcome)}`);
+}
+
+export interface RecordPublishAttemptInput {
+  scopeKey: string;
+  provider: string;
+  accountId: string;
+  claimToken: string;
+  result: ContentUploadAccountResult;
+}
+
+// Records the outcome of a claimed attempt. Returns false instead of
+// throwing when the record is lost: the publish already happened, so the
+// result still goes back to the caller — and the engine's own recorded
+// success (issue #500) keeps that account from retrying. A lost record
+// only matters if the caller also times out, so it is logged loudly.
+export async function recordPublishAttempt(
+  supabase: SupabaseClient,
+  input: RecordPublishAttemptInput,
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc('record_publish_ledger', {
+    p_key: publishLedgerKey(input.scopeKey, input.provider, input.accountId),
+    p_token: input.claimToken,
+    p_status: input.result.success ? 'published' : 'failed',
+    p_result: input.result.success ? input.result : null,
+    p_error: input.result.success ? null : (input.result.error ?? 'upload failed'),
+    p_error_code: input.result.success ? null : (input.result.errorCode ?? null),
+  });
+  if (error) {
+    logger.error('[publish-ledger] record failed', error, {
+      key: publishLedgerKey(input.scopeKey, input.provider, input.accountId),
+    });
+    return false;
+  }
+  if (data !== true) {
+    logger.error('[publish-ledger] record lost: claim no longer held', null, {
+      key: publishLedgerKey(input.scopeKey, input.provider, input.accountId),
+    });
+    return false;
+  }
+  return true;
+}
+
+/** The per-account answer while an earlier request is still publishing it. */
+export function publishInProgressResult(accountId: string): ContentUploadAccountResult {
+  return accountFailure(
+    accountId,
+    new Error('Publish still in progress from an earlier request.'),
+    'publish_in_progress',
+  );
+}
+
+export function createPublishLedgerClient(): SupabaseClient {
+  return createSupabaseServiceClient();
+}
