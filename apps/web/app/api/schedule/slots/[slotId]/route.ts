@@ -8,6 +8,7 @@ import { getSlotPost, personaScopeOf } from '@/lib/post-detail';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { validateScheduleWindow } from '@/lib/schedule-window';
+import { hasExplicitOffset } from '@/lib/timezone';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
@@ -311,6 +312,16 @@ async function patchHandler(
       return apiErrorResponse(400, 'slotAt must be an ISO date string.', {
         route: 'PATCH /api/schedule/slots',
       });
+    }
+    // Reject a naive wall clock before validating: without an explicit
+    // offset `new Date` silently reads it as UTC, so the rescheduled time
+    // would depend on the server's timezone instead of the caller's.
+    if (!hasExplicitOffset(rawSlotAt)) {
+      return apiErrorResponse(
+        400,
+        'slotAt must carry an explicit timezone offset (Z or ±hh:mm).',
+        { route: 'PATCH /api/schedule/slots' },
+      );
     }
     if (publishMode === 'asap') {
       return apiErrorResponse(409, 'An ASAP post has no scheduled time to move.', {

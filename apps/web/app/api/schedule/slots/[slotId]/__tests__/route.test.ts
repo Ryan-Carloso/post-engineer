@@ -477,6 +477,28 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     expect(client.calls.some((c) => c.op === 'update')).toBe(false);
   });
 
+  it('returns 400 for a naive slotAt without a timezone offset', async () => {
+    // In-window (now + 24h) but naive: without Z or ±hh:mm `new Date`
+    // would silently read it as UTC, so the route rejects it before the
+    // window check — the offset check, not the window, must reject it.
+    const naiveSlotAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      .toISOString()
+      .replace(/Z$/, '');
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' },
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { slotAt: naiveSlotAt });
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toContain('explicit timezone offset');
+    expect(client.calls.some((c) => c.op === 'update')).toBe(false);
+  });
+
   it('returns 409 when rescheduling an ASAP slot', async () => {
     const slotAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const client = mockSlotsClient({
