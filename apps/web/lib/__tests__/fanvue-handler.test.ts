@@ -6,9 +6,12 @@ vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(()
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('@/lib/fanvue-tokens', () => ({ getValidFanvueAccessToken: vi.fn(async () => 'at-1') }));
-vi.mock('@/lib/fanvue', () => ({
+vi.mock('@/lib/fanvue-media', () => ({
   uploadVideoToFanvueVault: vi.fn(),
+}));
+vi.mock('@/lib/fanvue-posts', () => ({
   createFanvuePost: vi.fn(),
+  FANVUE_POST_TEXT_MAX_LENGTH: 5000,
 }));
 
 import { trackApiEvent } from '@/lib/analytics';
@@ -16,7 +19,8 @@ import { FanvueError } from '@/lib/errors';
 import { handleFanvueUpload } from '@/lib/upload/fanvue-handler';
 import { getValidFanvueAccessToken } from '@/lib/fanvue-tokens';
 import { touchSocialAccount } from '@/lib/social-accounts';
-import { uploadVideoToFanvueVault, createFanvuePost } from '@/lib/fanvue';
+import { uploadVideoToFanvueVault } from '@/lib/fanvue-media';
+import { createFanvuePost } from '@/lib/fanvue-posts';
 
 const MP4_BYTES = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
 
@@ -64,21 +68,21 @@ describe('handleFanvueUpload', () => {
     expect(vi.mocked(uploadVideoToFanvueVault).mock.calls[0][0].filename).toMatch(/^fanvue_\d+_[0-9a-f]{8}\.mp4$/);
     expect(vi.mocked(createFanvuePost).mock.calls[0][0]).toEqual({
       accessToken: 'at-1',
-      mediaId: 'media-1',
-      content: 'My post\n\nThe description',
+      mediaUuid: 'media-1',
+      text: 'My post\n\nThe description',
     });
     expect(touchSocialAccount).toHaveBeenCalledWith(expect.anything(), 'user-1', 'fanvue', 'fan-9');
   });
 
   it('posts the title alone when no description is sent', async () => {
     await handleFanvueUpload(formData({ description: null }), 'user-1');
-    expect(vi.mocked(createFanvuePost).mock.calls[0][0]).toMatchObject({ content: 'My post' });
+    expect(vi.mocked(createFanvuePost).mock.calls[0][0]).toMatchObject({ text: 'My post' });
   });
 
   it('uses the caption as the post description when no description is sent', async () => {
     await handleFanvueUpload(formData({ description: null, caption: 'caption text' }), 'user-1');
     expect(vi.mocked(createFanvuePost).mock.calls[0][0]).toMatchObject({
-      content: 'My post\n\ncaption text',
+      text: 'My post\n\ncaption text',
     });
   });
 
@@ -95,6 +99,7 @@ describe('handleFanvueUpload', () => {
     ['no account', { ids: [] as string[] }, 'At least one Fanvue account ID'],
     ['missing title', { title: null }, 'title is required'],
     ['blank title', { title: '   ' }, 'title is required'],
+    ['over-length text', { description: 'a'.repeat(5000) }, 'Post text exceeds 5000 characters'],
     ['missing video', { video: null }, 'Video file is required'],
     ['non-video bytes', { video: new File(['not a video!'], 'x.mp4', { type: 'video/mp4' }) }, 'MP4'],
   ])('rejects %s before publishing anything', async (_name, overrides, message) => {

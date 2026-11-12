@@ -1,6 +1,7 @@
 import { getErrorMessage, VideoTooLargeError, ApiError, readApiFailure } from './errors.js';
 import { redactSecretFromError } from './secret-redaction.js';
 import {
+  DIRECT_PUBLISH_TIMEOUT_MS,
   MAX_LIBRARY_IMAGE_BYTES,
   MAX_LIBRARY_IMAGE_MB,
   MAX_UPLOAD_VIDEO_BYTES,
@@ -50,8 +51,7 @@ import { mcpTelemetryHeaders } from './analytics.js';
 const PRODUCTION_API_URL = 'https://post-engineer.com';
 // Hung requests must not block the stdio tool call (and the agent session) forever.
 const REQUEST_TIMEOUT_MS = 30_000;
-// Multipart uploads can legitimately exceed the default budget: up to 10
-// 10MB library images on one request.
+// Multipart uploads can exceed the 30s default (up to 10 10MB images).
 const UPLOAD_TIMEOUT_MS = 120_000;
 // Shared with tools.ts so the client-side guards, the Zod schema limits,
 // and the field description strings can't drift apart.
@@ -772,7 +772,7 @@ export class PostEngineerClient {
       '/api/upload-content',
       { method: 'POST', headers: this.getHeaders(), body: formData },
       'publish video direct',
-      UPLOAD_TIMEOUT_MS
+      DIRECT_PUBLISH_TIMEOUT_MS
     );
     return narrowDirectPublishResult(result);
   }

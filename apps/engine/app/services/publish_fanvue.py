@@ -4,7 +4,7 @@ Wire contract (multipart/form-data, ``POST /api/upload-content``):
 ``provider=fanvue``, ``video`` (file), ``title``, ``description``,
 repeated ``fanvueAccountIds`` fields (Fanvue account ids).
 
-The web handler publishes subscribers-only (``isSubscribersOnly: true``,
+The web handler publishes subscribers-only (``audience: 'subscribers'``,
 the 18+ paywall rule) — the engine does NOT set that; it only passes
 title, description and account ids. There is no board concept for Fanvue.
 
@@ -19,9 +19,10 @@ from dataclasses import dataclass
 
 FANVUE_PROVIDER: str = "fanvue"
 # Fanvue title/description ceilings, mirroring the Pinterest contract
-# (publish_pinterest.py). Engine-side only: the web handler truncates
-# nothing (Fanvue documents no ceiling), so these caps are what the
-# engine sends, not a route contract.
+# (publish_pinterest.py). Engine-side only: the web route enforces only
+# the API's 5000-character post-text ceiling (FANVUE_POST_TEXT_MAX_LENGTH
+# in apps/web/lib/fanvue-posts.ts) and truncates nothing, so these caps
+# are what the engine sends, not a route contract.
 FANVUE_TITLE_MAX_LENGTH: int = 100
 FANVUE_DESCRIPTION_MAX_LENGTH: int = 800
 
