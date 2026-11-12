@@ -35,6 +35,12 @@ export interface AccountCardProps {
   compact?: boolean;
   showDisconnect?: boolean;
   onDisconnect?: () => void;
+  // Broken account (its last profile sync failed, e.g. an undecryptable
+  // stored token): the card flags it and offers only the reconnect action.
+  // Reconnect refreshes the token on the same record; disconnect removes
+  // the account, so a broken card never shows the trash button.
+  error?: boolean;
+  onReconnect?: () => void;
 }
 
 //---------------
@@ -67,6 +73,8 @@ export default function AccountCard({
   compact = false,
   showDisconnect = false,
   onDisconnect,
+  error = false,
+  onReconnect,
 }: AccountCardProps) {
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
@@ -144,7 +152,7 @@ export default function AccountCard({
       )}
       <div className="min-w-0 flex-1 leading-tight">
         <div className="flex items-center gap-2">
-          <span role="img" className="size-2 shrink-0 rounded-full bg-emerald-500" aria-label={t('accounts.connectedAccount')} />
+          <span role="img" className={cn('size-2 shrink-0 rounded-full', error ? 'bg-destructive' : 'bg-emerald-500')} aria-label={error ? t('accounts.tokenInvalid') : t('accounts.connectedAccount')} />
           <h3
             ref={labelRef}
             title={shownLabel}
@@ -154,7 +162,9 @@ export default function AccountCard({
             {shownLabel}
           </h3>
         </div>
-        {secondaryLabel ? (
+        {error ? (
+          <p ref={secondaryRef} className="mt-1 truncate text-xs text-destructive">{t('accounts.tokenInvalid')}</p>
+        ) : secondaryLabel ? (
           <p ref={secondaryRef} className="mt-1 truncate text-xs text-muted-text">{secondaryLabel}</p>
         ) : null}
       </div>
@@ -169,7 +179,18 @@ export default function AccountCard({
         />
       ) : null}
 
-      {showDisconnect && onDisconnect ? (
+      {error && onReconnect ? (
+        <button
+          type="button"
+          data-testid={`${type}-reconnect-button`}
+          aria-label={t('accounts.reconnect')}
+          title={t('accounts.reconnect')}
+          className="flex h-8 shrink-0 items-center rounded-lg border border-destructive/30 bg-destructive-soft px-2.5 text-xs font-semibold whitespace-nowrap text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground"
+          onClick={onReconnect}
+        >
+          {t('accounts.reconnect')}
+        </button>
+      ) : showDisconnect && onDisconnect ? (
         <button
           type="button"
           data-testid={`${type}-disconnect-button`}
@@ -191,7 +212,7 @@ export default function AccountCard({
         data-testid="account-card"
         className={cn(
           'block cursor-pointer rounded-xl border bg-card p-4 transition-colors focus-within:ring-2 focus-within:ring-ink/15',
-          selected ? 'border-ink' : 'border-line hover:border-muted-text hover:bg-surface',
+          selected ? 'border-ink' : error ? 'border-destructive' : 'border-line hover:border-muted-text hover:bg-surface',
         )}
       >
         {body}
@@ -199,7 +220,7 @@ export default function AccountCard({
     );
   }
 
-  return <div ref={(node) => { cardRef.current = node; }} data-testid="account-card" className="rounded-xl border border-line bg-card p-4">{body}</div>;
+  return <div ref={(node) => { cardRef.current = node; }} data-testid="account-card" className={cn('rounded-xl border bg-card p-4', error ? 'border-destructive' : 'border-line')}>{body}</div>;
 }
 
 //---------------

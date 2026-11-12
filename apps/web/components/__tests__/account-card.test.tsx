@@ -139,6 +139,39 @@ describe('AccountCard', () => {
     });
   });
 
+  describe('error state', () => {
+    it('shows only the reconnect action on a broken card', () => {
+      render(<AccountCard {...baseProps} error onReconnect={() => {}} showDisconnect onDisconnect={() => {}} />);
+      expect(screen.getByTestId('youtube-reconnect-button')).toBeTruthy();
+      expect(screen.queryByTestId('youtube-disconnect-button')).toBeNull();
+    });
+
+    it('replaces the secondary line with the invalid-token message', () => {
+      render(<AccountCard {...baseProps} email="canal@example.com" error onReconnect={() => {}} />);
+      expect(screen.getByText('accounts.tokenInvalid')).toBeTruthy();
+      expect(screen.queryByText('canal@example.com')).toBeNull();
+    });
+
+    it('calls onReconnect when the reconnect button is clicked', () => {
+      const onReconnect = vi.fn();
+      render(<AccountCard {...baseProps} error onReconnect={onReconnect} showDisconnect onDisconnect={() => {}} />);
+      fireEvent.click(screen.getByTestId('youtube-reconnect-button'));
+      expect(onReconnect).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses a red border and a red status dot on a broken card', () => {
+      const { container } = render(<AccountCard {...baseProps} error onReconnect={() => {}} />);
+      expect(container.querySelector('[data-testid="account-card"]')?.className).toContain('border-destructive');
+      expect(screen.getByRole('img', { name: 'accounts.tokenInvalid' }).className).toContain('bg-destructive');
+    });
+
+    it('keeps the trash button and no reconnect action on a healthy card', () => {
+      render(<AccountCard {...baseProps} showDisconnect onDisconnect={() => {}} />);
+      expect(screen.getByTestId('youtube-disconnect-button')).toBeTruthy();
+      expect(screen.queryByTestId('youtube-reconnect-button')).toBeNull();
+    });
+  });
+
   describe('accessibility', () => {
     it('a selectable card has cursor-pointer on the label', () => {
       const { container } = render(<AccountCard {...baseProps} onSelect={() => {}} />);

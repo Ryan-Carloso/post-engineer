@@ -1,3 +1,14 @@
+//---------------
+// Account sync status — what GET /api/account reports per account.
+// 'ok' = the profile sync succeeded (or was not due); 'error' = the last
+// sync attempt failed (undecryptable token, revoked credentials), so the
+// accounts page flags the card instead of showing it as healthy.
+// The field is optional: older payloads and fixtures without it read as
+// healthy (status !== 'error').
+//---------------
+
+export type AccountSyncStatus = 'ok' | 'error';
+
 export interface AccountData {
   provider: 'youtube';
   recordId: string;
@@ -8,6 +19,7 @@ export interface AccountData {
   customUrl?: string;
   connectedAt: number;
   lastUsed: number;
+  status?: AccountSyncStatus;
   statistics?: {
     subscriberCount?: string;
     viewCount?: string;
@@ -31,6 +43,7 @@ export interface InstagramAccountData {
   mediaCount?: number;
   connectedAt: number;
   lastUsed: number;
+  status?: AccountSyncStatus;
 }
 
 //---------------

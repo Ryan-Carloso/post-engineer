@@ -28,7 +28,7 @@ import { ProviderIcon } from '@/components/provider-icon';
 import { useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
 import { useI18n } from '@/lib/i18n/provider';
 import { AccountsIcon, GoogleIcon, InstagramIcon } from '@/lib/ui';
-import { BrandIcon, connectedLabel, useDisconnectFlow } from './accounts-section-helpers';
+import { BrandIcon, connectedLabel, errorLabel, useDisconnectFlow } from './accounts-section-helpers';
 import { ThreespeakAccountsSection } from './threespeak-accounts-section';
 
 export default function AccountsPage(): React.ReactElement {
@@ -82,6 +82,7 @@ function YoutubeAccountsSection(): ReactNode {
   const selectedIds = useUploadStore((state) => state.selectedAccountIds.youtube);
   const toggle = useUploadStore((state) => state.toggleSelectedAccount);
   const accounts = query.data?.accounts ?? [];
+  const errorAccounts = accounts.filter((account) => account.status === 'error');
   useAccountListErrorTelemetry('youtube', query.error?.message ?? null);
   return (
     <SocialAccountsSection
@@ -89,8 +90,9 @@ function YoutubeAccountsSection(): ReactNode {
       label={t('accounts.youtubeLabel')}
       description={t('accounts.youtubeDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
+      errorLabel={errorAccounts.length > 0 ? errorLabel(t, errorAccounts.length) : null}
       count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="youtube" name={account.channelName} email={account.email} thumbnail={account.thumbnail} customUrl={account.customUrl} onSelect={() => toggle('youtube', account.channelId)} selected={selectedIds.includes(account.channelId)} showDisconnect onDisconnect={() => flow.onDisconnect(account.channelId, account.channelName)} />)}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="youtube" name={account.channelName} email={account.email} thumbnail={account.thumbnail} customUrl={account.customUrl} onSelect={() => toggle('youtube', account.channelId)} selected={selectedIds.includes(account.channelId)} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => flow.onDisconnect(account.channelId, account.channelName)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
@@ -117,6 +119,7 @@ function InstagramAccountsSection(): ReactNode {
   const selectedIds = useUploadStore((state) => state.selectedAccountIds.instagram);
   const toggle = useUploadStore((state) => state.toggleSelectedAccount);
   const accounts = query.data?.accounts ?? [];
+  const errorAccounts = accounts.filter((account) => account.status === 'error');
   useAccountListErrorTelemetry('instagram', query.error?.message ?? null);
   return (
     <SocialAccountsSection
@@ -124,8 +127,9 @@ function InstagramAccountsSection(): ReactNode {
       label={t('accounts.instagramLabel')}
       description={t('accounts.instagramDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
+      errorLabel={errorAccounts.length > 0 ? errorLabel(t, errorAccounts.length) : null}
       count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="instagram" name={`@${account.username}`} storedDisplayName={account.name} thumbnail={account.profilePictureUrl} onSelect={() => toggle('instagram', account.igUserId)} selected={selectedIds.includes(account.igUserId)} showDisconnect onDisconnect={() => flow.onDisconnect(account.igUserId, `@${account.username}`)} />)}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="instagram" name={`@${account.username}`} storedDisplayName={account.name} thumbnail={account.profilePictureUrl} onSelect={() => toggle('instagram', account.igUserId)} selected={selectedIds.includes(account.igUserId)} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => flow.onDisconnect(account.igUserId, `@${account.username}`)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
@@ -152,6 +156,7 @@ function LinkedinAccountsSection(): ReactNode {
   const oauth = useLinkedInOAuth();
   const flow = useDisconnectFlow('linkedin');
   const accounts = query.data?.accounts ?? [];
+  const errorAccounts = accounts.filter((account) => account.status === 'error');
   useAccountListErrorTelemetry('linkedin', query.error?.message ?? null);
   return (
     <SocialAccountsSection
@@ -159,8 +164,9 @@ function LinkedinAccountsSection(): ReactNode {
       label={t('accounts.linkedinLabel')}
       description={t('accounts.linkedinDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
+      errorLabel={errorAccounts.length > 0 ? errorLabel(t, errorAccounts.length) : null}
       count={accounts.length}
-      accounts={accounts.map((account) => <LinkedinAccountCard key={account.recordId} name={account.accountName || account.providerAccountId} thumbnail={account.profilePictureUrl} storedDisplayName={account.accountMetadata?.name ?? undefined} labelOrigin={account.accountName ? 'stored' : 'provider_id'} isOrganization={account.providerAccountId.startsWith('urn:li:organization:')} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName || account.providerAccountId)} />)}
+      accounts={accounts.map((account) => <LinkedinAccountCard key={account.recordId} name={account.accountName || account.providerAccountId} thumbnail={account.profilePictureUrl} storedDisplayName={account.accountMetadata?.name ?? undefined} labelOrigin={account.accountName ? 'stored' : 'provider_id'} isOrganization={account.providerAccountId.startsWith('urn:li:organization:')} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName || account.providerAccountId)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
@@ -186,6 +192,7 @@ function ThreadsAccountsSection(): ReactNode {
   const oauth = useThreadsOAuth();
   const flow = useDisconnectFlow('threads');
   const accounts = query.data?.accounts ?? [];
+  const errorAccounts = accounts.filter((account) => account.status === 'error');
   useAccountListErrorTelemetry('threads', query.error?.message ?? null);
   return (
     <SocialAccountsSection
@@ -193,8 +200,9 @@ function ThreadsAccountsSection(): ReactNode {
       label={t('accounts.threadsLabel')}
       description={t('accounts.threadsDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
+      errorLabel={errorAccounts.length > 0 ? errorLabel(t, errorAccounts.length) : null}
       count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="threads" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="threads" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
@@ -220,6 +228,7 @@ function FacebookAccountsSection(): ReactNode {
   const oauth = useFacebookOAuth();
   const flow = useDisconnectFlow('facebook');
   const accounts = query.data?.accounts ?? [];
+  const errorAccounts = accounts.filter((account) => account.status === 'error');
   useAccountListErrorTelemetry('facebook', query.error?.message ?? null);
   return (
     <SocialAccountsSection
@@ -227,8 +236,9 @@ function FacebookAccountsSection(): ReactNode {
       label={t('accounts.facebookLabel')}
       description={t('accounts.facebookDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
+      errorLabel={errorAccounts.length > 0 ? errorLabel(t, errorAccounts.length) : null}
       count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="facebook" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="facebook" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
@@ -255,6 +265,7 @@ function PinterestAccountsSection(): ReactNode {
   const oauth = usePinterestOAuth();
   const flow = useDisconnectFlow('pinterest');
   const accounts = query.data?.accounts ?? [];
+  const errorAccounts = accounts.filter((account) => account.status === 'error');
   useAccountListErrorTelemetry('pinterest', query.error?.message ?? null);
   return (
     <SocialAccountsSection
@@ -262,8 +273,9 @@ function PinterestAccountsSection(): ReactNode {
       label={t('accounts.pinterestLabel')}
       description={t('accounts.pinterestDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
+      errorLabel={errorAccounts.length > 0 ? errorLabel(t, errorAccounts.length) : null}
       count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="pinterest" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="pinterest" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
@@ -289,6 +301,7 @@ function FanvueAccountsSection(): ReactNode {
   const oauth = useFanvueOAuth();
   const flow = useDisconnectFlow('fanvue');
   const accounts = query.data?.accounts ?? [];
+  const errorAccounts = accounts.filter((account) => account.status === 'error');
   useAccountListErrorTelemetry('fanvue', query.error?.message ?? null);
   return (
     <SocialAccountsSection
@@ -296,8 +309,9 @@ function FanvueAccountsSection(): ReactNode {
       label={t('accounts.fanvueLabel')}
       description={t('accounts.fanvueDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
+      errorLabel={errorAccounts.length > 0 ? errorLabel(t, errorAccounts.length) : null}
       count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="fanvue" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="fanvue" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} thumbnail={account.profilePictureUrl} error={account.status === 'error'} onReconnect={() => void oauth.startOAuth()} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}
@@ -316,9 +330,9 @@ function FanvueAccountsSection(): ReactNode {
 // LinkedIn card that distinguishes a member profile from a company page.
 //---------------
 
-function LinkedinAccountCard({ name, thumbnail, storedDisplayName, labelOrigin, isOrganization, showDisconnect, onDisconnect }: { name: string; thumbnail?: string; storedDisplayName?: string; labelOrigin?: 'stored' | 'provider_id'; isOrganization: boolean; showDisconnect?: boolean; onDisconnect?: () => void }): ReactNode {
+function LinkedinAccountCard({ name, thumbnail, storedDisplayName, labelOrigin, isOrganization, showDisconnect, onDisconnect, error, onReconnect }: { name: string; thumbnail?: string; storedDisplayName?: string; labelOrigin?: 'stored' | 'provider_id'; isOrganization: boolean; showDisconnect?: boolean; onDisconnect?: () => void; error?: boolean; onReconnect?: () => void }): ReactNode {
   const { t } = useI18n();
-  return <div className="relative"><AccountCard type="linkedin" name={name} thumbnail={thumbnail} storedDisplayName={storedDisplayName} labelOrigin={labelOrigin} showDisconnect={showDisconnect} onDisconnect={onDisconnect} /><span className="absolute top-2 right-2 rounded border border-info/30 bg-info-soft px-1.5 py-0.5 text-[10px] font-semibold text-info">{t(isOrganization ? 'accounts.pageBadge' : 'accounts.memberBadge')}</span></div>;
+  return <div className="relative"><AccountCard type="linkedin" name={name} thumbnail={thumbnail} storedDisplayName={storedDisplayName} labelOrigin={labelOrigin} showDisconnect={showDisconnect} onDisconnect={onDisconnect} error={error} onReconnect={onReconnect} /><span className="absolute top-2 right-2 rounded border border-info/30 bg-info-soft px-1.5 py-0.5 text-[10px] font-semibold text-info">{t(isOrganization ? 'accounts.pageBadge' : 'accounts.memberBadge')}</span></div>;
 }
 
 

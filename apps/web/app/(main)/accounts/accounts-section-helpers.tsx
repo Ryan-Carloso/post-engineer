@@ -23,6 +23,10 @@ export function connectedLabel(t: ReturnType<typeof useI18n>['t'], count: number
   return t(count === 1 ? 'accounts.accountConnected' : 'accounts.accountsConnected', { count });
 }
 
+export function errorLabel(t: ReturnType<typeof useI18n>['t'], count: number): string {
+  return t(count === 1 ? 'accounts.accountWithIssue' : 'accounts.accountsWithIssues', { count });
+}
+
 //---------------
 // useDisconnectFlow — one dialog-backed disconnect flow per provider
 // section. The trash button on the card opens the confirmation dialog;

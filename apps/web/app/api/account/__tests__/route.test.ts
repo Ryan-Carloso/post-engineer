@@ -159,6 +159,30 @@ describe('GET /api/account', () => {
     expect(body.accounts[0].username).toBe('kept_handle');
   });
 
+  it('marks the account whose profile sync failed with status error and keeps the others ok', async () => {
+    mockSession();
+    const broken = {
+      id: 'rec-broken', provider: 'youtube', providerAccountId: 'chan-broken', accountName: 'Broken Channel',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {},
+    };
+    const healthy = {
+      id: 'rec-ok', provider: 'instagram', providerAccountId: 'ig-ok', accountName: 'ok_handle',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {},
+    };
+    vi.mocked(listSocialAccounts).mockResolvedValue([broken, healthy] as never);
+    vi.mocked(syncAccountProfile).mockImplementation(async (_supabase: unknown, _userId: string, rec: SocialAccountRecord) => {
+      if (rec.id === 'rec-broken') throw new Error('Invalid authentication tag length: 2');
+      return rec;
+    });
+
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { accounts: Array<{ recordId: string; status?: string }> };
+    expect(body.accounts).toHaveLength(2);
+    expect(body.accounts.find((account) => account.recordId === 'rec-broken')?.status).toBe('error');
+    expect(body.accounts.find((account) => account.recordId === 'rec-ok')?.status).toBe('ok');
+  });
+
   it('logs the original sync error as the cause, not its message string', async () => {
     mockSession();
     vi.mocked(listSocialAccounts).mockResolvedValue([{

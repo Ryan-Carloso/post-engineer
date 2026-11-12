@@ -322,4 +322,48 @@ describe('Accounts — UI', () => {
       .should('be.visible')
       .and('contain', 'Não foi possível desconectar a conta');
   });
+
+  it('mostra o estado de erro na conta partida: só Voltar a ligar, sem lixo', () => {
+    cy.intercept('GET', '/api/account', {
+      statusCode: 200,
+      body: {
+        authenticated: true,
+        message: 'ok',
+        accounts: [
+          {
+            provider: 'youtube',
+            recordId: 'acc-yt-broken',
+            channelId: 'ch-broken',
+            channelName: 'Canal Partido',
+            email: 'partido@example.com',
+            connectedAt: 1_700_000_000_000,
+            lastUsed: 1_700_000_000_000,
+            status: 'error',
+          },
+          {
+            provider: 'instagram',
+            recordId: 'acc-ig-ok',
+            igUserId: 'ig-456',
+            username: 'meu.perfil',
+            connectedAt: 1_700_000_000_000,
+            lastUsed: 1_700_000_000_000,
+            status: 'ok',
+          },
+        ],
+      },
+    }).as('getAccounts');
+
+    cy.visit('/accounts');
+    cy.wait('@getAccounts');
+
+    // The broken card names the problem and offers only the reconnect action.
+    cy.contains('Canal Partido').should('be.visible');
+    cy.contains('Token inválido').should('be.visible');
+    cy.get('[data-testid=youtube-reconnect-button]').should('be.visible');
+    cy.get('[data-testid=youtube-disconnect-button]').should('not.exist');
+    // The section header counts the broken account; the healthy sibling
+    // keeps its trash button.
+    cy.contains('1 conta com problema').should('be.visible');
+    cy.get('[data-testid=instagram-disconnect-button]').should('be.visible');
+  });
 });

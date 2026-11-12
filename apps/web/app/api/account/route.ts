@@ -34,6 +34,11 @@ async function getHandler(request?: Request) {
     // picture on the provider shows without reconnecting. Rows run in
     // parallel (each read has its own timeout); a failed read keeps the
     // stored profile.
+    // A failed sync also marks the account 'error' in the response, so the
+    // accounts page flags that card instead of showing it as healthy. The
+    // failure never drops the row: one broken account must not block the
+    // others, and the next list retries the row.
+    const failedRecordIds = new Set<string>();
     const effectiveRecords = await Promise.all(records.map(async (record) => {
       try {
         return await syncAccountProfile(supabase, userId, record);
@@ -44,12 +49,13 @@ async function getHandler(request?: Request) {
         // reported: ..." as the PostHog exception and hid the stack.
         // The record ids ride as metadata, as elsewhere.
         logger.error('[ACCOUNT] Profile sync failed, keeping the stored profile', error, { recordId: record.id, provider: record.provider });
+        failedRecordIds.add(record.id);
         return record;
       }
     }));
     const accounts: PublicAccountItem[] = [];
     for (const effectiveRecord of effectiveRecords) {
-      const mapped = toPublicAccountSafe(effectiveRecord);
+      const mapped = toPublicAccountSafe(effectiveRecord, failedRecordIds.has(effectiveRecord.id) ? 'error' : 'ok');
       if (mapped) {
         accounts.push(mapped);
       } else {

@@ -1,5 +1,5 @@
 import type { SocialAccountRecord } from '@/lib/social-accounts';
-import type { AccountData, InstagramAccountData } from '@/lib/types';
+import type { AccountData, AccountSyncStatus, InstagramAccountData } from '@/lib/types';
 
 //---------------
 // Provider Registry — SINGLE SOURCE of the supported social networks list.
@@ -33,6 +33,7 @@ export interface BlueskyAccountData {
   avatar?: string;
   connectedAt: number;
   lastUsed: number;
+  status?: AccountSyncStatus;
 }
 
 export interface LinkedinAccountData {
@@ -44,6 +45,7 @@ export interface LinkedinAccountData {
   profilePictureUrl?: string;
   connectedAt: number;
   lastUsed: number;
+  status?: AccountSyncStatus;
 }
 
 export interface ThreadsAccountData {
@@ -54,6 +56,7 @@ export interface ThreadsAccountData {
   profilePictureUrl?: string;
   connectedAt: number;
   lastUsed: number;
+  status?: AccountSyncStatus;
 }
 
 export interface FacebookAccountData {
@@ -66,6 +69,7 @@ export interface FacebookAccountData {
   followersCount?: number;
   connectedAt: number;
   lastUsed: number;
+  status?: AccountSyncStatus;
 }
 
 export interface PinterestAccountData {
@@ -76,6 +80,7 @@ export interface PinterestAccountData {
   profilePictureUrl?: string;
   connectedAt: number;
   lastUsed: number;
+  status?: AccountSyncStatus;
 }
 
 export interface ThreespeakAccountData {
@@ -85,6 +90,7 @@ export interface ThreespeakAccountData {
   accountName: string | null;
   connectedAt: number;
   lastUsed: number;
+  status?: AccountSyncStatus;
 }
 
 export interface RumbleAccountData {
@@ -94,6 +100,7 @@ export interface RumbleAccountData {
   accountName: string | null;
   connectedAt: number;
   lastUsed: number;
+  status?: AccountSyncStatus;
 }
 
 export interface FanvueAccountData {
@@ -104,6 +111,7 @@ export interface FanvueAccountData {
   profilePictureUrl?: string;
   connectedAt: number;
   lastUsed: number;
+  status?: AccountSyncStatus;
 }
 
 export type PublicAccountItem =
@@ -393,11 +401,11 @@ export function isOAuthProvider(value: unknown): value is OAuthProvider {
 // an unknown provider (never falls back silently).
 //---------------
 
-export function toPublicAccount(record: SocialAccountRecord): PublicAccountItem {
+export function toPublicAccount(record: SocialAccountRecord, status: AccountSyncStatus = 'ok'): PublicAccountItem {
   if (!isSocialProvider(record.provider)) {
     throw new Error(`Unknown social provider: ${String(record.provider)}`);
   }
-  return PROVIDER_REGISTRY[record.provider].toPublicAccount(record);
+  return { ...PROVIDER_REGISTRY[record.provider].toPublicAccount(record), status };
 }
 
 //---------------
@@ -405,7 +413,7 @@ export function toPublicAccount(record: SocialAccountRecord): PublicAccountItem 
 // returns null (the route filters and logs) instead of dropping the whole list.
 //---------------
 
-export function toPublicAccountSafe(record: SocialAccountRecord): PublicAccountItem | null {
+export function toPublicAccountSafe(record: SocialAccountRecord, status: AccountSyncStatus = 'ok'): PublicAccountItem | null {
   if (!isSocialProvider(record.provider)) return null;
-  return PROVIDER_REGISTRY[record.provider].toPublicAccount(record);
+  return { ...PROVIDER_REGISTRY[record.provider].toPublicAccount(record), status };
 }
