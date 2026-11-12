@@ -28,6 +28,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { resolveApiKey } from '@/lib/api-keys';
 import { listSocialAccounts, deleteSocialAccount, type SocialAccountRecord } from '@/lib/social-accounts';
 import { syncAccountProfile } from '@/lib/account-profile-sync';
+import { logger } from '@/lib/logger';
 
 function mockSession(userId = 'u1') {
   vi.mocked(createSupabaseServerClient).mockResolvedValue({
@@ -156,6 +157,28 @@ describe('GET /api/account', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { accounts: Array<{ username: string }> };
     expect(body.accounts[0].username).toBe('kept_handle');
+  });
+
+  it('logs the original sync error as the cause, not its message string', async () => {
+    mockSession();
+    vi.mocked(listSocialAccounts).mockResolvedValue([{
+      id: 'rec-yt', provider: 'youtube', providerAccountId: 'chan-9', accountName: 'kept_channel',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {},
+    }] as never);
+    const syncError = new Error('Invalid authentication tag length: 2');
+    vi.mocked(syncAccountProfile).mockRejectedValue(syncError);
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => 'test-log-id');
+    try {
+      const res = await GET();
+      expect(res.status).toBe(200);
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[ACCOUNT] Profile sync failed, keeping the stored profile',
+        syncError,
+        { recordId: 'rec-yt', provider: 'youtube' },
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it('maps bluesky accounts with did and handle (nao vira instagram)', async () => {
@@ -319,12 +342,18 @@ describe('GET /api/account', () => {
         getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'sb-token' } }, error: null }),
       },
     } as never);
-    vi.mocked(listSocialAccounts).mockRejectedValue(new Error('db fail'));
-
-    const res = await GET();
-    expect(res.status).toBe(500);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('LIST_ERROR');
+    const listError = new Error('db fail');
+    vi.mocked(listSocialAccounts).mockRejectedValue(listError);
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => 'test-log-id');
+    try {
+      const res = await GET();
+      expect(res.status).toBe(500);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe('LIST_ERROR');
+      expect(errorSpy).toHaveBeenCalledWith('[ACCOUNT] Erro ao listar contas', listError);
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 
@@ -386,11 +415,17 @@ describe('DELETE /api/account', () => {
 
   it('returns 500 when deleteSocialAccount throws', async () => {
     mockSession();
-    vi.mocked(deleteSocialAccount).mockRejectedValue(new Error('db fail'));
-
-    const res = await DELETE(deleteRequest('provider=instagram&providerAccountId=ig1'));
-    expect(res.status).toBe(500);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('DELETE_ERROR');
+    const deleteError = new Error('db fail');
+    vi.mocked(deleteSocialAccount).mockRejectedValue(deleteError);
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => 'test-log-id');
+    try {
+      const res = await DELETE(deleteRequest('provider=instagram&providerAccountId=ig1'));
+      expect(res.status).toBe(500);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe('DELETE_ERROR');
+      expect(errorSpy).toHaveBeenCalledWith('[ACCOUNT] Erro ao desconectar conta', deleteError);
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
