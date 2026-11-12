@@ -50,6 +50,7 @@ vi.mock('@/lib/videos/signed-upload', () => {
 
 import { POST } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { applyRateLimit } from '@/lib/rate-limit';
 import { mintVideoUpload } from '@/lib/videos/signed-upload';
 
 function jsonRequest(body: unknown): Request {
@@ -102,5 +103,19 @@ describe('POST /api/videos/upload-url', () => {
       new Request('https://post-engineer.com/api/videos/upload-url', { method: 'POST', body: 'not json' }),
     );
     expect(response.status).toBe(400);
+  });
+
+  it('returns the rate-limit response before minting', async () => {
+    vi.mocked(applyRateLimit).mockResolvedValueOnce(
+      NextResponse.json({ success: false, error: 'Too many requests.' }, { status: 429 }) as never,
+    );
+    const response = await POST(jsonRequest({ contentType: 'video/mp4', sizeBytes: 1 }));
+    expect(response.status).toBe(429);
+    expect(vi.mocked(mintVideoUpload)).not.toHaveBeenCalled();
+  });
+
+  it('rethrows an unexpected mint failure', async () => {
+    vi.mocked(mintVideoUpload).mockRejectedValueOnce(new Error('db down'));
+    await expect(POST(jsonRequest({ contentType: 'video/mp4', sizeBytes: 1 }))).rejects.toThrow('db down');
   });
 });

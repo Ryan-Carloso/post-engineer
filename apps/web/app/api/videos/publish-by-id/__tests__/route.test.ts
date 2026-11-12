@@ -61,6 +61,7 @@ vi.mock('@/lib/videos/publish-uploaded', async () => {
 
 import { POST } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { applyRateLimit } from '@/lib/rate-limit';
 import { publishUploadedVideo } from '@/lib/videos/publish-uploaded';
 
 const UPLOAD_ID = '11111111-1111-4111-8111-111111111111';
@@ -121,5 +122,47 @@ describe('POST /api/videos/publish-by-id', () => {
       jsonRequest({ uploadId: UPLOAD_ID, provider: 'instagram', accountIds: ['ig-1'], caption: 'hi' }),
     );
     expect(response.status).toBe(401);
+  });
+
+  it('rejects a body that is not JSON', async () => {
+    const response = await POST(
+      new Request('https://post-engineer.com/api/videos/publish-by-id', { method: 'POST', body: 'not json' }),
+    );
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as Record<string, unknown>).code).toBe('VIDEO_UPLOAD_INVALID_BODY');
+    expect(vi.mocked(publishUploadedVideo)).not.toHaveBeenCalled();
+  });
+
+  it('returns the rate-limit response before publishing', async () => {
+    vi.mocked(applyRateLimit).mockResolvedValueOnce(
+      NextResponse.json({ success: false, error: 'Too many requests.' }, { status: 429 }) as never,
+    );
+    const response = await POST(
+      jsonRequest({ uploadId: UPLOAD_ID, provider: 'instagram', accountIds: ['ig-1'], caption: 'hi' }),
+    );
+    expect(response.status).toBe(429);
+    expect(vi.mocked(publishUploadedVideo)).not.toHaveBeenCalled();
+  });
+
+  it('counts zero successes when the publish result has no per-account list', async () => {
+    vi.mocked(publishUploadedVideo).mockResolvedValueOnce({
+      success: true,
+      provider: 'instagram',
+      logId: 'log-1',
+    } as never);
+    const response = await POST(
+      jsonRequest({ uploadId: UPLOAD_ID, provider: 'instagram', accountIds: ['ig-1'], caption: 'hi' }),
+    );
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as Record<string, unknown>).successCount).toBe(0);
+  });
+
+  it('maps an unexpected publish failure through the upload error response', async () => {
+    vi.mocked(publishUploadedVideo).mockRejectedValueOnce(new Error('provider down'));
+    const response = await POST(
+      jsonRequest({ uploadId: UPLOAD_ID, provider: 'instagram', accountIds: ['ig-1'], caption: 'hi' }),
+    );
+    expect(response.status).toBe(500);
+    expect(((await response.json()) as Record<string, unknown>).error).toBe('provider down');
   });
 });

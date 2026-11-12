@@ -38,6 +38,7 @@ vi.mock('@/lib/videos/signed-upload', () => {
 
 import { POST } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { applyRateLimit } from '@/lib/rate-limit';
 import { completeVideoUpload } from '@/lib/videos/signed-upload';
 
 function completeRequest(): Request {
@@ -80,5 +81,19 @@ describe('POST /api/videos/uploads/[uploadId]/complete', () => {
     const response = await POST(completeRequest(), ctx('upload-1'));
     expect(response.status).toBe(401);
     expect(vi.mocked(completeVideoUpload)).not.toHaveBeenCalled();
+  });
+
+  it('returns the rate-limit response before completing', async () => {
+    vi.mocked(applyRateLimit).mockResolvedValueOnce(
+      NextResponse.json({ success: false, error: 'Too many requests.' }, { status: 429 }) as never,
+    );
+    const response = await POST(completeRequest(), ctx('upload-1'));
+    expect(response.status).toBe(429);
+    expect(vi.mocked(completeVideoUpload)).not.toHaveBeenCalled();
+  });
+
+  it('rethrows an unexpected complete failure', async () => {
+    vi.mocked(completeVideoUpload).mockRejectedValueOnce(new Error('db down'));
+    await expect(POST(completeRequest(), ctx('upload-1'))).rejects.toThrow('db down');
   });
 });

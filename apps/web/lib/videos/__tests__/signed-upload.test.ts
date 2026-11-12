@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   MAX_VIDEO_UPLOAD_BYTES,
@@ -131,6 +131,16 @@ describe('mintVideoUpload', () => {
     ).rejects.toMatchObject({ status: 502 });
     expect(store.rows.size).toBe(0);
   });
+
+  it('deletes the row when signing returns no url and no error', async () => {
+    const store = makeStore();
+    const storage = makeStorage();
+    storage.createSignedUploadUrl = async () => ({ data: null, error: null });
+    await expect(
+      mintVideoUpload(store, storage, USER, { contentType: 'video/mp4', sizeBytes: 1 }, NOW),
+    ).rejects.toMatchObject({ status: 502 });
+    expect(store.rows.size).toBe(0);
+  });
 });
 
 describe('completeVideoUpload', () => {
@@ -145,6 +155,26 @@ describe('completeVideoUpload', () => {
     const store = makeStore([row({ status: 'ready', detected_content_type: 'video/mp4', size_bytes: MP4.length })]);
     const result = await completeVideoUpload(store, makeStorage(), USER, 'upload-1', NOW);
     expect(result.status).toBe('ready');
+  });
+
+  it('falls back to the declared type, then mp4, when a ready upload has no detected type', async () => {
+    const declared = await completeVideoUpload(
+      makeStore([row({ status: 'ready', detected_content_type: null, declared_content_type: 'video/quicktime', size_bytes: null })]),
+      makeStorage(),
+      USER,
+      'upload-1',
+      NOW,
+    );
+    expect(declared).toMatchObject({ contentType: 'video/quicktime', sizeBytes: 0 });
+
+    const fallback = await completeVideoUpload(
+      makeStore([row({ status: 'ready', detected_content_type: null, declared_content_type: null, size_bytes: null })]),
+      makeStorage(),
+      USER,
+      'upload-1',
+      NOW,
+    );
+    expect(fallback.contentType).toBe('video/mp4');
   });
 
   it('returns 404 for unknown and foreign-owned uploads', async () => {
@@ -177,6 +207,48 @@ describe('completeVideoUpload', () => {
       status: 400,
     });
   });
+
+  it('rejects an empty upload and deletes the object', async () => {
+    const storage = makeStorage(Buffer.alloc(0));
+    await expect(completeVideoUpload(makeStore([row()]), storage, USER, 'upload-1', NOW)).rejects.toMatchObject({
+      status: 400,
+      code: 'VIDEO_UPLOAD_FILE_EMPTY',
+    });
+    expect(storage.removed).toEqual([[`${USER}/direct-uploads/upload-1.mp4`]]);
+  });
+
+  it('rejects an upload over 2GB and deletes the object', async () => {
+    // The guard compares buffer.length with 2GB. Patch the length on a
+    // one-byte object so the branch runs without allocating 2GB.
+    const storage = makeStorage(Buffer.from([0xab]));
+    const realFrom = Buffer.from.bind(Buffer);
+    const fromSpy = vi.spyOn(Buffer, 'from').mockImplementation(((input: unknown) => {
+      const buf = realFrom(input as ArrayBuffer);
+      if (buf.length === 1 && buf[0] === 0xab) {
+        Object.defineProperty(buf, 'length', { value: MAX_VIDEO_UPLOAD_BYTES + 1 });
+      }
+      return buf;
+    }) as typeof Buffer.from);
+    try {
+      await expect(completeVideoUpload(makeStore([row()]), storage, USER, 'upload-1', NOW)).rejects.toMatchObject({
+        status: 413,
+        code: 'VIDEO_UPLOAD_TOO_LARGE',
+      });
+      expect(storage.removed).toEqual([[`${USER}/direct-uploads/upload-1.mp4`]]);
+    } finally {
+      fromSpy.mockRestore();
+    }
+  });
+
+  it('rejects a complete that lost the pending-to-ready race', async () => {
+    const store = makeStore([row()]);
+    store.updateUpload = async () => false;
+    await expect(completeVideoUpload(store, makeStorage(MP4), USER, 'upload-1', NOW)).rejects.toMatchObject({
+      status: 409,
+      code: 'VIDEO_UPLOAD_CONFLICT',
+    });
+    expect(store.rows.get('upload-1')?.status).toBe('pending');
+  });
 });
 
 describe('claimUploadForPublish', () => {
@@ -206,5 +278,15 @@ describe('claimUploadForPublish', () => {
 
     const ready = makeStore([row({ status: 'ready', detected_content_type: 'video/mp4' })]);
     await expect(claimUploadForPublish(ready, makeStorage(), OTHER, 'upload-1', NOW)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('rejects a claim that lost the ready-to-consumed race', async () => {
+    const store = makeStore([row({ status: 'ready', detected_content_type: 'video/mp4', size_bytes: MP4.length })]);
+    store.updateUpload = async () => false;
+    await expect(claimUploadForPublish(store, makeStorage(MP4), USER, 'upload-1', NOW)).rejects.toMatchObject({
+      status: 409,
+      code: 'VIDEO_UPLOAD_CONSUMED',
+    });
+    expect(store.rows.get('upload-1')?.status).toBe('ready');
   });
 });

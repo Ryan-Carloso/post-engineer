@@ -53,6 +53,16 @@ describe('isPublicIp — shared SSRF fixture (Python is_global parity)', () => {
     expect(isPublicIp(ip)).toBe(false);
   });
 
+  it('rejects a value that is not an IP address', () => {
+    expect(isPublicIp('not-an-ip')).toBe(false);
+    expect(isPublicIp('')).toBe(false);
+  });
+
+  it('classifies an uncompressed IPv6 address', () => {
+    expect(isPublicIp('2001:db8:0:0:0:0:0:1')).toBe(false);
+    expect(isPublicIp('2606:4700:4700:0:0:0:0:1111')).toBe(true);
+  });
+
   it('pins every literal representative the engine SSRF test covers', () => {
     const root = findRepoRoot(import.meta.url);
     const engineTest = readFileSync(join(root, 'apps', 'engine', 'test', 'utils', 'test_ssrf.py'), 'utf8');
