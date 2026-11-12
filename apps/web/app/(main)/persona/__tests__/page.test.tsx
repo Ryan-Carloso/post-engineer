@@ -563,27 +563,56 @@ describe('app/(main)/persona/page — PersonaPage', () => {
 // fillValidForm — full flow: character + name + voice
 // (lives at file level for reuse across describes)
 //---------------
+//---------------
+// bindFirstAccount — issue #572: a persona is born bound to at least one
+// publishing account. Binds the first connected account through the
+// draft section's picker (edit mode toggles the section's local selection
+// instead, which the edit submit never reads).
+//---------------
+async function bindFirstAccount(user: ReturnType<typeof userEvent.setup>) {
+  const firstAccount = (await screen.findAllByTestId('account-card-select'))[0];
+  await user.click(firstAccount);
+}
+
 async function preencherFormularioValido(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'persona.characterLabel 1', hidden: true }));
   await user.type(screen.getByLabelText('persona.name'), 'Zé Persona');
   await pickVoice(user, 'en us male 01');
+  await bindFirstAccount(user);
 }
 
 describe('app/(main)/persona/page — persona enxuta (sem schedule)', () => {
-  it('NÃO renderiza seção de agendamento (contas, dias, horários)', () => {
+  it('NÃO renderiza seção de agendamento (dias, horários), mas mostra o seletor de contas vinculadas', () => {
     mockConnectedAccounts();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
     // Scheduling has no screen of its own, so the persona form must not
-    // carry account pickers, weekday toggles or time inputs. Asserted on
-    // what the page actually renders, not on translation keys.
-    expect(screen.queryByTitle('Meu canal')).toBeNull();
+    // carry weekday toggles or time inputs. The account picker it DOES
+    // render is the persona's binding (issue #572), not a schedule.
+    expect(screen.getByText('persona.publishingAccountsLabel')).toBeInTheDocument();
+    expect(screen.getByTitle('Meu canal')).toBeInTheDocument();
     expect(document.querySelector('input[type="time"]')).toBeNull();
     expect(document.querySelector('[data-testid="schedule-new-tile"]')).toBeNull();
   });
 
-  it('submit NÃO exige contas conectadas e chama POST /api/persona (persona sozinha)', async () => {
-    mockNoAccounts();
+  it('submit sem conta vinculada mostra erro e não cria a persona', async () => {
+    mockConnectedAccounts();
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    // Fill name + character + voice, but bind no account.
+    await user.click(screen.getByRole('button', { name: 'persona.characterLabel 1', hidden: true }));
+    await user.type(screen.getByLabelText('persona.name'), 'Zé Persona');
+    await pickVoice(user, 'en us male 01');
+    await user.click(screen.getByText('persona.submit'));
+
+    expect(createPersona).not.toHaveBeenCalled();
+    expect(screen.getByText('publishing.mustSelectAccount')).toBeInTheDocument();
+    expect(scrollToErrorField).toHaveBeenCalledWith('accounts');
+  });
+
+  it('submit com conta vinculada cria a persona e envia o vínculo', async () => {
+    mockConnectedAccounts();
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
@@ -593,11 +622,27 @@ describe('app/(main)/persona/page — persona enxuta (sem schedule)', () => {
     await waitFor(() => expect(createPersona).toHaveBeenCalledTimes(1));
     const formData = vi.mocked(createPersona).mock.calls[0][0] as FormData;
     expect(formData.get('name')).toBe('Zé Persona');
+    expect(JSON.parse(String(formData.get('publishingAccounts')))).toEqual(
+      expect.objectContaining({ youtube: ['yt-1'] }),
+    );
     expect(formData.has('schedule')).toBe(false);
   });
 
-  it('sucesso na criação leva o usuário para a lista de personas', async () => {
+  it('sem contas conectadas não há o que vincular: submit mostra o erro', async () => {
     mockNoAccounts();
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByRole('button', { name: 'persona.characterLabel 1', hidden: true }));
+    await user.type(screen.getByLabelText('persona.name'), 'Zé Persona');
+    await pickVoice(user, 'en us male 01');
+    await user.click(screen.getByText('persona.submit'));
+
+    expect(createPersona).not.toHaveBeenCalled();
+    expect(screen.getByText('publishing.mustSelectAccount')).toBeInTheDocument();
+  });
+
+  it('sucesso na criação leva o usuário para a lista de personas', async () => {
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
@@ -605,18 +650,6 @@ describe('app/(main)/persona/page — persona enxuta (sem schedule)', () => {
     await user.click(screen.getByText('persona.submit'));
 
     await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/personas'));
-  });
-
-  it('não mostra erro de conta obrigatória nunca mais', async () => {
-    mockNoAccounts();
-    const user = userEvent.setup();
-    render(<PersonaPage />, { wrapper: createWrapper() });
-
-    await preencherFormularioValido(user);
-    await user.click(screen.getByText('persona.submit'));
-
-    await waitFor(() => expect(createPersona).toHaveBeenCalled());
-    expect(screen.queryByText('publishing.mustSelectAccount')).toBeNull();
   });
 });
 
@@ -1006,6 +1039,7 @@ describe('app/(main)/persona/page — validação do submit (guards do store)', 
     await user.upload(fileInput(container), new File(['conteudo'], 'foto.png', { type: 'image/png' }));
     await user.type(screen.getByLabelText('persona.name'), 'Zé Persona');
     await pickVoice(user, 'en us male 01');
+    await bindFirstAccount(user);
     await user.click(screen.getByText('persona.submit'));
 
     await waitFor(() => expect(createPersona).toHaveBeenCalledTimes(1));
@@ -1507,7 +1541,11 @@ describe('app/(main)/persona/page — seletor de foto', () => {
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     expect(mutateAsync).toHaveBeenCalledWith({ file: expect.objectContaining({ name: 'ok.png' }) });
-    expect(screen.getByRole('alert').textContent).toContain('persona.libraryFilesRejected');
+    // The page carries a second alert in edit mode: the binding section
+    // reports the stubbed empty binding (issue #572). Assert on the
+    // library alert's text, not on the page having exactly one alert.
+    const alerts = screen.getAllByRole('alert');
+    expect(alerts.some((alert) => alert.textContent?.includes('persona.libraryFilesRejected'))).toBe(true);
   });
 
   it('em edição, upload que lança erro mostra erro localizado', async () => {
@@ -1519,7 +1557,11 @@ describe('app/(main)/persona/page — seletor de foto', () => {
 
     await user.upload(fileInput(container), new File(['a'], 'a.png', { type: 'image/png' }));
 
-    expect((await screen.findByRole('alert')).textContent).toBe('persona.libraryUploadError');
+    await waitFor(() => {
+      expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toContain(
+        'persona.libraryUploadError',
+      );
+    });
   });
 
   it('seleção cancelada mantém as fotos já escolhidas', async () => {
@@ -1570,7 +1612,13 @@ describe('app/(main)/persona/page — seletor de foto', () => {
 
     await user.upload(fileInput(container), new File(['a'], 'a.png', { type: 'image/png' }));
 
-    expect((await screen.findByRole('alert')).textContent).toBe('persona.libraryUploadError');
+    // Same second-alert caveat as the test above: the binding section
+    // reports the stubbed empty binding in edit mode.
+    await waitFor(() => {
+      expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toContain(
+        'persona.libraryUploadError',
+      );
+    });
   });
 
   it('foto atual em edição mostra a foto guardada e permite trocar', async () => {
