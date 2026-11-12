@@ -150,6 +150,12 @@ export interface PublishVideoDirectInput {
   caption?: string;
   /** Pinterest only: required. The board the pin goes to (the id from list_pinterest_boards). */
   boardId?: string;
+  /**
+   * Omitted: a UUID is generated per call. Reuse the same key when retrying
+   * a timed-out call so the server replays the original result instead of
+   * publishing the video again.
+   */
+  idempotencyKey?: string;
 }
 
 /** One per-account outcome from a direct-publish upload. */

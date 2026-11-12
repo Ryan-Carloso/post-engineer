@@ -45,6 +45,13 @@ export const PublishVideoDirectShape = {
     .string()
     .optional()
     .describe('Pinterest only: the board to publish the pin to (the id from list_pinterest_boards). Required for pinterest.'),
+  idempotencyKey: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Idempotency key: if the call times out or fails ambiguously, retry with the SAME key — the server returns the original publish result instead of posting the video again. Omitted: a key is generated per call.',
+    ),
 };
 
 export const PublishVideoDirectSchema = z.object(PublishVideoDirectShape);

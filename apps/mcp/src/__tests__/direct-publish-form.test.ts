@@ -183,4 +183,53 @@ describe('buildDirectPublishForm', () => {
     expect(ig.get('caption')).toBe('hi');
     expect(ig.getAll('igAccountIds')).toEqual(['ig-1']);
   });
+
+  it('sends the idempotency key as the publish scope key', () => {
+    const fields = requireDirectPublishFields({
+      provider: 'fanvue',
+      videoPath: 'clip.mp4',
+      accountIds: ['fan-1'],
+      title: 'T',
+      description: 'D',
+    });
+    const form = buildDirectPublishForm(
+      {
+        provider: 'fanvue',
+        videoPath: 'clip.mp4',
+        accountIds: ['fan-1'],
+        title: 'T',
+        description: 'D',
+        idempotencyKey: 'retry-1',
+      },
+      fields,
+      video,
+      'clip.mp4',
+    );
+    expect(form.get('publishScopeKey')).toBe('direct:retry-1');
+  });
+
+  it('mints a direct scope key when no idempotency key is given', () => {
+    const fields = requireDirectPublishFields({
+      provider: 'fanvue',
+      videoPath: 'clip.mp4',
+      accountIds: ['fan-1'],
+      title: 'T',
+      description: 'D',
+    });
+    const first = buildDirectPublishForm(
+      { provider: 'fanvue', videoPath: 'clip.mp4', accountIds: ['fan-1'], title: 'T', description: 'D' },
+      fields,
+      video,
+      'clip.mp4',
+    );
+    const second = buildDirectPublishForm(
+      { provider: 'fanvue', videoPath: 'clip.mp4', accountIds: ['fan-1'], title: 'T', description: 'D' },
+      fields,
+      video,
+      'clip.mp4',
+    );
+    expect(first.get('publishScopeKey')).toMatch(/^direct:[0-9a-f-]{36}$/);
+    expect(second.get('publishScopeKey')).toMatch(/^direct:[0-9a-f-]{36}$/);
+    expect(second.get('publishScopeKey')).not.toBe(first.get('publishScopeKey'));
+  });
 });
