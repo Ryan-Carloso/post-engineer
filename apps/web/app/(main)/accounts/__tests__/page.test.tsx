@@ -117,7 +117,7 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 vi.mock('@/components/account-card', () => ({
-  default: ({ name, onSelect, onRemove, selected, showDisconnect, onDisconnect, type, storedDisplayName, labelOrigin }: {
+  default: ({ name, onSelect, onRemove, selected, showDisconnect, onDisconnect, type, storedDisplayName, labelOrigin, error, onReconnect }: {
     name: string;
     onSelect?: () => void;
     onRemove?: () => void;
@@ -127,6 +127,8 @@ vi.mock('@/components/account-card', () => ({
     type?: string;
     storedDisplayName?: string;
     labelOrigin?: string;
+    error?: boolean;
+    onReconnect?: () => void;
   }) => (
     <div
       data-testid="account-card"
@@ -146,9 +148,11 @@ vi.mock('@/components/account-card', () => ({
       {onRemove && (
         <button onClick={onRemove} data-testid="account-card-remove">remove</button>
       )}
-      {showDisconnect && onDisconnect && (
+      {error && onReconnect ? (
+        <button onClick={onReconnect} data-testid={`${type ?? 'account'}-reconnect-button`}>reconnect</button>
+      ) : showDisconnect && onDisconnect ? (
         <button onClick={onDisconnect} data-testid={`${type ?? 'account'}-disconnect-button`}>disconnect</button>
-      )}
+      ) : null}
     </div>
   ),
 }));
@@ -1304,5 +1308,450 @@ describe('Rumble accounts section', () => {
     await screen.findByTestId('disconnect-dialog');
     fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
     await waitFor(() => expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('rumble', 'rejected'));
+  });
+});
+
+describe('error state wiring — broken cards offer reconnect, healthy cards keep trash', () => {
+  function sectionByLabel(labelKey: string): HTMLElement {
+    const section = screen.getByText(labelKey).closest('section');
+    if (!section) throw new Error(`missing section ${labelKey}`);
+    return section;
+  }
+
+  function expectBrokenSection(section: HTMLElement, type: string): void {
+    expect(within(section).getByTestId(`${type}-reconnect-button`)).toBeTruthy();
+    expect(within(section).getByTestId(`${type}-disconnect-button`)).toBeTruthy();
+    expect(within(section).getByText('accounts.accountWithIssue')).toBeTruthy();
+  }
+
+  function expectHealthySection(section: HTMLElement, type: string): void {
+    expect(within(section).queryByTestId(`${type}-reconnect-button`)).toBeNull();
+    expect(within(section).queryByText('accounts.accountWithIssue')).toBeNull();
+    expect(within(section).queryByText('accounts.accountsWithIssues')).toBeNull();
+  }
+
+  interface OAuthSection {
+    type: string;
+    label: string;
+    brokenName: string;
+    healthyName: string;
+    setAccounts: (which: 'broken' | 'healthy' | 'both') => void;
+    armOAuth: () => ReturnType<typeof vi.fn>;
+  }
+
+  const youtubeStart = { fn: vi.fn() };
+  const instagramStart = { fn: vi.fn() };
+  const linkedinStart = { fn: vi.fn() };
+
+  const oauthSections: OAuthSection[] = [
+    {
+      type: 'youtube',
+      label: 'accounts.youtubeLabel',
+      brokenName: 'Broken Channel',
+      healthyName: 'OK Channel',
+      setAccounts: (which) => {
+        const broken = { provider: 'youtube', recordId: 'r-broken', channelId: 'ch-broken', channelName: 'Broken Channel', status: 'error', connectedAt: 0, lastUsed: 0 } as const;
+        const healthy = { provider: 'youtube', recordId: 'r-ok', channelId: 'ch-ok', channelName: 'OK Channel', status: 'ok', connectedAt: 0, lastUsed: 0 } as const;
+        const accounts = which === 'broken' ? [broken] : which === 'healthy' ? [healthy] : [broken, healthy];
+        vi.mocked(useYouTubeAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts }, isLoading: false });
+      },
+      armOAuth: () => {
+        youtubeStart.fn = vi.fn().mockResolvedValue(undefined);
+        vi.mocked(useYouTubeOAuth).mockReturnValue({ startOAuth: youtubeStart.fn, isLoading: false, error: null });
+        return youtubeStart.fn;
+      },
+    },
+    {
+      type: 'instagram',
+      label: 'accounts.instagramLabel',
+      brokenName: '@brokenuser',
+      healthyName: '@okuser',
+      setAccounts: (which) => {
+        const broken = { provider: 'instagram', recordId: 'r-broken', igUserId: 'ig-broken', username: 'brokenuser', status: 'error', connectedAt: 0, lastUsed: 0 } as const;
+        const healthy = { provider: 'instagram', recordId: 'r-ok', igUserId: 'ig-ok', username: 'okuser', status: 'ok', connectedAt: 0, lastUsed: 0 } as const;
+        const accounts = which === 'broken' ? [broken] : which === 'healthy' ? [healthy] : [broken, healthy];
+        vi.mocked(useInstagramAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts }, isLoading: false });
+      },
+      armOAuth: () => {
+        instagramStart.fn = vi.fn().mockResolvedValue(undefined);
+        vi.mocked(useInstagramOAuth).mockReturnValue({ startOAuth: instagramStart.fn, isLoading: false, error: null });
+        return instagramStart.fn;
+      },
+    },
+    {
+      type: 'linkedin',
+      label: 'accounts.linkedinLabel',
+      brokenName: 'Broken Org',
+      healthyName: 'OK Member',
+      setAccounts: (which) => {
+        const broken = { provider: 'linkedin', recordId: 'r-broken', providerAccountId: 'urn:li:organization:999', accountName: 'Broken Org', accountMetadata: { kind: 'organization', name: 'Broken Org' }, status: 'error', connectedAt: 0, lastUsed: 0 } as const;
+        const healthy = { provider: 'linkedin', recordId: 'r-ok', providerAccountId: 'member-ok', accountName: 'OK Member', accountMetadata: { kind: 'member', name: 'OK Member' }, status: 'ok', connectedAt: 0, lastUsed: 0 } as const;
+        const accounts = which === 'broken' ? [broken] : which === 'healthy' ? [healthy] : [broken, healthy];
+        vi.mocked(useLinkedinAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts }, isLoading: false });
+      },
+      armOAuth: () => {
+        linkedinStart.fn = vi.fn().mockResolvedValue(undefined);
+        vi.mocked(useLinkedInOAuth).mockReturnValue({ startOAuth: linkedinStart.fn, isLoading: false, error: null });
+        return linkedinStart.fn;
+      },
+    },
+    {
+      type: 'threads',
+      label: 'accounts.threadsLabel',
+      brokenName: 'broken',
+      healthyName: 'ok',
+      setAccounts: (which) => {
+        const broken = { provider: 'threads', recordId: 'r-broken', providerAccountId: '42', accountName: 'broken', status: 'error', connectedAt: 0, lastUsed: 0 } as const;
+        const healthy = { provider: 'threads', recordId: 'r-ok', providerAccountId: '43', accountName: 'ok', status: 'ok', connectedAt: 0, lastUsed: 0 } as const;
+        const accounts = which === 'broken' ? [broken] : which === 'healthy' ? [healthy] : [broken, healthy];
+        vi.mocked(useThreadsAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts }, isLoading: false, error: null, refetch: vi.fn() });
+      },
+      armOAuth: () => threadsOAuth.startOAuth,
+    },
+    {
+      type: 'facebook',
+      label: 'accounts.facebookLabel',
+      brokenName: 'Broken Page',
+      healthyName: 'OK Page',
+      setAccounts: (which) => {
+        const broken = { provider: 'facebook', recordId: 'r-broken', providerAccountId: '111', accountName: 'Broken Page', status: 'error', connectedAt: 0, lastUsed: 0 } as const;
+        const healthy = { provider: 'facebook', recordId: 'r-ok', providerAccountId: '222', accountName: 'OK Page', status: 'ok', connectedAt: 0, lastUsed: 0 } as const;
+        const accounts = which === 'broken' ? [broken] : which === 'healthy' ? [healthy] : [broken, healthy];
+        vi.mocked(useFacebookAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts }, isLoading: false, error: null, refetch: vi.fn() });
+      },
+      armOAuth: () => facebookOAuth.startOAuth,
+    },
+    {
+      type: 'pinterest',
+      label: 'accounts.pinterestLabel',
+      brokenName: 'Broken Pin',
+      healthyName: 'OK Pin',
+      setAccounts: (which) => {
+        const broken = { provider: 'pinterest', recordId: 'r-broken', providerAccountId: 'p1', accountName: 'Broken Pin', status: 'error', connectedAt: 0, lastUsed: 0 } as const;
+        const healthy = { provider: 'pinterest', recordId: 'r-ok', providerAccountId: 'p2', accountName: 'OK Pin', status: 'ok', connectedAt: 0, lastUsed: 0 } as const;
+        const accounts = which === 'broken' ? [broken] : which === 'healthy' ? [healthy] : [broken, healthy];
+        vi.mocked(usePinterestAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts }, isLoading: false, error: null, refetch: vi.fn() });
+      },
+      armOAuth: () => pinterestOAuth.startOAuth,
+    },
+    {
+      type: 'fanvue',
+      label: 'accounts.fanvueLabel',
+      brokenName: 'Broken Fan',
+      healthyName: 'OK Fan',
+      setAccounts: (which) => {
+        const broken = { provider: 'fanvue', recordId: 'r-broken', providerAccountId: 'f1', accountName: 'Broken Fan', status: 'error', connectedAt: 0, lastUsed: 0 } as const;
+        const healthy = { provider: 'fanvue', recordId: 'r-ok', providerAccountId: 'f2', accountName: 'OK Fan', status: 'ok', connectedAt: 0, lastUsed: 0 } as const;
+        const accounts = which === 'broken' ? [broken] : which === 'healthy' ? [healthy] : [broken, healthy];
+        vi.mocked(useFanvueAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts }, isLoading: false, error: null, refetch: vi.fn() });
+      },
+      armOAuth: () => fanvueOAuth.startOAuth,
+    },
+  ];
+
+  for (const section of oauthSections) {
+    it(`${section.type}: broken card offers reconnect, healthy card keeps trash, pill shows`, () => {
+      section.setAccounts('both');
+      render(<AccountsPage />, { wrapper: createWrapper() });
+      const el = sectionByLabel(section.label);
+      expectBrokenSection(el, section.type);
+      expect(within(el).getByText(section.brokenName)).toBeTruthy();
+      expect(within(el).getByText(section.healthyName)).toBeTruthy();
+    });
+
+    it(`${section.type}: healthy-only section shows no pill and no reconnect`, () => {
+      section.setAccounts('healthy');
+      render(<AccountsPage />, { wrapper: createWrapper() });
+      const el = sectionByLabel(section.label);
+      expectHealthySection(el, section.type);
+      expect(within(el).getAllByTestId(`${section.type}-disconnect-button`)).toHaveLength(1);
+    });
+
+    it(`${section.type}: reconnect starts OAuth`, () => {
+      const startOAuth = section.armOAuth();
+      section.setAccounts('broken');
+      render(<AccountsPage />, { wrapper: createWrapper() });
+      const el = sectionByLabel(section.label);
+      fireEvent.click(within(el).getByTestId(`${section.type}-reconnect-button`));
+      expect(startOAuth).toHaveBeenCalledTimes(1);
+    });
+  }
+
+  it('youtube: selecting an account toggles it with the youtube provider id', () => {
+    oauthSections[0].setAccounts('both');
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const el = sectionByLabel('accounts.youtubeLabel');
+    fireEvent.click(within(el).getAllByTestId('account-card-select')[0]);
+    expect(mockStoreState.toggleSelectedAccount).toHaveBeenCalledWith('youtube', 'ch-broken');
+  });
+
+  it('linkedin: reconnect on the org card still starts OAuth', () => {
+    // The org row is the broken one here; the member row stays healthy.
+    const section = oauthSections[2];
+    const startOAuth = section.armOAuth();
+    section.setAccounts('both');
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const el = sectionByLabel('accounts.linkedinLabel');
+    expect(within(el).getByText('accounts.pageBadge')).toBeTruthy();
+    expect(within(el).getByText('accounts.memberBadge')).toBeTruthy();
+    fireEvent.click(within(el).getByTestId('linkedin-reconnect-button'));
+    expect(startOAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('fanvue: marks a stored name or the account id on the card', () => {
+    vi.mocked(useFanvueAccountsQuery, { partial: true }).mockReturnValue({
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'fanvue', recordId: 'r-1', providerAccountId: 'f1', accountName: 'My Fan', status: 'ok', connectedAt: 0, lastUsed: 0 },
+          { provider: 'fanvue', recordId: 'r-2', providerAccountId: 'f2', accountName: null, status: 'ok', connectedAt: 0, lastUsed: 0 },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const el = sectionByLabel('accounts.fanvueLabel');
+    const cards = within(el).getAllByTestId('account-card').filter((node) => node.getAttribute('data-provider') === 'fanvue');
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveAttribute('data-label-origin', 'stored');
+    expect(cards[1]).toHaveAttribute('data-label-origin', 'provider_id');
+    expect(within(el).getByText('f2')).toBeTruthy();
+  });
+
+  interface CredentialSection {
+    type: string;
+    label: string;
+    inputTestId: string;
+    prefilled: string;
+    setAccounts: (which: 'broken' | 'healthy' | 'both') => void;
+  }
+
+  const credentialSections: CredentialSection[] = [
+    {
+      type: 'bluesky',
+      label: 'accounts.blueskyLabel',
+      inputTestId: 'bluesky-handle-input',
+      prefilled: 'broken.bsky.social',
+      setAccounts: (which) => {
+        const broken = { provider: 'bluesky', recordId: 'r-broken', did: 'did:plc:broken', handle: 'broken.bsky.social', displayName: 'Broken', status: 'error', connectedAt: 0, lastUsed: 0 } as const;
+        const healthy = { provider: 'bluesky', recordId: 'r-ok', did: 'did:plc:ok', handle: 'ok.bsky.social', status: 'ok', connectedAt: 0, lastUsed: 0 } as const;
+        const accounts = which === 'broken' ? [broken] : which === 'healthy' ? [healthy] : [broken, healthy];
+        vi.mocked(useBlueskyAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts }, isLoading: false });
+      },
+    },
+    {
+      type: 'rumble',
+      label: 'accounts.rumbleLabel',
+      inputTestId: 'rumble-handle-input',
+      prefilled: 'chan-broken',
+      setAccounts: (which) => {
+        const broken = { provider: 'rumble', recordId: 'r-broken', providerAccountId: 'chan-broken', accountName: 'chan-broken', status: 'error', connectedAt: 0, lastUsed: 0 } as const;
+        const healthy = { provider: 'rumble', recordId: 'r-ok', providerAccountId: 'chan-ok', accountName: 'chan-ok', status: 'ok', connectedAt: 0, lastUsed: 0 } as const;
+        const accounts = which === 'broken' ? [broken] : which === 'healthy' ? [healthy] : [broken, healthy];
+        vi.mocked(useRumbleAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts }, isLoading: false, error: null, refetch: vi.fn() });
+      },
+    },
+    {
+      type: '3speak',
+      label: 'accounts.threespeakLabel',
+      inputTestId: 'threespeak-handle-input',
+      prefilled: 'broken-hive',
+      setAccounts: (which) => {
+        const broken = { provider: '3speak', recordId: 'r-broken', providerAccountId: 'broken-hive', accountName: 'Broken Hive', status: 'error', connectedAt: 0, lastUsed: 0 } as const;
+        const healthy = { provider: '3speak', recordId: 'r-ok', providerAccountId: 'ok-hive', accountName: 'OK Hive', status: 'ok', connectedAt: 0, lastUsed: 0 } as const;
+        const accounts = which === 'broken' ? [broken] : which === 'healthy' ? [healthy] : [broken, healthy];
+        vi.mocked(useThreespeakAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts }, isLoading: false, error: null, refetch: vi.fn() });
+      },
+    },
+  ];
+
+  for (const section of credentialSections) {
+    it(`${section.type}: broken card offers reconnect, healthy card keeps trash, pill shows`, () => {
+      section.setAccounts('both');
+      render(<AccountsPage />, { wrapper: createWrapper() });
+      const el = sectionByLabel(section.label);
+      expectBrokenSection(el, section.type);
+    });
+
+    it(`${section.type}: healthy-only section shows no pill and no reconnect`, () => {
+      section.setAccounts('healthy');
+      render(<AccountsPage />, { wrapper: createWrapper() });
+      const el = sectionByLabel(section.label);
+      expectHealthySection(el, section.type);
+      expect(within(el).getAllByTestId(`${section.type}-disconnect-button`)).toHaveLength(1);
+    });
+
+    it(`${section.type}: reconnect reopens the dialog with the handle prefilled`, async () => {
+      section.setAccounts('broken');
+      render(<AccountsPage />, { wrapper: createWrapper() });
+      const el = sectionByLabel(section.label);
+      fireEvent.click(within(el).getByTestId(`${section.type}-reconnect-button`));
+      const input = await screen.findByTestId(section.inputTestId);
+      expect(input).toHaveValue(section.prefilled);
+    });
+  }
+
+  it('3speak: marks a stored name or the Hive username on the card', () => {
+    vi.mocked(useThreespeakAccountsQuery, { partial: true }).mockReturnValue({
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: '3speak', recordId: 'r-1', providerAccountId: 'alice', accountName: 'Alice in Hive', status: 'ok', connectedAt: 0, lastUsed: 0 },
+          { provider: '3speak', recordId: 'r-2', providerAccountId: 'bob', accountName: null, status: 'ok', connectedAt: 0, lastUsed: 0 },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const el = sectionByLabel('accounts.threespeakLabel');
+    const cards = within(el).getAllByTestId('account-card').filter((node) => node.getAttribute('data-provider') === '3speak');
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveAttribute('data-label-origin', 'stored');
+    expect(cards[1]).toHaveAttribute('data-label-origin', 'provider_id');
+    expect(within(el).getByText('bob')).toBeTruthy();
+  });
+
+  it('two broken accounts show the plural issue pill', () => {
+    vi.mocked(useYouTubeAccountsQuery, { partial: true }).mockReturnValue({
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'youtube', recordId: 'r-1', channelId: 'ch-1', channelName: 'Ch 1', status: 'error', connectedAt: 0, lastUsed: 0 },
+          { provider: 'youtube', recordId: 'r-2', channelId: 'ch-2', channelName: 'Ch 2', status: 'error', connectedAt: 0, lastUsed: 0 },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const el = sectionByLabel('accounts.youtubeLabel');
+    expect(within(el).getByText('accounts.accountsWithIssues')).toBeTruthy();
+    expect(within(el).queryByText('accounts.accountWithIssue')).toBeNull();
+    expect(within(el).getAllByTestId('youtube-reconnect-button')).toHaveLength(2);
+  });
+});
+
+describe('disconnect dialog names the account', () => {
+  async function openDisconnect(buttonTestId: string): Promise<HTMLElement> {
+    fireEvent.click(screen.getByTestId(buttonTestId));
+    return screen.findByTestId('disconnect-dialog');
+  }
+
+  function dialogAccount(dialog: HTMLElement): string {
+    return within(dialog).getByTestId('disconnect-dialog-account').textContent ?? '';
+  }
+
+  it('instagram: names the handle with @', async () => {
+    vi.mocked(useInstagramAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [{ provider: 'instagram', recordId: 'r1', igUserId: 'ig1', username: 'instauser', connectedAt: 0, lastUsed: 0 }] },
+      isLoading: false,
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const dialog = await openDisconnect('instagram-disconnect-button');
+    expect(dialogAccount(dialog)).toBe('@instauser');
+  });
+
+  it('linkedin: names the member by name and the org by its id', async () => {
+    vi.mocked(useLinkedinAccountsQuery, { partial: true }).mockReturnValue({
+      data: {
+        authenticated: true,
+        accounts: [
+          { provider: 'linkedin', recordId: 'r1', providerAccountId: 'member-123', accountName: 'Ryan Carlos', accountMetadata: { kind: 'member', name: 'Ryan Carlos' }, connectedAt: 0, lastUsed: 0 },
+          { provider: 'linkedin', recordId: 'r2', providerAccountId: 'urn:li:organization:111', accountName: '', accountMetadata: { kind: 'organization', name: 'Company Inc' }, connectedAt: 0, lastUsed: 0 },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const buttons = screen.getAllByTestId('linkedin-disconnect-button');
+    fireEvent.click(buttons[0]);
+    expect(dialogAccount(await screen.findByTestId('disconnect-dialog'))).toBe('Ryan Carlos');
+    fireEvent.click(screen.getByTestId('disconnect-cancel-button'));
+    await waitFor(() => expect(screen.queryByTestId('disconnect-dialog')).not.toBeInTheDocument());
+    fireEvent.click(buttons[1]);
+    expect(dialogAccount(await screen.findByTestId('disconnect-dialog'))).toBe('urn:li:organization:111');
+  });
+
+  it('threads: names the account by its handle', async () => {
+    vi.mocked(useThreadsAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [{ provider: 'threads', recordId: 'r1', providerAccountId: '42', accountName: 'ana', connectedAt: 0, lastUsed: 0 }] },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const dialog = await openDisconnect('threads-disconnect-button');
+    expect(dialogAccount(dialog)).toBe('ana');
+  });
+
+  it('facebook: names the Page by its stored name', async () => {
+    vi.mocked(useFacebookAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [{ provider: 'facebook', recordId: 'r1', providerAccountId: '111', accountName: 'My Page', connectedAt: 0, lastUsed: 0 }] },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const dialog = await openDisconnect('facebook-disconnect-button');
+    expect(dialogAccount(dialog)).toBe('My Page');
+  });
+
+  it('pinterest: disconnects the account after confirmation', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.mocked(usePinterestAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [{ provider: 'pinterest', recordId: 'r1', providerAccountId: 'p1', accountName: 'My Pin', connectedAt: 0, lastUsed: 0 }] },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const dialog = await openDisconnect('pinterest-disconnect-button');
+    expect(dialogAccount(dialog)).toBe('My Pin');
+    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'p1' }));
+    expect(useDisconnectAccountMutation).toHaveBeenCalledWith('pinterest');
+  });
+
+  it('fanvue: disconnects the account after confirmation', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useDisconnectAccountMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.mocked(useFanvueAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [{ provider: 'fanvue', recordId: 'r1', providerAccountId: 'f1', accountName: 'My Fan', connectedAt: 0, lastUsed: 0 }] },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const dialog = await openDisconnect('fanvue-disconnect-button');
+    expect(dialogAccount(dialog)).toBe('My Fan');
+    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'f1' }));
+    expect(useDisconnectAccountMutation).toHaveBeenCalledWith('fanvue');
+  });
+
+  it('bluesky: names the account by its display name', async () => {
+    vi.mocked(useBlueskyAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [{ provider: 'bluesky', recordId: 'r1', did: 'did:plc:a', handle: 'a.bsky.social', displayName: 'Habit Loom', connectedAt: 0, lastUsed: 0 }] },
+      isLoading: false,
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const dialog = await openDisconnect('bluesky-disconnect-button');
+    expect(dialogAccount(dialog)).toBe('Habit Loom');
+  });
+
+  it('3speak: names the account by its stored name', async () => {
+    vi.mocked(useThreespeakAccountsQuery, { partial: true }).mockReturnValue({
+      data: { authenticated: true, accounts: [{ provider: '3speak', recordId: 'r1', providerAccountId: 'alice', accountName: 'Alice in Hive', connectedAt: 0, lastUsed: 0 }] },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<AccountsPage />, { wrapper: createWrapper() });
+    const dialog = await openDisconnect('3speak-disconnect-button');
+    expect(dialogAccount(dialog)).toBe('Alice in Hive');
   });
 });
