@@ -220,8 +220,9 @@ describe('PostHistoryPage', () => {
     render(<PostHistoryPage />);
 
     // Dense rows truncate the failure reason to one line; the full reason
-    // stays readable on the detail page (PostFailureNotice keeps the raw
-    // error in a disclosure, pinned by post-failure-notice.test.tsx).
+    // stays readable on the detail page — the raw slot error in the
+    // PostFailureNotice disclosure (post-failure-notice.test.tsx), and the
+    // translated generation message unclamped on the generation detail.
     const message = screen.getByText('posts.errorCustomAudio');
     expect(message.className.split(/\s+/)).toContain('truncate');
     const slotMessage = screen.getByText('posts.cardFailedPermanent');
