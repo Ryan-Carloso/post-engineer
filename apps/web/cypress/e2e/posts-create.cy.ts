@@ -8,6 +8,17 @@
 
 const NEW_POST_SCHEDULE_ID = 'sched-e2e-new';
 
+// The first-visit onboarding wizard auto-opens on /posts and hides the
+// page behind it; these specs cover the list, not the wizard, so every
+// visit starts seen. The key lives in lib/onboarding-wizard.ts.
+function visitPosts() {
+  cy.visit('/posts', {
+    onBeforeLoad(win) {
+      win.localStorage.setItem('post-engineer-onboarding-wizard-seen', '1');
+    },
+  });
+}
+
 // Day 15 is always in the shown month, so the same test works on any
 // day; the button's aria-label is the full pt-BR date react-day-picker
 // renders (pt is the default locale).
@@ -120,14 +131,14 @@ describe('Posts list progress', () => {
   });
 
   it('links New post to the recipes hub, with no onboard card or dialog', () => {
-    cy.visit('/posts');
+    visitPosts();
     cy.get('[data-testid=mcp-onboard-card]').should('not.exist');
     cy.get('[role=dialog]').should('not.exist');
     cy.get('[data-testid=new-post-button]').should('have.attr', 'href', '/recipes');
   });
 
   it('shows the live progress percent on the calendar day card', () => {
-    cy.visit('/posts');
+    visitPosts();
     // Today's posts render below the calendar, inside the scrolling <main>.
     cy.contains('E2E generating topic').scrollIntoView().should('be.visible');
     cy.contains('42%').should('be.visible');
@@ -135,7 +146,7 @@ describe('Posts list progress', () => {
   });
 
   it('drives the calendar: pick a day, change month, go to today, refresh', () => {
-    cy.visit('/posts');
+    visitPosts();
     // Pick a day: the day panel names the 15th.
     cy.get('[data-calendar-card]').find(`button[aria-label^="${day15FullDate()}"]`).click();
     cy.contains(`Publicações de ${day15ShortDate()}`).should('be.visible');
@@ -154,7 +165,7 @@ describe('Posts list progress', () => {
 
   it('scrolls the day panel into view when picking a day on a narrow screen', () => {
     cy.viewport(390, 844);
-    cy.visit('/posts');
+    visitPosts();
     cy.get('[data-calendar-card]').find(`button[aria-label^="${day15FullDate()}"]`).click();
     cy.contains(`Publicações de ${day15ShortDate()}`).should('be.visible');
   });

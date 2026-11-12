@@ -1,4 +1,20 @@
+import { beforeEach } from 'vitest';
+import { ONBOARDING_WIZARD_SEEN_KEY } from '@/lib/onboarding-wizard';
+
 process.env.MCP_RESOURCE = 'https://mcp.post-engineer.test';
+
+//---------------
+// The first-visit onboarding wizard auto-opens on /posts. The default test
+// user is a returning one, so the wizard starts seen; first-visit tests
+// clear localStorage in their own beforeEach to get the fresh state. The
+// window guard keeps node-environment suites (route tests) out of this.
+//---------------
+beforeEach(() => {
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(ONBOARDING_WIZARD_SEEN_KEY, '1');
+  }
+});
+
 
 //---------------
 // jsdom ships no ResizeObserver, and the Radix primitives behind our shadcn

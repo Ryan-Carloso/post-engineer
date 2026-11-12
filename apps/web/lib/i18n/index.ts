@@ -21,6 +21,7 @@ import { pricingContactStrings } from './pricing-contact-i18n';
 import { fullLipsyncPriceStrings } from './full-lipsync-price-i18n';
 import { themeStrings } from './theme-i18n';
 import { postsCalendarStrings } from './posts-calendar-i18n';
+import { onboardingStrings } from './onboarding-i18n';
 import type { Locale } from './types';
 
 //---------------
@@ -48,6 +49,7 @@ export const ptDictionary = {
   personas: { ...basePtDictionary.personas, ...personaLayoutHintStrings.pt.personas },
   landing: { ...basePtDictionary.landing, ...pricingContactStrings.pt.landing },
   theme: themeStrings.pt.theme,
+  onboarding: onboardingStrings.pt.onboarding,
 };
 
 export const enDictionary = {
@@ -64,6 +66,7 @@ export const enDictionary = {
   personas: { ...baseEnDictionary.personas, ...personaLayoutHintStrings.en.personas },
   landing: { ...baseEnDictionary.landing, ...pricingContactStrings.en.landing },
   theme: themeStrings.en.theme,
+  onboarding: onboardingStrings.en.onboarding,
 };
 
 type PublishingAccountsKeys = typeof publishingAccountsStrings.en;
@@ -79,6 +82,7 @@ type PricingContactKeys = typeof pricingContactStrings.en;
 type FullLipsyncPriceKeys = typeof fullLipsyncPriceStrings.en;
 type ThemeKeys = typeof themeStrings.en;
 type PostsCalendarKeys = typeof postsCalendarStrings.en;
+type OnboardingKeys = typeof onboardingStrings.en;
 export type Dictionary = BaseDictionary & {
   [Section in keyof ThreadsKeys]: {
     [Key in keyof ThreadsKeys[Section]]: string;
@@ -126,6 +130,10 @@ export type Dictionary = BaseDictionary & {
 } & {
   [Section in keyof PostsCalendarKeys]: {
     [Key in keyof PostsCalendarKeys[Section]]: string;
+  };
+} & {
+  [Section in keyof OnboardingKeys]: {
+    [Key in keyof OnboardingKeys[Section]]: string;
   };
 } & {
   [Section in keyof ThemeKeys]: {

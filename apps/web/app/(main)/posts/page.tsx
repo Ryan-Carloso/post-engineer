@@ -24,6 +24,7 @@ import { CALENDAR_LAYOUT_CLASS, CalendarLoadingSkeleton } from './loading-skelet
 import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-joins';
 import { PageHeader } from '@/components/ui/page-header';
 import { Button } from '@/components/ui/button';
+import { OnboardingWizard, OnboardingWizardButton } from './onboarding-wizard';
 
 //---------------
 // PostsPage — month calendar of every post (past and upcoming) across all
@@ -155,6 +156,7 @@ export default function PostsPage() {
                 {t('posts.refresh')}
               </Button>
             )}
+            <OnboardingWizardButton testId="onboarding-reopen-button" />
           </>
         }
       />
@@ -270,6 +272,7 @@ export default function PostsPage() {
           </div>
         )}
       </div>
+      <OnboardingWizard />
     </div>
   );
 }
