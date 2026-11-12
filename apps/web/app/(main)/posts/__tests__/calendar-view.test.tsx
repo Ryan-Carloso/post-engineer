@@ -171,7 +171,8 @@ describe('CalendarView', () => {
     expect(pip).not.toBeNull();
     expect(pip?.className.split(/\s+/)).toContain('bg-warning');
     expect(numeral?.contains(pip)).toBe(false);
-    expect(pip?.compareDocumentPosition(numeral!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    if (pip === null) throw new Error('today pip not rendered');
+    expect(pip.compareDocumentPosition(numeral!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(postDots(today.querySelector('[data-day-post-total]'))).toHaveLength(1);
     expect(numeral?.className.split(/\s+/)).toContain('bg-brand');
     expect(numeral?.className.split(/\s+/)).not.toContain('text-warning');
