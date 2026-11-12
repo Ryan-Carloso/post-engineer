@@ -20,7 +20,6 @@ vi.mock('@/lib/i18n/provider', () => {
   return { useI18n, I18nProvider };
 });
 
-import { useMcpOnboardStore } from '@/lib/mcp-onboard';
 import { AccountEmptyState, DayEmptyState, EmptyState } from '../day-section';
 
 describe('EmptyState', () => {
@@ -56,18 +55,15 @@ describe('EmptyState', () => {
 });
 
 describe('AccountEmptyState', () => {
-  it('opens the MCP explanation from New post', async () => {
-    useMcpOnboardStore.setState({ isOpen: false, cardVisible: false });
-    const user = userEvent.setup();
+  it('links New post to the recipes hub', () => {
     render(<AccountEmptyState />);
     expect(screen.getByText('posts.accountEmptyTitle')).toBeInTheDocument();
     expect(screen.getByText('posts.accountEmptyHint')).toBeInTheDocument();
-    const button = screen.getByRole('button', { name: 'posts.newPostAction' });
-    expect(button.className).toContain('h-9');
-    expect(button.className).toContain('shrink-0');
-    expect(button.className).toContain('whitespace-nowrap');
-    await user.click(button);
-    expect(useMcpOnboardStore.getState().isOpen).toBe(true);
+    const link = screen.getByRole('link', { name: 'posts.newPostAction' });
+    expect(link).toHaveAttribute('href', '/recipes');
+    expect(link.className).toContain('h-9');
+    expect(link.className).toContain('shrink-0');
+    expect(link.className).toContain('whitespace-nowrap');
   });
 });
 
@@ -88,18 +84,20 @@ describe('DayEmptyState', () => {
     render(<DayEmptyState reason="month" monthLabel="June 2030" onClearFilters={vi.fn()} />);
     expect(screen.getByText('posts.calendarMonthEmptyTitle')).toBeInTheDocument();
     expect(screen.getByText('posts.calendarMonthEmptyHint')).toBeInTheDocument();
-    const button = screen.getByRole('button', { name: 'posts.newPostAction' });
-    expect(button.className).toContain('h-8');
-    expect(button.className).toContain('min-w-0');
-    expect(button.className).toContain('px-2');
-    expect(button.className).toContain('text-xs');
+    const link = screen.getByRole('link', { name: 'posts.newPostAction' });
+    expect(link).toHaveAttribute('href', '/recipes');
+    expect(link.className).toContain('h-8');
+    expect(link.className).toContain('min-w-0');
+    expect(link.className).toContain('px-2');
+    expect(link.className).toContain('text-xs');
   });
 
   it('offers New post when one day is empty', () => {
     render(<DayEmptyState reason="day" monthLabel="June 2030" onClearFilters={vi.fn()} />);
     expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
     expect(screen.getByText('posts.calendarDayNoneHint')).toBeInTheDocument();
-    const button = screen.getByRole('button', { name: 'posts.newPostAction' });
-    expect(button.className).toContain('h-9');
+    const link = screen.getByRole('link', { name: 'posts.newPostAction' });
+    expect(link).toHaveAttribute('href', '/recipes');
+    expect(link.className).toContain('h-9');
   });
 });

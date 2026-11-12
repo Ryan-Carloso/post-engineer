@@ -1,7 +1,12 @@
 export const recipesI18nEn = {
   title: 'Get your prompts',
   subtitle:
-      'Post Engineer is MCP-first. Create your key, install the MCP in your agent, and copy the prompt that sends the post.',
+      'Persona videos, published by your agent. MCP-first: create your key, install the MCP, and send the post.',
+  whyMcpTitle: 'Why MCP-first?',
+  whyMcpRoutinesTitle: 'Routines',
+  whyMcpRoutinesBody: 'Say it once, the agent repeats it.',
+  whyMcpAutomationTitle: 'Automation',
+  whyMcpAutomationBody: 'Ask your agent, the post shows up.',
   dailyNewsTitle: 'Daily news becomes a video',
   dailyNewsObjective:
       'Turn one news story of the day into one persona video, validated before any token is spent.',

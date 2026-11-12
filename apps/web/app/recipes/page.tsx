@@ -14,15 +14,16 @@ import AddPromptLink from './components/add-prompt-link';
 
 //---------------
 // Prompts hub — the one place to start with the Post Engineer MCP
-// server, in three numbered steps: 1) your API key (the key manager
-// when signed in, a sign-in call to action otherwise), 2) the setup
-// prompt to paste into your agent (a key created in step 1 is filled
-// into it; the key lives only in this page's state, never persisted),
-// 3) the recipe prompts, each copyable from its card or readable on its
-// detail page. Rendered inside the AppShell for signed-in users and the
-// public frame otherwise (see layout.tsx). Route stays /recipes; the
-// old /api-keys page redirects here (next.config.ts). To add a prompt,
-// add one entry to PROMPTS in prompts.ts.
+// server: a short why-MCP-first note, then three numbered steps:
+// 1) your API key (the key manager when signed in, a sign-in call to
+// action otherwise), 2) the setup prompt to paste into your agent (a
+// key created in step 1 is filled into it; the key lives only in this
+// page's state, never persisted), 3) the recipe prompts, each copyable
+// from its card or readable on its detail page. Rendered inside the
+// AppShell for signed-in users and the public frame otherwise (see
+// layout.tsx). Route stays /recipes; the old /api-keys page redirects
+// here (next.config.ts). To add a prompt, add one entry to PROMPTS in
+// prompts.ts.
 //---------------
 
 export default function RecipesPage() {
@@ -33,6 +34,19 @@ export default function RecipesPage() {
   return (
     <div className="mx-auto flex w-full max-w-375 flex-col gap-8 lg:gap-10">
       <PromptsHero title={t('recipes.title')} subtitle={t('recipes.subtitle')} />
+      <section className="flex flex-col gap-4">
+        <h2 className="text-lg font-bold tracking-tight text-ink">{t('recipes.whyMcpTitle')}</h2>
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <li className="rounded-2xl border border-hairline bg-card p-5">
+            <p className="text-base font-bold text-ink">{t('recipes.whyMcpRoutinesTitle')}</p>
+            <p className="mt-1 text-sm leading-relaxed text-ink-soft">{t('recipes.whyMcpRoutinesBody')}</p>
+          </li>
+          <li className="rounded-2xl border border-hairline bg-card p-5">
+            <p className="text-base font-bold text-ink">{t('recipes.whyMcpAutomationTitle')}</p>
+            <p className="mt-1 text-sm leading-relaxed text-ink-soft">{t('recipes.whyMcpAutomationBody')}</p>
+          </li>
+        </ul>
+      </section>
       <HubStep number={1} title={t('recipes.stepKeyTitle')} hint={t('recipes.stepKeyHint')}>
         {signedIn ? (
           <ApiKeysSection onKeyCreated={setCreatedKey} />

@@ -1,9 +1,9 @@
 //---------------
 // Posts list progress — creation happens through the API/MCP now (the
-// /posts/new screen was removed in Phase 4), so this spec covers only
-// what the list page still does: rendering live progress on its cards.
-// Every app-page spec logs in for real (the middleware bounces
-// unauthenticated visits to /landing).
+// /posts/new screen was removed in Phase 4), so this spec covers what the
+// list page still does: the New post link to the recipes hub, and rendering
+// live progress on its cards. Every app-page spec logs in for real (the
+// middleware bounces unauthenticated visits to /landing).
 //---------------
 
 const NEW_POST_SCHEDULE_ID = 'sched-e2e-new';
@@ -94,23 +94,11 @@ describe('Posts list progress', () => {
     }).as('status');
   });
 
-  it('explains that a new post is sent through the MCP', () => {
-    cy.visit('/posts', {
-      onBeforeLoad(win) {
-        win.localStorage.removeItem('post-engineer-mcp-onboard-seen');
-      },
-    });
-    cy.get('[data-testid=mcp-onboard-card]').should('be.visible');
-    cy.contains('Esta tela não cria a publicação').should('be.visible');
-    cy.get('[data-testid=new-post-button]').click();
-    cy.get('[role=dialog]').within(() => {
-      cy.contains('MCP first').should('be.visible');
-      cy.contains('servidor MCP').should('be.visible');
-      cy.contains('a', 'Configurar o agente').should('have.attr', 'href', '/recipes');
-      cy.contains('button', 'Entendi').click();
-    });
-    cy.get('[role=dialog]').should('not.exist');
+  it('links New post to the recipes hub, with no onboard card or dialog', () => {
+    cy.visit('/posts');
     cy.get('[data-testid=mcp-onboard-card]').should('not.exist');
+    cy.get('[role=dialog]').should('not.exist');
+    cy.get('[data-testid=new-post-button]').should('have.attr', 'href', '/recipes');
   });
 
   it('shows the live progress percent on the calendar day card', () => {

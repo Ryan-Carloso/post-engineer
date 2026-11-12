@@ -6,7 +6,12 @@ vi.mock('@/lib/i18n/provider', () => {
   const translations: Record<string, string> = {
     'recipes.title': 'Get your prompts',
     'recipes.subtitle':
-      'Post Engineer is MCP-first. Create your key, install the MCP in your agent, and copy the prompt that sends the post.',
+      'Persona videos, published by your agent. MCP-first: create your key, install the MCP, and send the post.',
+    'recipes.whyMcpTitle': 'Why MCP-first?',
+    'recipes.whyMcpRoutinesTitle': 'Routines',
+    'recipes.whyMcpRoutinesBody': 'Say it once, the agent repeats it.',
+    'recipes.whyMcpAutomationTitle': 'Automation',
+    'recipes.whyMcpAutomationBody': 'Ask your agent, the post shows up.',
     'recipes.stepKeyTitle': 'Create your API key',
     'recipes.stepKeyHint': 'It connects your agent to your account.',
     'recipes.stepSetupTitle': 'Send the setup prompt to your agent',
@@ -89,9 +94,26 @@ describe('/recipes prompts hub', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Get your prompts' })).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Post Engineer is MCP-first. Create your key, install the MCP in your agent, and copy the prompt that sends the post.',
+        'Persona videos, published by your agent. MCP-first: create your key, install the MCP, and send the post.',
       ),
     ).toBeInTheDocument();
+  });
+
+  it('explains why MCP-first between the hero and step 1', () => {
+    renderHub(true);
+    const heading = screen.getByRole('heading', { level: 2, name: 'Why MCP-first?' });
+    expect(heading).toBeInTheDocument();
+    expect(screen.getByText('Routines')).toBeInTheDocument();
+    expect(screen.getByText('Say it once, the agent repeats it.')).toBeInTheDocument();
+    expect(screen.getByText('Automation')).toBeInTheDocument();
+    expect(screen.getByText('Ask your agent, the post shows up.')).toBeInTheDocument();
+    // The section sits after the hero and before the first numbered step,
+    // and it is not a fourth numbered step.
+    const hero = screen.getByRole('heading', { level: 1 });
+    const step1 = screen.getByRole('heading', { name: 'Create your API key' });
+    expect(hero.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(heading.compareDocumentPosition(step1) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByRole('region')).toHaveLength(3);
   });
 
   it('lays out three numbered steps in order: key, setup, recipes', () => {

@@ -4,19 +4,8 @@
 export const postsCalendarStrings = {
   pt: {
     posts: {
-      subtitle:
-        'Calendário das publicações que o seu agente já mandou pelo MCP. Novo post explica como criar a próxima.',
+      subtitle: 'Calendário das publicações que o seu agente já mandou pelo MCP.',
       newPostAction: 'Novo post',
-      mcpOnboardBadge: 'MCP first',
-      mcpOnboardTitle: 'Novo post',
-      mcpOnboardLead: 'Esta tela não cria a publicação. O Post Engineer é MCP first.',
-      mcpOnboardBody:
-        'Você pede o post ao seu agente (Cursor, Claude, OpenCode ou outro). Ele manda pelo servidor MCP, e a publicação aparece neste calendário.',
-      mcpOnboardStep1: 'Crie uma chave de API.',
-      mcpOnboardStep2: 'Cole o prompt de setup no agente. Isso instala o MCP.',
-      mcpOnboardStep3: 'Diga o que publicar e para quando. O agente envia pelo MCP.',
-      mcpOnboardSetup: 'Configurar o agente',
-      mcpOnboardDismiss: 'Entendi',
       subtitleLoadError: 'Calendário indisponível. Os filtros estão desativados.',
       historyTitle: 'Histórico',
       historySubtitle: 'Publicações passadas e gerações de vídeo de todas as contas.',
@@ -70,18 +59,8 @@ export const postsCalendarStrings = {
   },
   en: {
     posts: {
-      subtitle: 'Calendar of the posts your agent already sent through the MCP. New post explains how to create the next one.',
+      subtitle: 'Calendar of the posts your agent already sent through the MCP.',
       newPostAction: 'New post',
-      mcpOnboardBadge: 'MCP first',
-      mcpOnboardTitle: 'New post',
-      mcpOnboardLead: 'This screen does not create the post. Post Engineer is MCP-first.',
-      mcpOnboardBody:
-        'Ask your agent (Cursor, Claude, OpenCode, or another). It sends the post through the MCP server, and the post shows up on this calendar.',
-      mcpOnboardStep1: 'Create an API key.',
-      mcpOnboardStep2: 'Paste the setup prompt into the agent. That installs the MCP.',
-      mcpOnboardStep3: 'Say what to publish and when. The agent sends it through the MCP.',
-      mcpOnboardSetup: 'Set up the agent',
-      mcpOnboardDismiss: 'Got it',
       subtitleLoadError: 'Calendar unavailable. Filters are disabled.',
       historyTitle: 'History',
       historySubtitle: 'Past posts and video generations from all accounts.',

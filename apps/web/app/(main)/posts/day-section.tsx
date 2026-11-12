@@ -1,23 +1,44 @@
 'use client';
 
+import Link from 'next/link';
 import { CalendarPlus, CalendarX2, Filter, FilterX } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/provider';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
-import { NewPostButton } from './mcp-onboard';
+import { cn } from '@/lib/utils';
 
 // The shared empty-state block lives in components/ui (one definition for
 // every list and panel); re-exported here so the posts screens keep their
-// existing import path. CREATE_POSTS_HREF stays on this module so the
-// failure notice can keep its import.
+// existing import path.
 export { EmptyState } from '@/components/ui/empty-state';
-export { CREATE_POSTS_HREF } from '@/lib/mcp-onboard';
+
+// The recipes hub is where the API key and the agent setup prompt live,
+// so New post and the failure notice both link there.
+export const CREATE_POSTS_HREF = '/recipes';
+
+//---------------
+// New post is a link to the recipes hub, not a button: the web app has
+// no create form. A post is created when the user's agent sends it
+// through the MCP server.
+//---------------
+
+export function NewPostButton({ className, testId }: { className?: string; testId?: string }) {
+  const { t } = useI18n();
+  return (
+    <Button asChild size="sm" className={cn('shrink-0', className)} data-testid={testId}>
+      <Link href={CREATE_POSTS_HREF}>
+        <CalendarPlus aria-hidden />
+        {t('posts.newPostAction')}
+      </Link>
+    </Button>
+  );
+}
 
 //---------------
 // The posts calendar's states around the grid: the summary of the selected
 // day and the empty states (account, month, day, filter). Presentational —
 // the page decides which one shows. There is no create form: New post
-// opens the MCP-first explanation.
+// links to the recipes hub, where the MCP setup lives.
 //---------------
 
 // An account with no post in any month (no schedule yet, or schedules
