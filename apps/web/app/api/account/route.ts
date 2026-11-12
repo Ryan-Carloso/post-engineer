@@ -38,7 +38,12 @@ async function getHandler(request?: Request) {
       try {
         return await syncAccountProfile(supabase, userId, record);
       } catch (error) {
-        logger.error('[ACCOUNT] Profile sync failed, keeping the stored profile', error instanceof Error ? error.message : error, { recordId: record.id, provider: record.provider });
+        // Log the original error as the cause: its message and stack carry
+        // the real reason (e.g. an undecryptable stored token). Logging only
+        // error.message made the logger synthesize "Non-error value
+        // reported: ..." as the PostHog exception and hid the stack.
+        // The record ids ride as metadata, as elsewhere.
+        logger.error('[ACCOUNT] Profile sync failed, keeping the stored profile', error, { recordId: record.id, provider: record.provider });
         return record;
       }
     }));
@@ -59,7 +64,7 @@ async function getHandler(request?: Request) {
     });
   } catch (error) {
     // Generic message for the client: internal details stay server-side only
-    logger.error('[ACCOUNT] Erro ao listar contas', error instanceof Error ? error.message : error);
+    logger.error('[ACCOUNT] Erro ao listar contas', error);
     return NextResponse.json(
       { authenticated: false, accounts: [], message: 'Failed to list accounts.', error: 'LIST_ERROR' },
       { status: 500 }
@@ -109,7 +114,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     await deleteSocialAccount(supabase, auth.userId, provider as SocialProvider, providerAccountId);
     return NextResponse.json({ success: true });
   } catch (error) {
-    logger.error('[ACCOUNT] Erro ao desconectar conta', error instanceof Error ? error.message : error);
+    logger.error('[ACCOUNT] Erro ao desconectar conta', error);
     return NextResponse.json(
       { success: false, message: 'Failed to disconnect account.', error: 'DELETE_ERROR' },
       { status: 500 }
