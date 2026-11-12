@@ -44,12 +44,18 @@ export function withTelemetryHeaders<TResult>(headers: () => Record<string, stri
 }
 
 //---------------
-// Headers for the current API request: the server version always, plus the
-// tool name and call id when the request runs inside a tracked tool call.
+// Headers for the current API request: the server version by default, plus
+// the tool name and call id when the request runs inside a tracked tool
+// call. The remote (HTTP) client suppresses the version: its package
+// version is MAJOR.MINOR.PATCH (e.g. 1.52.0) while the web gate requires
+// the generated MAJOR.MINOR.PR form, so sending it would 426 the remote's
+// own calls — omitting the header makes the gate pass the request as a
+// non-MCP caller (see client-types.ts suppressVersionHeader).
 //---------------
-export function mcpTelemetryHeaders(): Record<string, string> {
+export function mcpTelemetryHeaders(options?: { includeVersion?: boolean }): Record<string, string> {
   const extras = extraHeadersContext.getStore();
-  const headers: Record<string, string> = { ...(extras === undefined ? {} : extras()), [MCP_VERSION_HEADER]: pkg.version };
+  const headers: Record<string, string> = { ...(extras === undefined ? {} : extras()) };
+  if (options?.includeVersion !== false) headers[MCP_VERSION_HEADER] = pkg.version;
   const context = toolCallContext.getStore();
   if (context !== undefined) {
     headers[MCP_TOOL_HEADER] = context.toolName;

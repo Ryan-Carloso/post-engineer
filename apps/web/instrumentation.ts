@@ -35,11 +35,12 @@ export async function register() {
   }
 
   //---------------
-  // Internal scheduler — post-metrics (hourly) and billing-reconcile
-  // (daily) run inside this server process (lib/scheduler-jobs.ts), with
-  // a DB lease so only one replica executes each tick. No public HTTP
-  // route, no CRON_SECRET, no pg_cron. SCHEDULER_ENABLED=false (and the
-  // test environment) disables it.
+  // Internal scheduler — post-metrics (hourly), billing-reconcile
+  // (daily), and the expired video-upload sweep (hourly) run inside
+  // this server process (lib/scheduler-jobs.ts). A DB lease lets only
+  // one replica execute each tick. No public HTTP route, no
+  // CRON_SECRET, no pg_cron. SCHEDULER_ENABLED=false (and the test
+  // environment) disables it.
   //
   // Node runtime only (guarded with the dynamic import INSIDE the
   // branch): instrumentation is also compiled for the edge runtime,

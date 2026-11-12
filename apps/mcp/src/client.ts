@@ -228,17 +228,17 @@ export class PostEngineerClient {
   readonly baseUrl: string;
   private readonly apiKey?: string;
   private readonly now: () => Date;
-
+  private readonly suppressVersionHeader: boolean;
   constructor(options: PostEngineerClientOptions = {}) {
     this.baseUrl = resolveBaseUrl(options.baseUrl ?? process.env.POST_ENGINEER_API_URL);
-    this.apiKey = options.apiKey;
+    this.apiKey = options.apiKey; this.suppressVersionHeader = options.suppressVersionHeader ?? false;
     this.now = options.now ?? (() => new Date());
   }
 
   getHeaders(includeContentType = true): Record<string, string> {
     // Telemetry headers name the calling MCP tool; the web API records
     // mcp_tool_called from them (see analytics.ts).
-    const headers: Record<string, string> = { ...mcpTelemetryHeaders(), Accept: 'application/json' };
+    const headers: Record<string, string> = { ...mcpTelemetryHeaders({ includeVersion: !this.suppressVersionHeader }), Accept: 'application/json' };
     if (includeContentType) headers['Content-Type'] = 'application/json';
     if (this.apiKey) {
       headers.Authorization = `Bearer ${this.apiKey}`;

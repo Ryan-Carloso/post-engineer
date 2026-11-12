@@ -4,6 +4,7 @@ import type { Dictionary } from './pt';
 import { personaVoiceCloneEn, voiceCloneApiToolDescEn } from './voice-clone-i18n-en';
 import { postToolDescEn } from './post-tools-i18n-en';
 import { segmentMediaToolDescEn } from './segment-media-i18n-en';
+import { videoUploadToolDescEn } from './video-upload-i18n-en';
 import { accountI18nEn } from './account-i18n-en';
 import { accountsI18nEn } from './accounts-i18n-en';
 import { recipesI18nEn } from './recipes-i18n-en';
@@ -200,8 +201,7 @@ export const enDictionary: Dictionary = {
     toolDescAddPersonaImage: 'Add an image to the library',
     toolDescUpdatePersonaImage: 'Update a library image',
     toolDescRemovePersonaImage: 'Remove a library image',
-    toolDescPublishVideoDirect: 'Publish a video directly',
-    toolDescConnectAccount: 'Connect a social account',
+    ...videoUploadToolDescEn,
     toolDescListSocialAccounts: 'List connected social accounts',
     toolDescListSchedules: 'List automation schedules',
     toolDescListPosts: 'List upcoming and past posts',

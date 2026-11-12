@@ -133,6 +133,15 @@
   "POST /api/upload-content": [
     "publish_video_direct"
   ],
+  "POST /api/videos/upload-url": [
+    "create_video_upload"
+  ],
+  "POST /api/videos/uploads/[uploadId]/complete": [
+    "complete_video_upload"
+  ],
+  "POST /api/videos/publish-by-id": [
+    "publish_uploaded_video"
+  ],
   "POST /api/videos/generate-and-schedule": [
     "generate_persona_video",
     "add_experiment_pair",

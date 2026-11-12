@@ -677,6 +677,26 @@ describe('cloned voice tools run through the MCP server', () => {
     );
   });
 
+  it('create_cloned_voice on the remote server uses the URL-only schema', async () => {
+    const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-http' } });
+    global.fetch = vi.fn().mockResolvedValue(audioResponse([5, 5, 5]));
+    const apiClient = fakeHost(request) as unknown as PostEngineerClient;
+    const server = createPostEngineerMcpServer(apiClient, 'http');
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const result = await client.callTool({
+        name: 'create_cloned_voice',
+        arguments: { audioUrl: 'https://cdn.example.com/ref.wav', language: 'en', consent: true, denoise: true },
+      });
+      expect(result.isError).toBeFalsy();
+      expect(firstText(result as { content?: unknown })).toContain('Voice clone registration started');
+    } finally {
+      await client.close();
+    }
+  });
+
   it('create_cloned_voice downloads then uploads', async () => {
     const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-1' } });
     global.fetch = vi.fn().mockResolvedValue(audioResponse([5, 5, 5]));

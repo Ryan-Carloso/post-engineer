@@ -14,6 +14,8 @@ import {
   serveHttpTransport,
   type HttpTransportHandle,
 } from '../http-transport.js';
+import { createHttpRateLimiter } from '../http-rate-limit.js';
+import type { HttpAuthenticator } from '../http-auth.js';
 
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
@@ -287,4 +289,76 @@ describe('HTTP transport with OAuth authentication (P6-2)', () => {
     });
     expect(response.status).toBe(401);
   });
+  it('blocks per IP before OAuth verification so the authenticator is not called after the limit', async () => {
+    const verify = vi.fn(async (token: string) => ({
+      sub: 'user-123',
+      clientId: 'c1',
+      bearer: token,
+    }));
+    const authenticator: HttpAuthenticator = { verify };
+    const ipRateLimiter = createHttpRateLimiter({ limit: 2, windowMs: 60_000 });
+    const handle = await serveHttpTransport(
+      () => createPostEngineerMcpServer(mockClient()),
+      { host: '127.0.0.1', port: 0, allowRemote: false },
+      authConfig(),
+      { authenticator, ipRateLimiter },
+    );
+    handles.push(handle);
+    const post = () =>
+      fetch(handle.url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          authorization: 'Bearer ' + ['aaa', 'bbb', 'ccc'].join('.'),
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 't', version: '1' } },
+        }),
+      });
+    const first = await post();
+    const second = await post();
+    const third = await post();
+    expect(first.status).not.toBe(429);
+    expect(second.status).not.toBe(429);
+    expect(third.status).toBe(429);
+    expect(third.headers.get('retry-after')).toBeTruthy();
+    expect(verify).toHaveBeenCalledTimes(2);
+  });
+
+  it('answers 429 per IP for unauthenticated floods without calling the authenticator at all beyond the limit', async () => {
+    const verify = vi.fn(async (token: string) => ({
+      sub: 'user-123',
+      clientId: 'c1',
+      bearer: token,
+    }));
+    const authenticator: HttpAuthenticator = { verify };
+    const ipRateLimiter = createHttpRateLimiter({ limit: 1, windowMs: 60_000 });
+    const handle = await serveHttpTransport(
+      () => createPostEngineerMcpServer(mockClient()),
+      { host: '127.0.0.1', port: 0, allowRemote: false },
+      authConfig(),
+      { authenticator, ipRateLimiter },
+    );
+    handles.push(handle);
+    const post = () =>
+      fetch(handle.url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          authorization: 'Bearer ' + ['aaa', 'bbb', 'ccc'].join('.'),
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+      });
+    const first = await post();
+    const second = await post();
+    expect(first.status).not.toBe(429);
+    expect(second.status).toBe(429);
+    expect(verify).toHaveBeenCalledTimes(1);
+  });
+
 });
