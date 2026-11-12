@@ -107,7 +107,7 @@ describe('recordPublishAttempt', () => {
   it('records a published result with its post id', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     const result = { accountId: 'acc-1', success: true, postId: 'post-1' };
-    await expect(recordPublishAttempt(mockSupabase(rpc), { ...base, result })).resolves.toBe(true);
+    await expect(recordPublishAttempt(mockSupabase(rpc), { ...base, accountResult: result })).resolves.toBe(true);
     expect(rpc).toHaveBeenCalledWith('record_publish_ledger', {
       p_key: 'publish:slot:s1:video:v.mp4:fanvue:acc-1',
       p_token: 'token-1',
@@ -121,7 +121,7 @@ describe('recordPublishAttempt', () => {
   it('records a failure so the next retry can claim a fresh attempt', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     const result = { accountId: 'acc-1', success: false, error: 'Fanvue 503', errorCode: 'transient' };
-    await expect(recordPublishAttempt(mockSupabase(rpc), { ...base, result })).resolves.toBe(true);
+    await expect(recordPublishAttempt(mockSupabase(rpc), { ...base, accountResult: result })).resolves.toBe(true);
     expect(rpc).toHaveBeenCalledWith('record_publish_ledger', {
       p_key: 'publish:slot:s1:video:v.mp4:fanvue:acc-1',
       p_token: 'token-1',
@@ -135,9 +135,9 @@ describe('recordPublishAttempt', () => {
   it('returns false instead of throwing when the record is lost', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
     const result = { accountId: 'acc-1', success: true, postId: 'post-1' };
-    await expect(recordPublishAttempt(mockSupabase(rpc), { ...base, result })).resolves.toBe(false);
+    await expect(recordPublishAttempt(mockSupabase(rpc), { ...base, accountResult: result })).resolves.toBe(false);
     const failing = vi.fn().mockResolvedValue({ data: null, error: { message: 'db down' } });
-    await expect(recordPublishAttempt(mockSupabase(failing), { ...base, result })).resolves.toBe(false);
+    await expect(recordPublishAttempt(mockSupabase(failing), { ...base, accountResult: result })).resolves.toBe(false);
   });
 });
 

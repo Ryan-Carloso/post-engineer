@@ -127,7 +127,7 @@ export interface RecordPublishAttemptInput {
   provider: string;
   accountId: string;
   claimToken: string;
-  result: ContentUploadAccountResult;
+  accountResult: ContentUploadAccountResult;
 }
 
 // Records the outcome of a claimed attempt. Returns false instead of
@@ -142,10 +142,10 @@ export async function recordPublishAttempt(
   const { data, error } = await supabase.rpc('record_publish_ledger', {
     p_key: publishLedgerKey(input.scopeKey, input.provider, input.accountId),
     p_token: input.claimToken,
-    p_status: input.result.success ? 'published' : 'failed',
-    p_result: input.result.success ? input.result : null,
-    p_error: input.result.success ? null : (input.result.error ?? 'upload failed'),
-    p_error_code: input.result.success ? null : (input.result.errorCode ?? null),
+    p_status: input.accountResult.success ? 'published' : 'failed',
+    p_result: input.accountResult.success ? input.accountResult : null,
+    p_error: input.accountResult.success ? null : (input.accountResult.error ?? 'upload failed'),
+    p_error_code: input.accountResult.success ? null : (input.accountResult.errorCode ?? null),
   });
   if (error) {
     logger.error('[publish-ledger] record failed', error, {
@@ -249,7 +249,7 @@ export async function recordPartitionResults(
       provider: partition.provider,
       accountId: granted.accountId,
       claimToken: granted.claimToken,
-      result,
+      accountResult: result,
     });
   }
 }

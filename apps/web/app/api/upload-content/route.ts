@@ -156,10 +156,12 @@ async function postHandler(request: NextRequest) {
       partition = await partitionPublishAccounts(ledgerClient, scopeKey, provider, userId, formData);
     }
 
+    // No index signature: the handler responses are interfaces without
+    // one, and the route only reads success/results — the extra fields
+    // (provider, logId, error) still flow through to JSON at runtime.
     type UploadDispatchResult = {
       success: boolean;
       results?: ContentUploadAccountResult[];
-      [key: string]: unknown;
     };
     let response: UploadDispatchResult;
     if (partition !== null && partition.granted.length === 0) {
@@ -203,7 +205,7 @@ async function postHandler(request: NextRequest) {
                 provider,
                 accountId: granted.accountId,
                 claimToken: granted.claimToken,
-                result: {
+                accountResult: {
                   accountId: granted.accountId,
                   success: false,
                   error: failure.error,
