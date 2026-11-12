@@ -38,12 +38,13 @@ import { NextResponse } from 'next/server';
 const USER_ID = 'user-uuid-1';
 const TOKEN = 'a'.repeat(40);
 
-function mockSupabase(overrides: { user?: { id: string } | null; insertError?: unknown; isApiKey?: boolean } = {}) {
-  const inserted: Array<Record<string, unknown>> = [];
+function mockSupabase(overrides: { user?: { id: string } | null; upsertError?: unknown; isApiKey?: boolean } = {}) {
+  const upserted: Array<Record<string, unknown>> = [];
+  const upsertOptions: Array<unknown> = [];
   const selectMock = vi.fn(() => ({
     single: vi.fn(async () => ({
-      data: { id: 'row-1', ...inserted[inserted.length - 1] },
-      error: overrides.insertError ?? null,
+      data: { id: 'row-1', ...upserted[upserted.length - 1] },
+      error: overrides.upsertError ?? null,
     })),
   }));
   const client = {
@@ -56,8 +57,9 @@ function mockSupabase(overrides: { user?: { id: string } | null; insertError?: u
     from: vi.fn((table: string) => {
       if (table === 'social_accounts') {
         return {
-          insert: vi.fn((values: Record<string, unknown>) => {
-            inserted.push(values);
+          upsert: vi.fn((values: Record<string, unknown>, options?: unknown) => {
+            upserted.push(values);
+            upsertOptions.push(options);
             return {
               select: selectMock,
             };
@@ -81,7 +83,7 @@ function mockSupabase(overrides: { user?: { id: string } | null; insertError?: u
         error: null,
       }) as never
   );
-  return { inserted, selectMock };
+  return { upserted, upsertOptions, selectMock };
 }
 
 function formRequest(fields: Record<string, string>): Request {
@@ -138,7 +140,7 @@ describe('POST /api/rumble-connect', () => {
   });
 
   it('returns 400 for a non-string or blank channelId/token in JSON and saves nothing', async () => {
-    const { inserted } = mockSupabase();
+    const { upserted } = mockSupabase();
     const nonString = await POST(jsonRequest({ channelId: 123, accessToken: TOKEN }));
     expect(nonString.status).toBe(400);
     expect(await nonString.json()).toMatchObject({ success: false, error: 'Rumble channel ID is required.' });
@@ -148,7 +150,7 @@ describe('POST /api/rumble-connect', () => {
     const blankToken = await POST(jsonRequest({ channelId: 'chan-1', accessToken: '   ' }));
     expect(blankToken.status).toBe(400);
     expect(await blankToken.json()).toMatchObject({ success: false, error: 'Rumble access token is required.' });
-    expect(inserted).toHaveLength(0);
+    expect(upserted).toHaveLength(0);
   });
 
   it('returns 400 for a blank channelId in FormData', async () => {
@@ -159,17 +161,17 @@ describe('POST /api/rumble-connect', () => {
   });
 
   it('trims padded channelId and accessToken before saving (JSON and FormData)', async () => {
-    const { inserted } = mockSupabase();
+    const { upserted } = mockSupabase();
     const jsonRes = await POST(jsonRequest({ channelId: '  chan-1  ', accessToken: `  ${TOKEN}  ` }));
     expect(jsonRes.status).toBe(200);
-    expect(inserted[0]).toMatchObject({ provider_account_id: 'chan-1', account_name: 'chan-1' });
+    expect(upserted[0]).toMatchObject({ provider_account_id: 'chan-1', account_name: 'chan-1' });
     expect(encryptTokens).toHaveBeenCalledWith(
       expect.objectContaining({ access_token: TOKEN, channel_id: 'chan-1' }),
     );
 
     const formRes = await POST(formRequest({ channelId: '  chan-2  ', accessToken: TOKEN }));
     expect(formRes.status).toBe(200);
-    expect(inserted[1]).toMatchObject({ provider_account_id: 'chan-2', account_name: 'chan-2' });
+    expect(upserted[1]).toMatchObject({ provider_account_id: 'chan-2', account_name: 'chan-2' });
   });
 
   it('returns 400 for a malformed token (wrong length or non-hex) and saves nothing', async () => {
@@ -186,7 +188,7 @@ describe('POST /api/rumble-connect', () => {
   });
 
   it('connects: encrypts the token and saves social_accounts with the channel id', async () => {
-    const { inserted } = mockSupabase();
+    const { upserted } = mockSupabase();
 
     const res = await POST(formRequest({ channelId: 'chan-1', accessToken: TOKEN }));
     expect(res.status).toBe(200);
@@ -197,11 +199,11 @@ describe('POST /api/rumble-connect', () => {
     expect(encryptTokens).toHaveBeenCalledWith(
       expect.objectContaining({ access_token: TOKEN, token_type: 'rumble_access_token', channel_id: 'chan-1' }),
     );
-    const blob = inserted[0]?.encrypted_tokens;
+    const blob = upserted[0]?.encrypted_tokens;
     expect(typeof blob).toBe('string');
     expect(String(blob)).not.toContain(TOKEN);
 
-    expect(inserted[0]).toMatchObject({
+    expect(upserted[0]).toMatchObject({
       user_id: USER_ID,
       provider: 'rumble',
       provider_account_id: 'chan-1',
@@ -210,8 +212,25 @@ describe('POST /api/rumble-connect', () => {
     });
   });
 
-  it('returns 500 when the insert fails and names the failure', async () => {
-    mockSupabase({ insertError: { message: 'check violation' } });
+  it('refreshes the existing row when the account reconnects', async () => {
+    const { upserted, upsertOptions } = mockSupabase();
+
+    const res = await POST(formRequest({ channelId: 'chan-1', accessToken: TOKEN }));
+    expect(res.status).toBe(200);
+    // A reconnect overwrites the stored token on the same row: the upsert
+    // targets the unique (user_id, provider, provider_account_id) key, so
+    // it cannot fail with a constraint violation like the plain insert did.
+    expect(upserted).toHaveLength(1);
+    expect(upsertOptions[0]).toEqual({ onConflict: 'user_id,provider,provider_account_id' });
+    expect(upserted[0]).toMatchObject({
+      user_id: USER_ID,
+      provider: 'rumble',
+      provider_account_id: 'chan-1',
+    });
+  });
+
+  it('returns 500 when the upsert fails and names the failure', async () => {
+    mockSupabase({ upsertError: { message: 'check violation' } });
     const res = await POST(formRequest({ channelId: 'chan-1', accessToken: TOKEN }));
     expect(res.status).toBe(500);
     expect(await res.json()).toMatchObject({ success: false, error: 'Could not save the Rumble account.' });
@@ -244,7 +263,7 @@ describe('POST /api/rumble-connect', () => {
   });
 
   it('MCP flow: API key + JSON connects and associates with the key owner', async () => {
-    const { inserted } = mockSupabase({ isApiKey: true });
+    const { upserted } = mockSupabase({ isApiKey: true });
 
     const res = await POST(jsonRequest({ channelId: 'chan-1', accessToken: TOKEN }));
     expect(res.status).toBe(200);
@@ -252,7 +271,7 @@ describe('POST /api/rumble-connect', () => {
     expect(body.success).toBe(true);
     expect(body.channelId).toBe('chan-1');
 
-    expect(inserted[0]).toMatchObject({
+    expect(upserted[0]).toMatchObject({
       user_id: USER_ID,
       provider: 'rumble',
       provider_account_id: 'chan-1',
