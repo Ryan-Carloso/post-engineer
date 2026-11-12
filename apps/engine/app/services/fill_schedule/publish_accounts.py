@@ -165,6 +165,10 @@ def publish_slot_accounts(
                     content_type="video/mp4",
                     max_attempts=1,
                     surface_application_failure=True,
+                    # Deterministic across retries of this slot/video: the
+                    # web route recognises a re-ask of the same publish and
+                    # answers from its ledger instead of posting again.
+                    publish_scope_key=f"slot:{slot['id']}:video:{video_name}",
                 )
             except upload_publisher.PublishError as exc:
                 parsed = _json_accounts(getattr(exc, "response_body", None))

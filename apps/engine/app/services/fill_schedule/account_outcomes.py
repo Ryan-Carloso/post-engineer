@@ -10,6 +10,7 @@ from app.services.analytics import scrub_error_text
 from app.services.upload_publisher import RETRYABLE_STATUS_CODES
 from app.services.fill_schedule.constants import (
     MAX_PUBLISH_ATTEMPTS,
+    PUBLISH_IN_PROGRESS_DELAY_SECONDS,
     PUBLISH_RETRY_DELAY_SECONDS,
 )
 from app.services.fill_schedule.metadata import metadata_for
@@ -114,7 +115,7 @@ def classify_failure(
     code = error_code.strip() if isinstance(error_code, str) else ""
     if code in USER_CODES:
         return code, True
-    if code in ("transient", "publish_rejected"):
+    if code in ("transient", "publish_rejected", "publish_in_progress"):
         return code, False
     # No code: an older handler, a network error, or an engine-side
     # synthetic result. Decide from the status only.
@@ -217,6 +218,24 @@ def _fail_outcome(
     status_code: int | None,
     now: datetime,
 ) -> None:
+    if error_code == "publish_in_progress":
+        # The web route is still publishing this account under an earlier
+        # request that outlived the engine's 600s timeout. The retry only
+        # re-asks for that attempt's recorded result: it must not start a
+        # second publish, and it must not spend one of the 3 tries, or a
+        # slow upload would exhaust the budget (and refund the slot) while
+        # the original post is about to go live. The attempt this call
+        # recorded is handed back, and the account wakes in 60s.
+        outcome["error"] = scrub_error_text(message, max_chars=200)
+        outcome["requiresUser"] = False
+        outcome["status"] = "retrying"
+        outcome["code"] = "publish_in_progress"
+        outcome["notice"] = None
+        outcome["attempts"] = max(int(outcome.get("attempts") or 0) - 1, 0)
+        outcome["retryAt"] = (
+            now + timedelta(seconds=PUBLISH_IN_PROGRESS_DELAY_SECONDS)
+        ).isoformat()
+        return
     code, requires_user = classify_failure(error_code, status_code)
     attempts = int(outcome.get("attempts") or 0)
     outcome["error"] = scrub_error_text(message, max_chars=200)

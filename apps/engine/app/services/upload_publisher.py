@@ -394,6 +394,7 @@ def publish_video(
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     sleep: Callable[[float], None] = time.sleep,
     surface_application_failure: bool = False,
+    publish_scope_key: str | None = None,
 ) -> dict[str, Any]:
     """Publish one finished video through the internal upload API.
 
@@ -416,6 +417,11 @@ def publish_video(
     if parts is None:
         raise PublishError(f"unsupported publish metadata: {type(metadata).__name__}")
     parts.fields.append(("userId", owner_user_id))
+    if publish_scope_key:
+        # Lets the web route recognise a retry of the same slot/video as
+        # the same publish (ledger key) instead of a new post. Callers
+        # without a key send nothing and keep today's behaviour.
+        parts.fields.append(("publishScopeKey", publish_scope_key))
 
     file_field, fileobj, file_content_type = build_video_file_part(
         fileobj=io.BytesIO(video_bytes),

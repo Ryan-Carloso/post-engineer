@@ -236,6 +236,64 @@ class AccountRetryTests(unittest.TestCase):
         youtube = next(item for item in store.slot["publish_outcomes"] if item["provider"] == "youtube")
         self.assertEqual(youtube["status"], "published")
 
+    def test_in_progress_result_waits_for_the_first_attempt_then_replays_its_success(self) -> None:
+        # The web route is still publishing under the first request, which
+        # outlived the engine's 600s timeout. The engine re-asks; the web
+        # answers "in progress" instead of publishing again. The retry
+        # must not spend the account's 3-try budget, and the recorded
+        # success ends the slot with no refund and no second post.
+        slot = self._slot(["instagram"])
+        slot["schedules"]["instagram_account_ids"] = ["ig-1"]
+        store = _MemoryStore(slot)
+        calls: list[dict] = []
+        state = {"answered": 0}
+
+        def publish(**kwargs):
+            calls.append(kwargs)
+            state["answered"] += 1
+            if state["answered"] <= 2:
+                return {
+                    "success": False,
+                    "results": [{
+                        "accountId": "ig-1",
+                        "success": False,
+                        "error": "publish still in progress",
+                        "errorCode": "publish_in_progress",
+                    }],
+                }
+            return {
+                "success": True,
+                "results": [{"accountId": "ig-1", "success": True, "postId": "ig-post-1"}],
+            }
+
+        scheduler = self._scheduler(store, publish)
+        scheduler.publish_due(NOW)
+        outcome = store.slot["publish_outcomes"][0]
+        self.assertEqual((outcome["status"], outcome["code"]), ("retrying", "publish_in_progress"))
+        self.assertEqual(outcome["attempts"], 0)
+        self.assertEqual(store.slot["status"], "publishing")
+        self.assertEqual(store.slot["publish_not_before"], "2026-09-07T12:01:00+00:00")
+        self.assertEqual(store.refund_batch_calls, [])
+
+        scheduler.publish_due(NOW + timedelta(seconds=60))
+        outcome = store.slot["publish_outcomes"][0]
+        self.assertEqual((outcome["status"], outcome["code"]), ("retrying", "publish_in_progress"))
+        self.assertEqual(outcome["attempts"], 0)
+        self.assertEqual(store.slot["status"], "publishing")
+
+        scheduler.publish_due(NOW + timedelta(seconds=120))
+        outcome = store.slot["publish_outcomes"][0]
+        self.assertEqual(outcome["status"], "published")
+        self.assertEqual(outcome["postId"], "ig-post-1")
+        self.assertEqual(store.slot["status"], "published")
+        self.assertEqual(store.refund_batch_calls, [])
+
+        # Every call carries the same deterministic scope key, so the web
+        # route can tell the re-asks apart from a new publish.
+        expected_key = f"slot:slot-1:video:{os.path.basename(self.video_path)}"
+        self.assertEqual(len(calls), 3)
+        self.assertTrue(all(item.get("publish_scope_key") == expected_key for item in calls))
+
     def test_transient_account_failure_inside_a_200_is_retried_then_exhausted(self) -> None:
         # A provider 503 reported per account inside a 200 response carries
         # errorCode transient: it gets the 30s / 2min retries, not one shot.
@@ -368,6 +426,7 @@ class AccountRetryTests(unittest.TestCase):
         self.assertEqual(classify_failure("token_missing", 200), ("token_missing", True))
         self.assertEqual(classify_failure("publish_rejected", 200), ("publish_rejected", False))
         self.assertEqual(classify_failure("transient", 200), ("transient", False))
+        self.assertEqual(classify_failure("publish_in_progress", 200), ("publish_in_progress", False))
         # No code: the status decides.
         self.assertEqual(classify_failure(None, 400), ("publish_rejected", False))
         self.assertEqual(classify_failure(None, 503), ("transient", False))

@@ -24,6 +24,12 @@ MAX_PUBLISH_ATTEMPTS = 3
 # return to `ready` between tries.
 PUBLISH_RETRY_DELAY_SECONDS = (30, 120, 600)
 
+# Wake-up after the web route answers "publish_in_progress": the earlier
+# request is still publishing this account, so the retry only re-asks for
+# its recorded result. It spends no attempt (see account_outcomes), so the
+# delay is short and independent of the transient backoff above.
+PUBLISH_IN_PROGRESS_DELAY_SECONDS = 60
+
 # Unified generate+schedule batches (POST /api/videos/generate-and-schedule):
 # finite, user-requested, prepaid at request time. Their slots carry the
 # title chosen by the user.

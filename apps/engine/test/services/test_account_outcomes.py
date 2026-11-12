@@ -91,6 +91,31 @@ class FailOutcomeTests(unittest.TestCase):
         self.assertEqual(outcome["code"], "retries_exhausted")
         self.assertEqual(outcome["notice"], "Threads did not publish after 3 attempts.")
 
+    def test_in_progress_waits_without_spending_an_attempt(self) -> None:
+        # The web route is still publishing this account under an earlier
+        # request that outlived the engine's 600s timeout. The retry waits
+        # for that attempt instead of starting a second publish, so the
+        # attempt is not spent: a slow upload cannot exhaust the budget.
+        outcome = _outcome(2)
+        _fail_outcome(outcome, "publish still running on the web", "publish_in_progress", 200, NOW)
+        self.assertEqual(outcome["status"], "retrying")
+        self.assertEqual(outcome["code"], "publish_in_progress")
+        self.assertEqual(outcome["attempts"], 1)
+        self.assertEqual(outcome["retryAt"], "2026-09-07T12:01:00+00:00")
+        self.assertFalse(outcome["requiresUser"])
+        self.assertIsNone(outcome["notice"])
+
+    def test_in_progress_at_the_cap_still_waits(self) -> None:
+        # Even a third recorded try waits when the web says the first
+        # attempt is still in flight — the slot must not fail (and refund)
+        # while its post is about to go live.
+        outcome = _outcome(3)
+        _fail_outcome(outcome, "publish still running on the web", "publish_in_progress", 200, NOW)
+        self.assertEqual(
+            (outcome["status"], outcome["code"], outcome["attempts"]),
+            ("retrying", "publish_in_progress", 2),
+        )
+
     def test_exhaust_outcome_is_terminal_without_user_copy(self) -> None:
         outcome = {**_outcome(3), "status": "retrying", "retryAt": "x", "requiresUser": True}
         exhaust_outcome(outcome)
