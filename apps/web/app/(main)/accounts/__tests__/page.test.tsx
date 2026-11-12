@@ -1336,7 +1336,7 @@ describe('error state wiring — broken cards offer reconnect, healthy cards kee
     brokenName: string;
     healthyName: string;
     setAccounts: (which: 'broken' | 'healthy' | 'both') => void;
-    armOAuth: () => ReturnType<typeof vi.fn>;
+    armOAuth: () => () => Promise<void>;
   }
 
   const youtubeStart = { fn: vi.fn() };
