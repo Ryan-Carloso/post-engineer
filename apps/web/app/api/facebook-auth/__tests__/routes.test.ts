@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 vi.mock('@/lib/rate-limit', () => ({ applyRateLimit: vi.fn(async () => null), RATE_LIMITS: { oauthStart: {} } }));
-vi.mock('@/lib/api-error-reporting', () => ({ withApiErrorReporting: (_route: string, handler: unknown) => handler }));
+vi.mock('@/lib/api-error-reporting', () => ({ withApiErrorReporting: (_route: string, handler: unknown) => handler, markApiErrorReported: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createSupabaseServerClient: vi.fn() }));
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({ __mock: 'service' })) }));
 vi.mock('@/lib/logger', () => ({ logger: { generateLogId: vi.fn(() => 'log-1'), logOAuthError: vi.fn(), error: vi.fn() } }));
@@ -31,6 +31,7 @@ import { buildFacebookAuthorizationUrl, exchangeFacebookCodeForToken, fetchFaceb
 import { createOAuthState, resolveOAuthRedirectUri, setOAuthNonceCookie } from '@/lib/oauth-utils';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
+import { markApiErrorReported } from '@/lib/api-error-reporting';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 
 const START = 'https://app.example/api/facebook-auth/start';
@@ -92,6 +93,14 @@ describe('GET /api/facebook-auth/start', () => {
     const response = await startGET(new NextRequest(START));
     expect(response.status).toBe(500);
     expect((await response.json()).error).toContain('FACEBOOK_CLIENT_SECRET');
+    // The missing-credentials cause is logged so PostHog shows the reason
+    // instead of only the wrapper's generic "[route] 500", and the response
+    // is marked so the wrapper does not report a second synthetic exception.
+    expect(logger.logOAuthError).toHaveBeenCalledWith(
+      'log-1',
+      expect.objectContaining({ message: expect.stringContaining('FACEBOOK_CLIENT_ID') }),
+    );
+    expect(markApiErrorReported).toHaveBeenCalledWith(response);
   });
 
   it('returns a generic 500 and logs the detail when building the URL throws', async () => {

@@ -3,7 +3,7 @@ import { logger } from '@/lib/logger';
 import { createOAuthState, resolveOAuthRedirectUri, setOAuthNonceCookie } from '@/lib/oauth-utils';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { markApiErrorReported, withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // getSessionUserId — returns the session's user_id (null when not logged in)
@@ -31,13 +31,14 @@ async function getHandler(request: NextRequest = new NextRequest('https://post-e
 
   try {
     if (!process.env.INSTAGRAM_CLIENT_ID || !process.env.INSTAGRAM_CLIENT_SECRET) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Instagram credentials are not configured (INSTAGRAM_CLIENT_ID / INSTAGRAM_CLIENT_SECRET).',
-        },
-        { status: 500 }
-      );
+      const message = 'Instagram credentials are not configured (INSTAGRAM_CLIENT_ID / INSTAGRAM_CLIENT_SECRET).';
+      const response = NextResponse.json({ success: false, error: message }, { status: 500 });
+      // The cause would otherwise reach PostHog only as the wrapper's
+      // generic "[route] 500" — log the reason here, and mark the response
+      // so the wrapper does not report a second synthetic exception.
+      logger.logOAuthError(logId, new Error(message));
+      markApiErrorReported(response);
+      return response;
     }
 
     const userId = await getSessionUserId();

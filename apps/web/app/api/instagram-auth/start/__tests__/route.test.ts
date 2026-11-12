@@ -8,6 +8,10 @@ vi.mock('@/lib/oauth-utils', () => ({
   resolveOAuthRedirectUri: vi.fn(() => 'https://post-engineer.com/api/instagram-auth/callback'),
   setOAuthNonceCookie: vi.fn(),
 }));
+vi.mock('@/lib/api-error-reporting', () => ({
+  withApiErrorReporting: (_route: string, handler: unknown) => handler,
+  markApiErrorReported: vi.fn(),
+}));
 vi.mock('@/lib/logger', () => ({
   logger: { generateLogId: vi.fn(() => 'log-1'), logOAuthError: vi.fn() },
 }));
@@ -21,6 +25,8 @@ import { GET } from '@/app/api/instagram-auth/start/route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createOAuthState, setOAuthNonceCookie } from '@/lib/oauth-utils';
 import { InstagramService } from '@/lib/instagram';
+import { logger } from '@/lib/logger';
+import { markApiErrorReported } from '@/lib/api-error-reporting';
 
 const user = { id: 'user-1' };
 
@@ -52,9 +58,17 @@ describe('/api/instagram-auth/start', () => {
   });
 
   it('returns 500 when instagram credentials are not configured', async () => {
-    delete process.env.INSTAGRAM_CLIENT_ID;
+    vi.stubEnv('INSTAGRAM_CLIENT_ID', undefined);
     const res = await GET();
     expect(res.status).toBe(500);
+    // The missing-credentials cause is logged so PostHog shows the reason
+    // instead of only the wrapper's generic "[route] 500", and the response
+    // is marked so the wrapper does not report a second synthetic exception.
+    expect(logger.logOAuthError).toHaveBeenCalledWith(
+      'log-1',
+      expect.objectContaining({ message: expect.stringContaining('INSTAGRAM_CLIENT_ID') }),
+    );
+    expect(markApiErrorReported).toHaveBeenCalledWith(res);
   });
 
   it('returns 401 when not logged in', async () => {

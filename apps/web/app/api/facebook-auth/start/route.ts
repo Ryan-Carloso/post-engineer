@@ -3,7 +3,7 @@ import { logger } from '@/lib/logger';
 import { createOAuthState, resolveOAuthRedirectUri, setOAuthNonceCookie } from '@/lib/oauth-utils';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { markApiErrorReported, withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/facebook-auth/start — generates the Facebook authorization URL.
@@ -17,14 +17,14 @@ async function getHandler(request: NextRequest) {
 
   try {
     if (!process.env.FACEBOOK_CLIENT_ID || !process.env.FACEBOOK_CLIENT_SECRET) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            'Facebook credentials are not configured (FACEBOOK_CLIENT_ID / FACEBOOK_CLIENT_SECRET).',
-        },
-        { status: 500 }
-      );
+      const message = 'Facebook credentials are not configured (FACEBOOK_CLIENT_ID / FACEBOOK_CLIENT_SECRET).';
+      const response = NextResponse.json({ success: false, error: message }, { status: 500 });
+      // The cause would otherwise reach PostHog only as the wrapper's
+      // generic "[route] 500" — log the reason here, and mark the response
+      // so the wrapper does not report a second synthetic exception.
+      logger.logOAuthError(logId, new Error(message));
+      markApiErrorReported(response);
+      return response;
     }
 
     const supabase = await createSupabaseServerClient();
