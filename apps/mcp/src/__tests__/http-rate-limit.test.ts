@@ -78,9 +78,19 @@ describe('clientIpKey', () => {
     expect(clientIpKey({ socket: { remoteAddress: '2001:db8::1' } } as never)).toBe('2001:db8::1');
   });
 
-  it('falls back to unknown when no remote address is present', () => {
+  it('buckets by the last forwarded hop, ignoring a spoofed first entry and the proxy socket', () => {
+    const req = {
+      socket: { remoteAddress: '172.17.0.1' },
+      headers: { 'x-forwarded-for': '1.2.3.4, 203.0.113.7' },
+    };
+    expect(clientIpKey(req as never)).toBe('203.0.113.7');
+    expect(clientIpKey({ socket: { remoteAddress: '172.17.0.1' }, headers: { 'x-forwarded-for': ['::ffff:198.51.100.10'] } } as never)).toBe('198.51.100.10');
+  });
+
+  it('falls back to x-real-ip, then the socket, then unknown', () => {
+    expect(clientIpKey({ socket: { remoteAddress: '172.17.0.1' }, headers: { 'x-real-ip': '203.0.113.8' } } as never)).toBe('203.0.113.8');
+    expect(clientIpKey({ socket: { remoteAddress: '203.0.113.7' }, headers: { 'x-forwarded-for': '   ' } } as never)).toBe('203.0.113.7');
     expect(clientIpKey({ socket: {} } as never)).toBe('unknown');
     expect(clientIpKey({} as never)).toBe('unknown');
   });
-
 });

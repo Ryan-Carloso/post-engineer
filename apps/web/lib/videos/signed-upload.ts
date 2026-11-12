@@ -162,8 +162,19 @@ async function loadOwnedUpload(store: VideoUploadStore, userId: string, uploadId
   return row;
 }
 
-function assertNotExpired(row: VideoUploadRow, now: Date): void {
+// A refused upload must not keep its object: the signed URL can point at
+// up to 2GB, and an expired or rejected object is never published.
+async function discardObject(storage: VideoUploadStorage, path: string): Promise<void> {
+  try {
+    await storage.remove([path]);
+  } catch {
+    // Best-effort. A failed delete must not hide why the upload was refused.
+  }
+}
+
+async function rejectIfExpired(storage: VideoUploadStorage, row: VideoUploadRow, now: Date): Promise<void> {
   if (Date.parse(row.expires_at) <= now.getTime()) {
+    await discardObject(storage, row.storage_path);
     throw new VideoUploadError('This video upload has expired. Mint a new one.', 410, 'VIDEO_UPLOAD_EXPIRED');
   }
 }
@@ -177,19 +188,23 @@ async function downloadVerifiedVideo(
     throw new VideoUploadError('No uploaded file was found for this upload. Upload the video first.', 400, 'VIDEO_UPLOAD_FILE_MISSING');
   }
   const buffer = Buffer.from(await data.arrayBuffer());
+  const refuse = async (message: string, status: number, code: string): Promise<never> => {
+    await discardObject(storage, row.storage_path);
+    throw new VideoUploadError(message, status, code);
+  };
   if (buffer.length === 0) {
-    throw new VideoUploadError('The uploaded video is empty.', 400, 'VIDEO_UPLOAD_FILE_EMPTY');
+    return refuse('The uploaded video is empty.', 400, 'VIDEO_UPLOAD_FILE_EMPTY');
   }
   if (buffer.length > MAX_VIDEO_UPLOAD_BYTES) {
-    throw new VideoUploadError('Video is too large. Maximum is 2GB.', 413, 'VIDEO_UPLOAD_TOO_LARGE');
+    return refuse('Video is too large. Maximum is 2GB.', 413, 'VIDEO_UPLOAD_TOO_LARGE');
   }
   // Real content, never the declared type: both are caller-controlled.
   const detected = detectMagicMimeType(buffer);
   if (detected !== 'video/mp4' && detected !== 'video/quicktime') {
-    throw new VideoUploadError('The uploaded file is not an MP4 or MOV video.', 400, 'VIDEO_UPLOAD_CONTENT_UNRECOGNIZED');
+    return refuse('The uploaded file is not an MP4 or MOV video.', 400, 'VIDEO_UPLOAD_CONTENT_UNRECOGNIZED');
   }
   if (row.declared_content_type !== null && row.declared_content_type !== detected) {
-    throw new VideoUploadError('The uploaded video content does not match the declared content type.', 400, 'VIDEO_UPLOAD_TYPE_MISMATCH');
+    return refuse('The uploaded video content does not match the declared content type.', 400, 'VIDEO_UPLOAD_TYPE_MISMATCH');
   }
   return { buffer, detectedType: detected };
 }
@@ -209,6 +224,10 @@ export async function completeVideoUpload(
   now: Date,
 ): Promise<CompletedVideoUpload> {
   const row = await loadOwnedUpload(store, userId, uploadId);
+  if (row.status === 'consumed') {
+    throw new VideoUploadError('This video upload was already used to publish.', 409, 'VIDEO_UPLOAD_CONSUMED');
+  }
+  await rejectIfExpired(storage, row, now);
   if (row.status === 'ready') {
     // Idempotent retry: the verified facts are already on the row.
     return {
@@ -218,10 +237,6 @@ export async function completeVideoUpload(
       sizeBytes: row.size_bytes ?? 0,
     };
   }
-  if (row.status === 'consumed') {
-    throw new VideoUploadError('This video upload was already used to publish.', 409, 'VIDEO_UPLOAD_CONSUMED');
-  }
-  assertNotExpired(row, now);
   const { buffer, detectedType } = await downloadVerifiedVideo(storage, row);
   const sizeBytes = buffer.length;
   const updated = await store.updateUpload(row.id, 'pending', {
@@ -253,13 +268,13 @@ export async function claimUploadForPublish(
   now: Date,
 ): Promise<ClaimedVideoUpload> {
   const row = await loadOwnedUpload(store, userId, uploadId);
-  if (row.status === 'pending') {
-    throw new VideoUploadError('This video upload is not completed yet. Complete it before publishing.', 409, 'VIDEO_UPLOAD_NOT_READY');
-  }
   if (row.status === 'consumed') {
     throw new VideoUploadError('This video upload was already used to publish.', 409, 'VIDEO_UPLOAD_CONSUMED');
   }
-  assertNotExpired(row, now);
+  await rejectIfExpired(storage, row, now);
+  if (row.status === 'pending') {
+    throw new VideoUploadError('This video upload is not completed yet. Complete it before publishing.', 409, 'VIDEO_UPLOAD_NOT_READY');
+  }
   const { buffer, detectedType } = await downloadVerifiedVideo(storage, row);
   const updated = await store.updateUpload(row.id, 'ready', {
     status: 'consumed',

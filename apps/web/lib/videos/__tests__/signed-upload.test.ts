@@ -154,15 +154,19 @@ describe('completeVideoUpload', () => {
   });
 
   it('rejects expired, consumed, non-video and mismatched uploads', async () => {
+    const expiredStorage = makeStorage();
     await expect(
-      completeVideoUpload(makeStore([row({ expires_at: new Date(NOW.getTime() - 1).toISOString() })]), makeStorage(), USER, 'upload-1', NOW),
+      completeVideoUpload(makeStore([row({ expires_at: new Date(NOW.getTime() - 1).toISOString() })]), expiredStorage, USER, 'upload-1', NOW),
     ).rejects.toMatchObject({ status: 410 });
+    expect(expiredStorage.removed).toEqual([[`${USER}/direct-uploads/upload-1.mp4`]]);
+    const junk = makeStorage(Buffer.from('not a video at all......'));
+    await expect(
+      completeVideoUpload(makeStore([row()]), junk, USER, 'upload-1', NOW),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(junk.removed).toEqual([[`${USER}/direct-uploads/upload-1.mp4`]]);
     await expect(
       completeVideoUpload(makeStore([row({ status: 'consumed' })]), makeStorage(), USER, 'upload-1', NOW),
     ).rejects.toMatchObject({ status: 409 });
-    await expect(
-      completeVideoUpload(makeStore([row()]), makeStorage(Buffer.from('not a video at all......')), USER, 'upload-1', NOW),
-    ).rejects.toMatchObject({ status: 400 });
     await expect(
       completeVideoUpload(makeStore([row()]), makeStorage(MOV), USER, 'upload-1', NOW),
     ).rejects.toMatchObject({ status: 400 });
@@ -195,8 +199,10 @@ describe('claimUploadForPublish', () => {
     const expired = makeStore([
       row({ status: 'ready', expires_at: new Date(NOW.getTime() - 1).toISOString(), detected_content_type: 'video/mp4' }),
     ]);
-    await expect(claimUploadForPublish(expired, makeStorage(), USER, 'upload-1', NOW)).rejects.toMatchObject({ status: 410 });
+    const expiredStorage = makeStorage();
+    await expect(claimUploadForPublish(expired, expiredStorage, USER, 'upload-1', NOW)).rejects.toMatchObject({ status: 410 });
     expect(expired.rows.get('upload-1')?.status).toBe('ready');
+    expect(expiredStorage.removed).toEqual([[`${USER}/direct-uploads/upload-1.mp4`]]);
 
     const ready = makeStore([row({ status: 'ready', detected_content_type: 'video/mp4' })]);
     await expect(claimUploadForPublish(ready, makeStorage(), OTHER, 'upload-1', NOW)).rejects.toMatchObject({ status: 404 });

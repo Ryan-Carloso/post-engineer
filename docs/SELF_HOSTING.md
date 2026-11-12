@@ -212,7 +212,11 @@ reads the **last** entry of `X-Forwarded-For`. Make sure your reverse
 proxy **overwrites** (not appends to) `X-Forwarded-For` with the real
 client IP — with Caddy this is the default. If the proxy instead appends,
 all clients collapse into the proxy's IP bucket and the limiter will
-block legitimate traffic.
+block legitimate traffic. The remote MCP pre-auth limiter uses that
+same last-hop rule (then `X-Real-IP`, then the socket). Behind the
+Caddy example above, the socket address is the Docker gateway for
+every client, so a missing forwarded header collapses the MCP limit
+into one shared bucket.
 
 Security notes:
 

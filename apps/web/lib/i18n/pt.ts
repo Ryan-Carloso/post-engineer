@@ -3,6 +3,7 @@
 import { personaVoiceClonePt, voiceCloneApiToolDescPt } from './voice-clone-i18n-pt';
 import { postToolDescPt } from './post-tools-i18n-pt';
 import { segmentMediaToolDescPt } from './segment-media-i18n-pt';
+import { videoUploadToolDescPt } from './video-upload-i18n-pt';
 import { accountI18nPt } from './account-i18n-pt';
 import { accountsI18nPt } from './accounts-i18n-pt';
 import { recipesI18nPt } from './recipes-i18n-pt';
@@ -202,11 +203,7 @@ export const ptDictionary = {
     toolDescAddPersonaImage: 'Adicione uma imagem à biblioteca',
     toolDescUpdatePersonaImage: 'Atualize uma imagem da biblioteca',
     toolDescRemovePersonaImage: 'Remova uma imagem da biblioteca',
-    toolDescPublishVideoDirect: 'Publicar um vídeo diretamente',
-    toolDescCreateVideoUpload: 'Criar um upload de vídeo assinado',
-    toolDescCompleteVideoUpload: 'Verificar um upload de vídeo assinado',
-    toolDescPublishUploadedVideo: 'Publicar um vídeo enviado por ID',
-    toolDescConnectAccount: 'Conecte uma conta social',
+    ...videoUploadToolDescPt,
     toolDescListSocialAccounts: 'Liste contas sociais conectadas',
     toolDescListSchedules: 'Liste agendamentos automáticos',
     toolDescListPosts: 'Liste posts futuros e passados',

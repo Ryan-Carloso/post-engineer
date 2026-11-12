@@ -77,13 +77,33 @@ export function createPreAuthIpRateLimiter(
   });
 }
 
-// Rate-limit key for one request: the socket peer address, never a
-// spoofable forwarded header. IPv4-mapped IPv6 peers (::ffff:a.b.c.d)
-// normalize to the IPv4 form so one client cannot double its budget by
-// alternating representations. Missing addresses share the 'unknown'
-// bucket, which fails closed under flood instead of skipping the limit.
-export function clientIpKey(req: Pick<IncomingMessage, 'socket'>): string {
+// Rate-limit key for one request. The public listener is published only
+// on 127.0.0.1 and Caddy is the only path in, so the socket peer is the
+// Docker gateway for every client. Use the same trust rule as the web
+// limiter: the LAST X-Forwarded-For entry (the hop the edge proxy
+// wrote; the proxy must overwrite the header, which Caddy does), then
+// X-Real-IP, then the socket address. The first forwarded entry is
+// client-controlled and is ignored. IPv4-mapped IPv6 peers
+// (::ffff:a.b.c.d) normalize to the IPv4 form so one client cannot
+// double its budget by alternating representations. Missing addresses
+// share the 'unknown' bucket, which fails closed under flood.
+function forwardedLast(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const raw = Array.isArray(value) ? value.join(',') : value;
+  const entries = raw.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0);
+  return entries.length === 0 ? undefined : entries[entries.length - 1];
+}
+
+function normalizeIp(ip: string): string {
+  return ip.startsWith('::ffff:') ? ip.slice('::ffff:'.length) : ip;
+}
+
+export function clientIpKey(req: Pick<IncomingMessage, 'socket' | 'headers'>): string {
+  const forwarded = forwardedLast(req.headers?.['x-forwarded-for']);
+  if (forwarded !== undefined) return normalizeIp(forwarded);
+  const realIp = forwardedLast(req.headers?.['x-real-ip']);
+  if (realIp !== undefined) return normalizeIp(realIp);
   const remote = req.socket?.remoteAddress;
   if (remote === undefined || remote === '') return 'unknown';
-  return remote.startsWith('::ffff:') ? remote.slice('::ffff:'.length) : remote;
+  return normalizeIp(remote);
 }
