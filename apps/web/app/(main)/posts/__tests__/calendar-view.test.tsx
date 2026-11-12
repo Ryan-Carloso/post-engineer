@@ -121,6 +121,16 @@ describe('CalendarView', () => {
     expect(selected?.className.split(/\s+/)).toContain('bg-brand');
   });
 
+  it('keeps today readable when it falls in the neighbouring month', () => {
+    // July 2030 opens on a Monday, so Sunday June 30 is an outside day of
+    // its first week: today shown outside its own month gets full opacity
+    // instead of the muted outside fade.
+    setup({ year: 2030, month: 6, todayKey: '2030-06-30', selectedKey: null });
+    const numeral = dayButton(/June 30, 2030/).querySelector('[data-day-numeral]');
+    expect(numeral?.className.split(/\s+/)).toContain('opacity-100');
+    expect(numeral?.className.split(/\s+/)).not.toContain('opacity-50');
+  });
+
   it('outlines only the numeral and leaves the post dots outside the ring', () => {
     setup({
       selectedKey: '2030-06-05',

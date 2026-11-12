@@ -1026,6 +1026,20 @@ describe('PostsPage calendar view', () => {
     }
   });
 
+  it('refetches the has-any-post read too when the month is empty', async () => {
+    // The "never posted" read only exists while the month is empty, so a
+    // refresh there must refetch it as well as the range.
+    mockQueries({ range: [] });
+    const hasAnyRefetch = vi.fn();
+    vi.mocked(useHasAnyPostQuery).mockReturnValue({ data: false, isLoading: false, isError: false, refetch: hasAnyRefetch } as never);
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    const refresh = screen.getAllByRole('button', { name: 'posts.refresh' })[0];
+    await user.click(refresh as HTMLElement);
+    expect(hasAnyRefetch).toHaveBeenCalledTimes(1);
+  });
+
   it('shows a bare recovery frame on a load error with a single in-card retry and no day-selection copy', async () => {
     mockQueries();
     const refetch = vi.fn();
