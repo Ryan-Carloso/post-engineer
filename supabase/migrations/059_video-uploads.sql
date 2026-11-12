@@ -9,9 +9,11 @@
 -- real content (magic bytes) and marks the row `ready`, and publish-by-id
 -- consumes the row exactly once (status `ready` -> `consumed` in one
 -- conditional update, so a replay or a concurrent second publish loses).
--- Rows are never reused after consumption; an abandoned `pending` row
--- expires at `expires_at` and its object is best-effort removed by the
--- publish/complete paths. Idempotent.
+-- Rows are never reused after consumption. An abandoned pending or
+-- ready row expires at `expires_at`. The next mint and the hourly
+-- in-app scheduler each remove a bounded batch of those objects and
+-- then delete the rows. Complete and publish still drop an object as
+-- soon as that request notices it is expired or refused. Idempotent.
 -- ============================================================================
 
 create table if not exists public.video_uploads (

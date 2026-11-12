@@ -67,6 +67,7 @@ function readyFixture(options?: { removeRejects?: boolean }): { store: VideoUplo
     getUpload: vi.fn(async () => ({ ...row })),
     updateUpload: vi.fn(async () => true),
     deleteUpload: vi.fn(async () => undefined),
+    listExpired: vi.fn(async () => []),
   };
   const storage: VideoUploadStorage = {
     createSignedUploadUrl: vi.fn(async () => ({ data: null, error: { message: 'unused' } })),
@@ -461,6 +462,7 @@ describe('publishUploadedVideo', () => {
       getUpload: vi.fn(async () => ({ ...row })),
       updateUpload,
       deleteUpload: vi.fn(async () => undefined),
+      listExpired: vi.fn(async () => []),
     };
     const storage: VideoUploadStorage = {
       createSignedUploadUrl: vi.fn(async () => ({ data: null, error: { message: 'unused' } })),

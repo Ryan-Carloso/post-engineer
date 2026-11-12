@@ -22,6 +22,9 @@ export const VIDEO_UPLOAD_BUCKET = 'videos';
 // Same 2GB ceiling as POST /api/upload-content and the MCP client guard.
 export const MAX_VIDEO_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 export const VIDEO_UPLOAD_TTL_MS = 15 * 60 * 1000;
+// One mint, and one hourly scheduler tick, each remove at most this
+// many expired objects. A quieter pass continues on the next tick.
+export const VIDEO_UPLOAD_SWEEP_LIMIT = 20;
 export const VIDEO_UPLOAD_CONTENT_TYPES = ['video/mp4', 'video/quicktime'] as const;
 export const VIDEO_UPLOAD_STATUSES = ['pending', 'ready', 'consumed'] as const;
 
@@ -68,6 +71,9 @@ export interface VideoUploadStore {
     patch: Partial<VideoUploadRow>,
   ): Promise<boolean>;
   deleteUpload(id: string): Promise<void>;
+  // Expired pending/ready rows only. Consumed rows stay as the record
+  // that the upload was used. Bounded so one pass cannot scan the table.
+  listExpired(now: Date, limit: number): Promise<Array<Pick<VideoUploadRow, 'id' | 'storage_path'>>>;
 }
 
 export interface VideoUploadStorage {
@@ -122,6 +128,13 @@ export async function mintVideoUpload(
   input: { contentType: VideoUploadContentType; sizeBytes: number },
   now: Date,
 ): Promise<MintedVideoUpload> {
+  try {
+    // Best-effort. A failed sweep must not refuse a new upload; the
+    // hourly scheduler retries whatever this pass left behind.
+    await sweepExpiredVideoUploads(store, storage, now);
+  } catch {
+    // The error is the sweep's. The mint below is independent.
+  }
   const id = randomUUID();
   const storagePath = `${userId}/direct-uploads/${id}.${extensionFor(input.contentType)}`;
   const expiresAt = new Date(now.getTime() + VIDEO_UPLOAD_TTL_MS).toISOString();
@@ -171,6 +184,30 @@ async function discardObject(storage: VideoUploadStorage, path: string): Promise
   } catch {
     // Best-effort. A failed delete must not hide why the upload was refused.
   }
+}
+
+// Drops expired pending and ready uploads. The object goes first: if
+// the delete of the row fails, the next pass still has the path. A
+// remove that fails leaves the row in place for the same reason.
+export async function sweepExpiredVideoUploads(
+  store: VideoUploadStore,
+  storage: VideoUploadStorage,
+  now: Date,
+  limit: number = VIDEO_UPLOAD_SWEEP_LIMIT,
+): Promise<number> {
+  const expired = await store.listExpired(now, limit);
+  let removed = 0;
+  for (const row of expired) {
+    try {
+      const { error } = await storage.remove([row.storage_path]);
+      if (error !== null) continue;
+      await store.deleteUpload(row.id);
+      removed += 1;
+    } catch {
+      // Keep the row. The next mint or hourly tick retries it.
+    }
+  }
+  return removed;
 }
 
 async function rejectIfExpired(storage: VideoUploadStorage, row: VideoUploadRow, now: Date): Promise<void> {
@@ -309,6 +346,16 @@ export function createSupabaseVideoUploadStore(): VideoUploadStore {
         eq: (column: string, value: string) => {
           maybeSingle: () => Promise<{ data: VideoUploadRow | null; error: QueryError | null }>;
         };
+        lte: (column: string, value: string) => {
+          in: (column: string, values: readonly string[]) => {
+            order: (column: string, options: { ascending: boolean }) => {
+              limit: (count: number) => Promise<{
+                data: Array<Pick<VideoUploadRow, 'id' | 'storage_path'>> | null;
+                error: QueryError | null;
+              }>;
+            };
+          };
+        };
       };
       update: (values: Record<string, unknown>) => {
         eq: (column: string, value: string) => {
@@ -345,6 +392,16 @@ export function createSupabaseVideoUploadStore(): VideoUploadStore {
     async deleteUpload(id) {
       const { error } = await table().delete().eq('id', id);
       if (error !== null) throw new Error(`Failed to remove the video upload: ${error.message}`);
+    },
+    async listExpired(now, limit) {
+      const { data, error } = await table()
+        .select('id, storage_path')
+        .lte('expires_at', now.toISOString())
+        .in('status', ['pending', 'ready'])
+        .order('expires_at', { ascending: true })
+        .limit(limit);
+      if (error !== null) throw new Error(`Failed to list expired video uploads: ${error.message}`);
+      return data ?? [];
     },
   };
 }

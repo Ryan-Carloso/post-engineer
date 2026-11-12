@@ -38,6 +38,7 @@ function installClient(options: {
   signed?: { data: { signedUrl: string; token: string; path: string } | null; error: QueryError | null };
   download?: { data: Blob | null; error: QueryError | null };
   removeError?: QueryError | null;
+  list?: { data: Array<Pick<VideoUploadRow, 'id' | 'storage_path'>> | null; error: QueryError | null };
 }) {
   const insert = vi.fn(async () => ({ error: options.insertError ?? null }));
   const maybeSingle = vi.fn(async () => ({
@@ -45,7 +46,14 @@ function installClient(options: {
     error: options.get?.error ?? null,
   }));
   const eqGet = vi.fn(() => ({ maybeSingle }));
-  const selectGet = vi.fn(() => ({ eq: eqGet }));
+  const limitList = vi.fn(async () => ({
+    data: options.list?.data ?? null,
+    error: options.list?.error ?? null,
+  }));
+  const orderList = vi.fn(() => ({ limit: limitList }));
+  const inList = vi.fn(() => ({ order: orderList }));
+  const lteList = vi.fn(() => ({ in: inList }));
+  const selectGet = vi.fn(() => ({ eq: eqGet, lte: lteList }));
   const selectUpdate = vi.fn(async () => ({
     data: options.update?.data ?? null,
     error: options.update?.error ?? null,
@@ -67,7 +75,22 @@ function installClient(options: {
     storage: { from: storageFrom },
   } as never);
 
-  return { from, insert, eqGet, eqId, eqStatus, eqDelete, storageFrom, createSignedUploadUrl, download, remove };
+  return {
+    from,
+    insert,
+    eqGet,
+    eqId,
+    eqStatus,
+    eqDelete,
+    storageFrom,
+    createSignedUploadUrl,
+    download,
+    remove,
+    lteList,
+    inList,
+    orderList,
+    limitList,
+  };
 }
 
 beforeEach(() => {
@@ -122,6 +145,28 @@ describe('createSupabaseVideoUploadStore', () => {
     installClient({ update: { data: null, error: { message: 'locked' } } });
     await expect(createSupabaseVideoUploadStore().updateUpload(ROW.id, 'ready', { status: 'consumed' })).rejects.toThrow(
       'Failed to update the video upload: locked',
+    );
+  });
+
+  it('lists expired pending and ready rows, an empty result, and a database error', async () => {
+    const now = new Date('2026-11-12T01:00:00.000Z');
+    const listed = installClient({
+      list: { data: [{ id: ROW.id, storage_path: ROW.storage_path }], error: null },
+    });
+    await expect(createSupabaseVideoUploadStore().listExpired(now, 20)).resolves.toEqual([
+      { id: ROW.id, storage_path: ROW.storage_path },
+    ]);
+    expect(listed.lteList).toHaveBeenCalledWith('expires_at', now.toISOString());
+    expect(listed.inList).toHaveBeenCalledWith('status', ['pending', 'ready']);
+    expect(listed.orderList).toHaveBeenCalledWith('expires_at', { ascending: true });
+    expect(listed.limitList).toHaveBeenCalledWith(20);
+
+    installClient({ list: { data: null, error: null } });
+    await expect(createSupabaseVideoUploadStore().listExpired(now, 5)).resolves.toEqual([]);
+
+    installClient({ list: { data: null, error: { message: 'scan failed' } } });
+    await expect(createSupabaseVideoUploadStore().listExpired(now, 5)).rejects.toThrow(
+      'Failed to list expired video uploads: scan failed',
     );
   });
 

@@ -8,6 +8,7 @@ import {
   completeVideoUpload,
   mintVideoUpload,
   parseMintBody,
+  sweepExpiredVideoUploads,
   type VideoUploadRow,
   type VideoUploadStorage,
   type VideoUploadStore,
@@ -41,6 +42,16 @@ function makeStore(rows: VideoUploadRow[] = []): VideoUploadStore & { rows: Map<
     },
     async deleteUpload(id) {
       map.delete(id);
+    },
+    async listExpired(now, limit) {
+      return [...map.values()]
+        .filter(
+          (row) =>
+            (row.status === 'pending' || row.status === 'ready') && Date.parse(row.expires_at) <= now.getTime(),
+        )
+        .sort((a, b) => Date.parse(a.expires_at) - Date.parse(b.expires_at))
+        .slice(0, limit)
+        .map((row) => ({ id: row.id, storage_path: row.storage_path }));
     },
   };
 }
@@ -140,6 +151,60 @@ describe('mintVideoUpload', () => {
       mintVideoUpload(store, storage, USER, { contentType: 'video/mp4', sizeBytes: 1 }, NOW),
     ).rejects.toMatchObject({ status: 502 });
     expect(store.rows.size).toBe(0);
+  });
+
+  it('still mints when the expiry sweep cannot list rows', async () => {
+    const store = makeStore();
+    store.listExpired = async () => {
+      throw new Error('db down');
+    };
+    const result = await mintVideoUpload(store, makeStorage(), USER, { contentType: 'video/mp4', sizeBytes: 4 }, NOW);
+    expect(result.signedUrl).toContain('token=');
+    expect(store.rows.size).toBe(1);
+  });
+});
+
+describe('sweepExpiredVideoUploads', () => {
+  it('removes expired pending and ready objects and leaves the rest', async () => {
+    const store = makeStore([
+      row({ id: 'old-pending', storage_path: 'u/old-pending.mp4', expires_at: new Date(NOW.getTime() - 2_000).toISOString() }),
+      row({
+        id: 'old-ready',
+        status: 'ready',
+        storage_path: 'u/old-ready.mp4',
+        expires_at: new Date(NOW.getTime() - 1_000).toISOString(),
+      }),
+      row({ id: 'fresh', storage_path: 'u/fresh.mp4' }),
+      row({
+        id: 'used',
+        status: 'consumed',
+        storage_path: 'u/used.mp4',
+        expires_at: new Date(NOW.getTime() - 5_000).toISOString(),
+      }),
+    ]);
+    const storage = makeStorage();
+    const removed = await sweepExpiredVideoUploads(store, storage, NOW);
+    expect(removed).toBe(2);
+    expect(storage.removed).toEqual([['u/old-pending.mp4'], ['u/old-ready.mp4']]);
+    expect([...store.rows.keys()].sort()).toEqual(['fresh', 'used']);
+  });
+
+  it('keeps a row when object removal fails or throws, and honors the batch limit', async () => {
+    const store = makeStore([
+      row({ id: 'busy', storage_path: 'u/busy.mp4', expires_at: new Date(NOW.getTime() - 3_000).toISOString() }),
+      row({ id: 'throws', storage_path: 'u/throws.mp4', expires_at: new Date(NOW.getTime() - 2_000).toISOString() }),
+      row({ id: 'ok', storage_path: 'u/ok.mp4', expires_at: new Date(NOW.getTime() - 1_000).toISOString() }),
+    ]);
+    const storage = makeStorage();
+    storage.remove = async (paths) => {
+      if (paths[0] === 'u/busy.mp4') return { error: { message: 'busy' } };
+      if (paths[0] === 'u/throws.mp4') throw new Error('storage down');
+      return { error: null };
+    };
+    expect(await sweepExpiredVideoUploads(store, storage, NOW, 1)).toBe(0);
+    expect(store.rows.has('busy')).toBe(true);
+    expect(await sweepExpiredVideoUploads(store, storage, NOW)).toBe(1);
+    expect([...store.rows.keys()].sort()).toEqual(['busy', 'throws']);
   });
 });
 

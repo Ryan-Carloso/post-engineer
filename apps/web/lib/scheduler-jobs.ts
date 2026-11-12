@@ -18,10 +18,10 @@ import 'server-only';
 // Restart-safe scheduling: the scheduler does not trust boot-relative
 // timers. Every tick checks the job's last SUCCESSFUL run persisted in
 // the database (scheduler_leases.last_success_at, migration 027):
-// post-metrics is due after >= 1h, billing-reconcile after >= 24h, and a
-// job that never ran (fresh deploy or after downtime) runs on the first
-// tick at startup. A deploy-restart therefore cannot postpone the daily
-// billing run forever.
+// post-metrics is due after >= 1h, billing-reconcile after >= 24h, the
+// expired-upload sweep after >= 1h, and a job that never ran (fresh
+// deploy or after downtime) runs on the first tick at startup. A
+// deploy-restart therefore cannot postpone the daily billing run forever.
 //
 // The success-event names and property shape are kept identical to the
 // removed /api/cron routes (post_metrics_run / billing_reconciled with
@@ -39,6 +39,11 @@ import { trackApiEvent } from '@/lib/analytics';
 import { flushPostHog } from '@/lib/posthog-server';
 import { logger } from '@/lib/logger';
 import { createScheduler, type SchedulerHandle, type SchedulerJob } from '@/lib/scheduler';
+import {
+  createSupabaseVideoUploadStorage,
+  createSupabaseVideoUploadStore,
+  sweepExpiredVideoUploads,
+} from '@/lib/videos/signed-upload';
 import {
   getSchedulerLastSuccess,
   recordSchedulerSuccess,
@@ -88,6 +93,20 @@ async function runBillingReconcileTick(): Promise<void> {
   await flushPostHog();
 }
 
+// Expired signed uploads (issue #561). Mint also sweeps a batch, so a
+// busy server does not wait for this tick; a quiet server still drops
+// abandoned objects within an hour of expiry.
+async function runVideoUploadSweepTick(): Promise<void> {
+  const removed = await sweepExpiredVideoUploads(
+    createSupabaseVideoUploadStore(),
+    createSupabaseVideoUploadStorage(),
+    new Date(),
+  );
+  if (removed > 0) {
+    logger.info('[scheduler/video-upload-sweep] removed expired uploads', { removed });
+  }
+}
+
 export const SCHEDULER_TICK_MS = 60 * 60 * 1000; // hourly due-check tick
 
 export const SCHEDULER_JOBS: SchedulerJob[] = [
@@ -108,6 +127,14 @@ export const SCHEDULER_JOBS: SchedulerJob[] = [
     successEvent: 'billing_reconciled',
     routeLabel: 'POST /api/cron/billing-reconcile',
     run: runBillingReconcileTick,
+  },
+  {
+    name: 'video-upload-sweep',
+    dueAfterMs: 60 * 60 * 1000,
+    leaseTtlSeconds: 5 * 60,
+    successEvent: 'video_upload_sweep',
+    routeLabel: 'internal:video-upload-sweep',
+    run: runVideoUploadSweepTick,
   },
 ];
 
