@@ -7,6 +7,9 @@ export interface SocialAccountsSectionProps {
   label: string;
   description: string;
   connectedLabel: string;
+  // Label for the issue pill ("1 account with an issue"); the pill renders
+  // only when this is a non-null string, so healthy sections pass nothing.
+  errorLabel?: string | null;
   count: number;
   accounts: ReactNode[];
   isLoading: boolean;
@@ -26,6 +29,7 @@ export default function SocialAccountsSection({
   label,
   description,
   connectedLabel,
+  errorLabel,
   count,
   accounts,
   isLoading,
@@ -54,10 +58,18 @@ export default function SocialAccountsSection({
             <p className="text-sm leading-5 text-muted-text">{description}</p>
           </div>
         </div>
-        <span className="hidden shrink-0 items-center gap-2 rounded-full bg-success-soft px-3 py-1.5 text-xs font-semibold text-success sm:flex">
-          <span aria-hidden="true" className="size-2 rounded-full bg-emerald-500" />
-          {connectedLabel}
-        </span>
+        <div className="hidden shrink-0 items-center gap-2 sm:flex">
+          <span className="flex items-center gap-2 rounded-full bg-success-soft px-3 py-1.5 text-xs font-semibold text-success">
+            <span aria-hidden="true" className="size-2 rounded-full bg-emerald-500" />
+            {connectedLabel}
+          </span>
+          {errorLabel ? (
+            <span className="flex items-center gap-2 rounded-full bg-destructive-soft px-3 py-1.5 text-xs font-semibold text-destructive">
+              <span aria-hidden="true" className="size-2 rounded-full bg-destructive" />
+              {errorLabel}
+            </span>
+          ) : null}
+        </div>
       </div>
       <div className="p-4 pt-0 lg:p-6 lg:pt-0">
         {isLoading ? (

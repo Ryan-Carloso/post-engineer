@@ -124,29 +124,35 @@ async function postHandler(request: Request): Promise<NextResponse> {
       channel_id: channelId,
     });
 
-    const { data: inserted, error: insertError } = await supabase
+    // Upsert, not insert: a reconnect refreshes the token on the row the
+    // unique (user_id, provider, provider_account_id) key already holds
+    // (migration 040), so a plain insert fails with a constraint violation.
+    const { data: upserted, error: upsertError } = await supabase
       .from('social_accounts')
-      .insert({
-        user_id: auth.userId,
-        provider: 'rumble',
-        provider_account_id: channelId,
-        account_name: channelId,
-        account_metadata: {},
-        encrypted_tokens: encrypted,
-      })
+      .upsert(
+        {
+          user_id: auth.userId,
+          provider: 'rumble',
+          provider_account_id: channelId,
+          account_name: channelId,
+          account_metadata: {},
+          encrypted_tokens: encrypted,
+        },
+        { onConflict: 'user_id,provider,provider_account_id' },
+      )
       .select('id')
       .single();
 
-    if (insertError || !inserted) {
+    if (upsertError || !upserted) {
       // The full PostgREST error object (not just the message) is threaded
       // as cause so the PostHog issue carries code/details/hint.
       return errorResponse(500, 'Could not save the Rumble account.', 'POST /api/rumble-connect', {
-        cause: insertError,
+        cause: upsertError,
         metadata: { userId: auth.userId },
       });
     }
 
-    return NextResponse.json({ success: true, accountId: inserted.id, channelId });
+    return NextResponse.json({ success: true, accountId: upserted.id, channelId });
   } catch (error) {
     return errorResponse(500, 'Could not connect the Rumble account.', 'POST /api/rumble-connect', {
       cause: error,

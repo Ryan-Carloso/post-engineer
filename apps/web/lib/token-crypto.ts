@@ -62,31 +62,55 @@ export function encryptTokens(payload: EncryptedTokenPayload): string {
 }
 
 //---------------
+// TokenDecryptError — the stored blob cannot be decrypted (tampered,
+// truncated, or encrypted under a different key). Callers use it to tell
+// an undecryptable stored token — reconnecting fixes it — from a transient
+// failure. Key-config errors are NOT this: a missing TOKEN_ENCRYPTION_KEY
+// is a server misconfiguration, not a dead token.
+//---------------
+export class TokenDecryptError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message);
+    this.name = 'TokenDecryptError';
+    if (options?.cause !== undefined) {
+      (this as { cause?: unknown }).cause = options.cause;
+    }
+  }
+}
+
+//---------------
 // decryptTokens — decrypts and validates format/version/tag
-// Throws on tampering or invalid format.
+// Throws TokenDecryptError on tampering or invalid format.
 //---------------
 export function decryptTokens(encrypted: string): EncryptedTokenPayload {
   const key = getEncryptionKey();
-  const parts = encrypted.split('.');
+  try {
+    const parts = encrypted.split('.');
 
-  if (parts.length !== 4 || parts[0] !== VERSION) {
-    throw new Error('Invalid encrypted token format or version');
+    if (parts.length !== 4 || parts[0] !== VERSION) {
+      throw new Error('Invalid encrypted token format or version');
+    }
+
+    const [, ivB64, tagB64, payloadB64] = parts;
+
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, Buffer.from(ivB64, 'base64url'));
+    decipher.setAuthTag(Buffer.from(tagB64, 'base64url'));
+
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(payloadB64, 'base64url')),
+      decipher.final(), // throws if the auth tag does not match
+    ]);
+
+    const parsed: unknown = JSON.parse(decrypted.toString('utf-8'));
+    if (typeof parsed !== 'object' || parsed === null) {
+      throw new Error('Decrypted payload is not an object');
+    }
+
+    return parsed as EncryptedTokenPayload;
+  } catch (error) {
+    throw new TokenDecryptError(
+      error instanceof Error ? error.message : 'Failed to decrypt stored tokens',
+      { cause: error },
+    );
   }
-
-  const [, ivB64, tagB64, payloadB64] = parts;
-
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, Buffer.from(ivB64, 'base64url'));
-  decipher.setAuthTag(Buffer.from(tagB64, 'base64url'));
-
-  const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(payloadB64, 'base64url')),
-    decipher.final(), // throws if the auth tag does not match
-  ]);
-
-  const parsed: unknown = JSON.parse(decrypted.toString('utf-8'));
-  if (typeof parsed !== 'object' || parsed === null) {
-    throw new Error('Decrypted payload is not an object');
-  }
-
-  return parsed as EncryptedTokenPayload;
 }

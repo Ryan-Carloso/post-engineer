@@ -219,4 +219,9 @@ describe('toPublicAccount / toPublicAccountSafe', () => {
     const result = toPublicAccountSafe(makeRecord());
     expect(result?.provider).toBe('youtube');
   });
+
+  it('defaults the status to ok when the caller passes none', () => {
+    expect(toPublicAccount(makeRecord()).status).toBe('ok');
+    expect(toPublicAccountSafe(makeRecord())?.status).toBe('ok');
+  });
 });

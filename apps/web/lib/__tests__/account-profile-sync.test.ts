@@ -4,7 +4,10 @@ const { sources } = vi.hoisted(() => ({
   sources: {} as Record<string, { pictureKey: string; applies: ReturnType<typeof vi.fn>; fetch: ReturnType<typeof vi.fn> }>,
 }));
 vi.mock('@/lib/account-profile-sources', () => ({ PROFILE_SOURCES: sources }));
-vi.mock('@/lib/social-accounts', () => ({ updateSocialAccountMetadata: vi.fn() }));
+vi.mock('@/lib/social-accounts', () => ({
+  updateSocialAccountMetadata: vi.fn(),
+  getSocialAccountTokens: vi.fn(),
+}));
 vi.mock('@/lib/account-profile-telemetry', () => ({
   reportProfileFetched: vi.fn(),
   reportProfileFetchFailed: vi.fn(),
@@ -19,7 +22,7 @@ import {
 } from '@/lib/account-profile-sync';
 import { logger } from '@/lib/logger';
 import { pictureUrlExpired } from '@/lib/account-display-diagnostics';
-import { updateSocialAccountMetadata, type SocialAccountRecord } from '@/lib/social-accounts';
+import { updateSocialAccountMetadata, getSocialAccountTokens, type SocialAccountRecord } from '@/lib/social-accounts';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 
 const NOW = new Date('2026-11-06T12:00:00.000Z');
@@ -111,8 +114,12 @@ describe('syncAccountProfile', () => {
   beforeEach(() => {
     for (const key of Object.keys(sources)) delete sources[key];
     sources.instagram = { pictureKey: 'profilePictureUrl', applies: vi.fn(() => true), fetch: vi.fn() };
+    sources.rumble = { pictureKey: 'profilePictureUrl', applies: vi.fn(() => false), fetch: vi.fn() };
+    sources.bluesky = { pictureKey: 'avatar', applies: vi.fn(() => true), fetch: vi.fn() };
     vi.mocked(updateSocialAccountMetadata).mockReset();
     vi.mocked(updateSocialAccountMetadata).mockResolvedValue(undefined);
+    vi.mocked(getSocialAccountTokens).mockReset();
+    vi.mocked(getSocialAccountTokens).mockResolvedValue({ tokens: { access_token: 'x' }, account: record() } as never);
     vi.mocked(reportProfileFetched).mockReset();
     vi.mocked(reportProfileFetchFailed).mockReset();
     vi.mocked(logger.info).mockClear();
@@ -180,5 +187,68 @@ describe('syncAccountProfile', () => {
     ).rejects.toBe(failure);
     expect(reportProfileFetchFailed).toHaveBeenCalledWith('instagram', 'sync', failure);
     expect(updateSocialAccountMetadata).not.toHaveBeenCalled();
+  });
+
+  it('flags a non-applies row (Rumble) whose stored token is undecryptable', async () => {
+    // Rumble/3Speak/LinkedIn-org rows never fetch a profile, so without a
+    // probe their corrupted token would render as a healthy card.
+    const failure = new Error('Invalid authentication tag length: 2');
+    vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(failure);
+    const rec = record({ provider: 'rumble', providerAccountId: 'chan-1' }, { profileSyncedAt: STALE });
+    await expect(
+      syncAccountProfile(supabase, 'u1', rec, { now: () => NOW }),
+    ).rejects.toBe(failure);
+    expect(reportProfileFetchFailed).toHaveBeenCalledWith('rumble', 'sync', failure);
+    expect(sources.rumble.fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns a non-applies row when the probe decrypts its token', async () => {
+    const rec = record({ provider: 'rumble', providerAccountId: 'chan-1' }, { profileSyncedAt: STALE });
+    expect(await syncAccountProfile(supabase, 'u1', rec, { now: () => NOW })).toBe(rec);
+    expect(vi.mocked(getSocialAccountTokens)).toHaveBeenCalledWith(supabase, 'u1', 'rumble', 'chan-1');
+    expect(sources.rumble.fetch).not.toHaveBeenCalled();
+  });
+
+  it('flags a fresh row whose stored token is undecryptable', async () => {
+    // A token corrupted since the last sync, or a Bluesky token (its
+    // public-profile fetch never reads it), would render green without it.
+    const failure = new Error('Invalid authentication tag length: 2');
+    vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(failure);
+    await expect(
+      syncAccountProfile(supabase, 'u1', record(), { now: () => NOW }),
+    ).rejects.toBe(failure);
+    expect(reportProfileFetchFailed).toHaveBeenCalledWith('instagram', 'sync', failure);
+    expect(sources.instagram.fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not probe when the profile fetch runs', async () => {
+    sources.instagram.fetch.mockResolvedValue({ accountName: 'new_handle', pictureUrl: null, metadata: {} });
+    const rec = record({}, { profileSyncedAt: STALE });
+    await syncAccountProfile(supabase, 'u1', rec, { now: () => NOW });
+    expect(vi.mocked(getSocialAccountTokens)).not.toHaveBeenCalled();
+  });
+
+  it('flags a stale Bluesky row whose token is undecryptable even though the public fetch succeeds', async () => {
+    // Bluesky's fetch reads the public profile and never touches the stored
+    // token, so without a probe on the fetch path a corrupted token would
+    // render green on every resync due (roughly once a day).
+    sources.bluesky.fetch.mockResolvedValue({ accountName: 'new_handle', pictureUrl: null, metadata: {} });
+    const failure = new Error('Invalid authentication tag length: 2');
+    vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(failure);
+    const rec = record({ provider: 'bluesky', providerAccountId: 'did:plc:x' }, { profileSyncedAt: STALE });
+    await expect(
+      syncAccountProfile(supabase, 'u1', rec, { now: () => NOW }),
+    ).rejects.toBe(failure);
+    expect(reportProfileFetchFailed).toHaveBeenCalledWith('bluesky', 'sync', failure);
+    expect(sources.bluesky.fetch).toHaveBeenCalledWith(supabase, 'u1', rec);
+    expect(updateSocialAccountMetadata).not.toHaveBeenCalled();
+    expect(reportProfileFetched).not.toHaveBeenCalled();
+  });
+
+  it('probes the stored token after a successful Bluesky fetch', async () => {
+    sources.bluesky.fetch.mockResolvedValue({ accountName: 'new_handle', pictureUrl: null, metadata: {} });
+    const rec = record({ provider: 'bluesky', providerAccountId: 'did:plc:x' }, { profileSyncedAt: STALE });
+    await syncAccountProfile(supabase, 'u1', rec, { now: () => NOW });
+    expect(vi.mocked(getSocialAccountTokens)).toHaveBeenCalledWith(supabase, 'u1', 'bluesky', 'did:plc:x');
   });
 });

@@ -51,8 +51,9 @@ import { encryptTokens } from '@/lib/token-crypto';
 
 const USER_ID = 'user-uuid-1';
 
-function mockSupabase(overrides: { user?: { id: string } | null; insertError?: unknown; isApiKey?: boolean } = {}) {
-  const inserted: Array<Record<string, unknown>> = [];
+function mockSupabase(overrides: { user?: { id: string } | null; upsertError?: unknown; isApiKey?: boolean } = {}) {
+  const upserted: Array<Record<string, unknown>> = [];
+  const upsertOptions: Array<unknown> = [];
   const client = {
     auth: {
       getUser: vi.fn(async () => ({
@@ -63,13 +64,14 @@ function mockSupabase(overrides: { user?: { id: string } | null; insertError?: u
     from: vi.fn((table: string) => {
       if (table === 'social_accounts') {
         return {
-          insert: vi.fn((values: Record<string, unknown>) => {
-            inserted.push(values);
+          upsert: vi.fn((values: Record<string, unknown>, options?: unknown) => {
+            upserted.push(values);
+            upsertOptions.push(options);
             return {
               select: vi.fn(() => ({
                 single: vi.fn(async () => ({
                   data: { id: 'row-1', ...values },
-                  error: overrides.insertError ?? null,
+                  error: overrides.upsertError ?? null,
                 })),
               })),
             };
@@ -93,7 +95,7 @@ function mockSupabase(overrides: { user?: { id: string } | null; insertError?: u
         error: null,
       }) as never
   );
-  return { inserted };
+  return { upserted, upsertOptions };
 }
 
 function formRequest(fields: Record<string, string>): Request {
@@ -118,7 +120,7 @@ describe('POST /api/bluesky-connect', () => {
   });
 
   it('stores the display name, avatar and sync stamp from the public profile', async () => {
-    const { inserted } = mockSupabase();
+    const { upserted } = mockSupabase();
     vi.mocked(loginToBluesky).mockResolvedValueOnce({ did: 'did:plc:me', handle: 'eu.bsky.social' });
     vi.mocked(fetchBlueskyPublicProfile).mockResolvedValueOnce({
       did: 'did:plc:me', handle: 'eu.bsky.social', displayName: 'Eu', avatar: 'https://cdn.bsky.app/a.jpg',
@@ -128,7 +130,7 @@ describe('POST /api/bluesky-connect', () => {
 
     expect(res.status).toBe(200);
     expect(fetchBlueskyPublicProfile).toHaveBeenCalledWith('did:plc:me');
-    expect(inserted[0].account_metadata).toEqual({
+    expect(upserted[0].account_metadata).toEqual({
       displayName: 'Eu',
       avatar: 'https://cdn.bsky.app/a.jpg',
       profileSyncedAt: expect.any(String),
@@ -140,7 +142,7 @@ describe('POST /api/bluesky-connect', () => {
   });
 
   it('still connects without profile metadata when the profile read fails, and reports it', async () => {
-    const { inserted } = mockSupabase();
+    const { upserted } = mockSupabase();
     vi.mocked(loginToBluesky).mockResolvedValueOnce({ did: 'did:plc:me', handle: 'eu.bsky.social' });
     const failure = new Error('BLUESKY_PROFILE_FAILED: status 502');
     vi.mocked(fetchBlueskyPublicProfile).mockRejectedValueOnce(failure);
@@ -148,7 +150,7 @@ describe('POST /api/bluesky-connect', () => {
     const res = await POST(formRequest({ handle: 'eu.bsky.social', appPassword: 'x' }));
 
     expect(res.status).toBe(200);
-    expect(inserted[0].account_metadata).toEqual({});
+    expect(upserted[0].account_metadata).toEqual({});
     expect(reportProfileFetchFailed).toHaveBeenCalledWith('bluesky', 'connect', failure);
   });
 
@@ -177,7 +179,7 @@ describe('POST /api/bluesky-connect', () => {
   });
 
   it('connects: validates credential, encrypts password and saves social_accounts', async () => {
-    const { inserted } = mockSupabase();
+    const { upserted } = mockSupabase();
     vi.mocked(loginToBluesky).mockResolvedValueOnce({ did: 'did:plc:abc', handle: 'eu.bsky.social' });
 
     const res = await POST(formRequest({ handle: 'eu.bsky.social', appPassword: 'app-pass-1' }));
@@ -189,19 +191,38 @@ describe('POST /api/bluesky-connect', () => {
     expect(encryptTokens).toHaveBeenCalledWith(
       expect.objectContaining({ access_token: 'app-pass-1', token_type: 'bluesky_app_password' }),
     );
-    const blob = inserted[0]?.encrypted_tokens;
+    const blob = upserted[0]?.encrypted_tokens;
     expect(typeof blob).toBe('string');
     expect(String(blob)).not.toContain('app-pass-1');
 
-    expect(inserted[0]).toMatchObject({
+    expect(upserted[0]).toMatchObject({
       user_id: USER_ID,
       provider: 'bluesky',
       provider_account_id: 'did:plc:abc',
     });
   });
 
-  it('returns 500 when the insert fails', async () => {
-    mockSupabase({ insertError: { message: 'check violation' } });
+  it('refreshes the existing row when the account reconnects', async () => {
+    const { upserted, upsertOptions } = mockSupabase();
+    vi.mocked(loginToBluesky).mockResolvedValueOnce({ did: 'did:plc:abc', handle: 'eu.bsky.social' });
+
+    const res = await POST(formRequest({ handle: 'eu.bsky.social', appPassword: 'app-pass-2' }));
+
+    expect(res.status).toBe(200);
+    // A reconnect overwrites the stored token on the same row: the upsert
+    // targets the unique (user_id, provider, provider_account_id) key, so
+    // it cannot fail with a constraint violation like the plain insert did.
+    expect(upserted).toHaveLength(1);
+    expect(upsertOptions[0]).toEqual({ onConflict: 'user_id,provider,provider_account_id' });
+    expect(upserted[0]).toMatchObject({
+      user_id: USER_ID,
+      provider: 'bluesky',
+      provider_account_id: 'did:plc:abc',
+    });
+  });
+
+  it('returns 500 when the upsert fails', async () => {
+    mockSupabase({ upsertError: { message: 'check violation' } });
     vi.mocked(loginToBluesky).mockResolvedValueOnce({ did: 'did:plc:abc', handle: 'eu.bsky.social' });
 
     const res = await POST(formRequest({ handle: 'eu.bsky.social', appPassword: 'app-pass-1' }));
@@ -216,7 +237,7 @@ describe('POST /api/bluesky-connect', () => {
   });
 
   it('MCP flow: API key + JSON connects and associates with the key owner', async () => {
-    const { inserted } = mockSupabase({ isApiKey: true });
+    const { upserted } = mockSupabase({ isApiKey: true });
     vi.mocked(loginToBluesky).mockResolvedValueOnce({ did: 'did:plc:mcp', handle: 'eu.bsky.social' });
 
     const res = await POST(jsonRequest({ handle: 'eu.bsky.social', appPassword: 'app-pass-mcp' }));
@@ -226,7 +247,7 @@ describe('POST /api/bluesky-connect', () => {
     expect(body.did).toBe('did:plc:mcp');
 
     expect(loginToBluesky).toHaveBeenCalledWith('eu.bsky.social', 'app-pass-mcp');
-    expect(inserted[0]).toMatchObject({
+    expect(upserted[0]).toMatchObject({
       user_id: USER_ID,
       provider: 'bluesky',
       provider_account_id: 'did:plc:mcp',
