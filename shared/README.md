@@ -37,6 +37,37 @@ and each app has a `script-segments-shared.test.ts` suite that fails
 loudly if a generated copy ever drifts from the shared source. Never
 edit a generated copy by hand.
 
+## music-mood-field
+
+`music-mood-field/music-mood-field.ts` is the Zod field schema for
+`options.musicMood` on generate-and-schedule (`musicMoodField`: a 1-64
+char string, optional) — the first shared JSON body (issue #561). Both
+apps already sent this exact shape; sharing it keeps the MCP from
+stripping or loosening a mood the web route would reject.
+
+The consumers use byte-identical generated copies, committed to git:
+
+- `apps/web/lib/generation/music-mood-field.ts`
+- `apps/mcp/src/music-mood-field.ts`
+
+Unlike script-segments, this file imports `zod`, so it uses only syntax
+both majors accept (the web runs Zod 4, the MCP Zod 3):
+`z.string().min().max().optional().describe()` — no `.url()`, `errorMap`,
+or other version-specific APIs. Each app resolves `zod` from its own
+dependencies. The catalog check (a catalogued mood or `"none"`) stays a
+separate web-side layer in `lib/generation/music-moods`.
+
+To change the field, edit only the shared file, then regenerate:
+
+```sh
+node scripts/sync-music-mood-field.mjs
+```
+
+Both apps also run the sync from their `prebuild` and `pretest` scripts,
+each app has a `music-mood-field-shared.test.ts` drift suite, and each
+runs the same payload contract table in `music-mood-field.test.ts`
+against its own copy. Never edit a generated copy by hand.
+
 ## prompt-base
 
 `prompt-base/prompt-base.ts` holds the text of every prompt in the prompts

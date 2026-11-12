@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { PostEngineerClient } from './client.js';
 import { withTracking } from './analytics.js';
+import { READ_ONLY, MUTATING, DESTRUCTIVE } from './tool-annotations.js';
 import {
   createClonedVoiceFromFile,
   createClonedVoiceFromUrl,
@@ -203,7 +204,7 @@ export function registerClonedVoiceTools(server: McpServer, apiClient: PostEngin
   server.tool(
     'list_cloned_voices',
     'List per-user Chatterbox voice clones (status, voice_id when ready).',
-    ListClonedVoicesShape,
+    ListClonedVoicesShape, READ_ONLY,
     withTracking('list_cloned_voices', async () => {
       return handleListClonedVoices(apiClient);
     }),
@@ -214,7 +215,7 @@ export function registerClonedVoiceTools(server: McpServer, apiClient: PostEngin
     remote
       ? 'Register a voice clone from a short HTTPS audio URL (requires explicit consent).'
       : 'Register a voice clone from a short HTTPS audio URL or a local audio file path (requires explicit consent).',
-    remote ? CreateClonedVoiceRemoteShape : CreateClonedVoiceShape,
+    remote ? CreateClonedVoiceRemoteShape : CreateClonedVoiceShape, MUTATING,
     withTracking('create_cloned_voice', async (args) => {
       return remote
         ? handleCreateClonedVoice(apiClient, CreateClonedVoiceRemoteSchema.parse(args))
@@ -225,7 +226,7 @@ export function registerClonedVoiceTools(server: McpServer, apiClient: PostEngin
   server.tool(
     'get_cloned_voice',
     'Get one voice clone by id: its status (poll after create_cloned_voice until ready or failed) and voice_id once ready.',
-    GetClonedVoiceShape,
+    GetClonedVoiceShape, READ_ONLY,
     withTracking('get_cloned_voice', async (args) => {
       return handleGetClonedVoice(apiClient, args);
     }),
@@ -234,7 +235,7 @@ export function registerClonedVoiceTools(server: McpServer, apiClient: PostEngin
   server.tool(
     'delete_cloned_voice',
     'Delete one of your voice clones by id.',
-    DeleteClonedVoiceShape,
+    DeleteClonedVoiceShape, DESTRUCTIVE,
     withTracking('delete_cloned_voice', async (args) => {
       return handleDeleteClonedVoice(apiClient, args);
     }),
@@ -243,7 +244,7 @@ export function registerClonedVoiceTools(server: McpServer, apiClient: PostEngin
   server.tool(
     'preview_cloned_voice',
     'Synthesize a short MP3 preview for a ready voice clone, optionally speaking your own text (returns base64 audio; 10 previews per day).',
-    PreviewClonedVoiceShape,
+    PreviewClonedVoiceShape, MUTATING,
     withTracking('preview_cloned_voice', async (args) => {
       return handlePreviewClonedVoice(apiClient, args);
     }),
@@ -252,7 +253,7 @@ export function registerClonedVoiceTools(server: McpServer, apiClient: PostEngin
   server.tool(
     'preview_house_voice',
     'Synthesize a short MP3 preview for a house voice, optionally speaking your own text (returns base64 audio; 10 previews per day).',
-    PreviewHouseVoiceShape,
+    PreviewHouseVoiceShape, MUTATING,
     withTracking('preview_house_voice', async (args) => {
       return handlePreviewHouseVoice(apiClient, args);
     }),

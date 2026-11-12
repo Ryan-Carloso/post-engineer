@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { createHttpRateLimiter } from '../http-rate-limit.js';
+import {
+  createHttpRateLimiter,
+  createPreAuthIpRateLimiter,
+  clientIpKey,
+  PRE_AUTH_IP_LIMIT_PER_MINUTE,
+} from '../http-rate-limit.js';
 
 describe('createHttpRateLimiter', () => {
   it('allows requests up to the limit within one window', () => {
@@ -28,6 +33,14 @@ describe('createHttpRateLimiter', () => {
     expect(limiter.check('user-1').allowed).toBe(true);
   });
 
+  it('keeps the per-subject limiter working alongside the IP limiter', () => {
+    const subjectLimiter = createHttpRateLimiter({ limit: 1, windowMs: 60_000, now: () => 0 });
+    const ipLimiter = createPreAuthIpRateLimiter({ limit: 5, windowMs: 60_000, now: () => 0 });
+    expect(subjectLimiter.check('user-1').allowed).toBe(true);
+    expect(subjectLimiter.check('user-1').allowed).toBe(false);
+    expect(ipLimiter.check('203.0.113.1').allowed).toBe(true);
+  });
+
   it('reports the remaining window seconds while blocked', () => {
     let now = 0;
     const limiter = createHttpRateLimiter({ limit: 1, windowMs: 60_000, now: () => now });
@@ -37,4 +50,37 @@ describe('createHttpRateLimiter', () => {
     expect(blocked.allowed).toBe(false);
     expect(blocked.retryAfterSeconds).toBe(15);
   });
+});
+
+describe('createPreAuthIpRateLimiter', () => {
+  it('limits per IP so one address cannot starve another', () => {
+    const limiter = createPreAuthIpRateLimiter({ limit: 2, windowMs: 60_000, now: () => 0 });
+    expect(limiter.check('203.0.113.1').allowed).toBe(true);
+    expect(limiter.check('203.0.113.1').allowed).toBe(true);
+    expect(limiter.check('203.0.113.1').allowed).toBe(false);
+    expect(limiter.check('203.0.113.2').allowed).toBe(true);
+  });
+
+  it('defaults to a bounded per-minute limit', () => {
+    expect(PRE_AUTH_IP_LIMIT_PER_MINUTE).toBeGreaterThan(0);
+    const limiter = createPreAuthIpRateLimiter({ now: () => 0 });
+    for (let i = 0; i < PRE_AUTH_IP_LIMIT_PER_MINUTE; i += 1) {
+      expect(limiter.check('203.0.113.9').allowed).toBe(true);
+    }
+    expect(limiter.check('203.0.113.9').allowed).toBe(false);
+  });
+});
+
+describe('clientIpKey', () => {
+  it('uses the socket remote address and normalizes IPv4-mapped IPv6', () => {
+    expect(clientIpKey({ socket: { remoteAddress: '203.0.113.7' } } as never)).toBe('203.0.113.7');
+    expect(clientIpKey({ socket: { remoteAddress: '::ffff:203.0.113.7' } } as never)).toBe('203.0.113.7');
+    expect(clientIpKey({ socket: { remoteAddress: '2001:db8::1' } } as never)).toBe('2001:db8::1');
+  });
+
+  it('falls back to unknown when no remote address is present', () => {
+    expect(clientIpKey({ socket: {} } as never)).toBe('unknown');
+    expect(clientIpKey({} as never)).toBe('unknown');
+  });
+
 });

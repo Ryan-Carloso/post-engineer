@@ -8,6 +8,9 @@ import {
   withTracking,
 } from '../analytics.js';
 import { PostEngineerClient } from '../client.js';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 //---------------
 // MCP tool telemetry travels to the web API as request headers: the web
@@ -62,6 +65,20 @@ describe('mcpTelemetryHeaders', () => {
   });
 });
 
+describe('mcpTelemetryHeaders version suppression', () => {
+  it('omits the version header when includeVersion is false', () => {
+    expect(mcpTelemetryHeaders({ includeVersion: false })).toEqual({});
+  });
+
+  it('keeps tool headers while omitting the version inside a tool call', async () => {
+    const wrapped = withTracking('list_personas', async () => mcpTelemetryHeaders({ includeVersion: false }));
+    const headers = await wrapped({});
+    expect(headers[MCP_TOOL_HEADER]).toBe('list_personas');
+    expect(headers[MCP_CALL_ID_HEADER]).toMatch(UUID);
+    expect(headers[MCP_VERSION_HEADER]).toBeUndefined();
+  });
+});
+
 describe('PostEngineerClient telemetry headers', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -80,5 +97,52 @@ describe('PostEngineerClient telemetry headers', () => {
     expect(headers[MCP_CALL_ID_HEADER]).toMatch(UUID);
     expect(headers[MCP_VERSION_HEADER]).toBe(pkg.version);
     expect(headers.Authorization).toBe('Bearer pe_test');
+  });
+
+  it('sends the version header by default (stdio identity)', () => {
+    const client = new PostEngineerClient({ apiKey: 'pe_test', baseUrl: 'https://api.example.test' });
+    expect(client.getHeaders()[MCP_VERSION_HEADER]).toBe(pkg.version);
+  });
+
+  it('suppresses the version header only when suppressVersionHeader is set (http identity)', () => {
+    const client = new PostEngineerClient({
+      apiKey: 'pe_test',
+      baseUrl: 'https://api.example.test',
+      suppressVersionHeader: true,
+    });
+    const headers = client.getHeaders();
+    expect(headers[MCP_VERSION_HEADER]).toBeUndefined();
+    expect(headers.Accept).toBe('application/json');
+  });
+
+  it('suppresses the version header on a real API request while keeping tool headers', async () => {
+    const fetchMock = vi.fn(
+      async (_url: string, _init: RequestInit) => new Response(JSON.stringify({ personas: [] }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new PostEngineerClient({
+      apiKey: 'pe_test',
+      baseUrl: 'https://api.example.test',
+      suppressVersionHeader: true,
+    });
+    await withTracking('list_personas', async () => client.listPersonas())({});
+    const headers = fetchMock.mock.calls[0]?.[1].headers as Record<string, string>;
+    expect(headers[MCP_VERSION_HEADER]).toBeUndefined();
+    expect(headers[MCP_TOOL_HEADER]).toBe('list_personas');
+    expect(headers[MCP_CALL_ID_HEADER]).toMatch(UUID);
+  });
+});
+
+describe('remote client identity wiring (index.ts)', () => {
+  it('suppresses the version header only in the HTTP factory; stdio keeps sending it', () => {
+    const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'index.ts'), 'utf8');
+    const httpFactory = source.split('\n').find((line) => line.includes('new PostEngineerClient') && line.includes("'http'")) ?? '';
+    expect(httpFactory).toContain('suppressVersionHeader: true');
+    const stdioLines = source.split('\n').filter((line) => line.includes('new PostEngineerClient') && !line.includes("'http'"));
+    for (const line of stdioLines) {
+      expect(line).not.toContain('suppressVersionHeader');
+    }
+    // The default server factory (stdio) must not suppress either.
+    expect(source).toContain('client ?? new PostEngineerClient({ apiKey: requireApiKey() })');
   });
 });

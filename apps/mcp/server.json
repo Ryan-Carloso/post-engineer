@@ -10,6 +10,12 @@
     "subfolder": "apps/mcp"
   },
   "version": "1.52.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://post-engineer.com/mcp"
+    }
+  ],
   "packages": [
     {
       "registryType": "npm",

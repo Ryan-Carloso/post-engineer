@@ -37,9 +37,40 @@ never reads files from the host it runs on: `upload_media`,
 `create_persona`, `update_persona` and `create_cloned_voice` accept only
 public URLs (`avatarUrl` / `audioUrl`) — no `avatarPath`, `audioPath` or
 library image files. Local paths stay available on the default stdio
-server, where the disk is the agent's own machine. Signed upload will
-replace them on the remote surface; until then, remote callers use a
-public URL or the stdio server for file-based flows.
+server, where the disk is the agent's own machine. Signed upload
+replaces them on the remote surface: `create_video_upload` mints a
+short-lived signed URL, the caller PUTs the video bytes to it directly,
+`complete_video_upload` verifies the stored bytes, and
+`publish_uploaded_video` publishes by id (single-use).
+
+### Hosted endpoint and ChatGPT
+
+The hosted remote endpoint is `https://post-engineer.com/mcp`
+(Streamable HTTP, OAuth Bearer with the `mcp:tools` scope; discovery at
+`https://post-engineer.com/.well-known/oauth-protected-resource`). Point
+a remote MCP client — including ChatGPT, which requires a public HTTPS
+endpoint, OAuth, and tool annotations — at that URL and sign in; no
+local install or API key is needed. Every tool carries MCP annotations
+(`readOnlyHint` for `list_*`/`get_*`/`check_*`/`validate_script`/
+`score_draft`, `destructiveHint` for `delete_*`/publish/disconnect/
+cancel tools, `openWorldHint` throughout) so annotation-aware clients
+can auto-approve reads and confirm writes. The stdio package above
+remains fully supported for local agents.
+
+### Deployment (remote HTTP service)
+
+The repo ships the deploy unit but does not deploy it:
+`apps/mcp/docker-compose.yml` (service `mcp`, container
+`post-engineer-mcp`) publishes only `127.0.0.1:8081` on the host behind
+the Caddy edge proxy, requires `MCP_OAUTH_ISSUER` and `MCP_RESOURCE`
+at startup (compose refuses to start without them, and the server
+refuses a non-loopback bind without OAuth), and health-checks
+`GET /health`. `apps/mcp/Dockerfile` builds the image from the
+monorepo root. The public route is `https://post-engineer.com/mcp`;
+see the Caddy example in
+[docs/SELF_HOSTING.md](../../docs/SELF_HOSTING.md). Run it with
+`MCP_OAUTH_ISSUER=<issuer> MCP_RESOURCE=https://post-engineer.com/mcp docker compose up -d --build`
+from `apps/mcp/`.
 
 ### Telemetry
 
@@ -161,6 +192,9 @@ The `Authorization: Bearer` API key header is sent to the configured base URL, s
 - `update_persona_image`: update a persona library image tag, description, or primary flag.
 - `remove_persona_image`: remove an image from a persona image library.
 - `publish_video_direct`: publish a ready-made video file directly to social accounts — no generation, no schedule (local .mp4/.mov, max 2GB; YouTube needs title, description, tags, privacyStatus; Rumble needs title and description; Pinterest needs a boardId from `list_pinterest_boards`; others need caption).
+- `create_video_upload`: mint a short-lived signed upload for one video (MP4 or MOV, max 2GB) — returns an uploadId and a signedUrl to PUT the bytes to directly; bound to your account, expires in 15 minutes.
+- `complete_video_upload`: verify a signed video upload after the PUT (the server checks the real bytes and size) and mark it ready to publish; safe to retry.
+- `publish_uploaded_video`: publish a completed signed-upload video by uploadId — no generation, no schedule, no local path; single-use (same provider field rules as `publish_video_direct`).
 - `list_social_accounts`: list connected social accounts with the account IDs needed for scheduling.
 - `list_pinterest_boards`: list the boards of a connected Pinterest account (id + name) — the id is the boardId for Pinterest publishing.
 - `get_persona_publishing_accounts`: list a persona's default publishing accounts per provider. `generate_persona_video` falls back to these when no account IDs are passed; explicit IDs always win.

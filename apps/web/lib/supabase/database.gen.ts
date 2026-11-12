@@ -966,6 +966,45 @@ export interface Database {
         };
         Relationships: [];
       };
+      video_uploads: {
+        Row: {
+        id: string;
+        user_id: string;
+        storage_path: string;
+        declared_content_type: 'video/mp4' | 'video/quicktime' | null;
+        detected_content_type: 'video/mp4' | 'video/quicktime' | null;
+        size_bytes: number | null;
+        status: 'pending' | 'ready' | 'consumed';
+        expires_at: string;
+        created_at: string;
+        consumed_at: string | null;
+        };
+        Insert: {
+        id?: string;
+        user_id: string;
+        storage_path: string;
+        declared_content_type?: 'video/mp4' | 'video/quicktime' | null;
+        detected_content_type?: 'video/mp4' | 'video/quicktime' | null;
+        size_bytes?: number | null;
+        status?: 'pending' | 'ready' | 'consumed';
+        expires_at: string;
+        created_at?: string;
+        consumed_at?: string | null;
+        };
+        Update: {
+        id?: string;
+        user_id?: string;
+        storage_path?: string;
+        declared_content_type?: 'video/mp4' | 'video/quicktime' | null;
+        detected_content_type?: 'video/mp4' | 'video/quicktime' | null;
+        size_bytes?: number | null;
+        status?: 'pending' | 'ready' | 'consumed';
+        expires_at?: string;
+        created_at?: string;
+        consumed_at?: string | null;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     // RPC signatures are not in the snapshot yet: any RPC name with named args.
