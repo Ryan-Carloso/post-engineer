@@ -60,6 +60,24 @@ export const CreateClonedVoiceSchema = z
     message: CREATE_CLONE_AUDIO_SOURCE_MESSAGE,
   });
 
+/** create_cloned_voice over HTTP: audioUrl only — a local audioPath would
+ * resolve on the MCP server's filesystem, not on the agent's machine.
+ * Strict so a smuggled audioPath fails loudly instead of being dropped. */
+export const CreateClonedVoiceRemoteShape = {
+  audioUrl: CreateClonedVoiceShape.audioUrl,
+  language: CreateClonedVoiceShape.language,
+  consent: CreateClonedVoiceShape.consent,
+  denoise: CreateClonedVoiceShape.denoise,
+};
+
+export const CreateClonedVoiceRemoteSchema = z
+  .object(CreateClonedVoiceRemoteShape)
+  .strict()
+  .refine((args) => args.audioUrl !== undefined, {
+    message: 'audioUrl is required: the remote server cannot read local files.',
+    path: ['audioUrl'],
+  });
+
 export const DeleteClonedVoiceShape = {
   cloneId: z.string().min(1).describe('Cloned voice id from list_cloned_voices'),
 };
@@ -181,7 +199,7 @@ export async function handlePreviewHouseVoice(
 // Registers the cloned-voice tools (list/create/get/delete/preview, plus the
 // house-voice preview) on the server. Kept here, next to their shapes and
 // handlers, so index.ts stays under the 500-line cap.
-export function registerClonedVoiceTools(server: McpServer, apiClient: PostEngineerClient): void {
+export function registerClonedVoiceTools(server: McpServer, apiClient: PostEngineerClient, remote = false): void {
   server.tool(
     'list_cloned_voices',
     'List per-user Chatterbox voice clones (status, voice_id when ready).',
@@ -193,10 +211,14 @@ export function registerClonedVoiceTools(server: McpServer, apiClient: PostEngin
 
   server.tool(
     'create_cloned_voice',
-    'Register a voice clone from a short HTTPS audio URL or a local audio file path (requires explicit consent).',
-    CreateClonedVoiceShape,
+    remote
+      ? 'Register a voice clone from a short HTTPS audio URL (requires explicit consent).'
+      : 'Register a voice clone from a short HTTPS audio URL or a local audio file path (requires explicit consent).',
+    remote ? CreateClonedVoiceRemoteShape : CreateClonedVoiceShape,
     withTracking('create_cloned_voice', async (args) => {
-      return handleCreateClonedVoice(apiClient, args);
+      return remote
+        ? handleCreateClonedVoice(apiClient, CreateClonedVoiceRemoteSchema.parse(args))
+        : handleCreateClonedVoice(apiClient, args);
     }),
   );
 

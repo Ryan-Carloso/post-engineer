@@ -1,9 +1,11 @@
 // Streamable HTTP transport for the MCP server (Phase 6, P6-1).
 //
-// This module wires the same McpServer built by createPostEngineerMcpServer()
-// to the SDK's StreamableHTTPServerTransport instead of stdio. No tool is
-// added, removed, or changed here: the HTTP endpoint serves exactly the
-// tools the stdio server serves, with the same handlers.
+// This module wires the McpServer built by createPostEngineerMcpServer()
+// to the SDK's StreamableHTTPServerTransport instead of stdio. The HTTP
+// endpoint serves the JSON tools with the same handlers, but never the
+// local-file tools: createPostEngineerMcpServer(..., 'http') omits every
+// tool and field that would read a path from this host's filesystem
+// (see remote-shapes.ts and local-file-tools.ts).
 //
 // Authentication (Phase 6, P6-2): when OAuth is configured
 // (MCP_OAUTH_ISSUER + MCP_RESOURCE, see http-auth.ts), every /mcp

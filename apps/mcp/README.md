@@ -29,6 +29,18 @@ credits is billed by Modal.
 - Node.js 20.10+
 - API key generated at https://post-engineer.com/recipes
 
+## Remote (HTTP) surface
+
+With `--http-transport` the same server speaks Streamable HTTP, but it
+never reads files from the host it runs on: `upload_media`,
+`add_persona_image` and `publish_video_direct` are not registered, and
+`create_persona`, `update_persona` and `create_cloned_voice` accept only
+public URLs (`avatarUrl` / `audioUrl`) — no `avatarPath`, `audioPath` or
+library image files. Local paths stay available on the default stdio
+server, where the disk is the agent's own machine. Signed upload will
+replace them on the remote surface; until then, remote callers use a
+public URL or the stdio server for file-based flows.
+
 ### Telemetry
 
 Each request to the post-engineer API includes the calling tool's name and

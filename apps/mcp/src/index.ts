@@ -3,7 +3,7 @@ import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { PostEngineerClient, MAX_LIBRARY_IMAGES, MAX_LIBRARY_IMAGE_MB, MAX_UPLOAD_VIDEO_GB } from './client.js';
+import { PostEngineerClient, MAX_LIBRARY_IMAGES } from './client.js';
 import {
   CreatePersonaShape,
   ListPersonasShape,
@@ -28,10 +28,8 @@ import {
   GetVideoStatusShape,
   GetVideoTaskProgressShape,
   ListPersonaImagesShape,
-  AddPersonaImageShape,
   UpdatePersonaImageShape,
   RemovePersonaImageShape,
-  PublishVideoDirectShape,
   handleCreatePersona,
   handleListPersonas,
   handleListVoices,
@@ -54,10 +52,8 @@ import {
   handleGetVideoStatus,
   handleGetVideoTaskProgress,
   handleListPersonaImages,
-  handleAddPersonaImage,
   handleUpdatePersonaImage,
   handleRemovePersonaImage,
-  handlePublishVideoDirect,
 } from './tools.js';
 import {
   GetPersonaPublishingAccountsShape,
@@ -82,7 +78,9 @@ import {
   handleWaitForVideoTasks,
 } from './video-task-tools.js';
 import { GeneratePersonaVideoShape, ValidateScriptShape, ValidateScriptDescription, ScoreDraftShape, ScoreDraftDescription, handleGeneratePersonaVideo, handleValidateScript, handleScoreDraft } from './tools-single-video.js';
-import { CheckMediaDescription, CheckMediaShape, UploadMediaDescription, UploadMediaShape, handleCheckMedia, handleUploadMedia } from './tools-user-media.js';
+import { CheckMediaDescription, CheckMediaShape, handleCheckMedia } from './tools-user-media.js';
+import { CreatePersonaRemoteSchema, CreatePersonaRemoteShape, UpdatePersonaRemoteSchema, UpdatePersonaRemoteShape } from './remote-shapes.js';
+import { registerLocalFileTools } from './local-file-tools.js';
 import { ListPinterestBoardsDescription, ListPinterestBoardsShape, handleListPinterestBoards } from './tools-pinterest.js';
 import { GeneratePersonaVideoBatchDescription, GeneratePersonaVideoBatchShape, handleGeneratePersonaVideoBatch } from './tools-batch.js';
 import { AddExperimentPairShape, CreateExperimentShape, GetExperimentResultsShape, ListExperimentsShape, handleAddExperimentPair, handleCreateExperiment, handleGetExperimentResults, handleListExperiments } from './tools-experiments.js';
@@ -115,15 +113,27 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
   );
   registerRemotePrompts(server, apiClient);
   const recipeSession = registerPromptTools(server, apiClient, transport);
+  const isRemote = transport === 'http';
 
-  server.tool(
-    'create_persona',
-    'Create a new AI persona with avatar, voice, language, and niche prompt. A face is REQUIRED: pass avatarUrl (public URL or list_faces) or avatarPath (local photo file, uploaded directly). A video without a face is a per-video choice — set options.videoType to "faceless" on generate_persona_video.',
-    CreatePersonaShape,
-    withTracking('create_persona', withRecipeNudge(recipeSession, 'create_persona', async (args) => {
-      return handleCreatePersona(apiClient, args);
-    }))
-  );
+  if (isRemote) {
+    server.tool(
+      'create_persona',
+      'Create a new AI persona with avatar, voice, language, and niche prompt. A face is REQUIRED: pass avatarUrl (public URL or list_faces). The remote server cannot read local files. A video without a face is a per-video choice — set options.videoType to "faceless" on generate_persona_video.',
+      CreatePersonaRemoteShape,
+      withTracking('create_persona', withRecipeNudge(recipeSession, 'create_persona', async (args) => {
+        return handleCreatePersona(apiClient, CreatePersonaRemoteSchema.parse(args));
+      })),
+    );
+  } else {
+    server.tool(
+      'create_persona',
+      'Create a new AI persona with avatar, voice, language, and niche prompt. A face is REQUIRED: pass avatarUrl (public URL or list_faces) or avatarPath (local photo file, uploaded directly). A video without a face is a per-video choice — set options.videoType to "faceless" on generate_persona_video.',
+      CreatePersonaShape,
+      withTracking('create_persona', withRecipeNudge(recipeSession, 'create_persona', async (args) => {
+        return handleCreatePersona(apiClient, args);
+      })),
+    );
+  }
 
   server.tool(
     'list_personas',
@@ -145,7 +155,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   // Cloned-voice tools (list/create/get/delete/preview, plus the house-voice
   // preview) live in cloned-voice-tools.ts, next to their shapes/handlers.
-  registerClonedVoiceTools(server, apiClient);
+  registerClonedVoiceTools(server, apiClient, isRemote);
 
   server.tool(
     'list_faces',
@@ -156,14 +166,25 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
     })
   );
 
-  server.tool(
-    'update_persona',
-    'Update an existing AI persona (only the provided fields change). Replace the face with avatarUrl or avatarPath (local photo file).',
-    UpdatePersonaShape,
-    withTracking('update_persona', async (args) => {
-      return handleUpdatePersona(apiClient, args);
-    })
-  );
+  if (isRemote) {
+    server.tool(
+      'update_persona',
+      'Update an existing AI persona (only the provided fields change). Replace the face with avatarUrl. The remote server cannot read local files.',
+      UpdatePersonaRemoteShape,
+      withTracking('update_persona', async (args) => {
+        return handleUpdatePersona(apiClient, UpdatePersonaRemoteSchema.parse(args));
+      }),
+    );
+  } else {
+    server.tool(
+      'update_persona',
+      'Update an existing AI persona (only the provided fields change). Replace the face with avatarUrl or avatarPath (local photo file).',
+      UpdatePersonaShape,
+      withTracking('update_persona', async (args) => {
+        return handleUpdatePersona(apiClient, args);
+      }),
+    );
+  }
 
   server.tool(
     'list_social_accounts',
@@ -372,7 +393,6 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
   server.tool('generate_persona_video_batch', GeneratePersonaVideoBatchDescription, GeneratePersonaVideoBatchShape, withTracking('generate_persona_video_batch', async (args) => handleGeneratePersonaVideoBatch(apiClient, args)));
   server.tool('validate_script', ValidateScriptDescription, ValidateScriptShape, withTracking('validate_script', withScriptOutcome(recipeSession, 'validate_script', async (args) => handleValidateScript(apiClient, args))));
   server.tool('score_draft', ScoreDraftDescription, ScoreDraftShape, withTracking('score_draft', async (args) => handleScoreDraft(apiClient, args)));
-  server.tool('upload_media', UploadMediaDescription, UploadMediaShape, withTracking('upload_media', async (args) => handleUploadMedia(apiClient, args)));
   server.tool('check_media', CheckMediaDescription, CheckMediaShape, withTracking('check_media', async (args) => handleCheckMedia(apiClient, args)));
   // Paired A/B content experiments (issue #476).
   server.tool('create_experiment', 'Create a paired A/B experiment that tests ONE script variable (the hook) with two variants, each with a slug variantId (e.g. hook-aggressive; never "A"/"B"), a name and a style description you will follow when writing its hooks. Then call add_experiment_pair once per pair. Results come from get_experiment_results.', CreateExperimentShape, withTracking('create_experiment', async (args) => handleCreateExperiment(apiClient, args)));
@@ -410,15 +430,6 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
   );
 
   server.tool(
-    'add_persona_image',
-    `Add an image to a persona image library from a local file path (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB). Optional tag and description drive the deterministic per-video image selection. The server rejects full libraries (${MAX_LIBRARY_IMAGES} max).`,
-    AddPersonaImageShape,
-    withTracking('add_persona_image', async (args) => {
-      return handleAddPersonaImage(apiClient, args);
-    })
-  );
-
-  server.tool(
     'update_persona_image',
     'Update a persona library image tag, description, or primary flag.',
     UpdatePersonaImageShape,
@@ -436,14 +447,9 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
     })
   );
 
-  server.tool(
-    'publish_video_direct',
-    `Publish a ready-made video file directly to social accounts — no generation, no schedule. Reads a local video (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB) and posts it immediately via POST /api/upload-content. YouTube requires title, description, tags, and privacyStatus; Rumble and Fanvue require title and description; Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak require caption.`,
-    PublishVideoDirectShape,
-    withTracking('publish_video_direct', async (args) => {
-      return handlePublishVideoDirect(apiClient, args);
-    })
-  );
+  // Local-file tools exist only on stdio, where the disk is the agent's
+  // own machine; the remote server must never read paths from its host.
+  if (!isRemote) registerLocalFileTools(server, apiClient);
 
   return server;
 }
