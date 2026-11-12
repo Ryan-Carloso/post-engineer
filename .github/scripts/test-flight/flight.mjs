@@ -22,8 +22,9 @@
 // Auth is a Post Engineer API key (TEST_FLIGHT_POST_ENGINEER_API_KEY) belonging to the
 // funded test account; the key only ever lives in CI secrets. Account ids
 // arrive via workflow_dispatch inputs (manual flight) or repo Variables/Secrets
-// (scheduled monitor) — or are auto-discovered from GET /api/account when none
-// are configured. Explicit ids always win. Nothing is hardcoded here.
+// (scheduled monitor) — at least one is required (issue #572: no
+// auto-discovery; a flight publishes only to accounts bound to its persona).
+// Nothing is hardcoded here.
 //
 // Configuration (environment, fail-fast — every missing value is an error):
 //   TEST_FLIGHT_POST_ENGINEER_API_KEY  required. Post Engineer API key of
