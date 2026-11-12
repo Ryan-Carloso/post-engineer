@@ -882,6 +882,89 @@
                 "fk_persona_images_persona": "FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE CASCADE"
             }
         },
+        "publish_ledger": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "key",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "provider",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "account_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "status",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "lease_until",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "claim_token",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "result",
+                    "type": "jsonb",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "error",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "error_code",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "publish_ledger_pkey": "PRIMARY KEY (key)",
+                "publish_ledger_status_check": "CHECK ((status = ANY (ARRAY['in_progress'::text, 'published'::text, 'failed'::text])))"
+            }
+        },
         "scheduled_posts": {
             "rls": false,
             "columns": [
