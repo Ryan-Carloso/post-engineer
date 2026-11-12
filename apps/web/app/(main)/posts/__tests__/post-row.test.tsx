@@ -13,6 +13,7 @@ vi.mock('@/lib/i18n/provider', () => ({
 }));
 
 import { PostRow } from '../post-row';
+import { formatDate, formatTime } from '../post-card';
 
 const SLOT: ScheduledSlot = {
   id: 'slot-1',
@@ -55,7 +56,11 @@ describe('PostRow layout', () => {
     renderRow();
 
     expect(screen.getByText('Viva Leve')).toBeInTheDocument();
-    expect(screen.getByText(/Jun 1, 2030 · \d{1,2}:\d{2}/)).toBeInTheDocument();
+    // Zone-agnostic: pin the slot's full date and time, not the wall-clock
+    // rendering of a UTC instant.
+    expect(
+      screen.getByText(`${formatDate('2030-06-01T13:05:00.000Z', 'en')} · ${formatTime('2030-06-01T13:05:00.000Z', 'en')}`),
+    ).toBeInTheDocument();
   });
 
   it('shows only the time when the day list already names the date', () => {
@@ -66,9 +71,13 @@ describe('PostRow layout', () => {
   });
 
   it('dates a published post by when it went out, not by the planned slot', () => {
-    renderRow({ status: 'published', publishedAt: '2030-06-02T09:30:00.000Z' }, true);
+    // Zone-agnostic: pin which instant is shown (published, not the slot),
+    // not the wall-clock rendering of a UTC instant. The two instants are
+    // 30 minutes apart, so their rendered times differ in every zone.
+    renderRow({ status: 'published', publishedAt: '2030-06-02T09:30:00.000Z', slotAt: '2030-06-01T10:00:00.000Z' }, true);
 
-    expect(screen.getByText(/^9:30/)).toBeInTheDocument();
+    expect(screen.getByText(formatTime('2030-06-02T09:30:00.000Z', 'en'))).toBeInTheDocument();
+    expect(screen.queryByText(formatTime('2030-06-01T10:00:00.000Z', 'en'))).not.toBeInTheDocument();
   });
 
   it('falls back to the untitled copy instead of an empty line', () => {

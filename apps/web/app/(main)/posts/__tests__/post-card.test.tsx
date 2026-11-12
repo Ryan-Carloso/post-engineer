@@ -37,8 +37,11 @@ function renderCard(generation: Partial<VideoGeneration> = {}) {
 
 describe('formatDate and formatTime', () => {
   it('formats pt-BR dates with the month name in Portuguese', () => {
-    expect(formatDate('2026-09-23T10:00:00.000Z', 'pt')).toMatch(/23 de set\. de 2026/);
-    expect(formatTime('2026-09-23T10:00:00.000Z', 'pt')).toMatch(/10:00/);
+    // Zone-agnostic: the month name and year survive any viewer timezone
+    // (the day can shift by one at the zone edges), and the time pins only
+    // its HH:MM shape, never the wall clock of a UTC instant.
+    expect(formatDate('2026-09-23T10:00:00.000Z', 'pt')).toMatch(/de set\. de 2026/);
+    expect(formatTime('2026-09-23T10:00:00.000Z', 'pt')).toMatch(/^\d{1,2}:\d{2}$/);
   });
 });
 
