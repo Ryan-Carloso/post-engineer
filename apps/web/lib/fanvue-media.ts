@@ -34,14 +34,16 @@ export const FANVUE_UPLOAD_TIMEOUT_MS = 10 * 60_000;
 // The API documents a 1.5 GiB ceiling for a media upload.
 export const FANVUE_MAX_FILE_BYTES = 1_610_612_736;
 // Poll cadence from the API docs' own helper: every 1.5s.
-// The ready wait is capped at 120s so the whole in-request publish stays
+// The ready wait is capped at 120s to keep the post-creation phase as far
 // inside the clients' 600s budget (engine DEFAULT_TIMEOUT_SECONDS in
 // app/services/upload_publisher.py, DIRECT_PUBLISH_TIMEOUT_MS in
-// apps/mcp/src/limits.ts): the request also uploads every part first, and
-// a client timeout mid-publish reports failure while the server keeps
-// going — the scheduler retry would then duplicate the post. A poll
-// timeout is safe to retry instead: no post exists yet, so the retry
-// uploads a fresh media item.
+// apps/mcp/src/limits.ts) as the unbounded upload allows: the request
+// uploads every part first, and a client timeout mid-publish reports
+// failure while the server keeps going — the scheduler retry would then
+// duplicate the post. The cap shrinks that window but does not eliminate
+// it: a slow upload alone can still exceed 600s. A poll timeout is safe
+// to retry instead: no post exists yet, so the retry uploads a fresh
+// media item.
 export const FANVUE_MEDIA_POLL_INTERVAL_MS = 1_500;
 export const FANVUE_MEDIA_READY_TIMEOUT_MS = 2 * 60_000;
 
@@ -329,11 +331,19 @@ export async function uploadVideoToFanvueVault(
   }
   // The API's totalParts must cover the whole file: a smaller value would
   // leave the buffer tail unsent and silently truncate the video — the
-  // exact failure this client was rewritten to stop. An inconsistent
+  // exact failure this client was rewritten to stop. A larger value would
+  // upload zero-byte parts past the end of the buffer. An inconsistent
   // session fails loudly here, before any part is signed.
   if (totalParts * session.partSize < input.video.length) {
     throw new FanvueError(
       `FANVUE_UPLOAD_FAILED: session covers ${totalParts * session.partSize} of ${input.video.length} bytes`,
+      502,
+    );
+  }
+  const neededParts = Math.ceil(input.video.length / session.partSize);
+  if (totalParts > neededParts) {
+    throw new FanvueError(
+      `FANVUE_UPLOAD_FAILED: session allots ${totalParts} parts, file needs ${neededParts}`,
       502,
     );
   }

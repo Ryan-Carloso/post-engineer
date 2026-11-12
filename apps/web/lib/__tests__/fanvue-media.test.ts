@@ -264,11 +264,13 @@ describe('waitForFanvueMediaReady', () => {
     ).rejects.toThrow('media processing failed (unsupported_format)');
   });
 
-  it('caps the default ready wait at 120s so the publish fits the clients 600s budget', () => {
+  it('caps the default ready wait at 120s to leave room for the upload inside the clients 600s budget', () => {
     // The engine (DEFAULT_TIMEOUT_SECONDS) and the MCP client
     // (DIRECT_PUBLISH_TIMEOUT_MS) both abort at 600s; the request also
-    // uploads every part first, so a 300s poll would let a slow upload
-    // push the server past the clients and duplicate the post on retry.
+    // uploads every part first, so a 300s poll would leave less room for
+    // the upload before the clients abort and the scheduler retry
+    // duplicates the post. The cap shrinks that window; it does not
+    // eliminate it, since a slow upload alone can still exceed 600s.
     expect(FANVUE_MEDIA_READY_TIMEOUT_MS).toBe(2 * 60_000);
   });
 
@@ -354,6 +356,22 @@ describe('uploadVideoToFanvueVault', () => {
         contentType: 'video/mp4',
       }),
     ).rejects.toThrow('session covers 8 of 10 bytes');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a session whose totalParts exceeds the parts the file needs', async () => {
+    // 10 bytes at a 4-byte partSize need 3 parts; an API totalParts of 4
+    // would upload a zero-byte part past the end of the buffer.
+    mockFetch.mockResolvedValueOnce(sessionResponse({ totalParts: 4 }));
+
+    await expect(
+      uploadVideoToFanvueVault({
+        accessToken: 'at-1',
+        video,
+        filename: 'clip.mp4',
+        contentType: 'video/mp4',
+      }),
+    ).rejects.toThrow('session allots 4 parts, file needs 3');
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
