@@ -4,7 +4,7 @@ import { logger } from '@/lib/logger';
 import { createOAuthState, resolveOAuthRedirectUri, setOAuthNonceCookie } from '@/lib/oauth-utils';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { markApiErrorReported, withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // getSessionUser — returns the session's user_id (null when not logged in)
@@ -37,6 +37,17 @@ async function getHandler(request: NextRequest = new NextRequest('https://post-e
         { success: false, error: 'Authentication required. Please log in.' },
         { status: 401 }
       );
+    }
+
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      const message = 'Google credentials are not configured (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).';
+      const response = NextResponse.json({ success: false, error: message }, { status: 500 });
+      // The cause would otherwise reach PostHog only as the wrapper's
+      // generic "[route] 500" — log the reason here, and mark the response
+      // so the wrapper does not report a second synthetic exception.
+      logger.logOAuthError(logId, new Error(message));
+      markApiErrorReported(response);
+      return response;
     }
 
     const redirectUri = resolveOAuthRedirectUri(request, 'GOOGLE_REDIRECT_URI_LOCAL', 'GOOGLE_REDIRECT_URI');
