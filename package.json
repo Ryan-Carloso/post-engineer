@@ -14,7 +14,8 @@
     "lint:fix": "pnpm exec nx run web:lint:fix && pnpm exec nx run-many -t lint typecheck",
     "typecheck": "pnpm exec nx run-many -t typecheck",
     "graph": "pnpm exec nx graph",
-    "typecheck:global": "pnpm exec nx run-many -t typecheck"
+    "typecheck:global": "pnpm exec nx run-many -t typecheck",
+    "security:audit": "node .github/scripts/audit/verify-accepted.mjs"
   },
   "devDependencies": {
     "husky": "^9.1.7",
