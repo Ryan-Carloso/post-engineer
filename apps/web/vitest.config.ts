@@ -15,6 +15,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // Pin the test timezone so tests asserting exact wall-clock times from
+    // UTC instants (e.g. pt-BR formatTime) pass on every machine, not just UTC.
+    env: { TZ: 'UTC' },
     include: ['**/__tests__/**/*.test.{ts,tsx}'],
     setupFiles: ['./test/setup.ts'],
     coverage: {

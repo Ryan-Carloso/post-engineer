@@ -40,6 +40,13 @@ describe('PostFailureNotice', () => {
     expect(document.querySelector('[data-post-failure]')).toBeNull();
   });
 
+  it('renders nothing for a failed post whose error is an empty string', () => {
+    // An empty message is not an error to disclose: the length check must
+    // stay strict, or an empty disclosure renders for a failed post.
+    render(<PostFailureNotice status="failed" error="" />);
+    expect(document.querySelector('[data-post-failure]')).toBeNull();
+  });
+
   it('renders the provider notice below the failure block', () => {
     render(
       <PostFailureNotice

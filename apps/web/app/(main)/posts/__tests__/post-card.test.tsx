@@ -50,6 +50,38 @@ describe('resolveSlotAccounts', () => {
   });
 });
 
+describe('GenerationCard thumbnail and failure state', () => {
+  it('shows the video thumbnail only for a completed generation', () => {
+    const { container } = renderCard({ status: 'completed', errorCode: null });
+
+    const video = container.querySelector('video');
+    expect(video).not.toBeNull();
+    expect(video?.getAttribute('src')).toBe('/api/persona/video-download/task-1/final-1.mp4#t=0.1');
+    // A completed card carries no failure line and no destructive border.
+    expect(container.querySelector('[data-generation-error]')).toBeNull();
+    const card = screen.getByRole('link').firstElementChild as HTMLElement;
+    expect(card.className.split(/\s+/)).not.toContain('border-destructive/35');
+  });
+
+  it('shows the fallback icon without a thumbnail while the video is still generating', () => {
+    const { container } = renderCard({ status: 'generating', errorCode: null });
+
+    expect(container.querySelector('video')).toBeNull();
+    expect(container.querySelector('[data-generation-error]')).toBeNull();
+    const icon = container.querySelector('.size-14 svg');
+    expect(icon?.getAttribute('class')).toContain('text-muted-text');
+  });
+
+  it('marks a failed generation with the destructive border and the error line', () => {
+    const { container } = renderCard({ status: 'failed', errorCode: 'custom_audio_invalid' });
+
+    expect(container.querySelector('video')).toBeNull();
+    expect(container.querySelector('[data-generation-error]')).not.toBeNull();
+    const card = screen.getByRole('link').firstElementChild as HTMLElement;
+    expect(card.className.split(/\s+/)).toContain('border-destructive/35');
+  });
+});
+
 describe('GenerationCard fallbacks', () => {
   it('falls back to the pending label and style for an unknown status', () => {
     renderCard({ status: 'bogus' });
