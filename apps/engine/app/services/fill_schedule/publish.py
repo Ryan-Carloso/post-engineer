@@ -29,6 +29,7 @@ from app.services.fill_schedule.publish_events import (
     publish_tracking_context,
 )
 from app.services.fill_schedule.publish_results import merge_prior_published
+from app.services.owner_alert import notify_publish_failed, notify_publish_partial
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
     notify_safe,
@@ -113,6 +114,12 @@ class BatchPublisher:
                 publish_failed_properties(
                     slot, schedule, "task has no finished videos", retryable=False
                 ),
+            )
+            notify_publish_failed(
+                slot_user_id(slot),
+                slot_id=str(slot["id"]),
+                title=str(slot.get("title") or ""),
+                reason="task has no finished videos",
             )
             return 0
         if not isinstance(object_path, str) or not object_path:
@@ -245,6 +252,12 @@ class BatchPublisher:
                             str(slot["id"]), account_result.non_user_failed_providers,
                         ),
                     )
+                notify_publish_partial(
+                    slot_user_id(slot),
+                    slot_id=str(slot["id"]),
+                    title=title,
+                    providers=list(account_result.failed_providers),
+                )
             return 1
         self._fail_slot_permanently(
             slot,
@@ -367,3 +380,9 @@ class BatchPublisher:
         if outcomes is not None:
             fields["publish_outcomes"] = [dict(item) for item in outcomes]
         self.store.update_slot(slot["id"], **fields)
+        notify_publish_failed(
+            user_id,
+            slot_id=str(slot["id"]),
+            title=str(slot.get("title") or ""),
+            reason=fields["error"],
+        )
