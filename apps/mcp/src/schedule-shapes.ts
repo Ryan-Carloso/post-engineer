@@ -101,17 +101,16 @@ function httpsUrlField(fieldName: string) {
 
 export const GeneratePersonaVideoOptionsShape = {
   // The one video mode (issue #542 follow-up): required — it decides the
-  // render path and the price. The errorMap gives the missing/invalid
-  // message with every mode and its cost, so the agent can choose knowing
-  // the price.
+  // render path and the price. The `error` callback gives the
+  // missing/invalid message with every mode and its cost, so the agent can
+  // choose knowing the price. Zod 4 replaced v3's `errorMap`: a missing
+  // value arrives as `invalid_value` with no `input` (v3's `ctx.data`).
   videoType: z
     .enum(VIDEO_TYPES, {
-      errorMap: (issue, ctx) => ({
-        message:
-          issue.code === 'invalid_type' && ctx.data === undefined
-            ? `options.videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}`
-            : unknownVideoTypeMessage(ctx.data),
-      }),
+      error: (issue) =>
+        issue.input === undefined
+          ? `options.videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}`
+          : unknownVideoTypeMessage(issue.input),
     })
     .describe('The one video mode: full_lipsync = the whole video is the persona talking (requires a persona with a photo; 8 tokens at face quality ok, 15 at very_good); hook_lipsync = lip sync on the hook only, agent images after (requires a persona with a photo; 2 tokens ok, 3 very_good); faceless = agent images only, no face (persona optional — with one, its voice and niche still apply; 1 token). Required: the mode decides the render path and the price.'),
   musicMood: musicMoodField,

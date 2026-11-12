@@ -1,5 +1,5 @@
 -- ============================================================================
--- 059 — Signed video uploads for publish-by-id (issue #561).
+-- 060 — Signed video uploads for publish-by-id (issue #561).
 -- A remote (HTTP) MCP caller cannot send a local video path, so it first
 -- mints a short-lived signed upload: one row per upload, bound to its
 -- owner, holding the storage path in the private `videos` bucket

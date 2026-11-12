@@ -1,0 +1,56 @@
+name: Dependency audit
+
+# Blocks dependency risk at the merge gate and re-checks the registry weekly,
+# because advisories are published against versions that were clean when they
+# landed. The accepted list (.github/audit/accepted-advisories.json) is checked
+# in both directions: a new advisory fails, and a stale entry fails too.
+#
+# `pnpm audit` reads pnpm-lock.yaml, so this needs no install step.
+
+on:
+  schedule:
+    # Mondays 06:00 UTC: catch advisories published after the last merge.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - package.json
+      - apps/*/package.json
+      - .github/audit/**
+      - .github/scripts/audit/**
+      - .github/workflows/dependency-audit.yml
+
+concurrency:
+  group: dependency-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  advisories:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.22.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      - name: Self-test the gate rules
+        run: node .github/scripts/audit/verify-accepted.mjs --self-test
+
+      - name: Verify accepted advisories against the registry
+        run: |
+          set -euo pipefail
+          node .github/scripts/audit/verify-accepted.mjs --level low

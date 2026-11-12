@@ -87,7 +87,12 @@ describe('ensureEngineImageUrl', () => {
     expect(objectPath).toContain('u-1');
     expect(objectPath).toContain('caracter-samples');
     expect(options.contentType).toBe('image/png');
-    expect(createSignedUrl).toHaveBeenCalledWith(objectPath, 3600);
+    // The hosted house-character URL must outlive the serial render queue
+    // like every other generation-time signing (24h, same constant as
+    // persona-prep's SIGNED_URL_TTL_SECONDS): a slot picked up more than
+    // 1h after creation would otherwise fail with the same HTTP 400 the
+    // 1h persona-photo URL caused (OpenCode review, PR #564).
+    expect(createSignedUrl).toHaveBeenCalledWith(objectPath, 24 * 3600);
     expect(result).toBe('https://project.supabase.co/storage/v1/object/sign/personas/x.png?token=T');
   });
 

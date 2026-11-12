@@ -335,7 +335,7 @@ interface QueryError {
 
 export function createSupabaseVideoUploadStore(): VideoUploadStore {
   const supabase = createSupabaseServiceClient();
-  // The table ships in migration 059 and is in the generated Database
+  // The table ships in migration 060 and is in the generated Database
   // types; this adapter still speaks through a minimal structural view
   // of the query builder so the store seam stays trivially fakeable in
   // the state-machine unit tests.

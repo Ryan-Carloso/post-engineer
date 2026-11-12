@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
+vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn() } }));
+vi.mock('@/lib/owner-alert-mail', () => ({ notifyAccountBreak: vi.fn(() => Promise.resolve()) }));
 
 import { trackApiEvent } from '@/lib/analytics';
+import { logger } from '@/lib/logger';
+import { notifyAccountBreak } from '@/lib/owner-alert-mail';
 import {
   httpStatusOf,
   isUnauthorizedError,
@@ -12,6 +16,8 @@ import {
 
 beforeEach(() => {
   vi.mocked(trackApiEvent).mockClear();
+  vi.mocked(logger.error).mockClear();
+  vi.mocked(notifyAccountBreak).mockClear();
 });
 
 describe('httpStatusOf', () => {
@@ -75,7 +81,8 @@ describe('isUnauthorizedError', () => {
 
 describe('reportAccountUnauthorized', () => {
   it('emits publish_account_unauthorized with ids only for a 401', () => {
-    reportAccountUnauthorized('youtube', 'UC123', 'user-1', new Error('Unauthorized'));
+    const error = new Error('Unauthorized');
+    reportAccountUnauthorized('youtube', 'UC123', 'user-1', error);
     expect(trackApiEvent).toHaveBeenCalledTimes(1);
     expect(trackApiEvent).toHaveBeenCalledWith(PUBLISH_ACCOUNT_UNAUTHORIZED_EVENT, {
       provider: 'youtube',
@@ -83,10 +90,37 @@ describe('reportAccountUnauthorized', () => {
       user_id: 'user-1',
       status: 401,
     });
+    expect(notifyAccountBreak).toHaveBeenCalledWith({
+      userId: 'user-1',
+      provider: 'youtube',
+      accountId: 'UC123',
+      error,
+    });
   });
 
   it('emits nothing for a failure that is not a 401', () => {
     reportAccountUnauthorized('instagram', 'ig-1', 'user-1', { response: { status: 500 } });
     expect(trackApiEvent).not.toHaveBeenCalled();
+    expect(notifyAccountBreak).not.toHaveBeenCalled();
+  });
+
+  it('emails email_not_verified without the unauthorized PostHog event', () => {
+    const error = { name: 'BlueskyError', code: 'email_not_verified' };
+    reportAccountUnauthorized('bluesky', 'did:plc:1', 'user-1', error);
+    expect(trackApiEvent).not.toHaveBeenCalled();
+    expect(notifyAccountBreak).toHaveBeenCalledWith({
+      userId: 'user-1',
+      provider: 'bluesky',
+      accountId: 'did:plc:1',
+      error,
+    });
+  });
+
+  it('logs when the owner email fails', async () => {
+    vi.mocked(notifyAccountBreak).mockRejectedValueOnce('boom');
+    reportAccountUnauthorized('youtube', 'UC123', 'user-1', new Error('Unauthorized'));
+    await vi.waitFor(() => {
+      expect(logger.error).toHaveBeenCalledWith('[ACCOUNT] Owner alert failed', expect.any(Error));
+    });
   });
 });

@@ -650,6 +650,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     vi.clearAllMocks();
     vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
     vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://example.com');
   });
 
   it('returns the slot with schedule and persona for the owner', async () => {

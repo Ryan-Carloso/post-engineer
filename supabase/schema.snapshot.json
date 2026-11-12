@@ -1674,6 +1674,34 @@
                 "experiment_variants_description_length_check": "CHECK (((char_length(description) >= 1) AND (char_length(description) <= 500)))"
             }
         },
+        "owner_alert_notices": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "dedup_key",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "sent_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "owner_alert_notices_pkey": "PRIMARY KEY (user_id, dedup_key)"
+            }
+        },
         "test_deploy_supabase": {
             "rls": true,
             "columns": [

@@ -11,7 +11,7 @@ import { ERROR_CODES } from '@/lib/error-codes';
 import { useI18n } from '@/lib/i18n/provider';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { ProviderIcon } from '@/components/provider-icon';
-import { BrandIcon, connectedLabel, useDisconnectFlow } from './accounts-section-helpers';
+import { BrandIcon, connectedLabel, errorLabel, useDisconnectFlow } from './accounts-section-helpers';
 
 // 3Speak accounts: one query and a key dialog owned by the page — same
 // shape as Bluesky (no OAuth: a Hive username plus its posting key).
@@ -28,6 +28,7 @@ export function ThreespeakAccountsSection(): ReactNode {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const accounts = query.data?.accounts ?? [];
+  const errorAccounts = accounts.filter((account) => account.status === 'error');
   useAccountListErrorTelemetry('3speak', query.error?.message ?? null);
 
   const connect = async (): Promise<void> => {
@@ -75,8 +76,9 @@ export function ThreespeakAccountsSection(): ReactNode {
       label={t('accounts.threespeakLabel')}
       description={t('accounts.threespeakDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
+      errorLabel={errorAccounts.length > 0 ? errorLabel(t, errorAccounts.length) : null}
       count={accounts.length}
-      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="3speak" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
+      accounts={accounts.map((account) => <AccountCard key={account.recordId} type="3speak" name={account.accountName ?? account.providerAccountId} labelOrigin={account.accountName ? 'stored' : 'provider_id'} error={account.status === 'error'} onReconnect={() => { setHandle(account.providerAccountId); setOpen(true); }} showDisconnect onDisconnect={() => flow.onDisconnect(account.providerAccountId, account.accountName ?? account.providerAccountId)} />)}
       isLoading={query.isLoading}
       loadError={query.error?.message ?? null}
       connectLabel={t(accounts.length > 0 ? 'accounts.connectAnother' : 'accounts.connectFirst')}

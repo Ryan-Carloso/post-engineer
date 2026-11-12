@@ -5,8 +5,24 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { syncAccountProfile } from '@/lib/account-profile-sync';
+import { TokenDecryptError } from '@/lib/token-crypto';
+import { isUnauthorizedError } from '@/lib/upload/account-unauthorized';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+
+//---------------
+// isCredentialFailure — only a dead credential flags the card as 'error'.
+// An undecryptable stored token (TokenDecryptError) or a provider rejection
+// of the credential (401, Bluesky/3Speak invalid_credentials, Rumble
+// invalid_token) means reconnecting is the fix. Anything else — a provider
+// 5xx, a DB read failure, an unclassified error — is transient: flagging it
+// would mislabel the card as "Invalid token" and hide the trash until the
+// next successful list, while the next list retries the row anyway.
+// The failure is still logged for every throw below, credential or not.
+//---------------
+function isCredentialFailure(error: unknown): boolean {
+  return error instanceof TokenDecryptError || isUnauthorizedError(error);
+}
 
 //---------------
 // GET /api/account — lists all social accounts of the logged-in user (NO tokens).
@@ -34,6 +50,13 @@ async function getHandler(request?: Request) {
     // picture on the provider shows without reconnecting. Rows run in
     // parallel (each read has its own timeout); a failed read keeps the
     // stored profile.
+    // A credential sync failure also marks the account 'error' in the
+    // response, so the accounts page flags that card instead of showing it
+    // as healthy. A transient failure does not: the row keeps the stored
+    // profile and stays 'ok', so the card keeps its disconnect action and
+    // the next list retries the row. The failure never drops the row: one
+    // broken account must not block the others.
+    const failedRecordIds = new Set<string>();
     const effectiveRecords = await Promise.all(records.map(async (record) => {
       try {
         return await syncAccountProfile(supabase, userId, record);
@@ -44,12 +67,13 @@ async function getHandler(request?: Request) {
         // reported: ..." as the PostHog exception and hid the stack.
         // The record ids ride as metadata, as elsewhere.
         logger.error('[ACCOUNT] Profile sync failed, keeping the stored profile', error, { recordId: record.id, provider: record.provider });
+        if (isCredentialFailure(error)) failedRecordIds.add(record.id);
         return record;
       }
     }));
     const accounts: PublicAccountItem[] = [];
     for (const effectiveRecord of effectiveRecords) {
-      const mapped = toPublicAccountSafe(effectiveRecord);
+      const mapped = toPublicAccountSafe(effectiveRecord, failedRecordIds.has(effectiveRecord.id) ? 'error' : 'ok');
       if (mapped) {
         accounts.push(mapped);
       } else {

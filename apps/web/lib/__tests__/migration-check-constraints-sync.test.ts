@@ -99,7 +99,7 @@ const EXPECTED: Record<string, readonly string[]> = {
   // No TypeScript list exists: the experiment variable is always 'hook'
   // (migration 041, issue #476), so this literal is the pinned contract.
   experiments_variable_check: ['hook'],
-  // migration 059. The nullable content-type checks also allow NULL; the
+  // migration 060. The nullable content-type checks also allow NULL; the
   // parser keeps only the ANY (ARRAY[...]) arm, which is this list.
   video_uploads_status_check: VIDEO_UPLOAD_STATUSES,
   video_uploads_declared_content_type_check: VIDEO_UPLOAD_CONTENT_TYPES,

@@ -50,6 +50,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
     vi.clearAllMocks();
     vi.stubEnv('MONEYPRINT_API_URL', 'http://moneyprint.internal:8080');
     vi.stubEnv('MONEYPRINT_API_SECRET', API_SECRET);
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://post-engineer.com');
     mockSession();
   });
 
@@ -256,8 +257,8 @@ describe('GET /api/persona/video-status/:taskId', () => {
       vi.stubGlobal('fetch', fetchMock);
     }
 
-    async function poll(taskId = 'task-1') {
-      return GET(new Request(`http://localhost/api/persona/video-status/${taskId}`) as never, {
+    async function poll(taskId = 'task-1', origin = 'http://localhost') {
+      return GET(new Request(`${origin}/api/persona/video-status/${taskId}`) as never, {
         params: Promise.resolve({ taskId }),
       });
     }
@@ -352,7 +353,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
       }
     });
 
-    it('includes postUrl for the task’s slot on a completed video', async () => {
+    it('includes postUrl from the public app URL even when the request comes from the proxy origin', async () => {
       mockTaskBody({
         status: 200,
         message: 'success',
@@ -363,7 +364,9 @@ describe('GET /api/persona/video-status/:taskId', () => {
         .spyOn(videoGeneration, 'recordGenerationUpdate')
         .mockResolvedValue(undefined);
       try {
-        const response = await poll();
+        // Behind the Caddy proxy the request reaches Next with Host
+        // 0.0.0.0:3000 — the link must still name the public host.
+        const response = await poll('task-1', 'http://0.0.0.0:3000');
         expect(response.status).toBe(200);
         // Inside the envelope's body, where BaseResponse readers look: the
         // MCP narrows result.body, so a top-level postUrl would never reach
@@ -372,7 +375,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
           body: { postUrl: string | null };
           postUrl?: unknown;
         };
-        expect(envelope.body.postUrl).toBe('http://localhost/posts/slot-1');
+        expect(envelope.body.postUrl).toBe('https://post-engineer.com/posts/slot-1');
         expect(envelope.postUrl).toBeUndefined();
       } finally {
         updateSpy.mockRestore();
@@ -662,7 +665,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
           success: false,
           terminal: true,
           delivered: true,
-          postUrl: 'http://localhost/posts/slot-1',
+          postUrl: 'https://post-engineer.com/posts/slot-1',
         });
         expect(updateSpy).toHaveBeenCalledWith(
           expect.objectContaining({

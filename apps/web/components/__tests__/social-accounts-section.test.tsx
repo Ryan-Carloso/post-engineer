@@ -61,4 +61,16 @@ describe('SocialAccountsSection', () => {
 
     expect(screen.getByRole('dialog')).toHaveTextContent('Bluesky form');
   });
+
+  it('renders the issue pill when errorLabel is provided', () => {
+    renderSection({ errorLabel: '1 account with an issue' });
+
+    expect(screen.getByText('1 account with an issue')).toBeInTheDocument();
+  });
+
+  it('renders no issue pill without errorLabel', () => {
+    renderSection();
+
+    expect(screen.queryByText(/with an issue/)).toBeNull();
+  });
 });

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
 //---------------
-// supabase/migrations/059_video-uploads.sql — signed video uploads for
+// supabase/migrations/060_video-uploads.sql — signed video uploads for
 // publish-by-id (issue #561): one owner-bound row per upload with a
 // single-use status, pinned here so the migration, the TS status list
 // (lib/videos/signed-upload.ts) and supabase/README.md cannot drift.
@@ -12,12 +12,12 @@ import { findRepoRoot } from '@/test/repo-root';
 
 const repoRoot = findRepoRoot(import.meta.url);
 const migration = readFileSync(
-  join(repoRoot, 'supabase', 'migrations', '059_video-uploads.sql'),
+  join(repoRoot, 'supabase', 'migrations', '060_video-uploads.sql'),
   'utf8',
 );
 const readme = readFileSync(join(repoRoot, 'supabase', 'README.md'), 'utf8');
 
-describe('supabase/migrations/059_video-uploads.sql', () => {
+describe('supabase/migrations/060_video-uploads.sql', () => {
   it('creates the video_uploads table idempotently', () => {
     expect(migration).toContain('create table if not exists public.video_uploads');
     expect(migration).toContain("status text not null default 'pending'");
@@ -39,6 +39,6 @@ describe('supabase/migrations/059_video-uploads.sql', () => {
   });
 
   it('is listed in supabase/README.md', () => {
-    expect(readme).toContain('059_video-uploads.sql');
+    expect(readme).toContain('060_video-uploads.sql');
   });
 });

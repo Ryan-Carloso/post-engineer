@@ -17,6 +17,7 @@
 
 import { isIP } from 'node:net';
 
+import { SIGNED_URL_TTL_SECONDS } from '@/app/api/videos/generate-and-schedule/persona-prep';
 import { isHttpUrl, isPublicIp } from '@/lib/generation/custom-audio';
 import { isPublicAssetPath } from '@/lib/image-source';
 
@@ -146,7 +147,11 @@ export async function ensureEngineImageUrl(
     throw new Error(`could not host the persona image ${candidate}: ${uploadError.message}`);
   }
 
-  const { data, error: signError } = await client.createSignedUrl(objectPath, 3600);
+  // The hosted URL is sent to the engine at dispatch and must outlive the
+  // serial render queue like every other generation-time signing (24h):
+  // a house-character slot picked up more than 1h after creation would
+  // otherwise fail with the same HTTP 400 as the 1h persona-photo URL.
+  const { data, error: signError } = await client.createSignedUrl(objectPath, SIGNED_URL_TTL_SECONDS);
   if (signError || !data?.signedUrl) {
     throw new Error(
       `could not sign the hosted persona image ${candidate}: ${signError?.message ?? 'no url returned'}`,

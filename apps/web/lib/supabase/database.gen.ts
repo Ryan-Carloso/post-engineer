@@ -249,6 +249,24 @@ export interface Database {
         };
         Relationships: [];
       };
+      owner_alert_notices: {
+        Row: {
+        user_id: string;
+        dedup_key: string;
+        sent_at: string;
+        };
+        Insert: {
+        user_id: string;
+        dedup_key: string;
+        sent_at?: string;
+        };
+        Update: {
+        user_id?: string;
+        dedup_key?: string;
+        sent_at?: string;
+        };
+        Relationships: [];
+      };
       persona_default_accounts: {
         Row: {
         persona_id: string;

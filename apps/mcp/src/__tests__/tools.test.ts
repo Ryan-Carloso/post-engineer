@@ -710,11 +710,14 @@ describe('persona image library tools', () => {
     // avatarUrl is always required: every persona has a face, and "no face"
     // is a per-video choice (generate_persona_video options.videoType 'faceless'),
     // never a persona one. There is no images-specific rule anymore — the
-    // missing required field fails the parse on its own.
+    // schema-level rule (avatarUrl or avatarPath) fails the parse on its own.
+    // voiceId is supplied so the parse fails on the face rule, not on it.
     expect(() =>
-      CreatePersonaSchema.parse({ name: 'X', images: [{ path: '/tmp/a.jpg' }] })
-    ).toThrow(/Required/);
-    expect(() => CreatePersonaSchema.parse({ name: 'X' })).toThrow(/Required/);
+      CreatePersonaSchema.parse({ name: 'X', voiceId: 'none', images: [{ path: '/tmp/a.jpg' }] })
+    ).toThrow(/avatarUrl or avatarPath is required/);
+    expect(() => CreatePersonaSchema.parse({ name: 'X', voiceId: 'none' })).toThrow(
+      /avatarUrl or avatarPath is required/
+    );
   });
 
   it('CreatePersonaSchema accepts images with avatarUrl', () => {
@@ -756,7 +759,7 @@ describe('persona image library tools', () => {
   it('CreatePersonaSchema rejects a missing or empty voiceId (no default voice)', () => {
     // Fail fast: the MCP never picks a voice on the agent's behalf.
     const base = { name: 'X', avatarUrl: 'https://example.com/a.png' };
-    expect(() => CreatePersonaSchema.parse(base)).toThrow(/Required/);
+    expect(() => CreatePersonaSchema.parse(base)).toThrow(/voiceId is required/);
     expect(() => CreatePersonaSchema.parse({ ...base, voiceId: '' })).toThrow(/voiceId is required/);
   });
 

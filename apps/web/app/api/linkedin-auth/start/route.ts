@@ -3,7 +3,7 @@ import { logger } from '@/lib/logger';
 import { createOAuthState, resolveOAuthRedirectUri, setOAuthNonceCookie } from '@/lib/oauth-utils';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { withApiErrorReporting } from '@/lib/api-error-reporting';
+import { markApiErrorReported, withApiErrorReporting } from '@/lib/api-error-reporting';
 
 //---------------
 // getSessionUserId — returns the session's user_id (null when not logged in)
@@ -31,13 +31,14 @@ async function getHandler(request: NextRequest = new NextRequest('https://post-e
 
   try {
     if (!process.env.LINKEDIN_CLIENT_ID || !process.env.LINKEDIN_CLIENT_SECRET) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'LinkedIn credentials are not configured (LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET).',
-        },
-        { status: 500 }
-      );
+      const message = 'LinkedIn credentials are not configured (LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET).';
+      const response = NextResponse.json({ success: false, error: message }, { status: 500 });
+      // The cause would otherwise reach PostHog only as the wrapper's
+      // generic "[route] 500" — log the reason here, and mark the response
+      // so the wrapper does not report a second synthetic exception.
+      logger.logOAuthError(logId, new Error(message));
+      markApiErrorReported(response);
+      return response;
     }
 
     const userId = await getSessionUserId();
@@ -66,10 +67,14 @@ async function getHandler(request: NextRequest = new NextRequest('https://post-e
     // Internal details stay in the server logs — the client only gets a
     // stable, generic error.
     logger.logOAuthError(logId, new Error(errorMessage));
-    return NextResponse.json(
+    // The logged cause is already reported to PostHog, so mark the response
+    // and the wrapper does not report a second synthetic exception.
+    const response = NextResponse.json(
       { success: false, error: 'Failed to generate the authorization URL.' },
       { status: 500 }
     );
+    markApiErrorReported(response);
+    return response;
   }
 }
 
