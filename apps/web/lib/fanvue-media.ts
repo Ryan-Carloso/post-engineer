@@ -55,7 +55,7 @@ export interface FanvueUploadSession {
   uploadId: string;
   partSize: number;
   maxParts: number;
-  // Null when the create call omitted sizeBytes; the caller computes
+  // Null when the create response omitted totalParts; the caller computes
   // ceil(fileSize / partSize).
   totalParts: number | null;
 }
