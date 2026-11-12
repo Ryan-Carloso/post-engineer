@@ -118,7 +118,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'create_persona',
-    'Create a new AI persona with avatar, voice, language, and niche prompt. A face is REQUIRED: pass avatarUrl (public URL or list_faces) or avatarPath (local photo file, uploaded directly). A video without a face is a per-video choice — set options.videoType to "faceless" on generate_persona_video.',
+    'Create a new AI persona with avatar, voice, language, and niche prompt. A face is REQUIRED: pass avatarUrl (public URL or list_faces) or avatarPath (local photo file, uploaded directly). A video without a face is a per-video choice — set options.videoType to "faceless" on generate_persona_video. At least one publishing account is REQUIRED (accounts): the persona is bound to those accounts and videos publish only to them.',
     CreatePersonaShape,
     withTracking('create_persona', withRecipeNudge(recipeSession, 'create_persona', async (args) => {
       return handleCreatePersona(apiClient, args);
@@ -185,7 +185,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'get_persona_publishing_accounts',
-    "List a persona's default publishing accounts per provider. generate_persona_video falls back to these when no account IDs are passed; explicit IDs always win.",
+    "List the publishing accounts a persona is bound to, per provider. generate_persona_video falls back to these when no account IDs are passed; explicit IDs must be a subset of the binding.",
     GetPersonaPublishingAccountsShape,
     withTracking('get_persona_publishing_accounts', async (args) => {
       return handleGetPersonaPublishingAccounts(apiClient, args);
@@ -194,7 +194,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'set_persona_publishing_accounts',
-    "Replace a persona's default publishing accounts (per provider). Account IDs come from list_social_accounts. Providers mapped to empty arrays keep no defaults.",
+    "Replace the publishing accounts a persona is bound to (per provider). Account IDs come from list_social_accounts. Providers mapped to empty arrays keep no binding for that provider; the binding as a whole must keep at least one account.",
     SetPersonaPublishingAccountsShape,
     withTracking('set_persona_publishing_accounts', async (args) => {
       return handleSetPersonaPublishingAccounts(apiClient, args);

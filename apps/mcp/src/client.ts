@@ -288,6 +288,19 @@ export class PostEngineerClient {
 
   async createPersona(input: CreatePersonaInput): Promise<unknown> {
     const formData = new FormData();
+    // Issue #572: the binding is checked before any file is read — a
+    // persona with no bound account cannot exist, so fail fast here
+    // instead of uploading bytes the server would reject.
+    const totalAccounts = Object.values(input.accounts ?? {}).reduce(
+      (total, ids) => total + (Array.isArray(ids) ? ids.length : 0),
+      0,
+    );
+    if (totalAccounts === 0) {
+      throw new Error(
+        'Select at least one publishing account for this persona: pass accounts, e.g. { youtube: ["UC..."] }. Account IDs come from list_social_accounts.',
+      );
+    }
+    formData.set('publishingAccounts', JSON.stringify(input.accounts));
     // Every persona has a face: exactly one of avatarUrl or avatarPath (the
     // `photo` file), checked before any other file is read.
     await appendPersonaAvatar(formData, input, true);

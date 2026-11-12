@@ -50,7 +50,7 @@ describe('persona avatar from a local file (avatarPath)', () => {
 
   it('createPersona uploads avatarPath as the photo file and sends no avatarUrl', async () => {
     const fetchMock = okFetch();
-    await client.createPersona({ name: 'Ryan', voiceId: 'voice-1', avatarPath: photoPath });
+    await client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'Ryan', voiceId: 'voice-1', avatarPath: photoPath });
 
     const form = sentForm(fetchMock);
     const photo = form.get('photo');
@@ -87,7 +87,7 @@ describe('persona avatar from a local file (avatarPath)', () => {
         const both = { avatarUrl: 'https://example.com/face.png', avatarPath: photoPath };
       const call =
         mode === 'create'
-          ? client.createPersona({ name: 'Ryan', voiceId: 'voice-1', ...both })
+          ? client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'Ryan', voiceId: 'voice-1', ...both })
           : client.updatePersona({ personaId: 'p-1', ...both });
       await expect(call).rejects.toThrow('Give either avatarUrl or avatarPath, not both.');
       expect(fetchMock).not.toHaveBeenCalled();
@@ -98,7 +98,7 @@ describe('persona avatar from a local file (avatarPath)', () => {
     const fetchMock = okFetch();
     const missing = join(dir, 'missing.jpg');
     await expect(
-      client.createPersona({ name: 'Ryan', voiceId: 'voice-1', avatarPath: missing }),
+      client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'Ryan', voiceId: 'voice-1', avatarPath: missing }),
     ).rejects.toThrow(`Failed to read image "${missing}"`);
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -106,7 +106,7 @@ describe('persona avatar from a local file (avatarPath)', () => {
   it('createPersona rejects an unsupported avatarPath extension before any fetch', async () => {
     const fetchMock = okFetch();
     await expect(
-      client.createPersona({ name: 'Ryan', voiceId: 'voice-1', avatarPath: join(dir, 'face.gif') }),
+      client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'Ryan', voiceId: 'voice-1', avatarPath: join(dir, 'face.gif') }),
     ).rejects.toThrow('Unsupported image extension ".gif"');
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -120,7 +120,7 @@ describe('persona avatar from a local file (avatarPath)', () => {
 });
 
 describe('persona avatar schema refine', () => {
-  const base = { name: 'Ryan', voiceId: 'en-US-AriaNeural' };
+  const base = { name: 'Ryan', voiceId: 'en-US-AriaNeural', accounts: { youtube: ['acct-1'] } };
 
   it('create accepts avatarPath alone', () => {
     expect(CreatePersonaSchema.safeParse({ ...base, avatarPath: '/tmp/face.jpg' }).success).toBe(true);
@@ -134,6 +134,7 @@ describe('persona avatar schema refine', () => {
 
   it('create rejects both face sources', () => {
     const parsed = CreatePersonaSchema.safeParse({
+      accounts: { youtube: ['acct-1'] },
       ...base,
       avatarUrl: 'https://example.com/face.png',
       avatarPath: '/tmp/face.jpg',
