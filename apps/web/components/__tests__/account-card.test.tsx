@@ -170,6 +170,51 @@ describe('AccountCard', () => {
       expect(screen.getByTestId('youtube-disconnect-button')).toBeTruthy();
       expect(screen.queryByTestId('youtube-reconnect-button')).toBeNull();
     });
+
+    it('shows neither action on a broken card without a reconnect handler', () => {
+      // The docstring promises a broken card never shows the trash button,
+      // but the branch falls through to it when onReconnect is missing.
+      render(<AccountCard {...baseProps} error showDisconnect onDisconnect={() => {}} />);
+      expect(screen.queryByTestId('youtube-reconnect-button')).toBeNull();
+      expect(screen.queryByTestId('youtube-disconnect-button')).toBeNull();
+    });
+
+    it('labels the reconnect button with the reconnect copy', () => {
+      render(<AccountCard {...baseProps} error onReconnect={() => {}} />);
+      const button = screen.getByTestId('youtube-reconnect-button');
+      expect(button.textContent).toBe('accounts.reconnect');
+      expect(button.getAttribute('aria-label')).toBe('accounts.reconnect');
+      expect(button.getAttribute('title')).toBe('accounts.reconnect');
+    });
+
+    it('uses a green dot with the connected label on a healthy card', () => {
+      render(<AccountCard {...baseProps} />);
+      const dot = screen.getByRole('img', { name: 'accounts.connectedAccount' });
+      expect(dot.className).toContain('bg-emerald-500');
+      expect(dot.className).toContain('size-2');
+    });
+
+    it('shows no trash when the disconnect handler is missing', () => {
+      render(<AccountCard {...baseProps} showDisconnect />);
+      expect(screen.queryByTestId('youtube-disconnect-button')).toBeNull();
+    });
+
+    it('shows no trash when the disconnect affordance is off', () => {
+      render(<AccountCard {...baseProps} onDisconnect={() => {}} />);
+      expect(screen.queryByTestId('youtube-disconnect-button')).toBeNull();
+    });
+
+    it('uses a red border on a selectable broken card', () => {
+      const { container } = render(<AccountCard {...baseProps} onSelect={() => {}} error onReconnect={() => {}} />);
+      expect(container.querySelector('label')?.className).toContain('border-destructive');
+    });
+
+    it('uses a neutral border on a healthy card', () => {
+      const { container } = render(<AccountCard {...baseProps} />);
+      const card = container.querySelector('[data-testid="account-card"]');
+      expect(card?.className).toContain('border-line');
+      expect(card?.className).toContain('rounded-xl');
+    });
   });
 
   describe('accessibility', () => {

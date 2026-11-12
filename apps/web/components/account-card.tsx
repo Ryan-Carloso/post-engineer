@@ -179,17 +179,19 @@ export default function AccountCard({
         />
       ) : null}
 
-      {error && onReconnect ? (
-        <button
-          type="button"
-          data-testid={`${type}-reconnect-button`}
-          aria-label={t('accounts.reconnect')}
-          title={t('accounts.reconnect')}
-          className="flex h-8 shrink-0 items-center rounded-lg border border-destructive/30 bg-destructive-soft px-2.5 text-xs font-semibold whitespace-nowrap text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground"
-          onClick={onReconnect}
-        >
-          {t('accounts.reconnect')}
-        </button>
+      {error ? (
+        onReconnect ? (
+          <button
+            type="button"
+            data-testid={`${type}-reconnect-button`}
+            aria-label={t('accounts.reconnect')}
+            title={t('accounts.reconnect')}
+            className="flex h-8 shrink-0 items-center rounded-lg border border-destructive/30 bg-destructive-soft px-2.5 text-xs font-semibold whitespace-nowrap text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground"
+            onClick={onReconnect}
+          >
+            {t('accounts.reconnect')}
+          </button>
+        ) : null
       ) : showDisconnect && onDisconnect ? (
         <button
           type="button"
