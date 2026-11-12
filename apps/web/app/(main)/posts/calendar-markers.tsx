@@ -70,10 +70,11 @@ export function LegendTodaySwatch() {
   );
 }
 
-// Selected day: a filled brand chip on the numeral only. A blue ring was the
-// same hue as an in-progress post dot, and the dots collided with it.
+// Selected day: a filled brand square with rounded corners, on the numeral
+// only. A circle read as another status dot, and a blue ring was the same
+// hue as an in-progress post.
 export const SELECTED_DAY_NUMERAL_CLASS =
-  'box-border inline-flex size-7 min-h-7 min-w-7 shrink-0 items-center justify-center overflow-visible rounded-full bg-brand p-0 text-white';
+  'box-border inline-flex size-7 min-h-7 min-w-7 shrink-0 items-center justify-center overflow-visible rounded-lg bg-brand p-0 text-white';
 
 // Legend selected-day sample: the same filled chip as the grid numeral.
 export function LegendSelectedDaySwatch() {
@@ -84,7 +85,7 @@ export function LegendSelectedDaySwatch() {
       className={cn(
         SELECTED_DAY_NUMERAL_CLASS,
         'pointer-events-none font-semibold leading-none tabular-nums',
-        'max-xl:size-4 max-xl:min-h-4 max-xl:min-w-4 max-xl:text-[10px]',
+        'max-xl:size-4 max-xl:min-h-4 max-xl:min-w-4 max-xl:rounded max-xl:text-[10px]',
         'xl:text-base',
       )}
     >

@@ -135,7 +135,8 @@ describe('CalendarView', () => {
     const numeral = selected.querySelector('[data-day-numeral]');
     expect(numeral).toHaveTextContent('5');
     expect(numeral?.className.split(/\s+/)).toContain('bg-brand');
-    expect(numeral?.className.split(/\s+/)).toContain('rounded-full');
+    expect(numeral?.className.split(/\s+/)).toContain('rounded-lg');
+    expect(numeral?.className.split(/\s+/)).not.toContain('rounded-full');
     expect(numeral?.className.split(/\s+/)).not.toContain('outline-ring');
     expect(selected.className.split(/\s+/)).not.toContain('data-[selected-single=true]:outline-primary');
     const total = selected.querySelector('[data-day-post-total]');
@@ -432,7 +433,8 @@ describe('CalendarView', () => {
     expect(legend.querySelector('[data-legend-today-bar]')).toBeNull();
     expect(selectedSwatch?.className.split(/\s+/)).toContain('bg-brand');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('text-white');
-    expect(selectedSwatch?.className.split(/\s+/)).toContain('rounded-full');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('rounded-lg');
+    expect(selectedSwatch?.className.split(/\s+/)).not.toContain('rounded-full');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('size-7');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('font-semibold');
     expect(selectedSwatch?.className.split(/\s+/)).not.toContain('outline-ring');
