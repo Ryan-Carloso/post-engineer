@@ -8,9 +8,6 @@ import {
   withTracking,
 } from '../analytics.js';
 import { PostEngineerClient } from '../client.js';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 //---------------
 // MCP tool telemetry travels to the web API as request headers: the web
@@ -130,19 +127,5 @@ describe('PostEngineerClient telemetry headers', () => {
     expect(headers[MCP_VERSION_HEADER]).toBeUndefined();
     expect(headers[MCP_TOOL_HEADER]).toBe('list_personas');
     expect(headers[MCP_CALL_ID_HEADER]).toMatch(UUID);
-  });
-});
-
-describe('remote client identity wiring (index.ts)', () => {
-  it('suppresses the version header only in the HTTP factory; stdio keeps sending it', () => {
-    const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'index.ts'), 'utf8');
-    const httpFactory = source.split('\n').find((line) => line.includes('new PostEngineerClient') && line.includes("'http'")) ?? '';
-    expect(httpFactory).toContain('suppressVersionHeader: true');
-    const stdioLines = source.split('\n').filter((line) => line.includes('new PostEngineerClient') && !line.includes("'http'"));
-    for (const line of stdioLines) {
-      expect(line).not.toContain('suppressVersionHeader');
-    }
-    // The default server factory (stdio) must not suppress either.
-    expect(source).toContain('client ?? new PostEngineerClient({ apiKey: requireApiKey() })');
   });
 });

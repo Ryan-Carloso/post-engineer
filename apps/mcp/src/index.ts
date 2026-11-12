@@ -470,7 +470,7 @@ export function isMainModule(): boolean {
   }
 }
 
-async function main() {
+export async function main() {
   // Without --http-transport the server stays on stdio, no port; with OAuth, HTTP requests authenticate, else loopback only.
   const httpOptions = parseHttpTransportOptions(process.argv.slice(2), process.env);
   if (httpOptions !== null) {
