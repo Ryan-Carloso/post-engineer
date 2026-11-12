@@ -4,18 +4,15 @@ import { useI18n } from '@/lib/i18n/provider';
 import { providerLabel, type PublishUserNotice } from '@/lib/publish-user-notice';
 
 export function PublishAccountNotices({
-  status,
-  error,
   userNotices,
   compact = false,
 }: {
-  status: string;
-  error?: string | null;
   userNotices?: readonly PublishUserNotice[];
   compact?: boolean;
 }) {
   const { t } = useI18n();
-  const tone = compact ? 'mt-3 text-xs text-destructive' : 'mt-6 text-sm text-destructive';
+  // compact: the line sits under a dense post row, not under a card block.
+  const tone = compact ? 'mt-2 text-xs text-destructive' : 'mt-6 text-sm text-destructive';
   return (
     <>
       {(userNotices ?? []).map((notice) => (
@@ -23,7 +20,6 @@ export function PublishAccountNotices({
           {noticeText(t, notice)}
         </p>
       ))}
-      {status === 'failed' && error ? <p className={tone}>{error}</p> : null}
     </>
   );
 }

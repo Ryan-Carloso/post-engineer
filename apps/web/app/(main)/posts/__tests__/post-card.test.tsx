@@ -1,243 +1,108 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
-import type { ScheduledSlot } from '@/lib/api';
+import { cleanup, render, screen } from '@testing-library/react';
+import type { VideoGeneration } from '@/lib/api';
 
 //---------------
-// Tests for PostCard (the slot card under the posts calendar).
-// i18n echoes keys; next/image renders a plain <img>.
+// Tests for the shared posts-list pieces in post-card.tsx: the date/time
+// formatters, the slot-account resolution and the standalone generation
+// row. i18n echoes keys. The fallbacks here are the defensive branches
+// (unknown status / unmapped error code / no schedule), so each test pins
+// the branch the happy-path fixtures never take.
 //---------------
 
 vi.mock('@/lib/i18n/provider', () => ({
   useI18n: () => ({ locale: 'en', t: (key: string) => key }),
 }));
 
-vi.mock('next/image', () => ({
-  // eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element
-  default: (props: React.ComponentProps<'img'>) => <img {...props} />,
-}));
+import { GenerationCard, formatDate, formatTime, resolveSlotAccounts } from '../post-card';
 
-import { PostCard } from '../post-card';
-
-const FAILED_SLOT: ScheduledSlot = {
-  id: 'f1',
-  scheduleId: 's1',
-  slotAt: '2030-06-01T10:00:00.000Z',
+const GENERATION: VideoGeneration = {
+  id: 'g1',
+  generationId: 'gen-1',
+  engineTaskId: 'task-1',
+  personaName: 'Viva Leve',
+  videoSubject: 'Myth busting',
   status: 'failed',
-  title: 'Failed topic',
-  error: 'Upload failed',
-  publishedAt: null,
-  taskId: null,
-  progress: 0,
-  stage: null,
-  queuePosition: null,
-  queueTotal: null,
-  retryable: true,
+  errorCode: 'custom_audio_invalid',
+  tokensRefunded: true,
+  createdAt: '2026-09-23T10:00:00.000Z',
+  completedAt: '2026-09-23T10:01:00.000Z',
 };
 
-const ACCOUNTS = [
-  { id: 'ch1', provider: 'youtube' as const, label: 'Europa Na Estrada' },
-  { id: 'ig1', provider: 'instagram' as const, label: '@vivalave' },
-];
-
-function renderCard(slot: ScheduledSlot, timeOnly = false, accounts: typeof ACCOUNTS = []) {
+function renderCard(generation: Partial<VideoGeneration> = {}) {
   cleanup();
-  render(<PostCard slot={slot} personaName="Viva Leve" accounts={accounts} locale="en" timeOnly={timeOnly} />);
+  return render(<GenerationCard generation={{ ...GENERATION, ...generation }} locale="en" />);
 }
 
-describe('PostCard failure', () => {
-  // There is no retry endpoint. The next step opens Recipes, where the
-  // post is scheduled again. See details stays secondary.
-  it('links a failed post to Recipes first and to its detail second', () => {
-    renderCard(FAILED_SLOT);
-
-    expect(screen.queryByText('posts.cardRetry')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'posts.cardScheduleAgain' })).toHaveAttribute('href', '/recipes');
-    expect(screen.getByRole('link', { name: 'posts.cardDetails' })).toHaveAttribute('href', '/posts/f1');
-  });
-
-  it('puts the failure reason, the accounts it failed for and the details link together in one red box', () => {
-    renderCard(FAILED_SLOT, false, ACCOUNTS);
-
-    const box = screen.getByText('posts.cardFailedRetryable').closest('.bg-destructive-soft');
-    if (!(box instanceof HTMLElement)) throw new Error('failure box not rendered');
-    expect(within(box).getByText('posts.cardFailedFor')).toBeInTheDocument();
-    expect(within(box).getByText('Europa Na Estrada')).toBeInTheDocument();
-    expect(within(box).getByText('@vivalave')).toBeInTheDocument();
-    expect(within(box).getByRole('link', { name: 'posts.cardScheduleAgain' })).toHaveAttribute('href', '/recipes');
-    expect(within(box).getByRole('link', { name: 'posts.cardDetails' })).toBeInTheDocument();
-    expect(box.className.split(/\s+/)).toContain('text-ink');
-    expect(box.className.split(/\s+/)).not.toContain('text-destructive');
-    // The chips are not repeated under the box.
-    expect(screen.getAllByText('Europa Na Estrada')).toHaveLength(1);
-  });
-
-  it('shows the permanent failure copy when the post cannot be retried, with the same next step', () => {
-    renderCard({ ...FAILED_SLOT, retryable: false });
-
-    expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
-    expect(screen.queryByText('posts.cardFailedRetryable')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'posts.cardScheduleAgain' })).toHaveAttribute('href', '/recipes');
-    expect(screen.getByRole('link', { name: 'posts.cardDetails' })).toHaveAttribute('href', '/posts/f1');
-  });
-
-  it('treats an unknown retryable flag as permanent', () => {
-    renderCard({ ...FAILED_SLOT, retryable: null });
-
-    expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
-  });
-
-  it('shows no failure box and no details link on a published card, and keeps its chips', () => {
-    renderCard(
-      { ...FAILED_SLOT, status: 'published', title: 'Published topic', error: null, publishedAt: '2030-06-01T10:05:00.000Z' },
-      false,
-      ACCOUNTS,
-    );
-
-    expect(screen.queryByRole('link', { name: 'posts.cardDetails' })).not.toBeInTheDocument();
-    expect(screen.queryByText('posts.cardFailedFor')).not.toBeInTheDocument();
-    expect(screen.getByText('Europa Na Estrada')).toBeInTheDocument();
-  });
-
-  it('keeps the card itself linked to the post detail but hides the header chevron on a failed card', () => {
-    renderCard(FAILED_SLOT);
-
-    const link = screen.getByRole('link', { name: 'posts.cardOpenDetail' });
-    expect(link).toHaveAttribute('href', '/posts/f1');
-    expect(link.querySelector('[data-card-chevron]')).toBeNull();
+describe('formatDate and formatTime', () => {
+  it('formats pt-BR dates with the month name in Portuguese', () => {
+    // Zone-agnostic: the month name and year survive any viewer timezone
+    // (the day can shift by one at the zone edges), and the time pins only
+    // its HH:MM shape, never the wall clock of a UTC instant.
+    expect(formatDate('2026-09-23T10:00:00.000Z', 'pt')).toMatch(/de set\. de 2026/);
+    expect(formatTime('2026-09-23T10:00:00.000Z', 'pt')).toMatch(/^\d{1,2}:\d{2}$/);
   });
 });
 
-describe('PostCard status pill — the calendar vocabulary', () => {
-  it.each([
-    ['awaiting', 'posts.groupScheduled'],
-    ['ready', 'posts.groupScheduled'],
-    ['generating', 'posts.groupInProgress'],
-    ['publishing', 'posts.groupInProgress'],
-    ['published', 'posts.groupPublished'],
-    ['failed', 'posts.groupFailed'],
-  ] as const)('labels a %s post with the calendar group word %s', (status, label) => {
-    renderCard({ ...FAILED_SLOT, status });
-
-    expect(document.querySelector(`[data-status="${status}"]`)).toHaveTextContent(label);
-  });
-
-  it('shows generating as a soft info pill with a spinner in the day list', () => {
-    renderCard({ ...FAILED_SLOT, status: 'generating' }, true);
-
-    const pill = document.querySelector('[data-status="generating"]');
-    expect(pill).toHaveTextContent('posts.statusGenerating');
-    expect(pill?.className).toMatch(/bg-info-soft/);
-    expect(pill?.querySelector('.animate-spin')).not.toBeNull();
-    expect(screen.queryByText('posts.groupInProgress')).not.toBeInTheDocument();
-  });
-
-  it('names the exact stage with the percent under the generating pill', () => {
-    renderCard({ ...FAILED_SLOT, status: 'generating', progress: 45, slotAt: '2030-06-01T10:00:00.000Z' }, true);
-
-    expect(screen.getAllByText('posts.statusGenerating')).toHaveLength(1);
-    expect(document.querySelector('[data-status="generating"]')?.querySelector('.animate-spin')).not.toBeNull();
-    expect(screen.queryByText('posts.groupInProgress')).not.toBeInTheDocument();
-    expect(screen.getByText('45%')).toBeInTheDocument();
-    expect(screen.getByText('posts.cardProgressCaption')).toBeInTheDocument();
-    const bar = screen.getByRole('progressbar');
-    expect(bar).toHaveAttribute('aria-valuenow', '45');
-    expect(bar.className.split(/\s+/)).toContain('flex-1');
-    expect(bar.querySelector('div')?.className.split(/\s+/)).toContain('bg-info');
+describe('resolveSlotAccounts', () => {
+  it('resolves no accounts without a schedule', () => {
+    expect(
+      resolveSlotAccounts(undefined, [{ id: 'ch1', provider: 'youtube', label: 'Europa Na Estrada' }]),
+    ).toEqual([]);
   });
 });
 
-describe('PostCard header and media', () => {
-  it('shows the full date with the time by default (history list)', () => {
-    renderCard({ ...FAILED_SLOT, status: 'awaiting', slotAt: '2030-06-01T10:00:00.000Z' });
+describe('GenerationCard thumbnail and failure state', () => {
+  it('shows the video thumbnail only for a completed generation', () => {
+    const { container } = renderCard({ status: 'completed', errorCode: null });
 
-    expect(screen.getByText(/2030 · \d{1,2}:\d{2}/)).toBeInTheDocument();
+    const video = container.querySelector('video');
+    expect(video).not.toBeNull();
+    expect(video?.getAttribute('src')).toBe('/api/persona/video-download/task-1/final-1.mp4#t=0.1');
+    // A completed card carries no failure line and no destructive border.
+    expect(container.querySelector('[data-generation-error]')).toBeNull();
+    const card = screen.getByRole('link').firstElementChild as HTMLElement;
+    expect(card.className.split(/\s+/)).not.toContain('border-destructive/35');
   });
 
-  it('labels scheduled vs published time in the day list', () => {
-    renderCard(
-      { ...FAILED_SLOT, status: 'published', publishedAt: '2030-06-01T10:05:00.000Z', slotAt: '2030-06-01T10:00:00.000Z' },
-      true,
-    );
-    expect(screen.getByRole('link', { name: 'posts.cardOpenDetail' }).querySelector('[data-card-when-kind]')).toBeNull();
+  it('shows the fallback icon without a thumbnail while the video is still generating', () => {
+    const { container } = renderCard({ status: 'generating', errorCode: null });
 
-    renderCard({ ...FAILED_SLOT, status: 'awaiting', slotAt: '2030-06-01T10:00:00.000Z' }, true);
-    expect(screen.getByText('posts.cardTimeScheduled')).toBeInTheDocument();
-
-    renderCard(
-      { ...FAILED_SLOT, status: 'generating', title: 'Generating only time', slotAt: '2030-06-01T10:00:00.000Z' },
-      true,
-    );
-    const generatingCard = screen.getByRole('link', { name: 'posts.cardOpenDetail' });
-    expect(generatingCard.querySelector('[data-card-when-kind]')).toBeNull();
+    expect(container.querySelector('video')).toBeNull();
+    expect(container.querySelector('[data-generation-error]')).toBeNull();
+    const icon = container.querySelector('.size-14 svg');
+    expect(icon?.getAttribute('class')).toContain('text-muted-text');
   });
 
-  it('shows only the time when the day list already names the date', () => {
-    renderCard({ ...FAILED_SLOT, status: 'awaiting', slotAt: '2030-06-01T10:00:00.000Z' }, true);
+  it('marks a failed generation with the destructive border and the error line', () => {
+    const { container } = renderCard({ status: 'failed', errorCode: 'custom_audio_invalid' });
 
-    expect(screen.queryByText(/2030/)).not.toBeInTheDocument();
-    expect(screen.getByText(/^\d{1,2}:\d{2}/)).toBeInTheDocument();
+    expect(container.querySelector('video')).toBeNull();
+    expect(container.querySelector('[data-generation-error]')).not.toBeNull();
+    const card = screen.getByRole('link').firstElementChild as HTMLElement;
+    expect(card.className.split(/\s+/)).toContain('border-destructive/35');
+  });
+});
+
+describe('GenerationCard fallbacks', () => {
+  it('falls back to the pending label and style for an unknown status', () => {
+    renderCard({ status: 'bogus' });
+
+    const badge = screen.getByText('posts.statusPending');
+    expect(badge.className.split(/\s+/)).toContain('bg-sunken');
+    expect(badge.className.split(/\s+/)).toContain('text-muted-text');
   });
 
-  it('shows the video thumbnail only after the preview loads, and no play tile before that', async () => {
-    renderCard({ ...FAILED_SLOT, status: 'published', taskId: 'task-1', publishedAt: '2030-06-01T10:05:00.000Z' });
-    const probe = document.querySelector('video');
-    expect(probe).toHaveAttribute('src', '/api/persona/video-download/task-1/final-1.mp4#t=0.1');
-    const link = screen.getByRole('link', { name: 'posts.cardOpenDetail' });
-    expect(link.querySelector('[data-card-no-preview]')).not.toBeNull();
-    probe?.dispatchEvent(new Event('loadeddata'));
-    await waitFor(() => {
-      expect(link.querySelector('[data-card-no-preview]')).toBeNull();
-    });
-    expect(link.querySelector('[data-card-chevron]')).not.toBeNull();
+  it('falls back to the unknown-error copy for an unmapped error code', () => {
+    renderCard({ status: 'failed', errorCode: 'not_a_real_code' });
+
+    expect(screen.getByText('posts.errorUnknown')).toBeInTheDocument();
   });
 
-  it('draws a quiet media placeholder when the post has no video yet', () => {
-    renderCard({ ...FAILED_SLOT, status: 'awaiting', taskId: null });
-    expect(document.querySelector('video')).toBeNull();
-    const placeholder = document.querySelector('[data-status="awaiting"]')?.closest('a')?.querySelector('[data-card-no-preview]');
-    expect(placeholder).not.toBeNull();
-    expect(placeholder).toHaveTextContent('posts.cardNoPreview');
-    expect(placeholder?.className).toMatch(/text-muted-foreground/);
-    expect(placeholder?.className).not.toMatch(/text-warning/);
-    expect(placeholder?.querySelector('svg')).toBeNull();
-  });
+  it('falls back to the unknown-error copy when the generation has no error code', () => {
+    renderCard({ status: 'failed', errorCode: null });
 
-  it('names the card link with the post title for screen readers', () => {
-    renderCard({
-      ...FAILED_SLOT,
-      status: 'published',
-      title: 'Calendar published',
-      taskId: 'task-1',
-      publishedAt: '2030-06-01T10:05:00.000Z',
-    });
-    expect(screen.getByRole('link', { name: 'posts.cardOpenDetail' })).toHaveAttribute('href', '/posts/f1');
-  });
-
-  it('does not underline the title as a second link affordance on a published card', () => {
-    renderCard({
-      ...FAILED_SLOT,
-      status: 'published',
-      title: 'Calendar published',
-      taskId: 'task-1',
-      publishedAt: '2030-06-01T10:05:00.000Z',
-    });
-    const title = screen.getByText('Calendar published');
-    expect(title.className.split(/\s+/)).not.toContain('underline');
-    expect(document.querySelector('[data-card-chevron]')).not.toBeNull();
-  });
-
-  it('keeps the header chevron separated from the timestamp', () => {
-    renderCard({ ...FAILED_SLOT, status: 'published', title: 'Calendar published', publishedAt: '2030-06-01T10:05:00.000Z' }, true);
-    const cardLink = screen.getByRole('link', { name: 'posts.cardOpenDetail' });
-    const header = cardLink.querySelector('[data-card-header]');
-    expect(header).not.toBeNull();
-    expect(header?.querySelector('[data-card-when]')?.textContent).toMatch(/\d{1,2}:\d{2}/);
-    expect(header?.querySelector('[data-card-open]')).toBeNull();
-    const open = cardLink.querySelector('[data-card-open]');
-    expect(open).toHaveTextContent('posts.cardOpen');
-    expect(open?.className.split(/\s+/)).toContain('border');
-    expect(header?.querySelector('[data-card-chevron]')).toBeNull();
-    expect(open?.querySelector('[data-card-chevron]')).not.toBeNull();
+    expect(screen.getByText('posts.errorUnknown')).toBeInTheDocument();
   });
 });

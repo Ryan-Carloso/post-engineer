@@ -287,6 +287,26 @@ describe('PostDetailPage', () => {
     expect(mutate).toHaveBeenCalledWith({ slotId: 'u1', title: 'New title' }, expect.anything());
   });
 
+  it('cancels an edit without saving and restores the original caption', async () => {
+    const user = userEvent.setup();
+    render(<DetailPage />);
+
+    await user.click(screen.getByRole('button', { name: 'posts.editCaption' }));
+    const textarea = screen.getByLabelText('posts.captionLabel');
+    await user.clear(textarea);
+    await user.type(textarea, 'Discarded title');
+    await user.click(screen.getByRole('button', { name: 'posts.cancel' }));
+
+    const mutate = vi.mocked(useUpdateSlotMutation).mock.results[0].value.mutate as ReturnType<typeof vi.fn>;
+    expect(mutate).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('posts.captionLabel')).not.toBeInTheDocument();
+    expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
+
+    // Reopening the editor shows the original caption, not the discarded draft.
+    await user.click(screen.getByRole('button', { name: 'posts.editCaption' }));
+    expect(screen.getByLabelText('posts.captionLabel')).toHaveValue('Upcoming topic');
+  });
+
   it('lists where the post was published, one link per provider', () => {
     mockQueries({
       slot: slotPayload({

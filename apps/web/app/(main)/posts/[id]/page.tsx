@@ -27,8 +27,9 @@ import { PROVIDER_LABELS, scheduleAccountIds } from '@/lib/account-options';
 import { useI18n } from '@/lib/i18n/provider';
 import { useCopyText } from '@/lib/use-copy-text';
 import type { TranslationKey } from '@/lib/i18n';
+import { Button } from '@/components/ui/button';
 import { STATUS_KEY, STATUS_STYLE } from '../status';
-import { PublishAccountNotices } from '../publish-user-notice';
+import { PostFailureNotice } from './post-failure-notice';
 
 //---------------
 // PostDetailPage (/posts/[id]) — the full-page post detail: big video
@@ -308,6 +309,7 @@ const DetailPlayer = ({ src, placeholder }: { src: string | null; placeholder: s
 
   return (
     <div className="mt-4">
+      {/* Media is capped: an uncapped 9:16 video (or an empty 16:9 box) pushed the facts below the fold. */}
       <div className="overflow-hidden rounded-2xl bg-black">
         {src ? (
           <video
@@ -316,12 +318,10 @@ const DetailPlayer = ({ src, placeholder }: { src: string | null; placeholder: s
             preload="metadata"
             onLoadedMetadata={handleMetadata}
             onError={handleError}
-            className="h-auto w-full"
+            className="mx-auto h-auto max-h-[46vh] w-auto max-w-full"
           />
         ) : (
-          <div className="flex aspect-video w-full items-center justify-center text-sm font-medium text-[#8aa2b5]">
-            {placeholder}
-          </div>
+          <div className="flex h-56 w-full items-center justify-center bg-sunken text-sm font-medium text-muted-foreground">{placeholder}</div>
         )}
       </div>
       {src && (
@@ -445,6 +445,8 @@ export const SlotDetail = ({
         />
       )}
 
+      {/* The failure reason sits under the player: first thing the reader needs. */}
+      <PostFailureNotice status={slot.status} error={slot.error} userNotices={slot.userNotices} />
       {canWatch && videoUrl && (
         <div className="mt-3">
           <a
@@ -470,29 +472,27 @@ export const SlotDetail = ({
               className="w-full rounded-xl border border-input px-3 py-2 text-sm text-primary focus:border-primary focus:outline-none"
             />
             <div className="mt-2 flex gap-2">
-              <button
+              <Button
                 type="button"
+                size="sm"
                 onClick={handleSave}
                 disabled={updateTitle.isPending || titleDraft.trim() === ''}
-                className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-ink hover:bg-accent-hover disabled:opacity-50"
               >
                 {t('posts.save')}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                onClick={() => {
-                  setEditing(false);
-                  setTitleDraft(slot.title ?? '');
-                }}
+                size="sm"
+                variant="outline"
+                onClick={() => { setEditing(false); setTitleDraft(slot.title ?? ''); }}
                 disabled={updateTitle.isPending}
-                className="rounded-xl border border-input px-4 py-2 text-sm font-semibold text-primary hover:bg-background"
               >
                 {t('posts.cancel')}
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
-          <p className="mt-2 rounded-xl border border-input bg-secondary px-3 py-2 text-sm text-primary">
+          <p className="mt-2 rounded-xl bg-secondary px-3.5 py-2.5 text-sm leading-relaxed text-primary">
             {slot.title ?? t('posts.unknownCaption')}
           </p>
         )}
@@ -527,8 +527,6 @@ export const SlotDetail = ({
           </div>
         </section>
       )}
-
-      <PublishAccountNotices status={slot.status} error={slot.error} userNotices={slot.userNotices} />
 
       <PublishLinks links={publishLinks} />
 
@@ -630,9 +628,9 @@ const DetailNotFound = ({ message }: { message?: string }) => {
   return (
     <div className="mx-auto max-w-3xl py-16 text-center">
       <p className="text-sm font-semibold text-primary">{message ?? t('posts.notFound')}</p>
-      <Link href="/posts" className="mt-4 inline-block rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-ink hover:bg-accent-hover">
-        {t('posts.back')}
-      </Link>
+      <Button asChild size="sm" className="mt-4">
+        <Link href="/posts">{t('posts.back')}</Link>
+      </Button>
     </div>
   );
 };

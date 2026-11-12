@@ -57,6 +57,11 @@ const PHOTOS = new Map<string, PersonaPhoto>([
 
 type DaySlot = Pick<ScheduledSlot, 'status' | 'scheduleId' | 'slotAt'>;
 
+// One dot per post inside the cell marker.
+function postDots(cell: Element | null): Element[] {
+  return cell === null ? [] : Array.from(cell.querySelectorAll('[data-post-dot]'));
+}
+
 function setup(overrides: Partial<React.ComponentProps<typeof CalendarView>> = {}) {
   const props = {
     year: 2030,
@@ -101,28 +106,32 @@ describe('CalendarView', () => {
     expect(dayButton(/June 21, 2030/).closest('[data-selected="true"]')).toBeNull();
   });
 
-  it('marks today with a gold bar under the numeral, not above it or on the row gap', () => {
+  it('marks today with a gold numeral and keeps that colour off the selected day', () => {
     setup({ selectedKey: '2030-06-20' });
     const today = dayButton(/June 15, 2030/);
     const number = today.querySelector('[data-day-numeral]');
     expect(number).toHaveTextContent('15');
+    expect(number?.className.split(/\s+/)).toContain('text-warning');
     expect(number?.className).not.toMatch(/bg-warning/);
-    expect(today.className.split(/\s+/)).toContain('overflow-hidden');
-    const bar = today.querySelector('[data-today-bar="true"]');
-    expect(bar).not.toBeNull();
-    expect(bar?.className.split(/\s+/)).not.toContain('absolute');
-    expect(bar?.parentElement?.getAttribute('data-day-number')).not.toBeNull();
-    expect(bar?.previousElementSibling?.getAttribute('data-day-numeral')).not.toBeNull();
-    const pill = today.querySelector('[data-day-post-total]');
-    if (pill !== null && bar !== null) {
-      expect(bar.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    }
-    expect(number?.querySelector('[data-today-mark]')).toBeNull();
-    expect(number?.className.split(/\s+/)).not.toContain('ring-warning');
-    expect(dayButton(/June 20, 2030/).querySelector('[data-today-bar]')).toBeNull();
+    expect(number?.className).not.toMatch(/bg-brand/);
+    expect(today.querySelector('[data-today-pip]')).toBeNull();
+    expect(today.querySelector('[data-today-bar]')).toBeNull();
+    const selected = dayButton(/June 20, 2030/).querySelector('[data-day-numeral]');
+    expect(selected?.className.split(/\s+/)).not.toContain('text-warning');
+    expect(selected?.className.split(/\s+/)).toContain('bg-brand');
   });
 
-  it('outlines only the numeral and leaves the count pill outside the ring', () => {
+  it('keeps today readable when it falls in the neighbouring month', () => {
+    // July 2030 opens on a Monday, so Sunday June 30 is an outside day of
+    // its first week: today shown outside its own month gets full opacity
+    // instead of the muted outside fade.
+    setup({ year: 2030, month: 6, todayKey: '2030-06-30', selectedKey: null });
+    const numeral = dayButton(/June 30, 2030/).querySelector('[data-day-numeral]');
+    expect(numeral?.className.split(/\s+/)).toContain('opacity-100');
+    expect(numeral?.className.split(/\s+/)).not.toContain('opacity-50');
+  });
+
+  it('outlines only the numeral and leaves the post dots outside the ring', () => {
     setup({
       selectedKey: '2030-06-05',
       slotsByDay: new Map([
@@ -135,7 +144,10 @@ describe('CalendarView', () => {
     const selected = dayButton(/June 5, 2030/);
     const numeral = selected.querySelector('[data-day-numeral]');
     expect(numeral).toHaveTextContent('5');
-    expect(numeral?.className.split(/\s+/)).toContain('outline-ring');
+    expect(numeral?.className.split(/\s+/)).toContain('bg-brand');
+    expect(numeral?.className.split(/\s+/)).toContain('rounded-lg');
+    expect(numeral?.className.split(/\s+/)).not.toContain('rounded-full');
+    expect(numeral?.className.split(/\s+/)).not.toContain('outline-ring');
     expect(selected.className.split(/\s+/)).not.toContain('data-[selected-single=true]:outline-primary');
     const total = selected.querySelector('[data-day-post-total]');
     expect(numeral?.contains(total)).toBe(false);
@@ -158,15 +170,23 @@ describe('CalendarView', () => {
     expect(selected.className.split(/\s+/)).toContain('shadow-none');
   });
 
-  it('keeps the today bar and post total as separate marks when today is selected', () => {
+  it('puts a gold pip above the brand chip when today is the selected day', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       ['2030-06-15', [{ status: 'awaiting', scheduleId: 's1', slotAt: '2030-06-15T10:00:00.000Z' }]],
     ]);
     setup({ selectedKey: '2030-06-15', slotsByDay });
     const today = dayButton(/June 15, 2030/);
-    expect(today.querySelector('[data-today-bar="true"]')).not.toBeNull();
-    expect(today.querySelector('[data-day-post-total]')).toHaveTextContent('1');
-    expect(today.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('outline-ring');
+    const pip = today.querySelector('[data-today-pip]');
+    const numeral = today.querySelector('[data-day-numeral]');
+    expect(pip).not.toBeNull();
+    expect(pip?.className.split(/\s+/)).toContain('bg-warning');
+    expect(numeral?.contains(pip)).toBe(false);
+    if (pip === null) throw new Error('today pip not rendered');
+    expect(pip.compareDocumentPosition(numeral!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(postDots(today.querySelector('[data-day-post-total]'))).toHaveLength(1);
+    expect(numeral?.className.split(/\s+/)).toContain('bg-brand');
+    expect(numeral?.className.split(/\s+/)).not.toContain('text-warning');
+    expect(today.querySelector('[data-today-bar]')).toBeNull();
   });
 
   it('keeps the phone legend on one row with even gaps and matching swatch scale', () => {
@@ -182,14 +202,19 @@ describe('CalendarView', () => {
       expect(item.className.split(/\s+/)).toContain('shrink-0');
       expect(item.className.split(/\s+/)).not.toContain('min-w-0');
     }
-    const todaySwatch = legend.querySelector('[data-legend-today-bar]');
-    expect(todaySwatch?.className.split(/\s+/)).toContain('max-xl:w-4');
+    const todaySwatch = legend.querySelector('[data-legend-today]');
+    expect(todaySwatch?.className.split(/\s+/)).toContain('text-warning');
+    expect(todaySwatch?.className.split(/\s+/)).toContain('max-xl:size-4');
     const countSwatch = legend.querySelector('[data-legend-post-total]');
-    expect(countSwatch?.className.split(/\s+/)).toContain('max-xl:w-4');
+    expect(postDots(countSwatch)).toHaveLength(4);
+    for (const dot of postDots(countSwatch)) {
+      expect(dot.className.split(/\s+/)).toContain('max-xl:size-1');
+    }
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
     expect(selectedSwatch).toHaveTextContent('5');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('max-xl:size-4');
-    expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-ring');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('bg-brand');
+    expect(selectedSwatch?.className.split(/\s+/)).not.toContain('outline-ring');
     expect(legend.closest('[data-calendar-card]')).not.toBeNull();
   });
 
@@ -237,11 +262,14 @@ describe('CalendarView', () => {
     ]);
     setup({ slotsByDay, selectedKey: '2030-06-05' });
     const cell = dayButton(/June 5, 2030/);
-    expect(cell.querySelector('[data-day-post-total]')).toHaveTextContent('2');
+    const dots = postDots(cell.querySelector('[data-day-post-total]'));
+    expect(dots).toHaveLength(2);
+    // Slot order: the strip reads as the day's timeline.
+    expect(dots.map((dot) => dot.getAttribute('data-group'))).toEqual(['published', 'scheduled']);
     expect(cell.querySelectorAll('[data-marker]')).toHaveLength(0);
   });
 
-  it('shows one total even when more than two groups share a day', () => {
+  it('draws one dot per post when more than two groups share a day', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
@@ -255,34 +283,36 @@ describe('CalendarView', () => {
       ['2030-06-06', [{ status: 'published', scheduleId: 's2', slotAt: '2030-06-06T10:00:00.000Z' }]],
     ]);
     setup({ slotsByDay });
-    expect(dayButton(/June 5, 2030/).querySelector('[data-day-post-total]')).toHaveTextContent('4');
-    expect(dayButton(/June 6, 2030/).querySelector('[data-day-post-total]')).toHaveTextContent('1');
+    expect(postDots(dayButton(/June 5, 2030/).querySelector('[data-day-post-total]'))).toHaveLength(4);
+    expect(postDots(dayButton(/June 6, 2030/).querySelector('[data-day-post-total]'))).toHaveLength(1);
     expect(dayButton(/June 5, 2030/).className.split(/\s+/)).not.toContain('bg-destructive-soft');
   });
 
-  // Selection is a navy outline on a clear cell. A failure stays on the
-  // chip, so a selected failed day is not a red block and an empty day is
-  // not a filled block.
-  it('outlines a selected failed day and leaves the failure on the chip', () => {
+  // Selection fills the numeral, not the cell. A failure stays on the
+  // post dot, so a selected failed day is not a red block.
+  it('fills the numeral of a selected failed day and leaves the failure on the dot', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       ['2030-06-05', [{ status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T12:00:00.000Z' }]],
     ]);
     setup({ slotsByDay, selectedKey: '2030-06-05' });
     const cell = dayButton(/June 5, 2030/);
-    expect(cell.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('outline-ring');
+    expect(cell.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('bg-brand');
+    expect(cell.querySelector('[data-day-numeral]')?.className.split(/\s+/)).not.toContain('outline-ring');
     expect(cell.className.split(/\s+/)).toEqual(
       expect.arrayContaining(['data-[selected-single=true]:bg-transparent', 'data-[selected-single=true]:text-primary']),
     );
     expect(cell.className.split(/\s+/)).not.toContain('data-[selected-single=true]:outline-primary');
     expect(cell.className.split(/\s+/)).not.toContain('bg-destructive-soft');
     expect(cell.className.split(/\s+/)).not.toContain('data-[selected-single=true]:bg-primary');
-    expect(cell.querySelector('[data-day-post-total]')).toHaveTextContent('1');
+    expect(postDots(cell.querySelector('[data-day-post-total]'))).toHaveLength(1);
   });
 
-  it('draws a selected day as the same outline, not a navy or blue block', () => {
+  it('fills only the numeral of a selected day, not the cell', () => {
     setup({ selectedKey: '2030-06-20' });
     const cell = dayButton(/June 20, 2030/);
-    expect(cell.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('outline-ring');
+    expect(cell.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('bg-brand');
+    expect(cell.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('text-white');
+    expect(cell.querySelector('[data-day-numeral]')?.className.split(/\s+/)).not.toContain('outline-ring');
     const classes = cell.className.split(/\s+/);
     expect(classes).toEqual(expect.arrayContaining(['data-[selected-single=true]:bg-transparent']));
     expect(classes).not.toContain('data-[selected-single=true]:outline-primary');
@@ -291,7 +321,7 @@ describe('CalendarView', () => {
     expect(classes).not.toContain('data-[selected-single=true]:text-primary-foreground');
   });
 
-  it('shows one total for four posts across every status group', () => {
+  it('draws one dot per post across every status group', () => {
     const slotsByDay = new Map<string, DaySlot[]>([
       [
         '2030-06-05',
@@ -305,8 +335,55 @@ describe('CalendarView', () => {
     ]);
     setup({ slotsByDay });
     const cell = dayButton(/June 5, 2030/);
-    expect(cell.querySelector('[data-day-post-total]')).toHaveTextContent('4');
+    const dots = postDots(cell.querySelector('[data-day-post-total]'));
+    expect(dots).toHaveLength(4);
+    expect(dots.map((dot) => dot.getAttribute('data-group'))).toEqual([
+      'failed',
+      'published',
+      'inProgress',
+      'scheduled',
+    ]);
     expect(cell.querySelector('[data-personas]')).toBeNull();
+  });
+
+  it('paints each dot with its calendar group colour', () => {
+    const slotsByDay = new Map<string, DaySlot[]>([
+      [
+        '2030-06-05',
+        [
+          { status: 'failed', scheduleId: 's1', slotAt: '2030-06-05T08:00:00.000Z' },
+          { status: 'published', scheduleId: 's2', slotAt: '2030-06-05T10:00:00.000Z' },
+          { status: 'publishing', scheduleId: 's1', slotAt: '2030-06-05T11:00:00.000Z' },
+          { status: 'awaiting', scheduleId: 's3', slotAt: '2030-06-05T12:00:00.000Z' },
+        ],
+      ],
+    ]);
+    setup({ slotsByDay });
+    const dots = postDots(dayButton(/June 5, 2030/).querySelector('[data-day-post-total]'));
+    expect(dots.map((dot) => dot.className.split(/\s+/).filter((name) => name.startsWith('bg-')))).toEqual([
+      ['bg-destructive'],
+      ['bg-success'],
+      ['bg-info'],
+      ['bg-muted-text'],
+    ]);
+  });
+
+  it('caps the strip at four dots and counts the rest in a small +N', () => {
+    const slotsByDay = new Map<string, DaySlot[]>([
+      [
+        '2030-06-05',
+        Array.from({ length: 6 }, (_, index) => ({
+          status: 'awaiting' as const,
+          scheduleId: 's1',
+          slotAt: `2030-06-05T${String(index + 8).padStart(2, '0')}:00:00.000Z`,
+        })),
+      ],
+    ]);
+    setup({ slotsByDay });
+    const marker = dayButton(/June 5, 2030/).querySelector('[data-day-post-total]');
+    expect(postDots(marker)).toHaveLength(4);
+    expect(marker?.querySelector('[data-day-post-overflow]')).toHaveTextContent('+2');
+    expect(postDots(marker)[0]?.getAttribute('data-group')).toBe('scheduled');
   });
 
   it('still marks the status of a day whose posts resolve to no persona', () => {
@@ -322,7 +399,7 @@ describe('CalendarView', () => {
     setup({ slotsByDay });
     const cell = dayButton(/June 9, 2030/);
     expect(cell.querySelector('[data-personas]')).toBeNull();
-    expect(cell.querySelector('[data-day-post-total]')).toHaveTextContent('2');
+    expect(postDots(cell.querySelector('[data-day-post-total]'))).toHaveLength(2);
   });
 
   it('names empty days explicitly and draws no marker or persona', () => {
@@ -343,30 +420,35 @@ describe('CalendarView', () => {
     const items = within(legend).getAllByRole('listitem');
     expect(items.map((item) => item.textContent)).toEqual([
       'posts.calendarLegendPostCount',
-      'Today',
+      '11Today',
       '5posts.calendarLegendSelected',
     ]);
     expect(items[2]?.querySelector('[data-legend-selected-day]')).toHaveTextContent('5');
+    // The legend sample is the same strip a cell draws: one dot per group,
+    // in the calendar order, so the colours are learnable from the legend.
     const countSwatch = legend.querySelector('[data-legend-post-total]');
     expect(countSwatch).toBeTruthy();
-    expect(countSwatch).toBeEmptyDOMElement();
-    expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/55');
-    expect(countSwatch?.className.split(/\s+/)).toContain('rounded-full');
-    expect(countSwatch?.className.split(/\s+/)).toContain('bg-primary/22');
-    expect(countSwatch?.className.split(/\s+/)).toContain('xl:min-w-6');
-    expect(countSwatch?.className.split(/\s+/)).not.toContain('w-8');
-    expect(countSwatch?.className.split(/\s+/)).toContain('border-primary/55');
+    const legendDots = postDots(countSwatch);
+    expect(legendDots.map((dot) => dot.className.split(/\s+/).filter((name) => name.startsWith('bg-')))).toEqual([
+      ['bg-destructive'],
+      ['bg-success'],
+      ['bg-info'],
+      ['bg-muted-text'],
+    ]);
     const selectedSwatch = legend.querySelector('[data-legend-selected-day]');
     expect(selectedSwatch).toHaveTextContent('5');
     expect(selectedSwatch).toHaveAttribute('aria-hidden', 'true');
-    const todaySwatch = legend.querySelector('[data-legend-today-bar]');
-    expect(todaySwatch?.className).toMatch(/bg-warning/);
-    expect(legend.querySelector('[data-legend-today-mark]')).toBeNull();
-    expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-ring');
-    expect(selectedSwatch?.className.split(/\s+/)).toContain('outline-2');
-    expect(selectedSwatch?.className.split(/\s+/)).toContain('rounded-md');
+    const todaySwatch = legend.querySelector('[data-legend-today]');
+    expect(todaySwatch?.className.split(/\s+/)).toContain('text-warning');
+    expect(todaySwatch?.className).not.toMatch(/bg-warning/);
+    expect(legend.querySelector('[data-legend-today-bar]')).toBeNull();
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('bg-brand');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('text-white');
+    expect(selectedSwatch?.className.split(/\s+/)).toContain('rounded-lg');
+    expect(selectedSwatch?.className.split(/\s+/)).not.toContain('rounded-full');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('size-7');
     expect(selectedSwatch?.className.split(/\s+/)).toContain('font-semibold');
+    expect(selectedSwatch?.className.split(/\s+/)).not.toContain('outline-ring');
     expect(selectedSwatch?.className.split(/\s+/)).not.toContain('outline-primary');
     expect(selectedSwatch?.className.split(/\s+/)).not.toContain('border-primary');
     expect(selectedSwatch?.className).not.toMatch(/bg-info-soft/);
@@ -561,7 +643,7 @@ describe('CalendarView', () => {
     expect(onToday).toBeEnabled();
     expect(onToday).toHaveAttribute('aria-pressed', 'true');
     const onTodayClasses = onToday.className.split(/\s+/);
-    expect(onTodayClasses).toEqual(expect.arrayContaining(['h-10', 'px-3', 'bg-primary', 'text-on-ink']));
+    expect(onTodayClasses).toEqual(expect.arrayContaining(['h-10', 'px-3', 'bg-brand', 'text-white']));
     expect(onTodayClasses).not.toContain('opacity-50');
   });
 
@@ -571,7 +653,7 @@ describe('CalendarView', () => {
     expect(today).toBeEnabled();
     expect(today).toHaveAttribute('aria-pressed', 'false');
     expect(today.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-10', 'px-3', 'border', 'border-input', 'bg-card']));
-    expect(today.className.split(/\s+/)).not.toContain('bg-primary');
+    expect(today.className.split(/\s+/)).not.toContain('bg-brand');
   });
 
   it('formats the weekday headers with Intl short names', () => {

@@ -32,7 +32,7 @@ describe('CalendarUnavailableFrame', () => {
     expect(icon?.className).toMatch(/bg-warning-soft/);
     expect(icon?.querySelector('svg')?.classList.contains('size-6')).toBe(true);
     const retry = screen.getByRole('button', { name: 'posts.loadErrorRetry' });
-    expect(retry.className).toMatch(/bg-primary/);
+    expect(retry.className).toMatch(/bg-brand/);
     fireEvent.click(retry);
     expect(onRetry).toHaveBeenCalledTimes(1);
   });

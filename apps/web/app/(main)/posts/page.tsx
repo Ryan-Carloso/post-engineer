@@ -22,6 +22,8 @@ import {
 import { AccountEmptyState, DayEmptyState } from './day-section';
 import { CALENDAR_LAYOUT_CLASS, CalendarLoadingSkeleton } from './loading-skeleton';
 import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-joins';
+import { PageHeader } from '@/components/ui/page-header';
+import { Button } from '@/components/ui/button';
 
 //---------------
 // PostsPage — month calendar of every post (past and upcoming) across all
@@ -134,24 +136,25 @@ export default function PostsPage() {
   return (
     <div className="mx-auto max-w-6xl">
       {/* On a load error the header refresh hides; retry lives in the calendar card. */}
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-[-0.02em] text-primary">{t('posts.title')}</h1>
-        {!isError && (
-          <button
-            type="button"
-            onClick={handleRefresh}
-            disabled={rangeQuery.isFetching}
-            aria-label={t('posts.refresh')}
-            className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-input bg-card px-3 text-xs font-semibold text-primary hover:bg-sunken disabled:cursor-default sm:h-10 sm:gap-2 sm:px-4 sm:text-sm"
-          >
-            <RefreshCw className={cn('size-4', rangeQuery.isFetching && 'animate-spin')} aria-hidden />
-            <span>{t('posts.refresh')}</span>
-          </button>
-        )}
-      </div>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {t(isError ? 'posts.subtitleLoadError' : 'posts.subtitle')}
-      </p>
+      <PageHeader
+        title={t('posts.title')}
+        description={t(isError ? 'posts.subtitleLoadError' : 'posts.subtitle')}
+        actions={
+          !isError && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={rangeQuery.isFetching}
+              aria-label={t('posts.refresh')}
+            >
+              <RefreshCw className={cn('size-4', rangeQuery.isFetching && 'animate-spin')} aria-hidden />
+              {t('posts.refresh')}
+            </Button>
+          )
+        }
+      />
 
       <PostFiltersBar
         filters={filters}
@@ -249,9 +252,9 @@ export default function PostsPage() {
                           onClearFilters={filters.clear}
                         />
                       ) : (
-                      // One column in the side panel; two equal-height columns
-                      // in between; one on a phone.
-                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+                      // One column in the side panel; two in between; one on a
+                      // phone. Rows, not cards: a full day fits without scroll.
+                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                           {selectedSlots.map((slot) => (
                             <SlotCard key={slot.id} slot={slot} joins={joins} timeOnly />
                           ))}

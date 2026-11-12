@@ -175,13 +175,28 @@ describe('Main Layout — Sidebar', () => {
     cy.url().should('match', /\/login$/);
   });
 
+});
+
+//---------------
+// "Sign out everywhere" no longer lives in the sidebar footer: the
+// compact AccountPanel (app-shell.tsx) hides it so the footer stays
+// short, and the full panel on /account renders it. These specs pin
+// the dialog itself, so they drive it from /account.
+//---------------
+describe('Sign out everywhere — /account page', () => {
+  beforeEach(() => {
+    cy.viewport(...TALL_VIEWPORT);
+    cy.loginE2EUser();
+    interceptShellData();
+  });
+
   it('pede confirmação antes de sair de todos os dispositivos', () => {
     // The confirmation dialog is the boundary: confirming here would fire
     // a GLOBAL sign-out against the shared E2E account, revoking the
     // session of the parallel cypress job mid-run (the /landing bounce).
     // The global path's behavior is pinned by the unit tests instead.
     seedUserMetadata({ name: 'Cypress' });
-    cy.visit('/');
+    cy.visit('/account');
     cy.contains('p', 'Cypress', { timeout: 10_000 }).scrollIntoView().should('be.visible');
 
     cy.get('[data-testid=sign-out-all-button]').scrollIntoView().click();
@@ -198,7 +213,7 @@ describe('Main Layout — Sidebar', () => {
     // a GLOBAL sign-out against the shared E2E account. The auth-server
     // logout call is stubbed, so only the UI flow is exercised.
     seedUserMetadata({ name: 'Cypress' });
-    cy.visit('/');
+    cy.visit('/account');
     cy.contains('p', 'Cypress', { timeout: 10_000 }).scrollIntoView().should('be.visible');
 
     cy.intercept('POST', '**/auth/v1/logout*', { statusCode: 204 });
@@ -213,7 +228,7 @@ describe('Main Layout — Sidebar', () => {
     // Failure path: the dialog stays open with the retryable alert and
     // the user is NOT routed away (other devices stay signed in).
     seedUserMetadata({ name: 'Cypress' });
-    cy.visit('/');
+    cy.visit('/account');
     cy.contains('p', 'Cypress', { timeout: 10_000 }).scrollIntoView().should('be.visible');
 
     cy.intercept('POST', '**/auth/v1/logout*', { statusCode: 500, body: { msg: 'kaboom' } });
@@ -232,7 +247,7 @@ describe('Main Layout — Sidebar', () => {
     // modal (from inside with wrap-around, or from outside — e.g. body)
     // and Escape closes while the sign-out is not pending.
     seedUserMetadata({ name: 'Cypress' });
-    cy.visit('/');
+    cy.visit('/account');
     cy.contains('p', 'Cypress', { timeout: 10_000 }).scrollIntoView().should('be.visible');
 
     cy.get('[data-testid=sign-out-all-button]').scrollIntoView().click();
@@ -280,7 +295,7 @@ describe('Main Layout — Sidebar', () => {
     // instead of escaping the dialog. The logout is stubbed with a
     // 100s delay so the request stays in flight for the assertion.
     seedUserMetadata({ name: 'Cypress' });
-    cy.visit('/');
+    cy.visit('/account');
     cy.contains('p', 'Cypress', { timeout: 10_000 }).scrollIntoView().should('be.visible');
 
     cy.intercept('POST', '**/auth/v1/logout*', (req) => {

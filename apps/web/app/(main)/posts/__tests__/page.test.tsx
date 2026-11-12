@@ -198,18 +198,21 @@ describe('posts calendar legend copy', () => {
 });
 
 describe('PostsPage', () => {
-  it("opens on the calendar with today's posts below it: persona, title, status and account avatars", () => {
+  it("opens on the calendar with today's posts below it: title, persona, status and network glyphs", () => {
     render(<PostsPage />);
 
     expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
     expect(screen.getByText('Viva Leve')).toBeInTheDocument();
     // An awaiting post carries the calendar's own word for it.
-    const card = within(screen.getByText('Upcoming topic').closest('a') as HTMLElement);
-    expect(card.getByText('posts.groupScheduled')).toBeInTheDocument();
-    expect(card.queryByText('posts.statusPending')).not.toBeInTheDocument();
-    // Account names appear in the account filter option and as a chip on the card.
-    expect(screen.getAllByText('Europa Na Estrada').length).toBe(2);
-    expect(screen.getAllByText('@vivalave').length).toBe(2);
+    const row = screen.getByText('Upcoming topic').closest('a') as HTMLElement;
+    expect(within(row).getByText('posts.groupScheduled')).toBeInTheDocument();
+    expect(within(row).queryByText('posts.statusPending')).not.toBeInTheDocument();
+    // The row names the networks it targets; the account labels stay in the
+    // filter, where a full name belongs, and the row keeps a glyph per network.
+    expect(row.querySelectorAll('[role="img"]')).toHaveLength(2);
+    expect(row.querySelector('[aria-label="youtube"]')).not.toBeNull();
+    expect(row.querySelector('[aria-label="instagram"]')).not.toBeNull();
+    expect(screen.getAllByText('Europa Na Estrada').length).toBe(1);
     // History items are hidden on the calendar tab
     expect(screen.queryByText('Past topic')).not.toBeInTheDocument();
   });
@@ -250,29 +253,29 @@ describe('PostsPage', () => {
     expect(screen.queryByText('posts.personaFallback')).not.toBeInTheDocument();
   });
 
-  it('renders the status badge first, then the time only, the title above the persona, and network + account chips', () => {
+  it('reads title first, then persona, time and networks, with the status chip last', () => {
     render(<PostsPage />);
 
-    const card = screen.getByText('Upcoming topic').closest('a')?.parentElement;
-    expect(card).not.toBeNull();
-    const text = card?.textContent ?? '';
-    // Status label precedes the time, which precedes the title, then the persona.
-    const timeIndex = text.search(/\d{1,2}:\d{2}/);
-    expect(timeIndex).toBeGreaterThan(-1);
-    expect(text.indexOf('posts.groupScheduled')).toBeLessThan(timeIndex);
-    expect(timeIndex).toBeLessThan(text.indexOf('Upcoming topic'));
+    const row = screen.getByText('Upcoming topic').closest('a');
+    expect(row).not.toBeNull();
+    const text = row?.textContent ?? '';
+    // One dense line: the title is the row's main line, the persona and the
+    // time are its supporting line, and the status chip closes the row.
     expect(text.indexOf('Upcoming topic')).toBeLessThan(text.indexOf('Viva Leve'));
-    // The day heading already names the date: the card repeats only the time.
-    expect(text).not.toContain('·');
+    const personaIndex = text.indexOf('Viva Leve');
+    const timeIndex = text.search(/\d{1,2}:\d{2}/);
+    expect(timeIndex).toBeGreaterThan(personaIndex);
+    expect(text.indexOf('posts.groupScheduled')).toBeGreaterThan(timeIndex);
+    // The day heading already names the date: the row repeats only the time.
     expect(text).not.toContain('2030');
-    // The title is the card's main line, the persona the secondary one.
+    expect(text).not.toContain('Jun');
+    // The title is the row's main line, the persona the supporting one.
     expect(screen.getByText('Upcoming topic').className.split(/\s+/)).toContain('font-semibold');
-    expect(screen.getByText('Viva Leve').className.split(/\s+/)).toContain('text-ink-soft');
-    // Chips: network glyph (role img) + account label — they sit in the card root, next to the link.
-    const chips = within(card as HTMLElement);
-    expect(chips.getByRole('img', { name: 'youtube' })).toBeInTheDocument();
-    expect(chips.getByText('Europa Na Estrada')).toBeInTheDocument();
-    expect(chips.getByText('@vivalave')).toBeInTheDocument();
+    expect(screen.getByText('Viva Leve').parentElement?.className.split(/\s+/)).toContain('text-muted-foreground');
+    // The networks sit on the supporting line as glyphs, with no label.
+    const support = screen.getByText('Viva Leve').parentElement;
+    expect(support?.querySelector('[aria-label="youtube"]')).not.toBeNull();
+    expect(support?.textContent).not.toContain('Europa Na Estrada');
   });
 
   it('filters slots by provider', async () => {
@@ -558,14 +561,19 @@ describe('PostsPage', () => {
     const grid = screen.getByRole('grid');
     const todayCell = grid.querySelector('[data-today]');
     expect(todayCell?.querySelector('[data-day-numeral]')).toHaveTextContent('1');
-    expect(todayCell?.querySelector('[data-today-bar="true"]')).not.toBeNull();
+    // The page opens with today selected, so the numeral is the brand chip
+    // and today is the gold pip above it. Gold text is only an unselected today.
+    expect(todayCell?.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('bg-brand');
+    expect(todayCell?.querySelector('[data-day-numeral]')?.className.split(/\s+/)).not.toContain('text-warning');
+    expect(todayCell?.querySelector('[data-today-pip]')?.className.split(/\s+/)).toContain('bg-warning');
 
     vi.setSystemTime(new Date('2030-06-02T00:01:00.000Z'));
     rerender(<PostsPage />);
 
     const nextToday = screen.getByRole('grid').querySelector('[data-today]');
     expect(nextToday?.querySelector('[data-day-numeral]')).toHaveTextContent('2');
-    expect(nextToday?.querySelector('[data-today-bar="true"]')).not.toBeNull();
+    expect(nextToday?.querySelector('[data-day-numeral]')?.className.split(/\s+/)).toContain('text-warning');
+    expect(nextToday?.querySelector('[data-today-pip]')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'posts.calendarGoToToday' }));
     expect(screen.getByRole('grid').querySelector('[data-selected="true"]')?.textContent).toBe('2');
   });
@@ -724,7 +732,7 @@ describe('PostsPage fallbacks', () => {
     expect(screen.getByText('posts.personaFallback')).toBeInTheDocument();
   });
 
-  it('renders at most three account chips per card and collapses the rest into +N', () => {
+  it('draws at most three network glyphs per row, whatever the schedule targets', () => {
     mockQueries();
     const accounts = ['Alpha One', 'Beta Two', 'Gamma Three', 'Delta Four', 'Epsilon Five'].map(
       (name, i) => ({ channelId: `ch${i}`, channelName: name }),
@@ -740,12 +748,10 @@ describe('PostsPage fallbacks', () => {
     } as never);
     render(<PostsPage />);
 
-    const card = within(screen.getByText('Upcoming topic').closest('a')?.parentElement as HTMLElement);
-    expect(card.getByText('Alpha One')).toBeInTheDocument();
-    expect(card.getByText('Beta Two')).toBeInTheDocument();
-    expect(card.getByText('Gamma Three')).toBeInTheDocument();
-    expect(card.queryByText('Delta Four')).not.toBeInTheDocument();
-    expect(card.getByText('+3')).toBeInTheDocument(); // 5 YouTube + the Instagram account = 6 chips, 3 shown
+    const row = screen.getByText('Upcoming topic').closest('a') as HTMLElement;
+    // 5 YouTube accounts + the Instagram account resolve to 6 accounts; the
+    // glyph strip stops at 3 so the row never wraps.
+    expect(row.querySelectorAll('[role="img"]')).toHaveLength(3);
   });
 
   it('labels every provider filter option with its own network name', () => {
@@ -852,7 +858,7 @@ describe('PostsPage calendar view', () => {
     expect(cells.some((cell) => cell.querySelector('[data-day-post-total]') !== null)).toBe(false);
   });
 
-  it('shows only the scheduled status marker in the cell for a day with one awaiting post', () => {
+  it('shows one scheduled dot and no persona in the cell for a day with one awaiting post', () => {
     mockQueries();
     render(<PostsPage />);
 
@@ -861,7 +867,10 @@ describe('PostsPage calendar view', () => {
       .find((button) => button.querySelector('[data-day-numeral]')?.textContent === '1');
     expect(day1).toBeDefined();
     expect((day1 as HTMLElement).querySelector('img')).toBeNull();
-    expect((day1 as HTMLElement).querySelector('[data-day-post-total]')).toHaveTextContent('1');
+    const dots = (day1 as HTMLElement).querySelectorAll('[data-post-dot]');
+    expect(dots).toHaveLength(1);
+    expect(dots[0]?.getAttribute('data-group')).toBe('scheduled');
+    expect(dots[0]?.className.split(/\s+/)).toContain('bg-muted-text');
     expect((day1 as HTMLElement).querySelector('[data-personas]')).toBeNull();
   });
 
@@ -1017,6 +1026,20 @@ describe('PostsPage calendar view', () => {
     }
   });
 
+  it('refetches the has-any-post read too when the month is empty', async () => {
+    // The "never posted" read only exists while the month is empty, so a
+    // refresh there must refetch it as well as the range.
+    mockQueries({ range: [] });
+    const hasAnyRefetch = vi.fn();
+    vi.mocked(useHasAnyPostQuery).mockReturnValue({ data: false, isLoading: false, isError: false, refetch: hasAnyRefetch } as never);
+    const user = userEvent.setup();
+    render(<PostsPage />);
+
+    const refresh = screen.getAllByRole('button', { name: 'posts.refresh' })[0];
+    await user.click(refresh as HTMLElement);
+    expect(hasAnyRefetch).toHaveBeenCalledTimes(1);
+  });
+
   it('shows a bare recovery frame on a load error with a single in-card retry and no day-selection copy', async () => {
     mockQueries();
     const refetch = vi.fn();
@@ -1056,8 +1079,8 @@ describe('PostsPage calendar view', () => {
     expect(loadError?.closest('[data-calendar-card]')?.className).toMatch(/border-line/);
     expect(document.querySelector('[data-load-error-banner="true"]')).toBeNull();
     expect(alert.closest('.xl\\:col-span-2')).not.toBeNull();
-    expect(retry.className).toMatch(/bg-primary/);
-    expect(retry.className).toMatch(/text-primary-foreground/);
+    expect(retry.className).toMatch(/bg-brand/);
+    expect(retry.className).toMatch(/text-white/);
     expect(retry.className).toMatch(/min-h-10/);
   });
 

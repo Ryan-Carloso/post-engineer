@@ -8,54 +8,84 @@ import { useI18n } from '@/lib/i18n/provider';
 import { cn } from '@/lib/utils';
 import { calendarCounts, dayKey } from './calendar-days';
 import {
+  CALENDAR_GROUP_DOT,
   CALENDAR_GROUP_KEY,
   CALENDAR_GROUP_ORDER,
-  type CalendarGroup,
+  calendarGroupOf,
 } from './status';
 
 //---------------
-// The posts calendar's day cell: one post-total pill per day (the status
-// breakdown lives in the accessible name), the gold today bar, and the
-// selected-day ring — plus the legend swatches that sample the same marks
-// so the legend always matches what a cell shows. Extracted from
-// calendar-view.tsx to keep it small.
+// The posts calendar's day cell: a row of post dots (one per post, coloured
+// by its calendar group; the status breakdown is in the accessible name),
+// the gold today numeral, and the filled selected-day chip — plus the
+// legend swatches that sample the same marks so the legend always matches
+// what a cell shows. Extracted from calendar-view.tsx to keep it small.
 //---------------
 
-export const DAY_POST_TOTAL_CLASS =
-  'inline-flex h-6 min-w-6 max-xl:h-[1.625rem] max-xl:min-w-[1.625rem] items-center justify-center rounded-full border border-primary/55 bg-primary/22 px-1.5 text-xs font-bold leading-none text-primary tabular-nums shadow-[0_1px_0_rgba(13,43,69,0.14)]';
+// A dot is one post: the same dot fills for every network and every status,
+// so a week of posts reads like a density strip instead of a wall of numbers.
+export const DAY_POST_DOT_CLASS = 'size-1.5 shrink-0 rounded-full';
+export const DAY_POST_DOTS_CLASS = 'flex items-center justify-center gap-1';
 
-// Legend count sample: empty day-total dot (phone matches selected swatch scale).
-export const LEGEND_POST_TOTAL_SWATCH_CLASS = cn(
-  'pointer-events-none box-border inline-flex shrink-0 items-center justify-center rounded-full border border-primary/55 bg-primary/22 px-0 shadow-[0_1px_0_rgba(13,43,69,0.14)]',
-  'h-4 min-h-4 w-4 min-w-4 max-w-4 max-xl:h-4 max-xl:min-h-4 max-xl:w-4 max-xl:min-w-4 max-xl:max-w-4',
-  'xl:h-6 xl:min-h-6 xl:w-6 xl:min-w-6 xl:max-w-6',
-);
+// Beyond this many posts the cell would need a second row and stop reading
+// as a strip; the extra posts become a small "+N" and the day panel lists
+// every one of them.
+export const MAX_DAY_DOTS = 4;
 
-export const TODAY_TOP_BAR_CLASS = 'h-1 w-full shrink-0 rounded-full bg-warning';
+// Legend sample: the same dots a cell shows, one per calendar group, so the
+// legend teaches the colours.
+export function LegendPostDotsSwatch() {
+  return (
+    <span aria-hidden data-legend-post-total className="pointer-events-none inline-flex shrink-0 items-center gap-0.5">
+      {CALENDAR_GROUP_ORDER.map((group) => (
+        <span
+          key={group}
+          data-post-dot
+          data-group={group}
+          className={cn(DAY_POST_DOT_CLASS, 'max-xl:size-1', CALENDAR_GROUP_DOT[group])}
+        />
+      ))}
+    </span>
+  );
+}
 
-// Directly under the today numeral — underlines the date, not the row above.
-export const TODAY_CELL_BAR_CLASS =
-  'pointer-events-none mt-0.5 h-1.5 w-10 max-w-[calc(100%-0.25rem)] shrink-0 rounded-full bg-warning';
+// Today is the numeral's own colour. A bar under the digit sat in the same
+// row as the post dots and read as another status.
+export const TODAY_NUMERAL_CLASS = 'text-warning';
 
-// Legend today: the same gold top bar as the grid — not a miniature scene.
-export const LEGEND_TODAY_BAR_SWATCH_CLASS =
-  'inline-block h-1 w-4 max-xl:w-4 shrink-0 rounded-full bg-warning align-middle xl:w-10';
+// Only when today is also the open day: a gold pip above the chip, never
+// down with the posts. The chip already says "selected".
+export const TODAY_PIP_CLASS = 'size-1.5 shrink-0 rounded-full bg-warning';
 
-// Fixed square frame so the ring never grows with the cell stack (outline-offset was
-// collapsing the digit).
-export const SELECTED_DAY_NUMERAL_OUTLINE_CLASS =
-  'box-border inline-flex size-7 min-h-7 min-w-7 shrink-0 items-center justify-center overflow-visible rounded-md bg-transparent p-0 outline outline-2 outline-offset-0 outline-ring';
+// Legend today: the same gold numeral the grid uses, not a bar.
+export function LegendTodaySwatch() {
+  return (
+    <span
+      aria-hidden
+      data-legend-today
+      className="pointer-events-none inline-flex size-7 max-xl:size-4 max-xl:min-h-4 max-xl:min-w-4 max-xl:text-[10px] shrink-0 items-center justify-center text-base font-semibold leading-none text-warning tabular-nums"
+    >
+      11
+    </span>
+  );
+}
 
-// Legend selected-day sample: same ring as the grid numeral, not an empty checkbox.
+// Selected day: a filled brand square with rounded corners, on the numeral
+// only. A circle read as another status dot, and a blue ring was the same
+// hue as an in-progress post.
+export const SELECTED_DAY_NUMERAL_CLASS =
+  'box-border inline-flex size-7 min-h-7 min-w-7 shrink-0 items-center justify-center overflow-visible rounded-lg bg-brand p-0 text-white';
+
+// Legend selected-day sample: the same filled chip as the grid numeral.
 export function LegendSelectedDaySwatch() {
   return (
     <span
       aria-hidden
       data-legend-selected-day
       className={cn(
-        SELECTED_DAY_NUMERAL_OUTLINE_CLASS,
-        'pointer-events-none font-semibold leading-none text-primary tabular-nums',
-        'max-xl:size-4 max-xl:min-h-4 max-xl:min-w-4 max-xl:text-[10px]',
+        SELECTED_DAY_NUMERAL_CLASS,
+        'pointer-events-none font-semibold leading-none tabular-nums',
+        'max-xl:size-4 max-xl:min-h-4 max-xl:min-w-4 max-xl:rounded max-xl:text-[10px]',
         'xl:text-base',
       )}
     >
@@ -64,27 +94,42 @@ export function LegendSelectedDaySwatch() {
   );
 }
 
-function DayCellPostTotal({
-  total,
-  groups,
-  counts,
-}: {
-  total: number;
-  groups: CalendarGroup[];
-  counts: Record<CalendarGroup, number>;
-}) {
+function DayCellPostTotal({ slots }: { slots: DaySlot[] }) {
   const { t } = useI18n();
-  const breakdown = groups.map((group) => `${t(CALENDAR_GROUP_KEY[group])}: ${counts[group]}`).join(', ');
+  const counts = calendarCounts(slots);
+  // Failure first, like the day summary: the breakdown only feeds the title
+  // and the accessible name, never a number inside the cell.
+  const breakdown = CALENDAR_GROUP_ORDER.filter((group) => counts[group] > 0)
+    .map((group) => `${t(CALENDAR_GROUP_KEY[group])}: ${counts[group]}`)
+    .join(', ');
+  // Slot order: the strip reads as the day's timeline, left to right.
+  const ordered = [...slots].sort((a, b) => a.slotAt.localeCompare(b.slotAt));
+  const shown = ordered.slice(0, MAX_DAY_DOTS);
+  const hidden = ordered.length - shown.length;
   return (
-    <span
-      data-day-post-total
-      title={breakdown}
-      className={cn(
-        DAY_POST_TOTAL_CLASS,
-        'max-xl:px-2 px-1.5',
+    <span data-day-post-total title={breakdown} className={DAY_POST_DOTS_CLASS}>
+      {shown.map((slot, index) => {
+        const group = calendarGroupOf(slot.status);
+        return (
+          <span
+            key={`${slot.scheduleId}:${slot.slotAt}:${index}`}
+            aria-hidden
+            data-post-dot
+            data-group={group}
+            data-status={slot.status}
+            className={cn(DAY_POST_DOT_CLASS, CALENDAR_GROUP_DOT[group])}
+          />
+        );
+      })}
+      {hidden > 0 && (
+        <span
+          aria-hidden
+          data-day-post-overflow
+          className="text-[10px] leading-none font-semibold text-muted-foreground tabular-nums"
+        >
+          +{hidden}
+        </span>
       )}
-    >
-      {total}
     </span>
   );
 }
@@ -100,18 +145,17 @@ interface DayContextValue {
 export const DayCellContext = createContext<DayContextValue>({ slotsByDay: new Map() });
 
 //---------------
-// PostsDayButton — one day cell. One post total (per-status breakdown is
-// only in the accessible name and on the day's cards). No persona names in
-// the cell (the list below names them). Today is a gold bar under the
-// numeral, then the count pill. Selection outlines only the numeral;
-// the count pill stays below it like unselected days.
+// PostsDayButton — one day cell. A row of post dots (one per post, coloured
+// by group; the per-status breakdown is only in the title and the day's
+// rows). No persona names in the cell (the list below names them). Today
+// colours the numeral gold. Selection fills that numeral with the brand
+// chip. When both are true, a gold pip sits above the chip. The post dots
+// stay below it, in their own row.
 //---------------
 export function PostsDayButton({ children, day, modifiers, className, ...props }: ComponentProps<typeof DayButton>) {
   const { slotsByDay } = useContext(DayCellContext);
   const key = dayKey(day.date);
   const slots = slotsByDay.get(key) ?? [];
-  const counts = calendarCounts(slots);
-  const groups = CALENDAR_GROUP_ORDER.filter((group) => counts[group] > 0);
   const { today: isToday, outside: isOutside } = modifiers;
   const selectedSingle =
     modifiers.selected && !modifiers.range_start && !modifiers.range_end && !modifiers.range_middle;
@@ -138,7 +182,7 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
         !isOutside && 'hover:bg-sunken hover:text-primary',
         'data-[selected-single=true]:bg-transparent data-[selected-single=true]:hover:bg-transparent',
         !isOutside && 'data-[selected-single=true]:text-primary',
-        // shadcn Button paints a focus ring on the whole cell — nested under the numeral ring.
+        // shadcn Button paints a focus ring on the whole cell. Focus stays on the numeral.
         'border-0 shadow-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0',
         'group-data-[focused=true]/day:bg-transparent group-data-[focused=true]/day:ring-0 group-data-[focused=true]/day:shadow-none',
         'group-data-[focused=true]/day:[&_[data-day-numeral]]:outline group-data-[focused=true]/day:[&_[data-day-numeral]]:outline-2 group-data-[focused=true]/day:[&_[data-day-numeral]]:outline-offset-0 group-data-[focused=true]/day:[&_[data-day-numeral]]:outline-ring',
@@ -154,23 +198,29 @@ export function PostsDayButton({ children, day, modifiers, className, ...props }
           isToday && slots.length > 0 && 'gap-1',
         )}
       >
+        <span data-today-pip-slot className="flex h-2 w-full items-end justify-center">
+          {isToday && selectedSingle && !isOutside ? (
+            <span aria-hidden data-today-pip className={TODAY_PIP_CLASS} />
+          ) : null}
+        </span>
         <span
           data-day-numeral
           className={cn(
             'inline-flex shrink-0 items-center justify-center text-base leading-none',
             isOutside ? 'font-normal text-muted-foreground opacity-50' : 'font-semibold text-primary',
             isToday && isOutside && 'opacity-100',
-            selectedSingle && !isOutside && SELECTED_DAY_NUMERAL_OUTLINE_CLASS,
+            isToday && !selectedSingle && !isOutside && TODAY_NUMERAL_CLASS,
+            selectedSingle && !isOutside && SELECTED_DAY_NUMERAL_CLASS,
             !(selectedSingle && !isOutside) && 'min-h-6',
           )}
         >
           {children}
         </span>
-        {isToday && <span aria-hidden data-today-bar="true" className={TODAY_CELL_BAR_CLASS} />}
       </span>
       {slots.length > 0 && (
-        <span aria-hidden className="flex shrink-0 items-center justify-center">
-          <DayCellPostTotal total={slots.length} groups={groups} counts={counts} />
+        // Clear of the chip, so a post dot never reads as part of the selection.
+        <span aria-hidden className="mt-1 flex shrink-0 items-center justify-center">
+          <DayCellPostTotal slots={slots} />
         </span>
       )}
     </Button>

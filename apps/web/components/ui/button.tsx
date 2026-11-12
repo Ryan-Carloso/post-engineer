@@ -9,7 +9,10 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        // The app's CTA is the brand accent, not `--primary`: in this design
+        // system `--primary` is the *text* colour, so the shadcn default
+        // (`bg-primary`) rendered as a solid white pill on the dark theme.
+        default: "bg-brand text-white shadow-sm hover:bg-brand-hover",
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline:

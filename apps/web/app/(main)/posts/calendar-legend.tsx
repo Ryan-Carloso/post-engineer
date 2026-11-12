@@ -4,9 +4,9 @@ import { Filter } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/provider';
 import { cn } from '@/lib/utils';
 import {
-  LEGEND_POST_TOTAL_SWATCH_CLASS,
-  LEGEND_TODAY_BAR_SWATCH_CLASS,
+  LegendPostDotsSwatch,
   LegendSelectedDaySwatch,
+  LegendTodaySwatch,
 } from './calendar-markers';
 
 export function CalendarLegend({
@@ -27,11 +27,11 @@ export function CalendarLegend({
       )}
     >
       <li className="flex shrink-0 items-center gap-1 whitespace-nowrap max-xl:gap-1 xl:gap-1.5">
-        <span aria-hidden data-legend-post-total className={LEGEND_POST_TOTAL_SWATCH_CLASS} />
+        <LegendPostDotsSwatch />
         {t('posts.calendarLegendPostCount')}
       </li>
       <li className="flex shrink-0 items-center gap-1 whitespace-nowrap max-xl:gap-1 xl:gap-1.5">
-        <span aria-hidden data-legend-today-bar className={LEGEND_TODAY_BAR_SWATCH_CLASS} />
+        <LegendTodaySwatch />
         {t('posts.calendarToday')}
       </li>
       {showSelection && (

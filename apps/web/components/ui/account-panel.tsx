@@ -109,7 +109,7 @@ export function LocaleSwitcher() {
 //---------------
 // SignOutButton — signs out via Supabase and routes to /login.
 //---------------
-export function SignOutButton() {
+export function SignOutButton({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
   const { t } = useI18n();
 
@@ -127,7 +127,9 @@ export function SignOutButton() {
       type="button"
       onClick={handleSignOut}
       title={t('nav.signOut')}
-      className="flex w-full items-center gap-3.5 rounded-[18px] bg-surface px-4 py-3 text-left text-[15px] font-semibold leading-snug text-ink transition-colors hover:bg-sunken"
+      className={`flex w-full items-center gap-3.5 rounded-[18px] bg-surface text-left font-semibold leading-snug text-ink transition-colors hover:bg-sunken ${
+        compact ? 'px-3.5 py-1.5 text-sm' : 'px-4 py-3 text-[15px]'
+      }`}
     >
       <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7} aria-hidden="true">
         <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0-4-4m4 4H7m6 4v1a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v1" />
@@ -332,9 +334,13 @@ export function MobileProfileLink() {
 export function AccountPanel({
   showVersionBadge = false,
   hideSidebarApiKeysRow = false,
+  compact = false,
 }: {
   showVersionBadge?: boolean;
   hideSidebarApiKeysRow?: boolean;
+  // compact: the sidebar footer form. Same rows, tighter padding and a
+  // one-line token balance, so every nav item stays visible at 900px.
+  compact?: boolean;
 }) {
   const { t } = useI18n();
   const sessionQuery = useSessionQuery();
@@ -342,12 +348,12 @@ export function AccountPanel({
   const { avatarUrl, userName } = getUserDisplay(user?.user_metadata);
 
   return (
-    <div className="space-y-3">
+    <div className={compact ? 'space-y-2' : 'space-y-3'}>
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1"><LocaleSwitcher /></div>
         <ThemeSwitcher className="shrink-0" />
       </div>
-      <TokenBalance />
+      <TokenBalance compact={compact} />
       {showVersionBadge && (
         <div className="flex items-center justify-between rounded-[28px] border border-hairline bg-surface px-5 py-3">
           <span className="text-sm font-medium text-muted-text">{t('account.version')}</span>
@@ -355,24 +361,31 @@ export function AccountPanel({
         </div>
       )}
       {user && (
-        <div className="space-y-3 pb-0.5">
+        <div className={compact ? 'space-y-1.5 pb-0.5' : 'space-y-3 pb-0.5'}>
           <Link
             href="/account"
             data-testid="profile-user-link"
             aria-label={t('nav.profile')}
-            className="flex items-center gap-3 border-t border-hairline px-1 pt-4 lg:gap-3 lg:pt-5"
+            className={`flex items-center gap-3 border-t border-hairline px-1 ${
+              compact ? 'pt-3' : 'pt-4 lg:pt-5'
+            }`}
           >
-            <AvatarCircle avatarUrl={avatarUrl} userName={userName} className="size-10 text-sm lg:size-12" />
+            <AvatarCircle avatarUrl={avatarUrl} userName={userName} className={compact ? 'size-9 text-sm' : 'size-10 text-sm lg:size-12'} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[15px] leading-tight font-semibold tracking-[-0.02em] text-ink lg:text-[18px]">
+              <p className={`truncate leading-tight font-semibold tracking-[-0.02em] text-ink ${
+                compact ? 'text-sm' : 'text-[15px] lg:text-[18px]'
+              }`}>
                 {userName || 'GitHub User'}
               </p>
             </div>
           </Link>
-          {!hideSidebarApiKeysRow && <ApiKeysRow />}
-          <BillingRow />
-          <SignOutButton />
-          <SignOutAllButton />
+          {!hideSidebarApiKeysRow && <ApiKeysRow compact={compact} />}
+          <BillingRow compact={compact} />
+          <SignOutButton compact={compact} />
+          {/* "Sign out everywhere" is a security action, not a daily one: it
+              lives on /account (the user row links there) so the sidebar
+              footer stays short enough for every nav item. */}
+          {!compact && <SignOutAllButton />}
         </div>
       )}
     </div>
@@ -384,13 +397,15 @@ export function AccountPanel({
 // key manager lives in step 1 of the prompts hub (/recipes), next to the
 // setup prompt that uses the key.
 //---------------
-export function ApiKeysRow() {
+export function ApiKeysRow({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
   return (
     <Link
       href="/recipes"
       data-testid="profile-api-keys-link"
-      className="flex w-full items-center gap-3.5 rounded-[18px] bg-surface px-4 py-3 text-left text-[15px] leading-snug text-muted-text transition-colors hover:bg-sunken hover:text-ink"
+      className={`flex w-full items-center gap-3.5 rounded-[18px] bg-surface text-left leading-snug text-muted-text transition-colors hover:bg-sunken hover:text-ink ${
+        compact ? 'px-3.5 py-1.5 text-sm' : 'px-4 py-3 text-[15px]'
+      }`}
     >
       <span className="shrink-0 [&>svg]:size-5">
         <KeyIcon />
@@ -406,13 +421,15 @@ export function ApiKeysRow() {
 // is unchanged, and buying tokens plus viewing history stay one tap
 // away from the account panel, exactly like API Keys above.
 //---------------
-export function BillingRow() {
+export function BillingRow({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
   return (
     <Link
       href="/billing"
       data-testid="profile-billing-link"
-      className="flex w-full items-center gap-3.5 rounded-[18px] bg-surface px-4 py-3 text-left text-[15px] leading-snug text-muted-text transition-colors hover:bg-sunken hover:text-ink"
+      className={`flex w-full items-center gap-3.5 rounded-[18px] bg-surface text-left leading-snug text-muted-text transition-colors hover:bg-sunken hover:text-ink ${
+        compact ? 'px-3.5 py-1.5 text-sm' : 'px-4 py-3 text-[15px]'
+      }`}
     >
       <span className="shrink-0 [&>svg]:size-5">
         <CoinsIcon />

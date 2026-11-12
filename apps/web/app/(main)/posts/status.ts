@@ -65,6 +65,16 @@ export const CALENDAR_GROUP_PILL: Record<CalendarGroup, string> = {
   scheduled: 'bg-line text-ink-soft',
 };
 
+// The calendar cell's post dot: the full-status hue (a dot is 6px, so a soft
+// tint would vanish). A scheduled post is quiet ink, not a hue: it is not an
+// event, it is a time waiting.
+export const CALENDAR_GROUP_DOT: Record<CalendarGroup, string> = {
+  failed: 'bg-destructive',
+  published: 'bg-success',
+  inProgress: 'bg-info',
+  scheduled: 'bg-muted-text',
+};
+
 export const CALENDAR_GROUP_KEY: Record<CalendarGroup, TranslationKey> = {
   published: 'posts.groupPublished',
   failed: 'posts.groupFailed',

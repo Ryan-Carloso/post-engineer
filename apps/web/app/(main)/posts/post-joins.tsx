@@ -19,7 +19,8 @@ import { useI18n } from '@/lib/i18n/provider';
 import { PROVIDER_LABELS, accountOption, type AccountOption, scheduleAccountIds } from '@/lib/account-options';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { PostCard, resolveSlotAccounts } from './post-card';
+import { resolveSlotAccounts } from './post-card';
+import { PostRow } from './post-row';
 import type { PersonaPhoto } from './calendar-days';
 
 //---------------
@@ -297,7 +298,9 @@ export function PostFiltersBar({
 }
 
 // timeOnly: the calendar's day list already names the day in its heading,
-// so its cards show only the time; the history list keeps the full date.
+// so its rows show only the time; the history list keeps the full date.
+// Both lists render the same PostRow: one post reads the same way wherever
+// it shows up.
 export function SlotCard({ slot, joins, timeOnly = false }: { slot: ScheduledSlot; joins: PostJoins; timeOnly?: boolean }) {
   const { t, locale } = useI18n();
   const schedule = joins.scheduleById.get(slot.scheduleId);
@@ -307,7 +310,7 @@ export function SlotCard({ slot, joins, timeOnly = false }: { slot: ScheduledSlo
   const personaId = schedule?.personaId ?? null;
   const personaName = personaId === null ? t('posts.noPersona') : joins.personaNameById.get(personaId) ?? t('posts.personaFallback');
   return (
-    <PostCard
+    <PostRow
       slot={slot}
       personaName={personaName}
       accounts={resolveSlotAccounts(schedule, joins.accountOptions)}
