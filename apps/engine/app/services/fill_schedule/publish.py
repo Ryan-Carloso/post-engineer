@@ -17,6 +17,7 @@ from app.services.fill_schedule.constants import (
     SLOT_PUBLISHED,
     SLOT_PUBLISHING,
 )
+from app.services.fill_schedule.metadata import validate_publish_plan
 from app.services.fill_schedule.publish_accounts import (
     lease_iso,
     next_delay_seconds,
@@ -97,6 +98,36 @@ class BatchPublisher:
                 return 0
         elif not self.store.claim_ready_slot(str(slot["id"]), now):
             return 0
+        # Issue #572: re-check the persona binding at publish time, after
+        # the claim and before any video leaves the server. The generate
+        # pre-flight proves the plan before GPU is spent, but the schedule
+        # row is the publisher's only input — an account unbound after
+        # generation (or a schedule created before the binding existed)
+        # would otherwise publish to an account the persona no longer
+        # owns. A schedule without a persona (faceless) skips the check.
+        # A binding read that fails leaves the slot in `publishing` for
+        # the resume path instead of publishing blind: fail closed, and a
+        # transient outage never burns a generated video.
+        persona_id = schedule.get("persona_id")
+        if isinstance(persona_id, str) and persona_id:
+            try:
+                bound = self.store.persona_bound_accounts(persona_id)
+            except Exception as exc:  # noqa: BLE001 — fail closed, retry later
+                logger.warning(
+                    f"fill_schedule: slot {slot['id']} binding read failed, "
+                    f"leaving it for the next tick: {notify_module.safe_diagnostic(exc)}"
+                )
+                return 0
+            try:
+                validate_publish_plan(schedule, title, description, bound)
+            except (RuntimeError, ValueError) as exc:
+                self._fail_slot_permanently(
+                    slot,
+                    schedule,
+                    str(exc),
+                    "Publish blocked by the persona binding check; video refunded",
+                )
+                return 0
         if not resumed:
             # Once per publish: a resume (backoff, crash lease) is the same publish.
             track_event("video_publish_started", publish_tracking_context(slot, schedule))

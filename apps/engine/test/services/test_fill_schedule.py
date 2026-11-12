@@ -1381,6 +1381,103 @@ class PublishDueTests(unittest.TestCase):
         self.assertEqual(kwargs["content_type"], "video/mp4")
         self.assertEqual(store.updates[-1][1]["status"], "published")
 
+    def _bound_slot(self, bound_accounts):
+        # Issue #572: a ready slot whose schedule names an account for a
+        # persona, with the binding the publisher must re-check at publish
+        # time (read fresh — an account unbound after generation must not
+        # publish).
+        slot = self._slot()
+        slot["charged_tokens"] = 1
+        slot["schedules"]["id"] = "sched-1"
+        slot["schedules"]["persona_id"] = "persona-1"
+        slot["schedules"]["youtube_account_ids"] = ["yt-1"]
+        store = _FakeStore()
+        store.bound_accounts = bound_accounts
+        store.ready_due_slots = lambda now: [slot]
+        return slot, store
+
+    def _run_publish_ok(self, slot, store):
+        state = MagicMock()
+        state.get_task.return_value = {
+            "state": 1,
+            "videos": [self.video_path],
+            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+        }
+        publish = MagicMock(return_value={"success": True, "results": [{"success": True}]})
+        scheduler = fs.FillScheduleScheduler(
+            store=store,
+            task_state=state,
+            publish_video=publish,
+        )
+        scheduler.publisher.base_url = "https://post-engineer.com"
+        scheduler.publisher.api_secret = "secret"
+        published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
+        return store, published, publish
+
+    def test_publish_fails_when_the_account_is_not_bound_to_the_persona(self):
+        # Issue #572: the binding is re-checked at publish time, not only
+        # in the generate pre-flight — a schedule created before the
+        # binding existed (or an account unbound after generation) must
+        # never publish to that account. The slot fails permanently and
+        # its prepaid token is refunded; the video never leaves the server.
+        from app.services.fill_schedule import publish as pub_module
+
+        slot, store = self._bound_slot({"youtube": ["yt-other"]})
+        with patch.object(pub_module, "track_event") as track:
+            _, published, publish = self._run_publish_ok(slot, store)
+        self.assertEqual(published, 0)
+        publish.assert_not_called()
+        self.assertEqual(store.updates[-1][1]["status"], "failed")
+        self.assertIn("not bound to persona", store.updates[-1][1]["error"])
+        self.assertEqual(len(store.refund_batch_calls), 1)
+        failed_calls = [c for c in track.call_args_list if c[0][0] == "video_publish_failed"]
+        self.assertEqual(len(failed_calls), 1)
+        self.assertFalse(failed_calls[0][0][1]["retryable"])
+
+    def test_publish_proceeds_when_the_account_is_bound_to_the_persona(self):
+        slot, store = self._bound_slot({"youtube": ["yt-1"]})
+        _, published, publish = self._run_publish_ok(slot, store)
+        self.assertEqual(published, 1)
+        publish.assert_called_once()
+        self.assertEqual(store.updates[-1][1]["status"], "published")
+
+    def test_publish_fails_when_the_persona_has_no_bound_accounts(self):
+        # A persona with zero bound accounts must not exist — and a slot
+        # that somehow names one still fails at publish time instead of
+        # publishing to an account the persona never owned.
+        slot, store = self._bound_slot({})
+        _, published, publish = self._run_publish_ok(slot, store)
+        self.assertEqual(published, 0)
+        publish.assert_not_called()
+        self.assertEqual(store.updates[-1][1]["status"], "failed")
+        self.assertIn("not bound to persona", store.updates[-1][1]["error"])
+
+    def test_publish_without_persona_skips_the_binding_check(self):
+        # Faceless / persona-less slots carry no binding: the check keys
+        # off the schedule's persona_id, so a slot without one publishes
+        # exactly like before — the binding must never block it.
+        slot = self._slot()
+        slot["schedules"]["youtube_account_ids"] = ["yt-1"]
+        store = _FakeStore()
+        store.bound_accounts = {}
+        store.ready_due_slots = lambda now: [slot]
+        _, published, publish = self._run_publish_ok(slot, store)
+        self.assertEqual(published, 1)
+        publish.assert_called_once()
+
+    def test_publish_binding_read_failure_leaves_slot_publishing_for_retry(self):
+        # A binding read that fails (Supabase down) fails closed: the
+        # video never leaves the server, but the slot is NOT failed — it
+        # stays `publishing` for the resume path, so a transient outage
+        # does not burn a generated video.
+        slot, store = self._bound_slot({"youtube": ["yt-1"]})
+        store.persona_bound_accounts = MagicMock(side_effect=RuntimeError("supabase down"))
+        _, published, publish = self._run_publish_ok(slot, store)
+        self.assertEqual(published, 0)
+        publish.assert_not_called()
+        self.assertEqual(store.updates, [])
+        self.assertEqual(store.refund_batch_calls, [])
+
     def test_scheduled_publish_reads_from_the_verified_archive_path(self):
         # The R2 object path recorded at archive time is the only source:
         # a None-swapped or dropped argument must fail.
