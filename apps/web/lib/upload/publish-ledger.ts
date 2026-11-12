@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import type { SocialProvider } from '@/lib/providers/registry';
 import { accountFailure } from '@/lib/upload/account-error';
+import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import type { ContentUploadAccountResult } from '@/lib/upload/content-upload-result';
 
 //---------------
@@ -168,4 +169,93 @@ export function publishInProgressResult(accountId: string): ContentUploadAccount
 
 export function createPublishLedgerClient(): SupabaseClient {
   return createSupabaseServiceClient();
+}
+
+export interface PublishLedgerPartition {
+  scopeKey: string;
+  provider: SocialProvider;
+  /** Accounts this request may publish (claim held, fenced by the token). */
+  granted: Array<{ accountId: string; claimToken: string }>;
+  /** Already-published accounts with their recorded results. */
+  replayed: ContentUploadAccountResult[];
+  /** Accounts still publishing under an earlier request. */
+  waiting: ContentUploadAccountResult[];
+  /** FormData carrying only the granted accounts, for the handler. */
+  formData: FormData;
+}
+
+// Splits one upload-content call into the accounts this request may
+// publish, the ones already published (replayed from the ledger), and the
+// ones still in flight. The handler only ever sees granted accounts: a
+// replayed or waiting account never reaches the provider again.
+export async function partitionPublishAccounts(
+  supabase: SupabaseClient,
+  scopeKey: string,
+  provider: SocialProvider,
+  userId: string,
+  formData: FormData,
+): Promise<PublishLedgerPartition> {
+  const field = PUBLISH_ACCOUNT_FIELDS[provider];
+  const accountIds = getAccountIdsFromFormData(formData, field);
+  const granted: PublishLedgerPartition['granted'] = [];
+  const replayed: ContentUploadAccountResult[] = [];
+  const waiting: ContentUploadAccountResult[] = [];
+  for (const accountId of accountIds) {
+    const claim = await claimPublishAttempt(supabase, { scopeKey, provider, accountId, userId });
+    if (claim.outcome === 'claimed' && claim.claimToken !== null) {
+      granted.push({ accountId, claimToken: claim.claimToken });
+    } else if (claim.outcome === 'published' && claim.result !== null) {
+      replayed.push(claim.result);
+    } else {
+      waiting.push(publishInProgressResult(accountId));
+    }
+  }
+  const next = new FormData();
+  formData.forEach((value, key) => {
+    if (key !== field) next.append(key, value);
+  });
+  for (const { accountId } of granted) next.append(field, accountId);
+  return { scopeKey, provider, granted, replayed, waiting, formData: next };
+}
+
+function isAccountResult(value: unknown): value is ContentUploadAccountResult {
+  return (
+    isRecord(value) && typeof value.accountId === 'string' && typeof value.success === 'boolean'
+  );
+}
+
+// Records the handler's outcome for every account this request claimed.
+// An account the handler never reported keeps its claim: the outcome is
+// unknown, so the lease expiry — not a recorded failure — is the recovery.
+export async function recordPartitionResults(
+  supabase: SupabaseClient,
+  partition: PublishLedgerPartition,
+  results: unknown,
+): Promise<void> {
+  if (!Array.isArray(results)) return;
+  const byAccount = new Map<string, ContentUploadAccountResult>();
+  for (const item of results) {
+    if (isAccountResult(item)) byAccount.set(item.accountId, item);
+  }
+  for (const granted of partition.granted) {
+    const result = byAccount.get(granted.accountId);
+    if (result === undefined) continue;
+    await recordPublishAttempt(supabase, {
+      scopeKey: partition.scopeKey,
+      provider: partition.provider,
+      accountId: granted.accountId,
+      claimToken: granted.claimToken,
+      result,
+    });
+  }
+}
+
+// One results list for the caller: replayed posts first, then accounts
+// still in flight, then what the handler just published.
+export function mergePartitionResults(
+  partition: PublishLedgerPartition,
+  results: unknown,
+): ContentUploadAccountResult[] {
+  const handlerResults = Array.isArray(results) ? results.filter(isAccountResult) : [];
+  return [...partition.replayed, ...partition.waiting, ...handlerResults];
 }

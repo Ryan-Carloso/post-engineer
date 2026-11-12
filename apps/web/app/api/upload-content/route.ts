@@ -19,6 +19,17 @@ import {
 } from '@/lib/upload/handlers';
 import { SOCIAL_PROVIDERS, isSocialProvider } from '@/lib/providers/registry';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { classifyUploadAccountError } from '@/lib/upload/account-error';
+import type { ContentUploadAccountResult } from '@/lib/upload/content-upload-result';
+import {
+  createPublishLedgerClient,
+  isValidPublishScopeKey,
+  mergePartitionResults,
+  partitionPublishAccounts,
+  recordPublishAttempt,
+  recordPartitionResults,
+  type PublishLedgerPartition,
+} from '@/lib/upload/publish-ledger';
 
 //---------------
 // Unified content upload — POST /api/upload-content
@@ -131,26 +142,86 @@ async function postHandler(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
 
-    const response =
-      provider === 'youtube'
-        ? await handleYoutubeUpload(formData, userId, logId, startTime)
-        : provider === 'bluesky'
-          ? await handleBlueskyUpload(formData, userId)
-          : provider === 'linkedin'
-            ? await handleLinkedinUpload(formData, userId)
-            : provider === 'threads'
-              ? await handleThreadsUpload(formData, userId)
-              : provider === 'facebook'
-                ? await handleFacebookUpload(formData, userId)
-                : provider === 'pinterest'
-                  ? await handlePinterestUpload(formData, userId)
-                  : provider === 'fanvue'
-                    ? await handleFanvueUpload(formData, userId)
-                    : provider === '3speak'
-                      ? await handleThreespeakUpload(formData, userId)
-                      : provider === 'rumble'
-                        ? await handleRumbleUpload(formData, userId)
-                        : await handleInstagramUpload(formData, userId, logId, startTime);
+    // Publish ledger — a retry of the same slot/video must not post again.
+    // The engine sends a deterministic `publishScopeKey` (slot + video);
+    // a direct caller sends `direct:<key>`. Without a valid key the
+    // request publishes exactly as before: no ledger, no behaviour change.
+    // A claim failure fails closed (500): publishing without the ledger
+    // could duplicate the post, so the engine retries later instead.
+    const scopeKeyRaw = formData.get('publishScopeKey');
+    const scopeKey = isValidPublishScopeKey(scopeKeyRaw) ? scopeKeyRaw : null;
+    const ledgerClient = scopeKey !== null ? createPublishLedgerClient() : null;
+    let partition: PublishLedgerPartition | null = null;
+    if (scopeKey !== null && ledgerClient !== null) {
+      partition = await partitionPublishAccounts(ledgerClient, scopeKey, provider, userId, formData);
+    }
+
+    type UploadDispatchResult = {
+      success: boolean;
+      results?: ContentUploadAccountResult[];
+      [key: string]: unknown;
+    };
+    let response: UploadDispatchResult;
+    if (partition !== null && partition.granted.length === 0) {
+      // Every account already published or still in flight: nothing to call.
+      const results = mergePartitionResults(partition, []);
+      response = { success: results.some((result) => result.success), results };
+    } else {
+      const handlerForm = partition !== null ? partition.formData : formData;
+      try {
+        response =
+          provider === 'youtube'
+            ? await handleYoutubeUpload(handlerForm, userId, logId, startTime)
+            : provider === 'bluesky'
+              ? await handleBlueskyUpload(handlerForm, userId)
+              : provider === 'linkedin'
+                ? await handleLinkedinUpload(handlerForm, userId)
+                : provider === 'threads'
+                  ? await handleThreadsUpload(handlerForm, userId)
+                  : provider === 'facebook'
+                    ? await handleFacebookUpload(handlerForm, userId)
+                    : provider === 'pinterest'
+                      ? await handlePinterestUpload(handlerForm, userId)
+                      : provider === 'fanvue'
+                        ? await handleFanvueUpload(handlerForm, userId)
+                        : provider === '3speak'
+                          ? await handleThreespeakUpload(handlerForm, userId)
+                          : provider === 'rumble'
+                            ? await handleRumbleUpload(handlerForm, userId)
+                            : await handleInstagramUpload(handlerForm, userId, logId, startTime);
+      } catch (error) {
+        if (partition !== null && ledgerClient !== null) {
+          // The handler failed before publishing (validation): release the
+          // claims as failed so the next retry proceeds at once instead of
+          // waiting out the lease.
+          const held = partition;
+          const failure = classifyUploadAccountError(error);
+          await Promise.all(
+            held.granted.map((granted) =>
+              recordPublishAttempt(ledgerClient, {
+                scopeKey: held.scopeKey,
+                provider,
+                accountId: granted.accountId,
+                claimToken: granted.claimToken,
+                result: {
+                  accountId: granted.accountId,
+                  success: false,
+                  error: failure.error,
+                  errorCode: failure.errorCode,
+                },
+              }),
+            ),
+          );
+        }
+        throw error;
+      }
+      if (partition !== null && ledgerClient !== null) {
+        const results = response.results;
+        await recordPartitionResults(ledgerClient, partition, results);
+        const merged = mergePartitionResults(partition, results);
+        response = { ...response, success: merged.some((result) => result.success), results: merged };
+      }
+    }
 
     logger.info('[upload-content] handler finalizado', { provider, success: response.success, logId });
     return NextResponse.json(response);
