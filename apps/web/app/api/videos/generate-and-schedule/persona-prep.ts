@@ -13,7 +13,9 @@ import type { VoiceFallbackInfo } from '@/lib/voice-fallback';
 // one video at a time (~15 min each), so the last slot of a batch is picked
 // up hours after creation. This matches the engine's fill_schedule horizon
 // (apps/engine/app/services/fill_schedule/constants.py: SIGNED_URL_EXPIRES_SECONDS = 24 * 3600).
-const SIGNED_URL_TTL_SECONDS = 24 * 3600;
+// Shared with lib/engine-image-url.ts: the house-character re-host signs
+// with the same horizon, so the two generation-time signings cannot drift.
+export const SIGNED_URL_TTL_SECONDS = 24 * 3600;
 
 /** signedUrl() never throws: a signing failure resolves to undefined and is
  * classified by the caller's guards — the incident stays diagnosable here. */
