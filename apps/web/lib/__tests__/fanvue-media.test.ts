@@ -341,37 +341,25 @@ describe('uploadVideoToFanvueVault', () => {
     expect(`${call(6).url.pathname}`).toBe('/media/media-1');
   });
 
-  it('uses the totalParts the API returned', async () => {
+  it('rejects a session whose totalParts does not cover the whole file', async () => {
+    // 10 bytes at a 4-byte partSize need 3 parts; an API totalParts of 2
+    // would leave the last 2 bytes unsent and silently truncate the video.
     mockFetch.mockResolvedValueOnce(sessionResponse({ totalParts: 2 }));
-    mockFetch.mockResolvedValueOnce(
-      jsonResponse({
-        partSize: 4,
-        parts: [
-          { partNumber: 1, url: partUrl(1) },
-          { partNumber: 2, url: partUrl(2) },
-        ],
-      }),
-    );
-    mockFetch.mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: '"e1"' } }));
-    mockFetch.mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: '"e2"' } }));
-    mockFetch.mockResolvedValueOnce(jsonResponse({ status: 'processing' }));
-    mockFetch.mockResolvedValueOnce(jsonResponse({ status: 'ready' }));
 
-    await uploadVideoToFanvueVault({
-      accessToken: 'at-1',
-      video,
-      filename: 'clip.mp4',
-      contentType: 'video/mp4',
-    });
-    expect(mockFetch).toHaveBeenCalledTimes(6);
-    // The API's totalParts wins: part 2 is one partSize slice, not the rest
-    // of the buffer.
-    expect((call(3).init.body as Blob).size).toBe(4);
+    await expect(
+      uploadVideoToFanvueVault({
+        accessToken: 'at-1',
+        video,
+        filename: 'clip.mp4',
+        contentType: 'video/mp4',
+      }),
+    ).rejects.toThrow('session covers 8 of 10 bytes');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it('fails when the signed URLs skip a part it must upload', async () => {
     mockFetch
-      .mockResolvedValueOnce(sessionResponse({ totalParts: 2 }))
+      .mockResolvedValueOnce(sessionResponse({ totalParts: 3 }))
       .mockResolvedValueOnce(
         jsonResponse({ partSize: 4, parts: [{ partNumber: 1, url: partUrl(1) }] }),
       )

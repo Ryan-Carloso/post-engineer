@@ -327,6 +327,16 @@ export async function uploadVideoToFanvueVault(
   if (!Number.isInteger(totalParts) || totalParts < 1) {
     throw new FanvueError('FANVUE_UPLOAD_FAILED: invalid totalParts', 502);
   }
+  // The API's totalParts must cover the whole file: a smaller value would
+  // leave the buffer tail unsent and silently truncate the video — the
+  // exact failure this client was rewritten to stop. An inconsistent
+  // session fails loudly here, before any part is signed.
+  if (totalParts * session.partSize < input.video.length) {
+    throw new FanvueError(
+      `FANVUE_UPLOAD_FAILED: session covers ${totalParts * session.partSize} of ${input.video.length} bytes`,
+      502,
+    );
+  }
   if (totalParts > session.maxParts) {
     throw new FanvueError(
       `FANVUE_UPLOAD_FAILED: file needs ${totalParts} parts, session allows ${session.maxParts}`,
