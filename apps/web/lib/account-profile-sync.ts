@@ -12,7 +12,7 @@
 //---------------
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { updateSocialAccountMetadata, type SocialAccountRecord } from './social-accounts';
+import { updateSocialAccountMetadata, getSocialAccountTokens, type SocialAccountRecord } from './social-accounts';
 import { PROFILE_SOURCES, type FetchedProfile } from './account-profile-sources';
 import { pictureUrlExpired } from './account-display-diagnostics';
 import { reportProfileFetched, reportProfileFetchFailed } from './account-profile-telemetry';
@@ -57,10 +57,26 @@ export function mergeProfileMetadata(
 }
 
 //---------------
+// probeStoredCredential — decrypts the stored tokens without using them.
+// Throws on an undecryptable blob (or a missing row), so the caller flags
+// the card. Used on the paths that never fetch a profile, where a corrupted
+// token would otherwise render as a healthy account.
+//---------------
+async function probeStoredCredential(
+  supabase: SupabaseClient,
+  userId: string,
+  record: SocialAccountRecord,
+): Promise<void> {
+  await getSocialAccountTokens(supabase, userId, record.provider, record.providerAccountId);
+}
+
+//---------------
 // syncAccountProfile — returns the record to render: the updated one, or the
 // original when no sync is needed. Throws on credential/provider/DB failure
 // (reported to PostHog first); nothing is written on failure, so the next
 // list retries the row — the caller logs and keeps the stored record.
+// Rows that skip the fetch still probe the stored credential: an
+// undecryptable token throws so the caller flags the card.
 //---------------
 export async function syncAccountProfile(
   supabase: SupabaseClient,
@@ -76,9 +92,21 @@ export async function syncAccountProfile(
     // the record untouched instead of throwing past its own try/catch.
     return record;
   }
-  if (!source.applies(record)) return record;
+  if (!source.applies(record)) {
+    // No profile fetch applies (Rumble, 3Speak, LinkedIn org pages), but
+    // the stored credential is still probed: an undecryptable token throws
+    // so the caller flags the card instead of showing it as healthy.
+    await probeStoredCredential(supabase, userId, record);
+    return record;
+  }
   const now = (options.now ?? (() => new Date()))();
-  if (!profileNeedsSync(record, source.pictureKey, now)) return record;
+  if (!profileNeedsSync(record, source.pictureKey, now)) {
+    // The profile is still fresh, so no fetch runs — but a token corrupted
+    // since the last sync, or a Bluesky token (its public-profile fetch
+    // never reads it), would render green without the probe.
+    await probeStoredCredential(supabase, userId, record);
+    return record;
+  }
 
   let fetched: FetchedProfile;
   try {

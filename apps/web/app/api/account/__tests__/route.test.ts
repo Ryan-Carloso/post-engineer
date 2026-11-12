@@ -183,6 +183,37 @@ describe('GET /api/account', () => {
     expect(body.accounts.find((account) => account.recordId === 'rec-ok')?.status).toBe('ok');
   });
 
+  it('marks Rumble, 3Speak and LinkedIn-org rows with status error when their sync fails', async () => {
+    // These providers never fetch a profile, so their broken state only
+    // reaches the page through the sync failure (undecryptable token).
+    mockSession();
+    const rumble = {
+      id: 'rec-rumble', provider: 'rumble', providerAccountId: 'chan-1', accountName: 'chan-1',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {},
+    };
+    const threespeak = {
+      id: 'rec-3speak', provider: '3speak', providerAccountId: 'alice', accountName: 'alice',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {},
+    };
+    const linkedinOrg = {
+      id: 'rec-li-org', provider: 'linkedin', providerAccountId: 'urn:li:organization:123', accountName: 'Company Inc',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: { kind: 'organization', name: 'Company Inc' },
+    };
+    vi.mocked(listSocialAccounts).mockResolvedValue([rumble, threespeak, linkedinOrg] as never);
+    vi.mocked(syncAccountProfile).mockImplementation(async (_supabase: unknown, _userId: string, rec: SocialAccountRecord) => {
+      if (rec.id === 'rec-li-org') return rec;
+      throw new Error('Invalid authentication tag length: 2');
+    });
+
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { accounts: Array<{ recordId: string; status?: string }> };
+    expect(body.accounts).toHaveLength(3);
+    expect(body.accounts.find((account) => account.recordId === 'rec-rumble')?.status).toBe('error');
+    expect(body.accounts.find((account) => account.recordId === 'rec-3speak')?.status).toBe('error');
+    expect(body.accounts.find((account) => account.recordId === 'rec-li-org')?.status).toBe('ok');
+  });
+
   it('logs the original sync error as the cause, not its message string', async () => {
     mockSession();
     vi.mocked(listSocialAccounts).mockResolvedValue([{
