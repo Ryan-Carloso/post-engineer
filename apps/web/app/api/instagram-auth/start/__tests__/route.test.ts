@@ -97,5 +97,12 @@ describe('/api/instagram-auth/start', () => {
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('Failed to generate the authorization URL.');
     expect(body.error).not.toContain('ig config missing');
+    expect(logger.logOAuthError).toHaveBeenCalledWith(
+      'log-1',
+      expect.objectContaining({ message: expect.stringContaining('ig config missing') }),
+    );
+    // The logged cause is already reported to PostHog, so the response is
+    // marked so the wrapper does not report a second synthetic exception.
+    expect(markApiErrorReported).toHaveBeenCalledWith(res);
   });
 });

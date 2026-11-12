@@ -55,10 +55,14 @@ async function getHandler(request: NextRequest) {
     // Internal details stay in the server logs — the client only gets a
     // stable, generic error.
     logger.logOAuthError(logId, new Error(errorMessage));
-    return NextResponse.json(
+    // The logged cause is already reported to PostHog, so mark the response
+    // and the wrapper does not report a second synthetic exception.
+    const response = NextResponse.json(
       { success: false, error: 'Failed to generate the authorization URL.' },
       { status: 500 }
     );
+    markApiErrorReported(response);
+    return response;
   }
 }
 

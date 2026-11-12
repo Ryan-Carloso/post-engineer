@@ -112,6 +112,9 @@ describe('GET /api/facebook-auth/start', () => {
     const body = await response.json();
     expect(body).toEqual({ success: false, error: 'Failed to generate the authorization URL.' });
     expect(logger.logOAuthError).toHaveBeenCalledWith('log-1', expect.objectContaining({ message: expect.stringContaining('FACEBOOK_REDIRECT_URI') }));
+    // The logged cause is already reported to PostHog, so the response is
+    // marked so the wrapper does not report a second synthetic exception.
+    expect(markApiErrorReported).toHaveBeenCalledWith(response);
   });
 });
 
