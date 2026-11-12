@@ -208,6 +208,17 @@ describe('syncAccountProfile', () => {
     });
   });
 
+  it('logs when the owner email fails', async () => {
+    const failure = { response: { status: 401 }, message: 'Unauthorized' };
+    sources.instagram.fetch.mockRejectedValue(failure);
+    vi.mocked(notifyAccountBreak).mockRejectedValueOnce('boom');
+    const rec = record({}, { profileSyncedAt: STALE });
+    await expect(syncAccountProfile(supabase, 'u1', rec, { now: () => NOW })).rejects.toBe(failure);
+    await vi.waitFor(() => {
+      expect(logger.error).toHaveBeenCalledWith('[ACCOUNT] Owner alert failed', expect.any(Error));
+    });
+  });
+
   it('flags a non-applies row (Rumble) whose stored token is undecryptable', async () => {
     // Rumble/3Speak/LinkedIn-org rows never fetch a profile, so without a
     // probe their corrupted token would render as a healthy card.

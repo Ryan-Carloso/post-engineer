@@ -21,10 +21,16 @@ from loguru import logger
 
 from app.services.analytics import scrub_error_text
 from app.services.notify import running_under_test
+from app.services.owner_alert_lookups import (
+    TIMEOUT_SECONDS,
+    lookup_account_names,
+    lookup_persona_name,
+    provider_label,
+    supabase_rest,
+)
 
 RESEND_URL = "https://api.resend.com/emails"
 USER_AGENT = "post-engineer/owner-alert"
-TIMEOUT_SECONDS = 10
 DEFAULT_ORIGIN = "https://post-engineer.com"
 REASON_CHARS = 300
 
@@ -114,19 +120,34 @@ def _reason(reason: str, fallback: str) -> str:
     return cleaned or fallback
 
 
-def _supabase() -> tuple[str, dict[str, str]] | None:
-    base = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
-    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
-    if not base or not key:
-        logger.warning("owner alert skipped: supabase is not configured")
-        return None
-    headers = {
-        "apikey": key,
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-    return base, headers
+def _failure_lines(
+    failures: list[dict[str, Any]] | None,
+    account_names: dict[tuple[str, str], str],
+) -> list[str]:
+    """One line per failed provider: network — account — scrubbed reason.
+
+    The account shows its display name when the lookup found one, else the
+    raw provider account id. A failure without a reason still names the
+    account, so the owner knows which one to reconnect.
+    """
+    lines: list[str] = []
+    for item in failures or []:
+        if not isinstance(item, dict):
+            continue
+        provider = item.get("provider")
+        account = item.get("account_id")
+        label = provider_label(provider) if isinstance(provider, str) else "Unknown"
+        name = None
+        if isinstance(provider, str) and isinstance(account, str):
+            name = account_names.get((provider, account))
+        who = name or (account if isinstance(account, str) and account else label)
+        reason = item.get("reason")
+        detail = _reason(reason, "") if isinstance(reason, str) else ""
+        line = f"{label} — {who}"
+        if detail:
+            line = f"{line} — {detail}"
+        lines.append(_clean(line))
+    return lines
 
 
 def _claim(session: Any, base: str, headers: dict[str, str], user_id: str, dedup_key: str) -> bool:
@@ -246,7 +267,7 @@ def _deliver(
     if not api_key or not sender or not user_id or not dedup_key:
         logger.warning("owner alert skipped: resend is not configured")
         return
-    supabase = _supabase()
+    supabase = supabase_rest()
     if supabase is None:
         return
     base, headers = supabase
@@ -287,19 +308,31 @@ def notify_generation_failed(
     slot_id: str | None,
     title: str,
     reason: str,
+    persona: str | None = None,
+    schedule_id: str | None = None,
     dedup_key: str | None = None,
     session: Any = None,
 ) -> None:
-    """Email once for a generation that will not be retried."""
+    """Email once for a generation that will not be retried.
+
+    The persona rides along when the caller knows it; the reconciler only
+    has the schedule id, so the name is looked up best-effort instead.
+    """
     key = dedup_key or (f"generate:{slot_id}" if slot_id else "")
     if not user_id or not key:
         return
     label = _clean(title) or "A scheduled post"
     subject = "A post could not be generated"
     detail = _reason(reason, "The video could not be generated.")
+    if persona is None and schedule_id:
+        persona = lookup_persona_name(session, schedule_id)
+    bits = [label]
+    if isinstance(persona, str) and _clean(persona):
+        bits.append(f"Persona: {_clean(persona)}")
+    bits.append(f"What happened: {detail}")
     html_body, text = _render(
         subject,
-        [label, f"What happened: {detail}"],
+        bits,
         [("Open the post", _post_link(slot_id))],
     )
     send_owner_email(
@@ -318,17 +351,30 @@ def notify_publish_failed(
     slot_id: str,
     title: str,
     reason: str,
+    persona: str | None = None,
+    failures: list[dict[str, Any]] | None = None,
     session: Any = None,
 ) -> None:
-    """Email once when a slot will not be published again."""
+    """Email once when a slot will not be published again.
+
+    ``failures`` is the failed outcomes (provider, account id, reason):
+    each gets its own line — network, account name, reason — so the owner
+    sees which account on which network failed and why.
+    """
     if not user_id or not slot_id:
         return
     label = _clean(title) or "A scheduled post"
     subject = "A post could not be published"
     detail = _reason(reason, "The post could not be published.")
+    bits = [label]
+    if isinstance(persona, str) and _clean(persona):
+        bits.append(f"Persona: {_clean(persona)}")
+    bits.append(f"What happened: {detail}")
+    names = lookup_account_names(session, user_id) if failures else {}
+    bits.extend(_failure_lines(failures, names))
     html_body, text = _render(
         subject,
-        [label, f"What happened: {detail}"],
+        bits,
         [
             ("Open the post", _post_link(slot_id)),
             ("Reconnect accounts", _accounts_link()),
@@ -349,19 +395,27 @@ def notify_publish_partial(
     *,
     slot_id: str,
     title: str,
-    providers: list[str],
+    failures: list[dict[str, Any]] | None = None,
+    persona: str | None = None,
     session: Any = None,
 ) -> None:
     """Email once when a post went out but some accounts did not get it."""
-    names = [_clean(name) for name in providers if isinstance(name, str) and _clean(name)]
-    if not user_id or not slot_id or not names:
+    if not user_id or not slot_id:
+        return
+    names = lookup_account_names(session, user_id) if failures else {}
+    lines = _failure_lines(failures, names)
+    if not lines:
         return
     label = _clean(title) or "A scheduled post"
     subject = "A post did not reach every account"
-    detail = "These accounts did not get the post: " + ", ".join(names)
+    bits = [label]
+    if isinstance(persona, str) and _clean(persona):
+        bits.append(f"Persona: {_clean(persona)}")
+    bits.append("These accounts did not get the post:")
+    bits.extend(lines)
     html_body, text = _render(
         subject,
-        [label, detail],
+        bits,
         [
             ("Open the post", _post_link(slot_id)),
             ("Reconnect accounts", _accounts_link()),

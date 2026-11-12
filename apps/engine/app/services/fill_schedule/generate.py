@@ -322,6 +322,7 @@ class BatchGenerator:
                     slot_id=str(slot["id"]),
                     title=str(slot.get("title") or ""),
                     reason=notify_module.safe_reason(exc),
+                    persona=identity.get("name", "Persona"),
                 )
             return None
 

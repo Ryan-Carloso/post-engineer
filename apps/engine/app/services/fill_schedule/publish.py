@@ -40,6 +40,24 @@ from app.services.fill_schedule.support import (
 from app.services.state import persist_state_update
 
 
+def _failed_outcomes(
+    outcomes: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Failed outcomes as owner-alert failures: provider, account, reason."""
+    failures: list[dict[str, Any]] = []
+    for outcome in outcomes or []:
+        if not isinstance(outcome, dict) or outcome.get("status") != "failed":
+            continue
+        failures.append(
+            {
+                "provider": str(outcome.get("provider") or ""),
+                "account_id": str(outcome.get("accountId") or ""),
+                "reason": str(outcome.get("error") or ""),
+            }
+        )
+    return failures
+
+
 class BatchPublisher:
     """Publishes due batch slots to their providers."""
 
@@ -120,6 +138,7 @@ class BatchPublisher:
                 slot_id=str(slot["id"]),
                 title=str(slot.get("title") or ""),
                 reason="task has no finished videos",
+                persona=persona_name,
             )
             return 0
         if not isinstance(object_path, str) or not object_path:
@@ -256,7 +275,8 @@ class BatchPublisher:
                     slot_user_id(slot),
                     slot_id=str(slot["id"]),
                     title=title,
-                    providers=list(account_result.failed_providers),
+                    failures=_failed_outcomes(account_result.outcomes),
+                    persona=persona_name,
                 )
             return 1
         self._fail_slot_permanently(
@@ -380,9 +400,13 @@ class BatchPublisher:
         if outcomes is not None:
             fields["publish_outcomes"] = [dict(item) for item in outcomes]
         self.store.update_slot(slot["id"], **fields)
+        personas = schedule.get("personas") or {}
+        persona = personas.get("name") if isinstance(personas, dict) else None
         notify_publish_failed(
             user_id,
             slot_id=str(slot["id"]),
             title=str(slot.get("title") or ""),
             reason=fields["error"],
+            persona=persona if isinstance(persona, str) else None,
+            failures=_failed_outcomes(outcomes),
         )

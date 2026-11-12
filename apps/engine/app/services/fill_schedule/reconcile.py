@@ -120,11 +120,13 @@ class BatchReconciler:
                     error=reason,
                 )
                 if user_id is not None:
+                    schedule_id = slot.get("schedule_id")
                     notify_generation_failed(
                         user_id,
                         slot_id=str(slot["id"]),
                         title=str(slot.get("title") or ""),
                         reason=reason,
+                        schedule_id=schedule_id if isinstance(schedule_id, str) else None,
                     )
                 updated += 1
         return updated
