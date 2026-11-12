@@ -161,9 +161,9 @@ describe('GET auth', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // postUrl is built from the public app URL, never the request origin:
-    // every request below uses https://example.com, so the env stub keeps
-    // the expectations on the same value.
+    // postUrl is built from the public app URL, never the request origin.
+    // The default stub keeps the https://example.com expectations below on
+    // the same value; the proxy-origin test re-stubs it explicitly.
     vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://example.com');
   });
 
