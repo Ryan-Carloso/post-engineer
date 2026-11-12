@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  emptyPersonaDefaultAccounts,
+  parsePublishingAccountsField,
+  type PersonaDefaultAccounts,
+} from './persona-publishing-accounts';
 
 //---------------
 // Zod schema for the persona form — the SINGLE source of validation.
@@ -109,6 +114,12 @@ export type ParsedPersonaForm = {
     niche: string | null;
     faceQuality: (typeof FACE_QUALITIES)[number] | null;
     videoSubject: string | null;
+    // The persona's bound publishing accounts (issue #572): at least one
+    // account, owned by the caller. Parsed from the `publishingAccounts`
+    // form field (JSON map provider -> account ids); create mode rejects a
+    // missing/empty/malformed binding, debug mode ignores it (the debug
+    // flow reuses an existing persona and never creates one).
+    publishingAccounts: PersonaDefaultAccounts;
   };
   photo: File | null;
   photoExtension: string | null;
@@ -187,6 +198,15 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
   if (mode === 'debug' && videoSubject && videoSubject.length > 300) {
     return { ok: false, error: 'Invalid video_subject: use at most 300 characters.' };
   }
+  // Issue #572: a persona is born bound to at least one publishing
+  // account — a persona with zero accounts selected must not exist. The
+  // binding is parsed here (not in the route) so every create caller —
+  // web, MCP, direct API — gets the same 400, and nothing is written
+  // before it passes.
+  const binding = parsePublishingAccountsField(formData.get('publishingAccounts'));
+  if (mode === 'create' && !binding.ok) {
+    return { ok: false, error: binding.error };
+  }
 
   return {
     ok: true,
@@ -204,6 +224,7 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
         niche: values.niche ?? null,
         faceQuality: values.faceQuality ?? null,
         videoSubject,
+        publishingAccounts: binding.ok ? binding.accounts : emptyPersonaDefaultAccounts(),
       },
       photo,
       photoExtension,

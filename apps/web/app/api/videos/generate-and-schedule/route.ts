@@ -38,6 +38,8 @@ import type { Provider } from './providers-validation';
 import { scheduleAccountColumns } from './account-columns';
 import { checkPreChargePreflights } from './aspect-preflight';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
+import { validateAccounts } from './validate-accounts';
+import { getPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 import { segmentsRequestSchema } from './segments-schema';
 import { rawKeyIssues } from './request-title';
 import { checkSemantics, MAX_REPORTED_ISSUES, rejectInvalidRequest, shapeIssues } from './request-validation';
@@ -261,76 +263,9 @@ function validatePublishMode(
 }
 
 //---------------
-// Social account validation. One query loads all of the user's accounts;
-// each requested id must belong to the user AND to the requested provider,
-// distinguishing "not yours" from "yours but for another provider".
+// Social account validation lives in validate-accounts.ts (extracted so
+// the route module stays under the file-size ratchet).
 //---------------
-async function validateAccounts(
-  supabase: SupabaseClient,
-  userId: string,
-  providers: Provider[],
-  accounts: Record<string, string[] | undefined>,
-): Promise<Record<Provider, string[]> | NextResponse> {
-  const { data: rows, error } = await supabase
-    .from('social_accounts')
-    .select('provider, provider_account_id')
-    .eq('user_id', userId);
-  if (error) {
-    logger.error('[generate-and-schedule] social accounts lookup failed', error, { userId });
-    return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
-  }
-  const byProvider = new Map<string, Set<string>>();
-  const providerOfId = new Map<string, string>();
-  for (const row of rows ?? []) {
-    const provider = (row as { provider: string }).provider;
-    const accountId = (row as { provider_account_id: string }).provider_account_id;
-    if (typeof provider !== 'string' || typeof accountId !== 'string') continue;
-    if (!byProvider.has(provider)) byProvider.set(provider, new Set());
-    byProvider.get(provider)?.add(accountId);
-    providerOfId.set(accountId, provider);
-  }
-
-  const accountIds = {} as Record<Provider, string[]>;
-  for (const provider of providers) {
-    const field = `publishing.accounts.${provider}`;
-    const ids = [...new Set((accounts[provider] ?? []).map((id) => id.trim()).filter((id) => id.length > 0))];
-    accountIds[provider] = ids;
-    if (ids.length === 0) {
-      const connected = byProvider.get(provider);
-      if (!connected || connected.size === 0) {
-        return validationFailed(
-          ERROR_CODES.NO_CONNECTED_ACCOUNTS,
-          formatErrorMessage(ERROR_CODES.NO_CONNECTED_ACCOUNTS, { provider }),
-          field,
-        );
-      }
-      return validationFailed(
-        ERROR_CODES.INVALID_PROVIDER_ACCOUNT,
-        `Select at least one ${provider} account to publish to.`,
-        field,
-      );
-    }
-    for (const id of ids) {
-      if (byProvider.get(provider)?.has(id)) continue;
-      const actualProvider = providerOfId.get(id);
-      if (actualProvider) {
-        return validationFailed(
-          ERROR_CODES.INVALID_PROVIDER_ACCOUNT,
-          `Selected account cannot be used with ${provider}.`,
-          field,
-        );
-      }
-      return validationFailed(
-        ERROR_CODES.SOCIAL_ACCOUNT_NOT_OWNED,
-        formatErrorMessage(ERROR_CODES.SOCIAL_ACCOUNT_NOT_OWNED, { provider }),
-        field,
-      );
-    }
-  }
-  return accountIds;
-}
-
-
 
 async function postHandler(request: Request): Promise<NextResponse> {
   const startedAt = Date.now();
@@ -440,7 +375,17 @@ async function postHandler(request: Request): Promise<NextResponse> {
       };
 
   // 5. Providers + social accounts (fail fast: never charge for a bad selection).
-  const accountIds = await validateAccounts(supabase, userId, providers, await resolvePublishingAccounts(supabase, personaId, publishing.accounts));
+  // The binding is loaded once here: resolvePublishingAccounts falls back
+  // to it when accounts are omitted, and validateAccounts proves every
+  // requested id is bound to the persona (issue #572).
+  const bound = personaId !== null ? await getPersonaDefaultAccounts(supabase, personaId) : null;
+  const accountIds = await validateAccounts(
+    supabase,
+    userId,
+    providers,
+    await resolvePublishingAccounts(supabase, personaId, publishing.accounts, bound ?? undefined),
+    bound,
+  );
   if (accountIds instanceof NextResponse) return accountIds;
 
   // Pinned library image: fail fast when the id does not resolve, before

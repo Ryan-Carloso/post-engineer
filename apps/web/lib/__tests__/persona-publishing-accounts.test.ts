@@ -5,7 +5,9 @@ import { describe, it, expect } from 'vitest';
 import {
   emptyPersonaDefaultAccounts,
   getPersonaDefaultAccounts,
+  parsePublishingAccountsField,
   setPersonaDefaultAccounts,
+  totalBoundAccounts,
 } from '../persona-publishing-accounts';
 
 type Row = Record<string, unknown>;
@@ -221,5 +223,88 @@ describe('emptyPersonaDefaultAccounts', () => {
       rumble: [],
       fanvue: [],
     });
+  });
+});
+
+describe('setPersonaDefaultAccounts — a persona must keep at least one bound account (issue #572)', () => {
+  it('rejects an empty map and writes nothing', async () => {
+    const db = baseDb();
+    await expect(
+      setPersonaDefaultAccounts({
+        supabase: db as never,
+        userId: USER,
+        personaId: PERSONA,
+        accounts: {},
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect(db.tables.persona_default_accounts).toHaveLength(0);
+  });
+
+  it('rejects providers that are all empty and keeps the previous binding', async () => {
+    const db = baseDb();
+    db.tables.persona_default_accounts = [
+      { persona_id: PERSONA, provider: 'youtube', provider_account_id: 'UC-1' },
+    ];
+    await expect(
+      setPersonaDefaultAccounts({
+        supabase: db as never,
+        userId: USER,
+        personaId: PERSONA,
+        accounts: { youtube: [], bluesky: [] },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect(db.tables.persona_default_accounts).toHaveLength(1);
+  });
+});
+
+describe('totalBoundAccounts', () => {
+  it('counts ids across providers', () => {
+    expect(totalBoundAccounts(emptyPersonaDefaultAccounts())).toBe(0);
+    expect(
+      totalBoundAccounts({
+        ...emptyPersonaDefaultAccounts(),
+        youtube: ['UC-1'],
+        bluesky: ['did:plc:a', 'did:plc:b'],
+      }),
+    ).toBe(3);
+  });
+});
+
+describe('parsePublishingAccountsField — the create-persona form field (issue #572)', () => {
+  it('parses a valid JSON map and normalizes it', () => {
+    expect(
+      parsePublishingAccountsField(JSON.stringify({ youtube: ['UC-1', ' UC-1 '], bluesky: ['did:plc:a'] })),
+    ).toEqual({
+      ok: true,
+      accounts: { ...emptyPersonaDefaultAccounts(), youtube: ['UC-1'], bluesky: ['did:plc:a'] },
+    });
+  });
+
+  it('rejects a missing field', () => {
+    expect(parsePublishingAccountsField(null).ok).toBe(false);
+  });
+
+  it('rejects malformed JSON', () => {
+    expect(parsePublishingAccountsField('{not json').ok).toBe(false);
+  });
+
+  it('rejects a non-object payload', () => {
+    expect(parsePublishingAccountsField(JSON.stringify(['UC-1'])).ok).toBe(false);
+  });
+
+  it('rejects an unknown provider', () => {
+    expect(parsePublishingAccountsField(JSON.stringify({ tiktok: ['tt-1'] })).ok).toBe(false);
+  });
+
+  it('rejects a non-array provider value', () => {
+    expect(parsePublishingAccountsField(JSON.stringify({ youtube: 'UC-1' })).ok).toBe(false);
+  });
+
+  it('rejects a total of zero accounts', () => {
+    const parsed = parsePublishingAccountsField(JSON.stringify({ youtube: [], bluesky: [] }));
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok) {
+      expect(parsed.error).toMatch(/at least one/i);
+    }
   });
 });
