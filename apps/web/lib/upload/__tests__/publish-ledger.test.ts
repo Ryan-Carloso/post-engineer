@@ -12,6 +12,7 @@ import {
   publishInProgressResult,
   publishLedgerKey,
   recordPublishAttempt,
+  releaseClaimsForRequestRejection,
   startLedgerHeartbeat,
   touchPublishLedger,
 } from '@/lib/upload/publish-ledger';
@@ -148,6 +149,67 @@ describe('recordPublishAttempt', () => {
     await expect(recordPublishAttempt(mockSupabase(rpc), { ...base, accountResult: result })).resolves.toBe(false);
     const failing = vi.fn().mockResolvedValue({ data: null, error: { message: 'db down' } });
     await expect(recordPublishAttempt(mockSupabase(failing), { ...base, accountResult: result })).resolves.toBe(false);
+  });
+});
+
+describe('releaseClaimsForRequestRejection', () => {
+  const partition = {
+    scopeKey: 'slot:s1:video:v.mp4',
+    provider: 'fanvue',
+    granted: [
+      { accountId: 'acc-1', claimToken: 'token-1' },
+      { accountId: 'acc-2', claimToken: 'token-2' },
+    ],
+    replayed: [],
+    waiting: [],
+    formData: new FormData(),
+  } as never;
+
+  it('records every granted claim as failed with the rejection error', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    await releaseClaimsForRequestRejection(mockSupabase(rpc), partition, [
+      { accountId: '', success: false, error: 'Caption is required', errorCode: 'publish_rejected' },
+    ]);
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledWith('record_publish_ledger', {
+      p_key: 'publish:slot:s1:video:v.mp4:fanvue:acc-1',
+      p_token: 'token-1',
+      p_status: 'failed',
+      p_result: null,
+      p_error: 'Caption is required',
+      p_error_code: 'publish_rejected',
+    });
+    expect(rpc).toHaveBeenCalledWith('record_publish_ledger', {
+      p_key: 'publish:slot:s1:video:v.mp4:fanvue:acc-2',
+      p_token: 'token-2',
+      p_status: 'failed',
+      p_result: null,
+      p_error: 'Caption is required',
+      p_error_code: 'publish_rejected',
+    });
+  });
+
+  it('defaults the code when the rejection carries none', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    await releaseClaimsForRequestRejection(mockSupabase(rpc), partition, [
+      { accountId: '', success: false, error: 'missing caption' },
+    ]);
+    expect(rpc).toHaveBeenCalledWith('record_publish_ledger', expect.objectContaining({
+      p_key: 'publish:slot:s1:video:v.mp4:fanvue:acc-1',
+      p_status: 'failed',
+      p_error: 'missing caption',
+      p_error_code: 'publish_rejected',
+    }));
+  });
+
+  it('does nothing without a request-level rejection', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    await releaseClaimsForRequestRejection(mockSupabase(rpc), partition, [
+      { accountId: 'acc-1', success: false, error: 'Fanvue 503', errorCode: 'transient' },
+    ]);
+    expect(rpc).not.toHaveBeenCalled();
+    await releaseClaimsForRequestRejection(mockSupabase(rpc), partition, []);
+    expect(rpc).not.toHaveBeenCalled();
   });
 });
 

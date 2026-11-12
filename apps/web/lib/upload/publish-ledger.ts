@@ -324,6 +324,48 @@ export async function recordPartitionResults(
   }
 }
 
+// A request-level rejection (a failure carrying no accountId) means the
+// handler validated the request before publishing anything: every
+// `accountFailure('', ...)` / `rejected(...)` site is a pre-publish check
+// (missing account ids, caption, title, video file, overlong text, non-MP4).
+// Nothing was published, so release the granted claims as failed — like the
+// handler-throw path — instead of parking them for the full lease: a
+// same-key retry after fixing the request proceeds at once.
+// An account the handler never reported keeps its claim (see above): its
+// outcome is unknown, so only the explicit empty-accountId rejection
+// releases claims here.
+export async function releaseClaimsForRequestRejection(
+  supabase: SupabaseClient,
+  partition: PublishLedgerPartition,
+  results: unknown,
+): Promise<void> {
+  if (!Array.isArray(results)) return;
+  const rejection = results.find(
+    (item) => isAccountResult(item) && item.accountId === '' && item.success === false,
+  );
+  if (rejection === undefined) return;
+  await Promise.all(
+    partition.granted.map((granted) =>
+      recordPublishAttempt(supabase, {
+        scopeKey: partition.scopeKey,
+        provider: partition.provider,
+        accountId: granted.accountId,
+        claimToken: granted.claimToken,
+        accountResult: {
+          accountId: granted.accountId,
+          success: false,
+          error:
+            typeof rejection.error === 'string'
+              ? rejection.error
+              : 'request rejected before publish',
+          errorCode:
+            typeof rejection.errorCode === 'string' ? rejection.errorCode : 'publish_rejected',
+        },
+      }),
+    ),
+  );
+}
+
 // One results list for the caller: replayed posts first, then accounts
 // still in flight, then what the handler just published.
 export function mergePartitionResults(

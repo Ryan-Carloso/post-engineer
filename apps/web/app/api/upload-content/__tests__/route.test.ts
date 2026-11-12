@@ -677,6 +677,33 @@ describe('POST /api/upload-content with a publish scope key', () => {
     expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('published');
   });
 
+  it('releases the claims on a request-level rejection so a same-key retry proceeds at once', async () => {
+    mockHandleYoutubeUpload
+      .mockResolvedValueOnce({
+        success: false,
+        provider: 'youtube',
+        results: [{ accountId: '', success: false, error: 'Caption is required', errorCode: 'publish_rejected' }],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        provider: 'youtube',
+        results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
+      });
+
+    const first = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    expect((await first.json() as { success: boolean }).success).toBe(false);
+    expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('failed');
+
+    const second = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(2);
+    expect(await second.json()).toEqual({
+      success: true,
+      provider: 'youtube',
+      results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
+    });
+    expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('published');
+  });
+
   it('reclaims an expired lease instead of waiting forever', async () => {
     ledger.rows.set(ledgerKey('acc-1'), {
       status: 'in_progress',

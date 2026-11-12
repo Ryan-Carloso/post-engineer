@@ -28,6 +28,7 @@ import {
   partitionPublishAccounts,
   recordPublishAttempt,
   recordPartitionResults,
+  releaseClaimsForRequestRejection,
   startLedgerHeartbeat,
   type PublishLedgerPartition,
 } from '@/lib/upload/publish-ledger';
@@ -231,6 +232,7 @@ async function postHandler(request: NextRequest) {
         if (partition !== null && ledgerClient !== null) {
           const results = response.results;
           await recordPartitionResults(ledgerClient, partition, results);
+          await releaseClaimsForRequestRejection(ledgerClient, partition, results);
           const merged = mergePartitionResults(partition, results);
           response = { ...response, success: merged.some((result) => result.success), results: merged };
         }
