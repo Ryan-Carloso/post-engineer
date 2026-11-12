@@ -33,9 +33,17 @@ import {
 export const FANVUE_UPLOAD_TIMEOUT_MS = 10 * 60_000;
 // The API documents a 1.5 GiB ceiling for a media upload.
 export const FANVUE_MAX_FILE_BYTES = 1_610_612_736;
-// Poll cadence from the API docs' own helper: every 1.5s, up to 300s.
+// Poll cadence from the API docs' own helper: every 1.5s.
+// The ready wait is capped at 120s so the whole in-request publish stays
+// inside the clients' 600s budget (engine DEFAULT_TIMEOUT_SECONDS in
+// app/services/upload_publisher.py, DIRECT_PUBLISH_TIMEOUT_MS in
+// apps/mcp/src/limits.ts): the request also uploads every part first, and
+// a client timeout mid-publish reports failure while the server keeps
+// going — the scheduler retry would then duplicate the post. A poll
+// timeout is safe to retry instead: no post exists yet, so the retry
+// uploads a fresh media item.
 export const FANVUE_MEDIA_POLL_INTERVAL_MS = 1_500;
-export const FANVUE_MEDIA_READY_TIMEOUT_MS = 5 * 60_000;
+export const FANVUE_MEDIA_READY_TIMEOUT_MS = 2 * 60_000;
 
 const MEDIA_STATUSES = ['created', 'processing', 'ready', 'error'] as const;
 export type FanvueMediaStatus = (typeof MEDIA_STATUSES)[number];

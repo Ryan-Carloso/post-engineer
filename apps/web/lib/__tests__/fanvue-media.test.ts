@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   FANVUE_MAX_FILE_BYTES,
+  FANVUE_MEDIA_READY_TIMEOUT_MS,
   FANVUE_UPLOAD_TIMEOUT_MS,
   completeFanvueUploadSession,
   createFanvueUploadSession,
@@ -261,6 +262,14 @@ describe('waitForFanvueMediaReady', () => {
     await expect(
       waitForFanvueMediaReady('at-1', 'media-1', { sleep: async () => undefined }),
     ).rejects.toThrow('media processing failed (unsupported_format)');
+  });
+
+  it('caps the default ready wait at 120s so the publish fits the clients 600s budget', () => {
+    // The engine (DEFAULT_TIMEOUT_SECONDS) and the MCP client
+    // (DIRECT_PUBLISH_TIMEOUT_MS) both abort at 600s; the request also
+    // uploads every part first, so a 300s poll would let a slow upload
+    // push the server past the clients and duplicate the post on retry.
+    expect(FANVUE_MEDIA_READY_TIMEOUT_MS).toBe(2 * 60_000);
   });
 
   it('times out instead of waiting forever', async () => {
