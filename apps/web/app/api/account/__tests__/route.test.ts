@@ -28,6 +28,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { resolveApiKey } from '@/lib/api-keys';
 import { listSocialAccounts, deleteSocialAccount, type SocialAccountRecord } from '@/lib/social-accounts';
 import { syncAccountProfile } from '@/lib/account-profile-sync';
+import { TokenDecryptError } from '@/lib/token-crypto';
 import { logger } from '@/lib/logger';
 
 function mockSession(userId = 'u1') {
@@ -171,7 +172,7 @@ describe('GET /api/account', () => {
     };
     vi.mocked(listSocialAccounts).mockResolvedValue([broken, healthy] as never);
     vi.mocked(syncAccountProfile).mockImplementation(async (_supabase: unknown, _userId: string, rec: SocialAccountRecord) => {
-      if (rec.id === 'rec-broken') throw new Error('Invalid authentication tag length: 2');
+      if (rec.id === 'rec-broken') throw new TokenDecryptError('Invalid authentication tag length: 2');
       return rec;
     });
 
@@ -202,7 +203,7 @@ describe('GET /api/account', () => {
     vi.mocked(listSocialAccounts).mockResolvedValue([rumble, threespeak, linkedinOrg] as never);
     vi.mocked(syncAccountProfile).mockImplementation(async (_supabase: unknown, _userId: string, rec: SocialAccountRecord) => {
       if (rec.id === 'rec-li-org') return rec;
-      throw new Error('Invalid authentication tag length: 2');
+      throw new TokenDecryptError('Invalid authentication tag length: 2');
     });
 
     const res = await GET();
@@ -212,6 +213,62 @@ describe('GET /api/account', () => {
     expect(body.accounts.find((account) => account.recordId === 'rec-rumble')?.status).toBe('error');
     expect(body.accounts.find((account) => account.recordId === 'rec-3speak')?.status).toBe('error');
     expect(body.accounts.find((account) => account.recordId === 'rec-li-org')?.status).toBe('ok');
+  });
+
+  it('marks revoked credentials as error: a provider 401 and a Bluesky invalid_credentials', async () => {
+    mockSession();
+    const revoked401 = {
+      id: 'rec-401', provider: 'youtube', providerAccountId: 'chan-401', accountName: 'Revoked 401',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {},
+    };
+    const revokedBsky = {
+      id: 'rec-bsky', provider: 'bluesky', providerAccountId: 'did:plc:dead', accountName: 'dead.bsky.social',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {},
+    };
+    vi.mocked(listSocialAccounts).mockResolvedValue([revoked401, revokedBsky] as never);
+    vi.mocked(syncAccountProfile).mockImplementation(async (_supabase: unknown, _userId: string, rec: SocialAccountRecord) => {
+      if (rec.id === 'rec-401') throw Object.assign(new Error('YOUTUBE_CHANNEL_FAILED: status 401'), { status: 401 });
+      throw Object.assign(new Error('invalid_credentials'), { name: 'BlueskyError', code: 'invalid_credentials' });
+    });
+
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { accounts: Array<{ recordId: string; status?: string }> };
+    expect(body.accounts.find((account) => account.recordId === 'rec-401')?.status).toBe('error');
+    expect(body.accounts.find((account) => account.recordId === 'rec-bsky')?.status).toBe('error');
+  });
+
+  it('leaves transient sync failures unflagged so the card keeps its disconnect action', async () => {
+    // A provider 5xx, a DB read failure and an unclassified error are not
+    // credential failures: flagging them would mislabel the card as
+    // "Invalid token" and hide the trash until the next successful list.
+    mockSession();
+    const outage = {
+      id: 'rec-502', provider: 'threads', providerAccountId: '42', accountName: 'ana',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {},
+    };
+    const dbHiccup = {
+      id: 'rec-db', provider: 'youtube', providerAccountId: 'chan-db', accountName: 'DB Channel',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {},
+    };
+    const unknown = {
+      id: 'rec-unknown', provider: 'instagram', providerAccountId: 'ig-x', accountName: 'unknown_handle',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {},
+    };
+    vi.mocked(listSocialAccounts).mockResolvedValue([outage, dbHiccup, unknown] as never);
+    vi.mocked(syncAccountProfile).mockImplementation(async (_supabase: unknown, _userId: string, rec: SocialAccountRecord) => {
+      if (rec.id === 'rec-502') throw Object.assign(new Error('THREADS_PROFILE_FAILED: status 502'), { status: 502 });
+      if (rec.id === 'rec-db') throw new Error('Failed to get social account: connection refused');
+      throw new Error('boom');
+    });
+
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { accounts: Array<{ recordId: string; status?: string }> };
+    expect(body.accounts).toHaveLength(3);
+    expect(body.accounts.find((account) => account.recordId === 'rec-502')?.status).toBe('ok');
+    expect(body.accounts.find((account) => account.recordId === 'rec-db')?.status).toBe('ok');
+    expect(body.accounts.find((account) => account.recordId === 'rec-unknown')?.status).toBe('ok');
   });
 
   it('logs the original sync error as the cause, not its message string', async () => {

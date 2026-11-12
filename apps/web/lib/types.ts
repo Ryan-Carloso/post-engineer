@@ -1,8 +1,10 @@
 //---------------
 // Account sync status — what GET /api/account reports per account.
 // 'ok' = the profile sync succeeded (or was not due); 'error' = the last
-// sync attempt failed (undecryptable token, revoked credentials), so the
-// accounts page flags the card instead of showing it as healthy.
+// sync attempt failed with a dead credential (undecryptable token, revoked
+// credentials), so the accounts page flags the card instead of showing it
+// as healthy. Transient provider/DB failures are not flagged: the card
+// stays 'ok' and the next list retries the row.
 // The field is optional: older payloads and fixtures without it read as
 // healthy (status !== 'error').
 //---------------

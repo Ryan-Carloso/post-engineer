@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { encryptTokens, decryptTokens } from '@/lib/token-crypto';
+import { encryptTokens, decryptTokens, TokenDecryptError } from '@/lib/token-crypto';
 
 const VALID_KEY = Buffer.alloc(32).toString('base64');
 const SHORT_KEY = Buffer.alloc(16).toString('base64');
@@ -57,6 +57,14 @@ describe('token-crypto', () => {
       const parts = encrypted.split('.');
       parts[3] = parts[3] + 'x';
       expect(() => decryptTokens(parts.join('.'))).toThrow();
+    });
+
+    it('names undecryptable blobs TokenDecryptError so callers can tell a dead token from a transient failure', () => {
+      const encrypted = encryptTokens({ access_token: 'tok' });
+      const parts = encrypted.split('.');
+      parts[3] = parts[3] + 'x';
+      expect(() => decryptTokens(parts.join('.'))).toThrow(TokenDecryptError);
+      expect(() => decryptTokens('not-a-token')).toThrow(TokenDecryptError);
     });
 
     it('throws on wrong version prefix', () => {
