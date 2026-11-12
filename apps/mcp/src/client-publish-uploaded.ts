@@ -76,6 +76,7 @@ export async function completeVideoUpload(
     `/api/videos/uploads/${encodeURIComponent(uploadId)}/complete`,
     { method: 'POST', headers: client.getHeaders(), body: JSON.stringify({}) },
     'complete video upload',
+    UPLOAD_TIMEOUT_MS,
   );
   if (
     !isRecord(result) ||

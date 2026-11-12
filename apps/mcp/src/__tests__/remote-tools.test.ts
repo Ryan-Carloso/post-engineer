@@ -178,9 +178,17 @@ describe('remote smuggled paths are dropped by the SDK, never read', () => {
     }
   }
 
-  function firstText(result: { content?: unknown }): string {
-    const content = result.content as Array<{ type: string; text: string }>;
-    return content?.[0]?.text ?? '';
+  function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+  }
+
+  function firstText(result: unknown): string {
+    if (!isRecord(result)) return '';
+    const content = result.content;
+    if (!Array.isArray(content)) return '';
+    const block = content[0];
+    if (!isRecord(block)) return '';
+    return typeof block.text === 'string' ? block.text : '';
   }
 
   it('create_persona over HTTP with only a smuggled avatarPath fails the face check', async () => {

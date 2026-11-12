@@ -94,6 +94,10 @@ describe('signed-upload client calls', () => {
     const completed = await completeVideoUpload(fakeClient(request), 'up-1');
     expect(completed.status).toBe('ready');
     expect(request.mock.calls[0]?.[0]).toBe('/api/videos/uploads/up-1/complete');
+    // The complete route downloads the whole stored object (up to 2GB)
+    // before answering, so it gets the upload timeout, not the 30s default.
+    const call = request.mock.calls[0] as unknown as [string, unknown, string, number];
+    expect(call[3]).toBe(120_000);
   });
 
   it('publishUploadedVideo posts JSON by id and narrows per-account results', async () => {
