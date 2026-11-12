@@ -349,7 +349,7 @@ export const PostCard = ({
             </div>
           </div>
         )}
-        <PublishAccountNotices status={slot.status} userNotices={slot.userNotices} compact />
+        <PublishAccountNotices userNotices={slot.userNotices} compact />
         {!isFailed && accounts.length > 0 && (
           <div className="mt-3">
             <AccountChips accounts={accounts} />
@@ -382,44 +382,79 @@ export const PostCard = ({
   );
 };
 
-// Standalone video generations. A failure shows the translated message for
-// its error_code, never the raw engine text.
+// Standalone video generations as one dense row: the list is scanned, not
+// read, so the status, the subject and the time sit on a single line and the
+// whole row is the link (no repeated "open" button). A failure keeps the
+// translated message for its error_code, never the raw engine text.
 export const GenerationCard = ({ generation, locale }: { generation: VideoGeneration; locale: Locale }) => {
   const { t } = useI18n();
   const videoUrl = videoUrlFor(generation.engineTaskId);
   const thumbSrc = generation.status === 'completed' ? videoUrl : null;
+  const isFailed = generation.status === 'failed';
+  const statusLabel = t(GENERATION_STATUS_KEY[generation.status] ?? 'posts.statusPending');
   return (
-    <Link href={`/posts/${generation.generationId}`} className="group/card block h-full">
-      <Card className={`flex h-full flex-col gap-0 rounded-xl p-4 transition-colors ${CARD_BORDER}`}>
-        <CardHeader
-          badge={
-            <StatusBadge
-              status={generation.status}
-              label={t(GENERATION_STATUS_KEY[generation.status] ?? 'posts.statusPending')}
-              style={STATUS_STYLE[generation.status] ?? STATUS_STYLE.pending}
-            />
-          }
-          when={`${formatDate(generation.createdAt, locale)} · ${formatTime(generation.createdAt, locale)}`}
-        />
-        <div className="mt-3 flex gap-3">
-          <CardTitle
-            title={generation.videoSubject ?? t('posts.unknownTitle')}
-            personaName={generation.personaName ?? t('posts.personaFallback')}
-            personaLabel={t('posts.cardPersonaLabel')}
-          />
-          {thumbSrc !== null && <PostThumb src={thumbSrc} />}
-        </div>
-        {generation.status === 'failed' && (
-          <FailureBox message={t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')} />
+    <Link
+      href={`/posts/${generation.generationId}`}
+      aria-label={`${statusLabel}: ${generation.videoSubject ?? t('posts.unknownTitle')}`}
+      className="group/card block rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    >
+      <Card
+        className={cn(
+          'flex flex-row items-center gap-3 rounded-xl px-3 py-2.5 transition-colors',
+          CARD_BORDER,
+          isFailed && 'border-destructive/35 hover:border-destructive/55',
         )}
-        {generation.tokensRefunded && (
-          <div className="mt-auto pt-4">
-            <Badge variant="outline" className="border-transparent bg-success-soft text-success">
+      >
+        <div className="relative size-14 shrink-0 overflow-hidden rounded-lg bg-sunken">
+          {thumbSrc !== null ? (
+            <video src={`${thumbSrc}#t=0.1`} preload="metadata" muted playsInline className="size-full object-cover" />
+          ) : (
+            <span className="flex size-full items-center justify-center">
+              <TriangleAlert
+                className={cn('size-4', isFailed ? 'text-destructive' : 'text-muted-text')}
+                aria-hidden
+              />
+            </span>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm leading-snug font-semibold text-primary">
+            {generation.videoSubject ?? t('posts.unknownTitle')}
+          </p>
+          <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="truncate">
+              <span className="sr-only">{t('posts.cardPersonaLabel')}: </span>
+              {generation.personaName ?? t('posts.personaFallback')}
+            </span>
+            <span aria-hidden>·</span>
+            <span className="shrink-0 tabular-nums">
+              {formatDate(generation.createdAt, locale)} · {formatTime(generation.createdAt, locale)}
+            </span>
+          </p>
+          {isFailed && (
+            <p data-generation-error className="mt-1 flex items-center gap-1.5 text-xs text-destructive">
+              <TriangleAlert className="size-3.5 shrink-0" aria-hidden />
+              <span className="truncate">
+                {t(GENERATION_ERROR_KEY[generation.errorCode ?? 'unknown'] ?? 'posts.errorUnknown')}
+              </span>
+            </p>
+          )}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          {generation.tokensRefunded && (
+            <Badge variant="outline" className="hidden border-transparent bg-success-soft text-success sm:inline-flex">
               {t('posts.refundedBadge')}
             </Badge>
-          </div>
-        )}
-        <CardOpenAction label={t('posts.cardOpen')} />
+          )}
+          <StatusBadge
+            status={generation.status}
+            label={statusLabel}
+            style={STATUS_STYLE[generation.status] ?? STATUS_STYLE.pending}
+          />
+          <ChevronRight className="size-4 text-muted-text transition-transform group-hover/card:translate-x-0.5" aria-hidden />
+        </div>
       </Card>
     </Link>
   );

@@ -1,12 +1,17 @@
 'use client';
 
-import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { CalendarPlus, CalendarX2, Filter, FilterX, type LucideIcon } from 'lucide-react';
+import { CalendarPlus, CalendarX2, Filter, FilterX } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
+
+// The shared empty-state block lives in components/ui (one definition for
+// every list and panel); re-exported here so the posts screens keep their
+// existing import path.
+export { EmptyState } from '@/components/ui/empty-state';
 
 //---------------
 // The posts calendar's states around the grid: the summary of the selected
@@ -18,37 +23,6 @@ import { cn } from '@/lib/utils';
 //---------------
 
 export const CREATE_POSTS_HREF = '/recipes';
-
-export function EmptyState({
-  icon: Icon,
-  title,
-  description,
-  action,
-  compact = false,
-}: {
-  icon: LucideIcon;
-  title: string;
-  description: string;
-  action?: ReactNode;
-  compact?: boolean;
-}) {
-  return (
-    <div
-      data-empty-state
-      className={cn(
-        'flex flex-col items-center rounded-xl border border-dashed border-line bg-card text-center',
-        compact ? 'gap-1.5 px-4 py-6' : 'gap-2 px-6 py-10',
-      )}
-    >
-      <span className="flex size-10 items-center justify-center rounded-full bg-sunken text-muted-text">
-        <Icon className="size-5" aria-hidden />
-      </span>
-      <p className="text-sm font-semibold text-primary">{title}</p>
-      <p className="max-w-md text-sm text-muted-foreground">{description}</p>
-      {action !== undefined && <div className="mt-2 w-full min-w-0">{action}</div>}
-    </div>
-  );
-}
 
 function CreatePostsLink({ labelKey, className }: { labelKey: TranslationKey; className?: string }) {
   const { t } = useI18n();
