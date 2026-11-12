@@ -107,8 +107,8 @@ export function PostRow({
               <span aria-hidden>·</span>
               <span className="shrink-0 tabular-nums">{when}</span>
               {accounts.length > 0 && (
-                <span className="flex shrink-0 items-center gap-1" aria-hidden>
-                  <span>·</span>
+                <span className="flex shrink-0 items-center gap-1">
+                  <span aria-hidden>·</span>
                   {accounts.slice(0, MAX_STATUS_ICONS).map((account) => (
                     <ProviderIcon key={`${account.provider}:${account.id}`} provider={account.provider} />
                   ))}

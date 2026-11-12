@@ -93,6 +93,16 @@ describe('PostRow layout', () => {
     expect(container.querySelectorAll('[aria-label="instagram"]')).toHaveLength(1);
   });
 
+  it('exposes the targeted networks to assistive technology', () => {
+    // getByRole reads the accessibility tree, so it fails while the glyph
+    // wrapper hides the icons with aria-hidden; the DOM query above cannot
+    // catch that.
+    renderRow();
+
+    expect(screen.getByRole('img', { name: 'youtube' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'instagram' })).toBeInTheDocument();
+  });
+
   it('draws no network glyph when the post targets no account', () => {
     renderRow({}, false, []);
 
