@@ -215,15 +215,17 @@ describe('PostHistoryPage', () => {
     expect(screen.queryByText('The engine restarted while generating your video.')).not.toBeInTheDocument();
   });
 
-  it('shows the full failure message on generation cards, never cut off', () => {
+  it('truncates the failure line to one row in the dense list', () => {
     mockQueries({ generations: [FAILED_GENERATION] });
     render(<PostHistoryPage />);
 
+    // Dense rows truncate the failure reason to one line; the full reason
+    // stays readable on the detail page (PostFailureNotice keeps the raw
+    // error in a disclosure, pinned by post-failure-notice.test.tsx).
     const message = screen.getByText('posts.errorCustomAudio');
-    expect(message.className.split(/\s+/)).not.toContain('line-clamp-2');
-    // The slot card's failure line is unclamped too.
+    expect(message.className.split(/\s+/)).toContain('truncate');
     const slotMessage = screen.getByText('posts.cardFailedPermanent');
-    expect(slotMessage.className.split(/\s+/)).not.toContain('line-clamp-2');
+    expect(slotMessage.className.split(/\s+/)).toContain('truncate');
   });
 
   it('draws no thumbnail tile on a card without video, and keeps the full date on history cards', () => {
