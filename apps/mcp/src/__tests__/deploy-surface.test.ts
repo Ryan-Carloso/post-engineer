@@ -40,6 +40,9 @@ describe('MCP HTTP deploy surface', () => {
     const dockerfile = read('Dockerfile');
     expect(dockerfile).toContain('--http-transport');
     expect(dockerfile).toContain('--allow-remote');
+    expect(dockerfile).toContain('pnpm --filter post-engineer-mcp --legacy deploy --prod /out');
+    expect(dockerfile).toContain('COPY --from=builder /out ./');
+    expect(dockerfile).not.toContain('COPY --from=builder /repo/apps/mcp/node_modules');
     expect(compose).toContain('dockerfile: apps/mcp/Dockerfile');
     expect(compose).toContain('context: ../..');
   });

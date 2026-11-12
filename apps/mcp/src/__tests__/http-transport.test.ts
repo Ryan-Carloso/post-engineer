@@ -135,10 +135,30 @@ describe('parseHttpTransportOptions', () => {
   });
 });
 
+const FILE_ONLY_TOOLS = ['upload_media', 'add_persona_image', 'publish_video_direct'];
+
+async function listedNames(client: PostEngineerClient, transport: 'stdio' | 'http'): Promise<string[]> {
+  const server = createPostEngineerMcpServer(client, transport);
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await server.connect(serverTransport);
+  const memoryClient = new Client({ name: 'memory-test', version: '1.0.0' });
+  await memoryClient.connect(clientTransport);
+  try {
+    const tools = await memoryClient.listTools();
+    return tools.tools.map((tool) => tool.name).sort();
+  } finally {
+    await memoryClient.close();
+  }
+}
+
 describe('serveHttpTransport', () => {
-  it('serves the same 56 tools over Streamable HTTP and answers validate_script without tokens', async () => {
+  it('serves the remote JSON tools over Streamable HTTP and answers validate_script without tokens', async () => {
     const client = mockClient();
-    const handle = await serveHttpTransport(() => createPostEngineerMcpServer(client), { host: '127.0.0.1', port: 0, allowRemote: false });
+    const handle = await serveHttpTransport(() => createPostEngineerMcpServer(client, 'http'), {
+      host: '127.0.0.1',
+      port: 0,
+      allowRemote: false,
+    });
     handles.push(handle);
 
     const mcpClient = new Client({ name: 'http-transport-test', version: '1.0.0' });
@@ -147,20 +167,17 @@ describe('serveHttpTransport', () => {
     try {
       const httpTools = await mcpClient.listTools();
       const httpNames = httpTools.tools.map((tool) => tool.name).sort();
+      const memoryNames = await listedNames(client, 'http');
+      const stdioNames = await listedNames(client, 'stdio');
 
-      // Parity proof without duplicating the tool list: the same server
-      // factory over an in-memory transport must list exactly the same tools.
-      const memoryServer = createPostEngineerMcpServer(client);
-      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-      await memoryServer.connect(serverTransport);
-      const memoryClient = new Client({ name: 'memory-test', version: '1.0.0' });
-      await memoryClient.connect(clientTransport);
-      const memoryTools = await memoryClient.listTools();
-      await memoryClient.close();
-      const memoryNames = memoryTools.tools.map((tool) => tool.name).sort();
-
+      // The HTTP listener must serve the same tools as the http factory.
+      // That set is the stdio set without the three local-file tools.
       expect(httpNames).toEqual(memoryNames);
-      expect(httpNames).toHaveLength(56);
+      for (const tool of FILE_ONLY_TOOLS) {
+        expect(httpNames).not.toContain(tool);
+        expect(stdioNames).toContain(tool);
+      }
+      expect(stdioNames.filter((name) => !FILE_ONLY_TOOLS.includes(name))).toEqual(httpNames);
       expect(httpNames).toContain('list_prompts');
       expect(httpNames).toContain('validate_script');
 

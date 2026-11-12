@@ -22,15 +22,21 @@ COPY apps/mcp ./apps/mcp
 COPY shared ./shared
 COPY scripts ./scripts
 COPY VERSION ./
-RUN cd apps/mcp && pnpm build
+# pnpm's isolated linker keeps the real packages in /repo/node_modules/.pnpm.
+# apps/mcp/node_modules is only relative symlinks, so copying that directory
+# into the runner leaves every import pointing at a store the image does not
+# contain. `pnpm deploy --legacy` writes a tree whose links stay inside
+# node_modules/.pnpm. pnpm 10 refuses deploy without --legacy unless the
+# workspace sets inject-workspace-packages.
+RUN cd apps/mcp && pnpm build \
+    && cd /repo \
+    && pnpm --filter post-engineer-mcp --legacy deploy --prod /out
 
 FROM node:22-alpine AS runner
 ENV NODE_ENV=production TZ=UTC
 WORKDIR /app
 
-COPY --from=builder /repo/apps/mcp/dist ./dist
-COPY --from=builder /repo/apps/mcp/package.json ./package.json
-COPY --from=builder /repo/apps/mcp/node_modules ./node_modules
+COPY --from=builder /out ./
 
 # Non-root runtime user.
 RUN addgroup -g 10001 mcp && adduser -u 10001 -G mcp -D mcp \
