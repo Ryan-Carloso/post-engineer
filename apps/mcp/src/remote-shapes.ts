@@ -4,19 +4,26 @@
 // A path served over HTTP would resolve on the MCP server's filesystem,
 // not on the agent's machine, so the remote surface cannot carry one:
 // create_persona keeps only avatarUrl (no avatarPath, no library images),
-// and update_persona keeps only avatarUrl. The schemas are strict so a
-// smuggled path field fails loudly instead of being silently dropped,
-// and the handlers re-parse with them before any client call.
+// and update_persona keeps only avatarUrl. The SDK parses tool args with
+// the registered raw shape, which strips unknown keys before the handler
+// runs — so a smuggled path is dropped (never read), not loudly rejected.
+// The strict re-parse is defense-in-depth for direct handler callers only.
 import { z } from 'zod';
 
-import { CreatePersonaAvatarFields, UpdatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar.js';
+import { UpdatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar.js';
 import { UpdatePersonaShape } from './persona-update.js';
 import { CreatePersonaShape } from './tools.js';
 
 /** create_persona over HTTP: avatarUrl only, no library image files. */
 export const CreatePersonaRemoteShape = {
   name: CreatePersonaShape.name,
-  avatarUrl: CreatePersonaAvatarFields.avatarUrl,
+  avatarUrl: z
+    .string()
+    .url()
+    .optional()
+    .describe(
+      'Public URL to the persona avatar image (use list_faces for stock face URLs). Required: every persona has a face; "no face" is chosen per video with generate_persona_video options.videoType: \'faceless\'.',
+    ),
   voiceId: CreatePersonaShape.voiceId,
   language: CreatePersonaShape.language,
   videoAspect: CreatePersonaShape.videoAspect,

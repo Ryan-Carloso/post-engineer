@@ -63,9 +63,17 @@ export const CreateClonedVoiceSchema = z
 
 /** create_cloned_voice over HTTP: audioUrl only — a local audioPath would
  * resolve on the MCP server's filesystem, not on the agent's machine.
- * Strict so a smuggled audioPath fails loudly instead of being dropped. */
+ * The SDK strips unknown keys before the handler runs, so a smuggled
+ * audioPath is dropped (never read), not loudly rejected; the strict
+ * re-parse is defense-in-depth for direct handler callers only. */
 export const CreateClonedVoiceRemoteShape = {
-  audioUrl: CreateClonedVoiceShape.audioUrl,
+  audioUrl: z
+    .string()
+    .url()
+    .optional()
+    .describe(
+      `HTTPS URL of a short reference recording (MP3, WAV, M4A, or WebM, max ${MAX_CLONE_AUDIO_MB}MB). Required: the remote server cannot read local files.`,
+    ),
   language: CreateClonedVoiceShape.language,
   consent: CreateClonedVoiceShape.consent,
   denoise: CreateClonedVoiceShape.denoise,

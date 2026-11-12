@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createPostEngineerMcpServer } from '../index.js';
@@ -138,5 +138,126 @@ describe('remote schemas reject local paths', () => {
       avatarPath: '/etc/passwd.png',
     });
     expect(create.success).toBe(false);
+  });
+});
+
+describe('remote smuggled paths are dropped by the SDK, never read', () => {
+  // The SDK parses tool args with the registered raw shape, which strips
+  // unknown keys before the handler runs — so a smuggled path is dropped
+  // (never read), not loudly rejected. These tests pin the actual outcome
+  // at the transport boundary, through tools/call, not through safeParse.
+  const realFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  function stubClient() {
+    const createPersona = vi.fn().mockResolvedValue({ id: 'p1', name: 'Ava' });
+    const updatePersona = vi.fn().mockResolvedValue({ id: 'p1', name: 'Ava 2' });
+    const request = vi.fn().mockResolvedValue({ success: true, voice: { id: 'v1', status: 'ready' } });
+    const client = {
+      createPersona,
+      updatePersona,
+      getHeaders: vi.fn(() => ({ Authorization: 'Bearer test' })),
+      request,
+      baseUrl: 'https://api.test',
+    } as unknown as PostEngineerClient;
+    return { client, createPersona, updatePersona, request };
+  }
+
+  async function callRemoteTool(client: PostEngineerClient, name: string, args: Record<string, unknown>) {
+    const server = createPostEngineerMcpServer(client, 'http');
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const mcpClient = new Client({ name: 'test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), mcpClient.connect(clientTransport)]);
+    try {
+      return await mcpClient.callTool({ name, arguments: args });
+    } finally {
+      await mcpClient.close();
+    }
+  }
+
+  function firstText(result: { content?: unknown }): string {
+    const content = result.content as Array<{ type: string; text: string }>;
+    return content?.[0]?.text ?? '';
+  }
+
+  it('create_persona over HTTP with only a smuggled avatarPath fails the face check', async () => {
+    const { client, createPersona } = stubClient();
+    const result = await callRemoteTool(client, 'create_persona', {
+      name: 'Ava',
+      voiceId: 'no-voice',
+      avatarPath: '/etc/passwd.png',
+    });
+    expect(result.isError).toBe(true);
+    expect(firstText(result)).toContain('avatarUrl or avatarPath is required');
+    expect(createPersona).not.toHaveBeenCalled();
+  });
+
+  it('create_persona over HTTP with avatarUrl and a smuggled avatarPath keeps only the URL', async () => {
+    const { client, createPersona } = stubClient();
+    const result = await callRemoteTool(client, 'create_persona', {
+      name: 'Ava',
+      voiceId: 'no-voice',
+      avatarUrl: 'https://example.com/face.png',
+      avatarPath: '/etc/passwd.png',
+    });
+    expect(result.isError).toBeUndefined();
+    expect(createPersona).toHaveBeenCalledTimes(1);
+    expect(createPersona.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ avatarUrl: 'https://example.com/face.png' }),
+    );
+    expect(createPersona.mock.calls[0][0]).not.toHaveProperty('avatarPath');
+  });
+
+  it('update_persona over HTTP with only a smuggled avatarPath updates nothing from the path', async () => {
+    const { client, updatePersona } = stubClient();
+    const result = await callRemoteTool(client, 'update_persona', {
+      personaId: 'p1',
+      avatarPath: '/etc/passwd.png',
+    });
+    expect(result.isError).toBeUndefined();
+    expect(updatePersona).toHaveBeenCalledTimes(1);
+    expect(updatePersona).toHaveBeenCalledWith({ personaId: 'p1' });
+  });
+
+  it('create_cloned_voice over HTTP with a smuggled audioPath clones from the URL', async () => {
+    const { client, request } = stubClient();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: (name: string) => (name === 'content-type' ? 'audio/mpeg' : null) },
+      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const result = await callRemoteTool(client, 'create_cloned_voice', {
+      audioUrl: 'https://example.com/voice.mp3',
+      audioPath: '/tmp/voice.mp3',
+      language: 'en',
+      consent: true,
+      denoise: true,
+    });
+    expect(result.isError).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/voice.mp3', expect.anything());
+    expect(request).toHaveBeenCalledWith(
+      '/api/persona/cloned-voices',
+      expect.objectContaining({ method: 'POST' }),
+      'create cloned voice',
+      expect.any(Number),
+    );
+    const body = request.mock.calls[0][1].body as FormData;
+    expect((body.get('file') as File).name).toBe('reference.bin');
+  });
+
+  it('remote URL field descriptions never name the local-path field', async () => {
+    const tools = await listTools('http');
+    const byName = new Map(tools.map((t) => [t.name, t.inputSchema.properties ?? {}]));
+    const personaProps = byName.get('create_persona') as Record<string, { description?: string }>;
+    expect(personaProps.avatarUrl.description).toBeDefined();
+    expect(personaProps.avatarUrl.description).not.toContain('avatarPath');
+    const voiceProps = byName.get('create_cloned_voice') as Record<string, { description?: string }>;
+    expect(voiceProps.audioUrl.description).toBeDefined();
+    expect(voiceProps.audioUrl.description).not.toContain('audioPath');
   });
 });
