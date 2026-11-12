@@ -7,11 +7,11 @@ import { toFiniteNumber } from '@/lib/tokens';
 import { useI18n } from '@/lib/i18n/provider';
 
 //---------------
+// TokenBalance — prepaid wallet balance. `compact` renders the one-row form
+// the sidebar uses (the tall card is what pushed the last nav item off a
+// 900px viewport); the full card stays on /account.
 //---------------
-// TokenBalance — prepaid wallet balance displayed in the sidebar.
-// Busca o saldo da API /api/billing/tokens e exibe barra de progresso.
-//---------------
-export function TokenBalance() {
+export function TokenBalance({ compact = false }: { compact?: boolean }) {
   const [balance, setBalance] = useState(0);
   const { t } = useI18n();
 
@@ -20,6 +20,28 @@ export function TokenBalance() {
       setBalance(toFiniteNumber(data.balance, 0));
     });
   }, []);
+
+  if (compact) {
+    return (
+      <Link
+        href="/billing"
+        data-testid="token-balance"
+        aria-label={`${t('tokens.balance')}: ${formatBalance(balance)}`}
+        className="flex items-center gap-2.5 rounded-2xl border border-hairline bg-surface px-3 py-2 transition-colors hover:border-line"
+      >
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-ink">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="size-4" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3.75 20.25 8v8L12 20.25 3.75 16V8L12 3.75Z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="m3.75 8 8.25 4.25L20.25 8M12 12.25v8" />
+          </svg>
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-muted-text">{t('tokens.balance')}</span>
+        <span className="shrink-0 text-[17px] leading-none font-semibold tracking-[-0.02em] text-ink tabular-nums">
+          {formatBalance(balance)}
+        </span>
+      </Link>
+    );
+  }
 
   return (
     <Link

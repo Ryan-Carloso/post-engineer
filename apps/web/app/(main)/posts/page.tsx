@@ -252,9 +252,9 @@ export default function PostsPage() {
                           onClearFilters={filters.clear}
                         />
                       ) : (
-                      // One column in the side panel; two equal-height columns
-                      // in between; one on a phone.
-                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+                      // One column in the side panel; two in between; one on a
+                      // phone. Rows, not cards: a full day fits without scroll.
+                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                           {selectedSlots.map((slot) => (
                             <SlotCard key={slot.id} slot={slot} joins={joins} timeOnly />
                           ))}

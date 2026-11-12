@@ -96,16 +96,13 @@ const MainSidebar = () => {
       <div
         data-testid="nav-brand"
         aria-label={t('nav.brand')}
-        className="group flex shrink-0 items-center gap-3 px-5 pt-8 pb-6 text-left transition-colors hover:bg-brand-soft lg:gap-3 lg:px-6 lg:pt-8 lg:pb-6"
+        className="flex shrink-0 items-center gap-3 px-5 pt-6 pb-4 text-left lg:px-6"
       >
-        <span className="shrink-0 transition-transform group-hover:rotate-3">
-          <AppLogo size={48} className="shadow-[0_10px_24px_rgba(20,32,51,0.18)] lg:size-[56px]" />
+        <span className="shrink-0">
+          <AppLogo size={40} className="shadow-[0_10px_24px_rgba(20,32,51,0.18)] lg:size-[44px]" />
         </span>
         <div className="hidden min-w-0 md:block">
-          <p className="text-[19px] leading-tight font-bold tracking-[-0.03em] text-ink">
-            {t('nav.brand')}
-            <VersionBadge />
-          </p>
+          <p className="text-[19px] leading-tight font-bold tracking-[-0.03em] text-ink">{t('nav.brand')}</p>
           <p className="text-[13px] leading-snug text-muted-text lg:text-[14px]">{t('nav.brandSubtitle')}</p>
         </div>
       </div>
@@ -116,9 +113,9 @@ const MainSidebar = () => {
         ))}
       </nav>
 
-      <div data-sidebar-footer className="max-h-[50%] min-h-0 shrink space-y-3 overflow-y-auto border-t border-hairline bg-card p-4 lg:p-5">
-        <AccountPanel hideSidebarApiKeysRow />
-        <SidebarLegalLinks />
+      <div data-sidebar-footer className="max-h-[62%] min-h-0 shrink overflow-y-auto border-t border-hairline bg-card px-4 py-3 lg:px-5">
+        <AccountPanel hideSidebarApiKeysRow compact />
+        <div className="mt-3"><SidebarLegalLinks /></div>
       </div>
     </aside>
   );
@@ -134,11 +131,11 @@ const SidebarTab = ({ item, isActive }: { item: NavItem; isActive: boolean }) =>
     <Link
       href={item.href}
       title={t(item.labelKey)}
-      className={`group relative flex items-center gap-3 rounded-[20px] px-4 py-3.5 transition-colors lg:gap-4 lg:rounded-[20px] lg:px-5 lg:py-3.5 ${
+      className={`group relative flex items-center gap-3 rounded-[20px] px-4 transition-colors lg:gap-4 lg:rounded-[20px] lg:px-5 ${
         isActive
           ? 'bg-brand-soft text-ink'
           : 'text-muted-text hover:bg-surface hover:text-ink'
-      }`}
+      } py-2.5`}
     >
       <span className={`shrink-0 [&>svg]:size-6 lg:[&>svg]:size-7 ${isActive ? 'text-brand' : 'text-muted-text group-hover:text-ink'}`}>
         <Icon />
