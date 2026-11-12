@@ -59,8 +59,9 @@ export function mergeProfileMetadata(
 //---------------
 // probeStoredCredential — decrypts the stored tokens without using them.
 // Throws on an undecryptable blob (or a missing row), so the caller flags
-// the card. Used on the paths that never fetch a profile, where a corrupted
-// token would otherwise render as a healthy account.
+// the card. Used on the paths whose fetch never reads the token: the ones
+// that skip the fetch entirely, and Bluesky's fetch path (its public-profile
+// fetch never touches the stored token).
 //---------------
 async function probeStoredCredential(
   supabase: SupabaseClient,
@@ -75,8 +76,9 @@ async function probeStoredCredential(
 // original when no sync is needed. Throws on credential/provider/DB failure
 // (reported to PostHog first); nothing is written on failure, so the next
 // list retries the row — the caller logs and keeps the stored record.
-// Rows that skip the fetch still probe the stored credential: an
-// undecryptable token throws so the caller flags the card.
+// Rows that skip the fetch still probe the stored credential, and so does
+// the Bluesky fetch path (its public-profile fetch never reads the token):
+// an undecryptable token throws so the caller flags the card.
 //---------------
 export async function syncAccountProfile(
   supabase: SupabaseClient,
@@ -114,6 +116,14 @@ export async function syncAccountProfile(
   } catch (error) {
     reportProfileFetchFailed(record.provider, 'sync', error);
     throw error;
+  }
+
+  // Bluesky's public-profile fetch never reads the stored token, so a
+  // corrupted blob would pass the fetch and render green on every resync
+  // due: probe it after the fetch succeeds, before anything is written.
+  // Every other source decrypts inside its fetch, so no second probe.
+  if (record.provider === 'bluesky') {
+    await probeStoredCredential(supabase, userId, record);
   }
 
   const previousPicture = record.accountMetadata[source.pictureKey];

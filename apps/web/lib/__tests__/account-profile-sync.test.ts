@@ -225,4 +225,27 @@ describe('syncAccountProfile', () => {
     await syncAccountProfile(supabase, 'u1', rec, { now: () => NOW });
     expect(vi.mocked(getSocialAccountTokens)).not.toHaveBeenCalled();
   });
+
+  it('flags a stale Bluesky row whose token is undecryptable even though the public fetch succeeds', async () => {
+    // Bluesky's fetch reads the public profile and never touches the stored
+    // token, so without a probe on the fetch path a corrupted token would
+    // render green on every resync due (roughly once a day).
+    sources.bluesky.fetch.mockResolvedValue({ accountName: 'new_handle', pictureUrl: null, metadata: {} });
+    const failure = new Error('Invalid authentication tag length: 2');
+    vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(failure);
+    const rec = record({ provider: 'bluesky', providerAccountId: 'did:plc:x' }, { profileSyncedAt: STALE });
+    await expect(
+      syncAccountProfile(supabase, 'u1', rec, { now: () => NOW }),
+    ).rejects.toBe(failure);
+    expect(sources.bluesky.fetch).toHaveBeenCalledWith(supabase, 'u1', rec);
+    expect(updateSocialAccountMetadata).not.toHaveBeenCalled();
+    expect(reportProfileFetched).not.toHaveBeenCalled();
+  });
+
+  it('probes the stored token after a successful Bluesky fetch', async () => {
+    sources.bluesky.fetch.mockResolvedValue({ accountName: 'new_handle', pictureUrl: null, metadata: {} });
+    const rec = record({ provider: 'bluesky', providerAccountId: 'did:plc:x' }, { profileSyncedAt: STALE });
+    await syncAccountProfile(supabase, 'u1', rec, { now: () => NOW });
+    expect(vi.mocked(getSocialAccountTokens)).toHaveBeenCalledWith(supabase, 'u1', 'bluesky', 'did:plc:x');
+  });
 });

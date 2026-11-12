@@ -172,8 +172,9 @@ describe('AccountCard', () => {
     });
 
     it('shows neither action on a broken card without a reconnect handler', () => {
-      // The docstring promises a broken card never shows the trash button,
-      // but the branch falls through to it when onReconnect is missing.
+      // A broken card never shows the trash button even when the reconnect
+      // handler is missing: with error=true the disconnect branch is
+      // unreachable, so the card renders no action at all.
       render(<AccountCard {...baseProps} error showDisconnect onDisconnect={() => {}} />);
       expect(screen.queryByTestId('youtube-reconnect-button')).toBeNull();
       expect(screen.queryByTestId('youtube-disconnect-button')).toBeNull();
