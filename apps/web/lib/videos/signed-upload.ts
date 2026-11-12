@@ -23,9 +23,10 @@ export const VIDEO_UPLOAD_BUCKET = 'videos';
 export const MAX_VIDEO_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 export const VIDEO_UPLOAD_TTL_MS = 15 * 60 * 1000;
 export const VIDEO_UPLOAD_CONTENT_TYPES = ['video/mp4', 'video/quicktime'] as const;
+export const VIDEO_UPLOAD_STATUSES = ['pending', 'ready', 'consumed'] as const;
 
 export type VideoUploadContentType = (typeof VIDEO_UPLOAD_CONTENT_TYPES)[number];
-export type VideoUploadStatus = 'pending' | 'ready' | 'consumed';
+export type VideoUploadStatus = (typeof VIDEO_UPLOAD_STATUSES)[number];
 
 export interface VideoUploadRow {
   id: string;

@@ -15,10 +15,12 @@
 //     The copies land inside each app's own build output instead, so the
 //     published MCP tarball (files: ["dist"]) stays self-contained.
 //
-// Wiring: apps/mcp and apps/web both run this from their prebuild and
-// pretest scripts, so `pnpm build` and `pnpm test` always regenerate
-// before compiling or testing. The per-app sync tests
-// (music-mood-field-shared.test.ts) fail loudly if a copy ever drifts.
+// Wiring: apps/mcp and apps/web prebuild and pretest run
+// scripts/sync-script-segments.mjs, which runs this script afterwards
+// and forwards --check. This script is not named in those package.json
+// files: they are guarded by the parity-exclusion gate. The per-app
+// sync tests (music-mood-field-shared.test.ts) fail loudly if a copy
+// ever drifts.
 // Usage: node scripts/sync-music-mood-field.mjs [--check]
 //   --check  exit 1 (without writing) when any copy differs from shared.
 import { copyFileSync, existsSync, readFileSync } from 'node:fs';

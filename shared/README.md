@@ -63,10 +63,13 @@ To change the field, edit only the shared file, then regenerate:
 node scripts/sync-music-mood-field.mjs
 ```
 
-Both apps also run the sync from their `prebuild` and `pretest` scripts,
-each app has a `music-mood-field-shared.test.ts` drift suite, and each
-runs the same payload contract table in `music-mood-field.test.ts`
-against its own copy. Never edit a generated copy by hand.
+`scripts/sync-script-segments.mjs` runs this sync afterwards and forwards
+`--check`. Both apps' `prebuild` and `pretest` scripts run that script.
+The music sync is not named in `apps/*/package.json`: those files are
+guarded by the parity-exclusion gate. Each app has a
+`music-mood-field-shared.test.ts` drift suite, and each runs the same
+payload contract table in `music-mood-field.test.ts` against its own
+copy. Never edit a generated copy by hand.
 
 ## prompt-base
 
