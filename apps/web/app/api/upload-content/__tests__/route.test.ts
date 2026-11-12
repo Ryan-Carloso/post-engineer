@@ -529,6 +529,15 @@ function makeLedgerFake() {
       row.leaseUntil = null;
       return { data: true, error: null };
     }
+    if (fn === 'touch_publish_ledger') {
+      const key = args.p_key as string;
+      const row = rows.get(key);
+      if (row === undefined || row.token !== args.p_token || row.status !== 'in_progress') {
+        return { data: false, error: null };
+      }
+      row.leaseUntil = Date.now() + (args.p_lease_seconds as number) * 1000;
+      return { data: true, error: null };
+    }
     throw new Error(`unexpected rpc ${fn}`);
   });
   return { rows, rpc };
@@ -688,5 +697,43 @@ describe('POST /api/upload-content with a publish scope key', () => {
 
     expect(res.status).toBe(500);
     expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('failed');
+  });
+
+  it('renews the claims while a slow handler runs and stops when it finishes', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveHandler!: (value: unknown) => void;
+      const handlerDone = new Promise((resolve) => {
+        resolveHandler = resolve;
+      });
+      mockHandleYoutubeUpload.mockImplementation(() => handlerDone);
+      const resPromise = POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+      // Let the route claim and reach the handler.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
+      const before = ledger.rows.get(ledgerKey('acc-1'))?.leaseUntil;
+
+      // One heartbeat beat touches the claim, pushing its lease out.
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      expect(ledger.rpc).toHaveBeenCalledWith(
+        'touch_publish_ledger',
+        expect.objectContaining({ p_key: ledgerKey('acc-1') }),
+      );
+      expect(ledger.rows.get(ledgerKey('acc-1'))?.leaseUntil).toBeGreaterThan(before ?? 0);
+
+      // Finish the handler; the heartbeat stops with the request.
+      resolveHandler({
+        success: true,
+        provider: 'youtube',
+        results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
+      });
+      const res = await resPromise;
+      expect((await res.json() as { success: boolean }).success).toBe(true);
+      const touches = ledger.rpc.mock.calls.filter(([fn]) => fn === 'touch_publish_ledger').length;
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      expect(ledger.rpc.mock.calls.filter(([fn]) => fn === 'touch_publish_ledger').length).toBe(touches);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

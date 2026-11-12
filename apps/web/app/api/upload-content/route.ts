@@ -28,6 +28,7 @@ import {
   partitionPublishAccounts,
   recordPublishAttempt,
   recordPartitionResults,
+  startLedgerHeartbeat,
   type PublishLedgerPartition,
 } from '@/lib/upload/publish-ledger';
 
@@ -163,15 +164,25 @@ async function postHandler(request: NextRequest) {
       success: boolean;
       results?: ContentUploadAccountResult[];
     };
+    // Heartbeat: while this request publishes, it renews its claims, so
+    // a publish longer than the lease is never taken over while alive.
+    // Stopped in the finally once the handler finished and the outcomes
+    // are recorded — including the handler-throw path, which records the
+    // claims as failed before rethrowing.
+    const stopHeartbeat =
+      partition !== null && partition.granted.length > 0 && ledgerClient !== null
+        ? startLedgerHeartbeat(ledgerClient, partition)
+        : null;
     let response: UploadDispatchResult;
-    if (partition !== null && partition.granted.length === 0) {
+    try {
+      if (partition !== null && partition.granted.length === 0) {
       // Every account already published or still in flight: nothing to call.
-      const results = mergePartitionResults(partition, []);
-      response = { success: results.some((result) => result.success), results };
-    } else {
-      const handlerForm = partition !== null ? partition.formData : formData;
-      try {
-        response =
+        const results = mergePartitionResults(partition, []);
+        response = { success: results.some((result) => result.success), results };
+      } else {
+        const handlerForm = partition !== null ? partition.formData : formData;
+        try {
+          response =
           provider === 'youtube'
             ? await handleYoutubeUpload(handlerForm, userId, logId, startTime)
             : provider === 'bluesky'
@@ -191,38 +202,41 @@ async function postHandler(request: NextRequest) {
                           : provider === 'rumble'
                             ? await handleRumbleUpload(handlerForm, userId)
                             : await handleInstagramUpload(handlerForm, userId, logId, startTime);
-      } catch (error) {
-        if (partition !== null && ledgerClient !== null) {
+        } catch (error) {
+          if (partition !== null && ledgerClient !== null) {
           // The handler failed before publishing (validation): release the
           // claims as failed so the next retry proceeds at once instead of
           // waiting out the lease.
-          const held = partition;
-          const failure = classifyUploadAccountError(error);
-          await Promise.all(
-            held.granted.map((granted) =>
-              recordPublishAttempt(ledgerClient, {
-                scopeKey: held.scopeKey,
-                provider,
-                accountId: granted.accountId,
-                claimToken: granted.claimToken,
-                accountResult: {
+            const held = partition;
+            const failure = classifyUploadAccountError(error);
+            await Promise.all(
+              held.granted.map((granted) =>
+                recordPublishAttempt(ledgerClient, {
+                  scopeKey: held.scopeKey,
+                  provider,
                   accountId: granted.accountId,
-                  success: false,
-                  error: failure.error,
-                  errorCode: failure.errorCode,
-                },
-              }),
-            ),
-          );
+                  claimToken: granted.claimToken,
+                  accountResult: {
+                    accountId: granted.accountId,
+                    success: false,
+                    error: failure.error,
+                    errorCode: failure.errorCode,
+                  },
+                }),
+              ),
+            );
+          }
+          throw error;
         }
-        throw error;
+        if (partition !== null && ledgerClient !== null) {
+          const results = response.results;
+          await recordPartitionResults(ledgerClient, partition, results);
+          const merged = mergePartitionResults(partition, results);
+          response = { ...response, success: merged.some((result) => result.success), results: merged };
+        }
       }
-      if (partition !== null && ledgerClient !== null) {
-        const results = response.results;
-        await recordPartitionResults(ledgerClient, partition, results);
-        const merged = mergePartitionResults(partition, results);
-        response = { ...response, success: merged.some((result) => result.success), results: merged };
-      }
+    } finally {
+      stopHeartbeat?.();
     }
 
     logger.info('[upload-content] handler finalizado', { provider, success: response.success, logId });
