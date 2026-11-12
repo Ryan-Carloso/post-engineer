@@ -38,7 +38,8 @@ by Modal.
   voiceover (TTS), subtitles, stock footage, and background music, assembled
   into a finished video.
 - **Scheduling & publishing** — queue posts for YouTube, Instagram, LinkedIn,
-  Bluesky, and 3Speak; track upcoming and past posts with per-account status.
+  Bluesky, Threads, Facebook, Pinterest, 3Speak, Rumble, and Fanvue; track
+  upcoming and past posts with per-account status.
 - **Dashboard** — personas, posts history, connected social accounts, API keys,
   and token billing in one Next.js app.
 - **Agent control** — an MCP server ([`apps/mcp/`](apps/mcp/)) exposes the same
@@ -141,6 +142,14 @@ To connect YouTube, Instagram, or LinkedIn accounts you need OAuth apps whose
   `pages_read_engagement` and `pages_manage_posts` permissions, set
   `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` and register
   `FACEBOOK_REDIRECT_URI`. Connecting once adds every Page the user manages.
+- **Fanvue** — [Fanvue Developer Area](https://www.fanvue.com/dev): create an
+  **API only** app from a creator account, add the redirect URIs from
+  `FANVUE_REDIRECT_URI` / `FANVUE_REDIRECT_URI_LOCAL`, and select the scopes
+  `read:self`, `read:post`, `write:post`, `read:media` and `write:media` (the
+  system scopes `openid`, `offline_access` and `offline` are added
+  automatically). Set `FANVUE_CLIENT_ID` / `FANVUE_CLIENT_SECRET`. There is no
+  API key: the creator authorizes the app over OAuth 2.0 + PKCE. Every post is
+  subscribers-only.
 - **Bluesky** uses an app password entered in the dashboard (encrypted at
   rest) — no OAuth app registration needed.
 - **3Speak** uses a Hive posting key entered in the dashboard (encrypted at

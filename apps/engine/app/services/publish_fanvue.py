@@ -4,7 +4,7 @@ Wire contract (multipart/form-data, ``POST /api/upload-content``):
 ``provider=fanvue``, ``video`` (file), ``title``, ``description``,
 repeated ``fanvueAccountIds`` fields (Fanvue account ids).
 
-The web handler publishes subscribers-only (``isSubscribersOnly: true``,
+The web handler publishes subscribers-only (``audience: 'subscribers'``,
 the 18+ paywall rule) — the engine does NOT set that; it only passes
 title, description and account ids. There is no board concept for Fanvue.
 

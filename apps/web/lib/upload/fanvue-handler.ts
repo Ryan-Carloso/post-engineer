@@ -3,7 +3,8 @@ import { logger } from '@/lib/logger';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { touchSocialAccount } from '@/lib/social-accounts';
 import { getValidFanvueAccessToken } from '@/lib/fanvue-tokens';
-import { uploadVideoToFanvueVault, createFanvuePost } from '@/lib/fanvue';
+import { uploadVideoToFanvueVault } from '@/lib/fanvue-media';
+import { createFanvuePost, FANVUE_POST_TEXT_MAX_LENGTH } from '@/lib/fanvue-posts';
 import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { accountFailure } from '@/lib/upload/account-error';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
@@ -19,13 +20,14 @@ import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 //   a description fallback, the shape the direct-publish MCP tool sends),
 //   fanvueAccountIds (repeated), userId (internal engine call only).
 // Content is title + description (description optional). It is validated,
-// never truncated: Fanvue documents no title/description ceiling, so none
-// is invented — an empty title is rejected instead. Every post is
-// subscribers-only (isSubscribersOnly: true, see lib/fanvue.ts): Fanvue
-// is an 18+ platform, so nothing is ever published public. The access
-// token lives ~1 hour; an expired token is refreshed from the stored
-// refresh token (which rotates — the new pair is persisted) before
-// publishing.
+// never truncated: the post text has a 5000-character API ceiling
+// (FANVUE_POST_TEXT_MAX_LENGTH, see lib/fanvue-posts.ts), so a longer
+// content is rejected instead of published cut off. Every post is
+// subscribers-only (`audience: 'subscribers'`): Fanvue is an 18+ platform,
+// so nothing is ever published public. The vault upload sends every part
+// and waits for media `ready` before creating the post. The access token
+// lives ~1 hour; an expired token is refreshed from the stored refresh
+// token (which rotates — the new pair is persisted) before publishing.
 //---------------
 
 interface FanvueAccountResult {
@@ -69,6 +71,9 @@ export async function handleFanvueUpload(
   if (!(rawFile instanceof File)) return rejected('Video file is required');
 
   const content = description === '' ? title : `${title}\n\n${description}`;
+  if (content.length > FANVUE_POST_TEXT_MAX_LENGTH) {
+    return rejected(`Post text exceeds ${FANVUE_POST_TEXT_MAX_LENGTH} characters`);
+  }
 
   // The stored file is checked by its bytes rather than the client-declared
   // type: MP4 carries `ftyp` at offset 4.
@@ -88,13 +93,13 @@ export async function handleFanvueUpload(
       // token is refreshed from the stored refresh token first.
       const accessToken = await getValidFanvueAccessToken(supabase, ownerUserId, accountId);
 
-      const mediaId = await uploadVideoToFanvueVault({
+      const mediaUuid = await uploadVideoToFanvueVault({
         accessToken,
         video: buffer,
         filename,
         contentType,
       });
-      const published = await createFanvuePost({ accessToken, mediaId, content });
+      const published = await createFanvuePost({ accessToken, mediaUuid, text: content });
 
       await touchSocialAccount(supabase, ownerUserId, 'fanvue', accountId);
       results.push({

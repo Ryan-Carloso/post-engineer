@@ -28,7 +28,8 @@ seu agente de IA operar pelo servidor MCP — tudo neste único monorepo.
   roteiro (LLM), narração (TTS), legendas, vídeos de banco de imagens e música
   de fundo, montados em um vídeo finalizado.
 - **Agendamento e publicação** — agende posts para YouTube, Instagram, LinkedIn,
-  Bluesky e 3Speak; acompanhe posts futuros e passados com status por conta.
+  Bluesky, Threads, Facebook, Pinterest, 3Speak, Rumble e Fanvue; acompanhe
+  posts futuros e passados com status por conta.
 - **Painel web** — personas, histórico de posts, contas sociais conectadas,
   chaves de API e cobrança por tokens em um único app Next.js.
 - **Controle por agentes** — um servidor MCP ([`apps/mcp/`](apps/mcp/)) expõe
@@ -135,6 +136,13 @@ OAuth cujos **redirect URIs correspondam exatamente** aos valores em
   `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` e registre
   `FACEBOOK_REDIRECT_URI`. Conectar uma vez adiciona todas as Páginas que o
   usuário gerencia.
+- **Fanvue** — [Fanvue Developer Area](https://www.fanvue.com/dev): crie um app
+  **API only** a partir de uma conta de creator, adicione os redirect URIs de
+  `FANVUE_REDIRECT_URI` / `FANVUE_REDIRECT_URI_LOCAL` e marque os scopes
+  `read:self`, `read:post`, `write:post`, `read:media` e `write:media` (os
+  system scopes `openid`, `offline_access` e `offline` entram automaticamente).
+  Defina `FANVUE_CLIENT_ID` / `FANVUE_CLIENT_SECRET`. Não existe API key: o
+  creator autoriza o app via OAuth 2.0 + PKCE. Todo post é subscribers-only.
 - **Bluesky** usa uma app password inserida no painel (criptografada em repouso)
   — não é necessário registrar app de OAuth.
 - **3Speak** usa uma posting key Hive inserida no painel (criptografada em

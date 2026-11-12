@@ -33,9 +33,17 @@ export const MAX_CLONE_AUDIO_BYTES = 20 * 1024 * 1024;
 /** Same limit in whole MB, derived from the byte limit. */
 export const MAX_CLONE_AUDIO_MB = MAX_CLONE_AUDIO_BYTES / (1024 * 1024);
 
+/**
+ * Direct publish budget: the request uploads the video and, on Fanvue,
+ * waits for the server to transcode it before creating the post. Match
+ * the engine's 600s publish budget (DEFAULT_TIMEOUT_SECONDS in
+ * app/services/upload_publisher.py): aborting earlier reports a failure
+ * while the server keeps publishing, and a retry would duplicate the post.
+ */
+export const DIRECT_PUBLISH_TIMEOUT_MS = 600_000;
+
 /** Max library image size in bytes (10MB). */
 export const MAX_LIBRARY_IMAGE_BYTES = 10 * 1024 * 1024;
-
 /**
  * Same limit in whole MB, derived from the byte limit so user-facing copy
  * (tool descriptions, error messages) can't drift from the enforced bound.
