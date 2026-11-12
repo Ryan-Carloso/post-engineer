@@ -37,6 +37,10 @@ export const PUBLISH_LEDGER_LEASE_SECONDS = 30 * 60;
 /** The web route is still publishing this account under an earlier request. */
 export const PUBLISH_IN_PROGRESS_CODE = 'publish_in_progress';
 
+// The ledger rows' status values, mirroring the
+// publish_ledger_status_check constraint in migration 059.
+export const PUBLISH_LEDGER_STATUSES = ['in_progress', 'published', 'failed'] as const;
+
 export type PublishLedgerOutcome = 'claimed' | 'published' | 'in_progress';
 
 export interface PublishLedgerClaim {

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 import { GENERATION_PUBLISH_MODES } from '@/lib/generation/video-generation';
+import { PUBLISH_LEDGER_STATUSES } from '@/lib/upload/publish-ledger';
 import { ANALYTICS_STATUSES, METRICS_WINDOWS } from '@/lib/metrics/metrics-query';
 import { VIDEO_LAYOUTS } from '@/lib/persona-schema';
 import { VIDEO_TYPES } from '@/lib/tokens';
@@ -98,6 +99,7 @@ const EXPECTED: Record<string, readonly string[]> = {
   // No TypeScript list exists: the experiment variable is always 'hook'
   // (migration 041, issue #476), so this literal is the pinned contract.
   experiments_variable_check: ['hook'],
+  publish_ledger_status_check: PUBLISH_LEDGER_STATUSES,
 };
 
 describe('database enum checks match the code', () => {
