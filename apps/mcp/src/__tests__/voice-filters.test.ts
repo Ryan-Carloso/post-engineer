@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import type { PostEngineerClient } from '../client.js';
 import { handleListVoices } from '../tools.js';
@@ -77,10 +78,11 @@ describe('PersonaVoiceIdSchema', () => {
 
   it('autocomplete enum carries the 65 house names AND their labels', () => {
     const field = personaVoiceField();
-    const inner = (field as unknown as { _def: { schema: unknown } })._def.schema as {
-      _def: { options: { _def: { values: string[] } }[] };
-    };
-    const enumValues = inner._def.options[0]._def.values;
+    // Zod 4 dropped the `_def` introspection this used to read; assert the
+    // JSON Schema the MCP server actually advertises instead (the same shape
+    // the index test pins for the registered tools).
+    const json = z.toJSONSchema(field) as { anyOf?: Array<{ enum?: string[] }> };
+    const enumValues = (json.anyOf ?? []).flatMap((part) => part.enum ?? []);
     expect(enumValues).toHaveLength(65 + 65 + 2);
     expect(enumValues).toContain('phonon_zoey');
     expect(enumValues).toContain('Zoey');
