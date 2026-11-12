@@ -45,6 +45,11 @@ class _Session:
         self.calls.append(("close", "", {}))
 
 
+class _RaisingSession:
+    def request(self, *args, **kwargs):
+        raise RuntimeError("lookup boom")
+
+
 ENV = {
     "SUPABASE_URL": "https://example.supabase.co",
     "SUPABASE_SERVICE_ROLE_KEY": "service-role-test",
@@ -87,6 +92,28 @@ class LookupAccountNamesTests(unittest.TestCase):
         with patch.dict(os.environ, ENV, clear=False):
             names = lookup_account_names(session, "user-1")
         self.assertEqual(names, {("youtube", "UC1"): "Canal X", ("youtube", "UC3"): "Canal Z"})
+
+    def test_empty_for_an_empty_user_id(self):
+        session = _Session()
+        with patch.dict(os.environ, ENV, clear=False):
+            self.assertEqual(lookup_account_names(session, ""), {})
+        self.assertEqual(session.calls, [])
+
+    def test_skips_a_non_dict_row(self):
+        session = _Session(
+            accounts=[
+                "junk",
+                {"provider": "youtube", "provider_account_id": "UC1", "account_name": "Canal X"},
+            ]
+        )
+        with patch.dict(os.environ, ENV, clear=False):
+            self.assertEqual(
+                lookup_account_names(session, "user-1"), {("youtube", "UC1"): "Canal X"}
+            )
+
+    def test_empty_when_the_request_raises(self):
+        with patch.dict(os.environ, ENV, clear=False):
+            self.assertEqual(lookup_account_names(_RaisingSession(), "user-1"), {})
 
     def test_empty_when_supabase_errors(self):
         session = _Session(status=500)
@@ -135,6 +162,39 @@ class LookupPersonaNameTests(unittest.TestCase):
             session = _Session(schedules=schedules)
             with patch.dict(os.environ, ENV, clear=False):
                 self.assertIsNone(lookup_persona_name(session, "schedule-1"))
+
+    def test_none_for_an_empty_schedule_id(self):
+        session = _Session()
+        with patch.dict(os.environ, ENV, clear=False):
+            self.assertIsNone(lookup_persona_name(session, ""))
+        self.assertEqual(session.calls, [])
+
+    def test_none_when_the_first_row_is_not_a_dict(self):
+        session = _Session(schedules=["junk"])
+        with patch.dict(os.environ, ENV, clear=False):
+            self.assertIsNone(lookup_persona_name(session, "schedule-1"))
+
+    def test_none_when_the_request_raises(self):
+        with patch.dict(os.environ, ENV, clear=False):
+            self.assertIsNone(lookup_persona_name(_RaisingSession(), "schedule-1"))
+
+    def test_none_when_supabase_is_not_configured(self):
+        session = _Session()
+        with patch.dict(
+            os.environ, {"SUPABASE_URL": "", "SUPABASE_SERVICE_ROLE_KEY": ""}, clear=False
+        ):
+            self.assertIsNone(lookup_persona_name(session, "schedule-1"))
+        self.assertEqual(session.calls, [])
+
+    def test_opens_its_own_session_outside_the_test_suite(self):
+        session = _Session(schedules=[{"personas": {"name": "Bicuda"}}])
+        with (
+            patch("app.services.owner_alert_lookups.running_under_test", return_value=False),
+            patch("requests.Session", return_value=session),
+            patch.dict(os.environ, ENV, clear=False),
+        ):
+            self.assertEqual(lookup_persona_name(None, "schedule-1"), "Bicuda")
+        self.assertIn(("close", "", {}), session.calls)
 
     def test_none_when_supabase_errors(self):
         session = _Session(status=500)

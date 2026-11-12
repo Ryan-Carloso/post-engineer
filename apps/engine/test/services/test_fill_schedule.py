@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.services import fill_schedule as fs
 from app.services.fill_schedule.publish import BatchPublisher, _failed_outcomes
 from app.services.fill_schedule.publish_accounts import AccountPublishResult
+from app.services.owner_alert import notify_publish_partial
 from app.services.fill_schedule.store import ScheduleStore
 from app.services import notify as nf
 from app.utils.supabase_retry import build_retrying_session
@@ -3273,13 +3274,14 @@ class PartialPublishEmailTests(unittest.TestCase):
         publisher = BatchPublisher(store, task_state, notify=MagicMock())
         with (
             patch("app.services.fill_schedule.publish.publish_slot_accounts", return_value=result),
-            patch("app.services.fill_schedule.publish.notify_publish_partial") as notify_partial,
+            patch("app.services.fill_schedule.publish.notify_owner_async") as notify_async,
         ):
             published = publisher._publish_one(
                 slot, datetime(2026, 11, 12, 12, tzinfo=UTC), resumed=False
             )
         self.assertEqual(published, 1)
-        notify_partial.assert_called_once_with(
+        notify_async.assert_called_once_with(
+            notify_publish_partial,
             "user-1",
             slot_id="slot-1",
             title="Daily Dose",

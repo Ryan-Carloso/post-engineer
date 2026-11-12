@@ -29,7 +29,7 @@ from app.services.fill_schedule.publish_events import (
     publish_tracking_context,
 )
 from app.services.fill_schedule.publish_results import merge_prior_published
-from app.services.owner_alert import notify_publish_failed, notify_publish_partial
+from app.services.owner_alert import notify_owner_async, notify_publish_failed, notify_publish_partial
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
     notify_safe,
@@ -133,7 +133,8 @@ class BatchPublisher:
                     slot, schedule, "task has no finished videos", retryable=False
                 ),
             )
-            notify_publish_failed(
+            notify_owner_async(
+                notify_publish_failed,
                 slot_user_id(slot),
                 slot_id=str(slot["id"]),
                 title=str(slot.get("title") or ""),
@@ -271,7 +272,8 @@ class BatchPublisher:
                             str(slot["id"]), account_result.non_user_failed_providers,
                         ),
                     )
-                notify_publish_partial(
+                notify_owner_async(
+                    notify_publish_partial,
                     slot_user_id(slot),
                     slot_id=str(slot["id"]),
                     title=title,
@@ -402,7 +404,8 @@ class BatchPublisher:
         self.store.update_slot(slot["id"], **fields)
         personas = schedule.get("personas") or {}
         persona = personas.get("name") if isinstance(personas, dict) else None
-        notify_publish_failed(
+        notify_owner_async(
+            notify_publish_failed,
             user_id,
             slot_id=str(slot["id"]),
             title=str(slot.get("title") or ""),

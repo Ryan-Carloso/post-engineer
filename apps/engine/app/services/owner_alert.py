@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import html
 import os
-from typing import Any
+import threading
+from typing import Any, Callable
 
 from loguru import logger
 
@@ -300,6 +301,17 @@ def _deliver(
     finally:
         if own_session:
             session.close()
+
+
+def notify_owner_async(target: Callable[..., None], /, *args: Any, **kwargs: Any) -> None:
+    """Fire-and-forget an owner email off the scheduler tick.
+
+    One delivery is up to three sequential HTTP calls with a 10s timeout
+    each; a slow Supabase or Resend must not stall the tick and delay
+    publishing of other due slots. The target never raises, and the dedup
+    claim is atomic, so a detached daemon thread is safe.
+    """
+    threading.Thread(target=target, args=args, kwargs=kwargs, daemon=True).start()
 
 
 def notify_generation_failed(

@@ -12,7 +12,7 @@ from app.services.fill_schedule.constants import (
     SLOT_READY,
 )
 from app.services.analytics import scrub_secret_values, track_event
-from app.services.owner_alert import notify_generation_failed
+from app.services.owner_alert import notify_generation_failed, notify_owner_async
 from app.services.intro_cost import cost_event_props
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
@@ -121,7 +121,8 @@ class BatchReconciler:
                 )
                 if user_id is not None:
                     schedule_id = slot.get("schedule_id")
-                    notify_generation_failed(
+                    notify_owner_async(
+                        notify_generation_failed,
                         user_id,
                         slot_id=str(slot["id"]),
                         title=str(slot.get("title") or ""),

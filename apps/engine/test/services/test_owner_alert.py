@@ -19,6 +19,7 @@ from app.services.owner_alert import (
     alert_failed_task,
     direct_task_email_user,
     notify_generation_failed,
+    notify_owner_async,
     notify_publish_failed,
     notify_publish_partial,
     send_owner_email,
@@ -102,7 +103,16 @@ class DirectTaskEmailUserTests(unittest.TestCase):
 
 class SendOwnerEmailTests(unittest.TestCase):
     def test_under_test_without_a_session_does_not_open_a_client(self):
-        with patch("requests.Session", side_effect=AssertionError("opened")):
+        opened = []
+
+        def _open(*_args, **_kwargs):
+            opened.append(True)
+            raise AssertionError("opened")
+
+        with (
+            patch.dict(os.environ, ENV, clear=False),
+            patch("requests.Session", side_effect=_open),
+        ):
             send_owner_email(
                 user_id="user-1",
                 dedup_key="generate:slot-1",
@@ -110,6 +120,7 @@ class SendOwnerEmailTests(unittest.TestCase):
                 html_body="<p>x</p>",
                 text="x",
             )
+        self.assertEqual(opened, [])
 
     def test_missing_key_does_not_call_http(self):
         session = _Session()
@@ -162,6 +173,23 @@ class SendOwnerEmailTests(unittest.TestCase):
         headers = resend["headers"]
         self.assertEqual(headers["User-Agent"], "post-engineer/owner-alert")
         self.assertTrue(headers["Authorization"].startswith("Bearer "))
+
+    def test_secret_bearing_reason_is_redacted_in_the_body(self):
+        session = _Session()
+        with patch.dict(os.environ, ENV, clear=False):
+            notify_generation_failed(
+                "user-1",
+                slot_id="slot-1",
+                title="t",
+                reason="auth failed: api_key=sk-test-1234567890",
+                session=session,
+            )
+        resend = next(kwargs for _method, url, kwargs in session.calls if url == "https://api.resend.com/emails")
+        body = resend["json"]
+        self.assertNotIn("sk-test-1234567890", body["html"])
+        self.assertNotIn("sk-test-1234567890", body["text"])
+        self.assertIn("api_key=[redacted]", body["html"])
+        self.assertIn("api_key=[redacted]", body["text"])
 
     def test_resend_error_releases_the_claim(self):
         session = _Session(resend_status=500)
@@ -503,6 +531,25 @@ class EmailDirectGenerationFailureTests(unittest.TestCase):
     def test_skips_the_email_when_the_task_has_no_owner(self):
         notify = self._call({}, None)
         notify.assert_not_called()
+
+    def test_skips_the_email_for_a_slot_task(self):
+        notify = self._call({"slot_id": "slot-1", "user_id": "user-1"}, None)
+        notify.assert_not_called()
+
+    def test_skips_the_email_for_the_unknown_sentinel(self):
+        notify = self._call({"user_id": "unknown"}, None)
+        notify.assert_not_called()
+
+
+class NotifyOwnerAsyncTests(unittest.TestCase):
+    def test_starts_a_daemon_thread_with_the_target_and_kwargs(self):
+        target = MagicMock()
+        with patch("app.services.owner_alert.threading.Thread") as thread_cls:
+            notify_owner_async(target, "user-1", slot_id="slot-1", title="t")
+        thread_cls.assert_called_once_with(
+            target=target, args=("user-1",), kwargs={"slot_id": "slot-1", "title": "t"}, daemon=True
+        )
+        thread_cls.return_value.start.assert_called_once_with()
 
 
 if __name__ == "__main__":

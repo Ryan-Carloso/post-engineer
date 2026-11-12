@@ -21,7 +21,7 @@ from app.services.fill_schedule.constants import (
 from app.services.fill_schedule.metadata import validate_publish_plan
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.language_gate import ENGLISH_ONLY_VIDEO_MESSAGE, is_english_language
-from app.services.owner_alert import notify_generation_failed
+from app.services.owner_alert import notify_generation_failed, notify_owner_async
 from app.services.persona_image import is_engine_usable_persona_image_url
 from app.services.script_segments import legacy_media_list
 from app.services.fill_schedule.support import (
@@ -317,7 +317,8 @@ class BatchGenerator:
                 ),
             )
             if user_id is not None:
-                notify_generation_failed(
+                notify_owner_async(
+                    notify_generation_failed,
                     user_id,
                     slot_id=str(slot["id"]),
                     title=str(slot.get("title") or ""),
