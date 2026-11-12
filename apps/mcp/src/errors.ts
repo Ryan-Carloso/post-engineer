@@ -26,6 +26,8 @@ export class ApiError extends Error {
   readonly status: number | null;
   /** True when the error body says the video was delivered before the task was lost (410 only). */
   readonly delivered: boolean;
+  /** The post detail link, when the error body carries one (410 only). */
+  readonly postUrl: string | null;
 
   constructor(
     message: string,
@@ -33,6 +35,7 @@ export class ApiError extends Error {
     field: string | null,
     status: number | null = null,
     delivered: boolean = false,
+    postUrl: string | null = null,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -40,6 +43,7 @@ export class ApiError extends Error {
     this.field = field;
     this.status = status;
     this.delivered = delivered;
+    this.postUrl = postUrl;
   }
 }
 
@@ -112,10 +116,12 @@ export function readApiFailure(errorText: string): {
   code: string | null;
   field: string | null;
   delivered: boolean;
+  postUrl: string | null;
 } {
   let code: string | null = null;
   let field: string | null = null;
   let delivered = false;
+  let postUrl: string | null = null;
   let detail = errorText.slice(0, MAX_ERROR_BODY_CHARS);
   try {
     const parsed: unknown = JSON.parse(errorText);
@@ -129,9 +135,10 @@ export function readApiFailure(errorText: string): {
       if (typeof record.code === 'string') code = record.code;
       if (typeof record.field === 'string') field = record.field;
       if (record.delivered === true) delivered = true;
+      if (typeof record.postUrl === 'string') postUrl = record.postUrl;
     }
   } catch {
     // Non-JSON body: detail stays the capped raw text.
   }
-  return { detail, code, field, delivered };
+  return { detail, code, field, delivered, postUrl };
 }

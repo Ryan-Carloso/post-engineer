@@ -186,6 +186,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        postUrl: `https://example.com/posts/${slot.id}`,
       })),
       recent: recent.map((slot) => ({
         ...slot,
@@ -194,6 +195,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        postUrl: `https://example.com/posts/${slot.id}`,
       })),
       hasAnyPost: true,
     });
@@ -221,6 +223,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        postUrl: `https://example.com/posts/${slot.id}`,
       })),
       recent: recent.map((slot) => ({
         ...slot,
@@ -229,6 +232,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        postUrl: `https://example.com/posts/${slot.id}`,
       })),
       hasAnyPost: true,
     });
@@ -269,6 +273,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        postUrl: `https://example.com/posts/${slot.id}`,
       })),
       recent: recent.map((slot) => ({
         ...slot,
@@ -277,6 +282,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        postUrl: `https://example.com/posts/${slot.id}`,
       })),
       hasAnyPost: true,
     });
@@ -319,6 +325,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        postUrl: `https://example.com/posts/${slot.id}`,
       })),
       recent: allowedRecent.map((slot) => ({
         ...slot,
@@ -327,6 +334,7 @@ describe('GET auth', () => {
         queuePosition: null,
         queueTotal: null,
         retryable: null,
+        postUrl: `https://example.com/posts/${slot.id}`,
       })),
       hasAnyPost: true,
     });

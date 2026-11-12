@@ -159,6 +159,32 @@ export function datePartsInTimezone(
   return { year: Number(parts.year), month: Number(parts.month), day: Number(parts.day) };
 }
 
+//---------------
+// utcToZonedInputValue — format a UTC instant as the wall-clock value a
+// <input type="datetime-local"> shows in `timeZone` (YYYY-MM-DDTHH:MM).
+// The reschedule form pre-fills the slot's current time this way, so the
+// owner edits the time they actually see on the detail page. Null for an
+// invalid instant or timezone.
+//---------------
+export function utcToZonedInputValue(iso: string, timeZone: string): string | null {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime()) || !isValidTimezone(timeZone)) return null;
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    })
+      .formatToParts(date)
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
 const TIME_RE = /^(\d{1,2}):(\d{2})$/;
 
 //---------------

@@ -79,7 +79,7 @@ class _FakeStore:
         )
         return True
 
-    def claim_ready_slot(self, slot_id):
+    def claim_ready_slot(self, slot_id, now_utc=None):
         # by default the claim always wins (single-worker behavior)
         return True
 
@@ -2462,18 +2462,25 @@ class CoverageGapTests(unittest.TestCase):
             "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
         }
         publish = MagicMock(return_value={"success": True, "results": [{"success": True}]})
+        # Record claim and publish calls on one parent mock so the test can
+        # pin their order (claim BEFORE the first publish_video).
+        manager = MagicMock()
+        manager.attach_mock(store.claim_ready_slot, "claim")
+        manager.attach_mock(publish, "publish")
         scheduler = self._scheduler(store, task_state=state, publish_video=publish)
         scheduler.publisher.base_url = "https://post-engineer.com"
         scheduler.publisher.api_secret = "secret"
 
         published = scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         self.assertEqual(published, 1)
-        # claim happens BEFORE the first publish_video
-        store.claim_ready_slot.assert_called_once_with("slot-1")
-        self.assertLess(
-            store.claim_ready_slot.call_args.call_index or 0,
-            1,
-        ) if False else None
+        # claim happens BEFORE the first publish_video (C2 ordering pin)
+        store.claim_ready_slot.assert_called_once_with(
+            "slot-1", datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
+        )
+        self.assertEqual(
+            [call[0] for call in manager.mock_calls],
+            ["claim", "publish"],
+        )
         publish.assert_called_once()
         # marca published ao final
         self.assertEqual(store.updates[-1][1]["status"], "published")

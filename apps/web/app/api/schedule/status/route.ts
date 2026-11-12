@@ -43,6 +43,7 @@ import { recordProgressHistory, type ProgressSample } from '@/lib/schedule-progr
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { parseRange, RANGE_MAX_SLOTS, RANGE_STATUSES } from './range';
 import { mergeBySlotAt, presentPublishRows, USER_NOTICE_OUTCOME_FILTER } from '@/lib/publish-user-notice';
+import { postUrlFor } from '@/lib/post-url';
 
 const RESULT_SELECT =
   'id, slot_at, status, title, error, published_at, schedule_id, task_id, publish_outcomes';
@@ -94,7 +95,8 @@ async function withSlotPresentation<T extends { status?: unknown; task_id?: unkn
   userId: string,
   queuePositions: QueuePositions,
   engineProbe: EngineProbe,
-): Promise<(T & SlotEnrichment)[]> {
+  origin: string | null,
+): Promise<(T & SlotEnrichment & { postUrl: string | null })[]> {
   let remaining = ENGINE_LOOKUP_CAP;
   const plans = slots.map((slot) => {
     const needsEngine =
@@ -117,7 +119,13 @@ async function withSlotPresentation<T extends { status?: unknown; task_id?: unkn
       index === firstIndex && first !== null ? first : enrich(plan),
     ),
   );
-  return slots.map((slot, index) => ({ ...slot, ...enrichments[index] }));
+  // Every slot carries its absolute post detail link (issue #555) so the
+  // agent can send it in chat; a row without a string id gets null.
+  return slots.map((slot, index) => {
+    const id = (slot as { id?: unknown }).id;
+    const postUrl = typeof id === 'string' && origin !== null ? postUrlFor(origin, id) : null;
+    return { ...slot, ...enrichments[index], postUrl };
+  });
 }
 
 async function getHandler(request?: Request): Promise<NextResponse> {
@@ -128,6 +136,8 @@ async function getHandler(request?: Request): Promise<NextResponse> {
   }
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  // The request origin builds each slot's absolute postUrl (issue #555).
+  const origin = request ? new URL(request.url).origin : null;
   // API-key/OAuth callers have no cookie session, so the service client
   // (scoped by user_id below) is used; web sessions keep the server client.
   const supabase =
@@ -197,6 +207,7 @@ async function getHandler(request?: Request): Promise<NextResponse> {
       userId,
       new Map(),
       createEngineProbe(),
+      origin,
     );
     return NextResponse.json({ success: true, slots, truncated });
   }
@@ -296,8 +307,9 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     userId,
     queuePositions,
     engineProbe,
+    origin,
   );
-  const recentEnriched = await withSlotPresentation(presentPublishRows(recent.data), userId, queuePositions, engineProbe);
+  const recentEnriched = await withSlotPresentation(presentPublishRows(recent.data), userId, queuePositions, engineProbe, origin);
 
   // Best-effort progress history: every observation of a live (generating)
   // or dead (failed) slot records a (progress, stage) row when it changed

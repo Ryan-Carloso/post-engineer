@@ -8,7 +8,10 @@
 // startAt as wall-clock in the timezone via parseZonedDateTime and each
 // candidate slot via zonedTimeToUtc, lib/timezone.ts). The schedule form
 // parses the naive start date with parseZonedDateTime but does not run
-// this validator; the server enforces the window.
+// this validator; the server enforces the window. One exception: the slot
+// reschedule route passes the raw client string, but it rejects naive
+// values first (hasExplicitOffset, lib/timezone.ts), so the instant that
+// reaches this validator is unambiguous.
 //---------------
 
 export const SCHEDULE_MIN_ADVANCE_HOURS = 3;

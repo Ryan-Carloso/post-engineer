@@ -1,7 +1,9 @@
 -- ============================================================================
 -- Atomic slot delete guard (prevents the last-slot check-then-act race)
 -- ----------------------------------------------------------------------------
--- HOW TO APPLY: Supabase Dashboard > SQL Editor > New query > paste & run.
+-- SOURCE OF TRUTH: supabase/migrations/058_slot-delete-ready.sql (the
+-- versioned migration). This file keeps the same body for reference; do
+-- not apply it by hand — the migration chain applies the function.
 -- Safe to re-run (CREATE OR REPLACE is idempotent).
 --
 -- WHY: DELETE /api/schedule/slots checked "is this the schedule's last
@@ -37,9 +39,10 @@ begin
     return 'not_found';
   end if;
 
-  -- Only pending (not yet dispatched) and failed (dead row cleanup) slots
-  -- can be deleted; the engine owns everything mid-flight.
-  if v_status not in ('pending', 'failed') then
+  -- Only pending (not yet dispatched), ready (generated, not yet
+  -- dispatched) and failed (dead row cleanup) slots can be deleted; the
+  -- engine owns everything mid-flight.
+  if v_status not in ('pending', 'ready', 'failed') then
     return 'not_deletable';
   end if;
 

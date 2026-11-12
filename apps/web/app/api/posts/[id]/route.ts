@@ -52,7 +52,10 @@ async function getHandler(
       return NextResponse.json({ success: true, kind: 'generation', generation });
     }
     const slotUuid = resolveSlotUuid(id);
-    const slotDetail = slotUuid === null ? null : await getSlotPost(supabase, slotUuid, auth.userId, personaScope);
+    // The request origin builds the slot's absolute postUrl (issue #555):
+    // the agent sends that link in chat, so it must name the host the
+    // caller reached, in dev as in production.
+    const slotDetail = slotUuid === null ? null : await getSlotPost(supabase, slotUuid, auth.userId, personaScope, new URL(request.url).origin);
     if (slotDetail) {
       return NextResponse.json({ success: true, kind: 'slot', ...slotDetail });
     }

@@ -29,6 +29,7 @@ function parsed(response: McpToolResponse): {
     progress: number | null;
     stage: string | null;
     error: string | null;
+    postUrl: string | null;
   }>;
 } {
   return JSON.parse(textOf(response)) as ReturnType<typeof parsed>;
@@ -40,6 +41,7 @@ function statusBody(
   progress: number,
   stage: string | null,
   error?: string,
+  postUrl?: string,
 ): unknown {
   return {
     status: 200,
@@ -50,6 +52,7 @@ function statusBody(
       progress,
       stage,
       ...(error !== undefined ? { error } : {}),
+      ...(postUrl !== undefined ? { postUrl } : {}),
     },
   };
 }
@@ -77,7 +80,9 @@ describe('wait_for_video_tasks', () => {
   it('returns completed on the first poll without sleeping', async () => {
     const clock = fakeClock();
     const sleep = vi.fn(clock.sleep);
-    vi.mocked(mockClient.getVideoStatus).mockResolvedValue(statusBody('task-1', 1, 100, null));
+    vi.mocked(mockClient.getVideoStatus).mockResolvedValue(
+      statusBody('task-1', 1, 100, null, undefined, 'https://post-engineer.com/posts/slot-1'),
+    );
 
     const response = await handleWaitForVideoTasks(
       mockClient,
@@ -90,7 +95,7 @@ describe('wait_for_video_tasks', () => {
     expect(result.allTerminal).toBe(true);
     expect(result.timedOut).toBe(false);
     expect(result.results).toEqual([
-      { task_id: 'task-1', state: 1, outcome: 'completed', progress: 100, stage: null, error: null },
+      { task_id: 'task-1', state: 1, outcome: 'completed', progress: 100, stage: null, error: null, postUrl: 'https://post-engineer.com/posts/slot-1' },
     ]);
     expect(sleep).not.toHaveBeenCalled();
   });
@@ -137,6 +142,7 @@ describe('wait_for_video_tasks', () => {
       progress: 75,
       stage: 'render',
       error: 'persona hook must end between 3 and 6 seconds, got 6.55',
+      postUrl: null,
     });
   });
 
@@ -161,6 +167,7 @@ describe('wait_for_video_tasks', () => {
       progress: 42,
       stage: 'audio',
       error: null,
+      postUrl: null,
     });
   });
 
@@ -191,6 +198,7 @@ describe('wait_for_video_tasks', () => {
       progress: null,
       stage: null,
       error: 'The video task no longer exists on the generation engine.',
+      postUrl: null,
     });
   });
 
@@ -203,6 +211,7 @@ describe('wait_for_video_tasks', () => {
         null,
         410,
         true,
+        'https://post-engineer.com/posts/slot-1',
       ),
     );
 
@@ -222,6 +231,7 @@ describe('wait_for_video_tasks', () => {
       progress: 100,
       stage: null,
       error: null,
+      postUrl: 'https://post-engineer.com/posts/slot-1',
     });
   });
 
@@ -248,6 +258,7 @@ describe('wait_for_video_tasks', () => {
       progress: null,
       stage: null,
       error: 'Failed to get video status: 400 Invalid taskId.',
+      postUrl: null,
     });
     expect(sleep).not.toHaveBeenCalled();
     expect(vi.mocked(mockClient.getVideoStatus)).toHaveBeenCalledTimes(1);
@@ -303,6 +314,7 @@ describe('wait_for_video_tasks', () => {
       progress: null,
       stage: null,
       error: 'Failed to get video status: 422 Unprocessable Entity.',
+      postUrl: null,
     });
     expect(sleep).not.toHaveBeenCalled();
     expect(vi.mocked(mockClient.getVideoStatus)).toHaveBeenCalledTimes(1);
