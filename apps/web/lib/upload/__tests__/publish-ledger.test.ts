@@ -97,6 +97,13 @@ describe('claimPublishAttempt', () => {
       'malformed recorded result',
     );
   });
+
+  it('throws when the key belongs to another user', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: { outcome: 'forbidden' }, error: null });
+    await expect(claimPublishAttempt(mockSupabase(rpc), input)).rejects.toThrow(
+      'claim_publish_ledger returned forbidden',
+    );
+  });
 });
 
 describe('recordPublishAttempt', () => {

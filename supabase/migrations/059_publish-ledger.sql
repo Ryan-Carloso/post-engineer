@@ -11,7 +11,9 @@
 -- the recorded post, waits for the in-flight attempt, or — after a failed
 -- attempt or an expired lease — claims a fresh attempt. Only the request
 -- that holds the lease can record, so a first attempt whose lease was
--- taken over cannot overwrite the winner's post. The lease is renewed by
+-- taken over cannot overwrite the winner's post. Rows are fenced to the
+-- user who claimed them: a caller-supplied key never replays or parks
+-- another user's publish. The lease is renewed by
 -- the holder while it publishes (touch_publish_ledger, called on a
 -- heartbeat by the route), so it only expires when the holder is gone:
 -- a publish that runs longer than the lease — Fanvue is unbounded, up to
@@ -49,14 +51,38 @@ security definer
 as $$
 declare
   v_row public.publish_ledger%rowtype;
+  v_attempt integer;
 begin
   -- Lock the row first so concurrent claims serialize here.
-  select * into v_row from public.publish_ledger where key = p_key for update;
+  -- SELECT ... FOR UPDATE locks nothing when the row does not exist yet,
+  -- so two first-time claims can both reach the INSERT. ON CONFLICT DO
+  -- NOTHING lets the loser re-read the winner's row and fall through to
+  -- the replay/wait logic instead of 500ing on a unique violation. The
+  -- loop bounds the retries: each pass needs a concurrent claim that
+  -- then rolls back before the re-read.
+  for v_attempt in 1..3 loop
+    select * into v_row from public.publish_ledger where key = p_key for update;
 
-  if not found then
+    -- The key is caller-supplied, so the row is fenced to the user who
+    -- claimed it: another user who learns the key can neither replay the
+    -- recorded post, nor poll whether a publish is in flight, nor park
+    -- the owner's retry by holding the lease first.
+    if found then
+      if v_row.user_id <> p_user_id then
+        return jsonb_build_object('outcome', 'forbidden');
+      end if;
+      exit;
+    end if;
+
     insert into public.publish_ledger (key, provider, account_id, user_id, status, lease_until, claim_token)
-    values (p_key, p_provider, p_account_id, p_user_id, 'in_progress', now() + make_interval(secs => p_lease_seconds), p_token);
-    return jsonb_build_object('outcome', 'claimed');
+    values (p_key, p_provider, p_account_id, p_user_id, 'in_progress', now() + make_interval(secs => p_lease_seconds), p_token)
+    on conflict (key) do nothing;
+    if found then
+      return jsonb_build_object('outcome', 'claimed');
+    end if;
+  end loop;
+  if not found then
+    raise exception 'claim_publish_ledger: key % never materialized', p_key;
   end if;
 
   if v_row.status = 'published' then

@@ -126,6 +126,9 @@ export async function claimPublishAttempt(
     return { outcome, claimToken: null, result: toAccountResult(data.result, input.accountId) };
   }
   if (outcome === 'in_progress') return { outcome, claimToken: null, result: null };
+  if (outcome === 'forbidden') {
+    throw new Error('claim_publish_ledger returned forbidden: scope key belongs to another user');
+  }
   throw new Error(`claim_publish_ledger returned unknown outcome: ${String(outcome)}`);
 }
 

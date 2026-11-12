@@ -489,6 +489,7 @@ type LedgerRow = {
   leaseUntil: number | null;
   token: string | null;
   result: Record<string, unknown> | null;
+  userId: string | null;
 };
 
 function makeLedgerFake() {
@@ -503,8 +504,12 @@ function makeLedgerFake() {
           leaseUntil: Date.now() + (args.p_lease_seconds as number) * 1000,
           token: args.p_token as string,
           result: null,
+          userId: args.p_user_id as string,
         });
         return { data: { outcome: 'claimed' }, error: null };
+      }
+      if (row.userId !== args.p_user_id) {
+        return { data: { outcome: 'forbidden' }, error: null };
       }
       if (row.status === 'published') {
         return { data: { outcome: 'published', result: row.result }, error: null };
@@ -568,6 +573,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
       leaseUntil: null,
       token: null,
       result: { accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' },
+      userId: USER_ID,
     });
     mockHandleYoutubeUpload.mockResolvedValue({
       success: true,
@@ -604,6 +610,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
       leaseUntil: Date.now() + 30 * 60_000,
       token: 'first-token',
       result: null,
+      userId: USER_ID,
     });
 
     const res = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
@@ -622,6 +629,25 @@ describe('POST /api/upload-content with a publish scope key', () => {
       'claim_publish_ledger',
       expect.objectContaining({ p_key: ledgerKey('acc-1') }),
     );
+  });
+
+  it('fails closed when the scope key belongs to another user', async () => {
+    ledger.rows.set(ledgerKey('acc-1'), {
+      status: 'published',
+      leaseUntil: null,
+      token: null,
+      result: { accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' },
+      userId: 'user-2',
+    });
+    mockBuildUploadErrorResponse.mockReturnValue(
+      NextResponse.json({ success: false, error: 'boom' }, { status: 500 }),
+    );
+
+    const res = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+
+    expect(res.status).toBe(500);
+    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+    expect(mockBuildUploadErrorResponse).toHaveBeenCalled();
   });
 
   it('records a handler failure so the next retry can claim a fresh attempt', async () => {
@@ -657,6 +683,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
       leaseUntil: Date.now() - 1000,
       token: 'dead-token',
       result: null,
+      userId: USER_ID,
     });
     mockHandleYoutubeUpload.mockResolvedValue({
       success: true,
