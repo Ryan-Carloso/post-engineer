@@ -61,6 +61,9 @@ describe('i18n dictionaries', () => {
     expect(enDictionary.nav.posts).toBe('Posts');
     expect(ptDictionary.posts.title).toBe('Publicações');
     expect(ptDictionary.posts.subtitle).toContain('publicações');
+    expect(ptDictionary.posts.subtitle).toMatch(/MCP/);
+    expect(ptDictionary.recipes.subtitle).toMatch(/MCP first/);
+    expect(enDictionary.recipes.subtitle).toMatch(/MCP-first/);
     expect(ptDictionary.nav.postsHint).toBe('Calendário de publicações');
     expect(enDictionary.posts.title).toBe('Posts');
     expect(ptDictionary.nav.promptsHint).toBeTruthy();

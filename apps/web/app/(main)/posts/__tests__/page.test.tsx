@@ -56,6 +56,7 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 import PostsPage from '../page';
+import { MCP_ONBOARD_SEEN_KEY, useMcpOnboardStore } from '@/lib/mcp-onboard';
 import { postsCalendarStrings } from '@/lib/i18n/posts-calendar-i18n';
 import { useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range';
 import {
@@ -171,6 +172,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2030-06-01T12:00:00.000Z'));
+  window.localStorage.setItem(MCP_ONBOARD_SEEN_KEY, '1');
+  useMcpOnboardStore.setState({ isOpen: false, cardVisible: false });
   mockQueries();
 });
 
@@ -387,7 +390,8 @@ describe('PostsPage', () => {
 
     expect(screen.getByText('posts.accountEmptyTitle')).toBeInTheDocument();
     expect(screen.getByText('posts.accountEmptyHint')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'posts.accountEmptyAction' })).toHaveAttribute('href', '/recipes');
+    const accountEmpty = screen.getByText('posts.accountEmptyTitle').closest('[data-empty-state]');
+    expect(within(accountEmpty as HTMLElement).getByRole('button', { name: 'posts.newPostAction' })).toBeInTheDocument();
     // The frame stays: a faint calendar and disabled filters. No day to pick,
     // and the line under the title does not say to select one.
     expect(screen.getByRole('grid')).toBeInTheDocument();
@@ -403,7 +407,8 @@ describe('PostsPage', () => {
 
     expect(screen.getByText('posts.calendarMonthEmptyTitle')).toBeInTheDocument();
     expect(screen.getByText('posts.calendarMonthEmptyHint')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'posts.schedulePostsAction' })).toHaveAttribute('href', '/recipes');
+    const monthEmpty = screen.getByText('posts.calendarMonthEmptyTitle').closest('[data-empty-state]');
+    expect(within(monthEmpty as HTMLElement).getByRole('button', { name: 'posts.newPostAction' })).toBeInTheDocument();
     // The panel is scoped like its message: it names the month, not a day.
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('posts.calendarMonthHeading');
     expect(screen.queryByText('posts.calendarDayHeading')).not.toBeInTheDocument();
@@ -422,7 +427,8 @@ describe('PostsPage', () => {
     // Asked only because the month it opens on is empty.
     expect(vi.mocked(useHasAnyPostQuery).mock.calls.at(-1)?.[0]).toBe(true);
     expect(screen.getByText('posts.accountEmptyTitle')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'posts.accountEmptyAction' })).toHaveAttribute('href', '/recipes');
+    const neverPosted = screen.getByText('posts.accountEmptyTitle').closest('[data-empty-state]');
+    expect(within(neverPosted as HTMLElement).getByRole('button', { name: 'posts.newPostAction' })).toBeInTheDocument();
     // No day heading. The calendar and the filters stay, and the filters
     // cannot be used while there is nothing to filter.
     expect(screen.getByRole('grid')).toBeInTheDocument();
@@ -1108,6 +1114,7 @@ describe('PostsPage calendar view', () => {
     vi.mocked(useScheduleRangeQuery).mockReturnValue({ data: undefined, isLoading: false, isFetching: false, isError: true, refetch: vi.fn() } as never);
     render(<PostsPage />);
     expect(screen.queryByRole('button', { name: 'posts.refresh' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('new-post-button')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'posts.loadErrorRetry' })).toBeInTheDocument();
   });
 });

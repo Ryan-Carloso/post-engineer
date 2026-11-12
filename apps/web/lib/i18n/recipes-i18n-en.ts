@@ -1,7 +1,7 @@
 export const recipesI18nEn = {
   title: 'Get your prompts',
   subtitle:
-      'Your key, your agent setup, and ready-made prompts — all in one place.',
+      'Post Engineer is MCP-first. Create your key, install the MCP in your agent, and copy the prompt that sends the post.',
   dailyNewsTitle: 'Daily news becomes a video',
   dailyNewsObjective:
       'Turn one news story of the day into one persona video, validated before any token is spent.',

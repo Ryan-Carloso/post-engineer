@@ -94,6 +94,25 @@ describe('Posts list progress', () => {
     }).as('status');
   });
 
+  it('explains that a new post is sent through the MCP', () => {
+    cy.visit('/posts', {
+      onBeforeLoad(win) {
+        win.localStorage.removeItem('post-engineer-mcp-onboard-seen');
+      },
+    });
+    cy.get('[data-testid=mcp-onboard-card]').should('be.visible');
+    cy.contains('Esta tela não cria a publicação').should('be.visible');
+    cy.get('[data-testid=new-post-button]').click();
+    cy.get('[role=dialog]').within(() => {
+      cy.contains('MCP first').should('be.visible');
+      cy.contains('servidor MCP').should('be.visible');
+      cy.contains('a', 'Configurar o agente').should('have.attr', 'href', '/recipes');
+      cy.contains('button', 'Entendi').click();
+    });
+    cy.get('[role=dialog]').should('not.exist');
+    cy.get('[data-testid=mcp-onboard-card]').should('not.exist');
+  });
+
   it('shows the live progress percent on the calendar day card', () => {
     cy.visit('/posts');
     // Today's posts render below the calendar, inside the scrolling <main>.

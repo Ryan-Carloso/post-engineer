@@ -1,7 +1,7 @@
 export const recipesI18nPt = {
   title: 'Pegue seus prompts',
   subtitle:
-      'Sua key, o setup do agente e prompts prontos — tudo em um lugar.',
+      'O Post Engineer é MCP first. Crie a chave, instale o MCP no agente e copie o prompt que manda a publicação.',
   dailyNewsTitle: 'Notícia do dia vira vídeo',
   dailyNewsObjective:
       'Transformar uma notícia do dia em um vídeo de persona, validado antes de gastar qualquer token.',

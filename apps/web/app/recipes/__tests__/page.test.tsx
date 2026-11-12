@@ -5,7 +5,8 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 vi.mock('@/lib/i18n/provider', () => {
   const translations: Record<string, string> = {
     'recipes.title': 'Get your prompts',
-    'recipes.subtitle': 'Your key, your agent setup, and ready-made prompts — all in one place.',
+    'recipes.subtitle':
+      'Post Engineer is MCP-first. Create your key, install the MCP in your agent, and copy the prompt that sends the post.',
     'recipes.stepKeyTitle': 'Create your API key',
     'recipes.stepKeyHint': 'It connects your agent to your account.',
     'recipes.stepSetupTitle': 'Send the setup prompt to your agent',
@@ -87,7 +88,9 @@ describe('/recipes prompts hub', () => {
     renderHub(true);
     expect(screen.getByRole('heading', { level: 1, name: 'Get your prompts' })).toBeInTheDocument();
     expect(
-      screen.getByText('Your key, your agent setup, and ready-made prompts — all in one place.'),
+      screen.getByText(
+        'Post Engineer is MCP-first. Create your key, install the MCP in your agent, and copy the prompt that sends the post.',
+      ),
     ).toBeInTheDocument();
   });
 
