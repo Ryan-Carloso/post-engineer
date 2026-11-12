@@ -349,13 +349,21 @@ export function personaVoiceField(requiredMessage?: string) {
     ...houseLabels,
     ...NO_VOICE_SENTINELS,
   ] as [string, ...string[]];
-  const field = z.union([z.enum(names), z.string()]).superRefine((value, ctx) => {
-    if (typeof value === 'string' && value.trim().length > 0) return;
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: requiredMessage ?? 'voiceId must be a non-empty string',
+  const field = z
+    .union([z.enum(names), z.string()], {
+      // Zod 4 reports a missing required value on a union as `invalid_union`
+      // and dumps both branches' issues as JSON, which reads as noise to an
+      // agent. One sentence instead; the value is always a string here, so
+      // this is the only way the union itself can fail.
+      error: () => requiredMessage ?? 'voiceId must be a non-empty string',
+    })
+    .superRefine((value, ctx) => {
+      if (typeof value === 'string' && value.trim().length > 0) return;
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: requiredMessage ?? 'voiceId must be a non-empty string',
+      });
     });
-  });
   // The description sits on the refined wrapper so MCP UIs read it, and the
   // union keeps the house-name enum for autocomplete.
   return field.describe(

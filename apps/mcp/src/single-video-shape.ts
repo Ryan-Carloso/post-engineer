@@ -137,7 +137,7 @@ export const ValidateScriptShape = {
     .describe('The complete script as segments to validate mechanically, without spending tokens.'),
   videoType: z
     .enum(VIDEO_TYPES, {
-      errorMap: (_issue, ctx) => ({ message: unknownVideoTypeMessage(ctx.data) }),
+      error: (issue) => unknownVideoTypeMessage(issue.input),
     })
     .optional()
     .describe('The video mode the script is for: full_lipsync = media is optional (at most 6 images in total); hook_lipsync or faceless = images mode, which checks that every segment carries a media list, about one image per ~3s of speech (a 60s video needs about 20 images, at most 30). Omitted means hook_lipsync.'),
