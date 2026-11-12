@@ -65,13 +65,6 @@ import { pathToFileURL } from 'node:url';
 
 export const DEFAULT_API_BASE_URL = 'https://post-engineer.com';
 export const PROVIDER_ORDER = ['bluesky', 'instagram', 'youtube'];
-// Field carrying the provider account id in GET /api/account items.
-// Mirrors toPublicAccount in apps/web/lib/providers/registry.ts.
-export const ACCOUNT_ID_FIELDS = {
-  youtube: 'channelId',
-  instagram: 'igUserId',
-  bluesky: 'did',
-};
 // 3h10m: safely inside the [3h, 30d] schedule window (SCHEDULE_MIN_ADVANCE_HOURS).
 export const SCHEDULE_LEAD_MS = (3 * 60 + 10) * 60 * 1000;
 export const SLOT_AT_TOLERANCE_MS = 10 * 60 * 1000;
@@ -112,8 +105,14 @@ export function resolveConfig(env) {
     const accountId = optionalEnv(env, `TEST_FLIGHT_${provider.toUpperCase()}_ACCOUNT_ID`);
     if (accountId !== '') accounts[provider] = [accountId];
   }
-  // Empty is fine: main() auto-discovers the key's connected accounts via
-  // GET /api/account when nothing explicit was configured.
+  // Issue #572: no auto-discovery — a flight publishes only to accounts
+  // bound to its persona, so explicit account ids are required. A flight
+  // with none configured fails here, before spending any token.
+  if (Object.keys(accounts).length === 0) {
+    throw new FlightError(
+      'test-flight: no explicit account ids configured — set TEST_FLIGHT_<PROVIDER>_ACCOUNT_ID for at least one provider (bluesky, instagram, youtube).',
+    );
+  }
   const scheduledAction = optionalEnv(env, 'TEST_FLIGHT_SCHEDULED_ACTION') || 'cancel';
   if (scheduledAction !== 'cancel' && scheduledAction !== 'leave') {
     throw new FlightError(
@@ -205,60 +204,6 @@ export function resolveScript(env, { readFile = readFileSync } = {}) {
     topic: typeof parsed?.topic === 'string' ? parsed.topic : '',
     source: typeof parsed?.source === 'string' ? parsed.source : 'unknown',
   };
-}
-
-//---------------
-// Account discovery
-//---------------
-
-// GET /api/account does not use the { success: true } envelope, so discovery
-// reads the raw response instead of going through apiJson.
-export async function discoverAccounts(client, fetchFn = fetch) {
-  let res;
-  try {
-    res = await fetchFn(`${client.apiBaseUrl}/api/account`, {
-      headers: { authorization: `Bearer ${client.apiKey}` },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-  } catch (error) {
-    throw new FlightError(
-      `test-flight: GET /api/account failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  const text = await res.text();
-  let parsed = null;
-  try {
-    parsed = text === '' ? null : JSON.parse(text);
-  } catch {
-    parsed = null;
-  }
-  if (!res.ok || parsed === null || parsed.authenticated !== true || !Array.isArray(parsed.accounts)) {
-    const detail = parsed !== null ? JSON.stringify(parsed).slice(0, 500) : text.slice(0, 200);
-    throw new FlightError(`test-flight: GET /api/account -> HTTP ${res.status}: ${detail}`);
-  }
-  const accounts = {};
-  for (const item of parsed.accounts) {
-    const provider = item !== null && typeof item === 'object' ? item.provider : undefined;
-    const field = typeof provider === 'string' ? ACCOUNT_ID_FIELDS[provider] : undefined;
-    if (field === undefined) continue;
-    const id = item[field];
-    if (typeof id !== 'string' || id.trim() === '') continue;
-    (accounts[provider] ??= []).push(id);
-  }
-  if (Object.keys(accounts).length === 0) {
-    throw new FlightError(
-      'test-flight: no connected social accounts found for this API key — ' +
-        'connect at least one account (Perfil → Contas) on the test account first',
-    );
-  }
-  return accounts;
-}
-
-// Explicit account ids always win; when none are configured the flight
-// discovers the key's connected accounts instead of failing.
-export async function resolveFlightAccounts({ explicit, client, discover = discoverAccounts }) {
-  if (Object.keys(explicit).length > 0) return explicit;
-  return discover(client);
 }
 
 //---------------
@@ -522,7 +467,9 @@ export async function runFlight(env = process.env, options = {}) {
     apiKey: cfg.apiKey,
     fetchFn: options.fetchFn,
   };
-  const accounts = await resolveFlightAccounts({ explicit: cfg.accounts, client });
+  // Explicit account ids only (issue #572): resolveConfig already fails
+  // when none are configured — there is no auto-discovery fallback.
+  const accounts = cfg.accounts;
   const providers = Object.keys(accounts);
   const summary = [`script source: ${script.source}${script.topic ? ` (topic: ${script.topic})` : ''}`];
 
