@@ -58,10 +58,12 @@ export function mergeProfileMetadata(
 
 //---------------
 // probeStoredCredential — decrypts the stored tokens without using them.
-// Throws on an undecryptable blob (or a missing row), so the caller flags
-// the card. Used on the paths whose fetch never reads the token: the ones
-// that skip the fetch entirely, and Bluesky's fetch path (its public-profile
-// fetch never touches the stored token).
+// Throws on an undecryptable blob, so the caller flags the card. A missing
+// row also throws (AccountNotFoundError), but the route treats that as
+// transient and keeps the card 'ok': the row is gone, not broken. Used on
+// the paths whose fetch never reads the token: the ones that skip the fetch
+// entirely, and Bluesky's fetch path (its public-profile fetch never
+// touches the stored token).
 //---------------
 async function probeStoredCredential(
   supabase: SupabaseClient,

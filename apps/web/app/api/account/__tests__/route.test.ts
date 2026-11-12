@@ -29,6 +29,7 @@ import { resolveApiKey } from '@/lib/api-keys';
 import { listSocialAccounts, deleteSocialAccount, type SocialAccountRecord } from '@/lib/social-accounts';
 import { syncAccountProfile } from '@/lib/account-profile-sync';
 import { TokenDecryptError } from '@/lib/token-crypto';
+import { AccountNotFoundError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 
 function mockSession(userId = 'u1') {
@@ -269,6 +270,23 @@ describe('GET /api/account', () => {
     expect(body.accounts.find((account) => account.recordId === 'rec-502')?.status).toBe('ok');
     expect(body.accounts.find((account) => account.recordId === 'rec-db')?.status).toBe('ok');
     expect(body.accounts.find((account) => account.recordId === 'rec-unknown')?.status).toBe('ok');
+  });
+
+  it('leaves a row deleted mid-list unflagged: a missing row is not a dead token', async () => {
+    mockSession();
+    vi.mocked(listSocialAccounts).mockResolvedValue([{
+      id: 'rec-gone', provider: 'youtube', providerAccountId: 'chan-gone', accountName: 'Gone Channel',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {},
+    }] as never);
+    vi.mocked(syncAccountProfile).mockRejectedValue(
+      new AccountNotFoundError('Social account not found for youtube/chan-gone'),
+    );
+
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { accounts: Array<{ recordId: string; status?: string }> };
+    expect(body.accounts).toHaveLength(1);
+    expect(body.accounts[0].status).toBe('ok');
   });
 
   it('logs the original sync error as the cause, not its message string', async () => {
