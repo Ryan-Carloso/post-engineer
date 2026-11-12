@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getGenerationPost, getSlotPost, personaScopeOf } from '../post-detail';
 
@@ -108,6 +108,10 @@ describe('getSlotPost', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('returns the full slot detail for the owner', async () => {
     const { supabase, chains } = mockSupabase({
       scheduled_posts: { data: SLOT_ROW, error: null },
@@ -133,24 +137,26 @@ describe('getSlotPost', () => {
     expect(detail?.generation).not.toHaveProperty('material');
   });
 
-  it('returns postUrl built from the request origin', async () => {
+  it('returns postUrl built from the public app URL', async () => {
     const { supabase } = mockSupabase({
       scheduled_posts: { data: SLOT_ROW, error: null },
       schedules: { data: SCHEDULE_ROW, error: null },
       personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
       scheduled_post_progress_history: { data: [], error: null },
     });
-    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null, 'https://post-engineer.com');
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://post-engineer.com');
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(detail?.slot.postUrl).toBe('https://post-engineer.com/posts/slot-1');
   });
 
-  it('returns a null postUrl without an origin', async () => {
+  it('returns a null postUrl when the public app URL is not configured', async () => {
     const { supabase } = mockSupabase({
       scheduled_posts: { data: SLOT_ROW, error: null },
       schedules: { data: SCHEDULE_ROW, error: null },
       personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
       scheduled_post_progress_history: { data: [], error: null },
     });
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', undefined);
     const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(detail?.slot.postUrl).toBeNull();
   });

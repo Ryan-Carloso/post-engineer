@@ -65,7 +65,7 @@ export interface SlotPostDetail {
     queueTotal: null;
     // Absolute link to the post detail page — the agent sends this link in
     // chat so the owner can watch/download the video (issue #555). Null
-    // when the caller did not pass an origin.
+    // when the public app URL is not configured.
     postUrl: string | null;
   };
   schedule: {
@@ -164,16 +164,16 @@ async function resolvePublishedSlotEngineData(
 // getSlotPost — the full detail for a scheduled_posts id: slot row,
 // schedule, persona, live engine progress, publish links, progress
 // history. Null when the id is unknown, another user's, or the schedule
-// row is gone (the slot without its schedule is not a post). The origin
-// (request origin, e.g. https://post-engineer.com) builds the absolute
-// postUrl the agent sends in chat; without it postUrl is null.
+// row is gone (the slot without its schedule is not a post). The absolute
+// postUrl the agent sends in chat is built from the configured public
+// base URL (NEXT_PUBLIC_APP_URL, lib/post-url), never the request origin;
+// without it postUrl is null.
 //---------------
 export async function getSlotPost(
   supabase: SupabaseClient,
   slotId: string,
   userId: string,
   personaScope: readonly string[] | null,
-  origin: string | null = null,
 ): Promise<SlotPostDetail | null> {
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
@@ -313,7 +313,7 @@ export async function getSlotPost(
   const errorOut = row.error;
   const publishedAtOut = row.published_at;
   const taskIdOut = row.task_id;
-  const postUrlOut = origin === null ? null : postUrlFor(origin, row.id);
+  const postUrlOut = postUrlFor(row.id);
   const progressOut = enrichment.progress;
   const stageOut = enrichment.stage;
   const retryableOut = enrichment.retryable;
