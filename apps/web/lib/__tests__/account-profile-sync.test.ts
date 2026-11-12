@@ -13,6 +13,7 @@ vi.mock('@/lib/account-profile-telemetry', () => ({
   reportProfileFetchFailed: vi.fn(),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn() } }));
+vi.mock('@/lib/owner-alert-mail', () => ({ notifyAccountBreak: vi.fn(() => Promise.resolve()) }));
 
 import {
   ACCOUNT_PROFILE_SYNC_MAX_AGE_MS,
@@ -24,6 +25,7 @@ import { logger } from '@/lib/logger';
 import { pictureUrlExpired } from '@/lib/account-display-diagnostics';
 import { updateSocialAccountMetadata, getSocialAccountTokens, type SocialAccountRecord } from '@/lib/social-accounts';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
+import { notifyAccountBreak } from '@/lib/owner-alert-mail';
 
 const NOW = new Date('2026-11-06T12:00:00.000Z');
 const supabase = {} as never;
@@ -124,6 +126,7 @@ describe('syncAccountProfile', () => {
     vi.mocked(reportProfileFetchFailed).mockReset();
     vi.mocked(logger.info).mockClear();
     vi.mocked(logger.error).mockClear();
+    vi.mocked(notifyAccountBreak).mockClear();
   });
 
   it('returns the record untouched when no sync is needed', async () => {
@@ -187,6 +190,33 @@ describe('syncAccountProfile', () => {
     ).rejects.toBe(failure);
     expect(reportProfileFetchFailed).toHaveBeenCalledWith('instagram', 'sync', failure);
     expect(updateSocialAccountMetadata).not.toHaveBeenCalled();
+    expect(notifyAccountBreak).not.toHaveBeenCalled();
+  });
+
+  it('emails the owner when a profile fetch is unauthorized', async () => {
+    const failure = { response: { status: 401 }, message: 'Unauthorized' };
+    sources.instagram.fetch.mockRejectedValue(failure);
+    const rec = record({}, { profileSyncedAt: STALE });
+    await expect(syncAccountProfile(supabase, 'u1', rec, { now: () => NOW })).rejects.toBe(failure);
+    expect(notifyAccountBreak).toHaveBeenCalledWith({
+      userId: 'u1',
+      provider: 'instagram',
+      accountId: 'ig-1',
+      socialAccountId: 'rec-1',
+      accountName: 'old_handle',
+      error: failure,
+    });
+  });
+
+  it('logs when the owner email fails', async () => {
+    const failure = { response: { status: 401 }, message: 'Unauthorized' };
+    sources.instagram.fetch.mockRejectedValue(failure);
+    vi.mocked(notifyAccountBreak).mockRejectedValueOnce('boom');
+    const rec = record({}, { profileSyncedAt: STALE });
+    await expect(syncAccountProfile(supabase, 'u1', rec, { now: () => NOW })).rejects.toBe(failure);
+    await vi.waitFor(() => {
+      expect(logger.error).toHaveBeenCalledWith('[ACCOUNT] Owner alert failed', expect.any(Error));
+    });
   });
 
   it('flags a non-applies row (Rumble) whose stored token is undecryptable', async () => {
@@ -200,6 +230,13 @@ describe('syncAccountProfile', () => {
     ).rejects.toBe(failure);
     expect(reportProfileFetchFailed).toHaveBeenCalledWith('rumble', 'sync', failure);
     expect(sources.rumble.fetch).not.toHaveBeenCalled();
+    expect(notifyAccountBreak).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'u1',
+      provider: 'rumble',
+      accountId: 'chan-1',
+      socialAccountId: 'rec-1',
+      error: failure,
+    }));
   });
 
   it('returns a non-applies row when the probe decrypts its token', async () => {

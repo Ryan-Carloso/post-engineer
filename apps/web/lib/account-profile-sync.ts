@@ -15,10 +15,39 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { updateSocialAccountMetadata, getSocialAccountTokens, type SocialAccountRecord } from './social-accounts';
 import { PROFILE_SOURCES, type FetchedProfile } from './account-profile-sources';
 import { pictureUrlExpired } from './account-display-diagnostics';
+import { classifyAccountBreak } from './account-break';
 import { reportProfileFetched, reportProfileFetchFailed } from './account-profile-telemetry';
 import { logger } from './logger';
+import { notifyAccountBreak } from './owner-alert-mail';
 
 export const ACCOUNT_PROFILE_SYNC_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : 'Error';
+}
+
+//---------------
+// reportOwnerAccountBreak — email the owner when this sync failure is one
+// of the three account-break classes. Anything else (5xx, a revoked-token
+// string that is not a 401, a network blip) stays telemetry-only. A mail
+// failure is logged by name and never replaces the original error.
+//---------------
+function reportOwnerAccountBreak(record: SocialAccountRecord, error: unknown): void {
+  if (classifyAccountBreak(error) === null) return;
+  const pending = notifyAccountBreak({
+    userId: record.userId,
+    provider: record.provider,
+    accountId: record.providerAccountId,
+    socialAccountId: record.id,
+    accountName: record.accountName,
+    error,
+  });
+  if (pending && typeof pending.catch === 'function') {
+    void pending.catch((notifyError: unknown) => {
+      logger.error('[ACCOUNT] Owner alert failed', new Error(errorName(notifyError)));
+    });
+  }
+}
 
 export interface AccountProfileSyncOptions {
   now?: () => Date;
@@ -77,6 +106,7 @@ async function probeStoredCredential(
     // tokens show up in account_profile_fetch_failed (the route's logger
     // still reports the $exception as well, like the fetch path).
     reportProfileFetchFailed(record.provider, 'sync', error);
+    reportOwnerAccountBreak(record, error);
     throw error;
   }
 }
@@ -125,6 +155,7 @@ export async function syncAccountProfile(
     fetched = await source.fetch(supabase, userId, record);
   } catch (error) {
     reportProfileFetchFailed(record.provider, 'sync', error);
+    reportOwnerAccountBreak(record, error);
     throw error;
   }
 

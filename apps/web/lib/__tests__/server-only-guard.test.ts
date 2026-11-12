@@ -14,6 +14,7 @@ const SERVER_ONLY_MODULES: readonly string[] = [
   'lib/youtube.ts',
   'lib/instagram.ts',
   'lib/social-accounts.ts',
+  'lib/owner-alert-mail.ts',
   'lib/supabase/server.ts',
   'lib/supabase/service.ts',
   'lib/supabase/middleware.ts',

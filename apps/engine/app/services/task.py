@@ -44,6 +44,7 @@ from app.services.persona_hook import (
 from app.services.bgm_history import history_repository
 from app.services.analytics import nonempty_error_reason, track_event
 from app.services.notify import safe_reason, send_discord, task_failed_msg
+from app.services.owner_alert import alert_failed_task
 from app.utils import file_security, ssrf, utils
 
 #---------------
@@ -410,13 +411,10 @@ def _fail_task(
         webhook_url=getattr(params, "webhook_url", None),
         error=error,
     )
-    if not _should_send_failure_alert(task_id):
-        return
-    subject = params.video_title if params else ""
-    if not send_discord(task_failed_msg(task_id, error, subject)):
-        # The alert never went out (network blip, webhook misconfigured):
-        # release the reservation so a later failure notice re-alerts.
-        _release_failure_alert(task_id)
+    alert_failed_task(
+        task_id, error, params, _should_send_failure_alert,
+        _release_failure_alert, send_discord, task_failed_msg,
+    )
 
 
 # Product-fixed persona pacing ("always this way"): the lip-sync hook

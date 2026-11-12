@@ -12,6 +12,7 @@ from app.services.fill_schedule.constants import (
     SLOT_READY,
 )
 from app.services.analytics import scrub_secret_values, track_event
+from app.services.owner_alert import notify_generation_failed, notify_owner_async
 from app.services.intro_cost import cost_event_props
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
@@ -112,10 +113,21 @@ class BatchReconciler:
                 # the row into the response): scrub the full message before
                 # truncating — engine task errors can echo bearer tokens or
                 # DSNs (AGENTS.md PR #17).
+                reason = scrub_secret_values(str(task.get("error") or ""))[:500]
                 self.store.update_slot(
                     slot["id"],
                     status=SLOT_FAILED,
-                    error=scrub_secret_values(str(task.get("error") or ""))[:500],
+                    error=reason,
                 )
+                if user_id is not None:
+                    schedule_id = slot.get("schedule_id")
+                    notify_owner_async(
+                        notify_generation_failed,
+                        user_id,
+                        slot_id=str(slot["id"]),
+                        title=str(slot.get("title") or ""),
+                        reason=reason,
+                        schedule_id=schedule_id if isinstance(schedule_id, str) else None,
+                    )
                 updated += 1
         return updated

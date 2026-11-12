@@ -18,6 +18,9 @@ from loguru import logger
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import fill_schedule as fs
+from app.services.fill_schedule.publish import BatchPublisher, _failed_outcomes
+from app.services.fill_schedule.publish_accounts import AccountPublishResult
+from app.services.owner_alert import notify_publish_partial
 from app.services.fill_schedule.store import ScheduleStore
 from app.services import notify as nf
 from app.utils.supabase_retry import build_retrying_session
@@ -3209,4 +3212,82 @@ class VoiceForTests(unittest.TestCase):
                 }
             ),
             "calm",
+        )
+
+
+
+
+class FailedOutcomesTests(unittest.TestCase):
+    def test_keeps_only_failed_outcomes_with_provider_account_and_reason(self):
+        failures = _failed_outcomes(
+            [
+                {"provider": "youtube", "accountId": "UC1", "status": "published", "error": None},
+                {"provider": "bluesky", "accountId": "did:plc:1", "status": "failed", "error": "unauthorized"},
+                {"provider": "rumble", "accountId": "ch1", "status": "failed"},
+                {"provider": "fanvue", "accountId": "fv1", "status": "retrying", "error": "boom"},
+                "not-a-dict",
+            ]
+        )
+        self.assertEqual(
+            failures,
+            [
+                {"provider": "bluesky", "account_id": "did:plc:1", "reason": "unauthorized"},
+                {"provider": "rumble", "account_id": "ch1", "reason": ""},
+            ],
+        )
+
+    def test_empty_and_none_yield_no_failures(self):
+        self.assertEqual(_failed_outcomes(None), [])
+        self.assertEqual(_failed_outcomes([]), [])
+
+
+
+
+class PartialPublishEmailTests(unittest.TestCase):
+    def test_partial_publish_emails_the_owner_with_the_failed_account(self):
+        slot = {
+            "id": "slot-1",
+            "task_id": "task-1",
+            "title": "Daily Dose",
+            "user_id": "user-1",
+            "schedules": {"id": "sched-1", "persona_id": "p-1", "personas": {"name": "Bicuda"}},
+        }
+        store = MagicMock()
+        store.claim_ready_slot.return_value = True
+        task_state = MagicMock()
+        task_state.get_task.return_value = {
+            "videos": ["v.mp4"],
+            "video_storage_path": "x/y.mp4",
+        }
+        result = AccountPublishResult(
+            outcomes=[
+                {"provider": "youtube", "accountId": "UC1", "status": "published"},
+                {"provider": "bluesky", "accountId": "did:plc:1", "status": "failed", "error": "unauthorized"},
+            ],
+            published_providers=["youtube"],
+            failed_providers=["bluesky"],
+            non_user_failed_providers=["bluesky"],
+            first_error="unauthorized",
+            max_attempts=1,
+            any_published=True,
+        )
+        publisher = BatchPublisher(store, task_state, notify=MagicMock())
+        with (
+            patch("app.services.fill_schedule.publish.publish_slot_accounts", return_value=result),
+            patch("app.services.fill_schedule.publish.notify_owner_async") as notify_async,
+        ):
+            published = publisher._publish_one(
+                slot, datetime(2026, 11, 12, 12, tzinfo=UTC), resumed=False
+            )
+        self.assertEqual(published, 1)
+        notify_async.assert_called_once_with(
+            notify_publish_partial,
+            "user-1",
+            slot_id="slot-1",
+            title="Daily Dose",
+            failures=[{"provider": "bluesky", "account_id": "did:plc:1", "reason": "unauthorized"}],
+            persona="Bicuda",
+        )
+        self.assertTrue(
+            any(call.kwargs.get("status") == "published" for call in store.update_slot.call_args_list)
         )
