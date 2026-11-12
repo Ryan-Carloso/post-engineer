@@ -16,12 +16,13 @@ import { CalendarLegend } from './calendar-legend';
 import { CalendarLoadErrorEmptyState, CalendarUnavailableFrame } from './calendar-load-error-frame';
 
 // CalendarView — month calendar on the shadcn Calendar (react-day-picker:
-// grid semantics, keyboard navigation, focus). Each day cell shows one
-// post total (calendar-markers.tsx: DayCellPostTotal, breakdown in the
-// accessible name); the legend draws the same total as a swatch, plus the
-// today swatch and the selected-day chip. Today colours the numeral gold.
-// The selected day fills that numeral with the brand chip; the post dots
-// stay below it, so a status colour never means "open" or "today".
+// grid semantics, keyboard navigation, focus). Each day cell shows a row of
+// post dots, one per post coloured by its calendar group and capped at four
+// with a "+N" overflow (calendar-markers.tsx: DayCellPostTotal; the status
+// breakdown is in the accessible name); the legend draws the same dots as a
+// swatch, plus the today swatch and the selected-day chip. Today colours the
+// numeral gold. The selected day fills that numeral with the brand chip; the
+// post dots stay below it, so a status colour never means "open" or "today".
 // The grid shows only the weeks the month spans (no all-next-month sixth
 // row). Day buckets use the viewer's browser timezone (calendar-days.ts).
 // Data and the selected day's posts live in the page. `unavailable` (the
