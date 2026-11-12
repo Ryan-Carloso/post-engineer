@@ -138,8 +138,9 @@ async function getHandler(
 
   let detail;
   try {
-    // The request origin builds the slot's absolute postUrl (issue #555).
-    detail = await getSlotPost(supabase, resolvedSlotId, auth.userId, personaScopeOf(auth), new URL(request.url).origin);
+    // The slot's absolute postUrl (issue #555) is built from the
+    // configured public base URL (NEXT_PUBLIC_APP_URL, lib/post-url).
+    detail = await getSlotPost(supabase, resolvedSlotId, auth.userId, personaScopeOf(auth));
   } catch (error) {
     logger.error('[api/schedule/slots] slot lookup failed', error);
     return apiErrorResponse(500, 'Failed to load post.', {

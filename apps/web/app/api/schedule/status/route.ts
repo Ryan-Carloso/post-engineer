@@ -95,7 +95,6 @@ async function withSlotPresentation<T extends { status?: unknown; task_id?: unkn
   userId: string,
   queuePositions: QueuePositions,
   engineProbe: EngineProbe,
-  origin: string | null,
 ): Promise<(T & SlotEnrichment & { postUrl: string | null })[]> {
   let remaining = ENGINE_LOOKUP_CAP;
   const plans = slots.map((slot) => {
@@ -123,7 +122,7 @@ async function withSlotPresentation<T extends { status?: unknown; task_id?: unkn
   // agent can send it in chat; a row without a string id gets null.
   return slots.map((slot, index) => {
     const id = (slot as { id?: unknown }).id;
-    const postUrl = typeof id === 'string' && origin !== null ? postUrlFor(origin, id) : null;
+    const postUrl = typeof id === 'string' ? postUrlFor(id) : null;
     return { ...slot, ...enrichments[index], postUrl };
   });
 }
@@ -136,8 +135,6 @@ async function getHandler(request?: Request): Promise<NextResponse> {
   }
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
-  // The request origin builds each slot's absolute postUrl (issue #555).
-  const origin = request ? new URL(request.url).origin : null;
   // API-key/OAuth callers have no cookie session, so the service client
   // (scoped by user_id below) is used; web sessions keep the server client.
   const supabase =
@@ -207,7 +204,6 @@ async function getHandler(request?: Request): Promise<NextResponse> {
       userId,
       new Map(),
       createEngineProbe(),
-      origin,
     );
     return NextResponse.json({ success: true, slots, truncated });
   }
@@ -307,9 +303,8 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     userId,
     queuePositions,
     engineProbe,
-    origin,
   );
-  const recentEnriched = await withSlotPresentation(presentPublishRows(recent.data), userId, queuePositions, engineProbe, origin);
+  const recentEnriched = await withSlotPresentation(presentPublishRows(recent.data), userId, queuePositions, engineProbe);
 
   // Best-effort progress history: every observation of a live (generating)
   // or dead (failed) slot records a (progress, stage) row when it changed

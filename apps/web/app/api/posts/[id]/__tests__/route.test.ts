@@ -151,7 +151,7 @@ describe('GET /api/posts/[id]', () => {
     expect(body.success).toBe(true);
     expect(body.kind).toBe('slot');
     expect(body.slot.id).toBe('slot-1');
-    expect(getSlotPost).toHaveBeenCalledWith(expect.anything(), SLOT_ID, USER_ID, null, 'https://example.com');
+    expect(getSlotPost).toHaveBeenCalledWith(expect.anything(), SLOT_ID, USER_ID, null);
   });
 
   it('returns 404 when neither lookup matches (genuine miss)', async () => {
@@ -180,7 +180,7 @@ describe('GET /api/posts/[id]', () => {
     const body = (await response.json()) as { success: boolean; error: string };
     expect(body.success).toBe(false);
     expect(body.error).toBe('Post not found.');
-    expect(getSlotPost).toHaveBeenCalledWith(expect.anything(), SLOT_ID, USER_ID, null, 'https://example.com');
+    expect(getSlotPost).toHaveBeenCalledWith(expect.anything(), SLOT_ID, USER_ID, null);
   });
 
   it('returns 500 and logs when a lookup throws', async () => {

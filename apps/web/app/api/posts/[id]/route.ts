@@ -52,10 +52,11 @@ async function getHandler(
       return NextResponse.json({ success: true, kind: 'generation', generation });
     }
     const slotUuid = resolveSlotUuid(id);
-    // The request origin builds the slot's absolute postUrl (issue #555):
-    // the agent sends that link in chat, so it must name the host the
-    // caller reached, in dev as in production.
-    const slotDetail = slotUuid === null ? null : await getSlotPost(supabase, slotUuid, auth.userId, personaScope, new URL(request.url).origin);
+    // The slot's absolute postUrl (issue #555) is built from the
+    // configured public base URL (NEXT_PUBLIC_APP_URL, lib/post-url),
+    // never the request origin: behind the proxy the request reaches
+    // Next with Host 0.0.0.0:3000.
+    const slotDetail = slotUuid === null ? null : await getSlotPost(supabase, slotUuid, auth.userId, personaScope);
     if (slotDetail) {
       return NextResponse.json({ success: true, kind: 'slot', ...slotDetail });
     }

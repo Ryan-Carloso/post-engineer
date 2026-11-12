@@ -161,6 +161,14 @@ describe('GET auth', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // postUrl is built from the public app URL, never the request origin.
+    // The default stub keeps the https://example.com expectations below on
+    // the same value; the proxy-origin test re-stubs it explicitly.
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://example.com');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('accepts an API key and queries with the service client', async () => {
@@ -199,6 +207,21 @@ describe('GET auth', () => {
       })),
       hasAnyPost: true,
     });
+  });
+
+  it('builds postUrl from the public app URL, not the proxy request origin', async () => {
+    const client = mockPostsClient(upcoming, recent);
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://post-engineer.com');
+
+    // Behind the Caddy proxy the request reaches Next with Host 0.0.0.0:3000.
+    const response = await GET(new Request('http://0.0.0.0:3000/api/schedule/status?limit=5'));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.upcoming[0].postUrl).toBe('https://post-engineer.com/posts/up-1');
+    expect(body.recent[0].postUrl).toBe('https://post-engineer.com/posts/re-1');
   });
 
   it('keeps working with a cookie session through the server client', async () => {
