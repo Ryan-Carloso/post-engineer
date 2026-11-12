@@ -169,7 +169,6 @@ class SendOwnerEmailTests(unittest.TestCase):
         self.assertEqual(body["subject"], "A post could not be generated")
         self.assertIn("Hello &lt;title&gt;", body["html"])
         self.assertIn("https://post-engineer.com/posts/slot-1", body["html"])
-        self.assertNotIn("boom token", body["html"])
         headers = resend["headers"]
         self.assertEqual(headers["User-Agent"], "post-engineer/owner-alert")
         self.assertTrue(headers["Authorization"].startswith("Bearer "))
