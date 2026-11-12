@@ -118,7 +118,18 @@ class BatchGenerator:
             # Pre-flight before anything about the job itself: a slot that
             # could never publish is the more fundamental failure, and this
             # check is free.
-            validate_publish_plan(schedule, title, description)
+            # Issue #572: when the schedule has a persona, prove every
+            # account against the persona's binding, read now — an account
+            # unbound after scheduling fails the slot here, before any
+            # dispatch or spend. A binding read that fails raises here too:
+            # the slot fails loudly instead of publishing blind. Faceless
+            # schedules carry no persona and skip the check.
+            bound_accounts = (
+                self.store.persona_bound_accounts(str(schedule["persona_id"]))
+                if schedule.get("persona_id")
+                else None
+            )
+            validate_publish_plan(schedule, title, description, bound_accounts)
             # `PersonaParams` requires exactly one of voice_id / voice_audio_url,
             # so a schedule that resolves no voice can never generate. Checked
             # before the dispatch: failing the slot now gives a readable reason

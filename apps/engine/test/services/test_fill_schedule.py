@@ -41,6 +41,10 @@ class _FakeStore:
         # the budget actually dropped rather than only the final flag value.
         self.connect_retries = fs.store.CONNECT_RETRIES
         self.retry_calls = []
+        # Issue #572: the persona's bound accounts, as the generate
+        # pre-flight reads them. Tests set this explicitly; the default is
+        # empty (fail closed — a persona with no binding cannot schedule).
+        self.bound_accounts = {}
 
     def set_connect_retries(self, n):
         # Records every arm/disarm so a test can assert the budget each stage
@@ -85,6 +89,9 @@ class _FakeStore:
 
     def publishing_slots(self):
         return []
+
+    def persona_bound_accounts(self, persona_id):
+        return self.bound_accounts
 
 
 class BatchScheduleTests(unittest.TestCase):
@@ -246,6 +253,42 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertEqual(store.spent, [])
         self.assertEqual(store.updates[0][1]["status"], "failed")
         self.assertIn("description", store.updates[0][1]["error"])
+
+    def test_generate_batch_slot_fails_when_the_account_is_not_bound_to_the_persona(self):
+        # Issue #572: the binding is read at generate time, so an account
+        # unbound after scheduling fails the slot in the pre-flight —
+        # before any dispatch or token spend.
+        slot = self._batch_slot()
+        slot["schedules"]["persona_id"] = "persona-1"
+        store = _FakeStore()
+        store.bound_accounts = {"youtube": ["yt-other"]}
+        store.pending_slots = lambda now: [slot]
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(enqueued, 0)
+        dispatch_generation.assert_not_called()
+        self.assertEqual(store.spent, [])
+        self.assertEqual(store.updates[0][1]["status"], "failed")
+        self.assertIn("not bound to persona", store.updates[0][1]["error"])
+
+    def test_generate_batch_slot_dispatches_when_the_account_is_bound_to_the_persona(self):
+        slot = self._batch_slot()
+        slot["schedules"]["persona_id"] = "persona-1"
+        store = _FakeStore()
+        store.bound_accounts = {"youtube": ["yt-1"]}
+        store.pending_slots = lambda now: [slot]
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(enqueued, 1)
+        dispatch_generation.assert_called_once()
 
     def test_generate_batch_slot_without_a_stored_mood_uses_the_engine_default(self):
         # Rows created before migration 048 have no music_mood, and a blank

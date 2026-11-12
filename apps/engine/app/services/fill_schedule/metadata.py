@@ -85,12 +85,25 @@ def metadata_for(provider: str, title: str, schedule: dict[str, Any], descriptio
     raise RuntimeError(f"unsupported schedule provider: {provider}")
 
 
-def validate_publish_plan(schedule: dict[str, Any], title: str, description: str) -> None:
+def validate_publish_plan(
+    schedule: dict[str, Any],
+    title: str,
+    description: str,
+    bound_accounts: dict[str, list[str]] | None = None,
+) -> None:
     """Pre-flight of the publish plan BEFORE generating the video.
 
     Validates providers, accounts and caption limits with the real title;
     any problem fails the slot here, without spending tokens/money
     on a generation that could never be published.
+
+    When bound_accounts is given (a schedule with a persona), every
+    account the schedule publishes to must be bound to that persona
+    (issue #572). The binding is read at generate time, so an account
+    unbound after scheduling fails here instead of publishing to an
+    account the persona no longer owns. A persona with zero bound
+    accounts fails every account it names. Faceless schedules pass no
+    binding and skip the check.
     """
     providers = [str(provider) for provider in schedule.get("providers", [])]
     youtube = None
@@ -103,6 +116,15 @@ def validate_publish_plan(schedule: dict[str, Any], title: str, description: str
     rumble = None
     for provider in providers:
         metadata = metadata_for(provider, title, schedule, description)
+        if bound_accounts is not None:
+            bound = bound_accounts.get(provider, [])
+            for account_id in getattr(metadata, "account_ids", ()):
+                if str(account_id) not in bound:
+                    raise RuntimeError(
+                        f"account {account_id} is not bound to persona "
+                        f"{schedule.get('persona_id')}: bind it to the persona "
+                        "or remove it from the schedule"
+                    )
         if isinstance(metadata, upload_publisher.YouTubeMetadata):
             youtube = metadata
         elif isinstance(metadata, upload_publisher.InstagramMetadata):
