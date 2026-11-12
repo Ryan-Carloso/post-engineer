@@ -198,6 +198,7 @@ describe('syncAccountProfile', () => {
     await expect(
       syncAccountProfile(supabase, 'u1', rec, { now: () => NOW }),
     ).rejects.toBe(failure);
+    expect(reportProfileFetchFailed).toHaveBeenCalledWith('rumble', 'sync', failure);
     expect(sources.rumble.fetch).not.toHaveBeenCalled();
   });
 
@@ -216,6 +217,7 @@ describe('syncAccountProfile', () => {
     await expect(
       syncAccountProfile(supabase, 'u1', record(), { now: () => NOW }),
     ).rejects.toBe(failure);
+    expect(reportProfileFetchFailed).toHaveBeenCalledWith('instagram', 'sync', failure);
     expect(sources.instagram.fetch).not.toHaveBeenCalled();
   });
 
@@ -237,6 +239,7 @@ describe('syncAccountProfile', () => {
     await expect(
       syncAccountProfile(supabase, 'u1', rec, { now: () => NOW }),
     ).rejects.toBe(failure);
+    expect(reportProfileFetchFailed).toHaveBeenCalledWith('bluesky', 'sync', failure);
     expect(sources.bluesky.fetch).toHaveBeenCalledWith(supabase, 'u1', rec);
     expect(updateSocialAccountMetadata).not.toHaveBeenCalled();
     expect(reportProfileFetched).not.toHaveBeenCalled();

@@ -68,7 +68,15 @@ async function probeStoredCredential(
   userId: string,
   record: SocialAccountRecord,
 ): Promise<void> {
-  await getSocialAccountTokens(supabase, userId, record.provider, record.providerAccountId);
+  try {
+    await getSocialAccountTokens(supabase, userId, record.provider, record.providerAccountId);
+  } catch (error) {
+    // Same structured event as a failed profile fetch, so undecryptable
+    // tokens show up in account_profile_fetch_failed (the route's logger
+    // still reports the $exception as well, like the fetch path).
+    reportProfileFetchFailed(record.provider, 'sync', error);
+    throw error;
+  }
 }
 
 //---------------
