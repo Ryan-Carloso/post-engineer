@@ -32,7 +32,11 @@ describe('NewPostButton', () => {
     render(<NewPostButton className="h-8 min-w-0 shrink px-2 text-xs" />);
     const link = screen.getByRole('link', { name: 'posts.newPostAction' });
     expect(link.className).toContain('h-8');
-    expect(link.className).toContain('shrink-0');
+    // Assert on whole tokens: twMerge drops the built-in 'shrink-0' when
+    // the caller passes 'shrink', so a substring check would only match
+    // the '[&_svg]:shrink-0' selector from the Button base styles.
+    expect(link.className.split(' ')).toContain('shrink');
+    expect(link.className.split(' ')).not.toContain('shrink-0');
     expect(link.className).toContain('whitespace-nowrap');
   });
 
