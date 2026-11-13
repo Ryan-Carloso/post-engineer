@@ -10,6 +10,16 @@ from app.services.publish_fanvue import validate_fanvue_metadata
 from app.services.publish_pinterest import validate_pinterest_metadata
 
 
+class AccountNotBoundError(RuntimeError):
+    """A schedule names an account the persona is not bound to (issue #572).
+
+    A dedicated type so the publish stage can tell a binding rejection
+    apart from every other publish-plan failure (blank description,
+    unsupported provider, caption limits) — the refund reason recorded
+    for each must name the real cause.
+    """
+
+
 def metadata_for(provider: str, title: str, schedule: dict[str, Any], description: str):
     """Build the provider metadata for a slot's title and schedule.
 
@@ -120,7 +130,7 @@ def validate_publish_plan(
             bound = bound_accounts.get(provider, [])
             for account_id in getattr(metadata, "account_ids", ()):
                 if str(account_id) not in bound:
-                    raise RuntimeError(
+                    raise AccountNotBoundError(
                         f"account {account_id} is not bound to persona "
                         f"{schedule.get('persona_id')}: bind it to the persona "
                         "or remove it from the schedule"

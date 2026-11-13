@@ -1455,9 +1455,34 @@ class PublishDueTests(unittest.TestCase):
         self.assertEqual(store.updates[-1][1]["status"], "failed")
         self.assertIn("not bound to persona", store.updates[-1][1]["error"])
         self.assertEqual(len(store.refund_batch_calls), 1)
+        self.assertEqual(
+            store.refund_batch_calls[0][4],
+            "Publish blocked by the persona binding check; video refunded",
+        )
         failed_calls = [c for c in track.call_args_list if c[0][0] == "video_publish_failed"]
         self.assertEqual(len(failed_calls), 1)
         self.assertFalse(failed_calls[0][0][1]["retryable"])
+
+    def test_publish_plan_failure_uses_a_neutral_refund_reason(self):
+        # A publish-plan failure that is NOT about the binding (here: a
+        # blank description) must not record the binding refund reason —
+        # the ledger would blame the binding for a validation error.
+        # The slot still fails permanently and its token is refunded.
+        from app.services.fill_schedule import publish as pub_module
+
+        slot, store = self._bound_slot({"youtube": ["yt-1"]})
+        slot["description"] = ""
+        with patch.object(pub_module, "track_event"):
+            _, published, publish = self._run_publish_ok(slot, store)
+        self.assertEqual(published, 0)
+        publish.assert_not_called()
+        self.assertEqual(store.updates[-1][1]["status"], "failed")
+        self.assertIn("no video description", store.updates[-1][1]["error"])
+        self.assertEqual(len(store.refund_batch_calls), 1)
+        self.assertEqual(
+            store.refund_batch_calls[0][4],
+            "Publish plan failed validation; video refunded",
+        )
 
     def test_publish_proceeds_when_the_account_is_bound_to_the_persona(self):
         slot, store = self._bound_slot({"youtube": ["yt-1"]})

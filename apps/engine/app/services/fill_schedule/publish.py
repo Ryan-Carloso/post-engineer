@@ -17,7 +17,7 @@ from app.services.fill_schedule.constants import (
     SLOT_PUBLISHED,
     SLOT_PUBLISHING,
 )
-from app.services.fill_schedule.metadata import validate_publish_plan
+from app.services.fill_schedule.metadata import AccountNotBoundError, validate_publish_plan
 from app.services.fill_schedule.publish_accounts import (
     lease_iso,
     next_delay_seconds,
@@ -139,12 +139,23 @@ class BatchPublisher:
                 return 0
             try:
                 validate_publish_plan(schedule, title, description, bound)
-            except (RuntimeError, ValueError) as exc:
+            except AccountNotBoundError as exc:
                 self._fail_slot_permanently(
                     slot,
                     schedule,
                     str(exc),
                     "Publish blocked by the persona binding check; video refunded",
+                )
+                return 0
+            except (RuntimeError, ValueError) as exc:
+                # Any other plan failure (blank description, unsupported
+                # provider, caption limits) is a validation error, not a
+                # binding rejection — the refund reason must say so.
+                self._fail_slot_permanently(
+                    slot,
+                    schedule,
+                    str(exc),
+                    "Publish plan failed validation; video refunded",
                 )
                 return 0
         if not resumed:
