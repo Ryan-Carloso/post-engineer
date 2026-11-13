@@ -1,12 +1,8 @@
 import { getErrorMessage, VideoTooLargeError, ApiError, readApiFailure } from './errors.js';
 import { redactSecretFromError } from './secret-redaction.js';
 import {
-  DIRECT_PUBLISH_TIMEOUT_MS,
-  MAX_LIBRARY_IMAGE_BYTES,
-  MAX_LIBRARY_IMAGE_MB,
-  MAX_UPLOAD_VIDEO_BYTES,
-  MAX_UPLOAD_VIDEO_GB,
-  VIDEO_LAYOUTS,
+  DIRECT_PUBLISH_TIMEOUT_MS, MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB,
+  MAX_UPLOAD_VIDEO_BYTES, MAX_UPLOAD_VIDEO_GB, VIDEO_LAYOUTS,
 } from './limits.js';
 
 // Re-exported so existing import sites (`../client.js`) keep working.
@@ -29,6 +25,7 @@ import type {
   UpdatePersonaInput, VideoType,
 } from './client-types.js';
 import { buildDirectPublishForm, requireDirectPublishFields } from './direct-publish-form.js';
+import { requirePublishingAccounts } from './require-publishing-accounts.js';
 
 // Re-exported so existing import sites (`./client.js`) keep working.
 export type {
@@ -288,19 +285,7 @@ export class PostEngineerClient {
 
   async createPersona(input: CreatePersonaInput): Promise<unknown> {
     const formData = new FormData();
-    // Issue #572: the binding is checked before any file is read — a
-    // persona with no bound account cannot exist, so fail fast here
-    // instead of uploading bytes the server would reject.
-    const totalAccounts = Object.values(input.accounts ?? {}).reduce(
-      (total, ids) => total + (Array.isArray(ids) ? ids.length : 0),
-      0,
-    );
-    if (totalAccounts === 0) {
-      throw new Error(
-        'Select at least one publishing account for this persona: pass accounts, e.g. { youtube: ["UC..."] }. Account IDs come from list_social_accounts.',
-      );
-    }
-    formData.set('publishingAccounts', JSON.stringify(input.accounts));
+    formData.set('publishingAccounts', JSON.stringify(requirePublishingAccounts(input.accounts)));
     // Every persona has a face: exactly one of avatarUrl or avatarPath (the
     // `photo` file), checked before any other file is read.
     await appendPersonaAvatar(formData, input, true);
