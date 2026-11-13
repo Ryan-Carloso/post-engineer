@@ -152,6 +152,9 @@ describe('Posts list progress', () => {
     cy.contains(`Publicações de ${day15ShortDate()}`).should('be.visible');
     // Next month: the panel moves to the next month.
     const nextMonth = new Date();
+    // Pin the day first: setMonth(+1) on a day the next month lacks rolls
+    // two months forward (Aug 31 -> Oct 1), naming the wrong month.
+    nextMonth.setDate(1);
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     cy.get('[data-calendar-card]').find('button[aria-label="Próximo mês"]').click();
     cy.contains(`Publicações de ${monthLong(nextMonth)}`).should('be.visible');
