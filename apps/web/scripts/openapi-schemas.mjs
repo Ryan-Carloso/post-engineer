@@ -1,7 +1,7 @@
 // Hand-written request/response schemas for generate-openapi.mjs, keyed by
 // "METHOD /api/path". Each entry mirrors the route's own validation (cited in
 // the comment); endpoints without an entry keep the generic responses.
-import { experimentLinkSchema, metricsOperationSchemas } from './openapi-metrics-schemas.mjs';
+import { experimentLinkSchema, metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs';
 
 const object = (properties, required = []) => ({
   type: 'object',
@@ -405,7 +405,7 @@ export const operationSchemas = {
     request: object({ url: { type: 'string', format: 'uri', description: 'http(s) URL.' } }, ['url']),
     response: success({ code: str }),
   },
-  ...metricsOperationSchemas({ success, object, anyObject, str }),
+  ...metricsOperationSchemas({ success, object, anyObject, str }), ...videoOperationSchemas({ success, object, str }),
   // apps/web/app/api/posts/[id]/route.ts
   'GET /api/posts/[id]': {
     response: success({

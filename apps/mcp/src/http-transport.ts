@@ -1,9 +1,11 @@
 // Streamable HTTP transport for the MCP server (Phase 6, P6-1).
 //
-// This module wires the same McpServer built by createPostEngineerMcpServer()
-// to the SDK's StreamableHTTPServerTransport instead of stdio. No tool is
-// added, removed, or changed here: the HTTP endpoint serves exactly the
-// tools the stdio server serves, with the same handlers.
+// This module wires the McpServer built by createPostEngineerMcpServer()
+// to the SDK's StreamableHTTPServerTransport instead of stdio. The HTTP
+// endpoint serves the JSON tools with the same handlers, but never the
+// local-file tools: createPostEngineerMcpServer(..., 'http') omits every
+// tool and field that would read a path from this host's filesystem
+// (see remote-shapes.ts and local-file-tools.ts).
 //
 // Authentication (Phase 6, P6-2): when OAuth is configured
 // (MCP_OAUTH_ISSUER + MCP_RESOURCE, see http-auth.ts), every /mcp
@@ -25,6 +27,17 @@
 // Host, and binding 127.0.0.1 alone does not stop the browser on the
 // same machine from reaching it.
 //
+// Remote client identity: the per-request PostEngineerClient built for
+// HTTP suppresses its X-MCP-Version header (suppressVersionHeader in
+// client-types.ts, set only by the HTTP factory in index.ts). The package
+// version (MAJOR.MINOR.PATCH) never equals the web gate's generated
+// MAJOR.MINOR.PR requirement, so sending it would 426 the remote's own
+// calls; with no header the gate passes them as non-MCP callers. The
+// stdio client keeps sending the header. Abuse limit: /mcp requests are
+// rate-limited per client IP before OAuth verification (JWKS verifies
+// are asymmetric and must not be reachable without bound), then per
+// verified subject after auth (see http-rate-limit.ts).
+//
 // The transport is stateless (sessionIdGenerator: undefined): the SDK
 // keeps no session state in memory, no Mcp-Session-Id header is issued,
 // and no tool state is shared between requests beyond what the protocol
@@ -44,8 +57,22 @@ import {
   unauthorizedHttpResponse,
   type AuthContext,
   type HttpAuthConfig,
+  type HttpAuthenticator,
 } from './http-auth.js';
-import { createHttpRateLimiter, type HttpRateLimiter } from './http-rate-limit.js';
+import {
+  clientIpKey,
+  createHttpRateLimiter,
+  createPreAuthIpRateLimiter,
+  type HttpRateLimiter,
+} from './http-rate-limit.js';
+
+// Test seams for serveHttpTransport: production builds the real JWKS
+// authenticator and the default per-IP limiter; tests inject a spy
+// authenticator and a low-limit IP limiter to prove ordering.
+export interface HttpTransportDeps {
+  authenticator?: HttpAuthenticator;
+  ipRateLimiter?: HttpRateLimiter;
+}
 
 export interface HttpTransportOptions {
   host: string;
@@ -219,6 +246,7 @@ export async function serveHttpTransport(
   serverFactory: (auth?: AuthContext) => McpServer,
   options: HttpTransportOptions,
   auth: HttpAuthConfig | null = null,
+  deps: HttpTransportDeps = {},
 ): Promise<HttpTransportHandle> {
   if (auth === null) {
     if (!isLoopbackHost(options.host)) {
@@ -234,7 +262,9 @@ export async function serveHttpTransport(
       );
     }
   }
-  const authenticator = auth === null ? null : createHttpAuthenticator(auth);
+  const authenticator = auth === null ? null : (deps.authenticator ?? createHttpAuthenticator(auth));
+  const ipRateLimiter: HttpRateLimiter | null =
+    auth === null ? null : (deps.ipRateLimiter ?? createPreAuthIpRateLimiter());
   const rateLimiter: HttpRateLimiter | null =
     auth === null
       ? null
@@ -267,6 +297,21 @@ export async function serveHttpTransport(
         res.writeHead(404, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ error: 'Not found' }));
         return;
+      }
+      // Per-IP limit first, before any OAuth verification: JWKS
+      // verification is asymmetric, so unauthenticated traffic must not
+      // reach it without bound. A blocked IP gets 429 and the
+      // authenticator is never called for that request.
+      if (auth !== null && ipRateLimiter !== null) {
+        const ipLimited = ipRateLimiter.check(clientIpKey(req));
+        if (!ipLimited.allowed) {
+          res.writeHead(429, {
+            'content-type': 'application/json',
+            'retry-after': String(ipLimited.retryAfterSeconds),
+          });
+          res.end(JSON.stringify({ error: 'Too many requests.' }));
+          return;
+        }
       }
       // Authenticate before any tool is built or dispatched: an
       // unauthenticated request never learns the tool list, and a

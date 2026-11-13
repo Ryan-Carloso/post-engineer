@@ -58,6 +58,7 @@ import {
 } from '@/lib/generation/video-job-payload';
 import { recordGenerationStart, recordGenerationUpdate, startEngineVideoTask } from '@/lib/generation/video-generation';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
+import { musicMoodField } from '@/lib/generation/music-mood-field';
 import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { resolveIdempotency } from '@/lib/idempotency';
 import { trackApiEvent } from '@/lib/analytics';
@@ -100,8 +101,7 @@ const OptionsSchema = z
     videoType: z.enum(['full_lipsync', 'hook_lipsync', 'faceless'], {
       error: (issue) => (issue.input === undefined ? `options.videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}` : unknownVideoTypeMessage(issue.input)),
     }),
-    // BGM mood (issue #489): a catalogued mood, or "none" for no music; omitted = engine default.
-    musicMood: z.string().min(1).max(64).optional(),
+    musicMood: musicMoodField,
     audioUrl: z.string().optional(),
     imageId: z.string().optional(),
     // Segments contract (MCP first, Phase 1): one call = one video; the

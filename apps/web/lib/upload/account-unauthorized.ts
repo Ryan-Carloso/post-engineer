@@ -1,4 +1,7 @@
 import { trackApiEvent } from '../analytics';
+import { classifyAccountBreak, httpStatusOf, isUnauthorizedError } from '../account-break';
+import { logger } from '../logger';
+import { notifyAccountBreak } from '../owner-alert-mail';
 import type { SocialProvider } from '../providers/registry';
 
 //---------------
@@ -7,81 +10,18 @@ import type { SocialProvider } from '../providers/registry';
 // "one account failed" warning only says "Unauthorized"; this event names
 // the provider and the account that needs reconnecting, so PostHog can list
 // the broken ones. Sends ids only — never the token or the provider body.
+//
+// The same call also emails the owner for every account-break class
+// (unauthorized, undecryptable token, Bluesky email_not_verified).
+// PostHog stays limited to isUnauthorizedError. The mailer dedupes.
 //---------------
+
+export { classifyAccountBreak, httpStatusOf, isUnauthorizedError } from '../account-break';
 
 export const PUBLISH_ACCOUNT_UNAUTHORIZED_EVENT = 'publish_account_unauthorized';
 
-function numericField(source: unknown, key: string): number | undefined {
-  if (typeof source !== 'object' || source === null || !(key in source)) return undefined;
-  const value = (source as Record<string, unknown>)[key];
-  return typeof value === 'number' ? value : undefined;
-}
-
-//---------------
-// httpStatusOf — the HTTP status a provider SDK error carries, whichever shape
-// it uses (axios `response.status`, gaxios/Google `code`/`status`, our own
-// InstagramApiError `statusCode`).
-//---------------
-export function httpStatusOf(error: unknown): number | undefined {
-  if (typeof error !== 'object' || error === null) return undefined;
-  const response = 'response' in error ? (error as { response?: unknown }).response : undefined;
-  return (
-    numericField(response, 'status') ??
-    numericField(error, 'status') ??
-    numericField(error, 'statusCode') ??
-    numericField(error, 'code')
-  );
-}
-
-export function isUnauthorizedError(error: unknown): boolean {
-  if (httpStatusOf(error) === 401) return true;
-  if (isBlueskyInvalidCredentials(error)) return true;
-  if (isThreespeakInvalidCredentials(error)) return true;
-  if (isRumbleInvalidToken(error)) return true;
-  return error instanceof Error && /^unauthorized$/i.test(error.message.trim());
-}
-
-//---------------
-// isBlueskyInvalidCredentials — Bluesky never carries a numeric 401: a dead
-// app password surfaces as BlueskyError code 'invalid_credentials' (the
-// AT Protocol login rejects it, loginToBlueskySession rethrows it as-is).
-// A stored credential that no longer authenticates is exactly the account
-// that needs reconnecting, so it counts as unauthorized here. Duck-typed
-// (name + code) so this leaf stays free of the Bluesky client import.
-//---------------
-function isBlueskyInvalidCredentials(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const record = error as Record<string, unknown>;
-  return record.name === 'BlueskyError' && record.code === 'invalid_credentials';
-}
-
-//---------------
-// isThreespeakInvalidCredentials — same shape as Bluesky: a dead Hive
-// posting key surfaces as ThreespeakError code 'invalid_credentials'
-// (the Studio login memo no longer decrypts with it, or Studio rejects
-// the minted JWT), never as a numeric 401. A stored credential that no
-// longer authenticates is exactly the account that needs reconnecting.
-// Duck-typed (name + code) so this leaf stays free of the 3Speak client
-// import.
-//---------------
-function isThreespeakInvalidCredentials(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const record = error as Record<string, unknown>;
-  return record.name === 'ThreespeakError' && record.code === 'invalid_credentials';
-}
-
-//---------------
-// isRumbleInvalidToken — Rumble has no numeric 401 contract of its own:
-// the Simple Upload API answers a bad access token with an error object,
-// which lib/rumble.ts classifies as RumbleError code 'invalid_token'.
-// A stored token that no longer authenticates is exactly the account
-// that needs reconnecting, so it counts as unauthorized here. Duck-typed
-// (name + code) so this leaf stays free of the Rumble client import.
-//---------------
-function isRumbleInvalidToken(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const record = error as Record<string, unknown>;
-  return record.name === 'RumbleError' && record.code === 'invalid_token';
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : 'Error';
 }
 
 export function reportAccountUnauthorized(
@@ -90,11 +30,24 @@ export function reportAccountUnauthorized(
   ownerUserId: string,
   error: unknown,
 ): void {
-  if (!isUnauthorizedError(error)) return;
-  trackApiEvent(PUBLISH_ACCOUNT_UNAUTHORIZED_EVENT, {
+  if (isUnauthorizedError(error)) {
+    trackApiEvent(PUBLISH_ACCOUNT_UNAUTHORIZED_EVENT, {
+      provider,
+      account_id: accountId,
+      user_id: ownerUserId,
+      status: httpStatusOf(error) ?? 401,
+    });
+  }
+  if (classifyAccountBreak(error) === null) return;
+  const pending = notifyAccountBreak({
+    userId: ownerUserId,
     provider,
-    account_id: accountId,
-    user_id: ownerUserId,
-    status: httpStatusOf(error) ?? 401,
+    accountId,
+    error,
   });
+  if (pending && typeof pending.catch === 'function') {
+    void pending.catch((notifyError: unknown) => {
+      logger.error('[ACCOUNT] Owner alert failed', new Error(errorName(notifyError)));
+    });
+  }
 }

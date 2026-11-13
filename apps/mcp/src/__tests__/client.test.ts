@@ -2240,6 +2240,28 @@ describe('publishVideoDirect', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('gives direct publish the 600s budget, because Fanvue waits for transcoding', async () => {
+    const videoPath = await writeTempVideo('clip.mp4');
+    const timeouts: number[] = [];
+    const realTimeout = AbortSignal.timeout;
+    const spy = vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms: number) => {
+      timeouts.push(ms);
+      return realTimeout(ms);
+    });
+    try {
+      await client.publishVideoDirect({
+        provider: 'fanvue',
+        videoPath,
+        accountIds: ['fan-1'],
+        title: 'Fan post',
+        description: 'A description',
+      });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(timeouts).toEqual([600_000]);
+  });
+
   it('maps account ids to the rumble field name and sends title + description instead of a caption', async () => {
     const videoPath = await writeTempVideo('clip.mp4');
     await client.publishVideoDirect({
