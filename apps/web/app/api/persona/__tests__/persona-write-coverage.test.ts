@@ -117,6 +117,34 @@ describe('POST/PATCH personaWrite coverage', () => {
               })),
             })),
             delete: vi.fn(() => chain({ error: null })),
+            // Issue #572: the binding save checks persona ownership.
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle: vi.fn(async () => ({ data: { id: 'persona-uuid-1' }, error: null })),
+                })),
+              })),
+            })),
+          };
+        }
+        if (table === 'social_accounts') {
+          // Issue #572: the binding save only accepts connected accounts;
+          // the fixture's youtube account is connected.
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(async () => ({
+                data: [{ provider: 'youtube', provider_account_id: 'UC-1' }],
+                error: null,
+              })),
+            })),
+          };
+        }
+        if (table === 'persona_default_accounts') {
+          // Issue #572: the binding replace-all must succeed so the test
+          // reaches the library failure it pins.
+          return {
+            delete: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })),
+            insert: vi.fn(async () => ({ error: null })),
           };
         }
         return {
@@ -141,6 +169,7 @@ describe('POST/PATCH personaWrite coverage', () => {
     form.append('name', 'Remote');
     form.append('voiceId', 'chatterbox:kokoro_af_heart');
     form.append('avatarUrl', 'https://cdn.example/face.png');
+    form.append('publishingAccounts', JSON.stringify({ youtube: ['UC-1'] }));
     form.append('images', png('lib.png'));
     const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
     expect(res.status).toBe(500);
@@ -173,6 +202,7 @@ describe('POST/PATCH personaWrite coverage', () => {
     form.append('name', 'Remote');
     form.append('voiceId', 'chatterbox:kokoro_af_heart');
     form.append('avatarUrl', 'https://cdn.example/face.png');
+    form.append('publishingAccounts', JSON.stringify({ youtube: ['UC-1'] }));
     const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
     expect(res.status).toBe(500);
     expect(removed.some((paths) => paths.some((path) => path.endsWith('/photo.png')))).toBe(true);

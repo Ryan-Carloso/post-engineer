@@ -94,6 +94,15 @@ describe('GET /api/persona/list null records', () => {
             }),
           };
         }
+        if (table === 'persona_default_accounts') {
+          // Issue #572: the list route bulk-loads the binding for the
+          // returned personas; no rows means an all-empty binding.
+          return {
+            select: () => ({
+              in: async () => ({ data: [], error: null }),
+            }),
+          };
+        }
         return {
           select: () => ({
             eq: () => ({
