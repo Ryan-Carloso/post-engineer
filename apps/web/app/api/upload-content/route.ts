@@ -242,13 +242,14 @@ async function postHandler(request: NextRequest) {
             unrecorded.map((accountId) => {
               const granted = partition.granted.find((item) => item.accountId === accountId);
               if (granted === undefined) return Promise.resolve(false);
-              return markPublishUnknown(ledgerClient, {
-                scopeKey: partition.scopeKey,
-                provider,
-                accountId,
-                claimToken: granted.claimToken,
-                error: 'publish record lost after a successful post',
-              });
+              // One const per field: v8 emits no line entries for properties
+              // inside an object literal, so an inline argument object reads
+              // as uncovered lines to Codecov even when the test runs it.
+              const scopeKey = partition.scopeKey;
+              const claimToken = granted.claimToken;
+              const error = 'publish record lost after a successful post';
+              const args = { scopeKey, provider, accountId, claimToken, error };
+              return markPublishUnknown(ledgerClient, args);
             }),
           );
           await releaseClaimsForRequestRejection(ledgerClient, partition, results);

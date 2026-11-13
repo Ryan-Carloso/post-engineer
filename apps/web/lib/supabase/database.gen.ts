@@ -471,7 +471,7 @@ export interface Database {
         provider: string;
         account_id: string;
         user_id: string;
-        status: 'in_progress' | 'published' | 'failed';
+        status: 'in_progress' | 'published' | 'failed' | 'unknown';
         lease_until: string | null;
         claim_token: string | null;
         result: Json | null;
@@ -485,7 +485,7 @@ export interface Database {
         provider: string;
         account_id: string;
         user_id: string;
-        status: 'in_progress' | 'published' | 'failed';
+        status: 'in_progress' | 'published' | 'failed' | 'unknown';
         lease_until?: string | null;
         claim_token?: string | null;
         result?: Json | null;
@@ -499,7 +499,7 @@ export interface Database {
         provider?: string;
         account_id?: string;
         user_id?: string;
-        status?: 'in_progress' | 'published' | 'failed';
+        status?: 'in_progress' | 'published' | 'failed' | 'unknown';
         lease_until?: string | null;
         claim_token?: string | null;
         result?: Json | null;
