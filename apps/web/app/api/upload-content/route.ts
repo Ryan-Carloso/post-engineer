@@ -30,9 +30,9 @@ import {
   recordPublishAttempt,
   recordPartitionResults,
   releaseClaimsForRequestRejection,
-  startLedgerHeartbeat,
   type PublishLedgerPartition,
 } from '@/lib/upload/publish-ledger';
+import { startLedgerHeartbeat } from '@/lib/upload/publish-ledger-heartbeat';
 
 //---------------
 // Unified content upload — POST /api/upload-content

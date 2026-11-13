@@ -1,11 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it, vi, afterEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { findRepoRoot } from '@/test/repo-root';
 import {
   PUBLISH_ACCOUNT_FIELDS,
   PUBLISH_IN_PROGRESS_CODE,
-  PUBLISH_LEDGER_HEARTBEAT_MS,
   PUBLISH_LEDGER_LEASE_SECONDS,
   PUBLISH_LEDGER_RECORD_RETRY_DELAYS_MS,
   PUBLISH_UNKNOWN_CODE,
@@ -19,8 +18,6 @@ import {
   recordPartitionResults,
   recordPublishAttempt,
   releaseClaimsForRequestRejection,
-  startLedgerHeartbeat,
-  touchPublishLedger,
 } from '@/lib/upload/publish-ledger';
 import type { SocialProvider } from '@/lib/providers/registry';
 
@@ -329,6 +326,38 @@ describe('partitionPublishAccounts with an unknown claim', () => {
     expect(partition.granted).toEqual([{ accountId: 'acc-2', claimToken: expect.any(String) }]);
     expect(partition.formData.getAll('fanvueAccountIds')).toEqual(['acc-2']);
   });
+
+  it('releases already-granted claims as failed when a later claim throws, and rethrows', async () => {
+    const rpc = vi.fn(async (fn: string, args: Record<string, unknown>) => {
+      if (fn === 'record_publish_ledger') return { data: true, error: null };
+      if (args.p_key === 'publish:slot:s1:video:v.mp4:fanvue:acc-2') {
+        return { data: null, error: { message: 'db down' } };
+      }
+      return { data: { outcome: 'claimed' }, error: null };
+    });
+    const formData = new FormData();
+    formData.append('fanvueAccountIds', 'acc-1');
+    formData.append('fanvueAccountIds', 'acc-2');
+    await expect(
+      partitionPublishAccounts(mockSupabase(rpc), 'slot:s1:video:v.mp4', 'fanvue', 'user-1', formData),
+    ).rejects.toThrow('claim_publish_ledger failed: db down');
+    // Nothing was published, so the granted claim is released at once
+    // instead of parking the next retry in publish_in_progress for the
+    // 30-minute lease.
+    const claimCall = rpc.mock.calls.find(
+      ([fn, args]) => fn === 'claim_publish_ledger' && args.p_key === 'publish:slot:s1:video:v.mp4:fanvue:acc-1',
+    );
+    expect(claimCall).toBeDefined();
+    const token = (claimCall?.[1] as Record<string, unknown> | undefined)?.p_token;
+    expect(rpc).toHaveBeenCalledWith('record_publish_ledger', {
+      p_key: 'publish:slot:s1:video:v.mp4:fanvue:acc-1',
+      p_token: token,
+      p_status: 'failed',
+      p_result: null,
+      p_error: 'claim phase failed',
+      p_error_code: 'transient',
+    });
+  });
 });
 
 describe('releaseClaimsForRequestRejection', () => {
@@ -428,65 +457,5 @@ describe('publish account fields stay in sync with the handlers', () => {
     expect(fields.sort()).toEqual(['accountIds', 'igAccountIds']);
     expect(PUBLISH_ACCOUNT_FIELDS.youtube).toBe('accountIds');
     expect(PUBLISH_ACCOUNT_FIELDS.instagram).toBe('igAccountIds');
-  });
-});
-
-describe('touchPublishLedger', () => {
-  const input = { scopeKey: 'slot:s1:video:v.mp4', provider: 'fanvue', accountId: 'acc-1', claimToken: 'token-1' };
-
-  it('renews the lease with the claim token', async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
-    await expect(touchPublishLedger(mockSupabase(rpc), input)).resolves.toBe(true);
-    expect(rpc).toHaveBeenCalledWith('touch_publish_ledger', {
-      p_key: 'publish:slot:s1:video:v.mp4:fanvue:acc-1',
-      p_token: 'token-1',
-      p_lease_seconds: PUBLISH_LEDGER_LEASE_SECONDS,
-    });
-  });
-
-  it('returns false instead of throwing when the touch is lost', async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
-    await expect(touchPublishLedger(mockSupabase(rpc), input)).resolves.toBe(false);
-    const failing = vi.fn().mockResolvedValue({ data: null, error: { message: 'db down' } });
-    await expect(touchPublishLedger(mockSupabase(failing), input)).resolves.toBe(false);
-  });
-});
-
-describe('startLedgerHeartbeat', () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('touches every granted claim on each beat and stops when told', async () => {
-    vi.useFakeTimers();
-    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
-    const partition = {
-      scopeKey: 'slot:s1:video:v.mp4',
-      provider: 'fanvue',
-      granted: [
-        { accountId: 'acc-1', claimToken: 'token-1' },
-        { accountId: 'acc-2', claimToken: 'token-2' },
-      ],
-      replayed: [],
-      waiting: [],
-      formData: new FormData(),
-    } as never;
-    expect(PUBLISH_LEDGER_HEARTBEAT_MS).toBe(10 * 60 * 1000);
-
-    const stop = startLedgerHeartbeat(mockSupabase(rpc), partition);
-    await vi.advanceTimersByTimeAsync(PUBLISH_LEDGER_HEARTBEAT_MS);
-    expect(rpc).toHaveBeenCalledTimes(2);
-    expect(rpc).toHaveBeenCalledWith(
-      'touch_publish_ledger',
-      expect.objectContaining({ p_key: 'publish:slot:s1:video:v.mp4:fanvue:acc-1', p_token: 'token-1' }),
-    );
-    expect(rpc).toHaveBeenCalledWith(
-      'touch_publish_ledger',
-      expect.objectContaining({ p_key: 'publish:slot:s1:video:v.mp4:fanvue:acc-2', p_token: 'token-2' }),
-    );
-
-    stop();
-    await vi.advanceTimersByTimeAsync(PUBLISH_LEDGER_HEARTBEAT_MS * 2);
-    expect(rpc).toHaveBeenCalledTimes(2);
   });
 });

@@ -31,18 +31,14 @@ import type { ContentUploadAccountResult } from '@/lib/upload/content-upload-res
 //---------------
 
 // The lease bounds how long a retry waits before taking over a claim.
-// The holder renews it while it publishes (startLedgerHeartbeat below),
-// so a takeover only happens when the holder is gone — no heartbeat for
-// a full lease. A publish that runs longer than the lease (Fanvue is
+// The holder renews it while it publishes (startLedgerHeartbeat in
+// publish-ledger-heartbeat.ts), so a takeover only happens when the
+// holder is gone — no heartbeat for a full lease. A publish that runs longer than the lease (Fanvue is
 // unbounded: up to 256 parts at 10 min each) is never taken over while
 // it is still alive. The 30 minutes matches the engine's slot park
 // (ATTEMPT_LEASE_SECONDS in fill_schedule/account_outcomes.py): a retry
 // inside the lease waits instead of posting again.
 export const PUBLISH_LEDGER_LEASE_SECONDS = 30 * 60;
-
-// The holder touches its lease every 10 minutes — a third of the lease,
-// so two consecutive failed touches still fit inside it.
-export const PUBLISH_LEDGER_HEARTBEAT_MS = 10 * 60 * 1000;
 
 /** The web route is still publishing this account under an earlier request. */
 export const PUBLISH_IN_PROGRESS_CODE = 'publish_in_progress';
@@ -265,66 +261,6 @@ export async function markPublishUnknown(
   );
 }
 
-export interface TouchPublishLedgerInput {
-  scopeKey: string;
-  provider: string;
-  accountId: string;
-  claimToken: string;
-}
-
-// Renews one claim's lease. Returns false instead of throwing when the
-// touch is lost: a missed heartbeat is not fatal — the next one retries,
-// and only a full lease without any touch lets a retry take over. A
-// heartbeat failure must never fail the publish it protects.
-export async function touchPublishLedger(
-  supabase: SupabaseClient,
-  input: TouchPublishLedgerInput,
-): Promise<boolean> {
-  const { data, error } = await supabase.rpc('touch_publish_ledger', {
-    p_key: publishLedgerKey(input.scopeKey, input.provider, input.accountId),
-    p_token: input.claimToken,
-    p_lease_seconds: PUBLISH_LEDGER_LEASE_SECONDS,
-  });
-  if (error) {
-    logger.error('[publish-ledger] touch failed', error, {
-      key: publishLedgerKey(input.scopeKey, input.provider, input.accountId),
-    });
-    return false;
-  }
-  if (data !== true) {
-    logger.error('[publish-ledger] touch lost: claim no longer held', null, {
-      key: publishLedgerKey(input.scopeKey, input.provider, input.accountId),
-    });
-    return false;
-  }
-  return true;
-}
-
-// Renews every granted claim on a heartbeat while the holder publishes,
-// so a long upload is never taken over while it is still alive. Returns
-// a stop function the route calls in a finally once the handler finished
-// and the outcomes are recorded. The timer is unref'd: it must never
-// hold the process open after the request is done.
-export function startLedgerHeartbeat(
-  supabase: SupabaseClient,
-  partition: PublishLedgerPartition,
-): () => void {
-  const timer = setInterval(() => {
-    void Promise.all(
-      partition.granted.map((granted) =>
-        touchPublishLedger(supabase, {
-          scopeKey: partition.scopeKey,
-          provider: partition.provider,
-          accountId: granted.accountId,
-          claimToken: granted.claimToken,
-        }),
-      ),
-    );
-  }, PUBLISH_LEDGER_HEARTBEAT_MS);
-  timer.unref();
-  return () => clearInterval(timer);
-}
-
 /** The per-account answer while an earlier request is still publishing it. */
 export function publishInProgressResult(accountId: string): ContentUploadAccountResult {
   return accountFailure(
@@ -383,17 +319,42 @@ export async function partitionPublishAccounts(
   const replayed: ContentUploadAccountResult[] = [];
   const waiting: ContentUploadAccountResult[] = [];
   const unknown: ContentUploadAccountResult[] = [];
-  for (const accountId of accountIds) {
-    const claim = await claimPublishAttempt(supabase, { scopeKey, provider, accountId, userId });
-    if (claim.outcome === 'claimed' && claim.claimToken !== null) {
-      granted.push({ accountId, claimToken: claim.claimToken });
-    } else if (claim.outcome === 'published' && claim.result !== null) {
-      replayed.push(claim.result);
-    } else if (claim.outcome === 'unknown') {
-      unknown.push(publishUnknownResult(accountId));
-    } else {
-      waiting.push(publishInProgressResult(accountId));
+  try {
+    for (const accountId of accountIds) {
+      const claim = await claimPublishAttempt(supabase, { scopeKey, provider, accountId, userId });
+      if (claim.outcome === 'claimed' && claim.claimToken !== null) {
+        granted.push({ accountId, claimToken: claim.claimToken });
+      } else if (claim.outcome === 'published' && claim.result !== null) {
+        replayed.push(claim.result);
+      } else if (claim.outcome === 'unknown') {
+        unknown.push(publishUnknownResult(accountId));
+      } else {
+        waiting.push(publishInProgressResult(accountId));
+      }
     }
+  } catch (error) {
+    // Nothing was published yet: release what this request already
+    // granted so the next retry proceeds at once instead of waiting out
+    // the 30-minute lease with no heartbeat. The release never throws
+    // (recordPublishAttempt returns false on a lost record), so the
+    // original claim error still surfaces.
+    await Promise.all(
+      granted.map((item) =>
+        recordPublishAttempt(supabase, {
+          scopeKey,
+          provider,
+          accountId: item.accountId,
+          claimToken: item.claimToken,
+          accountResult: {
+            accountId: item.accountId,
+            success: false,
+            error: 'claim phase failed',
+            errorCode: 'transient',
+          },
+        }),
+      ),
+    );
+    throw error;
   }
   const next = new FormData();
   formData.forEach((value, key) => {
