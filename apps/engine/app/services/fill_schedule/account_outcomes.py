@@ -17,6 +17,15 @@ from app.services.fill_schedule.metadata import metadata_for
 
 ATTEMPT_LEASE_SECONDS = 30 * 60
 
+# Upper bound on waiting for an in-flight publish: the web route answers
+# publish_in_progress while an earlier request still holds the ledger
+# claim, and the heartbeat renews that claim indefinitely while the
+# handler lives — so without a cap the engine would re-ask (re-uploading
+# the full video) every 60s forever. Past this long the account fails
+# terminally as publish_unknown, without refund: the first post may
+# still go live, so only a human who checked the provider may post again.
+MAX_IN_PROGRESS_WAIT_SECONDS = ATTEMPT_LEASE_SECONDS
+
 USER_CODES = frozenset({
     "email_not_verified",
     "token_expired",
@@ -239,6 +248,24 @@ def _fail_outcome(
         # slow upload would exhaust the budget (and refund the slot) while
         # the original post is about to go live. The attempt this call
         # recorded is handed back, and the account wakes in 60s.
+        #
+        # The wait is bounded, though: the ledger heartbeat renews the
+        # claim indefinitely while the first handler lives, so an
+        # in-progress answer that never resolves would re-ask (and
+        # re-upload the full video) forever. Past the cap the account
+        # fails terminally as publish_unknown, without refund — the first
+        # post may still go live, so only a human who checked the
+        # provider may post again.
+        waited = int(outcome.get("inProgressWaitSeconds") or 0) + PUBLISH_IN_PROGRESS_DELAY_SECONDS
+        if waited >= MAX_IN_PROGRESS_WAIT_SECONDS:
+            outcome["error"] = scrub_error_text(message, max_chars=200)
+            outcome["requiresUser"] = True
+            outcome["status"] = "failed"
+            outcome["code"] = "publish_unknown"
+            outcome["notice"] = _action_sentence(outcome["provider"], "publish_unknown")
+            outcome["retryAt"] = None
+            return
+        outcome["inProgressWaitSeconds"] = waited
         outcome["error"] = scrub_error_text(message, max_chars=200)
         outcome["requiresUser"] = False
         outcome["status"] = "retrying"

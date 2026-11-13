@@ -118,6 +118,11 @@ def publish_slot_accounts(
                     continue
                 attempt = _prior_attempts(prior, slot, legacy_slot=legacy_slot) + 1
                 outcome = _blank(provider_name, account_id, video_name, attempt)
+                if prior is not None and isinstance(prior.get("inProgressWaitSeconds"), int):
+                    # The in-progress wait clock survives across ticks: a
+                    # fresh blank outcome would otherwise reset it and the
+                    # wait cap in _fail_outcome could never fire.
+                    outcome["inProgressWaitSeconds"] = int(prior["inProgressWaitSeconds"])
                 _upsert(outcomes, outcome)
                 indexed[(provider_name, account_id, video_name)] = outcome
                 started.append(outcome)
