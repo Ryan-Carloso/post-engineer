@@ -34,7 +34,6 @@ import { buildSlotRows } from './slot-rows';
 import { fetchReplay } from './replay';
 import { refundRollbackSpend } from './rollback-refund';
 import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, verifyExperimentPairAfterInsert } from './experiment-link';
-import type { Provider } from './providers-validation';
 import { scheduleAccountColumns } from './account-columns';
 import { checkPreChargePreflights } from './aspect-preflight';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';

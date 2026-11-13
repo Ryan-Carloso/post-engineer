@@ -134,7 +134,6 @@ describe('persona avatar schema refine', () => {
 
   it('create rejects both face sources', () => {
     const parsed = CreatePersonaSchema.safeParse({
-      accounts: { youtube: ['acct-1'] },
       ...base,
       avatarUrl: 'https://example.com/face.png',
       avatarPath: '/tmp/face.jpg',

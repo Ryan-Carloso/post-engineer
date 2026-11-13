@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { requirePublishingAccounts } from '../require-publishing-accounts';
+import { requirePublishingAccounts } from '../require-publishing-accounts.js';
 
 describe('requirePublishingAccounts (issue #572)', () => {
   it('throws when no accounts are passed', () => {
