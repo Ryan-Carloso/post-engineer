@@ -19,11 +19,12 @@ import {
   gridRange,
   monthKey,
 } from './calendar-days';
-import { AccountEmptyState, DayEmptyState } from './day-section';
+import { AccountEmptyState, DayEmptyState, NewPostButton } from './day-section';
 import { CALENDAR_LAYOUT_CLASS, CalendarLoadingSkeleton } from './loading-skeleton';
 import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-joins';
 import { PageHeader } from '@/components/ui/page-header';
 import { Button } from '@/components/ui/button';
+import { OnboardingWizard, OnboardingWizardButton } from './onboarding-wizard';
 
 //---------------
 // PostsPage — month calendar of every post (past and upcoming) across all
@@ -140,22 +141,25 @@ export default function PostsPage() {
         title={t('posts.title')}
         description={t(isError ? 'posts.subtitleLoadError' : 'posts.subtitle')}
         actions={
-          !isError && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={rangeQuery.isFetching}
-              aria-label={t('posts.refresh')}
-            >
-              <RefreshCw className={cn('size-4', rangeQuery.isFetching && 'animate-spin')} aria-hidden />
-              {t('posts.refresh')}
-            </Button>
-          )
+          <>
+            <NewPostButton testId="new-post-button" />
+            {!isError && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={rangeQuery.isFetching}
+                aria-label={t('posts.refresh')}
+              >
+                <RefreshCw className={cn('size-4', rangeQuery.isFetching && 'animate-spin')} aria-hidden />
+                {t('posts.refresh')}
+              </Button>
+            )}
+            <OnboardingWizardButton testId="onboarding-reopen-button" />
+          </>
         }
       />
-
       <PostFiltersBar
         filters={filters}
         disabled={isLoading || isAccountEmpty || isError}
@@ -268,6 +272,7 @@ export default function PostsPage() {
           </div>
         )}
       </div>
+      <OnboardingWizard />
     </div>
   );
 }

@@ -61,6 +61,9 @@ describe('i18n dictionaries', () => {
     expect(enDictionary.nav.posts).toBe('Posts');
     expect(ptDictionary.posts.title).toBe('Publicações');
     expect(ptDictionary.posts.subtitle).toContain('publicações');
+    expect(ptDictionary.posts.subtitle).toMatch(/MCP/);
+    expect(ptDictionary.recipes.subtitle).toMatch(/MCP first/);
+    expect(enDictionary.recipes.subtitle).toMatch(/MCP-first/);
     expect(ptDictionary.nav.postsHint).toBe('Calendário de publicações');
     expect(enDictionary.posts.title).toBe('Posts');
     expect(ptDictionary.nav.promptsHint).toBeTruthy();
@@ -72,6 +75,17 @@ describe('i18n dictionaries', () => {
       expect(ptDictionary.nav).not.toHaveProperty(key);
       expect(enDictionary.nav).not.toHaveProperty(key);
     }
+  });
+
+  it('carries the onboarding wizard copy in both locales', () => {
+    expect(ptDictionary.onboarding.step1Body).toMatch(/MCP/);
+    expect(enDictionary.onboarding.step1Body).toMatch(/MCP/);
+    expect(ptDictionary.onboarding.step4Body).toMatch(/3 tokens grátis/);
+    expect(enDictionary.onboarding.step4Body).toMatch(/3 free tokens/);
+    expect(ptDictionary.onboarding.stepOf).toBe('Passo {step} de 4');
+    expect(enDictionary.onboarding.stepOf).toBe('Step {step} of 4');
+    expect(ptDictionary.onboarding.skip).toBe('Pular por agora');
+    expect(enDictionary.onboarding.skip).toBe('Skip for now');
   });
 });
 
