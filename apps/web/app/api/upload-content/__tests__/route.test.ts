@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 
-const { mockRequireSupabaseSession, mockApplyRateLimit, mockHandleYoutubeUpload, mockHandleInstagramUpload, mockHandleBlueskyUpload, mockHandleLinkedinUpload, mockHandleRumbleUpload, mockBuildUploadErrorResponse, apiErrorReportingCalls } = vi.hoisted(() => {
+const { mockRequireSupabaseSession, mockApplyRateLimit, mockHandleYoutubeUpload, mockHandleInstagramUpload, mockHandleBlueskyUpload, mockHandleLinkedinUpload, mockHandleRumbleUpload, mockBuildUploadErrorResponse, mockCreateSupabaseServiceClient, apiErrorReportingCalls } = vi.hoisted(() => {
   return {
     mockRequireSupabaseSession: vi.fn(),
     mockApplyRateLimit: vi.fn(),
@@ -11,6 +11,7 @@ const { mockRequireSupabaseSession, mockApplyRateLimit, mockHandleYoutubeUpload,
     mockHandleLinkedinUpload: vi.fn(),
     mockHandleRumbleUpload: vi.fn(),
     mockBuildUploadErrorResponse: vi.fn(),
+    mockCreateSupabaseServiceClient: vi.fn(),
     // Plain array (not a mock fn): beforeEach's clearAllMocks must not wipe
     // the registration record — the wrapper runs once at module import.
     apiErrorReportingCalls: [] as unknown[][],
@@ -66,6 +67,10 @@ vi.mock('@/lib/upload/threespeak-handler', () => ({
   handleThreespeakUpload: (...args: unknown[]) => mockHandleThreespeakUpload(...args),
 }));
 
+vi.mock('@/lib/supabase/service', () => ({
+  createSupabaseServiceClient: (...args: unknown[]) => mockCreateSupabaseServiceClient(...args),
+}));
+
 vi.mock('@/lib/upload/handlers', () => ({
   handleYoutubeUpload: (...args: unknown[]) => mockHandleYoutubeUpload(...args),
   handleInstagramUpload: (...args: unknown[]) => mockHandleInstagramUpload(...args),
@@ -86,11 +91,15 @@ function makeRequest(opts?: {
   provider?: string | null;
   authorization?: string;
   userId?: string;
+  accountIds?: string[];
+  scopeKey?: string;
 }): NextRequest {
   const form = new FormData();
   if (opts?.provider !== null) form.append('provider', opts?.provider ?? 'youtube');
   if (opts?.provider === 'instagram') form.append('caption', 'hello');
   if (opts?.userId) form.append('userId', opts.userId);
+  for (const accountId of opts?.accountIds ?? []) form.append('accountIds', accountId);
+  if (opts?.scopeKey) form.append('publishScopeKey', opts.scopeKey);
   const req = new NextRequest('http://localhost/api/upload-content', {
     method: 'POST',
     body: form,
@@ -465,5 +474,373 @@ describe('POST /api/upload-content with a personal API key', () => {
     expect(res.status).toBe(200);
     const [, userId] = mockHandleYoutubeUpload.mock.calls[0] as unknown[];
     expect(userId).toBe('engine-owner');
+  });
+});
+
+//---------------
+// Publish ledger — an in-memory stand-in for the claim/record RPCs
+// (migration 061), with the same rules: a fresh key is claimed, a
+// published key replays its recorded result, an in-flight key waits,
+// a failed key or an expired lease is claimed again, and only the
+// request holding the lease can record.
+//---------------
+type LedgerRow = {
+  status: 'in_progress' | 'published' | 'failed' | 'unknown';
+  leaseUntil: number | null;
+  token: string | null;
+  result: Record<string, unknown> | null;
+  userId: string | null;
+  error?: string;
+};
+
+function makeLedgerFake() {
+  const rows = new Map<string, LedgerRow>();
+  const failRecordKeys = new Set<string>();
+  const rpc = vi.fn(async (fn: string, args: Record<string, unknown>) => {
+    if (fn === 'claim_publish_ledger') {
+      const key = args.p_key as string;
+      const row = rows.get(key);
+      if (row === undefined) {
+        rows.set(key, {
+          status: 'in_progress',
+          leaseUntil: Date.now() + (args.p_lease_seconds as number) * 1000,
+          token: args.p_token as string,
+          result: null,
+          userId: args.p_user_id as string,
+        });
+        return { data: { outcome: 'claimed' }, error: null };
+      }
+      if (row.userId !== args.p_user_id) {
+        return { data: { outcome: 'forbidden' }, error: null };
+      }
+      if (row.status === 'published') {
+        return { data: { outcome: 'published', result: row.result }, error: null };
+      }
+      if (row.status === 'unknown') {
+        return { data: { outcome: 'unknown' }, error: null };
+      }
+      if (row.status === 'in_progress' && row.leaseUntil !== null && row.leaseUntil > Date.now()) {
+        return { data: { outcome: 'in_progress' }, error: null };
+      }
+      row.status = 'in_progress';
+      row.leaseUntil = Date.now() + (args.p_lease_seconds as number) * 1000;
+      row.token = args.p_token as string;
+      row.result = null;
+      return { data: { outcome: 'claimed' }, error: null };
+    }
+    if (fn === 'record_publish_ledger') {
+      const key = args.p_key as string;
+      if (failRecordKeys.has(key)) {
+        return { data: null, error: { message: 'db down' } };
+      }
+      const row = rows.get(key);
+      if (row === undefined || row.token !== args.p_token || row.status !== 'in_progress') {
+        return { data: false, error: null };
+      }
+      row.status = args.p_status as 'published' | 'failed';
+      row.result = (args.p_result as Record<string, unknown> | null) ?? null;
+      row.leaseUntil = null;
+      return { data: true, error: null };
+    }
+    if (fn === 'mark_publish_unknown') {
+      const key = args.p_key as string;
+      const row = rows.get(key);
+      if (row === undefined || row.token !== args.p_token || row.status !== 'in_progress') {
+        return { data: false, error: null };
+      }
+      row.status = 'unknown';
+      row.leaseUntil = null;
+      row.error = args.p_error as string;
+      return { data: true, error: null };
+    }
+    if (fn === 'touch_publish_ledger') {
+      const key = args.p_key as string;
+      const row = rows.get(key);
+      if (row === undefined || row.token !== args.p_token || row.status !== 'in_progress') {
+        return { data: false, error: null };
+      }
+      row.leaseUntil = Date.now() + (args.p_lease_seconds as number) * 1000;
+      return { data: true, error: null };
+    }
+    throw new Error(`unexpected rpc ${fn}`);
+  });
+  return { rows, rpc, failRecordKeys };
+}
+
+const SCOPE_KEY = 'slot:slot-1:video:v.mp4';
+const ledgerKey = (accountId: string): string => `publish:${SCOPE_KEY}:youtube:${accountId}`;
+
+describe('POST /api/upload-content with a publish scope key', () => {
+  let ledger: ReturnType<typeof makeLedgerFake>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('MONEYPRINT_API_SECRET', API_SECRET);
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'sb-token' },
+      error: null,
+    });
+    mockApplyRateLimit.mockResolvedValue(null);
+    mockHandleYoutubeUpload.mockResolvedValue({ success: true, provider: 'youtube', results: [] });
+    ledger = makeLedgerFake();
+    mockCreateSupabaseServiceClient.mockReturnValue({ rpc: ledger.rpc });
+  });
+
+  it('replays an already-published account without calling the handler for it', async () => {
+    ledger.rows.set(ledgerKey('acc-1'), {
+      status: 'published',
+      leaseUntil: null,
+      token: null,
+      result: { accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' },
+      userId: USER_ID,
+    });
+    mockHandleYoutubeUpload.mockResolvedValue({
+      success: true,
+      provider: 'youtube',
+      results: [{ accountId: 'acc-2', success: true, videoUrl: 'https://youtu.be/def' }],
+    });
+
+    const res = await POST(makeRequest({
+      accountIds: ['acc-1', 'acc-2'],
+      scopeKey: SCOPE_KEY,
+    }));
+
+    expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
+    const [formData] = mockHandleYoutubeUpload.mock.calls[0] as [FormData, string];
+    expect(formData.getAll('accountIds')).toEqual(['acc-2']);
+    expect(await res.json()).toEqual({
+      success: true,
+      provider: 'youtube',
+      successCount: 2,
+      results: [
+        { accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' },
+        { accountId: 'acc-2', success: true, videoUrl: 'https://youtu.be/def' },
+      ],
+    });
+    // The fresh account's post is recorded, so a later retry replays it too.
+    expect(ledger.rows.get(ledgerKey('acc-2'))?.status).toBe('published');
+    expect(ledger.rows.get(ledgerKey('acc-2'))?.result).toEqual(
+      { accountId: 'acc-2', success: true, videoUrl: 'https://youtu.be/def' },
+    );
+  });
+
+  it('waits for an in-flight account instead of publishing it again', async () => {
+    ledger.rows.set(ledgerKey('acc-1'), {
+      status: 'in_progress',
+      leaseUntil: Date.now() + 30 * 60_000,
+      token: 'first-token',
+      result: null,
+      userId: USER_ID,
+    });
+
+    const res = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+
+    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({
+      success: false,
+      successCount: 0,
+      results: [{
+        accountId: 'acc-1',
+        success: false,
+        error: 'Publish still in progress from an earlier request.',
+        errorCode: 'publish_in_progress',
+      }],
+    });
+    expect(ledger.rpc).toHaveBeenCalledWith(
+      'claim_publish_ledger',
+      expect.objectContaining({ p_key: ledgerKey('acc-1') }),
+    );
+  });
+
+  it('fails closed when the scope key belongs to another user', async () => {
+    ledger.rows.set(ledgerKey('acc-1'), {
+      status: 'published',
+      leaseUntil: null,
+      token: null,
+      result: { accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' },
+      userId: 'user-2',
+    });
+    mockBuildUploadErrorResponse.mockReturnValue(
+      NextResponse.json({ success: false, error: 'boom' }, { status: 500 }),
+    );
+
+    const res = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+
+    expect(res.status).toBe(500);
+    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+    expect(mockBuildUploadErrorResponse).toHaveBeenCalled();
+  });
+
+  it('records a handler failure so the next retry can claim a fresh attempt', async () => {
+    mockHandleYoutubeUpload
+      .mockResolvedValueOnce({
+        success: false,
+        provider: 'youtube',
+        results: [{ accountId: 'acc-1', success: false, error: 'YouTube 503', errorCode: 'transient' }],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        provider: 'youtube',
+        results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
+      });
+
+    const first = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    expect((await first.json() as { success: boolean }).success).toBe(false);
+    expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('failed');
+
+    const second = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(2);
+    expect(await second.json()).toEqual({
+      success: true,
+      provider: 'youtube',
+      successCount: 1,
+      results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
+    });
+    expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('published');
+  });
+
+  it('releases the claims on a request-level rejection so a same-key retry proceeds at once', async () => {
+    mockHandleYoutubeUpload
+      .mockResolvedValueOnce({
+        success: false,
+        provider: 'youtube',
+        results: [{ accountId: '', success: false, error: 'Caption is required', errorCode: 'publish_rejected' }],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        provider: 'youtube',
+        results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
+      });
+
+    const first = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    expect((await first.json() as { success: boolean }).success).toBe(false);
+    expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('failed');
+
+    const second = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(2);
+    expect(await second.json()).toEqual({
+      success: true,
+      provider: 'youtube',
+      successCount: 1,
+      results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
+    });
+    expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('published');
+  });
+
+  it('parks a published account as unknown when its record is lost, and never re-posts it', async () => {
+    ledger.failRecordKeys.add(ledgerKey('acc-1'));
+    mockHandleYoutubeUpload.mockResolvedValue({
+      success: true,
+      provider: 'youtube',
+      results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
+    });
+
+    const first = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    // The caller still gets the handler's success: when it receives it, its
+    // own recorded success keeps the account from retrying at all. The
+    // unknown park only matters when the caller never got this answer.
+    expect((await first.json() as { success: boolean }).success).toBe(true);
+    expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('unknown');
+
+    const second = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
+    expect(await second.json()).toEqual({
+      success: false,
+      successCount: 0,
+      results: [{
+        accountId: 'acc-1',
+        success: false,
+        error: 'Publish result could not be recorded — this account may already have published. Check the provider before posting again.',
+        errorCode: 'publish_unknown',
+      }],
+    });
+    expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('unknown');
+  });
+
+  it('reclaims an expired lease instead of waiting forever', async () => {
+    ledger.rows.set(ledgerKey('acc-1'), {
+      status: 'in_progress',
+      leaseUntil: Date.now() - 1000,
+      token: 'dead-token',
+      result: null,
+      userId: USER_ID,
+    });
+    mockHandleYoutubeUpload.mockResolvedValue({
+      success: true,
+      provider: 'youtube',
+      results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
+    });
+
+    const res = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+
+    expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
+    expect((await res.json() as { success: boolean }).success).toBe(true);
+    expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('published');
+  });
+
+  it('publishes without the ledger when no scope key is sent', async () => {
+    mockHandleYoutubeUpload.mockResolvedValue({
+      success: true,
+      provider: 'youtube',
+      results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
+    });
+
+    const res = await POST(makeRequest({ accountIds: ['acc-1', 'acc-2'] }));
+
+    expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
+    const [formData] = mockHandleYoutubeUpload.mock.calls[0] as [FormData, string];
+    expect(formData.getAll('accountIds')).toEqual(['acc-1', 'acc-2']);
+    expect((await res.json() as { success: boolean }).success).toBe(true);
+    expect(ledger.rpc).not.toHaveBeenCalled();
+  });
+
+  it('releases the claims when the handler throws', async () => {
+    mockHandleYoutubeUpload.mockRejectedValue(new Error('boom'));
+    mockBuildUploadErrorResponse.mockReturnValue(
+      NextResponse.json({ success: false, error: 'boom' }, { status: 500 }),
+    );
+
+    const res = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+
+    expect(res.status).toBe(500);
+    expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('failed');
+  });
+
+  it('renews the claims while a slow handler runs and stops when it finishes', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveHandler!: (value: unknown) => void;
+      const handlerDone = new Promise((resolve) => {
+        resolveHandler = resolve;
+      });
+      mockHandleYoutubeUpload.mockImplementation(() => handlerDone);
+      const resPromise = POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+      // Let the route claim and reach the handler.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
+      const before = ledger.rows.get(ledgerKey('acc-1'))?.leaseUntil;
+
+      // One heartbeat beat touches the claim, pushing its lease out.
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      expect(ledger.rpc).toHaveBeenCalledWith(
+        'touch_publish_ledger',
+        expect.objectContaining({ p_key: ledgerKey('acc-1') }),
+      );
+      expect(ledger.rows.get(ledgerKey('acc-1'))?.leaseUntil).toBeGreaterThan(before ?? 0);
+
+      // Finish the handler; the heartbeat stops with the request.
+      resolveHandler({
+        success: true,
+        provider: 'youtube',
+        results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
+      });
+      const res = await resPromise;
+      expect((await res.json() as { success: boolean }).success).toBe(true);
+      const touches = ledger.rpc.mock.calls.filter(([fn]) => fn === 'touch_publish_ledger').length;
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      expect(ledger.rpc.mock.calls.filter(([fn]) => fn === 'touch_publish_ledger').length).toBe(touches);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

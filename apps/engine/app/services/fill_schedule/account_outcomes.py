@@ -10,11 +10,21 @@ from app.services.analytics import scrub_error_text
 from app.services.upload_publisher import RETRYABLE_STATUS_CODES
 from app.services.fill_schedule.constants import (
     MAX_PUBLISH_ATTEMPTS,
+    PUBLISH_IN_PROGRESS_DELAY_SECONDS,
     PUBLISH_RETRY_DELAY_SECONDS,
 )
 from app.services.fill_schedule.metadata import metadata_for
 
 ATTEMPT_LEASE_SECONDS = 30 * 60
+
+# Upper bound on waiting for an in-flight publish: the web route answers
+# publish_in_progress while an earlier request still holds the ledger
+# claim, and the heartbeat renews that claim indefinitely while the
+# handler lives — so without a cap the engine would re-ask (re-uploading
+# the full video) every 60s forever. Past this long the account fails
+# terminally as publish_unknown, without refund: the first post may
+# still go live, so only a human who checked the provider may post again.
+MAX_IN_PROGRESS_WAIT_SECONDS = ATTEMPT_LEASE_SECONDS
 
 USER_CODES = frozenset({
     "email_not_verified",
@@ -88,6 +98,12 @@ def user_notice(provider: str, code: str) -> str | None:
             f"{label} did not publish because the account needs to be reconnected. "
             f"This is a problem with your account. Only you can fix it: reconnect {label}."
         )
+    if code == "publish_unknown":
+        return (
+            f"{label} may already have published this video, but the publish record was lost. "
+            f"Check {label} before posting it again: this slot will not retry on its own "
+            f"and the token was not refunded."
+        )
     return None
 
 
@@ -114,7 +130,14 @@ def classify_failure(
     code = error_code.strip() if isinstance(error_code, str) else ""
     if code in USER_CODES:
         return code, True
-    if code in ("transient", "publish_rejected"):
+    if code == "publish_unknown":
+        # The web route parked the claim: the post may already be live, but
+        # its ledger record was lost. The account must never be retried by
+        # the scheduler — only a human who checked the provider may post
+        # again — so it fails terminally as a user action, like a
+        # disconnected account.
+        return code, True
+    if code in ("transient", "publish_rejected", "publish_in_progress"):
         return code, False
     # No code: an older handler, a network error, or an engine-side
     # synthetic result. Decide from the status only.
@@ -217,6 +240,42 @@ def _fail_outcome(
     status_code: int | None,
     now: datetime,
 ) -> None:
+    if error_code == "publish_in_progress":
+        # The web route is still publishing this account under an earlier
+        # request that outlived the engine's 600s timeout. The retry only
+        # re-asks for that attempt's recorded result: it must not start a
+        # second publish, and it must not spend one of the 3 tries, or a
+        # slow upload would exhaust the budget (and refund the slot) while
+        # the original post is about to go live. The attempt this call
+        # recorded is handed back, and the account wakes in 60s.
+        #
+        # The wait is bounded, though: the ledger heartbeat renews the
+        # claim indefinitely while the first handler lives, so an
+        # in-progress answer that never resolves would re-ask (and
+        # re-upload the full video) forever. Past the cap the account
+        # fails terminally as publish_unknown, without refund — the first
+        # post may still go live, so only a human who checked the
+        # provider may post again.
+        waited = int(outcome.get("inProgressWaitSeconds") or 0) + PUBLISH_IN_PROGRESS_DELAY_SECONDS
+        if waited >= MAX_IN_PROGRESS_WAIT_SECONDS:
+            outcome["error"] = scrub_error_text(message, max_chars=200)
+            outcome["requiresUser"] = True
+            outcome["status"] = "failed"
+            outcome["code"] = "publish_unknown"
+            outcome["notice"] = _action_sentence(outcome["provider"], "publish_unknown")
+            outcome["retryAt"] = None
+            return
+        outcome["inProgressWaitSeconds"] = waited
+        outcome["error"] = scrub_error_text(message, max_chars=200)
+        outcome["requiresUser"] = False
+        outcome["status"] = "retrying"
+        outcome["code"] = "publish_in_progress"
+        outcome["notice"] = None
+        outcome["attempts"] = max(int(outcome.get("attempts") or 0) - 1, 0)
+        outcome["retryAt"] = (
+            now + timedelta(seconds=PUBLISH_IN_PROGRESS_DELAY_SECONDS)
+        ).isoformat()
+        return
     code, requires_user = classify_failure(error_code, status_code)
     attempts = int(outcome.get("attempts") or 0)
     outcome["error"] = scrub_error_text(message, max_chars=200)

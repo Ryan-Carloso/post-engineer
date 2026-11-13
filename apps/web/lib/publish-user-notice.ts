@@ -4,16 +4,32 @@ import { isUserAccountErrorCode, type UserAccountErrorCode } from '@/lib/upload/
 // Per-account publish notices (issue #500). The slot row keeps the raw
 // outcomes; callers show userNotices and providerFailures and drop the rest.
 
+export type PublishUserNoticeCode = UserAccountErrorCode | TerminalUserActionCode;
+
 export interface PublishUserNotice {
   provider: string;
   accountId: string;
-  code: UserAccountErrorCode;
+  code: PublishUserNoticeCode;
   requiresUser: true;
   notice: string;
 }
 
+// 'publish_unknown' is terminal and needs the user to check the provider
+// before posting again, so it surfaces like a user notice even though it is
+// not a user-account code: the sync test pins USER_ACCOUNT_ERROR_CODES to
+// the engine USER_CODES, which deliberately excludes it.
+const TERMINAL_USER_ACTION_CODES = ['publish_unknown'] as const;
+type TerminalUserActionCode = (typeof TERMINAL_USER_ACTION_CODES)[number];
+
+function isUserActionCode(code: string): code is PublishUserNoticeCode {
+  return (
+    isUserAccountErrorCode(code) || (TERMINAL_USER_ACTION_CODES as readonly string[]).includes(code)
+  );
+}
+
 // Every terminal account failure. requiresUser mirrors the stored outcome:
-// true only for a user-account code (the same failure is in userNotices).
+// true for a user-account code or a terminal user-action code (the same
+// failure is in userNotices).
 export interface PublishProviderFailure {
   provider: string;
   accountId: string;
@@ -59,7 +75,7 @@ export function noticesFromOutcomes(raw: unknown): {
     if (seen.has(key)) continue;
     seen.add(key);
     const notice = failureNotice(provider, code, textOf(row.notice));
-    if (row.requiresUser === true && isUserAccountErrorCode(code)) {
+    if (row.requiresUser === true && isUserActionCode(code)) {
       userNotices.push({ provider, accountId, code, requiresUser: true, notice });
       providerFailures.push({ provider, accountId, code, requiresUser: true, notice });
     } else {

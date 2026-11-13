@@ -30,7 +30,7 @@ export function registerLocalFileTools(server: McpServer, apiClient: PostEnginee
 
   server.tool(
     'publish_video_direct',
-    `Publish a ready-made video file directly to social accounts — no generation, no schedule. Reads a local video (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB) and posts it immediately via POST /api/upload-content. YouTube requires title, description, tags, and privacyStatus; Rumble and Fanvue require title and description; Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak require caption.`,
+    `Publish a ready-made video file directly to social accounts — no generation, no schedule. Reads a local video (.mp4 or .mov, max ${MAX_UPLOAD_VIDEO_GB}GB) and posts it immediately via POST /api/upload-content. YouTube requires title, description, tags, and privacyStatus; Rumble and Fanvue require title and description; Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak require caption. If the call times out, retry with the same idempotencyKey: the server replays the original result instead of posting the video again. If a result carries errorCode publish_unknown, do not retry it: the post may already be live but its record was lost — check the provider account first.`,
     PublishVideoDirectShape, DESTRUCTIVE,
     withTracking('publish_video_direct', async (args) => {
       return handlePublishVideoDirect(apiClient, args);

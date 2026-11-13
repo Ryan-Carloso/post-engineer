@@ -1925,6 +1925,34 @@ describe('publish video direct tool', () => {
     expect(textOf(response)).toContain('"code":"UPLOAD_ERROR"');
   });
 
+  it('handlePublishVideoDirect forwards the idempotency key so a retry replays instead of reposting', async () => {
+    const { handlePublishVideoDirect } = await import('../tools.js');
+    vi.mocked(mockClient.publishVideoDirect).mockResolvedValue({
+      success: true,
+      provider: 'youtube',
+      results: [
+        { accountId: 'chan-1', success: true, videoId: 'vid-1', videoUrl: 'https://youtu.be/vid-1' },
+      ],
+      successCount: 1,
+      logId: 'log-1',
+    });
+
+    const response = await handlePublishVideoDirect(mockClient, {
+      provider: 'youtube',
+      videoPath: '/tmp/clip.mp4',
+      accountIds: ['chan-1'],
+      title: 't',
+      description: 'd',
+      tags: ['x'],
+      privacyStatus: 'unlisted',
+      idempotencyKey: 'retry-1',
+    });
+    expect(response.isError).toBeUndefined();
+    expect(vi.mocked(mockClient.publishVideoDirect).mock.calls[0][0]).toMatchObject({
+      idempotencyKey: 'retry-1',
+    });
+  });
+
   it('handlePublishVideoDirect forwards the pinterest boardId and shows the pin link', async () => {
     const { handlePublishVideoDirect } = await import('../tools.js');
     vi.mocked(mockClient.publishVideoDirect).mockResolvedValue({

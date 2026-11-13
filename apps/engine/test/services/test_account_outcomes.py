@@ -6,6 +6,7 @@ import unittest
 from datetime import datetime, timezone
 
 from app.services.fill_schedule.account_outcomes import (
+    MAX_IN_PROGRESS_WAIT_SECONDS,
     USER_CODES,
     _account_ids,
     _fail_outcome,
@@ -90,6 +91,62 @@ class FailOutcomeTests(unittest.TestCase):
         _fail_outcome(outcome, "upload URL expired", "transient", 200, NOW)
         self.assertEqual(outcome["code"], "retries_exhausted")
         self.assertEqual(outcome["notice"], "Threads did not publish after 3 attempts.")
+
+    def test_in_progress_waits_without_spending_an_attempt(self) -> None:
+        # The web route is still publishing this account under an earlier
+        # request that outlived the engine's 600s timeout. The retry waits
+        # for that attempt instead of starting a second publish, so the
+        # attempt is not spent: a slow upload cannot exhaust the budget.
+        outcome = _outcome(2)
+        _fail_outcome(outcome, "publish still running on the web", "publish_in_progress", 200, NOW)
+        self.assertEqual(outcome["status"], "retrying")
+        self.assertEqual(outcome["code"], "publish_in_progress")
+        self.assertEqual(outcome["attempts"], 1)
+        self.assertEqual(outcome["retryAt"], "2026-09-07T12:01:00+00:00")
+        self.assertFalse(outcome["requiresUser"])
+        self.assertIsNone(outcome["notice"])
+
+    def test_in_progress_at_the_cap_still_waits(self) -> None:
+        # Even a third recorded try waits when the web says the first
+        # attempt is still in flight — the slot must not fail (and refund)
+        # while its post is about to go live.
+        outcome = _outcome(3)
+        _fail_outcome(outcome, "publish still running on the web", "publish_in_progress", 200, NOW)
+        self.assertEqual(
+            (outcome["status"], outcome["code"], outcome["attempts"]),
+            ("retrying", "publish_in_progress", 2),
+        )
+
+    def test_in_progress_records_waited_seconds(self) -> None:
+        outcome = _outcome(2)
+        _fail_outcome(outcome, "publish still running on the web", "publish_in_progress", 200, NOW)
+        self.assertEqual(outcome["status"], "retrying")
+        self.assertEqual(outcome["inProgressWaitSeconds"], 60)
+        self.assertEqual(outcome["attempts"], 1)
+
+    def test_in_progress_below_the_wait_cap_keeps_waiting(self) -> None:
+        outcome = _outcome(1)
+        outcome["inProgressWaitSeconds"] = MAX_IN_PROGRESS_WAIT_SECONDS - 120
+        _fail_outcome(outcome, "publish still running on the web", "publish_in_progress", 200, NOW)
+        self.assertEqual(outcome["status"], "retrying")
+        self.assertEqual(outcome["code"], "publish_in_progress")
+        self.assertEqual(outcome["inProgressWaitSeconds"], MAX_IN_PROGRESS_WAIT_SECONDS - 60)
+
+    def test_in_progress_at_the_wait_cap_fails_as_unknown(self) -> None:
+        # The wait is bounded: past the cap the account fails terminally
+        # as publish_unknown — the first post may already be live, so only
+        # a human who checked the provider may post again, and the token
+        # is not refunded. The attempt is not handed back: the slot did
+        # spend one publish try (the timed-out first call).
+        outcome = _outcome(1)
+        outcome["inProgressWaitSeconds"] = MAX_IN_PROGRESS_WAIT_SECONDS - 60
+        _fail_outcome(outcome, "publish still running on the web", "publish_in_progress", 200, NOW)
+        self.assertEqual(outcome["status"], "failed")
+        self.assertEqual(outcome["code"], "publish_unknown")
+        self.assertTrue(outcome["requiresUser"])
+        self.assertEqual(outcome["notice"], user_notice("threads", "publish_unknown"))
+        self.assertIsNone(outcome["retryAt"])
+        self.assertEqual(outcome["attempts"], 1)
 
     def test_exhaust_outcome_is_terminal_without_user_copy(self) -> None:
         outcome = {**_outcome(3), "status": "retrying", "retryAt": "x", "requiresUser": True}

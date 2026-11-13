@@ -1081,7 +1081,7 @@ export async function handlePublishVideoDirect(
       description: args.description,
       tags: args.tags,
       privacyStatus: args.privacyStatus,
-      caption: args.caption, boardId: args.boardId,
+      caption: args.caption, boardId: args.boardId, idempotencyKey: args.idempotencyKey,
     });
     const lines = result.results.map((account) => {
       if (account.success) {

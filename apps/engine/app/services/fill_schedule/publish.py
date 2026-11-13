@@ -332,6 +332,12 @@ class BatchPublisher:
             attempts=account_result.max_attempts,
             emit_failed_event=False,
             outcomes=account_result.outcomes,
+            # An unknown outcome means the post may already be live: money
+            # must not move on an unknown outcome, so the slot fails
+            # WITHOUT refunding — support refunds it after the human check.
+            refund=not any(
+                outcome.get("code") == "publish_unknown" for outcome in account_result.outcomes
+            ),
         )
         track_event(
             "video_publish_failed",
@@ -374,6 +380,7 @@ class BatchPublisher:
         attempts: int | None = None,
         emit_failed_event: bool = True,
         outcomes: list[dict[str, Any]] | None = None,
+        refund: bool = True,
     ) -> None:
         """Auto-cancel a slot that can never publish and refund its token.
 
@@ -383,6 +390,11 @@ class BatchPublisher:
         it distinct from a generation-failure refund of the same slot). A
         refund RPC failure never kills the tick — the slot is already
         terminal, and the loud log line is the recovery trail.
+
+        ``refund=False`` is only for an unknown publish outcome
+        (``publish_unknown``): the post may already be live, so the token
+        stays charged until a human verifies the provider — money never
+        moves on an unknown outcome.
 
         Every permanent abort emits ``video_publish_failed`` with the reason,
         so the analytics funnel never ends at ``video_publish_started``.
@@ -396,7 +408,7 @@ class BatchPublisher:
             )
         user_id = slot_user_id(slot)
         schedule_id = schedule.get("id")
-        if user_id and isinstance(schedule_id, str) and schedule_id:
+        if refund and user_id and isinstance(schedule_id, str) and schedule_id:
             cost = slot_refund_amount(slot)
             if cost is not None:
                 batch_generation_id = f"batch:{schedule_id}"
@@ -429,7 +441,7 @@ class BatchPublisher:
                             f"fill_schedule: refund not applied for publish-failed "
                             f"slot {slot['id']}: rpc returned not-refunded"
                         )
-        else:
+        elif refund:
             logger.error(
                 "fill_schedule: cannot refund publish-failed slot without user_id/schedule_id",
                 slot_id=slot.get("id"),

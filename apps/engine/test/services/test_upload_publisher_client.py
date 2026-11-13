@@ -130,6 +130,43 @@ class PublishVideoClientTest(unittest.TestCase):
         self.assertIn(b'name="userId"', request["body"])
         self.assertIn(b"user-1", request["body"])
 
+    def test_publish_video_sends_publish_scope_key(self) -> None:
+        # The scope key lets the web route recognise a retry of the same
+        # slot/video as the same publish instead of a new one.
+        _MockHandler.responses.append((200, {"success": True}))
+        upload_publisher.publish_video(
+            base_url=self.base_url,
+            api_secret="secret-key",
+            owner_user_id="user-1",
+            metadata=_youtube_metadata(),
+            video_path="final.mp4",
+            video_bytes=b"mp4-bytes",
+            content_type="video/mp4",
+            timeout_seconds=5,
+            sleep=lambda seconds: None,
+            publish_scope_key="slot:slot-1:video:final.mp4",
+        )
+        request = _MockHandler.requests[0]
+        self.assertIn(b'name="publishScopeKey"', request["body"])
+        self.assertIn(b"slot:slot-1:video:final.mp4", request["body"])
+
+    def test_publish_video_omits_publish_scope_key_when_absent(self) -> None:
+        # Direct callers without a scope key send nothing extra: the route
+        # keeps today's behaviour for them.
+        _MockHandler.responses.append((200, {"success": True}))
+        upload_publisher.publish_video(
+            base_url=self.base_url,
+            api_secret="secret-key",
+            owner_user_id="user-1",
+            metadata=_youtube_metadata(),
+            video_path="final.mp4",
+            video_bytes=b"mp4-bytes",
+            content_type="video/mp4",
+            timeout_seconds=5,
+            sleep=lambda seconds: None,
+        )
+        self.assertNotIn(b"publishScopeKey", _MockHandler.requests[0]["body"])
+
     def test_publish_video_raises_on_client_error(self) -> None:
         _MockHandler.responses.append((401, {"success": False, "error": "Invalid API key."}))
         with self.assertRaises(upload_publisher.PublishError) as caught:

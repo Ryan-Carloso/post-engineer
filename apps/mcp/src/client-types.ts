@@ -163,6 +163,14 @@ export interface PublishVideoDirectInput {
   caption?: string;
   /** Pinterest only: required. The board the pin goes to (the id from list_pinterest_boards). */
   boardId?: string;
+  /**
+   * Omitted: a UUID is generated per call. Reuse the same key when retrying
+   * a timed-out call so the server replays the original result instead of
+   * publishing the video again. Exception: a result with errorCode
+   * publish_unknown means the post may already be live but its record was
+   * lost — do not retry it, check the provider account first.
+   */
+  idempotencyKey?: string;
 }
 
 /** Input for publishing a signed-upload video by id, without generation. */
@@ -213,6 +221,8 @@ export interface DirectPublishAccountResult {
   /** Ready-made post URL (Pinterest pin URL, Instagram/Threads/Facebook permalink). */
   permalink?: string;
   error?: string;
+  /** Stable failure code (e.g. publish_unknown: the post may already be live but its record was lost — do not retry). */
+  errorCode?: string;
 }
 
 /** Narrowed POST /api/upload-content response. */

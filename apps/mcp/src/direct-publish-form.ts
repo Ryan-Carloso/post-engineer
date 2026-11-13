@@ -7,6 +7,7 @@
 // Pinterest takes a boardId plus a description that falls
 // back to the caption; Instagram takes a file + caption; the rest take a
 // video + caption.
+import { randomUUID } from 'node:crypto';
 import type { PublishUploadedVideoInput, PublishVideoDirectInput } from './client-types.js';
 
 // The provider-field rules are shared by the local-path publish
@@ -119,5 +120,11 @@ export function buildDirectPublishForm(
       formData.append(accountField, accountId);
     }
   }
+  // The web route replays the recorded publish for a retried key instead of
+  // posting again; a fresh key per call keeps a new publish a new one.
+  const key = input.idempotencyKey !== undefined && input.idempotencyKey.trim().length > 0
+    ? input.idempotencyKey.trim()
+    : randomUUID();
+  formData.append('publishScopeKey', `direct:${key}`);
   return formData;
 }

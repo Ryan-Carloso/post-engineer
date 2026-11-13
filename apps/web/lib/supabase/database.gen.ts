@@ -483,6 +483,51 @@ export interface Database {
         };
         Relationships: [];
       };
+      publish_ledger: {
+        Row: {
+        key: string;
+        provider: string;
+        account_id: string;
+        user_id: string;
+        status: 'in_progress' | 'published' | 'failed' | 'unknown';
+        lease_until: string | null;
+        claim_token: string | null;
+        result: Json | null;
+        error: string | null;
+        error_code: string | null;
+        created_at: string;
+        updated_at: string;
+        };
+        Insert: {
+        key: string;
+        provider: string;
+        account_id: string;
+        user_id: string;
+        status: 'in_progress' | 'published' | 'failed' | 'unknown';
+        lease_until?: string | null;
+        claim_token?: string | null;
+        result?: Json | null;
+        error?: string | null;
+        error_code?: string | null;
+        created_at?: string;
+        updated_at?: string;
+        };
+        Update: {
+        key?: string;
+        provider?: string;
+        account_id?: string;
+        user_id?: string;
+        status?: 'in_progress' | 'published' | 'failed' | 'unknown';
+        lease_until?: string | null;
+        claim_token?: string | null;
+        result?: Json | null;
+        error?: string | null;
+        error_code?: string | null;
+        created_at?: string;
+        updated_at?: string;
+        };
+        Relationships: [];
+      };
       scheduled_post_progress_history: {
         Row: {
         id: string;

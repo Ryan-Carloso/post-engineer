@@ -2197,6 +2197,44 @@ describe('publishVideoDirect', () => {
     });
   });
 
+  it('keeps errorCode on a direct-publish account result so publish_unknown is observable', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          success: false,
+          provider: 'fanvue',
+          results: [
+            {
+              accountId: 'fan-1',
+              success: false,
+              error:
+                'Publish result could not be recorded — this account may already have published. Check the provider before posting again.',
+              errorCode: 'publish_unknown',
+            },
+          ],
+          successCount: 0,
+          logId: 'log-1',
+        }),
+    });
+    const videoPath = await writeTempVideo('clip.mp4');
+    const result = await client.publishVideoDirect({
+      provider: 'fanvue',
+      videoPath,
+      accountIds: ['fan-1'],
+      title: 'Fan post',
+      description: 'hello fanvue',
+    });
+    expect(result.results[0]).toEqual({
+      accountId: 'fan-1',
+      success: false,
+      error:
+        'Publish result could not be recorded — this account may already have published. Check the provider before posting again.',
+      errorCode: 'publish_unknown',
+    });
+  });
+
   it('maps account ids to the threespeak field name and sends the caption', async () => {
     const videoPath = await writeTempVideo('clip.mp4');
     await client.publishVideoDirect({

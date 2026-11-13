@@ -118,6 +118,11 @@ def publish_slot_accounts(
                     continue
                 attempt = _prior_attempts(prior, slot, legacy_slot=legacy_slot) + 1
                 outcome = _blank(provider_name, account_id, video_name, attempt)
+                if prior is not None and isinstance(prior.get("inProgressWaitSeconds"), int):
+                    # The in-progress wait clock survives across ticks: a
+                    # fresh blank outcome would otherwise reset it and the
+                    # wait cap in _fail_outcome could never fire.
+                    outcome["inProgressWaitSeconds"] = int(prior["inProgressWaitSeconds"])
                 _upsert(outcomes, outcome)
                 indexed[(provider_name, account_id, video_name)] = outcome
                 started.append(outcome)
@@ -165,6 +170,10 @@ def publish_slot_accounts(
                     content_type="video/mp4",
                     max_attempts=1,
                     surface_application_failure=True,
+                    # Deterministic across retries of this slot/video: the
+                    # web route recognises a re-ask of the same publish and
+                    # answers from its ledger instead of posting again.
+                    publish_scope_key=f"slot:{slot['id']}:video:{video_name}",
                 )
             except upload_publisher.PublishError as exc:
                 parsed = _json_accounts(getattr(exc, "response_body", None))
