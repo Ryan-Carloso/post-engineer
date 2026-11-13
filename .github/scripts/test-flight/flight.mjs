@@ -32,9 +32,10 @@
 //   TEST_FLIGHT_PERSONA_ID         required. Persona UUID (must be in the
 //                                  key's persona scope).
 //   TEST_FLIGHT_BLUESKY_ACCOUNT_ID / TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID /
-//   TEST_FLIGHT_YOUTUBE_ACCOUNT_ID optional. When none is set, the flight
-//                                  discovers the key's connected accounts
-//                                  via GET /api/account.
+//   TEST_FLIGHT_YOUTUBE_ACCOUNT_ID optional per provider, but at least
+//                                  one is required: with none set the
+//                                  flight fails (issue #572 — no
+//                                  auto-discovery).
 //   TEST_FLIGHT_SCRIPT_PATH        path to the script JSON written by
 //                                  write-script.mjs: { title, segments,
 //                                  source }. TEST_FLIGHT_SCRIPT_JSON may
