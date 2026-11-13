@@ -962,7 +962,7 @@
             },
             "constraints": {
                 "publish_ledger_pkey": "PRIMARY KEY (key)",
-                "publish_ledger_status_check": "CHECK ((status = ANY (ARRAY['in_progress'::text, 'published'::text, 'failed'::text])))"
+                "publish_ledger_status_check": "CHECK ((status = ANY (ARRAY['in_progress'::text, 'published'::text, 'failed'::text, 'unknown'::text])))"
             }
         },
         "scheduled_posts": {
