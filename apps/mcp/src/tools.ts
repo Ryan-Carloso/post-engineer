@@ -16,10 +16,7 @@ import {
   UpdateSlotTitleSchema,
   UpdateSlotTitleShape,
 } from './schedule-shapes.js';
-import {
-  DisconnectAccountSchema,
-  DisconnectAccountShape,
-} from './account-shapes.js';
+import { DisconnectAccountSchema, DisconnectAccountShape, createPersonaAccountsField } from './account-shapes.js';
 import { PublishVideoDirectSchema, PublishVideoDirectShape } from './publish-direct-shape.js';
 // Re-exported so existing import sites (`./tools.js`) keep working.
 export {
@@ -86,19 +83,7 @@ export const CreatePersonaShape = {
   paragraphNumber: z.number().int().min(1).max(10).default(1).describe('Number of paragraphs'),
   niche: z.string().optional().default('General').describe('Content niche'),
   faceQuality: z.enum(['ok', 'very_good']).default('very_good').describe('Face resolution of the rendered videos: ok (480p, 2 tokens/video) or very_good (720p, 3 tokens/video)'),
-  // Issue #572: a persona is born bound to at least one publishing
-  // account — videos publish only to bound accounts, and a persona with
-  // no bound account cannot exist. The server enforces the same rule;
-  // the refine fails the call here first, before any file is read.
-  accounts: z
-    .record(z.string(), z.array(z.string().min(1)))
-    .refine((accounts) => Object.values(accounts).some((ids) => ids.length > 0), {
-      message: 'Select at least one publishing account for this persona.',
-    })
-    .describe(
-      'Publishing accounts this persona is bound to, per provider, e.g. { youtube: ["UC..."], bluesky: ["did:plc:..."], \'3speak\': ["alice"] }. ' +
-        'At least one account is required. Account IDs come from list_social_accounts (channelId / igUserId / providerAccountId / did).',
-    ),
+  accounts: createPersonaAccountsField,
   images: z.array(PersonaLibraryImageInputShape).max(MAX_LIBRARY_IMAGES).optional().describe(`Up to ${MAX_LIBRARY_IMAGES} local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag.`),
   imagePrimaryIndex: z.number().int().min(0).max(MAX_LIBRARY_IMAGES - 1).optional().describe('Index into images[] marking the primary library image (no primary is set when omitted)'),
 };
