@@ -216,7 +216,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     photoPathToRollback,
   );
   if (!binding.ok) {
-    return errorResponse(500, binding.error, 'POST /api/persona');
+    return errorResponse(binding.status, binding.error, 'POST /api/persona', { code: binding.code });
   }
 
   let libraryImageIds: string[] = [];

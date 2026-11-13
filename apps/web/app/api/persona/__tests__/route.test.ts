@@ -505,11 +505,12 @@ describe('POST /api/persona — account binding (issue #572)', () => {
   it('rejects creation binding an account the user does not own', async () => {
     mockSupabase({ socialAccounts: [] });
     const res = await POST(formRequest(validFields));
-    const body = (await res.json()) as { error?: string };
+    const body = (await res.json()) as { error?: string; code?: string };
     // The binding save fails the ownership check: the persona row is
-    // rolled back and the caller gets a 500, not a half-created persona.
-    expect(res.status).toBe(500);
-    expect(body.error).toBe('Failed to bind publishing accounts to the persona.');
+    // rolled back and the caller gets the lib's coded 400, not a 500.
+    expect(res.status).toBe(400);
+    expect(body.code).toBe('INVALID_PROVIDER_ACCOUNT');
+    expect(body.error).toBe('Account acct-1 is not a connected youtube account of this user.');
   });
 
   it('rolls the persona back when the binding insert fails', async () => {

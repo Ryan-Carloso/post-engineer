@@ -219,10 +219,12 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
 
   // The binding can never be empty (issue #572): in draft mode the error
   // comes from the failed create submit; in edit mode it shows as soon as
-  // the last bound account is untoggled, and Save disables with it.
+  // the last bound account is untoggled, and Save disables with it. After
+  // a failed load the saved binding is unknown, not empty, so the error
+  // stays hidden and only the load error shows.
   const mustSelectError = isDraft
     ? submitResult !== null && !submitResult.success && submitResult.error === t('publishing.mustSelectAccount')
-    : !loading && totalBoundAccounts(selection) === 0;
+    : !loading && loadError === null && totalBoundAccounts(selection) === 0;
 
   const connectedByProvider: Record<PublishingProvider, CardAccount[]> = {
     youtube: (youtube.data?.accounts ?? []).map((account) => ({

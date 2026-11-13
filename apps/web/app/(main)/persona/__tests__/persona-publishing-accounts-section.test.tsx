@@ -251,6 +251,9 @@ describe('PersonaPublishingAccountsSection', () => {
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
 
     expect(await screen.findByText('boom')).toBeInTheDocument();
+    // A failed load must not also show the must-select error: nothing was
+    // ever loaded, so the saved binding is unknown, not empty.
+    expect(screen.queryByText('Select at least one account to publish to.')).not.toBeInTheDocument();
     expect(screen.queryByTestId('publishing-accounts-save')).not.toBeInTheDocument();
 
     fetchMock.mockResolvedValueOnce({
