@@ -479,7 +479,7 @@ describe('POST /api/upload-content with a personal API key', () => {
 
 //---------------
 // Publish ledger — an in-memory stand-in for the claim/record RPCs
-// (migration 059), with the same rules: a fresh key is claimed, a
+// (migration 061), with the same rules: a fresh key is claimed, a
 // published key replays its recorded result, an in-flight key waits,
 // a failed key or an expired lease is claimed again, and only the
 // request holding the lease can record.

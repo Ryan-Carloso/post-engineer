@@ -3,6 +3,8 @@
 // over the 500-line cap) can add libraryUrl without growing.
 //---------------
 
+import type { PersonaDefaultAccounts } from './persona-publishing-accounts';
+
 export interface PersonaRecord {
   id: string;
   name: string;
@@ -24,4 +26,9 @@ export interface PersonaRecord {
   // Billing input for the per-video token cost estimate (the persona's face
   // quality; "no face" is a per-post choice, not a persona attribute).
   faceQuality?: string;
+  // Issue #572: the accounts this persona is bound to, per provider
+  // (persona_default_accounts). Absent on records from before the binding
+  // shipped; the card treats absent as unbound so a legacy persona is
+  // never silently shown as publishing everywhere.
+  boundAccounts?: PersonaDefaultAccounts;
 }

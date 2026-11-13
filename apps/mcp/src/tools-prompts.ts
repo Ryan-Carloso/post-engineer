@@ -5,6 +5,7 @@ import { getErrorMessage } from './errors.js';
 import type { McpToolResponse } from './tools-call.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { withTracking } from './analytics.js';
+import { READ_ONLY } from './tool-annotations.js';
 import { RecipeSession, recipeRunText, type McpTransportKind } from './recipe-session.js';
 
 // Re-exported so index.ts pays one import line (it sits at the file-size cap).
@@ -88,7 +89,7 @@ export function registerPromptTools(server: McpServer, client: PostEngineerClien
   server.tool(
     'list_prompts',
     ListPromptsDescription,
-    ListPromptsShape,
+    ListPromptsShape, READ_ONLY,
     withTracking('list_prompts', async () => {
       const response = await session.run(undefined, () => handleListPrompts(client));
       if (response.isError !== true) session.recordRecipesListed();
@@ -98,7 +99,7 @@ export function registerPromptTools(server: McpServer, client: PostEngineerClien
   server.tool(
     'get_prompt',
     GetPromptDescription,
-    GetPromptShape,
+    GetPromptShape, READ_ONLY,
     withTracking('get_prompt', async (args) => {
       const slug = GetPromptSchema.safeParse(args).data?.slug;
       const response = await session.run(slug, () => handleGetPrompt(client, args));

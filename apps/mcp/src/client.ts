@@ -1,12 +1,8 @@
 import { getErrorMessage, VideoTooLargeError, ApiError, readApiFailure } from './errors.js';
 import { redactSecretFromError } from './secret-redaction.js';
 import {
-  DIRECT_PUBLISH_TIMEOUT_MS,
-  MAX_LIBRARY_IMAGE_BYTES,
-  MAX_LIBRARY_IMAGE_MB,
-  MAX_UPLOAD_VIDEO_BYTES,
-  MAX_UPLOAD_VIDEO_GB,
-  VIDEO_LAYOUTS,
+  DIRECT_PUBLISH_TIMEOUT_MS, MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB,
+  MAX_UPLOAD_VIDEO_BYTES, MAX_UPLOAD_VIDEO_GB, VIDEO_LAYOUTS,
 } from './limits.js';
 
 // Re-exported so existing import sites (`../client.js`) keep working.
@@ -29,6 +25,7 @@ import type {
   UpdatePersonaInput, VideoType,
 } from './client-types.js';
 import { buildDirectPublishForm, requireDirectPublishFields } from './direct-publish-form.js';
+import { requirePublishingAccounts } from './require-publishing-accounts.js';
 
 // Re-exported so existing import sites (`./client.js`) keep working.
 export type {
@@ -228,17 +225,17 @@ export class PostEngineerClient {
   readonly baseUrl: string;
   private readonly apiKey?: string;
   private readonly now: () => Date;
-
+  private readonly suppressVersionHeader: boolean;
   constructor(options: PostEngineerClientOptions = {}) {
     this.baseUrl = resolveBaseUrl(options.baseUrl ?? process.env.POST_ENGINEER_API_URL);
-    this.apiKey = options.apiKey;
+    this.apiKey = options.apiKey; this.suppressVersionHeader = options.suppressVersionHeader ?? false;
     this.now = options.now ?? (() => new Date());
   }
 
   getHeaders(includeContentType = true): Record<string, string> {
     // Telemetry headers name the calling MCP tool; the web API records
     // mcp_tool_called from them (see analytics.ts).
-    const headers: Record<string, string> = { ...mcpTelemetryHeaders(), Accept: 'application/json' };
+    const headers: Record<string, string> = { ...mcpTelemetryHeaders({ includeVersion: !this.suppressVersionHeader }), Accept: 'application/json' };
     if (includeContentType) headers['Content-Type'] = 'application/json';
     if (this.apiKey) {
       headers.Authorization = `Bearer ${this.apiKey}`;
@@ -288,6 +285,7 @@ export class PostEngineerClient {
 
   async createPersona(input: CreatePersonaInput): Promise<unknown> {
     const formData = new FormData();
+    formData.set('publishingAccounts', JSON.stringify(requirePublishingAccounts(input.accounts)));
     // Every persona has a face: exactly one of avatarUrl or avatarPath (the
     // `photo` file), checked before any other file is read.
     await appendPersonaAvatar(formData, input, true);

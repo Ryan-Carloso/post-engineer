@@ -187,6 +187,28 @@ class ScheduleStore:
         )
         return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
 
+    def persona_bound_accounts(self, persona_id: str) -> dict[str, list[str]]:
+        """The persona's bound publishing accounts (issue #572), grouped per provider.
+
+        Read from persona_default_accounts at generate time: the binding is
+        the source of truth, so an account unbound after scheduling never
+        publishes. Malformed rows are skipped, never crash the tick.
+        """
+        rows = self._request(
+            "GET",
+            "persona_default_accounts",
+            params={"persona_id": f"eq.{persona_id}", "select": "provider,provider_account_id"},
+        )
+        bound: dict[str, list[str]] = {}
+        for row in rows or []:
+            if not isinstance(row, dict):
+                continue
+            provider = row.get("provider")
+            account_id = row.get("provider_account_id")
+            if isinstance(provider, str) and isinstance(account_id, str) and account_id:
+                bound.setdefault(provider, []).append(account_id)
+        return bound
+
     def get_slot(self, slot_id: str) -> dict[str, Any] | None:
         """Fetch one scheduled_posts row by id (status + task linkage).
 

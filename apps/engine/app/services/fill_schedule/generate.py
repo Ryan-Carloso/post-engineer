@@ -21,6 +21,7 @@ from app.services.fill_schedule.constants import (
 from app.services.fill_schedule.metadata import validate_publish_plan
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.language_gate import ENGLISH_ONLY_VIDEO_MESSAGE, is_english_language
+from app.services.owner_alert import notify_generation_failed, notify_owner_async
 from app.services.persona_image import is_engine_usable_persona_image_url
 from app.services.script_segments import legacy_media_list
 from app.services.fill_schedule.support import (
@@ -82,7 +83,8 @@ class BatchGenerator:
 
     def _generate_slot(self, slot: dict[str, Any]) -> str | None:
         """Process one pending slot. Returns the notify label on success,
-        None when the slot failed (already recorded + notified)."""
+        None when the slot failed (already recorded + notified) or was
+        left pending for a later tick (transient binding-read failure)."""
         schedule = slot.get("schedules") or {}
         identity: dict[str, Any] = {}
         task_id: str | None = None
@@ -118,7 +120,25 @@ class BatchGenerator:
             # Pre-flight before anything about the job itself: a slot that
             # could never publish is the more fundamental failure, and this
             # check is free.
-            validate_publish_plan(schedule, title, description)
+            # Issue #572: when the schedule has a persona, prove every
+            # account against the persona's binding, read now — an account
+            # unbound after scheduling fails the slot here, before any
+            # dispatch or spend. Faceless schedules carry no persona and
+            # skip the check. A binding read that fails (Supabase down)
+            # leaves the slot pending for the next tick instead of
+            # failing it: a transient outage must not burn a prepaid
+            # slot, mirroring the publish-side fail-closed retry.
+            bound_accounts = None
+            if schedule.get("persona_id"):
+                try:
+                    bound_accounts = self.store.persona_bound_accounts(str(schedule["persona_id"]))
+                except Exception as exc:  # noqa: BLE001 — fail closed, retry later
+                    logger.warning(
+                        f"fill_schedule: slot {slot['id']} binding read failed, "
+                        f"leaving it for the next tick: {scrub_secret_values(str(exc))}"
+                    )
+                    return None
+            validate_publish_plan(schedule, title, description, bound_accounts)
             # `PersonaParams` requires exactly one of voice_id / voice_audio_url,
             # so a schedule that resolves no voice can never generate. Checked
             # before the dispatch: failing the slot now gives a readable reason
@@ -315,6 +335,15 @@ class BatchGenerator:
                     identity.get("name", "Persona"), "", notify_module.safe_reason(exc)
                 ),
             )
+            if user_id is not None:
+                notify_owner_async(
+                    notify_generation_failed,
+                    user_id,
+                    slot_id=str(slot["id"]),
+                    title=str(slot.get("title") or ""),
+                    reason=notify_module.safe_reason(exc),
+                    persona=identity.get("name", "Persona"),
+                )
             return None
 
     def _dispatch_generation(

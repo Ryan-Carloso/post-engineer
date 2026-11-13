@@ -20,7 +20,7 @@ vi.mock('@/lib/i18n/provider', () => {
   return { useI18n, I18nProvider };
 });
 
-import { AccountEmptyState, CREATE_POSTS_HREF, DayEmptyState, EmptyState } from '../day-section';
+import { AccountEmptyState, DayEmptyState, EmptyState } from '../day-section';
 
 describe('EmptyState', () => {
   it('renders the roomy layout without an action by default', () => {
@@ -55,12 +55,12 @@ describe('EmptyState', () => {
 });
 
 describe('AccountEmptyState', () => {
-  it('links to the recipes hub to schedule posts', () => {
+  it('links New post to the recipes hub', () => {
     render(<AccountEmptyState />);
     expect(screen.getByText('posts.accountEmptyTitle')).toBeInTheDocument();
     expect(screen.getByText('posts.accountEmptyHint')).toBeInTheDocument();
-    const link = screen.getByRole('link', { name: 'posts.accountEmptyAction' });
-    expect(link).toHaveAttribute('href', CREATE_POSTS_HREF);
+    const link = screen.getByRole('link', { name: 'posts.newPostAction' });
+    expect(link).toHaveAttribute('href', '/recipes');
     expect(link.className).toContain('h-9');
     expect(link.className).toContain('shrink-0');
     expect(link.className).toContain('whitespace-nowrap');
@@ -80,24 +80,24 @@ describe('DayEmptyState', () => {
     expect(onClearFilters).toHaveBeenCalledTimes(1);
   });
 
-  it('offers a compact schedule link when the whole month is empty', () => {
+  it('offers a compact New post button when the whole month is empty', () => {
     render(<DayEmptyState reason="month" monthLabel="June 2030" onClearFilters={vi.fn()} />);
     expect(screen.getByText('posts.calendarMonthEmptyTitle')).toBeInTheDocument();
     expect(screen.getByText('posts.calendarMonthEmptyHint')).toBeInTheDocument();
-    const link = screen.getByRole('link', { name: 'posts.schedulePostsAction' });
-    expect(link).toHaveAttribute('href', CREATE_POSTS_HREF);
+    const link = screen.getByRole('link', { name: 'posts.newPostAction' });
+    expect(link).toHaveAttribute('href', '/recipes');
     expect(link.className).toContain('h-8');
     expect(link.className).toContain('min-w-0');
     expect(link.className).toContain('px-2');
     expect(link.className).toContain('text-xs');
   });
 
-  it('offers the schedule link when one day is empty', () => {
+  it('offers New post when one day is empty', () => {
     render(<DayEmptyState reason="day" monthLabel="June 2030" onClearFilters={vi.fn()} />);
     expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
     expect(screen.getByText('posts.calendarDayNoneHint')).toBeInTheDocument();
-    const link = screen.getByRole('link', { name: 'posts.schedulePostsAction' });
-    expect(link).toHaveAttribute('href', CREATE_POSTS_HREF);
+    const link = screen.getByRole('link', { name: 'posts.newPostAction' });
+    expect(link).toHaveAttribute('href', '/recipes');
     expect(link.className).toContain('h-9');
   });
 });

@@ -1,5 +1,5 @@
 -- ============================================================================
--- 059 — Publish ledger: one recorded publish per (scope key, provider,
+-- 061 — Publish ledger: one recorded publish per (scope key, provider,
 -- account).
 --
 -- The engine's 600s upload timeout can fire while the web route is still

@@ -83,6 +83,9 @@ DELETE /api/persona/video-task/{taskId}                       cancel video task
 GET    /api/persona/video-generations                         list video generations
 GET    /api/persona/video-generations/{generationId}          get video generation
 POST   /api/upload-content                                    publish video direct
+POST   /api/videos/upload-url                                 create video upload
+POST   /api/videos/uploads/{uploadId}/complete                complete video upload
+POST   /api/videos/publish-by-id                              publish uploaded video
 POST   /api/media/upload                                      upload media
 POST   /api/media/check                                       check media
 GET    /api/persona/list                                      list personas

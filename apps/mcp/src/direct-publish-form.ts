@@ -8,7 +8,12 @@
 // back to the caption; Instagram takes a file + caption; the rest take a
 // video + caption.
 import { randomUUID } from 'node:crypto';
-import type { PublishVideoDirectInput } from './client-types.js';
+import type { PublishUploadedVideoInput, PublishVideoDirectInput } from './client-types.js';
+
+// The provider-field rules are shared by the local-path publish
+// (PublishVideoDirectInput) and the signed-upload publish by id
+// (PublishUploadedVideoInput): they differ only in how the bytes arrive.
+export type DirectPublishFieldInput = PublishVideoDirectInput | PublishUploadedVideoInput;
 
 export interface DirectPublishFields {
   title: string;
@@ -19,7 +24,7 @@ export interface DirectPublishFields {
   boardId: string;
 }
 
-function requireTitleAndDescription(input: PublishVideoDirectInput): { title: string; description: string } {
+function requireTitleAndDescription(input: DirectPublishFieldInput): { title: string; description: string } {
   if (input.title === undefined || input.title.trim().length === 0) {
     throw new Error(`title is required for ${input.provider}.`);
   }
@@ -31,7 +36,7 @@ function requireTitleAndDescription(input: PublishVideoDirectInput): { title: st
 
 // Provider-specific required fields, validated before any fetch so the
 // agent gets a named failure instead of a server 400 after uploading.
-export function requireDirectPublishFields(input: PublishVideoDirectInput): DirectPublishFields {
+export function requireDirectPublishFields(input: DirectPublishFieldInput): DirectPublishFields {
   let title = '';
   let description = '';
   let tags: string[] = [];

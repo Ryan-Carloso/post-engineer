@@ -42,11 +42,21 @@ vi.mock('../posthog-server', () => ({ flushPostHog: vi.fn().mockResolvedValue(un
 vi.mock('../logger', () => ({
   logger: { info: vi.fn(), error: vi.fn() },
 }));
+vi.mock('../videos/signed-upload', () => ({
+  sweepExpiredVideoUploads: vi.fn().mockResolvedValue(0),
+  createSupabaseVideoUploadStore: vi.fn(() => ({ store: true })),
+  createSupabaseVideoUploadStorage: vi.fn(() => ({ storage: true })),
+}));
 
 import { flushPostHog } from '../posthog-server';
 import { collectPostMetrics, createPostMetricsStore } from '../metrics/post-metrics';
 import { runBillingReconciliation, createReconcileStore } from '../billing/reconcile';
 import { logger } from '../logger';
+import {
+  createSupabaseVideoUploadStorage,
+  createSupabaseVideoUploadStore,
+  sweepExpiredVideoUploads,
+} from '../videos/signed-upload';
 import {
   isSchedulerEnabled,
   SCHEDULER_JOBS,
@@ -70,6 +80,11 @@ beforeEach(() => {
   vi.mocked(runBillingReconciliation).mockClear();
   vi.mocked(flushPostHog).mockClear();
   vi.mocked(logger.error).mockClear();
+  vi.mocked(logger.info).mockClear();
+  vi.mocked(sweepExpiredVideoUploads).mockReset();
+  vi.mocked(sweepExpiredVideoUploads).mockResolvedValue(0);
+  vi.mocked(createSupabaseVideoUploadStore).mockClear();
+  vi.mocked(createSupabaseVideoUploadStorage).mockClear();
 });
 
 afterEach(() => {
@@ -86,7 +101,7 @@ describe('startInternalScheduler', () => {
     expect(createSchedulerMock).not.toHaveBeenCalled();
   });
 
-  it('builds and starts the scheduler with the two jobs when opted in', () => {
+  it('builds and starts the scheduler with the configured jobs when opted in', () => {
     process.env.SCHEDULER_ENABLED = 'true';
     const handle = startInternalScheduler();
     expect(handle).toBe(schedulerHandle);
@@ -148,6 +163,36 @@ describe('startInternalScheduler', () => {
     expect(createReconcileStore).toHaveBeenCalledWith({});
     expect(runBillingReconciliation).toHaveBeenCalledTimes(1);
     expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('video-upload sweep tick removes expired uploads through the store seam', async () => {
+    process.env.SCHEDULER_ENABLED = 'true';
+    startInternalScheduler();
+    const deps = createdDeps[0] as {
+      jobs: Array<{ name: string; run: () => Promise<void> }>;
+    };
+    await deps.jobs.find((j) => j.name === 'video-upload-sweep')!.run();
+
+    expect(createSupabaseVideoUploadStore).toHaveBeenCalledTimes(1);
+    expect(createSupabaseVideoUploadStorage).toHaveBeenCalledTimes(1);
+    expect(sweepExpiredVideoUploads).toHaveBeenCalledWith({ store: true }, { storage: true }, expect.any(Date));
+    expect(logger.info).not.toHaveBeenCalledWith(
+      '[scheduler/video-upload-sweep] removed expired uploads',
+      expect.anything(),
+    );
+  });
+
+  it('video-upload sweep tick logs when it removed uploads', async () => {
+    vi.mocked(sweepExpiredVideoUploads).mockResolvedValueOnce(2);
+    process.env.SCHEDULER_ENABLED = 'true';
+    startInternalScheduler();
+    const deps = createdDeps[0] as {
+      jobs: Array<{ name: string; run: () => Promise<void> }>;
+    };
+    await deps.jobs.find((j) => j.name === 'video-upload-sweep')!.run();
+    expect(logger.info).toHaveBeenCalledWith('[scheduler/video-upload-sweep] removed expired uploads', {
+      removed: 2,
+    });
   });
 
   it('billing-reconcile tick logs when the report carries errors', async () => {

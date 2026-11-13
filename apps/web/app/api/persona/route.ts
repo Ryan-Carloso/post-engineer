@@ -14,7 +14,6 @@ import {
   addLibraryImages,
   IMAGE_BUCKET,
   isFileLike,
-  removeOrphanedUploadPaths,
   setPrimaryLibraryImage,
   PERSONA_IMAGE_WARNING_CODES,
   type LibraryImageInput,
@@ -26,7 +25,9 @@ import { parsePatchBody } from './patch-body';
 import { applyPersonaPatchFields } from './patch-updates';
 import { parseJsonStringArray, parsePrimaryIndex } from './form-parsing';
 import { errorResponse } from './error-response';
-import { forwardLibraryImagesError, personaValidationError } from './validation-error';
+import { personaValidationError } from './validation-error';
+import { savePersonaBinding } from './create-binding';
+import { rollbackLibraryCreation } from './create-library-rollback';
 import { uploadFile } from './upload-photo';
 import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
@@ -204,62 +205,27 @@ async function postHandler(request: Request): Promise<NextResponse> {
     });
   }
 
+  // Issue #572: bind the persona's publishing accounts now, before any
+  // library work — a persona with zero bound accounts must not exist, and
+  // a failed binding rolls the whole creation back (row + photo).
+  const binding = await savePersonaBinding(
+    supabase,
+    user.id,
+    persona.id,
+    body.values.publishingAccounts,
+    photoPathToRollback,
+  );
+  if (!binding.ok) {
+    return errorResponse(binding.status, binding.error, 'POST /api/persona', { code: binding.code });
+  }
+
   let libraryImageIds: string[] = [];
   const warnings: string[] = [];
   if (validatedLibraryInputs.length > 0) {
     // Storage folder uses the minted id that went into the row.
     const added = await addLibraryImages(supabase, user.id, personaId, validatedLibraryInputs);
     if ('error' in added) {
-      // Roll back the whole creation so a half-written persona never survives.
-      // Rollback failures are logged loudly: an invisible failed rollback is
-      // worse than a loud one.
-      // orphanPaths have no surviving row, so retry their removal BEFORE the
-      // persona delete: its cascade erases the image rows, making failed
-      // removals unrecoverable.
-      // rowBackedPaths still have surviving rows (a cascade erases rows, not
-      // storage objects), so their files must NOT be removed before the
-      // delete. After a successful delete the rows are gone and the files
-      // are true orphans — remove them then, and only then.
-      const { orphanPaths, rowBackedPaths } = added.leftoverPaths ?? {
-        orphanPaths: [],
-        rowBackedPaths: [],
-      };
-      if (orphanPaths.length > 0) {
-        // Retry the orphan removal once via the shared helper (logs loudly
-        // on failure); row-backed orchestration below is route-specific.
-        await removeOrphanedUploadPaths(supabase, orphanPaths, {
-          route: 'api/persona',
-        });
-      }
-      const { error: rollbackError } = await supabase
-        .from('personas')
-        .delete()
-        .eq('id', persona.id);
-      if (rollbackError) {
-        logger.error('[api/persona] creation rollback failed', rollbackError);
-        if (rowBackedPaths.length > 0) {
-          // Rows survive, so their storage files must survive too: removing
-          // them would leave rows pointing at deleted objects.
-          logger.error('[api/persona] creation rollback failed; row-backed image files left in place', undefined, { rowBackedPaths });
-        }
-      } else if (rowBackedPaths.length > 0) {
-        // The cascade erased the image rows: their storage files are now
-        // true orphans. One retry, then loud logging — the rows are gone,
-        // so this is the last recovery chance.
-        const { error: rowBackedRemoveError } = await supabase.storage
-          .from(IMAGE_BUCKET)
-          .remove(rowBackedPaths);
-        if (rowBackedRemoveError) {
-          const { error: rowBackedRetryError } = await supabase.storage
-            .from(IMAGE_BUCKET)
-            .remove(rowBackedPaths);
-          if (rowBackedRetryError) {
-            logger.error('[api/persona] row-backed library storage remove failed after cascade delete', rowBackedRetryError, { rowBackedPaths });
-          }
-        }
-      }
-      await rollbackStoragePath(supabase, photoPathToRollback);
-      return forwardLibraryImagesError(added, 'POST /api/persona');
+      return rollbackLibraryCreation(supabase, persona.id, photoPathToRollback, added);
     }
     libraryImageIds = added.images.map((image) => image.id);
     // Defensive: addLibraryImages rolls back partial work and returns exactly

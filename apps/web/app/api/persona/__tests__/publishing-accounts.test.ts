@@ -218,4 +218,19 @@ describe('PUT /api/persona/publishing-accounts', () => {
     const res = await PUT(bad);
     expect(res.status).toBe(400);
   });
+
+  it('400s for an empty binding and keeps the previous one (issue #572)', async () => {
+    const tables = baseTables();
+    tables.persona_default_accounts = [
+      { persona_id: PERSONA_ID, provider: 'youtube', provider_account_id: 'UC-1' },
+    ];
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(makeSupabase(tables) as never);
+    const res = await PUT(req('PUT', { accounts: {} }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.code).toBe('VALIDATION_FAILED');
+    expect(body.error).toBe('A persona must have at least one bound account.');
+    // The replace-all delete never ran: the previous binding survives.
+    expect(tables.persona_default_accounts).toHaveLength(1);
+  });
 });

@@ -81,9 +81,16 @@ function mockSupabase(overrides: {
   user?: { id: string } | null;
   uploadError?: { message: string } | null;
   insertError?: { message: string } | null;
+  // Connected accounts the binding ownership check sees (issue #572).
+  // Default: the youtube account every create test binds.
+  socialAccounts?: Array<{ provider: string; provider_account_id: string }>;
+  // Persona_default_accounts insert failure: the binding save fails and
+  // the whole creation rolls back.
+  bindingError?: { message: string } | null;
 } = {}) {
   const uploaded: Array<{ path: string; options: { contentType: string } }> = [];
   const inserted: Array<Record<string, unknown>> = [];
+  const bindingRows: Array<Record<string, unknown>> = [];
 
   const storageFrom = {
     upload: vi.fn(async (path: string, _body: unknown, options: { contentType: string }) => {
@@ -93,7 +100,7 @@ function mockSupabase(overrides: {
     remove: vi.fn(async () => ({ error: null })),
   };
 
-  const from = {
+  const personasFrom = {
     insert: vi.fn((values: Record<string, unknown>) => {
       inserted.push(values);
       return {
@@ -105,6 +112,43 @@ function mockSupabase(overrides: {
         })),
       };
     }),
+    // The binding save checks persona ownership (setPersonaDefaultAccounts).
+    select: vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: vi.fn(async () => ({ data: { id: 'persona-uuid-1' }, error: null })),
+        })),
+      })),
+    })),
+    // Creation rollbacks (binding save / library save) delete the persona.
+    delete: vi.fn(() => ({
+      eq: vi.fn(async () => ({ error: null })),
+    })),
+  };
+
+  const socialAccountsFrom = {
+    select: vi.fn(() => ({
+      eq: vi.fn(async () => ({
+        data: overrides.socialAccounts ?? [{ provider: 'youtube', provider_account_id: 'acct-1' }],
+        error: null,
+      })),
+    })),
+  };
+
+  const bindingFrom = {
+    delete: vi.fn(() => ({
+      eq: vi.fn(async () => ({ error: null })),
+    })),
+    insert: vi.fn((values: Record<string, unknown> | Array<Record<string, unknown>>) => {
+      bindingRows.push(...(Array.isArray(values) ? values : [values]));
+      return { error: overrides.bindingError ?? null };
+    }),
+  };
+
+  // Any other table keeps the old insert-only shape (persona_images via
+  // addLibraryImages).
+  const defaultFrom = {
+    insert: personasFrom.insert,
   };
 
   const client = {
@@ -115,7 +159,12 @@ function mockSupabase(overrides: {
       })),
     },
     storage: { from: vi.fn(() => storageFrom) },
-    from: vi.fn(() => from),
+    from: vi.fn((table: string) => {
+      if (table === 'personas') return personasFrom;
+      if (table === 'social_accounts') return socialAccountsFrom;
+      if (table === 'persona_default_accounts') return bindingFrom;
+      return defaultFrom;
+    }),
   };
 
   vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
@@ -124,12 +173,17 @@ function mockSupabase(overrides: {
     error: null,
   });
   vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-  return { client, uploaded, inserted };
+  return { client, uploaded, inserted, bindingRows };
 }
 
-function formRequest(fields: Record<string, string>, files: File[] = []): Request {
+function formRequest(fields: Record<string, string>, files: File[] = [], opts: { omitBinding?: boolean } = {}): Request {
   const formData = new FormData();
-  for (const [key, value] of Object.entries(fields)) {
+  // Every create carries a binding by default (issue #572): the youtube
+  // account the mock connects. Tests for the binding itself opt out.
+  const withBinding = opts.omitBinding
+    ? fields
+    : { publishingAccounts: JSON.stringify({ youtube: ['acct-1'] }), ...fields };
+  for (const [key, value] of Object.entries(withBinding)) {
     formData.append(key, value);
   }
   for (const file of files) {
@@ -395,6 +449,78 @@ describe('POST /api/persona — toda persona tem rosto', () => {
 
     expect(res.status).toBe(200);
     expect(inserted[0]).toMatchObject({ face_quality: 'very_good' });
+  });
+});
+
+describe('POST /api/persona — account binding (issue #572)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+    restorePinnedHttp();
+  });
+
+  const validFields = {
+    name: 'Canal Ninja',
+    avatarUrl: 'data:image/png;base64,IA',
+    voiceId: 'chatterbox:kokoro_af_heart',
+  };
+
+  it('saves the binding rows when creation succeeds', async () => {
+    const { bindingRows } = mockSupabase();
+    const res = await POST(formRequest(validFields));
+    const body = (await res.json()) as { success: boolean; personaId?: string };
+    expect(res.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(bindingRows).toEqual([
+      { persona_id: body.personaId, provider: 'youtube', provider_account_id: 'acct-1' },
+    ]);
+  });
+
+  it('rejects creation with no publishingAccounts field', async () => {
+    mockSupabase();
+    const res = await POST(formRequest(validFields, [], { omitBinding: true }));
+    const body = (await res.json()) as { error?: string };
+    expect(res.status).toBe(400);
+    expect(body.error).toBe('Select at least one publishing account for this persona.');
+  });
+
+  it('rejects creation with an empty binding', async () => {
+    mockSupabase();
+    const res = await POST(
+      formRequest({ ...validFields, publishingAccounts: JSON.stringify({ youtube: [] }) }),
+    );
+    const body = (await res.json()) as { error?: string };
+    expect(res.status).toBe(400);
+    expect(body.error).toBe('Select at least one publishing account for this persona.');
+  });
+
+  it('rejects creation with malformed publishingAccounts JSON', async () => {
+    mockSupabase();
+    const res = await POST(formRequest({ ...validFields, publishingAccounts: '{not json' }));
+    const body = (await res.json()) as { error?: string };
+    expect(res.status).toBe(400);
+    expect(body.error).toBe('publishingAccounts must be valid JSON.');
+  });
+
+  it('rejects creation binding an account the user does not own', async () => {
+    mockSupabase({ socialAccounts: [] });
+    const res = await POST(formRequest(validFields));
+    const body = (await res.json()) as { error?: string; code?: string };
+    // The binding save fails the ownership check: the persona row is
+    // rolled back and the caller gets the lib's coded 400, not a 500.
+    expect(res.status).toBe(400);
+    expect(body.code).toBe('INVALID_PROVIDER_ACCOUNT');
+    expect(body.error).toBe('Account acct-1 is not a connected youtube account of this user.');
+  });
+
+  it('rolls the persona back when the binding insert fails', async () => {
+    const { client } = mockSupabase({ bindingError: { message: 'db down' } });
+    const res = await POST(formRequest(validFields));
+    const body = (await res.json()) as { error?: string };
+    expect(res.status).toBe(500);
+    expect(body.error).toBe('Failed to bind publishing accounts to the persona.');
+    // The rollback deleted the persona row.
+    expect(client.from).toHaveBeenCalledWith('personas');
   });
 });
 

@@ -189,6 +189,10 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
   });
 
   it('1 — cria a persona pela UI real', () => {
+    // Issue #572: create requires at least one bound publishing account,
+    // so the Bluesky account is already connected when the persona is
+    // created (test 2 covers the connect flow itself).
+    blueskyConnected = true;
     cy.intercept('POST', '/api/persona', (req) => {
       console.log('[DEBUG] Create persona request body:', req.body);
       req.reply({ statusCode: 200, body: { success: true, personaId: PERSONA.id } });
@@ -201,6 +205,7 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     cy.contains('[role="tab"]', 'Escolha um personagem').click();
     cy.get('button[aria-label="Escolha um personagem 1"]').click();
     cy.pickHouseVoice('en us male 01');
+    cy.get('[data-error-field="accounts"] [data-testid="account-card-select"]').check();
 
     cy.contains('button', 'Criar persona').click();
     cy.wait('@createPersona');

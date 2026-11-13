@@ -818,6 +818,86 @@
                 "user_profiles_pkey": "PRIMARY KEY (id)"
             }
         },
+        "video_uploads": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "storage_path",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "declared_content_type",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "detected_content_type",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "size_bytes",
+                    "type": "bigint",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "status",
+                    "type": "text",
+                    "default": "'pending'::text",
+                    "notNull": true
+                },
+                {
+                    "name": "expires_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "consumed_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                }
+            ],
+            "policies": {
+                "video_uploads_select_own": {
+                    "cmd": "r",
+                    "qual": "(user_id = auth.uid())",
+                    "withCheck": null
+                }
+            },
+            "constraints": {
+                "video_uploads_pkey": "PRIMARY KEY (id)",
+                "video_uploads_status_check": "CHECK ((status = ANY (ARRAY['pending'::text, 'ready'::text, 'consumed'::text])))",
+                "video_uploads_size_bytes_check": "CHECK (((size_bytes IS NULL) OR (size_bytes > 0)))",
+                "video_uploads_storage_path_key": "UNIQUE (storage_path)",
+                "video_uploads_declared_content_type_check": "CHECK (((declared_content_type IS NULL) OR (declared_content_type = ANY (ARRAY['video/mp4'::text, 'video/quicktime'::text]))))",
+                "video_uploads_detected_content_type_check": "CHECK (((detected_content_type IS NULL) OR (detected_content_type = ANY (ARRAY['video/mp4'::text, 'video/quicktime'::text]))))"
+            }
+        },
         "persona_images": {
             "rls": true,
             "columns": [
@@ -1675,6 +1755,34 @@
                 "experiment_variants_experiment_id_fkey": "FOREIGN KEY (experiment_id) REFERENCES experiments(id) ON DELETE CASCADE",
                 "experiment_variants_variant_id_format_check": "CHECK ((variant_id ~ '^[a-z0-9][a-z0-9-]{0,47}$'::text))",
                 "experiment_variants_description_length_check": "CHECK (((char_length(description) >= 1) AND (char_length(description) <= 500)))"
+            }
+        },
+        "owner_alert_notices": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "dedup_key",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "sent_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "owner_alert_notices_pkey": "PRIMARY KEY (user_id, dedup_key)"
             }
         },
         "test_deploy_supabase": {

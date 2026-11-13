@@ -42,6 +42,43 @@ function terminal(result: unknown): Record<string, unknown> {
   return chain;
 }
 
+// Issue #572: creation binds the persona's publishing accounts right after
+// the insert (setPersonaDefaultAccounts): ownership select on personas,
+// owned-accounts list on social_accounts, replace-all on
+// persona_default_accounts. Every client in this file must answer those
+// queries, or creation fails before any library work runs.
+function bindingTables(table: string): Record<string, unknown> | null {
+  if (table === 'social_accounts') {
+    return {
+      select: () => ({
+        eq: async () => ({
+          data: [{ provider: 'youtube', provider_account_id: 'UC-1' }],
+          error: null,
+        }),
+      }),
+    };
+  }
+  if (table === 'persona_default_accounts') {
+    return {
+      delete: () => ({ eq: async () => ({ error: null }) }),
+      insert: async () => ({ error: null }),
+    };
+  }
+  return null;
+}
+
+function personasOwnershipSelect(): Record<string, unknown> {
+  return {
+    select: () => ({
+      eq: () => ({
+        eq: () => ({
+          maybeSingle: async () => ({ data: { id: PERSONA_ID }, error: null }),
+        }),
+      }),
+    }),
+  };
+}
+
 function mockClient(options: { failPrimarySwap?: boolean } = {}) {
   const calls = {
     personaInserts: 0,
@@ -63,6 +100,8 @@ function mockClient(options: { failPrimarySwap?: boolean } = {}) {
       return Promise.resolve({ data: null, error: null });
     }),
     from: vi.fn((table: string) => {
+      const binding = bindingTables(table);
+      if (binding) return binding;
       if (table === 'personas') {
         return {
           insert: vi.fn((values: Record<string, unknown>) => {
@@ -74,6 +113,7 @@ function mockClient(options: { failPrimarySwap?: boolean } = {}) {
             calls.personaDeletes += 1;
             return terminal({ error: null });
           }),
+          ...personasOwnershipSelect(),
         };
       }
       return {
@@ -135,6 +175,10 @@ function createRequest(fields: Record<string, string>, images: File[] = []): Req
 const BASE_FIELDS = {
   name: 'Ana',
   voiceId: 'chatterbox:kokoro_af_heart',
+  // Issue #572: every persona must bind at least one publishing account at
+  // creation, so the fixtures carry one — the image-validation errors these
+  // tests pin run after the binding check.
+  publishingAccounts: JSON.stringify({ youtube: ['UC-1'] }),
 };
 
 beforeEach(() => {
@@ -316,6 +360,7 @@ describe('POST /api/persona with image library', () => {
     const form = new FormData();
     form.append('name', 'Ana');
     form.append('voiceId', 'chatterbox:kokoro_af_heart');
+    form.append('publishingAccounts', JSON.stringify({ youtube: ['UC-1'] }));
     form.append('photo', png('main.png'));
     const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
     expect(res.status).toBe(200);
@@ -408,6 +453,7 @@ describe('POST /api/persona with image library', () => {
     const form = new StubFormData();
     form.append('name', 'Ana');
     form.append('voiceId', 'chatterbox:kokoro_af_heart');
+    form.append('publishingAccounts', JSON.stringify({ youtube: ['UC-1'] }));
     form.append('photo', png('main.png'));
     const request = { formData: async () => form } as unknown as Request;
 
@@ -539,6 +585,8 @@ describe('POST /api/persona with image library', () => {
     const client = {
       rpc: vi.fn(async () => ({ data: null, error: null })),
       from: vi.fn((table: string) => {
+        const binding = bindingTables(table);
+        if (binding) return binding;
         if (table === 'personas') {
           return {
             insert: vi.fn(() => terminal({ data: { id: PERSONA_ID }, error: null })),
@@ -546,6 +594,7 @@ describe('POST /api/persona with image library', () => {
               events.push('persona-delete');
               return terminal({ error: null });
             }),
+            ...personasOwnershipSelect(),
           };
         }
         return {
@@ -608,6 +657,8 @@ describe('POST /api/persona with image library', () => {
     const client = {
       rpc: vi.fn(async () => ({ data: null, error: null })),
       from: vi.fn((table: string) => {
+        const binding = bindingTables(table);
+        if (binding) return binding;
         if (table === 'personas') {
           return {
             insert: vi.fn(() => terminal({ data: { id: PERSONA_ID }, error: null })),
@@ -615,6 +666,7 @@ describe('POST /api/persona with image library', () => {
               events.push('persona-delete');
               return terminal({ error: null });
             }),
+            ...personasOwnershipSelect(),
           };
         }
         return {
@@ -684,6 +736,8 @@ describe('POST /api/persona with image library', () => {
     const client = {
       rpc: vi.fn(async () => ({ data: null, error: null })),
       from: vi.fn((table: string) => {
+        const binding = bindingTables(table);
+        if (binding) return binding;
         if (table === 'personas') {
           return {
             insert: vi.fn(() => terminal({ data: { id: PERSONA_ID }, error: null })),
@@ -691,6 +745,7 @@ describe('POST /api/persona with image library', () => {
               events.push('persona-delete');
               return terminal({ error: { message: 'cascade boom' } });
             }),
+            ...personasOwnershipSelect(),
           };
         }
         return {

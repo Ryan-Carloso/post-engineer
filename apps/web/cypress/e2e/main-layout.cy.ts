@@ -90,6 +90,20 @@ function seedUserMetadata(userMetadata: Record<string, unknown>): void {
 //---------------
 const TALL_VIEWPORT: [number, number] = [1280, 1440];
 
+//---------------
+// The first-visit wizard auto-opens on /posts ("/" redirects there) and
+// its dialog covers the page, so these specs visit as a returning user.
+// A Cypress spec cannot import the key from lib/onboarding-wizard.ts,
+// so the literal is pinned here (same as posts-create.cy.ts).
+//---------------
+function visitHomeAsReturningUser(): void {
+  cy.visit('/', {
+    onBeforeLoad(win) {
+      win.localStorage.setItem('post-engineer-onboarding-wizard-seen', '1');
+    },
+  });
+}
+
 describe('Main Layout — Sidebar', () => {
   beforeEach(() => {
     cy.viewport(...TALL_VIEWPORT);
@@ -98,7 +112,7 @@ describe('Main Layout — Sidebar', () => {
   });
 
   it('renders brand, subtitle and nav tabs, without a Home tab', () => {
-    cy.visit('/');
+    visitHomeAsReturningUser();
 
     cy.get('[data-testid=nav-brand]').should('be.visible');
     cy.contains('Post Engineer').should('be.visible');
@@ -122,7 +136,7 @@ describe('Main Layout — Sidebar', () => {
   });
 
   it('navega entre as páginas clicando nas abas da sidebar', () => {
-    cy.visit('/');
+    visitHomeAsReturningUser();
     // Middleware bounces to /landing when the session cookie is not yet
     // attached to this document — wait for the shell before navigating.
     cy.get('[data-testid=nav-brand]').should('be.visible');
@@ -151,19 +165,19 @@ describe('Main Layout — Sidebar', () => {
   it('exibe o avatar do utilizador no rodapé da sidebar', () => {
     // avatar_url present: the AvatarCircle renders the image branch.
     seedUserMetadata({ name: 'Cypress', avatar_url: '/cypress-avatar.png' });
-    cy.visit('/');
+    visitHomeAsReturningUser();
     cy.get('aside img[alt="Cypress"]', { timeout: 10_000 }).should('exist');
   });
 
   it('exibe o nome do usuário autenticado no rodapé da sidebar', () => {
     seedUserMetadata({ name: 'Cypress' });
-    cy.visit('/');
+    visitHomeAsReturningUser();
     cy.contains('p', 'Cypress', { timeout: 10_000 }).scrollIntoView().should('be.visible');
   });
 
   it('permite sair da conta pelo rodapé da sidebar', () => {
     seedUserMetadata({ name: 'Cypress' });
-    cy.visit('/');
+    visitHomeAsReturningUser();
     cy.contains('p', 'Cypress', { timeout: 10_000 }).scrollIntoView().should('be.visible');
 
     // Stub the auth-server logout call: these specs share one E2E
@@ -331,19 +345,19 @@ describe('Main Layout — Sidebar user name fallbacks', () => {
 
   it('exibe user_name quando o user_metadata não tem name', () => {
     seedUserMetadata({ user_name: 'ghuser' });
-    cy.visit('/');
+    visitHomeAsReturningUser();
     cy.contains('p', 'ghuser', { timeout: 10_000 }).scrollIntoView().should('be.visible');
   });
 
   it('exibe o provider_id como último fallback de nome', () => {
     seedUserMetadata({ provider_id: 'pid123' });
-    cy.visit('/');
+    visitHomeAsReturningUser();
     cy.contains('p', 'pid123', { timeout: 10_000 }).scrollIntoView().should('be.visible');
   });
 
   it('exibe nome padrão quando o user_metadata está vazio', () => {
     seedUserMetadata({});
-    cy.visit('/');
+    visitHomeAsReturningUser();
     cy.contains('p', 'GitHub User', { timeout: 10_000 }).scrollIntoView().should('be.visible');
   });
 });

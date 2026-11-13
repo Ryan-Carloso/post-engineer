@@ -1,0 +1,89 @@
+{
+  "$comment": "Advisories this workspace knowingly ships. .github/scripts/audit/verify-accepted.mjs fails the build for anything here that is no longer reported (so the list cannot rot) and for every reported advisory that is missing here. Add an entry only with a reason that names what unblocks it.",
+  "advisories": [
+    {
+      "ghsa": "GHSA-848j-6mx2-7j84",
+      "package": "elliptic",
+      "severity": "low",
+      "scope": "runtime",
+      "reason": "No fixed release exists: the advisory covers every published version of the unmaintained package. Reached only through @hiveio/dhive > secp256k1 for Hive key signing, and it needs a fault attack that observes two signatures to matter. Replacing dhive is a product decision, not a version bump."
+    },
+    {
+      "ghsa": "GHSA-mrhx-c7xc-m3w5",
+      "package": "zod",
+      "severity": "high",
+      "scope": "runtime",
+      "reason": "zod 3 has no fix (the patch lands in 4.6.6); web's own zod is 4.6.7 and this copy arrives through @atproto/api, which requires ^3.23.8. The DoS needs a caller-controlled oversized constrained collection, and the values validated here come from AT Protocol responses we fetch, not from request input. Unblocks when @atproto ships zod 4."
+    },
+    {
+      "ghsa": "GHSA-jmr9-qjv8-65gv",
+      "package": "extract-zip",
+      "severity": "high",
+      "scope": "dev",
+      "reason": "No fixed release exists: the package is unmaintained. Only Cypress' binary downloader uses it, on a developer machine, and it never unpacks user input. The fix path is Cypress 16, which drops the dependency; that upgrade is tracked separately because e2e is not exercised in CI."
+    },
+    {
+      "ghsa": "GHSA-7pqw-9j4j-h8q3",
+      "package": "extract-zip",
+      "severity": "high",
+      "scope": "dev",
+      "reason": "Same unmaintained package and same Cypress-only, developer-machine path as GHSA-jmr9-qjv8-65gv; no fixed release exists. Unblocks with Cypress 16, which no longer depends on extract-zip."
+    },
+    {
+      "ghsa": "GHSA-vp3h-ghgh-jr7g",
+      "package": "nx",
+      "severity": "high",
+      "scope": "dev",
+      "reason": "nx 21 is the last release this workspace can run: nx 22.7.10 pins brace-expansion 5.0.8 exactly and calls its CJS default export, which 5.0.9+ removed, and it also pins vulnerable axios, smol-toml and follow-redirects. nx 24 fixes both but is a three-major tool migration tracked as its own change. Dev-only: a developer machine's cache, daemon and migrate, never the deployed service."
+    },
+    {
+      "ghsa": "GHSA-w2vw-w76x-qr89",
+      "package": "nx",
+      "severity": "high",
+      "scope": "dev",
+      "reason": "Same nx 21 to 24 blocker as GHSA-vp3h-ghgh-jr7g: nx 22's exact pins are vulnerable and nx 24 is a separate three-major migration. The injection needs an attacker-supplied git revision on a developer machine; nothing in CI consumes remote refs from untrusted sources."
+    },
+    {
+      "ghsa": "GHSA-w3vv-58gj-gw77",
+      "package": "nx",
+      "severity": "high",
+      "scope": "dev",
+      "reason": "Same nx 21 to 24 blocker as GHSA-vp3h-ghgh-jr7g. The daemon socket is readable by other local users of the same machine, which a single-developer workstation does not share."
+    },
+    {
+      "ghsa": "GHSA-hrvq-x7jp-36xv",
+      "package": "nx",
+      "severity": "moderate",
+      "scope": "dev",
+      "reason": "Same nx 21 to 24 blocker as GHSA-vp3h-ghgh-jr7g. Path traversal in nx migrate only fires while applying migrations a maintainer chose to run."
+    },
+    {
+      "ghsa": "GHSA-g2r8-wvmj-jf5w",
+      "package": "nx",
+      "severity": "moderate",
+      "scope": "dev",
+      "reason": "Same nx 21 to 24 blocker as GHSA-vp3h-ghgh-jr7g. The permissive CORS policy belongs to the local `nx graph` dev server, which is not exposed outside the developer machine."
+    },
+    {
+      "ghsa": "GHSA-gcqx-w48m-w2h4",
+      "package": "deepmerge",
+      "severity": "low",
+      "scope": "dev",
+      "reason": "No fixed release exists; jest 30 still pins ^4.3.1. Reached only from jest-config in the unit-test toolchain, never from product code or user input."
+    },
+    {
+      "ghsa": "GHSA-3g3m-2fjr-6pw4",
+      "package": "glob",
+      "severity": "moderate",
+      "scope": "dev",
+      "reason": "test-exclude 7 (babel-plugin-istanbul, used by Cypress coverage) declares glob ^10 and the fix is glob 14, a major that test-exclude has not adopted. Build-time only, over repository file names."
+    },
+    {
+      "ghsa": "GHSA-g3hv-75wg-m249",
+      "package": "minimatch",
+      "severity": "moderate",
+      "scope": "dev",
+      "reason": "The fix is minimatch 11, whose changed exports break @eslint/config-array 0.21, which is why this workspace already overrides minimatch to ^9.0.7. Patterns come from our own config and CI, never from callers."
+    }
+  ]
+}

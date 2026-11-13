@@ -249,6 +249,24 @@ export interface Database {
         };
         Relationships: [];
       };
+      owner_alert_notices: {
+        Row: {
+        user_id: string;
+        dedup_key: string;
+        sent_at: string;
+        };
+        Insert: {
+        user_id: string;
+        dedup_key: string;
+        sent_at?: string;
+        };
+        Update: {
+        user_id?: string;
+        dedup_key?: string;
+        sent_at?: string;
+        };
+        Relationships: [];
+      };
       persona_default_accounts: {
         Row: {
         persona_id: string;
@@ -1008,6 +1026,45 @@ export interface Database {
         params?: Json | null;
         publish_mode?: 'asap' | 'scheduled';
         scheduled_at?: string | null;
+        };
+        Relationships: [];
+      };
+      video_uploads: {
+        Row: {
+        id: string;
+        user_id: string;
+        storage_path: string;
+        declared_content_type: 'video/mp4' | 'video/quicktime' | null;
+        detected_content_type: 'video/mp4' | 'video/quicktime' | null;
+        size_bytes: number | null;
+        status: 'pending' | 'ready' | 'consumed';
+        expires_at: string;
+        created_at: string;
+        consumed_at: string | null;
+        };
+        Insert: {
+        id?: string;
+        user_id: string;
+        storage_path: string;
+        declared_content_type?: 'video/mp4' | 'video/quicktime' | null;
+        detected_content_type?: 'video/mp4' | 'video/quicktime' | null;
+        size_bytes?: number | null;
+        status?: 'pending' | 'ready' | 'consumed';
+        expires_at: string;
+        created_at?: string;
+        consumed_at?: string | null;
+        };
+        Update: {
+        id?: string;
+        user_id?: string;
+        storage_path?: string;
+        declared_content_type?: 'video/mp4' | 'video/quicktime' | null;
+        detected_content_type?: 'video/mp4' | 'video/quicktime' | null;
+        size_bytes?: number | null;
+        status?: 'pending' | 'ready' | 'consumed';
+        expires_at?: string;
+        created_at?: string;
+        consumed_at?: string | null;
         };
         Relationships: [];
       };

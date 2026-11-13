@@ -3,7 +3,10 @@
 // Extracted from route.ts so the route module stays under the file-size
 // ratchet. PersonaPrep is the snapshot the engine reads at tick time.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
+import {
+  getPersonaDefaultAccounts,
+  type PersonaDefaultAccounts,
+} from '@/lib/persona-publishing-accounts';
 import { IMAGE_BUCKET } from '@/lib/persona-images';
 import { logger } from '@/lib/logger';
 import type { FaceQuality } from '@/lib/tokens';
@@ -69,9 +72,12 @@ export interface PersonaPrep {
 //---------------
 // resolvePublishingAccounts — which accounts a generate-and-schedule call
 // publishes to. When publishing.accounts is omitted entirely and the post
-// has a persona, fall back to the persona's default publishing accounts
-// (issue #212); explicit accounts always win. With no defaults either,
-// validateAccounts keeps its 400 behavior.
+// has a persona, fall back to the persona's bound publishing accounts
+// (issue #212, binding made mandatory by issue #572); explicit accounts
+// always win. With no binding either, validateAccounts keeps its 400
+// behavior. `bound` is the already-loaded binding (the caller loads it
+// once and reuses it for the binding check); without it the fallback is
+// fetched here.
 //
 // Lives here (not in route.ts) so the route module stays under the
 // file-size ratchet.
@@ -80,10 +86,11 @@ export async function resolvePublishingAccounts(
   supabase: SupabaseClient,
   personaId: string | null,
   explicitAccounts: Record<string, string[] | undefined> | undefined,
+  bound?: PersonaDefaultAccounts,
 ): Promise<Record<string, string[] | undefined>> {
   const accounts = explicitAccounts ?? {};
   if (Object.keys(accounts).length === 0 && personaId !== null) {
-    return getPersonaDefaultAccounts(supabase, personaId);
+    return bound ?? (await getPersonaDefaultAccounts(supabase, personaId));
   }
   return accounts;
 }

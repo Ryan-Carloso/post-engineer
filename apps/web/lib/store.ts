@@ -11,6 +11,10 @@ import { isEnglishLanguage } from '@/lib/language-gate';
 import { MAX_PERSONA_IMAGES } from '@/lib/persona-image-select';
 import { SOCIAL_PROVIDERS } from '@/lib/types';
 import type { FaceQuality } from '@/lib/tokens';
+import {
+  emptyPersonaDefaultAccounts,
+  type PersonaDefaultAccounts,
+} from '@/lib/persona-publishing-accounts';
 
 //---------------
 // UploadStore — global state shared between screens
@@ -231,6 +235,11 @@ interface PersonaFormState {
       3 tokens/video). The face is always present, so this is the only
       face-related choice on this screen. */
   faceQuality: FaceQuality;
+  /** Bound publishing accounts (issue #572): at least one account, owned
+      by the caller. The create picker writes here; the create submit sends
+      it as the `publishingAccounts` JSON field. */
+  publishingAccounts: PersonaDefaultAccounts;
+  setPublishingAccounts: (accounts: PersonaDefaultAccounts) => void;
   setName: (value: string) => void;
   setPhoto: (file: File | null) => void;
   /** Appends picks after the staged ones; the first ever staged is the primary. */
@@ -270,6 +279,7 @@ const initialPersonaState = {
   niche: '',
   result: null,
   faceQuality: 'ok' as FaceQuality,
+  publishingAccounts: emptyPersonaDefaultAccounts(),
 };
 
 export const usePersonaStore = create<PersonaFormState>()(
@@ -304,12 +314,21 @@ export const usePersonaStore = create<PersonaFormState>()(
     setNiche: (niche) => set({ niche }),
     setResult: (result) => set({ result }),
     setFaceQuality: (faceQuality) => set({ faceQuality }),
-    resetForm: () => set({ ...initialPersonaState }),
+    setPublishingAccounts: (publishingAccounts) => set({ publishingAccounts }),
+    // resetForm reuses the shared initial state, but the binding gets a
+    // fresh empty map: sharing one object across resets would let a
+    // mutated map leak into the next persona.
+    resetForm: () => set({ ...initialPersonaState, publishingAccounts: emptyPersonaDefaultAccounts() }),
     buildPersonaFormData: (language?: string) => {
       const s = get();
       const formData = new FormData();
       formData.append('name', s.name.trim());
       formData.append('faceQuality', s.faceQuality);
+      // Issue #572: the binding rides the create payload as JSON — the
+      // server rejects a missing/empty binding with a 400 before writing
+      // anything. Always sent, even empty: the server's error names the
+      // rule instead of the client guessing at it.
+      formData.append('publishingAccounts', JSON.stringify(s.publishingAccounts));
       // Exactly one visual identity per persona. The photo wins when both
       // are staged (the server enforces the same rule).
       if (s.photo) {

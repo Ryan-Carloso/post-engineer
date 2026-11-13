@@ -13,6 +13,13 @@ export interface PostEngineerClientOptions {
   baseUrl?: string;
   /** Clock override used by schedule validation (tests); defaults to the real clock. */
   now?: () => Date;
+  /**
+   * Suppress the X-MCP-Version header. Only the remote (HTTP) factory sets
+   * this: the package version (MAJOR.MINOR.PATCH) never equals the web
+   * gate's generated MAJOR.MINOR.PR requirement, so sending it would 426
+   * the remote's own calls. Stdio keeps sending it (the default).
+   */
+  suppressVersionHeader?: boolean;
 }
 
 /** One image for a persona's image library, read from a local file. */
@@ -46,6 +53,12 @@ export interface CreatePersonaInput {
   paragraphNumber?: number;
   niche?: string;
   faceQuality?: 'ok' | 'very_good';
+  /**
+   * Bound publishing accounts per provider (issue #572, required): at
+   * least one account, e.g. { youtube: ['UC...'] }. The persona publishes
+   * only to bound accounts; a persona with no bound account cannot exist.
+   */
+  accounts: Record<string, string[]>;
   /** Up to 10 local images of the same person for the image library. */
   images?: PersonaLibraryImageInput[];
   /** Index into images[] marking the primary library image. */
@@ -158,6 +171,44 @@ export interface PublishVideoDirectInput {
    * lost — do not retry it, check the provider account first.
    */
   idempotencyKey?: string;
+}
+
+/** Input for publishing a signed-upload video by id, without generation. */
+export interface PublishUploadedVideoInput {
+  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' | '3speak' | 'rumble';
+  /** The uploadId of a completed signed upload (create + complete). Single-use. */
+  uploadId: string;
+  /** Target accounts (same IDs as PublishVideoDirectInput). */
+  accountIds: string[];
+  /** YouTube, Rumble and Fanvue: required. Pinterest: pin title (optional). */
+  title?: string;
+  /** YouTube, Rumble and Fanvue: required. Pinterest: pin description (optional; caption is used when omitted). */
+  description?: string;
+  /** YouTube only: required, at least one tag. */
+  tags?: string[];
+  /** YouTube only: required. */
+  privacyStatus?: 'public' | 'private' | 'unlisted';
+  /** Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak: required. Pinterest: pin description when description is omitted. */
+  caption?: string;
+  /** Pinterest only: required. The board the pin goes to (the id from list_pinterest_boards). */
+  boardId?: string;
+}
+
+/** A minted signed video upload: PUT the bytes to signedUrl, then complete. */
+export interface MintedVideoUpload {
+  uploadId: string;
+  signedUrl: string;
+  token: string;
+  expiresAt: string;
+  maxBytes: number;
+}
+
+/** A completed (verified) signed video upload, ready to publish by id. */
+export interface CompletedVideoUpload {
+  uploadId: string;
+  status: 'ready';
+  contentType: string;
+  sizeBytes: number;
 }
 
 /** One per-account outcome from a direct-publish upload. */

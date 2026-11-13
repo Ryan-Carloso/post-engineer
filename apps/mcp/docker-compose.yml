@@ -1,0 +1,47 @@
+# MCP HTTP server (remote transport) on the VPS.
+#
+# Sits behind the Caddy edge proxy (post-engineer.com/mcp -> here), like
+# the web and engine services: only the host loopback port is published,
+# Caddy is the sole public entry point, and every /mcp request must carry
+# a valid OAuth Bearer token (see src/http-auth.ts).
+#
+# Secrets/config come from the environment exported by the deploy (never
+# committed):
+#   MCP_OAUTH_ISSUER  -> authorization server issuer (the web origin)
+#   MCP_RESOURCE      -> this endpoint's resource id (https://post-engineer.com/mcp)
+#   MCP_OAUTH_JWKS_URL -> optional JWKS override (defaults to <issuer>/.well-known/jwks.json)
+#   POST_ENGINEER_API_URL -> web API base the tools call (defaults to production)
+
+services:
+  mcp:
+    image: post-engineer-mcp-http:latest
+    build:
+      # Monorepo root: pnpm workspace lockfile + VERSION live there.
+      context: ../..
+      dockerfile: apps/mcp/Dockerfile
+    container_name: post-engineer-mcp
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      TZ: UTC
+      # OAuth is required: compose refuses to start without these, and
+      # the server itself refuses a non-loopback bind without OAuth
+      # configured (http-transport.ts), so an unauthenticated remote
+      # endpoint cannot come up by accident.
+      MCP_OAUTH_ISSUER: ${MCP_OAUTH_ISSUER:?MCP_OAUTH_ISSUER must be exported by the deploy (see src/http-auth.ts)}
+      MCP_RESOURCE: ${MCP_RESOURCE:?MCP_RESOURCE must be exported by the deploy (see src/http-auth.ts)}
+      MCP_OAUTH_JWKS_URL: ${MCP_OAUTH_JWKS_URL:-}
+      MCP_HTTP_RATE_LIMIT_PER_MINUTE: ${MCP_HTTP_RATE_LIMIT_PER_MINUTE:-120}
+      POST_ENGINEER_API_URL: ${POST_ENGINEER_API_URL:-https://post-engineer.com}
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3

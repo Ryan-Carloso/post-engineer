@@ -9,6 +9,9 @@ import {
 } from '@/lib/api';
 import { DeletePersonaModal } from './delete-persona-modal';
 import PersonaAvatar from '@/components/persona-avatar';
+import { ProviderIcon } from '@/components/provider-icon';
+import { emptyPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
+import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 import { useI18n } from '@/lib/i18n/provider';
 import {
   SparklesIcon,
@@ -159,6 +162,15 @@ const PersonaCard = ({
   onDeleteRequest: (persona: PersonaRecord) => void;
 }) => {
   const { t } = useI18n();
+  // Issue #572: the card shows where the persona publishes. A persona
+  // with no bound accounts (legacy, or a binding that never landed) gets
+  // a warning instead — the card links to the edit page, where the
+  // binding can be fixed. Absent boundAccounts reads as unbound, never
+  // as publishing everywhere.
+  const boundAccounts = persona.boundAccounts ?? emptyPersonaDefaultAccounts();
+  const boundProviders = SOCIAL_PROVIDERS.filter(
+    (provider) => boundAccounts[provider].length > 0,
+  );
 
   return (
     <div className="group relative flex min-h-30 items-center gap-4 rounded-2xl border border-line bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-line hover:shadow-md">
@@ -195,6 +207,28 @@ const PersonaCard = ({
                   {persona.videoAspect}
                 </span>
               )}
+            </div>
+          )}
+          {boundProviders.length > 0 ? (
+            <div
+              className="mt-1.5 flex flex-wrap items-center gap-1"
+              aria-label={t('personas.boundAccountsLabel')}
+            >
+              {boundProviders.map((provider) => (
+                <span
+                  key={provider}
+                  className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-1 text-xs font-medium text-ink-soft [&_svg]:size-3.5"
+                >
+                  <ProviderIcon provider={provider} />
+                  {boundAccounts[provider].length > 1
+                    ? `×${boundAccounts[provider].length}`
+                    : null}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-destructive-soft px-2.5 py-1 text-xs font-medium text-destructive">
+              {t('personas.noBoundAccounts')}
             </div>
           )}
         </div>

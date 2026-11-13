@@ -12,16 +12,17 @@ vi.mock('@/lib/i18n/provider', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const react = require('react') as typeof import('react');
   const dictionary: Record<string, string> = {
-    'persona.publishingAccountsLabel': 'Default publishing accounts',
+    'persona.publishingAccountsLabel': 'Publishing accounts',
     'persona.publishingAccountsHint': 'Hint text.',
-    'persona.publishingAccountsSave': 'Save defaults',
+    'persona.publishingAccountsSave': 'Save accounts',
     'persona.publishingAccountsSaving': 'Saving…',
-    'persona.publishingAccountsSaved': 'Defaults saved.',
-    'persona.publishingAccountsLoadError': 'Could not load the default accounts.',
-    'persona.publishingAccountsSaveError': 'Could not save the default accounts.',
+    'persona.publishingAccountsSaved': 'Accounts saved.',
+    'persona.publishingAccountsLoadError': 'Could not load the publishing accounts.',
+    'persona.publishingAccountsSaveError': 'Could not save the publishing accounts.',
     'persona.publishingAccountsNoAccounts': 'No {provider} accounts connected.',
     'persona.connectAccounts': 'Connect accounts',
     'persona.tryAgain': 'Try again',
+    'publishing.mustSelectAccount': 'Select at least one account to publish to.',
     'accounts.connectedAccount': 'Connected',
   };
   const t = (key: string, vars?: Record<string, string | number>) => {
@@ -108,6 +109,7 @@ vi.mock('@/lib/session-expiry', async (importOriginal) => {
 import { PersonaPublishingAccountsSection } from '../persona-publishing-accounts-section';
 import { reportAccountCardDisplay } from '@/lib/account-card-telemetry';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
+import { usePersonaStore } from '@/lib/store';
 
 const PERSONA_ID = '11111111-2222-3333-4444-555555555555';
 const DEFAULTS_URL = `/api/persona/publishing-accounts?personaId=${PERSONA_ID}`;
@@ -169,6 +171,7 @@ function setConnectedAccounts() {
 beforeEach(() => {
   vi.unstubAllGlobals();
   setConnectedAccounts();
+  usePersonaStore.getState().resetForm();
 });
 
 describe('PersonaPublishingAccountsSection', () => {
@@ -197,7 +200,7 @@ describe('PersonaPublishingAccountsSection', () => {
 
     const saveButton = await screen.findByTestId('publishing-accounts-save');
     expect(saveButton).toBeInTheDocument();
-    expect(screen.getByText('Default publishing accounts')).toBeInTheDocument();
+    expect(screen.getByText('Publishing accounts')).toBeInTheDocument();
 
     const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
     // 2 youtube + 1 instagram + 1 bluesky + 0 linkedin + 1 threespeak
@@ -248,6 +251,9 @@ describe('PersonaPublishingAccountsSection', () => {
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
 
     expect(await screen.findByText('boom')).toBeInTheDocument();
+    // A failed load must not also show the must-select error: nothing was
+    // ever loaded, so the saved binding is unknown, not empty.
+    expect(screen.queryByText('Select at least one account to publish to.')).not.toBeInTheDocument();
     expect(screen.queryByTestId('publishing-accounts-save')).not.toBeInTheDocument();
 
     fetchMock.mockResolvedValueOnce({
@@ -264,7 +270,7 @@ describe('PersonaPublishingAccountsSection', () => {
   it('falls back to the generic message when the server error has no detail', async () => {
     mockFetchOnce({ success: false }, false, 500);
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    expect(await screen.findByText('Could not load the default accounts.')).toBeInTheDocument();
+    expect(await screen.findByText('Could not load the publishing accounts.')).toBeInTheDocument();
   });
 
   it('notifies the session-expiry handler when the defaults GET answers 401', async () => {
@@ -272,7 +278,7 @@ describe('PersonaPublishingAccountsSection', () => {
     notify.mockClear();
     mockFetchOnce({ success: false }, false, 401);
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    expect(await screen.findByText('Could not load the default accounts.')).toBeInTheDocument();
+    expect(await screen.findByText('Could not load the publishing accounts.')).toBeInTheDocument();
     await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
   });
 
@@ -342,7 +348,7 @@ describe('PersonaPublishingAccountsSection', () => {
         }),
       );
     });
-    expect(await screen.findByText('Defaults saved.')).toBeInTheDocument();
+    expect(await screen.findByText('Accounts saved.')).toBeInTheDocument();
   });
 
   it('shows the server error message when saving fails', async () => {
@@ -357,7 +363,7 @@ describe('PersonaPublishingAccountsSection', () => {
     });
     fireEvent.click(screen.getByTestId('publishing-accounts-save'));
     expect(await screen.findByText('db exploded')).toBeInTheDocument();
-    expect(screen.queryByText('Defaults saved.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Accounts saved.')).not.toBeInTheDocument();
   });
 
   it('shows a per-provider "none connected" hint with a link to /accounts', async () => {
@@ -688,5 +694,64 @@ describe('PersonaPublishingAccountsSection', () => {
     const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
     expect(checkboxes[0].checked).toBe(true);
     expect(checkboxes[1].checked).toBe(false);
+  });
+});
+
+//---------------
+// Issue #572 — draft mode: while creating a persona there is no persisted
+// row, so the section cannot GET/PUT a binding. The picker writes the
+// selection straight into the persona store, which the create submit sends
+// as the `publishingAccounts` field; no Save button, no fetch. And in edit
+// mode the binding can never be emptied — Save disables at zero.
+//---------------
+describe('PersonaPublishingAccountsSection — draft mode (issue #572)', () => {
+  it('renders the picker without fetching when there is no personaId', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<PersonaPublishingAccountsSection />);
+
+    expect(screen.getByText('Publishing accounts')).toBeInTheDocument();
+    expect(screen.queryByTestId('publishing-accounts-loading')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('publishing-accounts-save')).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+    // The account cards still render from the connected-accounts queries.
+    expect(screen.getAllByTestId('account-card-select')).toHaveLength(5);
+  });
+
+  it('toggling a card writes the binding to the persona store', () => {
+    vi.stubGlobal('fetch', vi.fn());
+    render(<PersonaPublishingAccountsSection />);
+
+    const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
+    expect(checkboxes[0].checked).toBe(false);
+    fireEvent.click(checkboxes[0]);
+    expect(checkboxes[0].checked).toBe(true);
+    expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual(['UC-1']);
+    fireEvent.click(checkboxes[0]);
+    expect(checkboxes[0].checked).toBe(false);
+    expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual([]);
+  });
+
+  it('shows the must-select error after a failed create submit', () => {
+    vi.stubGlobal('fetch', vi.fn());
+    usePersonaStore.getState().setResult({ success: false, error: 'Select at least one account to publish to.' });
+    render(<PersonaPublishingAccountsSection />);
+
+    expect(screen.getByText('Select at least one account to publish to.')).toBeInTheDocument();
+  });
+
+  it('disables Save in edit mode when the last bound account is untoggled', async () => {
+    mockFetchOnce({
+      success: true,
+      defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [], threads: [] },
+    });
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    const saveButton = await screen.findByTestId('publishing-accounts-save');
+    expect(saveButton).not.toBeDisabled();
+
+    const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
+    fireEvent.click(checkboxes[0]); // untoggle UC-1, the only bound account
+    expect(saveButton).toBeDisabled();
+    expect(screen.getByText('Select at least one account to publish to.')).toBeInTheDocument();
   });
 });

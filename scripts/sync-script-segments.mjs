@@ -17,10 +17,14 @@
 //
 // Wiring: apps/mcp and apps/web both run this from their prebuild and
 // pretest scripts, so `pnpm build` and `pnpm test` always regenerate
-// before compiling or testing. The per-app sync tests
+// before compiling or testing. This script then runs
+// sync-music-mood-field.mjs and forwards --check. That second sync is
+// not named in either package.json: those files are guarded by the
+// parity-exclusion gate. The per-app sync tests
 // (script-segments-shared.test.ts) fail loudly if a copy ever drifts.
 // Usage: node scripts/sync-script-segments.mjs [--check]
 //   --check  exit 1 (without writing) when any copy differs from shared.
+import { spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,5 +68,19 @@ for (const target of targets) {
 if (checkOnly && drifted) {
   console.error('Generated script-segments copies drift from shared/script-segments/script-segments.ts.');
   console.error('Run: node scripts/sync-script-segments.mjs');
-  process.exit(1);
+}
+
+// Run after the script-segments report so a drift here does not hide a
+// drift in the music-mood copies.
+const music = spawnSync(
+  process.execPath,
+  [join(root, 'scripts', 'sync-music-mood-field.mjs'), ...(checkOnly ? ['--check'] : [])],
+  { stdio: 'inherit' },
+);
+if (music.error) {
+  console.error(music.error.message);
+}
+const musicFailed = music.status !== 0;
+if ((checkOnly && drifted) || musicFailed) {
+  process.exit(music.status !== 0 && music.status !== null ? music.status : 1);
 }

@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createPostEngineerMcpServer, isMainModule, requireApiKey } from '../index.js';
@@ -50,6 +49,11 @@ import { AddExperimentPairShape, CreateExperimentShape, GetExperimentResultsShap
 import { GetPostShape, GetPostMetricsShape, GetYouTubeRetentionCurveShape } from '../tools-posts.js';
 import { CancelVideoTaskShape, WaitForVideoTasksShape } from '../video-task-tools.js';
 import { ListPromptsShape, GetPromptShape } from '../tools-prompts.js';
+import {
+  CompleteVideoUploadShape,
+  CreateVideoUploadShape,
+  PublishUploadedVideoShape,
+} from '../publish-uploaded-shape.js';
 import type { PostEngineerClient } from '../client.js';
 
 vi.mock('../analytics.js', () => ({
@@ -115,6 +119,9 @@ const EXPECTED_TOOLS = [
   'update_persona_image',
   'remove_persona_image',
   'publish_video_direct',
+  'create_video_upload',
+  'complete_video_upload',
+  'publish_uploaded_video',
   'list_prompts',
   'get_prompt',
 ];
@@ -272,6 +279,9 @@ describe('registered tool schemas (single source of truth)', () => {
       update_persona_image: UpdatePersonaImageShape,
       remove_persona_image: RemovePersonaImageShape,
       publish_video_direct: PublishVideoDirectShape,
+      create_video_upload: CreateVideoUploadShape,
+      complete_video_upload: CompleteVideoUploadShape,
+      publish_uploaded_video: PublishUploadedVideoShape,
       list_prompts: ListPromptsShape,
       get_prompt: GetPromptShape,
     };
@@ -283,15 +293,10 @@ describe('registered tool schemas (single source of truth)', () => {
 
   it('registers create_persona with the tools.ts schema (paragraphNumber max 10)', async () => {
     const schemas = await listServerTools(createPostEngineerMcpServer(mockClient));
-    // CreatePersonaSchema wraps the raw shape in .superRefine() for the
-    // images-require-avatarUrl rule, so it is a ZodEffects: unwrap to the
-    // inner object to reach the registered field list.
-    const inner =
-      CreatePersonaSchema instanceof z.ZodEffects
-        ? CreatePersonaSchema.innerType()
-        : CreatePersonaSchema;
+    // Zod 4 keeps the object schema when `.superRefine()` is attached (v3
+    // returned a ZodEffects wrapper), so the raw shape is reachable directly.
     expect(Object.keys(schemas.get('create_persona')?.properties ?? {}).sort()).toEqual(
-      Object.keys((inner as z.AnyZodObject).shape).sort()
+      Object.keys(CreatePersonaSchema.shape).sort()
     );
     expect(schemas.get('create_persona')?.properties.paragraphNumber?.maximum).toBe(10);
   });

@@ -104,6 +104,12 @@ export const RATE_LIMITS = {
   // Draft scoring: one capped metrics read per call, no writes, no
   // engine call — cheaper than metrics, so it shares the same budget.
   draftScore: { name: 'draft-score', limit: 60, windowMs: 60_000 },
+  // Signed video uploads (issue #561): minting a signed URL and verifying
+  // an uploaded object (one storage download of up to 2GB per complete).
+  signedVideoUpload: { name: 'signed-video-upload', limit: 10, windowMs: 60_000 },
+  // Publish-by-id (issue #561): one provider publish fan-out per call,
+  // same weight as the direct multipart publish.
+  publishById: { name: 'publish-by-id', limit: 10, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitProfile>;
 
 //---------------

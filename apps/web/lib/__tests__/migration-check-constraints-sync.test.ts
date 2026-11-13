@@ -8,6 +8,7 @@ import { PUBLISH_LEDGER_STATUSES } from '@/lib/upload/publish-ledger';
 import { ANALYTICS_STATUSES, METRICS_WINDOWS } from '@/lib/metrics/metrics-query';
 import { VIDEO_LAYOUTS } from '@/lib/persona-schema';
 import { VIDEO_TYPES } from '@/lib/tokens';
+import { VIDEO_UPLOAD_CONTENT_TYPES, VIDEO_UPLOAD_STATUSES } from '@/lib/videos/signed-upload';
 
 //---------------
 // Every enum-like CHECK constraint the database really has must match the
@@ -100,6 +101,11 @@ const EXPECTED: Record<string, readonly string[]> = {
   // (migration 041, issue #476), so this literal is the pinned contract.
   experiments_variable_check: ['hook'],
   publish_ledger_status_check: PUBLISH_LEDGER_STATUSES,
+  // migration 060. The nullable content-type checks also allow NULL; the
+  // parser keeps only the ANY (ARRAY[...]) arm, which is this list.
+  video_uploads_status_check: VIDEO_UPLOAD_STATUSES,
+  video_uploads_declared_content_type_check: VIDEO_UPLOAD_CONTENT_TYPES,
+  video_uploads_detected_content_type_check: VIDEO_UPLOAD_CONTENT_TYPES,
 };
 
 describe('database enum checks match the code', () => {

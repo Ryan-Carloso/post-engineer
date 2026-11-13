@@ -77,6 +77,7 @@ describe('MCP Tool Handlers', () => {
     const response = await handleCreatePersona(
       mockClient,
       CreatePersonaSchema.parse({
+        accounts: { youtube: ['acct-1'] },
         name: 'Alex AI',
         avatarUrl: 'https://example.com/alex.png',
         voiceId: 'alloy',
@@ -101,6 +102,7 @@ describe('MCP Tool Handlers', () => {
     const response = await handleCreatePersona(
       mockClient,
       CreatePersonaSchema.parse({
+        accounts: { youtube: ['acct-1'] },
         name: 'Alex AI',
         avatarUrl: 'https://example.com/alex.png',
         voiceId: 'alloy',
@@ -123,6 +125,7 @@ describe('MCP Tool Handlers', () => {
     const response = await handleCreatePersona(
       mockClient,
       CreatePersonaSchema.parse({
+        accounts: { youtube: ['acct-1'] },
         name: 'Alex AI',
         avatarUrl: 'https://example.com/alex.png',
         voiceId: 'energetic',
@@ -591,6 +594,7 @@ describe('MCP Tool Handlers', () => {
 describe('schema bounds', () => {
   it('CreatePersonaSchema accepts paragraphNumber up to 10 (matches the API)', () => {
     const result = CreatePersonaSchema.safeParse({
+      accounts: { youtube: ['acct-1'] },
       name: 'x',
       avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:kokoro_am_michael',
       paragraphNumber: 10,
@@ -617,6 +621,7 @@ describe('schema bounds', () => {
 
   it('persona schemas reject non-English languages (English-only launch)', () => {
     const created = CreatePersonaSchema.safeParse({
+      accounts: { youtube: ['acct-1'] },
       name: 'x',
       avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:kokoro_am_michael',
       language: 'pt-BR',
@@ -636,6 +641,7 @@ describe('schema bounds', () => {
 
   it('persona schemas accept the full English language name', () => {
     const created = CreatePersonaSchema.safeParse({
+      accounts: { youtube: ['acct-1'] },
       name: 'x',
       avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:kokoro_am_michael',
       language: 'English',
@@ -645,6 +651,7 @@ describe('schema bounds', () => {
 
   it('persona schemas accept English regional variants', () => {
     const created = CreatePersonaSchema.safeParse({
+      accounts: { youtube: ['acct-1'] },
       name: 'x',
       avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:kokoro_am_michael',
       language: 'en-GB',
@@ -684,6 +691,7 @@ describe('persona image library tools', () => {
   it('create_persona accepts images and imagePrimaryIndex', async () => {
     vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1' });
     const args = CreatePersonaSchema.parse({
+      accounts: { youtube: ['acct-1'] },
       name: 'Alex AI',
       avatarUrl: 'https://example.com/alex.png', voiceId: 'chatterbox:kokoro_am_michael',
       images: [
@@ -710,16 +718,42 @@ describe('persona image library tools', () => {
     // avatarUrl is always required: every persona has a face, and "no face"
     // is a per-video choice (generate_persona_video options.videoType 'faceless'),
     // never a persona one. There is no images-specific rule anymore — the
-    // missing required field fails the parse on its own.
+    // schema-level rule (avatarUrl or avatarPath) fails the parse on its own.
+    // voiceId is supplied so the parse fails on the face rule, not on it.
+    // accounts is supplied too: zod skips superRefine while any field is
+    // still invalid, so without it the parse would fail on accounts first.
+    const accounts = { youtube: ['acct-1'] };
     expect(() =>
-      CreatePersonaSchema.parse({ name: 'X', images: [{ path: '/tmp/a.jpg' }] })
-    ).toThrow(/Required/);
-    expect(() => CreatePersonaSchema.parse({ name: 'X' })).toThrow(/Required/);
+      CreatePersonaSchema.parse({ accounts, name: 'X', voiceId: 'none', images: [{ path: '/tmp/a.jpg' }] })
+    ).toThrow(/avatarUrl or avatarPath is required/);
+    expect(() => CreatePersonaSchema.parse({ accounts, name: 'X', voiceId: 'none' })).toThrow(
+      /avatarUrl or avatarPath is required/
+    );
+  });
+
+  it('CreatePersonaSchema rejects a persona with no bound account (issue #572)', () => {
+    const base = { name: 'X', avatarUrl: 'https://example.com/a.png', voiceId: 'none' };
+    // Missing accounts: the required-field error names the field.
+    const missing = CreatePersonaSchema.safeParse(base);
+    expect(missing.success).toBe(false);
+    expect(JSON.stringify(missing.error?.issues)).toContain('"accounts"');
+    // An empty map (or all providers empty): the refine names the rule.
+    for (const accounts of [{}, { youtube: [] }]) {
+      const parsed = CreatePersonaSchema.safeParse({ ...base, accounts });
+      expect(parsed.success).toBe(false);
+      expect(JSON.stringify(parsed.error?.issues)).toContain(
+        'Select at least one publishing account for this persona',
+      );
+    }
+    expect(
+      CreatePersonaSchema.safeParse({ ...base, accounts: { youtube: ['acct-1'] } }).success,
+    ).toBe(true);
   });
 
   it('CreatePersonaSchema accepts images with avatarUrl', () => {
     expect(() =>
       CreatePersonaSchema.parse({
+        accounts: { youtube: ['acct-1'] },
         name: 'X',
         avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:kokoro_am_michael',
         images: [{ path: '/tmp/a.jpg' }],
@@ -727,6 +761,7 @@ describe('persona image library tools', () => {
     ).not.toThrow();
     expect(() =>
       CreatePersonaSchema.parse({
+        accounts: { youtube: ['acct-1'] },
         name: 'X',
         avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:kokoro_am_michael',
         images: [],
@@ -745,6 +780,7 @@ describe('persona image library tools', () => {
     const sdkArgs = {
       name: 'X',
       voiceId: 'en-US-AriaNeural',
+      accounts: { youtube: ['acct-1'] },
       images: [{ path: '/tmp/a.jpg' }],
     } as unknown as z.infer<typeof CreatePersonaSchema>;
     const response = await handleCreatePersona(mockClient, sdkArgs);
@@ -755,8 +791,8 @@ describe('persona image library tools', () => {
 
   it('CreatePersonaSchema rejects a missing or empty voiceId (no default voice)', () => {
     // Fail fast: the MCP never picks a voice on the agent's behalf.
-    const base = { name: 'X', avatarUrl: 'https://example.com/a.png' };
-    expect(() => CreatePersonaSchema.parse(base)).toThrow(/Required/);
+    const base = { name: 'X', avatarUrl: 'https://example.com/a.png', accounts: { youtube: ['acct-1'] } };
+    expect(() => CreatePersonaSchema.parse(base)).toThrow(/voiceId is required/);
     expect(() => CreatePersonaSchema.parse({ ...base, voiceId: '' })).toThrow(/voiceId is required/);
   });
 
@@ -766,6 +802,7 @@ describe('persona image library tools', () => {
     const sdkArgs = {
       name: 'X',
       avatarUrl: 'https://example.com/a.png',
+      accounts: { youtube: ['acct-1'] },
     } as unknown as z.infer<typeof CreatePersonaSchema>;
     const response = await handleCreatePersona(mockClient, sdkArgs);
     expect(response.isError).toBe(true);
@@ -1021,6 +1058,7 @@ describe('handleLibraryCall message contracts', () => {
     const response = await handleCreatePersona(
       mockClient,
       CreatePersonaSchema.parse({
+        accounts: { youtube: ['acct-1'] },
         name: 'Alex AI',
         avatarUrl: 'https://example.com/alex.png', voiceId: 'chatterbox:kokoro_am_michael',
       })
@@ -1034,6 +1072,7 @@ describe('handleLibraryCall message contracts', () => {
     const response = await handleCreatePersona(
       mockClient,
       CreatePersonaSchema.parse({
+        accounts: { youtube: ['acct-1'] },
         name: 'Alex AI',
         avatarUrl: 'https://example.com/alex.png', voiceId: 'chatterbox:kokoro_am_michael',
       })

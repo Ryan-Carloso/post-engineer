@@ -1,7 +1,7 @@
 -- ============================================================================
--- 060 — Publish ledger: park a lost record as 'unknown'.
+-- 062 — Publish ledger: park a lost record as 'unknown'.
 --
--- Migration 059 closed the duplicate on a publish timeout: a retry replays
+-- Migration 061 closed the duplicate on a publish timeout: a retry replays
 -- the recorded post instead of posting again. One hole stayed open: the
 -- post succeeds but the record RPC fails (and the engine times out too),
 -- so the retry finds no recorded result and — once the 30-min lease
@@ -18,7 +18,7 @@
 -- Idempotent (guarded constraint swap, CREATE OR REPLACE).
 -- ============================================================================
 
--- Admit 'unknown' alongside the 059 statuses.
+-- Admit 'unknown' alongside the 061 statuses.
 do $$
 begin
   if exists (select 1 from pg_constraint where conname = 'publish_ledger_status_check') then

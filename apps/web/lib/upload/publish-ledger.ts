@@ -51,8 +51,8 @@ export const PUBLISH_IN_PROGRESS_CODE = 'publish_in_progress';
 export const PUBLISH_UNKNOWN_CODE = 'publish_unknown';
 
 // The ledger rows' status values, mirroring the
-// publish_ledger_status_check constraint in migration 059 (extended with
-// 'unknown' by migration 060).
+// publish_ledger_status_check constraint in migration 061 (extended with
+// 'unknown' by migration 062).
 export const PUBLISH_LEDGER_STATUSES = ['in_progress', 'published', 'failed', 'unknown'] as const;
 
 export type PublishLedgerOutcome = 'claimed' | 'published' | 'in_progress' | 'unknown';

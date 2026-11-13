@@ -8,14 +8,14 @@ with your own values.
 ## Architecture on one host
 
 ```text
-                    ┌─────────────────────────────┐
-Internet ──HTTPS──▶ │ Caddy (reverse proxy, :443) │
-                    └──────┬──────────┬───────────┘
-                           │          │
-              ┌────────────▼──┐  ┌────▼────────────────┐
-              │ apps/web      │  │ apps/engine         │
-              │ (Next.js)     │  │ (FastAPI, Docker)   │
-              └───────────────┘  └─────────────────────┘
+                    ┌──────────────────────────────┐
+Internet ──HTTPS──▶ │ Caddy (reverse proxy, :443)  │
+                    └──┬──────────┬──────────┬─────┘
+                       │          │          │
+          ┌────────────▼──┐ ┌─────▼─────┐ ┌──▼──────────────────┐
+          │ apps/web      │ │apps/engine│ │ apps/mcp (optional) │
+          │ (Next.js)     │ │ (FastAPI) │ │ remote MCP, :8081   │
+          └───────────────┘ └───────────┘ └─────────────────────┘
 ```
 
 The web app can run on a platform like Vercel or as a Node process behind the
@@ -158,11 +158,44 @@ APP_DOMAIN {
         uri strip_prefix /engine
         reverse_proxy 127.0.0.1:8080
     }
+
+    # Remote MCP (optional, see below) — the MCP server itself stays on
+    # localhost (127.0.0.1:8081); Caddy is the only public entry point.
+    # The public route is https://post-engineer.com/mcp on the hosted
+    # platform; on a self-hosted install it is https://APP_DOMAIN/mcp.
+    handle /mcp* {
+        reverse_proxy 127.0.0.1:8081
+    }
 }
 ```
 
 Set `MONEYPRINT_API_URL` in `apps/web/.env` to the public engine URL
 (e.g. `https://APP_DOMAIN/engine`) so the web app can reach it.
+
+### Remote MCP HTTP service (optional)
+
+The remote MCP endpoint (`https://post-engineer.com/mcp` hosted;
+`https://APP_DOMAIN/mcp` self-hosted) serves the JSON-only tools over
+Streamable HTTP behind the same Caddy proxy. It is a separate compose
+service (`apps/mcp/docker-compose.yml`, container
+`post-engineer-mcp`), publishing only `127.0.0.1:8081` on the host:
+the MCP process binds all interfaces inside its container with
+`--allow-remote`, and every request must present an OAuth Bearer token
+(`mcp:tools` scope) verified against the web's JWKS — `MCP_OAUTH_ISSUER`
+and `MCP_RESOURCE` are required (compose refuses to start without
+them), and the server refuses a non-loopback bind without OAuth.
+
+```bash
+cd apps/mcp
+MCP_OAUTH_ISSUER=https://APP_DOMAIN \
+MCP_RESOURCE=https://APP_DOMAIN/mcp \
+  docker compose up -d --build
+curl http://127.0.0.1:8081/health   # {"ok":true}, unauthenticated probe
+```
+
+Point remote clients (including ChatGPT) at `https://APP_DOMAIN/mcp`
+after adding the `/mcp*` Caddy handle above. The stdio npm package is
+unaffected.
 
 > **Note on `NEXT_PUBLIC_*` vars:** Next.js inlines `NEXT_PUBLIC_*`
 > variables (e.g. `NEXT_PUBLIC_WHATSAPP_NUMBER`) **at build time**. Setting
@@ -179,7 +212,11 @@ reads the **last** entry of `X-Forwarded-For`. Make sure your reverse
 proxy **overwrites** (not appends to) `X-Forwarded-For` with the real
 client IP — with Caddy this is the default. If the proxy instead appends,
 all clients collapse into the proxy's IP bucket and the limiter will
-block legitimate traffic.
+block legitimate traffic. The remote MCP pre-auth limiter uses that
+same last-hop rule (then `X-Real-IP`, then the socket). Behind the
+Caddy example above, the socket address is the Docker gateway for
+every client, so a missing forwarded header collapses the MCP limit
+into one shared bucket.
 
 Security notes:
 

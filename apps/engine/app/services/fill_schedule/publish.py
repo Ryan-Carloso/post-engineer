@@ -17,6 +17,7 @@ from app.services.fill_schedule.constants import (
     SLOT_PUBLISHED,
     SLOT_PUBLISHING,
 )
+from app.services.fill_schedule.metadata import AccountNotBoundError, validate_publish_plan
 from app.services.fill_schedule.publish_accounts import (
     lease_iso,
     next_delay_seconds,
@@ -29,6 +30,7 @@ from app.services.fill_schedule.publish_events import (
     publish_tracking_context,
 )
 from app.services.fill_schedule.publish_results import merge_prior_published
+from app.services.owner_alert import notify_owner_async, notify_publish_failed, notify_publish_partial
 from app.services.fill_schedule.store import ScheduleStore
 from app.services.fill_schedule.support import (
     notify_safe,
@@ -37,6 +39,24 @@ from app.services.fill_schedule.support import (
     track_refund_issued,
 )
 from app.services.state import persist_state_update
+
+
+def _failed_outcomes(
+    outcomes: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Failed outcomes as owner-alert failures: provider, account, reason."""
+    failures: list[dict[str, Any]] = []
+    for outcome in outcomes or []:
+        if not isinstance(outcome, dict) or outcome.get("status") != "failed":
+            continue
+        failures.append(
+            {
+                "provider": str(outcome.get("provider") or ""),
+                "account_id": str(outcome.get("accountId") or ""),
+                "reason": str(outcome.get("error") or ""),
+            }
+        )
+    return failures
 
 
 class BatchPublisher:
@@ -97,6 +117,47 @@ class BatchPublisher:
                 return 0
         elif not self.store.claim_ready_slot(str(slot["id"]), now):
             return 0
+        # Issue #572: re-check the persona binding at publish time, after
+        # the claim and before any video leaves the server. The generate
+        # pre-flight proves the plan before GPU is spent, but the schedule
+        # row is the publisher's only input — an account unbound after
+        # generation (or a schedule created before the binding existed)
+        # would otherwise publish to an account the persona no longer
+        # owns. A schedule without a persona (faceless) skips the check.
+        # A binding read that fails leaves the slot in `publishing` for
+        # the resume path instead of publishing blind: fail closed, and a
+        # transient outage never burns a generated video.
+        persona_id = schedule.get("persona_id")
+        if isinstance(persona_id, str) and persona_id:
+            try:
+                bound = self.store.persona_bound_accounts(persona_id)
+            except Exception as exc:  # noqa: BLE001 — fail closed, retry later
+                logger.warning(
+                    f"fill_schedule: slot {slot['id']} binding read failed, "
+                    f"leaving it for the next tick: {notify_module.safe_diagnostic(exc)}"
+                )
+                return 0
+            try:
+                validate_publish_plan(schedule, title, description, bound)
+            except AccountNotBoundError as exc:
+                self._fail_slot_permanently(
+                    slot,
+                    schedule,
+                    str(exc),
+                    "Publish blocked by the persona binding check; video refunded",
+                )
+                return 0
+            except (RuntimeError, ValueError) as exc:
+                # Any other plan failure (blank description, unsupported
+                # provider, caption limits) is a validation error, not a
+                # binding rejection — the refund reason must say so.
+                self._fail_slot_permanently(
+                    slot,
+                    schedule,
+                    str(exc),
+                    "Publish plan failed validation; video refunded",
+                )
+                return 0
         if not resumed:
             # Once per publish: a resume (backoff, crash lease) is the same publish.
             track_event("video_publish_started", publish_tracking_context(slot, schedule))
@@ -113,6 +174,14 @@ class BatchPublisher:
                 publish_failed_properties(
                     slot, schedule, "task has no finished videos", retryable=False
                 ),
+            )
+            notify_owner_async(
+                notify_publish_failed,
+                slot_user_id(slot),
+                slot_id=str(slot["id"]),
+                title=str(slot.get("title") or ""),
+                reason="task has no finished videos",
+                persona=persona_name,
             )
             return 0
         if not isinstance(object_path, str) or not object_path:
@@ -245,6 +314,14 @@ class BatchPublisher:
                             str(slot["id"]), account_result.non_user_failed_providers,
                         ),
                     )
+                notify_owner_async(
+                    notify_publish_partial,
+                    slot_user_id(slot),
+                    slot_id=str(slot["id"]),
+                    title=title,
+                    failures=_failed_outcomes(account_result.outcomes),
+                    persona=persona_name,
+                )
             return 1
         self._fail_slot_permanently(
             slot,
@@ -379,3 +456,14 @@ class BatchPublisher:
         if outcomes is not None:
             fields["publish_outcomes"] = [dict(item) for item in outcomes]
         self.store.update_slot(slot["id"], **fields)
+        personas = schedule.get("personas") or {}
+        persona = personas.get("name") if isinstance(personas, dict) else None
+        notify_owner_async(
+            notify_publish_failed,
+            user_id,
+            slot_id=str(slot["id"]),
+            title=str(slot.get("title") or ""),
+            reason=fields["error"],
+            persona=persona if isinstance(persona, str) else None,
+            failures=_failed_outcomes(outcomes),
+        )

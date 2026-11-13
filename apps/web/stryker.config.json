@@ -1,7 +1,8 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
-  "_comment": "Per-PR mutation testing for apps/web (vitest); the mutation workflow passes the PR's changed files via --mutate. Manual 'workflow_dispatch' runs use this full scope: lib/** (pure business logic, fast unit tests). Widen once the baseline is stable. Incremental results live in reports/stryker-incremental.json, cached per-PR by the mutation workflow so synchronize re-runs only re-test changed mutants.",
+  "_comment": "Per-PR mutation testing for apps/web (vitest); the mutation workflow passes the PR's changed files via --mutate. Manual 'workflow_dispatch' runs use this full scope: lib/** (pure business logic, fast unit tests). Widen once the baseline is stable. Incremental results live in reports/stryker-incremental.json, cached per-PR by the mutation workflow so synchronize re-runs only re-test changed mutants. dryRunTimeoutMinutes is 10 because the instrumented initial run exceeds Stryker's 5-minute default on CI runners (timed out twice per run on PR #569 while the plain web job and the gates job's Stryker run pass on the same heads).",
   "coverageAnalysis": "perTest",
+  "dryRunTimeoutMinutes": 10,
   "incremental": true,
   "incrementalFile": "reports/stryker-incremental.json",
   "ignorePatterns": [

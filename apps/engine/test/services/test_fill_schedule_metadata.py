@@ -70,3 +70,42 @@ class MetadataForDescriptionTests(unittest.TestCase):
     def test_validate_publish_plan_accepts_a_description(self):
         schedule = dict(SCHEDULE, providers=["youtube", "pinterest"])
         validate_publish_plan(schedule, "Slot title", "Agent description.")
+
+
+class ValidatePublishPlanBindingTests(unittest.TestCase):
+    """Issue #572: a schedule publishes only to accounts bound to its persona.
+
+    The binding is read at generate time, so an account unbound after
+    scheduling fails the slot here — before any GPU is spent — instead of
+    publishing to an account the persona no longer owns.
+    """
+
+    def test_accepts_accounts_bound_to_the_persona(self):
+        schedule = dict(SCHEDULE, providers=["youtube", "instagram"], persona_id="persona-1")
+        validate_publish_plan(
+            schedule,
+            "Slot title",
+            "Agent description.",
+            bound_accounts={"youtube": ["yt-1"], "instagram": ["ig-1"]},
+        )
+
+    def test_rejects_an_account_the_persona_is_not_bound_to(self):
+        schedule = dict(SCHEDULE, providers=["youtube"], persona_id="persona-1")
+        with self.assertRaisesRegex(RuntimeError, "not bound to persona"):
+            validate_publish_plan(
+                schedule,
+                "Slot title",
+                "Agent description.",
+                bound_accounts={"youtube": ["yt-other"]},
+            )
+
+    def test_rejects_a_schedule_when_the_persona_has_no_bound_accounts(self):
+        schedule = dict(SCHEDULE, providers=["youtube"], persona_id="persona-1")
+        with self.assertRaisesRegex(RuntimeError, "not bound to persona"):
+            validate_publish_plan(schedule, "Slot title", "Agent description.", bound_accounts={})
+
+    def test_skips_the_binding_check_when_no_binding_is_given(self):
+        # Faceless schedules carry no persona, so the generate stage passes
+        # no binding and the ownership-only checks stand.
+        schedule = dict(SCHEDULE, providers=["youtube"])
+        validate_publish_plan(schedule, "Slot title", "Agent description.")

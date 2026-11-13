@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 //---------------
 
 import { usePersonaStore } from '@/lib/store';
+import { emptyPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 
 describe('usePersonaStore', () => {
   beforeEach(() => {
@@ -227,6 +228,51 @@ describe('usePersonaStore', () => {
     ]) {
       expect(state).not.toHaveProperty(key);
     }
+  });
+
+  //---------------
+  // Issue #572 — the persona is born bound to at least one publishing
+  // account. The binding lives in the store so the create picker and the
+  // submit share it, and buildPersonaFormData sends it as the
+  // `publishingAccounts` JSON field the server requires (create mode
+  // rejects a missing/empty binding with a 400, nothing written).
+  //---------------
+
+  it('starts with no bound publishing accounts', () => {
+    expect(usePersonaStore.getState().publishingAccounts).toEqual(emptyPersonaDefaultAccounts());
+  });
+
+  it('setPublishingAccounts stores the binding', () => {
+    const s = usePersonaStore.getState();
+    s.setPublishingAccounts({ ...emptyPersonaDefaultAccounts(), youtube: ['yt-1'] });
+
+    expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual(['yt-1']);
+    expect(usePersonaStore.getState().publishingAccounts.instagram).toEqual([]);
+  });
+
+  it('buildPersonaFormData sends the bound accounts as JSON', () => {
+    const s = usePersonaStore.getState();
+    s.setName('Zé Persona');
+    s.setPublishingAccounts({ ...emptyPersonaDefaultAccounts(), youtube: ['yt-1'], instagram: ['ig-1'] });
+
+    const formData = usePersonaStore.getState().buildPersonaFormData();
+    expect(JSON.parse(String(formData.get('publishingAccounts')))).toEqual(
+      expect.objectContaining({ youtube: ['yt-1'], instagram: ['ig-1'] }),
+    );
+  });
+
+  it('resetForm clears the bound publishing accounts', () => {
+    const s = usePersonaStore.getState();
+    s.setPublishingAccounts({ ...emptyPersonaDefaultAccounts(), youtube: ['yt-1'] });
+
+    usePersonaStore.getState().resetForm();
+
+    expect(usePersonaStore.getState().publishingAccounts).toEqual(emptyPersonaDefaultAccounts());
+  });
+
+  it('buildPersonaFormData sends an empty binding when none is picked', () => {
+    const formData = usePersonaStore.getState().buildPersonaFormData();
+    expect(JSON.parse(String(formData.get('publishingAccounts')))).toEqual(emptyPersonaDefaultAccounts());
   });
 
   //---------------

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 vi.mock('@/lib/rate-limit', () => ({ applyRateLimit: vi.fn(async () => null), RATE_LIMITS: { oauthStart: {}, pinterestBoards: {} } }));
-vi.mock('@/lib/api-error-reporting', () => ({ withApiErrorReporting: (_route: string, handler: unknown) => handler, resolveReportingUserId: vi.fn() }));
+vi.mock('@/lib/api-error-reporting', () => ({ withApiErrorReporting: (_route: string, handler: unknown) => handler, resolveReportingUserId: vi.fn(), markApiErrorReported: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createSupabaseServerClient: vi.fn() }));
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({ __mock: 'service' })) }));
 vi.mock('@/lib/logger', () => ({ logger: { generateLogId: vi.fn(() => 'log-1'), logOAuthError: vi.fn(), error: vi.fn() } }));
@@ -31,6 +31,8 @@ import { upsertSocialAccount } from '@/lib/social-accounts';
 import { buildFanvueAuthUrl, exchangeFanvueCode, fetchFanvueProfile } from '@/lib/fanvue';
 import { createOAuthState, resolveOAuthRedirectUri, setOAuthNonceCookie, setFanvueCodeVerifierCookie } from '@/lib/oauth-utils';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
+import { logger } from '@/lib/logger';
+import { markApiErrorReported } from '@/lib/api-error-reporting';
 
 const START = 'https://app.example/api/fanvue-auth/start';
 const CALLBACK = 'https://app.example/api/fanvue-auth/callback';
@@ -71,11 +73,19 @@ describe('GET /api/fanvue-auth/start', () => {
   });
 
   it('returns 500 when the Fanvue credentials are missing', async () => {
-    delete process.env.FANVUE_CLIENT_ID;
+    vi.stubEnv('FANVUE_CLIENT_ID', undefined);
     const res = await startGET(new NextRequest(START));
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain('FANVUE_CLIENT_ID');
+    // The missing-credentials cause is logged so PostHog shows the reason
+    // instead of only the wrapper's generic "[route] 500", and the response
+    // is marked so the wrapper does not report a second synthetic exception.
+    expect(logger.logOAuthError).toHaveBeenCalledWith(
+      'log-1',
+      expect.objectContaining({ message: expect.stringContaining('FANVUE_CLIENT_ID') }),
+    );
+    expect(markApiErrorReported).toHaveBeenCalledWith(res);
   });
 
   it('returns 500 with a generic error when URL building fails (no internal details leaked)', async () => {
@@ -87,6 +97,13 @@ describe('GET /api/fanvue-auth/start', () => {
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('Failed to generate the authorization URL.');
     expect(body.error).not.toContain('fan secret misconfigured');
+    expect(logger.logOAuthError).toHaveBeenCalledWith(
+      'log-1',
+      expect.objectContaining({ message: expect.stringContaining('fan secret misconfigured') }),
+    );
+    // The logged cause is already reported to PostHog, so the response is
+    // marked so the wrapper does not report a second synthetic exception.
+    expect(markApiErrorReported).toHaveBeenCalledWith(res);
   });
 });
 

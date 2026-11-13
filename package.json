@@ -14,18 +14,21 @@
     "lint:fix": "pnpm exec nx run web:lint:fix && pnpm exec nx run-many -t lint typecheck",
     "typecheck": "pnpm exec nx run-many -t typecheck",
     "graph": "pnpm exec nx graph",
-    "typecheck:global": "pnpm exec nx run-many -t typecheck"
+    "typecheck:global": "pnpm exec nx run-many -t typecheck",
+    "security:audit": "node .github/scripts/audit/verify-accepted.mjs"
   },
   "devDependencies": {
     "husky": "^9.1.7",
-    "nx": "^21.0.0"
+    "nx": "^21.6.11"
   },
   "pnpm": {
     "overrides": {
       "postcss": "^8.5.23",
       "minimatch": "^9.0.7",
       "uuid": "^11.1.1",
-      "@eslint/eslintrc>minimatch": "3.1.5"
+      "@eslint/eslintrc>minimatch": "3.1.5",
+      "js-yaml@4.1.0": "^4.3.2",
+      "qs@<6.16.1": "^6.16.1"
     }
   }
 }
