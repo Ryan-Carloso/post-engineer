@@ -302,8 +302,6 @@ export const enDictionary: Dictionary = {
     createNew: 'Create new persona',
     voiceHouse: 'House voice',
     voiceOwn: 'Your voice',
-    boundAccountsLabel: 'Publishes to',
-    noBoundAccounts: 'No accounts bound — tap to bind one',
     delete: 'Delete persona',
     edit: 'Edit persona',
     deleteConfirm: 'Delete',

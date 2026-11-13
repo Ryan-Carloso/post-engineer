@@ -302,8 +302,6 @@ export const ptDictionary = {
     createNew: 'Criar nova persona',
     voiceHouse: 'Voz da casa',
     voiceOwn: 'Sua voz',
-    boundAccountsLabel: 'Publica em',
-    noBoundAccounts: 'Nenhuma conta ligada — toca para ligar uma',
     delete: 'Deletar persona',
     edit: 'Editar persona',
     deleteConfirm: 'Deletar',
