@@ -3389,11 +3389,27 @@ class PartialPublishEmailTests(unittest.TestCase):
             "id": "slot-1",
             "task_id": "task-1",
             "title": "Daily Dose",
+            "description": "Daily Dose description.",
             "user_id": "user-1",
-            "schedules": {"id": "sched-1", "persona_id": "p-1", "personas": {"name": "Bicuda"}},
+            # Issue #572: the publish-time re-check runs validate_publish_plan
+            # before any video leaves the server, so the fixture carries a
+            # production-shaped plan — providers with their account ids, and
+            # a binding that covers them — or the slot fails before publish.
+            "schedules": {
+                "id": "sched-1",
+                "persona_id": "p-1",
+                "personas": {"name": "Bicuda"},
+                "providers": ["youtube", "bluesky"],
+                "youtube_account_ids": ["UC1"],
+                "bluesky_account_ids": ["did:plc:1"],
+            },
         }
         store = MagicMock()
         store.claim_ready_slot.return_value = True
+        store.persona_bound_accounts.return_value = {
+            "youtube": ["UC1"],
+            "bluesky": ["did:plc:1"],
+        }
         task_state = MagicMock()
         task_state.get_task.return_value = {
             "videos": ["v.mp4"],
