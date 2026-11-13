@@ -40,6 +40,32 @@ describe('noticesFromOutcomes', () => {
     expect(providerFailures).toHaveLength(1);
   });
 
+  it('surfaces a parked publish_unknown outcome as a user notice', () => {
+    const notice =
+      'Fanvue may already have published this video, but the publish record was lost. ' +
+      'Check Fanvue before posting it again: this slot will not retry on its own and the token was not refunded.';
+    const { userNotices, providerFailures } = noticesFromOutcomes([
+      { provider: 'fanvue', accountId: 'f1', status: 'failed', code: 'publish_unknown', requiresUser: true, notice },
+    ]);
+    expect(userNotices).toEqual([
+      { provider: 'fanvue', accountId: 'f1', code: 'publish_unknown', requiresUser: true, notice },
+    ]);
+    expect(providerFailures).toEqual([
+      { provider: 'fanvue', accountId: 'f1', code: 'publish_unknown', requiresUser: true, notice },
+    ]);
+  });
+
+  it('does not surface publish_unknown without the stored requiresUser flag', () => {
+    const notice = 'Fanvue may already have published this video, but the publish record was lost.';
+    const { userNotices, providerFailures } = noticesFromOutcomes([
+      { provider: 'fanvue', accountId: 'f1', status: 'failed', code: 'publish_unknown', requiresUser: false, notice },
+    ]);
+    expect(userNotices).toEqual([]);
+    expect(providerFailures).toEqual([
+      { provider: 'fanvue', accountId: 'f1', code: 'publish_unknown', requiresUser: false, notice },
+    ]);
+  });
+
   it('does not trust requiresUser on a code that is not a user code', () => {
     const { userNotices, providerFailures } = noticesFromOutcomes([
       { provider: 'youtube', accountId: 'c1', status: 'failed', code: 'publish_rejected', requiresUser: true, notice: '' },
