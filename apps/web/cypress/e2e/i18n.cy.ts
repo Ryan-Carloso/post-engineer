@@ -3,6 +3,20 @@
 // Testa troca de idioma via LocaleSwitcher da sidebar e persistência.
 //---------------
 
+//---------------
+// The first-visit wizard auto-opens on /posts ("/" redirects there) and
+// its dialog covers the page, so this spec visits as a returning user.
+// A Cypress spec cannot import the key from lib/onboarding-wizard.ts,
+// so the literal is pinned here (same as posts-create.cy.ts).
+//---------------
+function visitHomeAsReturningUser(): void {
+  cy.visit('/', {
+    onBeforeLoad(win) {
+      win.localStorage.setItem('post-engineer-onboarding-wizard-seen', '1');
+    },
+  });
+}
+
 describe('i18n — troca de idioma via UI', () => {
   beforeEach(() => {
     // Real session cookie first: the middleware validates it server-side and
@@ -40,7 +54,7 @@ describe('i18n — troca de idioma via UI', () => {
       body: { success: true, generations: [] },
     }).as('getGenerations');
 
-    cy.visit('/');
+    visitHomeAsReturningUser();
     cy.wait('@getSchedules');
   });
 

@@ -24,7 +24,6 @@ describe('NewPostButton', () => {
   it('is a link to the recipes hub with the New post label', () => {
     render(<NewPostButton testId="new-post-button" />);
     const link = screen.getByRole('link', { name: 'posts.newPostAction' });
-    expect(link).toHaveAttribute('href', '/recipes');
     expect(link).toHaveAttribute('href', CREATE_POSTS_HREF);
     expect(screen.getByTestId('new-post-button')).toBe(link);
   });

@@ -66,6 +66,9 @@ export function OnboardingWizard() {
   const openAtStep = useOnboardingWizardStore((s) => s.openAtStep);
   const dismiss = useOnboardingWizardStore((s) => s.dismiss);
 
+  // Mount-only check by design: the wizard reads the seen flag once, when
+  // the posts page mounts. A later localStorage change (another tab) must
+  // not reopen it mid-session, so the readers stay out of the deps.
   useEffect(() => {
     if (!readOnboardingWizardSeen()) openAtStep(readOnboardingWizardStep());
   }, [openAtStep]);

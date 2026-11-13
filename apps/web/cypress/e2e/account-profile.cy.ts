@@ -83,6 +83,20 @@ function interceptShellData(): void {
 const MOBILE_VIEWPORT: [number, number] = [390, 844];
 
 //---------------
+// The first-visit wizard auto-opens on /posts ("/" redirects there) and
+// its dialog covers the page, so these specs visit as a returning user.
+// A Cypress spec cannot import the key from lib/onboarding-wizard.ts,
+// so the literal is pinned here (same as posts-create.cy.ts).
+//---------------
+function visitHomeAsReturningUser(): void {
+  cy.visit('/', {
+    onBeforeLoad(win) {
+      win.localStorage.setItem('post-engineer-onboarding-wizard-seen', '1');
+    },
+  });
+}
+
+//---------------
 // The desktop sidebar is h-screen; on a short viewport the footer (user
 // block) is clipped off-screen, so the desktop spec uses a tall viewport.
 //---------------
@@ -97,7 +111,7 @@ describe('Account area — mobile header (390px)', () => {
   });
 
   it('shows the version badge and the avatar button in the mobile header', () => {
-    cy.visit('/');
+    visitHomeAsReturningUser();
 
     cy.get('[data-testid=mobile-header]').should('be.visible');
     cy.get('[data-testid=mobile-header] [data-testid=version-badge]')
@@ -111,7 +125,7 @@ describe('Account area — mobile header (390px)', () => {
   });
 
   it('navigates to /account when the avatar button is clicked', () => {
-    cy.visit('/');
+    visitHomeAsReturningUser();
 
     cy.get('[data-testid=mobile-profile-link]').click();
     cy.url().should('include', '/account');
@@ -119,7 +133,7 @@ describe('Account area — mobile header (390px)', () => {
   });
 
   it('opens History from the More sheet', () => {
-    cy.visit('/');
+    visitHomeAsReturningUser();
 
     cy.get('nav.fixed.bottom-0').contains('button', 'Mais').click();
     cy.get('[role=dialog]').within(() => {
@@ -131,7 +145,7 @@ describe('Account area — mobile header (390px)', () => {
   });
 
   it('has four bottom tab links starting at /posts plus More', () => {
-    cy.visit('/');
+    visitHomeAsReturningUser();
 
     // The bottom nav is the fixed nav; the translated aria-label depends on
     // the locale, so select by layout classes instead.
@@ -219,7 +233,7 @@ describe('Account area — desktop sidebar footer', () => {
   });
 
   it('sidebar has seven tabs starting at /posts and has no API Keys tab', () => {
-    cy.visit('/');
+    visitHomeAsReturningUser();
 
     // Sidebar nav: Posts first, then History, ..., API Key & MCP last.
     // Seven tabs; the mobile bottom bar has four tabs plus a More sheet
@@ -236,7 +250,7 @@ describe('Account area — desktop sidebar footer', () => {
   });
 
   it('user block links to /account', () => {
-    cy.visit('/');
+    visitHomeAsReturningUser();
 
     cy.get('[data-testid=profile-user-link]', { timeout: 10_000 })
       .scrollIntoView()

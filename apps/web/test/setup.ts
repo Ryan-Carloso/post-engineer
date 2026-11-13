@@ -7,10 +7,12 @@ process.env.MCP_RESOURCE = 'https://mcp.post-engineer.test';
 // The first-visit onboarding wizard auto-opens on /posts. The default test
 // user is a returning one, so the wizard starts seen; first-visit tests
 // clear localStorage in their own beforeEach to get the fresh state. The
-// window guard keeps node-environment suites (route tests) out of this.
+// window guard keeps node-environment suites (route tests) out of this,
+// and the storage guard keeps suites that stub a bare `window` without
+// `localStorage` (session-expiry stubs `{ location }`) out of it too.
 //---------------
 beforeEach(() => {
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
     window.localStorage.setItem(ONBOARDING_WIZARD_SEEN_KEY, '1');
   }
 });
