@@ -13,13 +13,20 @@ export const USER_ACCOUNT_ERROR_CODES = [
 
 export type UserAccountErrorCode = (typeof USER_ACCOUNT_ERROR_CODES)[number];
 
-export type UploadAccountErrorCode = UserAccountErrorCode | 'transient' | 'publish_rejected' | 'publish_in_progress';
+export type UploadAccountErrorCode = UserAccountErrorCode | 'transient' | 'publish_rejected' | 'publish_in_progress' | 'publish_unknown';
 
 // 'publish_in_progress' is not a failure: the web route is still
 // publishing this account under an earlier request (the first attempt
 // outlived the engine's 600s timeout). The engine waits 60s and re-asks
 // for the recorded result instead of spending one of its 3 tries —
 // it is not a user code, and it never carries a user notice.
+
+// 'publish_unknown' is a parked failure: the post may already be live,
+// but its ledger record was lost even after retries, so no later retry
+// may claim a fresh publish for this account. The engine marks the
+// account failed with a user notice (check the provider before posting
+// again) and never retries it on its own — it is not a user code either,
+// but unlike 'publish_in_progress' it is terminal.
 
 export function isUserAccountErrorCode(code: string): code is UserAccountErrorCode {
   return USER_ACCOUNT_ERROR_CODES.some((known) => known === code);

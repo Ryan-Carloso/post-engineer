@@ -418,6 +418,48 @@ class AccountRetryTests(unittest.TestCase):
         self.assertEqual(len(started), 1)
         self.assertEqual(store.slot["status"], "failed")
 
+    def test_unknown_publish_parks_the_account_without_refund_or_retry(self) -> None:
+        # The web route parked the claim as unknown: the post may already be
+        # live, but its ledger record was lost. The account must never be
+        # re-posted, and the slot must fail WITHOUT refunding the token:
+        # money must not move on an unknown outcome — if the post is live
+        # the user already got it, and if it is not, support refunds it
+        # after the human check. The user is told to verify first.
+        slot = self._slot(["instagram"])
+        slot["schedules"]["instagram_account_ids"] = ["ig-1"]
+        store = _MemoryStore(slot)
+        notify = MagicMock()
+
+        def publish(**kwargs):
+            return {
+                "success": False,
+                "results": [{
+                    "accountId": "ig-1",
+                    "success": False,
+                    "error": "Publish result could not be recorded",
+                    "errorCode": "publish_unknown",
+                }],
+            }
+
+        scheduler = self._scheduler(store, publish, notify=notify)
+        scheduler.publish_due(NOW)
+        outcome = store.slot["publish_outcomes"][0]
+        self.assertEqual((outcome["status"], outcome["code"]), ("failed", "publish_unknown"))
+        self.assertTrue(outcome["requiresUser"])
+        self.assertIn("may already have published", outcome["notice"])
+        self.assertIsNone(outcome["retryAt"])
+        self.assertEqual(store.slot["status"], "failed")
+        self.assertEqual(store.refund_batch_calls, [])
+
+        # The user is told to check the provider before posting again.
+        messages = [str(call.args[0]) for call in notify.call_args_list]
+        self.assertTrue(any("may already have published" in message for message in messages))
+
+        # A later tick never re-posts the parked account.
+        scheduler.publish_due(NOW + timedelta(seconds=30))
+        self.assertEqual(store.slot["status"], "failed")
+        self.assertEqual(store.refund_batch_calls, [])
+
     def test_delay_and_classification_trust_the_code_not_the_text(self) -> None:
         self.assertEqual(next_delay_seconds(1), 30)
         self.assertEqual(next_delay_seconds(2), 120)
@@ -427,6 +469,7 @@ class AccountRetryTests(unittest.TestCase):
         self.assertEqual(classify_failure("publish_rejected", 200), ("publish_rejected", False))
         self.assertEqual(classify_failure("transient", 200), ("transient", False))
         self.assertEqual(classify_failure("publish_in_progress", 200), ("publish_in_progress", False))
+        self.assertEqual(classify_failure("publish_unknown", 200), ("publish_unknown", True))
         # No code: the status decides.
         self.assertEqual(classify_failure(None, 400), ("publish_rejected", False))
         self.assertEqual(classify_failure(None, 503), ("transient", False))

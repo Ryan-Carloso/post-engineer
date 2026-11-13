@@ -7,10 +7,16 @@ import {
   PUBLISH_IN_PROGRESS_CODE,
   PUBLISH_LEDGER_HEARTBEAT_MS,
   PUBLISH_LEDGER_LEASE_SECONDS,
+  PUBLISH_LEDGER_RECORD_RETRY_DELAYS_MS,
+  PUBLISH_UNKNOWN_CODE,
   claimPublishAttempt,
   isValidPublishScopeKey,
+  markPublishUnknown,
+  partitionPublishAccounts,
   publishInProgressResult,
   publishLedgerKey,
+  publishUnknownResult,
+  recordPartitionResults,
   recordPublishAttempt,
   releaseClaimsForRequestRejection,
   startLedgerHeartbeat,
@@ -83,6 +89,12 @@ describe('claimPublishAttempt', () => {
     expect(claim).toEqual({ outcome: 'in_progress', claimToken: null, result: null });
   });
 
+  it('reports a parked-unknown claim with no token', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: { outcome: 'unknown' }, error: null });
+    const claim = await claimPublishAttempt(mockSupabase(rpc), input);
+    expect(claim).toEqual({ outcome: 'unknown', claimToken: null, result: null });
+  });
+
   it('throws when the claim RPC fails', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: { message: 'db down' } });
     await expect(claimPublishAttempt(mockSupabase(rpc), input)).rejects.toThrow(
@@ -149,6 +161,173 @@ describe('recordPublishAttempt', () => {
     await expect(recordPublishAttempt(mockSupabase(rpc), { ...base, accountResult: result })).resolves.toBe(false);
     const failing = vi.fn().mockResolvedValue({ data: null, error: { message: 'db down' } });
     await expect(recordPublishAttempt(mockSupabase(failing), { ...base, accountResult: result })).resolves.toBe(false);
+  });
+
+  it('retries a transient record error and succeeds on the second attempt', async () => {
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: null, error: { message: 'db down' } })
+      .mockResolvedValueOnce({ data: true, error: null });
+    const result = { accountId: 'acc-1', success: true, postId: 'post-1' };
+    await expect(
+      recordPublishAttempt(mockSupabase(rpc), { ...base, accountResult: result }, { sleep }),
+    ).resolves.toBe(true);
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(PUBLISH_LEDGER_RECORD_RETRY_DELAYS_MS[0]);
+  });
+
+  it('gives up after the retry budget and reports the delays it waited', async () => {
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { message: 'db down' } });
+    const result = { accountId: 'acc-1', success: true, postId: 'post-1' };
+    await expect(
+      recordPublishAttempt(mockSupabase(rpc), { ...base, accountResult: result }, { sleep }),
+    ).resolves.toBe(false);
+    expect(rpc).toHaveBeenCalledTimes(PUBLISH_LEDGER_RECORD_RETRY_DELAYS_MS.length + 1);
+    expect(sleep).toHaveBeenCalledTimes(PUBLISH_LEDGER_RECORD_RETRY_DELAYS_MS.length);
+    expect(sleep.mock.calls.map((call) => call[0])).toEqual(PUBLISH_LEDGER_RECORD_RETRY_DELAYS_MS);
+  });
+
+  it('does not retry a lost claim: the fencing rejection is final', async () => {
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
+    const result = { accountId: 'acc-1', success: true, postId: 'post-1' };
+    await expect(
+      recordPublishAttempt(mockSupabase(rpc), { ...base, accountResult: result }, { sleep }),
+    ).resolves.toBe(false);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('with maxAttempts 1 a transient error fails at once (retry negative control)', async () => {
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { message: 'db down' } });
+    const result = { accountId: 'acc-1', success: true, postId: 'post-1' };
+    await expect(
+      recordPublishAttempt(mockSupabase(rpc), { ...base, accountResult: result }, { sleep, maxAttempts: 1 }),
+    ).resolves.toBe(false);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+});
+
+describe('markPublishUnknown', () => {
+  const base = {
+    scopeKey: 'slot:s1:video:v.mp4',
+    provider: 'fanvue',
+    accountId: 'acc-1',
+    claimToken: 'token-1',
+    error: 'publish record lost after a successful post',
+  };
+
+  it('parks the claim as unknown with the claim token', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    await expect(markPublishUnknown(mockSupabase(rpc), base)).resolves.toBe(true);
+    expect(rpc).toHaveBeenCalledWith('mark_publish_unknown', {
+      p_key: 'publish:slot:s1:video:v.mp4:fanvue:acc-1',
+      p_token: 'token-1',
+      p_error: 'publish record lost after a successful post',
+    });
+  });
+
+  it('returns false instead of throwing when the park is lost', async () => {
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
+    await expect(markPublishUnknown(mockSupabase(rpc), base, { sleep })).resolves.toBe(false);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    const failing = vi.fn().mockResolvedValue({ data: null, error: { message: 'db down' } });
+    await expect(markPublishUnknown(mockSupabase(failing), base, { sleep })).resolves.toBe(false);
+    expect(failing).toHaveBeenCalledTimes(PUBLISH_LEDGER_RECORD_RETRY_DELAYS_MS.length + 1);
+  });
+});
+
+describe('recordPartitionResults', () => {
+  const partition = {
+    scopeKey: 'slot:s1:video:v.mp4',
+    provider: 'fanvue',
+    granted: [
+      { accountId: 'acc-1', claimToken: 'token-1' },
+      { accountId: 'acc-2', claimToken: 'token-2' },
+    ],
+    replayed: [],
+    waiting: [],
+    unknown: [],
+    formData: new FormData(),
+  } as never;
+
+  it('returns the success results it could not record, so the route can park them', async () => {
+    const rpc = vi.fn(async (fn: string, args: Record<string, unknown>) => {
+      if (args.p_key === 'publish:slot:s1:video:v.mp4:fanvue:acc-1') {
+        return { data: null, error: { message: 'db down' } };
+      }
+      return { data: true, error: null };
+    });
+    const unrecorded = await recordPartitionResults(mockSupabase(rpc), partition, [
+      { accountId: 'acc-1', success: true, postId: 'post-1' },
+      { accountId: 'acc-2', success: false, error: 'Fanvue 503', errorCode: 'transient' },
+    ]);
+    expect(unrecorded).toEqual(['acc-1']);
+  });
+
+  it('returns nothing when every result was recorded', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const unrecorded = await recordPartitionResults(mockSupabase(rpc), partition, [
+      { accountId: 'acc-1', success: true, postId: 'post-1' },
+      { accountId: 'acc-2', success: false, error: 'Fanvue 503', errorCode: 'transient' },
+    ]);
+    expect(unrecorded).toEqual([]);
+  });
+
+  it('does not report a failed result that could not be recorded: nothing was published', async () => {
+    const rpc = vi.fn(async (fn: string, args: Record<string, unknown>) => {
+      if (args.p_key === 'publish:slot:s1:video:v.mp4:fanvue:acc-2') {
+        return { data: null, error: { message: 'db down' } };
+      }
+      return { data: true, error: null };
+    });
+    const unrecorded = await recordPartitionResults(mockSupabase(rpc), partition, [
+      { accountId: 'acc-1', success: true, postId: 'post-1' },
+      { accountId: 'acc-2', success: false, error: 'Fanvue 503', errorCode: 'transient' },
+    ]);
+    expect(unrecorded).toEqual([]);
+  });
+});
+
+describe('publishUnknownResult', () => {
+  it('is a failure that tells the caller to verify before posting again', () => {
+    const result = publishUnknownResult('acc-1');
+    expect(result.accountId).toBe('acc-1');
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe(PUBLISH_UNKNOWN_CODE);
+    expect(result.errorCode).toBe('publish_unknown');
+    expect(result.error).toContain('may already have published');
+  });
+});
+
+describe('partitionPublishAccounts with an unknown claim', () => {
+  it('parks the unknown account and never sends it to the handler', async () => {
+    const rpc = vi.fn(async (fn: string, args: Record<string, unknown>) => {
+      if (args.p_key === 'publish:slot:s1:video:v.mp4:fanvue:acc-1') {
+        return { data: { outcome: 'unknown' }, error: null };
+      }
+      return { data: { outcome: 'claimed' }, error: null };
+    });
+    const formData = new FormData();
+    formData.append('fanvueAccountIds', 'acc-1');
+    formData.append('fanvueAccountIds', 'acc-2');
+    const partition = await partitionPublishAccounts(
+      mockSupabase(rpc),
+      'slot:s1:video:v.mp4',
+      'fanvue',
+      'user-1',
+      formData,
+    );
+    expect(partition.unknown).toHaveLength(1);
+    expect(partition.unknown[0]?.accountId).toBe('acc-1');
+    expect(partition.unknown[0]?.errorCode).toBe('publish_unknown');
+    expect(partition.granted).toEqual([{ accountId: 'acc-2', claimToken: expect.any(String) }]);
+    expect(partition.formData.getAll('fanvueAccountIds')).toEqual(['acc-2']);
   });
 });
 

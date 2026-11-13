@@ -17,9 +17,12 @@ import type { ContentUploadAccountResult } from '@/lib/upload/content-upload-res
 // The first request claims the key (in_progress, 30-min lease, fenced by
 // a random token) and records its result when it finishes; a retry replays
 // the recorded post, waits for the in-flight attempt, or — after a failed
-// attempt or an expired lease — claims a fresh attempt. Only the request
-// that holds the lease can record, so a first attempt whose lease was
-// taken over cannot overwrite the winner's post.
+// attempt or an expired lease — claims a fresh attempt. A post whose
+// record is lost after retries parks its claim as unknown instead: the
+// post may already be live, so no retry may ever claim it again — the
+// account waits for a human to verify it on the provider first. Only the
+// request that holds the lease can record, so a first attempt whose lease
+// was taken over cannot overwrite the winner's post.
 //
 // The key comes from the caller: the engine sends
 // `slot:<slotId>:video:<name>` (deterministic across retries of the same
@@ -44,11 +47,15 @@ export const PUBLISH_LEDGER_HEARTBEAT_MS = 10 * 60 * 1000;
 /** The web route is still publishing this account under an earlier request. */
 export const PUBLISH_IN_PROGRESS_CODE = 'publish_in_progress';
 
-// The ledger rows' status values, mirroring the
-// publish_ledger_status_check constraint in migration 059.
-export const PUBLISH_LEDGER_STATUSES = ['in_progress', 'published', 'failed'] as const;
+/** The post may already be live, but its record was lost: never re-post it. */
+export const PUBLISH_UNKNOWN_CODE = 'publish_unknown';
 
-export type PublishLedgerOutcome = 'claimed' | 'published' | 'in_progress';
+// The ledger rows' status values, mirroring the
+// publish_ledger_status_check constraint in migration 059 (extended with
+// 'unknown' by migration 060).
+export const PUBLISH_LEDGER_STATUSES = ['in_progress', 'published', 'failed', 'unknown'] as const;
+
+export type PublishLedgerOutcome = 'claimed' | 'published' | 'in_progress' | 'unknown';
 
 export interface PublishLedgerClaim {
   outcome: PublishLedgerOutcome;
@@ -125,6 +132,7 @@ export async function claimPublishAttempt(
   if (outcome === 'published') {
     return { outcome, claimToken: null, result: toAccountResult(data.result, input.accountId) };
   }
+  if (outcome === 'unknown') return { outcome, claimToken: null, result: null };
   if (outcome === 'in_progress') return { outcome, claimToken: null, result: null };
   if (outcome === 'forbidden') {
     throw new Error('claim_publish_ledger returned forbidden: scope key belongs to another user');
@@ -140,6 +148,64 @@ export interface RecordPublishAttemptInput {
   accountResult: ContentUploadAccountResult;
 }
 
+// Delays between record attempts: a single transient RPC error must not
+// park a publish as unknown. The budget stays under a second: the record
+// is a local Postgres RPC, and the caller is already a long publish.
+export const PUBLISH_LEDGER_RECORD_RETRY_DELAYS_MS = [100, 400];
+
+export interface RecordAttemptOptions {
+  /** Total attempts including the first (default: delays + 1). */
+  maxAttempts?: number;
+  /** Injectable for tests; defaults to a real setTimeout. */
+  sleep?: (milliseconds: number) => Promise<void>;
+}
+
+function defaultSleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function recordOptions(options: RecordAttemptOptions): {
+  maxAttempts: number;
+  sleep: (milliseconds: number) => Promise<void>;
+} {
+  return {
+    maxAttempts: options.maxAttempts ?? PUBLISH_LEDGER_RECORD_RETRY_DELAYS_MS.length + 1,
+    sleep: options.sleep ?? defaultSleep,
+  };
+}
+
+// Calls a ledger RPC with bounded retries. Only a transient RPC error is
+// retried: a fencing rejection (data !== true — the claim is no longer
+// held) is final at once, because no retry can re-win a lost claim.
+// Returns true only when the RPC applied.
+async function callLedgerRpcWithRetries(
+  supabase: SupabaseClient,
+  fn: string,
+  args: Record<string, unknown>,
+  logLabel: string,
+  options: RecordAttemptOptions,
+): Promise<boolean> {
+  const { maxAttempts, sleep } = recordOptions(options);
+  const key = typeof args.p_key === 'string' ? args.p_key : '';
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const { data, error } = await supabase.rpc(fn, args);
+    if (error) {
+      logger.error(`[publish-ledger] ${logLabel} failed`, error, { key });
+      if (attempt < maxAttempts) {
+        await sleep(PUBLISH_LEDGER_RECORD_RETRY_DELAYS_MS[attempt - 1] ?? 0);
+        continue;
+      }
+      return false;
+    }
+    if (data !== true) {
+      logger.error(`[publish-ledger] ${logLabel} lost: claim no longer held`, null, { key });
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
+
 // Records the outcome of a claimed attempt. Returns false instead of
 // throwing when the record is lost: the publish already happened, so the
 // result still goes back to the caller — and the engine's own recorded
@@ -148,28 +214,55 @@ export interface RecordPublishAttemptInput {
 export async function recordPublishAttempt(
   supabase: SupabaseClient,
   input: RecordPublishAttemptInput,
+  options: RecordAttemptOptions = {},
 ): Promise<boolean> {
-  const { data, error } = await supabase.rpc('record_publish_ledger', {
-    p_key: publishLedgerKey(input.scopeKey, input.provider, input.accountId),
-    p_token: input.claimToken,
-    p_status: input.accountResult.success ? 'published' : 'failed',
-    p_result: input.accountResult.success ? input.accountResult : null,
-    p_error: input.accountResult.success ? null : (input.accountResult.error ?? 'upload failed'),
-    p_error_code: input.accountResult.success ? null : (input.accountResult.errorCode ?? null),
-  });
-  if (error) {
-    logger.error('[publish-ledger] record failed', error, {
-      key: publishLedgerKey(input.scopeKey, input.provider, input.accountId),
-    });
-    return false;
-  }
-  if (data !== true) {
-    logger.error('[publish-ledger] record lost: claim no longer held', null, {
-      key: publishLedgerKey(input.scopeKey, input.provider, input.accountId),
-    });
-    return false;
-  }
-  return true;
+  return callLedgerRpcWithRetries(
+    supabase,
+    'record_publish_ledger',
+    {
+      p_key: publishLedgerKey(input.scopeKey, input.provider, input.accountId),
+      p_token: input.claimToken,
+      p_status: input.accountResult.success ? 'published' : 'failed',
+      p_result: input.accountResult.success ? input.accountResult : null,
+      p_error: input.accountResult.success ? null : (input.accountResult.error ?? 'upload failed'),
+      p_error_code: input.accountResult.success ? null : (input.accountResult.errorCode ?? null),
+    },
+    'record',
+    options,
+  );
+}
+
+export interface MarkPublishUnknownInput {
+  scopeKey: string;
+  provider: string;
+  accountId: string;
+  claimToken: string;
+  /** Why the outcome is unknown; stored on the row for the human check. */
+  error: string;
+}
+
+// Parks a claim whose post succeeded but whose record is lost, even after
+// retries: the post may already be live, so no later retry may claim a
+// fresh publish for this key. Only the token holder can park, and only
+// from in_progress — a row the winner already recorded is untouched.
+// Returns false instead of throwing when the park itself is lost: the row
+// stays in_progress, and the lease expiry remains the (unsafe) recovery.
+export async function markPublishUnknown(
+  supabase: SupabaseClient,
+  input: MarkPublishUnknownInput,
+  options: RecordAttemptOptions = {},
+): Promise<boolean> {
+  return callLedgerRpcWithRetries(
+    supabase,
+    'mark_publish_unknown',
+    {
+      p_key: publishLedgerKey(input.scopeKey, input.provider, input.accountId),
+      p_token: input.claimToken,
+      p_error: input.error,
+    },
+    'mark unknown',
+    options,
+  );
 }
 
 export interface TouchPublishLedgerInput {
@@ -241,6 +334,18 @@ export function publishInProgressResult(accountId: string): ContentUploadAccount
   );
 }
 
+/** The per-account answer when the post may already be live but its record was lost. */
+export function publishUnknownResult(accountId: string): ContentUploadAccountResult {
+  return accountFailure(
+    accountId,
+    new Error(
+      'Publish result could not be recorded — this account may already have published. ' +
+        'Check the provider before posting again.',
+    ),
+    'publish_unknown',
+  );
+}
+
 export function createPublishLedgerClient(): SupabaseClient {
   return createSupabaseServiceClient();
 }
@@ -254,14 +359,17 @@ export interface PublishLedgerPartition {
   replayed: ContentUploadAccountResult[];
   /** Accounts still publishing under an earlier request. */
   waiting: ContentUploadAccountResult[];
+  /** Accounts parked as unknown: possibly published, never re-posted. */
+  unknown: ContentUploadAccountResult[];
   /** FormData carrying only the granted accounts, for the handler. */
   formData: FormData;
 }
 
 // Splits one upload-content call into the accounts this request may
-// publish, the ones already published (replayed from the ledger), and the
-// ones still in flight. The handler only ever sees granted accounts: a
-// replayed or waiting account never reaches the provider again.
+// publish, the ones already published (replayed from the ledger), the
+// ones still in flight, and the ones parked as unknown. The handler only
+// ever sees granted accounts: a replayed, waiting, or unknown account
+// never reaches the provider again.
 export async function partitionPublishAccounts(
   supabase: SupabaseClient,
   scopeKey: string,
@@ -274,12 +382,15 @@ export async function partitionPublishAccounts(
   const granted: PublishLedgerPartition['granted'] = [];
   const replayed: ContentUploadAccountResult[] = [];
   const waiting: ContentUploadAccountResult[] = [];
+  const unknown: ContentUploadAccountResult[] = [];
   for (const accountId of accountIds) {
     const claim = await claimPublishAttempt(supabase, { scopeKey, provider, accountId, userId });
     if (claim.outcome === 'claimed' && claim.claimToken !== null) {
       granted.push({ accountId, claimToken: claim.claimToken });
     } else if (claim.outcome === 'published' && claim.result !== null) {
       replayed.push(claim.result);
+    } else if (claim.outcome === 'unknown') {
+      unknown.push(publishUnknownResult(accountId));
     } else {
       waiting.push(publishInProgressResult(accountId));
     }
@@ -289,7 +400,7 @@ export async function partitionPublishAccounts(
     if (key !== field) next.append(key, value);
   });
   for (const { accountId } of granted) next.append(field, accountId);
-  return { scopeKey, provider, granted, replayed, waiting, formData: next };
+  return { scopeKey, provider, granted, replayed, waiting, unknown, formData: next };
 }
 
 function isAccountResult(value: unknown): value is ContentUploadAccountResult {
@@ -299,29 +410,37 @@ function isAccountResult(value: unknown): value is ContentUploadAccountResult {
 }
 
 // Records the handler's outcome for every account this request claimed.
+// Returns the accounts whose SUCCESS result could not be recorded, even
+// after retries: the post may already be live, so the caller parks them
+// as unknown instead of letting a later retry claim a fresh publish.
+// A failed result that could not be recorded is not returned: nothing
+// was published, so the lease expiry stays the safe recovery.
 // An account the handler never reported keeps its claim: the outcome is
 // unknown, so the lease expiry — not a recorded failure — is the recovery.
 export async function recordPartitionResults(
   supabase: SupabaseClient,
   partition: PublishLedgerPartition,
   results: unknown,
-): Promise<void> {
-  if (!Array.isArray(results)) return;
+): Promise<string[]> {
+  if (!Array.isArray(results)) return [];
   const byAccount = new Map<string, ContentUploadAccountResult>();
   for (const item of results) {
     if (isAccountResult(item)) byAccount.set(item.accountId, item);
   }
+  const unrecorded: string[] = [];
   for (const granted of partition.granted) {
     const result = byAccount.get(granted.accountId);
     if (result === undefined) continue;
-    await recordPublishAttempt(supabase, {
+    const recorded = await recordPublishAttempt(supabase, {
       scopeKey: partition.scopeKey,
       provider: partition.provider,
       accountId: granted.accountId,
       claimToken: granted.claimToken,
       accountResult: result,
     });
+    if (!recorded && result.success === true) unrecorded.push(granted.accountId);
   }
+  return unrecorded;
 }
 
 // A request-level rejection (a failure carrying no accountId) means the
@@ -367,11 +486,12 @@ export async function releaseClaimsForRequestRejection(
 }
 
 // One results list for the caller: replayed posts first, then accounts
-// still in flight, then what the handler just published.
+// still in flight, then accounts parked as unknown, then what the handler
+// just published.
 export function mergePartitionResults(
   partition: PublishLedgerPartition,
   results: unknown,
 ): ContentUploadAccountResult[] {
   const handlerResults = Array.isArray(results) ? results.filter(isAccountResult) : [];
-  return [...partition.replayed, ...partition.waiting, ...handlerResults];
+  return [...partition.replayed, ...partition.waiting, ...partition.unknown, ...handlerResults];
 }

@@ -24,6 +24,7 @@ import type { ContentUploadAccountResult } from '@/lib/upload/content-upload-res
 import {
   createPublishLedgerClient,
   isValidPublishScopeKey,
+  markPublishUnknown,
   mergePartitionResults,
   partitionPublishAccounts,
   recordPublishAttempt,
@@ -231,7 +232,26 @@ async function postHandler(request: NextRequest) {
         }
         if (partition !== null && ledgerClient !== null) {
           const results = response.results;
-          await recordPartitionResults(ledgerClient, partition, results);
+          const unrecorded = await recordPartitionResults(ledgerClient, partition, results);
+          // A success the ledger could not record may already be live: park
+          // its claim as unknown so no later retry can claim a fresh
+          // publish for it. The response still carries the handler's
+          // success — when the caller receives it, its own recorded
+          // success keeps the account from retrying at all.
+          await Promise.all(
+            unrecorded.map((accountId) => {
+              const granted = partition.granted.find((item) => item.accountId === accountId);
+              if (granted === undefined) return Promise.resolve(false);
+              // One const per field: v8 emits no line entries for properties
+              // inside an object literal, so an inline argument object reads
+              // as uncovered lines to Codecov even when the test runs it.
+              const scopeKey = partition.scopeKey;
+              const claimToken = granted.claimToken;
+              const error = 'publish record lost after a successful post';
+              const args = { scopeKey, provider, accountId, claimToken, error };
+              return markPublishUnknown(ledgerClient, args);
+            }),
+          );
           await releaseClaimsForRequestRejection(ledgerClient, partition, results);
           const merged = mergePartitionResults(partition, results);
           response = { ...response, success: merged.some((result) => result.success), results: merged };

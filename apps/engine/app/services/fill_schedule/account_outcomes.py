@@ -89,6 +89,12 @@ def user_notice(provider: str, code: str) -> str | None:
             f"{label} did not publish because the account needs to be reconnected. "
             f"This is a problem with your account. Only you can fix it: reconnect {label}."
         )
+    if code == "publish_unknown":
+        return (
+            f"{label} may already have published this video, but the publish record was lost. "
+            f"Check {label} before posting it again: this slot will not retry on its own "
+            f"and the token was not refunded."
+        )
     return None
 
 
@@ -114,6 +120,13 @@ def classify_failure(
     """
     code = error_code.strip() if isinstance(error_code, str) else ""
     if code in USER_CODES:
+        return code, True
+    if code == "publish_unknown":
+        # The web route parked the claim: the post may already be live, but
+        # its ledger record was lost. The account must never be retried by
+        # the scheduler — only a human who checked the provider may post
+        # again — so it fails terminally as a user action, like a
+        # disconnected account.
         return code, True
     if code in ("transient", "publish_rejected", "publish_in_progress"):
         return code, False
