@@ -278,6 +278,28 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertEqual(store.updates[0][1]["status"], "failed")
         self.assertIn("not bound to persona", store.updates[0][1]["error"])
 
+    def test_generate_batch_slot_binding_read_failure_leaves_slot_pending_for_retry(self):
+        # A binding read that fails (Supabase down) fails closed: the
+        # slot is NOT failed — it stays pending for the next tick, so a
+        # transient outage does not burn a prepaid slot. Mirrors the
+        # publish-side retry (test_publish_binding_read_failure_...).
+        slot = self._batch_slot()
+        slot["schedules"]["persona_id"] = "persona-1"
+        store = _FakeStore()
+        store.persona_bound_accounts = MagicMock(side_effect=RuntimeError("supabase down"))
+        store.pending_slots = lambda now: [slot]
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
+            enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(enqueued, 0)
+        dispatch_generation.assert_not_called()
+        self.assertEqual(store.spent, [])
+        self.assertEqual(store.updates, [])
+        self.assertEqual(store.refund_batch_calls, [])
+
     def test_generate_batch_slot_dispatches_when_the_account_is_bound_to_the_persona(self):
         slot = self._batch_slot()
         slot["schedules"]["persona_id"] = "persona-1"
