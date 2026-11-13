@@ -157,6 +157,7 @@ describe('signed-upload client calls', () => {
             videoUrl: 'https://cdn.test/v.mp4',
             permalink: 'https://instagram.test/p/1',
             error: 'ignored',
+            errorCode: 'publish_unknown',
           },
         ],
         successCount: 1,
@@ -169,7 +170,7 @@ describe('signed-upload client calls', () => {
       accountIds: ['ig-1'],
       caption: 'hi',
     });
-    expect(full.results[0]).toMatchObject({ videoId: 'vid', videoUrl: 'https://cdn.test/v.mp4', permalink: 'https://instagram.test/p/1' });
+    expect(full.results[0]).toMatchObject({ videoId: 'vid', videoUrl: 'https://cdn.test/v.mp4', permalink: 'https://instagram.test/p/1', errorCode: 'publish_unknown' });
     expect(full.results[0]).not.toHaveProperty('postId');
     const sparse = await publishUploadedVideo(fakeClient(request), {
       provider: 'instagram',

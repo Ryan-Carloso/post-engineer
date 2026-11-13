@@ -1,12 +1,12 @@
 import type { PostEngineerClient } from './client.js';
 import type {
   CompletedVideoUpload,
-  DirectPublishAccountResult,
   DirectPublishResult,
   MintedVideoUpload,
   PublishUploadedVideoInput,
 } from './client-types.js';
 import { requireDirectPublishFields } from './direct-publish-form.js';
+import { isRecord, narrowDirectPublishAccountResult } from './direct-publish-narrowing.js';
 import { MAX_UPLOAD_VIDEO_BYTES } from './limits.js';
 
 //---------------
@@ -22,10 +22,6 @@ import { MAX_UPLOAD_VIDEO_BYTES } from './limits.js';
 
 const UPLOAD_TIMEOUT_MS = 120_000;
 const VIDEO_CONTENT_TYPES = ['video/mp4', 'video/quicktime'];
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
 
 export async function createVideoUpload(
   client: PostEngineerClient,
@@ -93,19 +89,6 @@ export async function completeVideoUpload(
     contentType: result.contentType,
     sizeBytes: result.sizeBytes,
   };
-}
-
-function narrowDirectPublishAccountResult(value: unknown): DirectPublishAccountResult {
-  if (!isRecord(value) || typeof value.accountId !== 'string' || typeof value.success !== 'boolean') {
-    throw new Error('Malformed direct-publish account result from the API.');
-  }
-  const result: DirectPublishAccountResult = { accountId: value.accountId, success: value.success };
-  if (typeof value.videoId === 'string') result.videoId = value.videoId;
-  if (typeof value.videoUrl === 'string') result.videoUrl = value.videoUrl;
-  if (typeof value.postId === 'string') result.postId = value.postId;
-  if (typeof value.permalink === 'string') result.permalink = value.permalink;
-  if (typeof value.error === 'string') result.error = value.error;
-  return result;
 }
 
 // A 200 with a malformed body is an error, never a silent success: the

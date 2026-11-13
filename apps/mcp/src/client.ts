@@ -16,7 +16,6 @@ export {
 
 import type {
   CreatePersonaInput,
-  DirectPublishAccountResult,
   DirectPublishResult,
   GeneratePersonaVideoInput,
   PersonaLibraryImageInput,
@@ -25,6 +24,7 @@ import type {
   UpdatePersonaInput, VideoType,
 } from './client-types.js';
 import { buildDirectPublishForm, requireDirectPublishFields } from './direct-publish-form.js';
+import { isRecord, narrowDirectPublishAccountResult } from './direct-publish-narrowing.js';
 import { requirePublishingAccounts } from './require-publishing-accounts.js';
 
 // Re-exported so existing import sites (`./client.js`) keep working.
@@ -181,25 +181,6 @@ function resolveBaseUrl(override: string | undefined): string {
   // identical: origin drops userinfo, trailing slashes are stripped so
   // `${baseUrl}${path}` never yields `//api/...`.
   return url.origin + url.pathname.replace(/\/+$/, '');
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function narrowDirectPublishAccountResult(value: unknown): DirectPublishAccountResult {
-  if (!isRecord(value) || typeof value.accountId !== 'string' || typeof value.success !== 'boolean') {
-    throw new Error('Malformed direct-publish account result from the API.');
-  }
-  const result: DirectPublishAccountResult = {
-    accountId: value.accountId,
-    success: value.success,
-  };
-  if (typeof value.videoId === 'string') result.videoId = value.videoId;
-  if (typeof value.videoUrl === 'string') result.videoUrl = value.videoUrl;
-  if (typeof value.postId === 'string') result.postId = value.postId; if (typeof value.permalink === 'string') result.permalink = value.permalink;
-  if (typeof value.error === 'string') result.error = value.error;
-  return result;
 }
 
 // A 200 with a malformed body is an error, never a silent success: the agent

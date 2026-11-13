@@ -221,6 +221,8 @@ export interface DirectPublishAccountResult {
   /** Ready-made post URL (Pinterest pin URL, Instagram/Threads/Facebook permalink). */
   permalink?: string;
   error?: string;
+  /** Stable failure code (e.g. publish_unknown: the post may already be live but its record was lost — do not retry). */
+  errorCode?: string;
 }
 
 /** Narrowed POST /api/upload-content response. */
