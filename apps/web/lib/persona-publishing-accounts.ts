@@ -167,6 +167,41 @@ export async function getPersonaDefaultAccounts(
   return defaults;
 }
 
+//---------------
+// getPersonaDefaultAccountsForPersonas — bulk form of
+// getPersonaDefaultAccounts for list views (issue #572): one query for
+// many personas. Every requested id is pre-seeded with an empty map, so
+// a persona with no bound accounts reads as all-empty (never absent);
+// rows for unrequested personas, unknown providers, and empty ids are
+// dropped.
+//---------------
+export async function getPersonaDefaultAccountsForPersonas(
+  supabase: SupabaseClient,
+  personaIds: string[],
+): Promise<Map<string, PersonaDefaultAccounts>> {
+  const byPersona = new Map<string, PersonaDefaultAccounts>();
+  for (const id of personaIds) byPersona.set(id, emptyPersonaDefaultAccounts());
+  if (personaIds.length === 0) return byPersona;
+  const { data, error } = await supabase
+    .from('persona_default_accounts')
+    .select('persona_id, provider, provider_account_id')
+    .in('persona_id', personaIds);
+  if (error) {
+    throw new Error(`Failed to list persona default accounts: ${error.message}`);
+  }
+  for (const row of data ?? []) {
+    const personaId = (row as { persona_id: unknown }).persona_id;
+    const provider = (row as { provider: unknown }).provider;
+    const accountId = (row as { provider_account_id: unknown }).provider_account_id;
+    if (typeof personaId !== 'string') continue;
+    const defaults = byPersona.get(personaId);
+    if (!defaults) continue;
+    if (!isSocialProvider(provider) || typeof accountId !== 'string' || accountId === '') continue;
+    defaults[provider].push(accountId);
+  }
+  return byPersona;
+}
+
 export interface SetPersonaDefaultAccountsParams {
   supabase: SupabaseClient;
   userId: string;

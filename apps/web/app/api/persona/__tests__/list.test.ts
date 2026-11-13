@@ -98,12 +98,34 @@ const LIBRARY_ROWS = [
   },
 ];
 
+// Issue #572: the bound publishing accounts per persona (persona_default_accounts).
+const BINDING_ROWS = [
+  { persona_id: 'p-1', provider: 'youtube', provider_account_id: 'yt-1' },
+  { persona_id: 'p-1', provider: 'instagram', provider_account_id: 'ig-1' },
+  { persona_id: 'p-2', provider: 'youtube', provider_account_id: 'yt-2' },
+];
+
+const EMPTY_BINDING = {
+  youtube: [],
+  instagram: [],
+  bluesky: [],
+  linkedin: [],
+  threads: [],
+  facebook: [],
+  pinterest: [],
+  '3speak': [],
+  rumble: [],
+  fanvue: [],
+};
+
 function mockSupabase(
   overrides: {
     user?: { id: string } | null;
     error?: { message: string } | null;
     imagesError?: { message: string } | null;
     images?: typeof LIBRARY_ROWS;
+    bindingsError?: { message: string } | null;
+    bindings?: typeof BINDING_ROWS;
     signErrorPaths?: string[];
     signEmptyUrlPaths?: string[];
     signNullDataPaths?: string[];
@@ -129,9 +151,26 @@ function mockSupabase(
   mockAuth(overrides);
   const signed: string[] = [];
   const imageFilters: { personaIds?: string[]; userId?: string } = {};
+  const bindingFilters: { personaIds?: string[] } = {};
   const personas = overrides.personas ?? PERSONAS;
   const client = {
     from: vi.fn((table: string) => {
+      if (table === 'persona_default_accounts') {
+        // The table carries no user_id: the scope is the listed persona
+        // ids, which the route already filtered to the caller.
+        return {
+          select: vi.fn(() => ({
+            in: vi.fn(async (_col: string, ids: string[]) => {
+              bindingFilters.personaIds = ids;
+              if (overrides.bindingsError) {
+                return { data: null, error: overrides.bindingsError };
+              }
+              const rows = (overrides.bindings ?? BINDING_ROWS).filter((row) => ids.includes(row.persona_id));
+              return { data: rows, error: null };
+            }),
+          })),
+        };
+      }
       if (table === 'persona_images') {
         return {
           select: vi.fn(() => ({
@@ -193,7 +232,7 @@ function mockSupabase(
     },
   };
   vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
-  return { client, signed, imageFilters };
+  return { client, signed, imageFilters, bindingFilters };
 }
 
 describe('GET /api/persona/list', () => {
@@ -284,6 +323,87 @@ describe('GET /api/persona/list', () => {
     expect(body.personas[1].niche).toBeUndefined();
   });
 
+  //---------------
+  // Issue #572 — the list carries each persona's bound publishing accounts
+  // (persona_default_accounts), scoped to the listed personas, so the card
+  // can show where the persona publishes — and warn when it binds nothing.
+  //---------------
+
+  it('returns the bound publishing accounts per persona', async () => {
+    const { bindingFilters } = mockSupabase();
+
+    const res = await GET(new Request('http://localhost:3434/api/persona/list'));
+    const body = (await res.json()) as {
+      personas: Array<{ id: string; boundAccounts?: Record<string, string[]> }>;
+    };
+
+    expect(res.status).toBe(200);
+    expect(body.personas[0].boundAccounts).toEqual({
+      ...EMPTY_BINDING,
+      youtube: ['yt-1'],
+      instagram: ['ig-1'],
+    });
+    expect(body.personas[1].boundAccounts).toEqual({ ...EMPTY_BINDING, youtube: ['yt-2'] });
+    expect(bindingFilters.personaIds).toEqual(['p-1', 'p-2']);
+  });
+
+  it('returns an empty binding for a persona with no bound accounts', async () => {
+    mockSupabase({
+      personas: [
+        {
+          id: 'p-blank',
+          name: 'Blank',
+          photo_path: null,
+          avatar_url: null,
+          voice_id: null,
+          voice_audio_path: null,
+          created_at: '2026-08-29T00:00:00Z',
+          language: null,
+          video_aspect: null,
+          script_prompt: null,
+          paragraph_number: null,
+        },
+      ],
+      images: [],
+      bindings: [],
+    });
+
+    const res = await GET(new Request('http://localhost:3434/api/persona/list'));
+    const body = (await res.json()) as {
+      personas: Array<{ id: string; boundAccounts?: Record<string, string[]> }>;
+    };
+
+    expect(res.status).toBe(200);
+    expect(body.personas).toHaveLength(1);
+    expect(body.personas[0].boundAccounts).toEqual(EMPTY_BINDING);
+  });
+
+  it('returns 500 when the binding query fails', async () => {
+    mockSupabase({ bindingsError: { message: 'bindings down' } });
+
+    const res = await GET(new Request('http://localhost:3434/api/persona/list'));
+
+    expect(res.status).toBe(500);
+  });
+
+  it('does not let a scoped key see another persona binding', async () => {
+    const { bindingFilters } = mockSupabase({
+      isApiKey: true,
+      personaIds: ['p-1'],
+    });
+
+    const res = await GET(new Request('http://localhost:3434/api/persona/list'));
+    const body = (await res.json()) as { personas: Array<{ id: string; boundAccounts?: Record<string, string[]> }> };
+
+    expect(body.personas.map((p) => p.id)).toEqual(['p-1']);
+    expect(bindingFilters.personaIds).toEqual(['p-1']);
+    expect(body.personas[0].boundAccounts).toEqual({
+      ...EMPTY_BINDING,
+      youtube: ['yt-1'],
+      instagram: ['ig-1'],
+    });
+  });
+
   it('retorna 500 quando a query falha', async () => {
     mockSupabase({ error: { message: 'db down' } });
 
@@ -311,6 +431,7 @@ describe('GET /api/persona/list', () => {
       scriptPrompt: 'Storytelling.',
       paragraphNumber: 2,
       niche: 'finanças pessoais',
+      boundAccounts: { ...EMPTY_BINDING, youtube: ['yt-1'], instagram: ['ig-1'] },
     });
     expect(body.personas[1]).toEqual({
       id: 'p-2',
@@ -319,6 +440,7 @@ describe('GET /api/persona/list', () => {
       avatarUrl: 'data:image/png;base64,IA',
       libraryUrl: `https://supabase.test/signed/${USER_ID}/p-2/other.png`,
       voiceAudioUrl: `https://supabase.test/signed/${USER_ID}/voz.mp3`,
+      boundAccounts: { ...EMPTY_BINDING, youtube: ['yt-2'] },
     });
     expect(signed.sort()).toEqual(
       [

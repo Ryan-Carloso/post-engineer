@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import {
   emptyPersonaDefaultAccounts,
   getPersonaDefaultAccounts,
+  getPersonaDefaultAccountsForPersonas,
   parsePublishingAccountsField,
   setPersonaDefaultAccounts,
   totalBoundAccounts,
@@ -35,6 +36,12 @@ function makeDb(initial: Record<string, Row[]> = {}) {
         },
         eq(col: string, val: unknown) {
           (query._filters as Array<(r: Row) => boolean>).push((r) => r[col] === val);
+          return chain;
+        },
+        in(col: string, vals: unknown[]) {
+          (query._filters as Array<(r: Row) => boolean>).push((r) =>
+            (vals as unknown[]).includes(r[col]),
+          );
           return chain;
         },
         maybeSingle() {
@@ -114,6 +121,33 @@ describe('getPersonaDefaultAccounts', () => {
     expect(got.youtube).toEqual(['UC-1']);
     expect(got.instagram).toEqual([]);
     expect(got.linkedin).toEqual([]);
+  });
+});
+
+describe('getPersonaDefaultAccountsForPersonas', () => {
+  it('returns an empty map for no personas', async () => {
+    const db = baseDb();
+    const got = await getPersonaDefaultAccountsForPersonas(db as never, []);
+    expect(got.size).toBe(0);
+  });
+
+  it('groups stored rows per persona and pre-seeds every requested id', async () => {
+    const db = baseDb();
+    db.tables.persona_default_accounts = [
+      { persona_id: PERSONA, provider: 'bluesky', provider_account_id: 'did:plc:a' },
+      { persona_id: PERSONA, provider: 'youtube', provider_account_id: 'UC-1' },
+      { persona_id: 'persona-2', provider: 'bluesky', provider_account_id: 'did:plc:b' },
+      { persona_id: 'persona-2', provider: 'tiktok', provider_account_id: 'tt-1' },
+      { persona_id: 'other-persona', provider: 'bluesky', provider_account_id: 'did:plc:z' },
+      { persona_id: PERSONA, provider: 'bluesky', provider_account_id: '' },
+    ];
+    const got = await getPersonaDefaultAccountsForPersonas(db as never, [PERSONA, 'persona-2', 'persona-3']);
+    expect(got.get(PERSONA)?.bluesky).toEqual(['did:plc:a']);
+    expect(got.get(PERSONA)?.youtube).toEqual(['UC-1']);
+    expect(got.get('persona-2')?.bluesky).toEqual(['did:plc:b']);
+    expect(got.get('persona-2')?.youtube).toEqual([]);
+    expect(got.get('persona-3')).toEqual(emptyPersonaDefaultAccounts());
+    expect([...got.keys()]).toEqual([PERSONA, 'persona-2', 'persona-3']);
   });
 });
 
