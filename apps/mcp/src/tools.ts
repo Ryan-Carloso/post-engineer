@@ -16,10 +16,7 @@ import {
   UpdateSlotTitleSchema,
   UpdateSlotTitleShape,
 } from './schedule-shapes.js';
-import {
-  DisconnectAccountSchema,
-  DisconnectAccountShape,
-} from './account-shapes.js';
+import { DisconnectAccountSchema, DisconnectAccountShape, createPersonaAccountsField } from './account-shapes.js';
 import { PublishVideoDirectSchema, PublishVideoDirectShape } from './publish-direct-shape.js';
 // Re-exported so existing import sites (`./tools.js`) keep working.
 export {
@@ -86,6 +83,7 @@ export const CreatePersonaShape = {
   paragraphNumber: z.number().int().min(1).max(10).default(1).describe('Number of paragraphs'),
   niche: z.string().optional().default('General').describe('Content niche'),
   faceQuality: z.enum(['ok', 'very_good']).default('very_good').describe('Face resolution of the rendered videos: ok (480p, 2 tokens/video) or very_good (720p, 3 tokens/video)'),
+  accounts: createPersonaAccountsField,
   images: z.array(PersonaLibraryImageInputShape).max(MAX_LIBRARY_IMAGES).optional().describe(`Up to ${MAX_LIBRARY_IMAGES} local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag.`),
   imagePrimaryIndex: z.number().int().min(0).max(MAX_LIBRARY_IMAGES - 1).optional().describe('Index into images[] marking the primary library image (no primary is set when omitted)'),
 };

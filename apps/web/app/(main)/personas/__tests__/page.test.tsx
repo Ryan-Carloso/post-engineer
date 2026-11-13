@@ -260,4 +260,71 @@ describe('app/(main)/personas/page — PersonasPage', () => {
     expect(screen.getAllByText('pt').length).toBeGreaterThan(0);
     expect(screen.getAllByText('9:16').length).toBeGreaterThan(0);
   });
+
+  //---------------
+  // Issue #572 — the card shows where the persona publishes.
+  //---------------
+  it('shows the bound publishing accounts on the card', () => {
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [
+        {
+          id: 'p-bound',
+          name: 'Bound Bea',
+          createdAt: '2026-08-29T00:00:00Z',
+          boundAccounts: {
+            youtube: ['UC-1', 'UC-2'],
+            instagram: ['ig-1'],
+            bluesky: [],
+            linkedin: [],
+            threads: [],
+            facebook: [],
+            pinterest: [],
+            '3speak': [],
+            rumble: [],
+            fanvue: [],
+          },
+        },
+      ],
+      isLoading: false,
+    } as never);
+    render(<PersonasPage />, { wrapper: createWrapper() });
+    expect(screen.getByLabelText('personas.boundAccountsLabel')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'youtube' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'instagram' })).toBeInTheDocument();
+    expect(screen.getByText('×2')).toBeInTheDocument();
+    expect(screen.queryByText('personas.noBoundAccounts')).toBeNull();
+  });
+
+  it('warns when the persona binds no accounts', () => {
+    vi.mocked(usePersonaListQuery).mockReturnValue({
+      data: [
+        {
+          id: 'p-blank',
+          name: 'Blank Bea',
+          createdAt: '2026-08-29T00:00:00Z',
+          boundAccounts: {
+            youtube: [],
+            instagram: [],
+            bluesky: [],
+            linkedin: [],
+            threads: [],
+            facebook: [],
+            pinterest: [],
+            '3speak': [],
+            rumble: [],
+            fanvue: [],
+          },
+        },
+      ],
+      isLoading: false,
+    } as never);
+    render(<PersonasPage />, { wrapper: createWrapper() });
+    expect(screen.getByText('personas.noBoundAccounts')).toBeInTheDocument();
+    expect(screen.queryByLabelText('personas.boundAccountsLabel')).toBeNull();
+  });
+
+  it('warns when the binding is absent (legacy record)', () => {
+    render(<PersonasPage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText('personas.noBoundAccounts')).toHaveLength(2);
+  });
 });

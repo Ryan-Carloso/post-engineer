@@ -65,6 +65,18 @@ function mockBase(): void {
     statusCode: 200,
     body: { success: true, voices: [] },
   }).as('getClonedVoices');
+
+  // Issue #572: create requires at least one bound publishing account —
+  // without a connected account the submit never fires POST /api/persona,
+  // so the server-error tests below need one to select.
+  cy.intercept('GET', '/api/account', {
+    statusCode: 200,
+    body: {
+      authenticated: true,
+      accounts: [{ provider: 'youtube', recordId: 'r1', channelId: 'UC1', channelName: 'Canal Um' }],
+      message: 'ok',
+    },
+  }).as('getAccounts');
 }
 
 function visitPersona(path: string): void {
@@ -81,12 +93,14 @@ function visitPersona(path: string): void {
   cy.get('#persona-name', { timeout: 15_000 }).should('be.visible');
 }
 
-// Fill a valid create form: name + character + voice.
+// Fill a valid create form: name + character + voice + one bound
+// publishing account (issue #572: the submit is blocked without one).
 function fillValidForm(): void {
   cy.get('#persona-name').type('Maya E2E');
   cy.contains('[role="tab"]', 'Escolha um personagem').click();
   cy.get('button[aria-label="Escolha um personagem 1"]').click();
   cy.pickHouseVoice('en us male 01');
+  cy.get('[data-error-field="accounts"] [data-testid="account-card-select"]').check();
 }
 
 describe('Persona — formulário (abas, foto, validação, edição, erros)', () => {
@@ -161,6 +175,11 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
     cy.pickHouseVoice('en us male 01');
     cy.contains('button', 'Criar persona').click();
 
+    // The app smooth-scrolls to the error field; Cypress's Electron does
+    // not settle that animation inside the assertion timeout, so bring
+    // the section into view instantly — the test asserts the error is
+    // shown, not the scroll animation.
+    cy.get('[data-error-field="avatar"]').scrollIntoView();
     cy.contains('Envie uma foto ou gere um avatar por IA.').should('be.visible');
   });
 

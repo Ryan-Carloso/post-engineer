@@ -62,10 +62,11 @@ name: test-flight-faceless
 #                                    the face render is skipped.
 #     TEST_FLIGHT_BLUESKY_ACCOUNT_ID / TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID /
 #     TEST_FLIGHT_YOUTUBE_ACCOUNT_ID account ids for the daily monitor.
-#                                    Optional: when none are configured the
-#                                    flight auto-discovers the key's connected
-#                                    accounts via GET /api/account; explicit
-#                                    ids always win (e.g. Bluesky-only runs).
+#                                    Required (at least one): the flight
+#                                    publishes only to accounts bound to its
+#                                    persona (issue #572) — there is no
+#                                    auto-discovery fallback, and a flight
+#                                    with no explicit id fails fast.
 #     TEST_FLIGHT_API_BASE_URL       (optional) default https://post-engineer.com.
 #     TEST_FLIGHT_TOPIC              (optional) fixed topic for the daily
 #                                    monitor; when empty the LLM proposes a new
@@ -93,15 +94,15 @@ on:
         required: true
         type: string
       bluesky_account_id:
-        description: 'Bluesky account DID (optional — auto-discovered from the key when omitted)'
+        description: 'Bluesky account DID (optional — falls back to the TEST_FLIGHT_BLUESKY_ACCOUNT_ID repository variable; at least one account id must be configured or the flight fails)'
         required: false
         type: string
       instagram_account_id:
-        description: 'Instagram account id (optional — auto-discovered from the key when omitted)'
+        description: 'Instagram account id (optional — falls back to the TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID repository variable; at least one account id must be configured or the flight fails)'
         required: false
         type: string
       youtube_account_id:
-        description: 'YouTube channel id (optional — auto-discovered from the key when omitted)'
+        description: 'YouTube channel id (optional — falls back to the TEST_FLIGHT_YOUTUBE_ACCOUNT_ID repository variable; at least one account id must be configured or the flight fails)'
         required: false
         type: string
       scheduled_action:

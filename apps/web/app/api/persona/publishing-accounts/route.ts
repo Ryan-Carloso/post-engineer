@@ -14,13 +14,16 @@ import {
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
-// /api/persona/publishing-accounts?personaId= — per-persona default
-// publishing accounts (issue #212, migration 022).
+// /api/persona/publishing-accounts?personaId= — per-persona bound
+// publishing accounts (issue #212, migration 022; the binding became
+// mandatory in issue #572).
 //
-// GET returns the persona's defaults grouped per provider; PUT replaces the
-// whole set (providers mapped to [] — or omitted — keep no defaults).
-// generate-and-schedule falls back to these defaults when
-// publishing.accounts is omitted; explicit accounts always win.
+// GET returns the persona's binding grouped per provider; PUT replaces the
+// whole set, which must keep at least one bound account (issue #572) — an
+// all-empty map is a 400 and the previous binding survives.
+// generate-and-schedule falls back to the binding when
+// publishing.accounts is omitted; explicit accounts must be a subset of
+// the binding.
 //
 // Auth = Supabase session (cookie) OR personal API key (Bearer/x-api-key,
 // MCP). Ownership is enforced in the lib (service-role callers are

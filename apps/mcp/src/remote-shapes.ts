@@ -32,6 +32,11 @@ export const CreatePersonaRemoteShape = {
   paragraphNumber: CreatePersonaShape.paragraphNumber,
   niche: CreatePersonaShape.niche,
   faceQuality: CreatePersonaShape.faceQuality,
+  // Issue #572: same binding rule as the local shape — a persona is born
+  // bound to at least one publishing account. Without this field the
+  // handler's re-parse against CreatePersonaSchema (which requires
+  // accounts) would reject every remote create_persona call.
+  accounts: CreatePersonaShape.accounts,
 };
 
 export const CreatePersonaRemoteSchema = z

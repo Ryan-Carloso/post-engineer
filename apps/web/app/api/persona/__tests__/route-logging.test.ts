@@ -77,6 +77,9 @@ describe('POST /api/persona insert failure', () => {
         name: 'Canal Teste',
         avatarUrl: 'data:image/png;base64,IA',
         voiceId: 'chatterbox:kokoro_af_heart',
+        // Issue #572: creation requires at least one bound account; the
+        // fixture carries one so the request reaches the personas insert.
+        publishingAccounts: JSON.stringify({ youtube: ['acct-1'] }),
       }),
     );
 

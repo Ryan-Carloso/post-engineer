@@ -9,6 +9,11 @@ import {
   pickLibraryDisplayImage,
   type LibraryDisplayImage,
 } from '@/lib/persona-library-display';
+import {
+  emptyPersonaDefaultAccounts,
+  getPersonaDefaultAccountsForPersonas,
+  type PersonaDefaultAccounts,
+} from '@/lib/persona-publishing-accounts';
 
 //---------------
 // GET /api/persona/list — the logged-in user's personas.
@@ -70,6 +75,26 @@ async function getHandler(request: Request): Promise<NextResponse> {
     libraryRows = (images ?? []) as LibraryDisplayImage[];
   }
 
+  // Issue #572 — each persona's bound publishing accounts, so the card
+  // can show where the persona publishes and warn when it binds nothing.
+  // The table carries no user_id: the scope is the listed persona ids,
+  // which the route already filtered to the caller.
+  let bindingsByPersona: Map<string, PersonaDefaultAccounts> = new Map();
+  if (personaIds.length > 0) {
+    try {
+      bindingsByPersona = await getPersonaDefaultAccountsForPersonas(supabase, personaIds);
+    } catch (error) {
+      logger.error(
+        '[api/persona/list] persona_default_accounts query failed',
+        error instanceof Error ? error.message : 'unknown error',
+      );
+      return NextResponse.json(
+        { success: false, error: 'Failed to list personas.' },
+        { status: 500 },
+      );
+    }
+  }
+
   const personas = await Promise.all(
     records.map(async (record) => {
       const chosen = pickLibraryDisplayImage(libraryRows, record.id as string);
@@ -91,6 +116,8 @@ async function getHandler(request: Request): Promise<NextResponse> {
       const paragraphNumber = (record.paragraph_number as number | null) ?? undefined;
       const niche = (record.niche as string | null) ?? undefined;
       const faceQuality = (record.face_quality as string | null) ?? undefined;
+      const boundAccounts =
+        bindingsByPersona.get(record.id as string) ?? emptyPersonaDefaultAccounts();
       return {
         id: record.id as string,
         name: record.name as string,
@@ -113,6 +140,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
         paragraphNumber,
         niche,
         faceQuality,
+        boundAccounts,
       };
     }),
   );

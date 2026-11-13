@@ -31,6 +31,7 @@ describe('PostEngineerClient', () => {
     });
 
     const result = await client.createPersona({
+      accounts: { youtube: ['acct-1'] },
       name: 'Tech Creator',
       avatarUrl: 'https://example.com/avatar.png',
       voiceId: 'voice-alloy',
@@ -63,6 +64,42 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual(mockResponse);
   });
 
+  it('createPersona sends the binding as publishingAccounts JSON (issue #572)', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, personaId: 'persona-123' }),
+    });
+
+    await client.createPersona({
+      accounts: { youtube: ['acct-1'] },
+      name: 'Tech Creator',
+      avatarUrl: 'https://example.com/avatar.png',
+      voiceId: 'voice-alloy',
+    });
+
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const formData = request?.body as FormData;
+    expect(JSON.parse(String(formData.get('publishingAccounts')))).toEqual({ youtube: ['acct-1'] });
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['empty map', {}],
+    ['all providers empty', { youtube: [] }],
+  ])('createPersona rejects %s accounts before any fetch', async (_label, accounts) => {
+    global.fetch = vi.fn();
+    await expect(
+      client.createPersona({
+        accounts,
+        name: 'No Binding',
+        avatarUrl: 'https://example.com/avatar.png',
+        voiceId: 'voice-alloy',
+      } as never),
+    ).rejects.toThrow(/Select at least one publishing account for this persona/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('createPersona defaults the hook layout to standard', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -71,6 +108,7 @@ describe('PostEngineerClient', () => {
     });
 
     await client.createPersona({
+      accounts: { youtube: ['acct-1'] },
       name: 'No Layout',
       avatarUrl: 'https://example.com/avatar.png', voiceId: 'chatterbox:en_us_male_01',
     });
@@ -90,6 +128,7 @@ describe('PostEngineerClient', () => {
     });
 
     await client.createPersona({
+      accounts: { youtube: ['acct-1'] },
       name: 'Reacts',
       avatarUrl: 'https://example.com/avatar.png', voiceId: 'chatterbox:en_us_male_01',
       videoLayout: 'react',
@@ -155,7 +194,7 @@ describe('PostEngineerClient', () => {
       // error instead of uploading bytes the server would reject.
       global.fetch = vi.fn();
       await expect(
-        client.createPersona({ name: 'No Face', avatarUrl } as never),
+        client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'No Face', avatarUrl } as never),
       ).rejects.toThrow(/avatarUrl or avatarPath is required/);
       expect(global.fetch).not.toHaveBeenCalled();
     },
@@ -1501,6 +1540,7 @@ describe('PostEngineerClient persona image library', () => {
     const first = await writeTempImage('a.jpg');
     const second = await writeTempImage('b.png');
     await client.createPersona({
+      accounts: { youtube: ['acct-1'] },
       name: 'Tech Creator',
       avatarUrl: 'https://example.com/avatar.png', voiceId: 'chatterbox:en_us_male_01',
       images: [
@@ -1520,7 +1560,7 @@ describe('PostEngineerClient persona image library', () => {
   it('createPersona rejects more than 10 library images', async () => {
     const images = Array.from({ length: 11 }, (_, i) => ({ path: `/tmp/img-${i}.jpg` }));
     await expect(
-      client.createPersona({ name: 'X', avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01', images })
+      client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'X', avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01', images })
     ).rejects.toThrow(/At most 10 library images/);
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -1529,6 +1569,7 @@ describe('PostEngineerClient persona image library', () => {
     const path = await writeTempImage('a.jpg');
     await expect(
       client.createPersona({
+        accounts: { youtube: ['acct-1'] },
         name: 'X',
         avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path }],
@@ -1543,6 +1584,7 @@ describe('PostEngineerClient persona image library', () => {
     // proving no file is read before the pure-argument check.
     await expect(
       client.createPersona({
+        accounts: { youtube: ['acct-1'] },
         name: 'X',
         avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path: '/tmp/does-not-exist.jpg' }],
@@ -1555,6 +1597,7 @@ describe('PostEngineerClient persona image library', () => {
   it('createPersona normalizes whitespace-only tag/description to empty strings (server stores \'\' on both paths)', async () => {
     const path = await writeTempImage('a.jpg');
     await client.createPersona({
+      accounts: { youtube: ['acct-1'] },
       name: 'Tech Creator',
       avatarUrl: 'https://example.com/avatar.png', voiceId: 'chatterbox:en_us_male_01',
       images: [{ path, tag: '  casual  ', description: '   ' }],
@@ -1569,6 +1612,7 @@ describe('PostEngineerClient persona image library', () => {
     const path = await writeTempImage('a.jpg');
     await expect(
       client.createPersona({
+        accounts: { youtube: ['acct-1'] },
         name: 'X',
         avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path, tag: 'x'.repeat(101) }],
@@ -1581,6 +1625,7 @@ describe('PostEngineerClient persona image library', () => {
     const path = await writeTempImage('a.jpg');
     await expect(
       client.createPersona({
+        accounts: { youtube: ['acct-1'] },
         name: 'X',
         avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path, description: 'x'.repeat(501) }],
@@ -1594,6 +1639,7 @@ describe('PostEngineerClient persona image library', () => {
     // silent successful creation with no primary image.
     await expect(
       client.createPersona({
+        accounts: { youtube: ['acct-1'] },
         name: 'X',
         avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         imagePrimaryIndex: 0,
@@ -1608,6 +1654,7 @@ describe('PostEngineerClient persona image library', () => {
     // find the offending file when several images are uploaded at once.
     await expect(
       client.createPersona({
+        accounts: { youtube: ['acct-1'] },
         name: 'X',
         avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path }],
@@ -1620,6 +1667,7 @@ describe('PostEngineerClient persona image library', () => {
     const path = await writeTempImage('big.jpg', 11 * 1024 * 1024);
     await expect(
       client.createPersona({
+        accounts: { youtube: ['acct-1'] },
         name: 'X',
         avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path }],
@@ -1635,6 +1683,7 @@ describe('PostEngineerClient persona image library', () => {
     const path = await writeTempImage('big.jpg', 11 * 1024 * 1024);
     const error: unknown = await client
       .createPersona({
+        accounts: { youtube: ['acct-1'] },
         name: 'X',
         avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path }],
@@ -1655,6 +1704,7 @@ describe('PostEngineerClient persona image library', () => {
     // so the catch must still produce the actionable read-failure message.
     await expect(
       client.createPersona({
+        accounts: { youtube: ['acct-1'] },
         name: 'X',
         avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path: '/tmp/pe-mcp-test-does-not-exist.jpg' }],
@@ -1823,6 +1873,7 @@ describe('PostEngineerClient persona image library', () => {
       });
     try {
       await client.createPersona({
+        accounts: { youtube: ['acct-1'] },
         name: 'X',
         avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01',
         images: [{ path }],
@@ -1843,7 +1894,7 @@ describe('PostEngineerClient persona image library', () => {
         return realTimeout(ms);
       });
     try {
-      await client.createPersona({ name: 'X', avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01' });
+      await client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'X', avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:en_us_male_01' });
     } finally {
       spy.mockRestore();
     }

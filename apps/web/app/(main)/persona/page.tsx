@@ -22,11 +22,13 @@ import { PersonaTokensSection } from './persona-tokens';
 import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-image-library';
 import { PersonaPreferencesSection } from './persona-preferences-section';
 import { PersonaPublishingAccountsSection } from './persona-publishing-accounts-section';
+import { PersonaPageSkeleton } from './persona-page-skeleton';
 import { PersonaFormSync } from './persona-form-sync';
 import { PersonaPhotoPicker } from './persona-photo-picker';
 import { isPersonaVoiceHydrated, PersonaVoiceSection } from './persona-voice-section';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
+import { totalBoundAccounts } from '@/lib/persona-publishing-accounts';
 import { DEFAULT_PERSONA_FACE_IDS } from '@/lib/persona-faces';
 import {
   AlertIcon,
@@ -158,12 +160,10 @@ const PersonaPageContent = () => {
           <section className="rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
             <PersonaPreferencesSection />
           </section>
-          {/* Default publishing accounts need a PERSISTED persona (the API
-              route is keyed by personaId), so the section only renders while
-              editing an existing persona. */}
-          {editingPersonaId ? (
-            <PersonaPublishingAccountsSection personaId={editingPersonaId} />
-          ) : null}
+          {/* The binding picker renders in both modes: while creating, the
+              selection lives in the store (draft mode, no personaId yet);
+              while editing, it loads and saves the persisted binding. */}
+          <PersonaPublishingAccountsSection personaId={editingPersonaId ?? undefined} />
           <PersonaSubmit editId={editId} />
           <PersonaFeedback />
         </div>
@@ -462,6 +462,14 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
       scrollToErrorField('voice');
       return;
     }
+    // Issue #572: a persona is born bound to at least one publishing
+    // account. Edit mode skips this — the binding already exists there
+    // and the section guards it (Save disables at zero).
+    if (!isEditing && totalBoundAccounts(state.publishingAccounts) === 0) {
+      state.setResult({ success: false, error: t('publishing.mustSelectAccount') });
+      scrollToErrorField('accounts');
+      return;
+    }
 
     const language = resolveScriptLanguage(locale);
 
@@ -640,34 +648,3 @@ const getCharacterIndex = (avatarUrl: string | null): number => {
   const index = match ? Number(match[1]) - 1 : 0;
   return index >= 0 && index < DEFAULT_PERSONA_FACE_IDS.length ? index : 0;
 };
-
-//---------------
-// PersonaPageSkeleton — placeholder de carregamento da tela
-//---------------
-const PersonaPageSkeleton = () => (
-  <div aria-busy="true" aria-live="polite" className="space-y-8">
-    <div className="flex items-center gap-3">
-      <div className="skeleton-shimmer size-10 shrink-0 rounded-xl" />
-      <div className="space-y-2">
-        <div className="skeleton-shimmer h-5 w-40 rounded" />
-        <div className="skeleton-shimmer h-3.5 w-64 rounded" />
-      </div>
-    </div>
-    <section className="space-y-6 rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
-      <div className="flex gap-2"><div className="skeleton-shimmer h-9 w-28 rounded-lg" /><div className="skeleton-shimmer h-9 w-24 rounded-lg" /></div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><div className="skeleton-shimmer aspect-square rounded-xl" /><div className="skeleton-shimmer aspect-square rounded-xl" /><div className="skeleton-shimmer aspect-square rounded-xl" /><div className="skeleton-shimmer aspect-square rounded-xl" /></div>
-      <div className="space-y-2"><div className="skeleton-shimmer h-4 w-28 rounded" /><div className="skeleton-shimmer h-12 w-full rounded-xl" /></div>
-    </section>
-    <section className="space-y-4 rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
-      <div className="skeleton-shimmer h-4 w-32 rounded" />
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3"><div className="skeleton-shimmer h-16 rounded-xl" /><div className="skeleton-shimmer h-16 rounded-xl" /><div className="skeleton-shimmer h-16 rounded-xl" /></div>
-    </section>
-    <section className="space-y-6 rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
-      <div className="skeleton-shimmer h-4 w-36 rounded" />
-      <div className="skeleton-shimmer h-12 w-full rounded-xl" />
-      <div className="skeleton-shimmer h-24 w-full rounded-xl" />
-      <div className="grid gap-4 sm:grid-cols-3"><div className="skeleton-shimmer h-12 rounded-xl" /><div className="skeleton-shimmer h-12 rounded-xl" /><div className="skeleton-shimmer h-12 rounded-xl" /></div>
-    </section>
-    <div className="skeleton-shimmer h-12 w-full rounded-xl" />
-  </div>
-);

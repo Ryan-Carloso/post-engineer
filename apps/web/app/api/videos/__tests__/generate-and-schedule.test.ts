@@ -471,6 +471,10 @@ function post(body: unknown, headers?: Record<string, string>): Promise<NextResp
 const DEFAULT_CFG: DbConfig = {
   persona: PERSONA,
   socialAccounts: [{ provider: 'youtube', provider_account_id: 'acct-1' }],
+  // The fixture persona is bound to its only account (issue #572): every
+  // test that passes explicit accounts must pass a bound one, or the
+  // binding check 400s before the charge.
+  personaDefaultAccounts: [{ provider: 'youtube', provider_account_id: 'acct-1' }],
 };
 
 beforeEach(() => {
@@ -1679,6 +1683,14 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('rejects a provider with connected accounts but none selected', async () => {
+      // The persona is bound to instagram only: youtube has a connected
+      // account but the request selects none of it, so the binding-aware
+      // message names the persona binding instead of the generic pick.
+      setup({
+        ...DEFAULT_CFG,
+        socialAccounts: [{ provider: 'youtube', provider_account_id: 'acct-1' }],
+        personaDefaultAccounts: [{ provider: 'instagram', provider_account_id: 'ig-1' }],
+      });
       const res = await post(
         baseBody({
           publishing: {
@@ -1691,7 +1703,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.code).toBe('INVALID_PROVIDER_ACCOUNT');
-      expect(json.error).toBe('Select at least one youtube account to publish to.');
+      expect(json.error).toBe('Select at least one youtube account bound to this persona.');
       expect(json.field).toBe('publishing.accounts.youtube');
     });
 
@@ -1739,7 +1751,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
           { provider: 'youtube', provider_account_id: 'acct-1' },
           { provider: 'youtube', provider_account_id: 'acct-default' },
         ],
-        personaDefaultAccounts: [{ provider: 'youtube', provider_account_id: 'acct-default' }],
+        // Both accounts are bound: the explicit choice wins over the
+        // binding fallback, and the binding check passes for either.
+        personaDefaultAccounts: [
+          { provider: 'youtube', provider_account_id: 'acct-1' },
+          { provider: 'youtube', provider_account_id: 'acct-default' },
+        ],
       });
       const res = await post(baseBody());
       expect(res.status).toBe(200);
@@ -1748,12 +1765,14 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('keeps the 400 when accounts are omitted and the persona has no defaults', async () => {
-      setup(DEFAULT_CFG);
+      setup({ ...DEFAULT_CFG, personaDefaultAccounts: [] });
       const res = await post(noAccountsBody());
       const json = await res.json();
       expect(res.status).toBe(400);
-      expect(json.code).toBe('INVALID_PROVIDER_ACCOUNT');
-      expect(json.error).toBe('Select at least one youtube account to publish to.');
+      // Issue #572: a persona with zero bound accounts cannot schedule at
+      // all — the error names the missing binding, not the missing pick.
+      expect(json.code).toBe('PERSONA_NO_BOUND_ACCOUNTS');
+      expect(json.error).toBe('This persona has no accounts bound. Bind at least one account before scheduling.');
     });
 
     it('does not consult persona defaults for faceless posts without a persona', async () => {
@@ -1773,6 +1792,91 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(400);
       const json = await res.json();
       expect(json.success).toBe(false);
+    });
+  });
+
+  describe('persona account binding (issue #572)', () => {
+    it('rejects an owned account the persona is not bound to, before any charge', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        socialAccounts: [
+          { provider: 'youtube', provider_account_id: 'acct-1' },
+          { provider: 'youtube', provider_account_id: 'acct-other' },
+        ],
+        personaDefaultAccounts: [{ provider: 'youtube', provider_account_id: 'acct-1' }],
+      });
+      const res = await post(
+        baseBody({ publishing: { providers: ['youtube'], accounts: { youtube: ['acct-other'] }, schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' } } }),
+      );
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('ACCOUNT_NOT_BOUND_TO_PERSONA');
+      expect(json.error).toBe('Selected youtube account is not bound to this persona.');
+      expect(json.field).toBe('publishing.accounts.youtube');
+      // Pre-charge: no token was spent for the rejected request.
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('rejects explicit accounts when the persona has zero bound accounts', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        socialAccounts: [{ provider: 'youtube', provider_account_id: 'acct-1' }],
+        personaDefaultAccounts: [],
+      });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('ACCOUNT_NOT_BOUND_TO_PERSONA');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('rejects a provider the persona is not bound to when accounts are omitted for it', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        socialAccounts: [
+          { provider: 'youtube', provider_account_id: 'acct-1' },
+          { provider: 'instagram', provider_account_id: 'ig-1' },
+        ],
+        personaDefaultAccounts: [{ provider: 'youtube', provider_account_id: 'acct-1' }],
+      });
+      const res = await post(
+        baseBody({
+          publishing: {
+            providers: ['youtube', 'instagram'],
+            accounts: { youtube: ['acct-1'] },
+            schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
+          },
+        }),
+      );
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('INVALID_PROVIDER_ACCOUNT');
+      expect(json.error).toBe('Select at least one instagram account bound to this persona.');
+      expect(json.field).toBe('publishing.accounts.instagram');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('does not apply the binding check to faceless posts without a persona', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        socialAccounts: [{ provider: 'youtube', provider_account_id: 'acct-1' }],
+        personaDefaultAccounts: [],
+      });
+      const res = await post(
+        baseBody({
+          // Absent, not null: the schema rejects an explicit null personaId.
+          personaId: undefined,
+          // A persona-less post carries its own voice (no persona to read one from).
+          options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart' },
+          publishing: {
+            providers: ['youtube'],
+            accounts: { youtube: ['acct-1'] },
+            schedule: { startAt: futureISO(48), times: ['18:00'], timezone: 'Europe/Lisbon' },
+          },
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
     });
   });
 

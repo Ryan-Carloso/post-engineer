@@ -16,6 +16,12 @@ export const ERROR_CODES = {
   SOCIAL_ACCOUNT_NOT_OWNED: 'SOCIAL_ACCOUNT_NOT_OWNED',
   INVALID_PROVIDER_ACCOUNT: 'INVALID_PROVIDER_ACCOUNT',
   NO_CONNECTED_ACCOUNTS: 'NO_CONNECTED_ACCOUNTS',
+  // Issue #572: the account is connected and owned, but the persona is not
+  // bound to it — publishing to it is refused before any token is charged.
+  ACCOUNT_NOT_BOUND_TO_PERSONA: 'ACCOUNT_NOT_BOUND_TO_PERSONA',
+  // Issue #572: the persona has zero bound accounts, so nothing can be
+  // scheduled for it until an account is bound.
+  PERSONA_NO_BOUND_ACCOUNTS: 'PERSONA_NO_BOUND_ACCOUNTS',
   PERSONA_ALREADY_SCHEDULED: 'PERSONA_ALREADY_SCHEDULED',
   TOPICS_REQUIRED: 'TOPICS_REQUIRED',
   TOPICS_LIMIT_EXCEEDED: 'TOPICS_LIMIT_EXCEEDED',
@@ -42,6 +48,8 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   SOCIAL_ACCOUNT_NOT_OWNED: 'Selected {provider} account does not belong to this user.',
   INVALID_PROVIDER_ACCOUNT: 'Selected account cannot be used with this provider.',
   NO_CONNECTED_ACCOUNTS: 'No connected {provider} account found.',
+  ACCOUNT_NOT_BOUND_TO_PERSONA: 'Selected {provider} account is not bound to this persona.',
+  PERSONA_NO_BOUND_ACCOUNTS: 'This persona has no accounts bound. Bind at least one account before scheduling.',
   PERSONA_ALREADY_SCHEDULED:
     'This persona already has a publishing schedule. Cancel it before scheduling new videos for it.',
   TOPICS_REQUIRED: 'At least one video idea is required.',

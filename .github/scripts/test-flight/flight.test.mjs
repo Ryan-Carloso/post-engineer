@@ -15,9 +15,7 @@ import {
   assertScheduledSlot,
   buildAsapPayload,
   buildScheduledPayload,
-  discoverAccounts,
   resolveConfig,
-  resolveFlightAccounts,
   resolveScript,
   runFlight,
   scheduledTarget,
@@ -75,15 +73,18 @@ describe('resolveConfig', () => {
     assert.throws(() => resolveConfig(baseEnv({ TEST_FLIGHT_PERSONA_ID: '  ' })), FlightError);
   });
 
-  it('allows empty accounts (auto-discovery runs in main)', () => {
-    const cfg = resolveConfig(
-      baseEnv({
-        TEST_FLIGHT_BLUESKY_ACCOUNT_ID: '',
-        TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID: '',
-        TEST_FLIGHT_YOUTUBE_ACCOUNT_ID: '',
-      }),
+  it('fails when no explicit account ids are configured (issue #572: no auto-discovery)', () => {
+    assert.throws(
+      () =>
+        resolveConfig(
+          baseEnv({
+            TEST_FLIGHT_BLUESKY_ACCOUNT_ID: '',
+            TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID: '',
+            TEST_FLIGHT_YOUTUBE_ACCOUNT_ID: '',
+          }),
+        ),
+      /no explicit account ids configured/,
     );
-    assert.deepEqual(cfg.accounts, {});
   });
 
   it('fails on an unknown scheduled action', () => {
@@ -117,125 +118,6 @@ describe('resolveConfig', () => {
   it('ignores non-true TEST_FLIGHT_FACELESS values', () => {
     const cfg = resolveConfig(baseEnv({ TEST_FLIGHT_FACELESS: 'yes' }));
     assert.equal(cfg.videoType, 'hook_lipsync');
-  });
-});
-
-describe('discoverAccounts', () => {
-  const client = { apiBaseUrl: 'https://post-engineer.com', apiKey: 'key-for-tests' };
-  const okFetch = (body, status = 200) => async () => ({
-    ok: status >= 200 && status < 300,
-    status,
-    text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
-  });
-
-  it('maps each provider to its account id field', async () => {
-    const accounts = await discoverAccounts(
-      client,
-      okFetch({
-        authenticated: true,
-        accounts: [
-          { provider: 'youtube', channelId: 'UC-1' },
-          { provider: 'bluesky', did: 'did:plc:abc' },
-          { provider: 'instagram', igUserId: 'ig-9' },
-        ],
-      }),
-    );
-    assert.deepEqual(accounts, {
-      youtube: ['UC-1'],
-      bluesky: ['did:plc:abc'],
-      instagram: ['ig-9'],
-    });
-  });
-
-  it('collects several accounts of the same provider', async () => {
-    const accounts = await discoverAccounts(
-      client,
-      okFetch({
-        authenticated: true,
-        accounts: [
-          { provider: 'bluesky', did: 'did:plc:one' },
-          { provider: 'bluesky', did: 'did:plc:two' },
-        ],
-      }),
-    );
-    assert.deepEqual(accounts, { bluesky: ['did:plc:one', 'did:plc:two'] });
-  });
-
-  it('skips unknown providers and entries without an id', async () => {
-    const accounts = await discoverAccounts(
-      client,
-      okFetch({
-        authenticated: true,
-        accounts: [
-          { provider: 'linkedin', providerAccountId: 'li-1' },
-          { provider: 'bluesky', did: '   ' },
-          { provider: 'youtube' },
-          { provider: 'youtube', channelId: 'UC-2' },
-        ],
-      }),
-    );
-    assert.deepEqual(accounts, { youtube: ['UC-2'] });
-  });
-
-  it('fails when no usable accounts are connected', async () => {
-    await assert.rejects(
-      discoverAccounts(client, okFetch({ authenticated: true, accounts: [] })),
-      /no connected social accounts/,
-    );
-  });
-
-  it('fails on a non-2xx response', async () => {
-    await assert.rejects(
-      discoverAccounts(client, okFetch({ message: 'nope' }, 401)),
-      /GET \/api\/account -> HTTP 401/,
-    );
-  });
-
-  it('fails when the response is not an authenticated account list', async () => {
-    await assert.rejects(
-      discoverAccounts(client, okFetch({ authenticated: false, accounts: [] })),
-      /GET \/api\/account -> HTTP 200/,
-    );
-  });
-
-  it('fails on malformed JSON', async () => {
-    await assert.rejects(discoverAccounts(client, okFetch('not json{{{')), /GET \/api\/account/);
-  });
-
-  it('fails when the request itself errors', async () => {
-    await assert.rejects(
-      discoverAccounts(client, async () => {
-        throw new Error('socket hang up');
-      }),
-      /GET \/api\/account failed: socket hang up/,
-    );
-  });
-});
-
-describe('resolveFlightAccounts', () => {
-  const client = { apiBaseUrl: 'https://post-engineer.com', apiKey: 'key-for-tests' };
-
-  it('prefers explicit account ids and never discovers', async () => {
-    let discovered = false;
-    const accounts = await resolveFlightAccounts({
-      explicit: { bluesky: ['did:plc:explicit'] },
-      client,
-      discover: async () => {
-        discovered = true;
-        return { youtube: ['UC-x'] };
-      },
-    });
-    assert.deepEqual(accounts, { bluesky: ['did:plc:explicit'] });
-    assert.equal(discovered, false);
-  });
-
-  it('discovers when no explicit account ids exist', async () => {
-    const accounts = await resolveFlightAccounts({
-      explicit: {},
-      client,
-      discover: async () => ({ instagram: ['ig-1'] }),
-    });
-    assert.deepEqual(accounts, { instagram: ['ig-1'] });
   });
 });
 
@@ -659,6 +541,25 @@ describe('runFlight', () => {
     assert.deepEqual(asapPost.body.options.segments, TEST_SCRIPT.segments);
     assert.equal(summary.some((line) => line.includes('script source: llm')), true);
     assert.equal(summary.some((line) => line.includes('will not publish')), true);
+  });
+
+  it('fails without spending anything when no explicit account ids exist', async () => {
+    // Issue #572: no auto-discovery — the flight fails in resolveConfig,
+    // before any generate call. The fetch stub would 500 on any call, so
+    // zero calls proves nothing was attempted.
+    const { calls, fetchFn } = installFetch(happyRoutes({}));
+    await assert.rejects(
+      runFlight(
+        flightEnv({
+          TEST_FLIGHT_BLUESKY_ACCOUNT_ID: '',
+          TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID: '',
+          TEST_FLIGHT_YOUTUBE_ACCOUNT_ID: '',
+        }),
+        { now, fetchFn, sleepFn: async () => {}, nowFn: () => now.getTime() },
+      ),
+      /no explicit account ids configured/,
+    );
+    assert.equal(calls.length, 0);
   });
 
   it('still cancels when the slot time assertion fails', async () => {

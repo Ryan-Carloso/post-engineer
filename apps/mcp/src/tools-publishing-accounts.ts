@@ -7,13 +7,14 @@ import {
 import { handleLibraryCall, type McpToolResponse } from './tools.js';
 
 //---------------
-// Per-persona default publishing accounts (issue #212) — MCP tools.
+// Per-persona bound publishing accounts (issue #212; made mandatory by
+// issue #572) — MCP tools.
 //
-// Extracted from tools.ts so the tools module stays under the file-size
-// ratchet. Since issue #212, omitting all four provider account-id fields
-// in generate_persona_video falls back to the persona's default publishing
-// accounts (set via set_persona_publishing_accounts); explicit ids always
-// win.
+// Since issue #212, omitting all four provider account-id fields in
+// generate_persona_video falls back to the persona's bound publishing
+// accounts (set via set_persona_publishing_accounts); explicit ids must
+// be a subset of the binding. The binding as a whole must keep at least
+// one account: it can never be emptied.
 //---------------
 
 export const GetPersonaPublishingAccountsShape = {
@@ -33,8 +34,8 @@ export const SetPersonaPublishingAccountsShape = {
   accounts: z
     .record(z.string(), z.array(z.string().min(1)))
     .describe(
-      'Default publishing accounts per provider, e.g. { youtube: ["UC..."], bluesky: ["did:plc:..."], \'3speak\': ["alice"] }. ' +
-        'Replaces the whole set: providers mapped to [] (or omitted) keep no defaults. ' +
+      'Publishing accounts the persona is bound to, per provider, e.g. { youtube: ["UC..."], bluesky: ["did:plc:..."], \'3speak\': ["alice"] }. ' +
+        'Replaces the whole set: providers mapped to [] (or omitted) keep no binding for that provider, but the binding as a whole must keep at least one account (issue #572). ' +
         'Account IDs come from list_social_accounts (channelId / igUserId / providerAccountId / did).'
     ),
 };

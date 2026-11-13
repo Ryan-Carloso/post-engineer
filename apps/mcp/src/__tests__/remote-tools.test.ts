@@ -129,6 +129,17 @@ describe('remote schemas reject local paths', () => {
     }
   });
 
+  it('create_persona remote schema requires at least one bound account (issue #572)', () => {
+    const base = { name: 'Ava', avatarUrl: 'https://example.com/face.png', voiceId: 'alloy' };
+    expect(CreatePersonaRemoteSchema.safeParse(base).success).toBe(false);
+    expect(
+      CreatePersonaRemoteSchema.safeParse({ ...base, accounts: { youtube: [] } }).success,
+    ).toBe(false);
+    expect(
+      CreatePersonaRemoteSchema.safeParse({ ...base, accounts: { youtube: ['UC-1'] } }).success,
+    ).toBe(true);
+  });
+
   it('persona remote schemas reject smuggled path fields', () => {
     const update = UpdatePersonaRemoteSchema.safeParse({ personaId: 'p1', avatarPath: '/etc/passwd.png' });
     expect(update.success).toBe(false);
@@ -197,6 +208,7 @@ describe('remote smuggled paths are dropped by the SDK, never read', () => {
       name: 'Ava',
       voiceId: 'no-voice',
       avatarPath: '/etc/passwd.png',
+      accounts: { youtube: ['UC-1'] },
     });
     expect(result.isError).toBe(true);
     expect(firstText(result)).toContain('avatarUrl or avatarPath is required');
@@ -210,6 +222,7 @@ describe('remote smuggled paths are dropped by the SDK, never read', () => {
       voiceId: 'no-voice',
       avatarUrl: 'https://example.com/face.png',
       avatarPath: '/etc/passwd.png',
+      accounts: { youtube: ['UC-1'] },
     });
     expect(result.isError).toBeUndefined();
     expect(createPersona).toHaveBeenCalledTimes(1);

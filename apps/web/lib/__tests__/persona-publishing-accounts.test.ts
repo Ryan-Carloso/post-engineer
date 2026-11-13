@@ -5,7 +5,10 @@ import { describe, it, expect } from 'vitest';
 import {
   emptyPersonaDefaultAccounts,
   getPersonaDefaultAccounts,
+  getPersonaDefaultAccountsForPersonas,
+  parsePublishingAccountsField,
   setPersonaDefaultAccounts,
+  totalBoundAccounts,
 } from '../persona-publishing-accounts';
 
 type Row = Record<string, unknown>;
@@ -33,6 +36,12 @@ function makeDb(initial: Record<string, Row[]> = {}) {
         },
         eq(col: string, val: unknown) {
           (query._filters as Array<(r: Row) => boolean>).push((r) => r[col] === val);
+          return chain;
+        },
+        in(col: string, vals: unknown[]) {
+          (query._filters as Array<(r: Row) => boolean>).push((r) =>
+            (vals as unknown[]).includes(r[col]),
+          );
           return chain;
         },
         maybeSingle() {
@@ -112,6 +121,33 @@ describe('getPersonaDefaultAccounts', () => {
     expect(got.youtube).toEqual(['UC-1']);
     expect(got.instagram).toEqual([]);
     expect(got.linkedin).toEqual([]);
+  });
+});
+
+describe('getPersonaDefaultAccountsForPersonas', () => {
+  it('returns an empty map for no personas', async () => {
+    const db = baseDb();
+    const got = await getPersonaDefaultAccountsForPersonas(db as never, []);
+    expect(got.size).toBe(0);
+  });
+
+  it('groups stored rows per persona and pre-seeds every requested id', async () => {
+    const db = baseDb();
+    db.tables.persona_default_accounts = [
+      { persona_id: PERSONA, provider: 'bluesky', provider_account_id: 'did:plc:a' },
+      { persona_id: PERSONA, provider: 'youtube', provider_account_id: 'UC-1' },
+      { persona_id: 'persona-2', provider: 'bluesky', provider_account_id: 'did:plc:b' },
+      { persona_id: 'persona-2', provider: 'tiktok', provider_account_id: 'tt-1' },
+      { persona_id: 'other-persona', provider: 'bluesky', provider_account_id: 'did:plc:z' },
+      { persona_id: PERSONA, provider: 'bluesky', provider_account_id: '' },
+    ];
+    const got = await getPersonaDefaultAccountsForPersonas(db as never, [PERSONA, 'persona-2', 'persona-3']);
+    expect(got.get(PERSONA)?.bluesky).toEqual(['did:plc:a']);
+    expect(got.get(PERSONA)?.youtube).toEqual(['UC-1']);
+    expect(got.get('persona-2')?.bluesky).toEqual(['did:plc:b']);
+    expect(got.get('persona-2')?.youtube).toEqual([]);
+    expect(got.get('persona-3')).toEqual(emptyPersonaDefaultAccounts());
+    expect([...got.keys()]).toEqual([PERSONA, 'persona-2', 'persona-3']);
   });
 });
 
@@ -221,5 +257,88 @@ describe('emptyPersonaDefaultAccounts', () => {
       rumble: [],
       fanvue: [],
     });
+  });
+});
+
+describe('setPersonaDefaultAccounts — a persona must keep at least one bound account (issue #572)', () => {
+  it('rejects an empty map and writes nothing', async () => {
+    const db = baseDb();
+    await expect(
+      setPersonaDefaultAccounts({
+        supabase: db as never,
+        userId: USER,
+        personaId: PERSONA,
+        accounts: {},
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect(db.tables.persona_default_accounts).toHaveLength(0);
+  });
+
+  it('rejects providers that are all empty and keeps the previous binding', async () => {
+    const db = baseDb();
+    db.tables.persona_default_accounts = [
+      { persona_id: PERSONA, provider: 'youtube', provider_account_id: 'UC-1' },
+    ];
+    await expect(
+      setPersonaDefaultAccounts({
+        supabase: db as never,
+        userId: USER,
+        personaId: PERSONA,
+        accounts: { youtube: [], bluesky: [] },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect(db.tables.persona_default_accounts).toHaveLength(1);
+  });
+});
+
+describe('totalBoundAccounts', () => {
+  it('counts ids across providers', () => {
+    expect(totalBoundAccounts(emptyPersonaDefaultAccounts())).toBe(0);
+    expect(
+      totalBoundAccounts({
+        ...emptyPersonaDefaultAccounts(),
+        youtube: ['UC-1'],
+        bluesky: ['did:plc:a', 'did:plc:b'],
+      }),
+    ).toBe(3);
+  });
+});
+
+describe('parsePublishingAccountsField — the create-persona form field (issue #572)', () => {
+  it('parses a valid JSON map and normalizes it', () => {
+    expect(
+      parsePublishingAccountsField(JSON.stringify({ youtube: ['UC-1', ' UC-1 '], bluesky: ['did:plc:a'] })),
+    ).toEqual({
+      ok: true,
+      accounts: { ...emptyPersonaDefaultAccounts(), youtube: ['UC-1'], bluesky: ['did:plc:a'] },
+    });
+  });
+
+  it('rejects a missing field', () => {
+    expect(parsePublishingAccountsField(null).ok).toBe(false);
+  });
+
+  it('rejects malformed JSON', () => {
+    expect(parsePublishingAccountsField('{not json').ok).toBe(false);
+  });
+
+  it('rejects a non-object payload', () => {
+    expect(parsePublishingAccountsField(JSON.stringify(['UC-1'])).ok).toBe(false);
+  });
+
+  it('rejects an unknown provider', () => {
+    expect(parsePublishingAccountsField(JSON.stringify({ tiktok: ['tt-1'] })).ok).toBe(false);
+  });
+
+  it('rejects a non-array provider value', () => {
+    expect(parsePublishingAccountsField(JSON.stringify({ youtube: 'UC-1' })).ok).toBe(false);
+  });
+
+  it('rejects a total of zero accounts', () => {
+    const parsed = parsePublishingAccountsField(JSON.stringify({ youtube: [], bluesky: [] }));
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok) {
+      expect(parsed.error).toMatch(/at least one/i);
+    }
   });
 });

@@ -53,6 +53,12 @@ export interface CreatePersonaInput {
   paragraphNumber?: number;
   niche?: string;
   faceQuality?: 'ok' | 'very_good';
+  /**
+   * Bound publishing accounts per provider (issue #572, required): at
+   * least one account, e.g. { youtube: ['UC...'] }. The persona publishes
+   * only to bound accounts; a persona with no bound account cannot exist.
+   */
+  accounts: Record<string, string[]>;
   /** Up to 10 local images of the same person for the image library. */
   images?: PersonaLibraryImageInput[];
   /** Index into images[] marking the primary library image. */
