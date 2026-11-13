@@ -18,7 +18,10 @@ export interface ContentUploadAccountResult {
   error?: string;
   // Stable per-account failure code from classifyUploadAccountError
   // (#504): 'transient' | 'token_expired' | 'disconnected' |
-  // 'publish_rejected' | 'email_not_verified' | 'publish_in_progress'.
+  // 'publish_rejected' | 'email_not_verified' | 'publish_in_progress' |
+  // 'publish_unknown' (ledger-parked: the post may already be live —
+  // never retried, the engine fails the account and keeps the token
+  // charged until a human checks the provider).
   // The retry loop and the user notice read this, never the free-text
   // error. 'publish_in_progress' is not a failure: the account is still
   // publishing under an earlier request, so the engine waits and re-asks.

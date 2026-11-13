@@ -611,6 +611,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
     expect(await res.json()).toEqual({
       success: true,
       provider: 'youtube',
+      successCount: 2,
       results: [
         { accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' },
         { accountId: 'acc-2', success: true, videoUrl: 'https://youtu.be/def' },
@@ -637,6 +638,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
     expect(await res.json()).toEqual({
       success: false,
+      successCount: 0,
       results: [{
         accountId: 'acc-1',
         success: false,
@@ -691,6 +693,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
     expect(await second.json()).toEqual({
       success: true,
       provider: 'youtube',
+      successCount: 1,
       results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
     });
     expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('published');
@@ -718,6 +721,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
     expect(await second.json()).toEqual({
       success: true,
       provider: 'youtube',
+      successCount: 1,
       results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
     });
     expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('published');
@@ -742,6 +746,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
     expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
     expect(await second.json()).toEqual({
       success: false,
+      successCount: 0,
       results: [{
         accountId: 'acc-1',
         success: false,

@@ -164,6 +164,10 @@ async function postHandler(request: NextRequest) {
     // (provider, logId, error) still flow through to JSON at runtime.
     type UploadDispatchResult = {
       success: boolean;
+      // Count of successful accounts in results; the ledger branches
+      // recompute it from the merged results so a replayed success is
+      // counted (the handler's count only covers fresh publishes).
+      successCount?: number;
       results?: ContentUploadAccountResult[];
     };
     // Heartbeat: while this request publishes, it renews its claims, so
@@ -180,7 +184,11 @@ async function postHandler(request: NextRequest) {
       if (partition !== null && partition.granted.length === 0) {
       // Every account already published or still in flight: nothing to call.
         const results = mergePartitionResults(partition, []);
-        response = { success: results.some((result) => result.success), results };
+        response = {
+          success: results.some((result) => result.success),
+          successCount: results.filter((result) => result.success).length,
+          results,
+        };
       } else {
         const handlerForm = partition !== null ? partition.formData : formData;
         try {
@@ -254,7 +262,12 @@ async function postHandler(request: NextRequest) {
           );
           await releaseClaimsForRequestRejection(ledgerClient, partition, results);
           const merged = mergePartitionResults(partition, results);
-          response = { ...response, success: merged.some((result) => result.success), results: merged };
+          response = {
+            ...response,
+            success: merged.some((result) => result.success),
+            successCount: merged.filter((result) => result.success).length,
+            results: merged,
+          };
         }
       }
     } finally {

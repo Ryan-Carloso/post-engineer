@@ -40,6 +40,7 @@ create or replace function public.claim_publish_ledger(
 returns jsonb
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare
   v_row public.publish_ledger%rowtype;
@@ -114,6 +115,7 @@ create or replace function public.mark_publish_unknown(
 returns boolean
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare
   v_updated boolean;
