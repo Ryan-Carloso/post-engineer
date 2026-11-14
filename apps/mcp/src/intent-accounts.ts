@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { actionDescription, actionShape, byAction } from './action-tool.js';
 import type { PostEngineerClient } from './client.js';
 import { ConnectAccountShape, handleConnectAccount } from './connect-account.js';
-import { createRefResolvers, personaRefShape, withPersona } from './refs.js';
+import { personaRefShape, resolveAccountRef, withPersona } from './refs.js';
 import { withRecipeNudge, type RecipeSession } from './recipe-session.js';
 import { DESTRUCTIVE } from './tool-annotations.js';
 import { DisconnectAccountShape, handleDisconnectAccount, handleListSocialAccounts } from './tools.js';
@@ -52,7 +52,6 @@ function filterByProvider(response: McpToolResponse, provider: string | undefine
 }
 
 export function registerAccountTools(server: McpServer, client: PostEngineerClient, session: RecipeSession): void {
-  const resolvers = createRefResolvers(client);
   server.tool(
     'accounts',
     AccountsDescription,
@@ -63,14 +62,14 @@ export function registerAccountTools(server: McpServer, client: PostEngineerClie
         list: withRecipeNudge(session, 'accounts_list', async (args) => filterByProvider(await handleListSocialAccounts(client), args.provider)),
         connect: async (args) => handleConnectAccount(client, args),
         disconnect: async (args) => {
-          const outcome = await resolvers.account(args.account, args.provider);
+          const outcome = await resolveAccountRef(client, args.account, args.provider);
           if (outcome.kind === 'response') return outcome.response;
           return handleDisconnectAccount(client, { provider: outcome.value.provider as typeof args.provider & string, providerAccountId: outcome.value.id });
         },
         get_persona_publishing: (args) => withPersona(client, args, (resolved) => handleGetPersonaPublishingAccounts(client, resolved)),
         set_persona_publishing: (args) => withPersona(client, args, (resolved) => handleSetPersonaPublishingAccounts(client, resolved)),
         list_boards: async (args) => {
-          const outcome = await resolvers.account(args.account, 'pinterest');
+          const outcome = await resolveAccountRef(client, args.account, 'pinterest');
           if (outcome.kind === 'response') return outcome.response;
           return handleListPinterestBoards(client, { accountId: outcome.value.id });
         },

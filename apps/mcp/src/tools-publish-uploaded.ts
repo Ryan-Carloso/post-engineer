@@ -12,12 +12,12 @@ import { sanitizeEngineError } from './tools.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
 //---------------
-// Signed-upload publish tools (issue #561): the JSON-only remote flow
-// that replaces publish_video (action: from_file)'s local videoPath. Kept in a new
-// module so tools.ts stays under the file-size ratchet; registration
-// lives in publish-uploaded-tools.ts. sanitizeEngineError is imported
-// from tools.ts (the same import cycle local-file-tools.ts already has
-// through tools.js — handlers run after module init).
+// Signed-upload publish handlers (issue #561): the JSON-only remote flow
+// that replaces the local videoPath of publish_video (action: from_file).
+// Kept in a new module so tools.ts stays under the file-size ratchet; the
+// publish_video tool registers them in intent-content.ts. sanitizeEngineError
+// is imported from tools.ts (an import cycle through tools.js that is safe:
+// handlers run after module init).
 //---------------
 
 export async function handleCreateVideoUpload(

@@ -117,6 +117,35 @@ describe('accounts', () => {
     expect(seen.find((entry) => entry.method === 'DELETE')?.path).toBe('/api/account?provider=instagram&providerAccountId=9');
   });
 
+  it('resolves against the accounts as they are on each call, not as they were on the first one', async () => {
+    const seen: string[] = [];
+    let accounts: unknown = { accounts: [{ provider: 'youtube', channelId: 'UC1', channelName: 'Maria' }] };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        const parsed = new URL(url);
+        seen.push(`${init.method ?? 'GET'} ${parsed.pathname}${parsed.search}`);
+        return Response.json(parsed.pathname === '/api/account' && (init.method ?? 'GET') === 'GET' ? accounts : { success: true });
+      }),
+    );
+    const server = createPostEngineerMcpServer(new PostEngineerClient({ apiKey: 'pe_test', baseUrl: BASE }), 'stdio');
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 't', version: '0.0.0' });
+    await Promise.all([server.connect(b), client.connect(a)]);
+    try {
+      expect((await client.callTool({ name: 'accounts', arguments: { action: 'disconnect', account: 'Maria' } })).isError).not.toBe(true);
+      // The user reconnects another account; the same server must see it.
+      accounts = { accounts: [{ provider: 'instagram', igUserId: '9', username: 'new.account' }] };
+      expect((await client.callTool({ name: 'accounts', arguments: { action: 'disconnect', account: 'new.account' } })).isError).not.toBe(true);
+    } finally {
+      await client.close();
+    }
+    expect(seen.filter((entry) => entry.startsWith('DELETE'))).toEqual([
+      'DELETE /api/account?provider=youtube&providerAccountId=UC1',
+      'DELETE /api/account?provider=instagram&providerAccountId=9',
+    ]);
+  });
+
   it('lists the boards of a Pinterest account given by name, using its id', async () => {
     const { call, seen } = setup({ 'GET /api/account': ACCOUNTS, 'GET /api/pinterest/boards': { boards: [{ id: 'b1', name: 'Board' }] } });
     const result = await call('accounts', { action: 'list_boards', account: 'Maria Pins' });
