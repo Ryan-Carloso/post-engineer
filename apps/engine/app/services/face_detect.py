@@ -42,10 +42,11 @@ def image_contains_face(image_path: str) -> bool | None:
 
     Same Haar cascade and parameters as video_contains_face, on the
     image downscaled to <w_max=360>. None when the detector is
-    unavailable (opencv not installed or the cascade failed to load):
-    the caller must not block on None — a missing detector must never
-    fail a video. False covers both "no face" and "unreadable file": a
-    file cv2 cannot decode cannot be lip-synced either.
+    unavailable (opencv not installed, the cascade failed to load, or
+    detection itself raised): the caller must not block on None — a
+    missing detector must never fail a video. False covers both "no
+    face" and "unreadable file": a file cv2 cannot decode cannot be
+    lip-synced either.
     """
     cv2 = _load_cv2()
     if cv2 is None:
@@ -73,8 +74,10 @@ def image_contains_face(image_path: str) -> bool | None:
         )
         return len(faces) > 0
     except Exception as e:
+        # A raise here is a detector failure, not evidence of "no face":
+        # return None so the caller does not fail the video over it.
         logger.warning(f"face detection failed for '{image_path}': {str(e)}")
-        return False
+        return None
 
 
 def video_contains_face(

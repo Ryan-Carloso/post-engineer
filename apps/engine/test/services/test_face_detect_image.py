@@ -101,9 +101,11 @@ def test_does_not_resize_a_360_wide_image(fake_cv2):
     assert fake_cv2.resize_calls == []
 
 
-def test_returns_false_when_detection_raises(fake_cv2):
+def test_returns_none_when_detection_raises(fake_cv2):
+    # A raise is a detector failure, not "no face": the caller must not
+    # block on it (OpenCode review on PR #590).
     fake_cv2.cascade = FakeCascade(raises=True)
-    assert face_detect.image_contains_face("photo.png") is False
+    assert face_detect.image_contains_face("photo.png") is None
 
 
 def test_real_cv2_reports_no_face_in_a_faceless_resource_image():
