@@ -380,8 +380,9 @@ function useCredentialConnect(provider: CredentialProvider) {
       formData.append(config.passwordField, appPassword);
       const response = await fetch(config.endpoint, { method: 'POST', body: formData });
       if (!response.ok) {
-        // 401 here means a dead hub session (a rejected credential is
-        // 422), so it triggers the host-wide session-expiry redirect.
+        // 401 here means a dead hub session (a rejected credential is 422
+        // for Bluesky/3Speak, 400 for Rumble — format-only validation), so
+        // it triggers the host-wide session-expiry redirect.
         notifyIfSessionExpired(response);
         if (config.credentialRejectedKey) {
           // A rejected credential is 422 THREESPEAK_CREDENTIAL_REJECTED:
