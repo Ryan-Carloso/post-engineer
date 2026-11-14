@@ -348,8 +348,11 @@ describe('OnboardingWizard step 2', () => {
   it('does not show Connected for an account whose sync status is error', async () => {
     accountResponseQueue = [[YOUTUBE_ERROR_ACCOUNT as unknown as Record<string, unknown>], []];
     await openStep2List();
+    // Wait until the queued accounts read has been consumed before
+    // asserting the badge is absent, so the guard is actually exercised:
+    // the row renders before the query resolves.
     await waitFor(() => {
-      expect(screen.getByTestId('onboarding-provider-youtube')).toBeInTheDocument();
+      expect(accountResponseQueue).toHaveLength(1);
     });
     expect(within(screen.getByTestId('onboarding-provider-youtube')).queryByText('Connected')).not.toBeInTheDocument();
     expect(screen.queryByText('Connected')).not.toBeInTheDocument();
@@ -359,6 +362,11 @@ describe('OnboardingWizard step 2', () => {
     const user = userEvent.setup();
     accountResponseQueue = [[YOUTUBE_ERROR_ACCOUNT as unknown as Record<string, unknown>], []];
     const dialog = await openStep2List();
+    // Same synchronization as the list test: the connect view reads the
+    // same query, so wait for the accounts read before opening it.
+    await waitFor(() => {
+      expect(accountResponseQueue).toHaveLength(1);
+    });
     await user.click(screen.getByTestId('onboarding-provider-youtube'));
     expect(within(dialog).getByRole('button', { name: 'Connect an account' })).toBeInTheDocument();
     expect(within(dialog).queryByText('Connected')).not.toBeInTheDocument();
