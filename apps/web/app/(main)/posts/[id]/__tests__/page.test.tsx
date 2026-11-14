@@ -11,6 +11,12 @@ import type { ReactNode } from 'react';
 
 const pushMock = vi.fn();
 
+// The i18n mock returns the key verbatim (no dictionary, no interpolation),
+// so tests pin behavior by asserting the exact t() call args — the key AND
+// the interpolated vars. A plain getByText(key) cannot see a wrong number
+// or a missing var, so the position assertions go through mockT.
+const mockT = vi.fn((key: string, _vars?: Record<string, unknown>) => key);
+
 vi.mock('next/image', () => ({
   // eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element
   default: (props: React.ComponentProps<'img'>) => <img {...props} />,
@@ -59,7 +65,7 @@ vi.mock('@/lib/i18n/provider', () => {
     return <>{children}</>;
   }
   I18nProvider.displayName = 'I18nProvider';
-  const useI18n = vi.fn(() => ({ t: (key: string) => key, locale: 'en', setLocale: vi.fn() }));
+  const useI18n = vi.fn(() => ({ t: mockT, locale: 'en', setLocale: vi.fn() }));
   return { useI18n, I18nProvider };
 });
 
@@ -253,7 +259,7 @@ function mockMutations() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(useI18n).mockReturnValue({ t: (key: string) => key, locale: 'en', setLocale: vi.fn() });
+  vi.mocked(useI18n).mockReturnValue({ t: mockT, locale: 'en', setLocale: vi.fn() });
   mockQueries();
   mockMutations();
   vi.mocked(useParams).mockReturnValue({ id: 'u1' });
@@ -503,11 +509,16 @@ describe('PostDetailPage', () => {
   // what was charged for.
   //---------------
   //---------------
-  // HookPhotoSection — the photo the lip-sync hook opens with (issue
-  // #589): the first photo of the video, never the persona avatar. A
-  // URL photo renders; an upload or a persona fallback has no durable
-  // URL and renders an explanatory note instead. Faceless videos never
-  // show a face, so the section renders nothing for them.
+  // HookPhotoSection — the first photo of the video (issue #589). The copy
+  // never claims the hook used the photo: videos generated before #589
+  // opened with the persona avatar, so the section shows the first photo
+  // with a neutral note. A URL photo renders; an upload or a persona
+  // fallback has no durable URL and renders a note instead. Faceless
+  // videos never show a face, so the section renders nothing for them.
+  // The position (segment/image, 1-based) is asserted through mockT call
+  // args — the key mock never interpolates, so getByText alone cannot see
+  // a wrong number. A null index on either side drops the position and
+  // falls back to the persona note.
   //---------------
   it('shows the hook photo image and its position when the first photo came from a URL', () => {
     mockQueries({
@@ -523,9 +534,25 @@ describe('PostDetailPage', () => {
     render(<DetailPage />);
 
     const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
+    expect(within(section).getByText('posts.hookPhotoLabel')).toBeInTheDocument();
     const image = within(section).getByAltText('posts.hookPhotoAlt');
     expect(image.getAttribute('src')).toBe('https://e.com/hook.jpg');
     expect(within(section).getByText('posts.hookPhotoSegmentNote')).toBeInTheDocument();
+    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoSegmentNote', { segment: 1, image: 1 });
+  });
+
+  it('shows the segment note without an image when the first photo has no displayable URL', () => {
+    mockQueries({
+      slot: slotPayload({
+        hookPhoto: { url: null, source: 'segment', segmentIndex: 0, imageIndex: 1 },
+      }),
+    });
+    render(<DetailPage />);
+
+    const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
+    expect(within(section).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(section).getByText('posts.hookPhotoSegmentNote')).toBeInTheDocument();
+    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoSegmentNote', { segment: 1, image: 2 });
   });
 
   it('explains the upload when the first photo is a media id', () => {
@@ -539,6 +566,7 @@ describe('PostDetailPage', () => {
     const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
     expect(within(section).queryByRole('img')).not.toBeInTheDocument();
     expect(within(section).getByText('posts.hookPhotoUploadNote')).toBeInTheDocument();
+    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoUploadNote', { segment: 2, image: 3 });
   });
 
   it('explains the persona fallback when no segment photo was sent', () => {
@@ -548,6 +576,100 @@ describe('PostDetailPage', () => {
     const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
     expect(within(section).queryByRole('img')).not.toBeInTheDocument();
     expect(within(section).getByText('posts.hookPhotoPersonaNote')).toBeInTheDocument();
+    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoPersonaNote');
+  });
+
+  it.each([
+    ['both indices null', null, null],
+    ['segment index null', null, 2],
+    ['image index null', 0, null],
+  ])('falls back to the persona note when %s: no position, no image', (_label, segmentIndex, imageIndex) => {
+    mockQueries({
+      slot: slotPayload({
+        hookPhoto: {
+          url: 'https://e.com/hook.jpg',
+          source: 'segment',
+          segmentIndex,
+          imageIndex,
+        },
+      }),
+    });
+    render(<DetailPage />);
+
+    const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
+    expect(within(section).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(section).getByText('posts.hookPhotoPersonaNote')).toBeInTheDocument();
+    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoPersonaNote');
+  });
+
+  it('falls back to the persona note for a segment photo with no URL and no position', () => {
+    mockQueries({
+      slot: slotPayload({
+        hookPhoto: { url: null, source: 'segment', segmentIndex: null, imageIndex: null },
+      }),
+    });
+    render(<DetailPage />);
+
+    const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
+    expect(within(section).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(section).getByText('posts.hookPhotoPersonaNote')).toBeInTheDocument();
+    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoPersonaNote');
+  });
+
+  // Branch priority: only a segment photo renders an image, and only the
+  // upload branch renders the upload note. A URL on a non-segment photo
+  // never reaches the image branch, and a null position never reaches a
+  // note that needs one — both fall through to the persona note.
+  it('never renders an image for an upload photo even when it carries a URL', () => {
+    mockQueries({
+      slot: slotPayload({
+        hookPhoto: {
+          url: 'https://e.com/hook.jpg',
+          source: 'upload',
+          segmentIndex: 1,
+          imageIndex: 2,
+        },
+      }),
+    });
+    render(<DetailPage />);
+
+    const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
+    expect(within(section).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(section).getByText('posts.hookPhotoUploadNote')).toBeInTheDocument();
+    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoUploadNote', { segment: 2, image: 3 });
+  });
+
+  it('never renders the upload note for a persona fallback even with a position', () => {
+    mockQueries({
+      slot: slotPayload({
+        hookPhoto: {
+          url: 'https://e.com/hook.jpg',
+          source: 'persona',
+          segmentIndex: 1,
+          imageIndex: 2,
+        },
+      }),
+    });
+    render(<DetailPage />);
+
+    const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
+    expect(within(section).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(section).getByText('posts.hookPhotoPersonaNote')).toBeInTheDocument();
+    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoPersonaNote');
+  });
+
+  it('falls back to the persona note for an upload with no position', () => {
+    mockQueries({
+      slot: slotPayload({
+        hookPhoto: { url: null, source: 'upload', segmentIndex: null, imageIndex: null },
+      }),
+    });
+    render(<DetailPage />);
+
+    const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
+    expect(within(section).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(section).getByText('posts.hookPhotoPersonaNote')).toBeInTheDocument();
+    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoPersonaNote');
   });
 
   it('renders no hook photo section for a faceless video', () => {
@@ -579,6 +701,7 @@ describe('PostDetailPage', () => {
     render(<DetailPage />);
 
     const section = screen.getByRole('region', { name: 'posts.generationFactsLabel' });
+    expect(within(section).getByText('posts.generationFactsLabel')).toBeInTheDocument();
     expect(within(section).getByText('posts.generationLanguageLabel')).toBeInTheDocument();
     expect(within(section).getByText('pt-BR')).toBeInTheDocument();
     expect(within(section).getByText('posts.generationVoiceLabel')).toBeInTheDocument();

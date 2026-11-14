@@ -9,6 +9,7 @@ import {
   MEDIA_CHECK_TIMEOUT_MS,
 } from '../aspect-preflight';
 import { checkFullLipsyncNarration } from '../full-lipsync-preflight';
+import { logger } from '@/lib/logger';
 import type { PersonaPrep } from '../persona-prep';
 import type { ValidatedOptions } from '../options-validation';
 
@@ -84,6 +85,7 @@ describe('checkSegmentMediaAspect', () => {
   beforeEach(() => {
     vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
     vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
+    vi.mocked(logger.error).mockClear();
   });
 
   afterEach(() => {
@@ -179,11 +181,99 @@ describe('checkSegmentMediaAspect', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('posts exact JSON to the media/check URL, stripping trailing slashes from the engine URL', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test//');
+    const calls = stubFetch([engineBody('ok', 1080, 1920)]);
+    const result = await checkSegmentMediaAspect(INPUT);
+    expect(result).toBeNull();
+    expect(calls).toHaveLength(3);
+    expect(calls[0].url).toBe('https://engine.test/api/v1/media/check');
+    expect(calls[0].init.method).toBe('POST');
+    expect(calls[0].init.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      'x-user-id': 'user-1',
+    });
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      media_id: 'aabbccddeeff00112233445566778899.jpg',
+      video_aspect: '9:16',
+    });
+  });
+
+  it('fails closed with a 502 when only the engine URL is missing, never calling the engine', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', undefined);
+    const calls = stubFetch([engineBody('ok')]);
+    const result = await checkSegmentMediaAspect(INPUT);
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(502);
+    const payload = (await (result as NextResponse).json()) as { error?: string; code?: string };
+    expect(payload.error).toBe('Video service is unavailable.');
+    expect(payload.code).toBe('INTERNAL_ERROR');
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      '[segment-media-aspect] engine URL or secret is not defined',
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  it('fails closed with a 502 when only the engine secret is missing, never calling the engine', async () => {
+    vi.stubEnv('MONEYPRINT_API_SECRET', undefined);
+    const calls = stubFetch([engineBody('ok')]);
+    const result = await checkSegmentMediaAspect(INPUT);
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(502);
+    const payload = (await (result as NextResponse).json()) as { error?: string; code?: string };
+    expect(payload.error).toBe('Video service is unavailable.');
+    expect(payload.code).toBe('INTERNAL_ERROR');
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      '[segment-media-aspect] engine URL or secret is not defined',
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  it('aborts the engine call after the 30s timeout and fails closed', async () => {
+    vi.useFakeTimers();
+    try {
+      const calls: Array<{ url: string; init: RequestInit }> = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, init: RequestInit) => {
+          calls.push({ url, init });
+          await new Promise<never>((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () => {
+              reject(new DOMException('The operation was aborted.', 'AbortError'));
+            });
+          });
+        }),
+      );
+      const resultPromise = checkSegmentMediaAspect(INPUT);
+      await vi.advanceTimersByTimeAsync(MEDIA_CHECK_TIMEOUT_MS);
+      const result = await resultPromise;
+      expect(result).toBeInstanceOf(NextResponse);
+      expect((result as NextResponse).status).toBe(502);
+      const payload = (await (result as NextResponse).json()) as { error?: string };
+      expect(payload.error).toBe('Video service is unavailable.');
+      expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+        '[segment-media-aspect] engine unreachable',
+        expect.anything(),
+      );
+      expect(calls).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('fails closed with a 502 when the engine answers with an error', async () => {
     stubFetch([new Response('boom', { status: 500 })]);
     const result = await checkSegmentMediaAspect(INPUT);
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(502);
+    const payload = (await (result as NextResponse).json()) as { error?: string; code?: string };
+    expect(payload.error).toBe('Video service is unavailable.');
+    expect(payload.code).toBe('INTERNAL_ERROR');
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      '[segment-media-aspect] engine check failed',
+      undefined,
+      { status: 500 },
+    );
   });
 
   it('fails closed with a 502 when the engine is unreachable', async () => {
@@ -191,6 +281,13 @@ describe('checkSegmentMediaAspect', () => {
     const result = await checkSegmentMediaAspect(INPUT);
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(502);
+    const payload = (await (result as NextResponse).json()) as { error?: string; code?: string };
+    expect(payload.error).toBe('Video service is unavailable.');
+    expect(payload.code).toBe('INTERNAL_ERROR');
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      '[segment-media-aspect] engine unreachable',
+      expect.any(Error),
+    );
   });
 
   it('fails closed with a 502 when the engine returns no code', async () => {
@@ -203,6 +300,25 @@ describe('checkSegmentMediaAspect', () => {
     const result = await checkSegmentMediaAspect(INPUT);
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(502);
+    const payload = (await (result as NextResponse).json()) as { error?: string; code?: string };
+    expect(payload.error).toBe('Video service is unavailable.');
+    expect(payload.code).toBe('INTERNAL_ERROR');
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      '[segment-media-aspect] engine check returned no code',
+    );
+  });
+
+  it('fails closed with a 502 when the engine answers non-JSON', async () => {
+    stubFetch([new Response('not json', { status: 200 })]);
+    const result = await checkSegmentMediaAspect(INPUT);
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(502);
+    const payload = (await (result as NextResponse).json()) as { error?: string; code?: string };
+    expect(payload.error).toBe('Video service is unavailable.');
+    expect(payload.code).toBe('INTERNAL_ERROR');
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      '[segment-media-aspect] engine check returned no code',
+    );
   });
 });
 
@@ -210,6 +326,7 @@ describe('checkFirstPhotoFace', () => {
   beforeEach(() => {
     vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
     vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
+    vi.mocked(logger.error).mockClear();
   });
 
   afterEach(() => {
@@ -260,9 +377,15 @@ describe('checkFirstPhotoFace', () => {
     const result = await checkFirstPhotoFace(INPUT);
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(400);
-    const payload = (await (result as NextResponse).json()) as { error?: string };
+    const payload = (await (result as NextResponse).json()) as {
+      error?: string;
+      code?: string;
+      field?: string;
+    };
     expect(payload.error).toContain('Segment 0 image 0');
     expect(payload.error).toContain('no face was detected');
+    expect(payload.code).toBe('VALIDATION_FAILED');
+    expect(payload.field).toBe('options.segments');
   });
 
   it('fails closed with a 502 when the engine is unreachable', async () => {
@@ -270,6 +393,13 @@ describe('checkFirstPhotoFace', () => {
     const result = await checkFirstPhotoFace(INPUT);
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(502);
+    const payload = (await (result as NextResponse).json()) as { error?: string; code?: string };
+    expect(payload.error).toBe('Video service is unavailable.');
+    expect(payload.code).toBe('INTERNAL_ERROR');
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      '[first-photo-face] engine unreachable',
+      expect.any(Error),
+    );
   });
 
   it('fails closed with a 502 when the engine returns no code', async () => {
@@ -388,5 +518,105 @@ describe('checkPreChargePreflights', () => {
     expect(payload.code).toBe('VALIDATION_FAILED');
     expect(payload.field).toBe('personaId');
     expect(calls).toHaveLength(0);
+  });
+
+  it('checks landscape photos against 16:9 when the persona stores it', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920)]);
+    vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
+    const result = await checkPreChargePreflights({
+      ...COMBINED,
+      prep: { ...PREP, videoAspect: '16:9' },
+    });
+    expect(result).toBeNull();
+    // Three aspect checks plus the first-photo face check, all against 16:9.
+    expect(calls).toHaveLength(4);
+    expect(
+      calls.every(
+        (call) => (JSON.parse(call.init.body as string) as { video_aspect?: string }).video_aspect === '16:9',
+      ),
+    ).toBe(true);
+  });
+
+  it('checks square photos against 1:1 when the persona stores it', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920)]);
+    vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
+    const result = await checkPreChargePreflights({
+      ...COMBINED,
+      prep: { ...PREP, videoAspect: '1:1' },
+    });
+    expect(result).toBeNull();
+    expect(calls).toHaveLength(4);
+    expect(
+      calls.every(
+        (call) => (JSON.parse(call.init.body as string) as { video_aspect?: string }).video_aspect === '1:1',
+      ),
+    ).toBe(true);
+  });
+
+  it('skips the hook photo in the aspect check when the persona has a face photo', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920)]);
+    vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
+    const result = await checkPreChargePreflights({
+      ...COMBINED,
+      prep: { ...PREP, photoPath: '/tmp/persona.jpg' },
+    });
+    expect(result).toBeNull();
+    expect(checkFullLipsyncNarration).not.toHaveBeenCalled();
+    // The hook photo is a panel over the face: only the two content photos
+    // are aspect-checked, plus the first-photo face check.
+    expect(calls).toHaveLength(3);
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      url: 'https://e.com/body.jpg',
+      video_aspect: '9:16',
+    });
+  });
+
+  it('checks the hook photo in the aspect check when the persona has no face photo', async () => {
+    const calls = stubFetch([
+      engineBody('wrong_aspect', 1920, 1080),
+      engineBody('ok', 1080, 1920),
+    ]);
+    vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
+    const result = await checkPreChargePreflights(COMBINED);
+    expect(result).not.toBeNull();
+    expect(result?.status).toBe(400);
+    const payload = (await result?.json()) as { error?: string };
+    expect(payload.error).toContain('Segment 0 image 0');
+    expect(calls).toHaveLength(1);
+  });
+
+  it('checks the hook photo in the aspect check for faceless videos even with a persona photo', async () => {
+    const calls = stubFetch([
+      engineBody('wrong_aspect', 1920, 1080),
+      engineBody('ok', 1080, 1920),
+    ]);
+    vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
+    const result = await checkPreChargePreflights({
+      ...COMBINED,
+      options: { ...OPTIONS, videoType: 'faceless' },
+      prep: { ...PREP, photoPath: '/tmp/persona.jpg' },
+    });
+    expect(result).not.toBeNull();
+    expect(result?.status).toBe(400);
+    const payload = (await result?.json()) as { error?: string };
+    expect(payload.error).toContain('Segment 0 image 0');
+    expect(calls).toHaveLength(1);
+  });
+
+  it('returns the aspect failure without running the face check', async () => {
+    const calls = stubFetch([
+      engineBody('wrong_aspect', 1920, 1080),
+      engineBody('ok', 1080, 1920),
+    ]);
+    vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
+    const result = await checkPreChargePreflights(COMBINED);
+    expect(result).not.toBeNull();
+    expect(result?.status).toBe(400);
+    const payload = (await result?.json()) as { error?: string };
+    expect(payload.error).toContain('Segment 0 image 0');
+    expect(payload.error).toContain('1920x1080 (16:9)');
+    expect(checkFullLipsyncNarration).not.toHaveBeenCalled();
+    // The aspect failure short-circuits: the first-photo face check never runs.
+    expect(calls).toHaveLength(1);
   });
 });
