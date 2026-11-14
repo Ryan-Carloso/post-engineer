@@ -1,11 +1,12 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { PostEngineerClient } from '../client.js';
 import { createPostEngineerMcpServer } from '../index.js';
-import { callToolRecordingRequests, requestReaches } from './parity/behaviour.js';
+import { callToolRecordingRequests, requestReaches, type RecordedRequest } from './parity/behaviour.js';
 import { buildMcpCallGraph } from './parity/mcp-calls.js';
 import { EndpointMappingSchema, endpointToolNames, uncoveredEndpoints, verifyMapping } from './parity/mappings.js';
 import { ParityDataSchema, verifyExclusion, type VerifyContext } from './parity/exclusions.js';
@@ -50,11 +51,38 @@ const ENDPOINT_MAPPING = EndpointMappingSchema.parse(
 );
 const ENDPOINT_TOOLS = endpointToolNames(ENDPOINT_MAPPING);
 
-// Arguments that invoke one mapped action: `<tool>.<action>` → tool arguments
-// (including `action`). Only for actions, so it stays empty until a tool has any.
-const ACTION_SAMPLES: Record<string, Record<string, unknown>> = z
-  .record(z.string(), z.record(z.string(), z.unknown()))
+// Calls that invoke one mapped action: `<tool>.<action>` → one or more
+// samples, each the tool arguments (including `action`) and, when the action
+// must read a listing before it sends its request, the stubbed responses by
+// `METHOD /path`. An action that sends different requests on different calls
+// (preview, then confirm) lists one sample per call. `{{tmp:NAME}}` in a
+// string is the path of a small file the test writes for a local-file action.
+// The confirmToken of personas.delete is the digest of the persona id and of
+// the stubbed (all-null) preview: it changes when persona-delete.ts changes
+// how the token is built, and that failure says so.
+const SampleSchema = z.object({ args: z.record(z.string(), z.unknown()), responses: z.record(z.string(), z.unknown()).optional() }).strict();
+const ACTION_SAMPLES: Record<string, Array<z.infer<typeof SampleSchema>>> = z
+  .record(z.string(), z.array(SampleSchema).min(1))
   .parse(JSON.parse(readFileSync(join(here, 'parity-action-samples.json'), 'utf8')));
+
+const TEMP_DIR = mkdtempSync(join(tmpdir(), 'parity-samples-'));
+afterAll(() => rmSync(TEMP_DIR, { recursive: true, force: true }));
+
+function withTempFiles(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return value.replace(/\{\{tmp:([\w.-]+)\}\}/g, (_match, name: string) => {
+      const file = join(TEMP_DIR, name);
+      // A real PNG signature: the media upload checks the content, not the extension.
+      writeFileSync(file, name.endsWith('.png') ? Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex') : 'sample');
+      return file;
+    });
+  }
+  if (Array.isArray(value)) return value.map(withTempFiles);
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, withTempFiles(inner)]));
+  }
+  return value;
+}
 
 // Tools with no backing web endpoint. Empty today: every tool calls the
 // web API through the MCP client. A tool registered anywhere in
@@ -190,11 +218,15 @@ describe('Web -> MCP parity', () => {
   );
 
   it.each(mappedActions)('invoking $tool · $action sends the request for $key', async ({ key, tool, action }) => {
-    const args = ACTION_SAMPLES[`${tool}.${action}`];
-    expect(args, `Add arguments for ${tool}.${action} to parity-action-samples.json`).toBeDefined();
-    expect(args?.action, `${tool}.${action} sample must select the action`).toBe(action);
-    const server = createPostEngineerMcpServer(new PostEngineerClient({ apiKey: 'parity-proof' }), 'stdio');
-    const recorded = await callToolRecordingRequests(server, tool, args ?? {});
+    const samples = ACTION_SAMPLES[`${tool}.${action}`];
+    expect(samples, `Add samples for ${tool}.${action} to parity-action-samples.json`).toBeDefined();
+    const recorded: RecordedRequest[] = [];
+    for (const sample of samples ?? []) {
+      expect(sample.args.action, `${tool}.${action} sample must select the action`).toBe(action);
+      const server = createPostEngineerMcpServer(new PostEngineerClient({ apiKey: 'parity-proof' }), 'stdio');
+      const args = withTempFiles(sample.args);
+      recorded.push(...(await callToolRecordingRequests(server, tool, typeof args === 'object' && args !== null ? (args as Record<string, unknown>) : {}, sample.responses)));
+    }
     expect(requestReaches(recorded, key), `${tool}.${action} sent ${JSON.stringify(recorded)}, not ${key}`).toBe(true);
   });
 

@@ -52,15 +52,15 @@ export const WaitForVideoTasksShape = {
     .min(1, 'Provide at least one taskId')
     .max(MAX_BATCH_VIDEOS, `At most ${MAX_BATCH_VIDEOS} taskIds per call`)
     .describe(
-      'Engine task IDs from generate_persona_video or generate_persona_video_batch, one per video.',
+      'Engine task IDs from generate_video, one per video (up to 12). A whole batch is one call.',
     ),
-  timeoutSeconds: z
+  waitSeconds: z
     .number()
     .int()
-    .min(10, 'timeoutSeconds must be at least 10')
-    .max(600, 'timeoutSeconds must be at most 600')
-    .default(120)
-    .describe('Longest to wait for all tasks to finish, in seconds. Defaults to 120.'),
+    .min(0, 'waitSeconds must be at least 0')
+    .max(600, 'waitSeconds must be at most 600')
+    .default(0)
+    .describe('0 (default) = a snapshot of every task right now. More = block until every task finishes or this many seconds pass (max 600); on timeout the results are partial, so call again with the unfinished taskIds.'),
 };
 
 export const WaitForVideoTasksSchema = z.object(WaitForVideoTasksShape);
@@ -121,7 +121,7 @@ export async function handleWaitForVideoTasks(
   const sleep = deps.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
   const now = deps.now ?? (() => Date.now());
   const pollIntervalMs = deps.pollIntervalMs ?? POLL_INTERVAL_MS;
-  const deadline = now() + args.timeoutSeconds * 1000;
+  const deadline = now() + args.waitSeconds * 1000;
   const last = new Map<string, TaskWaitResult>();
 
   const summarize = (results: TaskWaitResult[], timedOut: boolean): string => {
@@ -129,7 +129,8 @@ export async function handleWaitForVideoTasks(
     const failed = results.filter((entry) => entry.outcome === 'failed').length;
     const running = results.length - completed - failed;
     const counts = `${completed} completed, ${failed} failed, ${running} running`;
-    return timedOut ? `Timed out after ${args.timeoutSeconds}s: ${counts}.` : `Wait finished: ${counts}.`;
+    if (args.waitSeconds === 0) return `Status now: ${counts}.`;
+    return timedOut ? `Timed out after ${args.waitSeconds}s: ${counts}.` : `Wait finished: ${counts}.`;
   };
 
   for (;;) {

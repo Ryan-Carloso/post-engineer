@@ -4,9 +4,9 @@ import { UnknownPromptSlugError, getPrompt, listPrompts } from './client-prompts
 import { getErrorMessage } from './errors.js';
 import type { McpToolResponse } from './tools-call.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { withTracking } from './analytics.js';
+import { actionDescription, actionShape, byAction } from './action-tool.js';
 import { READ_ONLY } from './tool-annotations.js';
-import { RecipeSession, recipeRunText, type McpTransportKind } from './recipe-session.js';
+import { RecipeSession, isRecipeSlug, recipeRunText, type McpTransportKind } from './recipe-session.js';
 
 // Re-exported so index.ts pays one import line (it sits at the file-size cap).
 export { withRecipeNudge, withScriptOutcome, type McpTransportKind } from './recipe-session.js';
@@ -78,34 +78,36 @@ function errorResponse(action: string, message: string): McpToolResponse {
 
 //---------------
 // Registration lives here (not in index.ts, which sits at the file-size
-// cap). Both tools run inside the server's RecipeSession: their requests
-// carry the recipe-adoption headers, list_prompts marks the recipes as
-// known, and get_prompt records the slug once the API returned it.
-// Returns the session so index.ts wraps the entry and script tools with
-// the same one.
+// cap). The prompts tool runs inside the server's RecipeSession: its
+// requests carry the recipe-adoption headers, `list` marks the recipes as
+// known, and `get` records the slug once the API returned it. Returns the
+// session so index.ts wraps the entry and script tools with the same one.
 //---------------
+const PROMPTS_SPECS = { list: ListPromptsShape, get: GetPromptShape };
+
 export function registerPromptTools(server: McpServer, client: PostEngineerClient, transport: McpTransportKind): RecipeSession {
   const session = new RecipeSession(transport);
   server.tool(
-    'list_prompts',
-    ListPromptsDescription,
-    ListPromptsShape, READ_ONLY,
-    withTracking('list_prompts', async () => {
-      const response = await session.run(undefined, () => handleListPrompts(client));
-      if (response.isError !== true) session.recordRecipesListed();
-      return response;
-    }),
-  );
-  server.tool(
-    'get_prompt',
-    GetPromptDescription,
-    GetPromptShape, READ_ONLY,
-    withTracking('get_prompt', async (args) => {
-      const slug = GetPromptSchema.safeParse(args).data?.slug;
-      const response = await session.run(slug, () => handleGetPrompt(client, args));
-      if (response.isError !== true && slug !== undefined) session.recordRecipeFetched(slug);
-      return response;
-    }),
+    'prompts',
+    actionDescription(`${ListPromptsDescription}\n${GetPromptDescription}`, PROMPTS_SPECS),
+    actionShape(PROMPTS_SPECS),
+    READ_ONLY,
+    byAction(
+      {
+        list: async () => {
+          const response = await session.run(undefined, () => handleListPrompts(client));
+          if (response.isError !== true) session.recordRecipesListed();
+          return response;
+        },
+        get: async (args) => {
+          const response = await session.run(args.slug, () => handleGetPrompt(client, args));
+          if (response.isError !== true && isRecipeSlug(args.slug)) session.recordRecipeFetched(args.slug);
+          return response;
+        },
+      },
+      PROMPTS_SPECS,
+      'prompts',
+    ),
   );
   return session;
 }

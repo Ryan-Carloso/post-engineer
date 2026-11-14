@@ -734,7 +734,7 @@ export async function handleDisconnectAccount(
 /** Narrows the GET /api/persona/delete-preview envelope: the persona, the
  * removal counts, and the per-video download links. Anything the API adds
  * later rides through unparsed. */
-function narrowDeletePreview(result: unknown): {
+export function narrowDeletePreview(result: unknown): {
   persona: { id: string | null; name: string | null };
   counts: {
     schedules: number | null;

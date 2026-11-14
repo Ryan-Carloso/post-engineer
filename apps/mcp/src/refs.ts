@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
 import { getErrorMessage } from './errors.js';
 import type { McpToolResponse } from './tools-call.js';
@@ -62,13 +63,15 @@ function text(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null;
 }
 
-export async function resolvePersonaRef(client: PostEngineerClient, ref: string): Promise<RefOutcome<ResolvedPersona>> {
+type Listing = () => Promise<unknown>;
+
+async function resolvePersona(listPersonas: Listing, ref: string): Promise<RefOutcome<ResolvedPersona>> {
   const wanted = ref.trim();
   if (wanted === '') return fail('persona is empty. Pass a persona name or id; call personas {action:"list"} to see them.');
   if (UUID.test(wanted)) return { kind: 'ok', value: { id: wanted, name: null } };
   let listing: unknown;
   try {
-    listing = await client.listPersonas();
+    listing = await listPersonas();
   } catch (error) {
     return fail(`Error resolving persona "${wanted}": ${getErrorMessage(error)}`);
   }
@@ -104,12 +107,12 @@ function accountOf(entry: unknown): { provider: string; id: string; names: strin
   return { provider, id, names, label: names[0] ?? id };
 }
 
-export async function resolveAccountRef(client: PostEngineerClient, ref: string, provider?: string): Promise<RefOutcome<ResolvedAccount>> {
+async function resolveAccount(listAccounts: Listing, ref: string, provider?: string): Promise<RefOutcome<ResolvedAccount>> {
   const wanted = ref.trim();
   if (wanted === '') return fail('An account reference is empty. Pass an account name or id; call accounts {action:"list"} to see them.');
   let listing: unknown;
   try {
-    listing = await client.listSocialAccounts();
+    listing = await listAccounts();
   } catch (error) {
     return fail(`Error resolving account "${wanted}": ${getErrorMessage(error)}`);
   }
@@ -128,4 +131,80 @@ export async function resolveAccountRef(client: PostEngineerClient, ref: string,
     return candidates('account', wanted, matches.map((account) => ({ id: account.id, name: account.label, summary: `${account.label} on ${account.provider}` })));
   }
   return { kind: 'ok', value: { provider: matches[0].provider, id: matches[0].id, label: matches[0].label } };
+}
+
+/** Reads a listing once, whatever the number of references resolved against it. */
+function once(read: Listing): Listing {
+  let pending: Promise<unknown> | null = null;
+  return () => {
+    pending ??= read();
+    return pending;
+  };
+}
+
+export interface RefResolvers {
+  persona: (ref: string) => Promise<RefOutcome<ResolvedPersona>>;
+  account: (ref: string, provider?: string) => Promise<RefOutcome<ResolvedAccount>>;
+}
+
+/** Resolvers that share one personas listing and one accounts listing (a batch resolves many refs). */
+export function createRefResolvers(client: PostEngineerClient): RefResolvers {
+  const personas = once(() => client.listPersonas());
+  const accounts = once(() => client.listSocialAccounts());
+  return {
+    persona: (ref) => resolvePersona(personas, ref),
+    account: (ref, provider) => resolveAccount(accounts, ref, provider),
+  };
+}
+
+export function resolvePersonaRef(client: PostEngineerClient, ref: string): Promise<RefOutcome<ResolvedPersona>> {
+  return createRefResolvers(client).persona(ref);
+}
+
+export function resolveAccountRef(client: PostEngineerClient, ref: string, provider?: string): Promise<RefOutcome<ResolvedAccount>> {
+  return createRefResolvers(client).account(ref, provider);
+}
+
+/** The `persona` field of every action that acts on one persona. */
+export const PERSONA_REF = z.string().min(1, 'persona is required').describe('The persona, by name or id (personas list shows both).');
+
+/** A shape with its `personaId` replaced by the `persona` reference (the other fields are kept as they are). */
+export function personaRefShape<TShape extends Record<string, z.ZodType>>(shape: TShape): { persona: typeof PERSONA_REF } & Omit<TShape, 'personaId'> {
+  const { personaId: _replaced, ...rest } = shape;
+  return { persona: PERSONA_REF, ...rest };
+}
+
+/**
+ * Resolves `args.persona` and runs `run` with the persona id as `personaId`
+ * (and the other fields untouched). An unknown or ambiguous persona ends the
+ * call with the resolver's response, before `run`.
+ */
+export async function withPersona<TArgs extends { persona: string }, TResult extends McpToolResponse>(
+  client: PostEngineerClient,
+  args: TArgs,
+  run: (args: Omit<TArgs, 'persona'> & { personaId: string }, persona: ResolvedPersona) => Promise<TResult>,
+): Promise<McpToolResponse> {
+  const outcome = await resolvePersonaRef(client, args.persona);
+  if (outcome.kind === 'response') return outcome.response;
+  const { persona: _ref, ...rest } = args;
+  return run({ ...rest, personaId: outcome.value.id }, outcome.value);
+}
+
+/** Like personaRefShape, for an action where the persona is optional. */
+export function optionalPersonaRefShape<TShape extends Record<string, z.ZodType>>(shape: TShape): { persona: z.ZodOptional<typeof PERSONA_REF> } & Omit<TShape, 'personaId'> {
+  const { personaId: _replaced, ...rest } = shape;
+  return { persona: PERSONA_REF.optional(), ...rest };
+}
+
+/** Like withPersona, when the persona is optional: absent stays absent (no personaId). */
+export async function withOptionalPersona<TArgs extends { persona?: string | undefined }>(
+  client: PostEngineerClient,
+  args: TArgs,
+  run: (args: Omit<TArgs, 'persona'> & { personaId?: string }) => Promise<McpToolResponse>,
+): Promise<McpToolResponse> {
+  const { persona, ...rest } = args;
+  if (persona === undefined) return run(rest);
+  const outcome = await resolvePersonaRef(client, persona);
+  if (outcome.kind === 'response') return outcome.response;
+  return run({ ...rest, personaId: outcome.value.id });
 }

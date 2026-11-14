@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PostEngineerClient } from '../client.js';
-import { resolveAccountRef, resolvePersonaRef } from '../refs.js';
+import { createRefResolvers, resolveAccountRef, resolvePersonaRef } from '../refs.js';
 import type { McpToolResponse } from '../tools-call.js';
 
 // Issue #566 §7: a persona or account is given as an id or as a display
@@ -133,6 +133,19 @@ describe('resolveAccountRef', () => {
   it('reads the listing through GET /api/account only once per call', async () => {
     const { client: c, listSocialAccounts } = client({ accounts: ACCOUNTS });
     await resolveAccountRef(c, 'UC123');
+    expect(listSocialAccounts).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('createRefResolvers', () => {
+  it('reads each listing once however many references it resolves', async () => {
+    const { client: c, listPersonas, listSocialAccounts } = client({ personas: PERSONAS, accounts: ACCOUNTS });
+    const resolvers = createRefResolvers(c);
+    await resolvers.persona('Maria');
+    await resolvers.persona('João');
+    await resolvers.account('UC123');
+    await resolvers.account('maria.cooks');
+    expect(listPersonas).toHaveBeenCalledTimes(1);
     expect(listSocialAccounts).toHaveBeenCalledTimes(1);
   });
 });

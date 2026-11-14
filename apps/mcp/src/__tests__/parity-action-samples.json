@@ -1,1 +1,564 @@
-{}
+{
+  "accounts.connect": [
+    {
+      "args": {
+        "action": "connect",
+        "provider": "youtube"
+      }
+    },
+    {
+      "args": {
+        "action": "connect",
+        "provider": "bluesky",
+        "handle": "a.bsky.social",
+        "appPassword": "abcd-efgh-ijkl-mnop"
+      }
+    },
+    {
+      "args": {
+        "action": "connect",
+        "provider": "3speak",
+        "username": "alice",
+        "postingKey": "5Jxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    },
+    {
+      "args": {
+        "action": "connect",
+        "provider": "rumble",
+        "channelId": "c1",
+        "accessToken": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "accounts.disconnect": [
+    {
+      "args": {
+        "action": "disconnect",
+        "account": "UC1",
+        "provider": "youtube"
+      },
+      "responses": {
+        "GET /api/account": {
+          "accounts": [
+            {
+              "provider": "youtube",
+              "channelId": "UC1",
+              "channelName": "Maria Cooks"
+            },
+            {
+              "provider": "pinterest",
+              "providerAccountId": "PIN1",
+              "accountName": "Maria Pins"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "accounts.get_persona_publishing": [
+    {
+      "args": {
+        "action": "get_persona_publishing",
+        "persona": "11111111-1111-4111-8111-111111111111"
+      }
+    }
+  ],
+  "accounts.list": [
+    {
+      "args": {
+        "action": "list"
+      }
+    }
+  ],
+  "accounts.list_boards": [
+    {
+      "args": {
+        "action": "list_boards",
+        "account": "PIN1"
+      },
+      "responses": {
+        "GET /api/account": {
+          "accounts": [
+            {
+              "provider": "youtube",
+              "channelId": "UC1",
+              "channelName": "Maria Cooks"
+            },
+            {
+              "provider": "pinterest",
+              "providerAccountId": "PIN1",
+              "accountName": "Maria Pins"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "accounts.set_persona_publishing": [
+    {
+      "args": {
+        "action": "set_persona_publishing",
+        "persona": "11111111-1111-4111-8111-111111111111",
+        "accounts": {
+          "youtube": [
+            "UC1"
+          ]
+        }
+      }
+    }
+  ],
+  "billing.balance": [
+    {
+      "args": {
+        "action": "balance"
+      }
+    }
+  ],
+  "billing.transactions": [
+    {
+      "args": {
+        "action": "transactions"
+      }
+    }
+  ],
+  "check_script.score": [
+    {
+      "args": {
+        "action": "score",
+        "draft": "A short draft about training plans that is long enough to score.",
+        "network": "youtube"
+      }
+    }
+  ],
+  "check_script.validate": [
+    {
+      "args": {
+        "action": "validate",
+        "segments": [
+          {
+            "kind": "hook",
+            "text": "Most people burn out because they train every single day without any plan, and here is the simple weekly structure that fixes it for good."
+          },
+          {
+            "kind": "content",
+            "text": "Start with three focused sessions a week, each one built around a single goal, so your body can recover and your progress keeps moving forward instead of stalling."
+          },
+          {
+            "kind": "content",
+            "text": "Track every session in a simple notebook, review it on Sunday, and change only one thing at a time, because small and steady adjustments beat dramatic restarts."
+          }
+        ],
+        "videoType": "full_lipsync"
+      }
+    }
+  ],
+  "experiments.add_pair": [
+    {
+      "args": {
+        "action": "add_pair",
+        "experimentId": "22222222-2222-4222-8222-222222222222",
+        "pair": 1,
+        "title": "Training plan",
+        "segments": [
+          {
+            "kind": "content",
+            "text": "Start with three focused sessions a week, each one built around a single goal, so your body can recover and your progress keeps moving forward instead of stalling."
+          },
+          {
+            "kind": "content",
+            "text": "Track every session in a simple notebook, review it on Sunday, and change only one thing at a time, because small and steady adjustments beat dramatic restarts."
+          }
+        ],
+        "hooks": [
+          {
+            "variantId": "hook-calm",
+            "text": "Most people burn out because they train every single day without any plan, and here is the simple weekly structure that fixes it for good."
+          },
+          {
+            "variantId": "hook-bold",
+            "text": "Almost everyone burn out because they train every single day without any plan, and here is the simple weekly structure that fixes it for good."
+          }
+        ],
+        "description": "D",
+        "persona": "11111111-1111-4111-8111-111111111111",
+        "providers": [
+          "youtube"
+        ],
+        "mode": "asap",
+        "options": {
+          "videoType": "full_lipsync"
+        }
+      }
+    }
+  ],
+  "experiments.create": [
+    {
+      "args": {
+        "action": "create",
+        "name": "Calm vs bold",
+        "variants": [
+          {
+            "variantId": "hook-calm",
+            "name": "Calm",
+            "description": "calm and clear"
+          },
+          {
+            "variantId": "hook-bold",
+            "name": "Bold",
+            "description": "direct and bold"
+          }
+        ]
+      }
+    }
+  ],
+  "experiments.list": [
+    {
+      "args": {
+        "action": "list"
+      }
+    }
+  ],
+  "experiments.results": [
+    {
+      "args": {
+        "action": "results",
+        "experimentId": "22222222-2222-4222-8222-222222222222"
+      }
+    }
+  ],
+  "insights.post_metrics": [
+    {
+      "args": {
+        "action": "post_metrics",
+        "window": "7d"
+      }
+    }
+  ],
+  "insights.retention_curve": [
+    {
+      "args": {
+        "action": "retention_curve",
+        "account": "UC1",
+        "video": "dQw4w9WgXcQ"
+      }
+    }
+  ],
+  "media.check": [
+    {
+      "args": {
+        "action": "check",
+        "url": "https://example.com/a.png"
+      }
+    }
+  ],
+  "media.upload": [
+    {
+      "args": {
+        "action": "upload",
+        "path": "{{tmp:image.png}}"
+      }
+    }
+  ],
+  "persona_media.add_image": [
+    {
+      "args": {
+        "action": "add_image",
+        "persona": "11111111-1111-4111-8111-111111111111",
+        "path": "{{tmp:image.png}}"
+      }
+    }
+  ],
+  "persona_media.list_faces": [
+    {
+      "args": {
+        "action": "list_faces"
+      }
+    }
+  ],
+  "persona_media.list_images": [
+    {
+      "args": {
+        "action": "list_images",
+        "persona": "11111111-1111-4111-8111-111111111111"
+      }
+    }
+  ],
+  "persona_media.remove_image": [
+    {
+      "args": {
+        "action": "remove_image",
+        "id": "img1"
+      }
+    }
+  ],
+  "persona_media.update_image": [
+    {
+      "args": {
+        "action": "update_image",
+        "id": "img1",
+        "tag": "gym"
+      }
+    }
+  ],
+  "personas.create": [
+    {
+      "args": {
+        "action": "create",
+        "name": "Maria",
+        "avatarUrl": "https://example.com/a.png",
+        "voiceId": "chatterbox:phonon_zoey",
+        "accounts": {
+          "youtube": [
+            "UC1"
+          ]
+        }
+      }
+    }
+  ],
+  "personas.delete": [
+    {
+      "args": {
+        "action": "delete",
+        "persona": "11111111-1111-4111-8111-111111111111"
+      }
+    },
+    {
+      "args": {
+        "action": "delete",
+        "persona": "11111111-1111-4111-8111-111111111111",
+        "confirmToken": "8e3781988bb4c080"
+      }
+    }
+  ],
+  "personas.list": [
+    {
+      "args": {
+        "action": "list"
+      }
+    }
+  ],
+  "personas.update": [
+    {
+      "args": {
+        "action": "update",
+        "persona": "11111111-1111-4111-8111-111111111111",
+        "name": "Maria 2"
+      }
+    }
+  ],
+  "posts.get": [
+    {
+      "args": {
+        "action": "get",
+        "id": "p1"
+      }
+    }
+  ],
+  "posts.list": [
+    {
+      "args": {
+        "action": "list"
+      }
+    }
+  ],
+  "prompts.get": [
+    {
+      "args": {
+        "action": "get",
+        "slug": "full-setup"
+      }
+    }
+  ],
+  "prompts.list": [
+    {
+      "args": {
+        "action": "list"
+      }
+    }
+  ],
+  "publish_video.complete_upload": [
+    {
+      "args": {
+        "action": "complete_upload",
+        "uploadId": "u1"
+      }
+    }
+  ],
+  "publish_video.create_upload": [
+    {
+      "args": {
+        "action": "create_upload",
+        "contentType": "video/mp4",
+        "sizeBytes": 1000
+      }
+    }
+  ],
+  "publish_video.from_file": [
+    {
+      "args": {
+        "action": "from_file",
+        "provider": "youtube",
+        "accountIds": [
+          "UC1"
+        ],
+        "title": "T",
+        "description": "D",
+        "tags": [
+          "a"
+        ],
+        "privacyStatus": "public",
+        "videoPath": "{{tmp:video.mp4}}"
+      }
+    }
+  ],
+  "publish_video.publish_upload": [
+    {
+      "args": {
+        "action": "publish_upload",
+        "provider": "youtube",
+        "accountIds": [
+          "UC1"
+        ],
+        "title": "T",
+        "description": "D",
+        "tags": [
+          "a"
+        ],
+        "privacyStatus": "public",
+        "uploadId": "u1"
+      }
+    }
+  ],
+  "schedules.cancel": [
+    {
+      "args": {
+        "action": "cancel",
+        "scheduleId": "s1"
+      }
+    }
+  ],
+  "schedules.delete_slot": [
+    {
+      "args": {
+        "action": "delete_slot",
+        "slotId": "sl1"
+      }
+    }
+  ],
+  "schedules.get_slot": [
+    {
+      "args": {
+        "action": "get_slot",
+        "slotId": "sl1"
+      }
+    }
+  ],
+  "schedules.list": [
+    {
+      "args": {
+        "action": "list"
+      }
+    }
+  ],
+  "schedules.update_slot_title": [
+    {
+      "args": {
+        "action": "update_slot_title",
+        "slotId": "sl1",
+        "title": "New"
+      }
+    }
+  ],
+  "video_tasks.get_generation": [
+    {
+      "args": {
+        "action": "get_generation",
+        "generationId": "g1"
+      }
+    }
+  ],
+  "video_tasks.list_generations": [
+    {
+      "args": {
+        "action": "list_generations"
+      }
+    }
+  ],
+  "video_tasks.status": [
+    {
+      "args": {
+        "action": "status",
+        "taskIds": [
+          "t1"
+        ]
+      }
+    }
+  ],
+  "voices.create_clone": [
+    {
+      "args": {
+        "action": "create_clone",
+        "audioUrl": "https://example.com/a.mp3",
+        "language": "en-US",
+        "consent": true,
+        "denoise": true
+      }
+    },
+    {
+      "args": {
+        "action": "create_clone",
+        "audioPath": "{{tmp:voice.mp3}}",
+        "language": "en-US",
+        "consent": true,
+        "denoise": true
+      }
+    }
+  ],
+  "voices.delete_clone": [
+    {
+      "args": {
+        "action": "delete_clone",
+        "cloneId": "c1"
+      }
+    }
+  ],
+  "voices.get_clone": [
+    {
+      "args": {
+        "action": "get_clone",
+        "cloneId": "c1"
+      }
+    }
+  ],
+  "voices.list": [
+    {
+      "args": {
+        "action": "list"
+      }
+    }
+  ],
+  "voices.list_clones": [
+    {
+      "args": {
+        "action": "list_clones"
+      }
+    }
+  ],
+  "voices.preview": [
+    {
+      "args": {
+        "action": "preview",
+        "voiceId": "chatterbox:phonon_zoey"
+      }
+    }
+  ],
+  "voices.preview_clone": [
+    {
+      "args": {
+        "action": "preview_clone",
+        "cloneId": "c1"
+      }
+    }
+  ]
+}

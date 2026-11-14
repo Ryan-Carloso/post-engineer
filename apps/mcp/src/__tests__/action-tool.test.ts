@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { mcpTelemetryHeaders } from '../analytics.js';
-import { actionDescription, actionShape, byAction } from '../action-tool.js';
+import { actionDescription, actionShape, byAction, offeredSpecs } from '../action-tool.js';
 import type { McpToolResponse } from '../tools-call.js';
 
 // Issue #566: one tool, many actions. The tools/list schema is one flat
@@ -16,7 +16,7 @@ const SPECS = {
   list: { limit: z.number().int().min(1).max(10).optional().describe('Max rows.') },
   create: { name: z.string().min(1).describe('Display name.'), limit: z.number().int().min(1).max(10).optional().describe('Max rows.') },
   remove: { id: z.string().min(1).describe('Row id.') },
-} satisfies Record<string, z.ZodRawShape>;
+} satisfies Record<string, Record<string, z.ZodType>>;
 
 function text(response: McpToolResponse): string {
   const block = response.content[0];
@@ -73,7 +73,7 @@ describe('actionDescription', () => {
 
 describe('byAction', () => {
   it('rejects a handler set that does not match the action specs, so a typo cannot ship', () => {
-    expect(() => byAction({ list: async () => ({ content: [] }) }, SPECS as never, 'things')).toThrow(/create, remove/);
+    expect(() => byAction({ list: async () => ({ content: [] }) } as never, SPECS, 'things')).toThrow(/create, remove/);
     expect(() => byAction({ ...handlers([]), extra: async () => ({ content: [] }) } as never, SPECS, 'things')).toThrow(/extra/);
   });
 
@@ -138,5 +138,65 @@ describe('byAction', () => {
     expect(ok.isError).not.toBe(true);
     const wrong = await client.callTool({ name: 'things', arguments: { action: 'remove', name: 'x' } });
     expect(wrong.isError).toBe(true);
+  });
+});
+
+describe('transport-gated actions', () => {
+  it('drops the unavailable action from the offered specs, the shape and the callable actions', async () => {
+    const offered = offeredSpecs(SPECS, { unavailable: ['remove'] });
+    expect(Object.keys(offered)).toEqual(['list', 'create']);
+    expect(Object.keys(actionShape(offered))).not.toContain('id');
+    const seen: Array<{ action: string; args: unknown; tool: string | null }> = [];
+    const run = byAction(handlers(seen), SPECS, 'things', { unavailable: ['remove'] });
+    const response = await run({ action: 'remove', id: 'x' });
+    expect(response.isError).toBe(true);
+    expect(text(response)).toContain('list, create');
+    expect(seen).toEqual([]);
+  });
+
+  it('still requires a handler for every offered action and knows no handler without a spec', () => {
+    expect(() => byAction({ list: async () => ({ content: [] }), remove: async () => ({ content: [] }) } as never, SPECS, 'things', { unavailable: ['remove'] })).toThrow(/create/);
+    expect(() => byAction({ ...handlers([]), ghost: async () => ({ content: [] }) } as never, SPECS, 'things', { unavailable: ['remove'] })).toThrow(/ghost/);
+  });
+});
+
+describe('action variants', () => {
+  it('replaces the field set of an action for this server, in the shape and in the strict re-parse', async () => {
+    const variants = { create: { title: z.string().min(1).describe('A title.') } };
+    expect(Object.keys(actionShape(offeredSpecs(SPECS, { variants })))).toContain('title');
+    expect(Object.keys(actionShape(offeredSpecs(SPECS, { variants })))).not.toContain('name');
+    const seen: Array<{ action: string; args: unknown; tool: string | null }> = [];
+    const run = byAction(handlers(seen), SPECS, 'things', { variants });
+    expect((await run({ action: 'create', name: 'Maria' })).isError).toBe(true);
+    expect((await run({ action: 'create', title: 'T' })).isError).not.toBe(true);
+    expect(seen).toEqual([{ action: 'create', args: { title: 'T' }, tool: 'things' }]);
+  });
+});
+
+describe('defaults', () => {
+  const WITH_DEFAULT = {
+    status: { waitSeconds: z.number().int().min(0).default(0).describe('0 = snapshot.') },
+    list: {},
+  };
+
+  it('are not applied by the flat shape, so another action never receives them', async () => {
+    const shape = actionShape(WITH_DEFAULT);
+    expect(shape.waitSeconds.safeParse(undefined)).toMatchObject({ success: true, data: undefined });
+    expect(JSON.stringify(z.toJSONSchema(z.object(shape)))).toContain('0 = snapshot.');
+    const seen: unknown[] = [];
+    const run = byAction({ status: async (args) => { seen.push(args); return { content: [] }; }, list: async (args) => { seen.push(args); return { content: [] }; } }, WITH_DEFAULT, 'jobs');
+    expect((await run({ action: 'list' })).isError).not.toBe(true);
+    expect((await run({ action: 'status' })).isError).not.toBe(true);
+    expect(seen).toEqual([{}, { waitSeconds: 0 }]);
+  });
+
+  it('survive a real MCP client round trip: an action without the field is not rejected', async () => {
+    const server = new McpServer({ name: 't', version: '0.0.0' });
+    server.tool('jobs', 'd', actionShape(WITH_DEFAULT), byAction({ status: async () => ({ content: [] }), list: async () => ({ content: [] }) }, WITH_DEFAULT, 'jobs'));
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await server.connect(a);
+    const client = new Client({ name: 'c', version: '0.0.0' });
+    await client.connect(b);
+    expect((await client.callTool({ name: 'jobs', arguments: { action: 'list' } })).isError).not.toBe(true);
   });
 });

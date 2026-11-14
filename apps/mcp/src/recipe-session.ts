@@ -30,17 +30,17 @@ import type { McpToolResponse } from './tools-call.js';
 export type McpTransportKind = 'stdio' | 'http';
 
 export const RECIPE_NUDGE_SURFACES = [
-  'create_persona',
-  'list_personas',
-  'list_social_accounts',
-  'get_token_balance',
-  'validate_script',
-  'generate_persona_video',
+  'personas_create',
+  'personas_list',
+  'accounts_list',
+  'billing_balance',
+  'check_script_validate',
+  'generate_video',
 ] as const;
 
 export type RecipeNudgeSurface = (typeof RECIPE_NUDGE_SURFACES)[number];
 
-export type ScriptTool = 'validate_script' | 'generate_persona_video';
+export type ScriptTool = 'check_script_validate' | 'generate_video';
 
 export const MCP_SESSION_ID_HEADER = 'X-MCP-Session-Id';
 export const MCP_TRANSPORT_HEADER = 'X-MCP-Transport';
@@ -64,11 +64,11 @@ export const SCRIPT_REJECTED_RECIPE_HINT =
 
 //---------------
 // The text an agent runs for a recipe: the hub text plus a footer asking
-// it to declare the recipe on generate_persona_video, so its request
+// it to declare the recipe on generate_video, so its request
 // carries X-MCP-Recipe. Shared by get_prompt and the slash commands.
 //---------------
 export function recipeRunText(slug: string, prompt: string): string {
-  return `${prompt}\n\nWhen you call generate_persona_video for this recipe, pass recipe: "${slug}".`;
+  return `${prompt}\n\nWhen you call generate_video for this recipe, pass recipe: "${slug}".`;
 }
 
 export function isRecipeSlug(value: unknown): value is string {
@@ -160,21 +160,26 @@ export function withRecipeNudge<TArgs>(
 // re-runs the same pure validator the handler runs, so it never parses
 // the handler's error text.
 //---------------
-export function withScriptOutcome<
-  TArgs extends { segments: unknown; recipe?: string; videoType?: VideoType; options?: { videoType?: VideoType } },
->(
+export interface ScriptView {
+  segments: unknown;
+  videoType?: VideoType;
+}
+
+export function withScriptOutcome<TArgs extends object>(
   session: RecipeSession,
   toolName: ScriptTool,
   handler: (args: TArgs) => Promise<McpToolResponse>,
+  scriptsOf: (args: TArgs) => ScriptView[],
 ): (args: TArgs) => Promise<McpToolResponse> {
   return async (args: TArgs): Promise<McpToolResponse> => {
-    const response = await session.run(args.recipe, () => handler(args));
-    const videoType = args.videoType ?? args.options?.videoType ?? 'hook_lipsync';
-    if (response.isError !== true || validateSegments(args.segments, videoType).ok) {
+    const recipe = 'recipe' in args ? args.recipe : undefined;
+    const response = await session.run(recipe, () => handler(args));
+    const rejected = scriptsOf(args).some((script) => !validateSegments(script.segments, script.videoType ?? 'hook_lipsync').ok);
+    if (response.isError !== true || !rejected) {
       return response;
     }
     session.recordScriptRejected();
-    if (args.recipe !== undefined || session.knowsRecipes()) {
+    if (recipe !== undefined || session.knowsRecipes()) {
       return response;
     }
     session.recordNudgeShown(toolName);

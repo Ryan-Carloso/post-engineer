@@ -10,7 +10,9 @@ import {
   EXPERIMENT_VARIANT_NAME_MAX_LENGTH,
   METRICS_WINDOWS,
 } from './limits.js';
-import { GeneratePersonaVideoShape, ScriptSegmentShape } from './single-video-shape.js';
+import { GenerateVideoItemSchema, prepareVideo } from './generate-video.js';
+import { createRefResolvers } from './refs.js';
+import { ScriptSegmentShape } from './single-video-shape.js';
 import { generatePersonaVideoOutcome } from './tools-single-video.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
@@ -75,8 +77,9 @@ export const GetExperimentResultsShape = {
 };
 export const GetExperimentResultsSchema = z.object(GetExperimentResultsShape);
 
-const { segments: _segments, title: _title, idempotencyKey: _key, recipe: _recipe, experiment: _experiment, ...deliveryShape } =
-  GeneratePersonaVideoShape;
+// Both videos of a pair share everything but the hook: the delivery fields are
+// the ones of a generate_video video (persona and accounts by name or id).
+const { segments: _segments, title: _title, experiment: _experiment, ...deliveryShape } = GenerateVideoItemSchema.shape;
 
 export const AddExperimentPairShape = {
   experimentId: z.string().uuid().describe('Experiment id from create_experiment.'),
@@ -158,7 +161,15 @@ export async function handleAddExperimentPair(
   client: PostEngineerClient,
   args: z.infer<typeof AddExperimentPairSchema>,
 ): Promise<McpToolResponse> {
-  const { experimentId, pair, title, segments, hooks, spacingHours, ...delivery } = args;
+  const { experimentId, pair, title, segments, hooks, spacingHours, ...deliveryRefs } = args;
+  // Resolve the persona and accounts once, before the first video exists.
+  const resolved = await prepareVideo(client, createRefResolvers(client), {
+    ...deliveryRefs,
+    title,
+    segments: [{ kind: 'hook', text: hooks[0].text }],
+  });
+  if (resolved.kind === 'response') return resolved.response;
+  const { segments: _placeholder, title: _slotTitle, idempotencyKey: _unused, experiment: _link, recipe: _recipe, ...delivery } = resolved.prepared.video;
   // Alternate which variant goes first (A,B / B,A) so publish order never
   // favours one variant.
   const ordered = pair % 2 === 1 ? hooks : [hooks[1], hooks[0]];
