@@ -39,8 +39,15 @@ describe('Onboarding wizard', () => {
     cy.contains('button', 'Continuar').click();
     cy.contains('Conecte a sua conta').should('be.visible');
     cy.contains('Passo 2 de 4').should('be.visible');
-    cy.get('[data-testid=onboarding-provider-youtube]').should('have.attr', 'href', '/accounts');
-    cy.contains('a', 'Conectar conta').should('have.attr', 'href', '/accounts');
+    // Step 2 connects inline: rows are buttons, never links to /accounts,
+    // and the duplicate "Conectar conta" button is gone.
+    cy.get('[data-testid=onboarding-provider-youtube]').should('not.have.attr', 'href');
+    cy.contains('a', 'Conectar conta').should('not.exist');
+    cy.get('[data-testid=onboarding-provider-youtube]').click();
+    cy.get('[data-testid=onboarding-provider-back]').should('be.visible');
+    cy.contains('button', 'Conectar uma conta').should('be.visible');
+    cy.get('[data-testid=onboarding-provider-back]').click();
+    cy.contains('Conecte a sua conta').should('be.visible');
 
     cy.contains('button', 'Pular por agora').click();
     cy.contains('Ligue o seu agente').should('be.visible');
@@ -61,6 +68,24 @@ describe('Onboarding wizard', () => {
     cy.window().then((win) => {
       expect(win.localStorage.getItem(SEEN_KEY)).to.eq('1');
     });
+  });
+
+  it('shows the load error when the accounts read fails', () => {
+    cy.intercept('GET', '/api/account', { statusCode: 500, body: { success: false } }).as('accountsFailed');
+    visitPosts();
+    cy.contains('button', 'Continuar').click();
+    cy.contains('Não foi possível carregar as contas.', { timeout: 10000 }).should('be.visible');
+    cy.get('[data-testid=onboarding-provider-youtube]').should('be.visible');
+  });
+
+  it('connects inline without leaving /posts', () => {
+    visitPosts();
+    cy.contains('button', 'Continuar').click();
+    cy.get('[data-testid=onboarding-provider-youtube]').click();
+    cy.url().should('include', '/posts');
+    cy.get('[data-testid=onboarding-wizard-dialog]').should('be.visible');
+    cy.contains('Passo 2 de 4').should('be.visible');
+    cy.get('[data-testid=onboarding-provider-back]').should('be.visible');
   });
 
   it('resumes at the saved step after a detour', () => {
