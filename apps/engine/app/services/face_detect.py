@@ -37,6 +37,46 @@ def _load_cv2():
     return _FACE_MODULE
 
 
+def image_contains_face(image_path: str) -> bool | None:
+    """True when a still image contains a detected human face.
+
+    Same Haar cascade and parameters as video_contains_face, on the
+    image downscaled to <w_max=360>. None when the detector is
+    unavailable (opencv not installed or the cascade failed to load):
+    the caller must not block on None — a missing detector must never
+    fail a video. False covers both "no face" and "unreadable file": a
+    file cv2 cannot decode cannot be lip-synced either.
+    """
+    cv2 = _load_cv2()
+    if cv2 is None:
+        return None
+
+    cascade = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    )
+    if cascade.empty():
+        logger.warning("face detection: Haar cascade failed to load; check inactive")
+        return None
+
+    try:
+        image = cv2.imread(image_path)
+        if image is None:
+            return False
+        height, width = image.shape[:2]
+        if width > 360:
+            scale = 360 / width
+            new_size = (360, max(1, int(height * scale)))
+            image = cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        faces = cascade.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=5, minSize=(24, 24)
+        )
+        return len(faces) > 0
+    except Exception as e:
+        logger.warning(f"face detection failed for '{image_path}': {str(e)}")
+        return False
+
+
 def video_contains_face(
     video_path: str, frames_to_sample: int = 8, force_exclude: bool | None = None
 ) -> bool:

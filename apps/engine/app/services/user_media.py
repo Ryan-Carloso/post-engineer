@@ -42,10 +42,11 @@ from PIL import Image
 
 from app.models.schema import VideoAspect
 from app.services import (
-    image_coverage, media_aspect, media_overlay, persona_hook, image_fetch, segment_panels, subtitle, video,
+    face_detect, image_coverage, media_aspect, media_overlay, persona_hook, image_fetch, segment_panels, subtitle, video,
 )
 from app.services.image_density import split_interval
 from app.services.lipsync_active import persona_lipsync_active
+from app.services.segment_intervals import segment_intervals_from_subtitle
 from app.services.segment_panels import Panel
 from app.utils import file_security, utils
 from app.utils.ssrf import UnsafeUrlError
@@ -58,7 +59,6 @@ MIN_PHOTO_LONG_EDGE = image_fetch.MIN_PHOTO_LONG_EDGE
 MIN_PHOTO_SHORT_EDGE = image_fetch.MIN_PHOTO_SHORT_EDGE
 MAX_PHOTO_PIXELS = image_fetch.MAX_PHOTO_PIXELS
 
-_WORD = re.compile(r"[^\W_]+")
 _MEDIA_ID_PATTERN = re.compile(r"^[0-9a-f]{32}\.(jpg|jpeg|png|webp)$")
 
 CHECK_CODES = ("ok", "blocked_403", "not_image", "too_small", "too_large", "timeout", "wrong_aspect", "media_expired")
@@ -81,70 +81,6 @@ def _temp_assets_dir() -> str:
     return utils.storage_dir("temp_assets", create=True)
 
 
-def _tokens(text: str) -> list[str]:
-    return _WORD.findall(text.casefold())
-
-
-def segment_intervals(
-    segments: Sequence[dict[str, Any]],
-    words: Sequence[tuple[str, float, float]],
-    audio_duration: float,
-) -> tuple[list[tuple[float, float]], bool]:
-    """Spoken interval per segment, plus whether proportional fallback ran.
-
-    Exact walk: the flattened subtitle tokens must equal the flattened
-    segment tokens; each segment then takes the first/last time of the
-    tokens it consumes. Anything else (a tokenisation mismatch, no word
-    times at all) falls back to intervals proportional to token counts
-    over the full audio duration, so a photo is never placed by a walk
-    that silently drifted.
-    """
-    counts = [len(_tokens(str(segment.get("text", "")))) for segment in segments]
-    total = sum(counts)
-    if not segments:
-        return [], False
-    if audio_duration <= 0:
-        return [(0.0, 0.0) for _ in segments], True
-    flat: list[tuple[str, float, float]] = []
-    for text, start, end in words:
-        for token in _tokens(text):
-            flat.append((token, start, end))
-    segment_tokens = [_tokens(str(segment.get("text", ""))) for segment in segments]
-    if flat and [token for token, _, _ in flat] == [token for tokens in segment_tokens for token in tokens]:
-        intervals: list[tuple[float, float]] = []
-        cursor = 0
-        for tokens in segment_tokens:
-            if not tokens:
-                # A segment with no spoken words (punctuation-only text
-                # passes validation in full lip sync; the images modes
-                # reject it before charging) has no interval of its own:
-                # inherit the previous boundary instead of indexing an
-                # empty slice, which raised IndexError and failed the video.
-                boundary = flat[cursor - 1][2] if cursor > 0 else 0.0
-                intervals.append((boundary, boundary))
-                continue
-            taken = flat[cursor : cursor + len(tokens)]
-            intervals.append((taken[0][1], taken[-1][2]))
-            cursor += len(tokens)
-        return intervals, False
-    # Proportional fallback: by token count, or evenly when nothing has words.
-    intervals = []
-    cursor = 0.0
-    for index, count in enumerate(counts):
-        share = (count / total) if total > 0 else (1.0 / len(segments))
-        end = audio_duration if index == len(segments) - 1 else cursor + audio_duration * share
-        intervals.append((cursor, end))
-        cursor = end
-    return intervals, True
-
-
-def segment_intervals_from_subtitle(
-    segments: Sequence[dict[str, Any]], subtitle_path: str, audio_duration: float
-) -> tuple[list[tuple[float, float]], bool]:
-    """Intervals from the word file next to `subtitle_path`."""
-    return segment_intervals(segments, subtitle.file_to_words(subtitle_path), audio_duration)
-
-
 def _media_list(media: Any) -> list[Any]:
     """The segment's photos. A missing value or a non-list is no photos."""
     return list(media) if isinstance(media, list) else []
@@ -157,6 +93,52 @@ def _segment_dict(segment: Any) -> dict[str, Any]:
     if callable(dump):
         return dict(dump(exclude_none=True))
     return {}
+
+
+def first_segment_media(segments: Sequence[Any]) -> tuple[int, int, dict] | None:
+    """The first photo of the video: (segment index, image index, media dict).
+
+    The first media item across segments, in order — the photo the hook
+    opens with (issue #589). None when no segment carries media. Pure
+    selection; the caller resolves the ref (mediaId or url) to a file.
+    """
+    for segment_index, segment in enumerate(segments):
+        for image_index, media in enumerate(
+            _media_list(_segment_dict(segment).get("media"))
+        ):
+            if isinstance(media, dict):
+                return segment_index, image_index, media
+    return None
+
+
+def resolve_first_segment_photo(
+    task_dir: str, segments: Sequence[Any], session=None
+) -> tuple[str, int, int, str | None]:
+    """Download the first photo of the video: (path, segment index, image index, reason).
+
+    reason is None on success, "no_segment_media" when no segment
+    carries a photo (the caller falls back to the persona photo), or
+    the per-photo failure (expired media id, blocked download,
+    unusable file) — the caller fails the task naming the segment and
+    image. The downloaded file is the caller's to remove once copied.
+    Faces are not checked here: the lip-sync resolution that consumes
+    this photo owns the face gate.
+    """
+    found = first_segment_media(segments)
+    if found is None:
+        return "", -1, -1, "no_segment_media"
+    segment_index, image_index, media = found
+    media_id = media.get("mediaId")
+    url = media.get("url")
+    if isinstance(media_id, str) and media_id:
+        photo, reason = _resolve_media_id(media_id)
+    elif isinstance(url, str) and url:
+        photo, reason = _resolve_url(url, "hook-first", task_dir, session=session)
+    else:
+        return "", segment_index, image_index, "unusable media"
+    if reason is not None:
+        return "", segment_index, image_index, reason
+    return photo, segment_index, image_index, None
 
 
 def _probe_size(source_path: str) -> Optional[tuple[int, int]]:
@@ -244,7 +226,7 @@ def check_media_detail(
     aspect: Optional[VideoAspect] = None,
     work_dir: str = "",
 ) -> dict:
-    """Mechanical check with dimensions: {"code", "width", "height"}.
+    """Mechanical check with dimensions: {"code", "width", "height", "has_face"}.
 
     Exactly one of url/media_id. No User-Agent or Referer tricks: a host
     that blocks the SSRF-safe download reports blocked_403 and the agent
@@ -253,23 +235,31 @@ def check_media_detail(
     "media_expired": in the images modes the skip now fails the task
     (images_do_not_cover_audio names the photo); full lip sync only
     records the warning.
+
+    has_face reports whether a detectable face is in the photo
+    (True/False), or None when there is no file to check (expired
+    media, failed download) or the detector is unavailable. It is a
+    reported fact, never a filter: this path never rejects a photo for
+    lacking a face (issue #589 — the hook-photo gate that consumes it
+    lives in the lip-sync resolution and the web pre-charge preflight).
     """
     if media_id is not None:
         source, reason = _media_id_path(media_id)
         if reason is not None:
-            return {"code": "media_expired", "width": None, "height": None}
+            return {"code": "media_expired", "width": None, "height": None, "has_face": None}
         size = _probe_size(source)
         code = _validate_photo(source, aspect)
         return {
             "code": code if code is not None else "ok",
             "width": size[0] if size is not None else None,
             "height": size[1] if size is not None else None,
+            "has_face": face_detect.image_contains_face(source),
         }
     raw_path = os.path.join(work_dir, "check-media.raw")
     try:
         image_fetch.download_image(url, raw_path)
     except Exception as exc:  # noqa: BLE001 - every download failure maps to a code
-        return {"code": _download_failure_code(exc), "width": None, "height": None}
+        return {"code": _download_failure_code(exc), "width": None, "height": None, "has_face": None}
     try:
         size = _probe_size(raw_path)
         failure = _validate_photo(raw_path, aspect)
@@ -277,6 +267,7 @@ def check_media_detail(
             "code": failure if failure is not None else "ok",
             "width": size[0] if size is not None else None,
             "height": size[1] if size is not None else None,
+            "has_face": face_detect.image_contains_face(raw_path),
         }
     finally:
         with contextlib.suppress(OSError):

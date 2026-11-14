@@ -13,11 +13,10 @@ import io
 import json
 from unittest.mock import patch
 
-import pytest
 from PIL import Image
 
 from app.models.schema import VideoAspect, VideoParams
-from app.services import image_coverage, image_fetch, user_media
+from app.services import face_detect, image_coverage, image_fetch, user_media
 from app.utils import ssrf
 
 WORDS = [
@@ -74,73 +73,6 @@ def test_segment_media_limit_is_the_engine_photo_limit_not_the_library_limit():
     assert user_media.MAX_SEGMENT_MEDIA_BYTES == image_fetch.MAX_PHOTO_BYTES
     assert user_media.MAX_SEGMENT_MEDIA_BYTES == 8 * 1024 * 1024
     assert user_media.MAX_SEGMENT_MEDIA_BYTES != 10 * 1024 * 1024
-
-
-# ---- segment intervals
-
-
-def test_exact_word_walk_gives_each_segment_its_spoken_interval():
-    intervals, fallback = user_media.segment_intervals(SEGMENTS, WORDS, 6.3)
-    assert fallback is False
-    assert intervals == [(0.0, 1.2), (2.0, 4.0), (5.0, 6.3)]
-
-
-def test_zero_token_segment_inherits_the_previous_boundary_instead_of_crashing():
-    # A punctuation-only segment passes validation (non-empty after
-    # strip, split-counted words) but tokenises to zero words. When the
-    # subtitle walk otherwise matches exactly, the empty slice must not
-    # raise IndexError and fail the whole task: the segment gets a
-    # zero-width interval at the previous boundary, so its photo keeps
-    # the original clip instead of crashing the video.
-    words = [("Porto", 0.0, 1.0), ("walks", 1.0, 2.0), ("now", 2.0, 3.0)]
-    segments = [
-        {"kind": "hook", "text": "Porto walks."},
-        {"kind": "content", "text": "!!! ???"},
-        {"kind": "content", "text": "now."},
-    ]
-    intervals, fallback = user_media.segment_intervals(segments, words, 3.0)
-    assert fallback is False
-    assert intervals == [(0.0, 2.0), (2.0, 2.0), (2.0, 3.0)]
-
-
-def test_word_list_shorter_than_segments_falls_back_to_proportional_timing():
-    # The word file covers only the hook: the flattened token lists differ
-    # in length, so the exact walk cannot match and the fallback runs.
-    words = [("I", 0.0, 0.3), ("don't", 0.3, 0.8), ("know", 0.8, 1.2)]
-    segments = [
-        {"kind": "hook", "text": "I don't know."},
-        {"kind": "content", "text": "Visit Porto soon."},
-    ]
-    intervals, fallback = user_media.segment_intervals(segments, words, 10.0)
-    assert fallback is True
-    # Proportional to token counts: "don't" tokenises to 2, so the hook
-    # has 4 tokens against the CTA's 3 over 10 seconds.
-    assert intervals[0][0] == 0.0
-    assert intervals[0][1] == pytest.approx(10.0 * 4 / 7)
-    assert intervals[1] == (pytest.approx(10.0 * 4 / 7), 10.0)
-
-
-def test_no_word_times_means_proportional_intervals():
-    intervals, fallback = user_media.segment_intervals(SEGMENTS, [], 12.0)
-    assert fallback is True
-    # Token counts 3, 6, 3 over 12 seconds.
-    assert intervals == [(0.0, 3.0), (3.0, 9.0), (9.0, 12.0)]
-
-
-def test_intervals_read_from_the_subtitle_word_file():
-    # The walker consumes subtitle.file_to_words, not a hand-built list:
-    # the file next to the subtitle is the production input.
-    import tempfile
-
-    with tempfile.TemporaryDirectory() as tmp:
-        from pathlib import Path
-
-        subtitle = _write_words(Path(tmp), WORDS)
-        intervals, fallback = user_media.segment_intervals_from_subtitle(
-            SEGMENTS, subtitle, 6.3
-        )
-        assert fallback is False
-        assert intervals == [(0.0, 1.2), (2.0, 4.0), (5.0, 6.3)]
 
 
 # ---- resolving one segment's media
@@ -335,11 +267,14 @@ def test_check_media_timeout_when_the_download_times_out(tmp_path):
 
 def test_segment_photos_no_longer_pass_through_face_detection():
     # The face rule was a stock B-roll rule; agent-supplied segment
-    # photos may show people, so no code, reason, or import for it
-    # may survive in the segment-media path.
+    # photos may show people, so no face code or reason may survive in
+    # the segment-media path — and a photo with no face still checks
+    # "ok" here. Issue #589 is the deliberate exception: the check
+    # REPORTS has_face (consumed by the hook-photo gate in the lip-sync
+    # resolution and the web pre-charge preflight) but never filters
+    # on it; see test_check_media_detail_still_passes_a_faceless_photo.
     assert "face_detected" not in user_media.CHECK_CODES
     assert "face_detected" not in user_media._CODE_TO_REASON
-    assert not hasattr(user_media, "face_detect")
 
 
 def test_check_media_ok_for_a_photo_with_people(tmp_path):
@@ -424,15 +359,62 @@ def test_check_media_detail_for_a_media_id_reports_dimensions(tmp_path, monkeypa
     portrait.write_bytes(_jpeg(1080, 1920))
     assert user_media.check_media_detail(
         media_id=portrait.name, aspect=VideoAspect.portrait
-    ) == {"code": "ok", "width": 1080, "height": 1920}
+    ) == {"code": "ok", "width": 1080, "height": 1920, "has_face": False}
     landscape = tmp_path / "00112233445566778899aabbccddeeff.jpg"
     landscape.write_bytes(_jpeg(1920, 1080))
     assert user_media.check_media_detail(
         media_id=landscape.name, aspect=VideoAspect.portrait
-    ) == {"code": "wrong_aspect", "width": 1920, "height": 1080}
+    ) == {"code": "wrong_aspect", "width": 1920, "height": 1080, "has_face": False}
     assert user_media.check_media_detail(
         media_id="ffffffffffffffffffffffffffffffff.jpg", aspect=VideoAspect.portrait
-    ) == {"code": "media_expired", "width": None, "height": None}
+    ) == {"code": "media_expired", "width": None, "height": None, "has_face": None}
+
+
+def test_check_media_detail_reports_has_face_for_a_media_id(tmp_path, monkeypatch):
+    monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
+    portrait = tmp_path / "aabbccddeeff00112233445566778899.jpg"
+    portrait.write_bytes(_jpeg(1080, 1920))
+    with patch.object(face_detect, "image_contains_face", return_value=True) as detector:
+        result = user_media.check_media_detail(media_id=portrait.name)
+    assert result == {"code": "ok", "width": 1080, "height": 1920, "has_face": True}
+    detector.assert_called_once_with(str(portrait))
+
+
+def test_check_media_detail_reports_has_face_none_when_the_detector_is_unavailable(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
+    portrait = tmp_path / "aabbccddeeff00112233445566778899.jpg"
+    portrait.write_bytes(_jpeg(1080, 1920))
+    with patch.object(face_detect, "image_contains_face", return_value=None):
+        result = user_media.check_media_detail(media_id=portrait.name)
+    assert result["has_face"] is None
+    assert result["code"] == "ok"
+
+
+def test_check_media_detail_reports_has_face_for_a_url(tmp_path):
+    def download(url, dest_path, session=None):
+        with open(dest_path, "wb") as handle:
+            handle.write(_jpeg())
+        return dest_path
+
+    with (
+        patch.object(image_fetch, "download_image", side_effect=download),
+        patch.object(face_detect, "image_contains_face", return_value=True),
+    ):
+        result = user_media.check_media_detail(url="https://e.com/porto.jpg", work_dir=str(tmp_path))
+    assert result == {"code": "ok", "width": 1080, "height": 1920, "has_face": True}
+
+
+def test_check_media_detail_still_passes_a_faceless_photo(tmp_path, monkeypatch):
+    # Issue #589: has_face is reported, never a filter — a photo with
+    # no detectable face still checks "ok" in the segment-media path.
+    monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
+    portrait = tmp_path / "aabbccddeeff00112233445566778899.jpg"
+    portrait.write_bytes(_jpeg(1080, 1920))
+    with patch.object(face_detect, "image_contains_face", return_value=False):
+        result = user_media.check_media_detail(media_id=portrait.name)
+    assert result == {"code": "ok", "width": 1080, "height": 1920, "has_face": False}
 
 
 def test_resolve_media_id_skips_a_wrong_ratio_photo_with_both_ratios_named(
