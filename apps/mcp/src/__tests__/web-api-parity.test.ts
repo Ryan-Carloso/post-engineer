@@ -202,7 +202,7 @@ describe('Web -> MCP parity', () => {
 
   it('maps only to tools registered in the MCP server', () => {
     const unknown = [...mappedTools].filter((tool) => !registeredTools.has(tool));
-    expect(unknown, `Mapped tools not registered in index.ts: ${unknown.join(', ')}`).toEqual([]);
+    expect(unknown, `Mapped tools not registered in the MCP server: ${unknown.join(', ')}`).toEqual([]);
   });
 
   it('proves every mapping: each mapped tool (or action) calls its endpoint (same method and path)', () => {
