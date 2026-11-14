@@ -15,6 +15,9 @@ WORKDIR /repo
 # Dependency layer first: rebuilds only when the lockfile changes.
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/web/package.json apps/web/
+# The web depends on the MCP package (workspace:*), so its package.json
+# must exist before `pnpm install` links it into apps/web/node_modules.
+COPY apps/mcp/package.json apps/mcp/
 RUN pnpm install --frozen-lockfile
 
 # apps/web/tsconfig.json extends this root config, so it must exist before
@@ -28,11 +31,13 @@ COPY VERSION ./
 COPY apps/web ./apps/web
 
 # `pnpm build` runs apps/web's prebuild, which syncs the generated
-# script-segments copy from the shared source. Both live outside apps/web, so
-# they must be copied explicitly; the script skips apps/mcp, which this image
-# does not build. Without these copies prebuild exits MODULE_NOT_FOUND.
+# script-segments copy from the shared source and builds the MCP package
+# the hosted /mcp route imports (issue #561). Both live outside apps/web,
+# so they must be copied explicitly. Without these copies prebuild exits
+# MODULE_NOT_FOUND.
 COPY shared ./shared
 COPY scripts ./scripts
+COPY apps/mcp ./apps/mcp
 
 # Build metadata: the VPS deploy injects VERSION/PR_NUMBER/BUILD/COMMIT as
 # build args from the commit being deployed (VERSION=MAJOR.MINOR.PR, e.g.

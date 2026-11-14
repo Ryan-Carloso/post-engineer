@@ -241,4 +241,25 @@ describe('middleware auth redirect', () => {
   it('excludes sitemap.xml from the matcher so the middleware never runs on it', () => {
     expect(config.matcher[0].includes('sitemap\\.xml$')).toBe(true);
   });
+
+  // The hosted /mcp endpoint authenticates with an OAuth bearer token in
+  // the route itself (issue #561); a 307 to /landing would make it
+  // unreachable for every hosted agent, so it bypasses the session
+  // middleware exactly like the public spec and sitemap.
+  it('does not redirect unauthenticated requests for /mcp', async () => {
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: authError('AuthSessionMissingError', 400, 'Auth session missing!'),
+    });
+
+    const response = await middleware(requestFor('/mcp'));
+
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get('location')).toBeNull();
+    expect(getUser).not.toHaveBeenCalled();
+  });
+
+  it('excludes /mcp from the matcher so the middleware never runs on it', () => {
+    expect(config.matcher[0].includes('mcp$')).toBe(true);
+  });
 });

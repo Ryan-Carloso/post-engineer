@@ -159,6 +159,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The web imports the MCP package (workspace:*) for the hosted /mcp
+      # route (issue #561): vitest, tsc, and eslint all resolve it through
+      # apps/mcp/dist, which is gitignored — build it before any step that
+      # touches the web. `pnpm build` would do it via prebuild, but the
+      # steps below run their tools directly.
+      - name: Build MCP package
+        run: pnpm --filter post-engineer-mcp build
+
       - name: Lint
         run: pnpm lint
 
@@ -807,6 +815,13 @@ jobs:
       - name: Install dependencies
         if: steps.detect.outputs.files != ''
         run: pnpm install --frozen-lockfile
+
+      # Stryker runs vitest/tsc directly (no prebuild), and the changed UI
+      # files include the hosted /mcp route, which imports the MCP package
+      # (workspace:*) through apps/mcp/dist — build it first.
+      - name: Build MCP package
+        if: steps.detect.outputs.files != ''
+        run: pnpm --filter post-engineer-mcp build
 
       # Same scoped invocation as the mutation workflow: line ranges first
       # (the extractor scopes to the PR's changed lines and emits the

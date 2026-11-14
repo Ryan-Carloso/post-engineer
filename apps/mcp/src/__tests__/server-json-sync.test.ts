@@ -27,7 +27,9 @@ const pkg: { name: string; mcpName: string; version: string } = JSON.parse(
   readFileSync(join(mcpRoot, 'package.json'), 'utf8'),
 );
 const server: ServerJson = JSON.parse(readFileSync(join(mcpRoot, 'server.json'), 'utf8'));
-const indexTs = readFileSync(join(here, '..', 'index.ts'), 'utf8');
+// requireApiKey moved out of index.ts into its own module (issue #561):
+// the "API key is required" error lives there now, and this pin follows it.
+const requireApiKeyTs = readFileSync(join(here, '..', 'require-api-key.ts'), 'utf8');
 
 describe('server.json (MCP Registry metadata)', () => {
   it('uses the package mcpName as the registry name', () => {
@@ -51,7 +53,7 @@ describe('server.json (MCP Registry metadata)', () => {
   });
 
   it('declares the API key the server requires as a required secret', () => {
-    expect(indexTs.includes("'POST_ENGINEER_API_KEY is required'")).toBe(true);
+    expect(requireApiKeyTs.includes("'POST_ENGINEER_API_KEY is required'")).toBe(true);
     const key = server.packages[0].environmentVariables.find(
       (v) => v.name === 'POST_ENGINEER_API_KEY',
     );

@@ -91,18 +91,18 @@ import { parseHttpTransportOptions, serveHttpTransport } from './http-transport.
 import { parseHttpAuthOptions } from './http-auth.js';
 import { SERVER_INSTRUCTIONS, registerPromptTools, withRecipeNudge, withScriptOutcome, type McpTransportKind } from './tools-prompts.js';
 import { registerRemotePrompts } from './prompts.js';
+import { requireApiKey } from './require-api-key.js';
+
+// The web's hosted /mcp route (issue #561) builds the remote server from
+// this package: the Web Standard request handler plus the client it feeds
+// the verified bearer to. Re-exported here so the package entry stays the
+// single public surface.
+export { PostEngineerClient };
+export { handleMcpWebRequest } from './http-web.js';
 
 // The server advertises the package version: import it so a version bump in
 // package.json flows through without touching this file.
 const { default: pkg } = await import('../package.json', { with: { type: 'json' } });
-
-export function requireApiKey(env: NodeJS.ProcessEnv = process.env): string {
-  const apiKey = env.POST_ENGINEER_API_KEY;
-  if (!apiKey) {
-    throw new Error('POST_ENGINEER_API_KEY is required');
-  }
-  return apiKey;
-}
 
 export function createPostEngineerMcpServer(client?: PostEngineerClient, transport: McpTransportKind = 'stdio'): McpServer {
   const apiClient = client ?? new PostEngineerClient({ apiKey: requireApiKey() });

@@ -110,6 +110,15 @@ export const RATE_LIMITS = {
   // Publish-by-id (issue #561): one provider publish fan-out per call,
   // same weight as the direct multipart publish.
   publishById: { name: 'publish-by-id', limit: 10, windowMs: 60_000 },
+  // Hosted remote MCP (issue #561): per-subject limit mirrors the MCP
+  // package's DEFAULT_RATE_LIMIT_PER_MINUTE (apps/mcp/src/http-auth.ts),
+  // pinned by the sync test in app/mcp/__tests__/rate-limit-sync.test.ts.
+  mcpRemote: { name: 'mcp-remote', limit: 120, windowMs: 60_000 },
+  // Hosted remote MCP, pre-auth per-IP budget: checked before any token
+  // verification, so unauthenticated traffic cannot force unlimited
+  // asymmetric verifies. Mirrors PRE_AUTH_IP_LIMIT_PER_MINUTE
+  // (apps/mcp/src/http-rate-limit.ts), pinned by the same sync test.
+  mcpRemotePreAuth: { name: 'mcp-remote-pre-auth', limit: 300, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitProfile>;
 
 //---------------
