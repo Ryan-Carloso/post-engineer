@@ -38,6 +38,11 @@ const PUBLIC_SITEMAP_PATH = '/sitemap.xml';
 // The OpenAPI spec is fetched anonymously by API marketplaces and agents.
 // Only this exact path: other .json paths stay behind auth.
 const PUBLIC_OPENAPI_SPEC_PATH = '/openapi.json';
+// The hosted remote MCP endpoint authenticates with an OAuth bearer token
+// in the route itself (issue #561). Exact path only: the session
+// middleware must never 307 it to /landing, or no hosted agent can reach
+// it — and the route needs no Supabase session at all.
+const PUBLIC_MCP_PATH = '/mcp';
 
 function getSupabaseEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -59,7 +64,7 @@ function getSupabaseEnv() {
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-  if (pathname === PUBLIC_SITEMAP_PATH || PUBLIC_STATIC_ASSET_PATH.test(pathname) || pathname === PUBLIC_OPENAPI_SPEC_PATH) {
+  if (pathname === PUBLIC_SITEMAP_PATH || PUBLIC_STATIC_ASSET_PATH.test(pathname) || pathname === PUBLIC_OPENAPI_SPEC_PATH || pathname === PUBLIC_MCP_PATH) {
     return NextResponse.next({
       request: {
         headers: request.headers,
@@ -160,10 +165,12 @@ export const config = {
      * - common public/ file extensions (logo.png, voice-samples, etc.)
      * - sitemap.xml (public metadata route, exact path only)
      * - openapi.json (public API spec, exact path only)
+     * - mcp (hosted remote MCP endpoint, exact path only — OAuth bearer
+     *   auth, handled by the route itself)
      * - api/ (API routes)
      * - auth/ (auth callback)
      * - login, landing, privacy, terms, recipes (public pages)
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$|sitemap\\.xml$|openapi\\.json$|api/|auth/|.well-known/|oauth/|login|landing|privacy|terms|recipes).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$|sitemap\\.xml$|openapi\\.json$|mcp$|api/|auth/|.well-known/|oauth/|login|landing|privacy|terms|recipes).*)',
   ],
 }

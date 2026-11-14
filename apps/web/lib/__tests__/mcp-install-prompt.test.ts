@@ -76,6 +76,22 @@ describe('buildInstallPrompt', () => {
     }
   });
 
+  it('documents the hosted remote MCP endpoint beside the npx snippet', () => {
+    // Step 5 of issue #561: a hosted agent (ChatGPT) connects by URL, so
+    // the prompt must name the remote endpoint and the local-only tools
+    // it drops, with the signed-upload tools that replace them.
+    for (const locale of ['en', 'pt'] as const) {
+      const prompt = buildInstallPrompt(locale, null);
+      expect(prompt, locale).toContain('https://post-engineer.com/mcp');
+      expect(prompt, locale).toContain('upload_media');
+      expect(prompt, locale).toContain('add_persona_image');
+      expect(prompt, locale).toContain('publish_video_direct');
+      expect(prompt, locale).toContain('create_video_upload');
+      expect(prompt, locale).toContain('complete_video_upload');
+      expect(prompt, locale).toContain('publish_uploaded_video');
+    }
+  });
+
   it('points at the prompts hub, never the removed /api-keys page', () => {
     for (const locale of ['en', 'pt'] as const) {
       const prompt = buildInstallPrompt(locale, null);
@@ -193,6 +209,9 @@ const EXPECTED_EN_PROMPT: string[] = [
   "   }",
   "2. Replace <MY_API_KEY> with my real API key. No repository clone or local build is required. The @latest tag forces npx to fetch the newest version instead of reusing a stale cached copy.",
   "",
+  "Remote (hosted) option — no local install needed:",
+  "If your agent supports remote MCP servers (for example ChatGPT), connect it to https://post-engineer.com/mcp instead of the npx command above. It serves the same tools over Streamable HTTP with OAuth sign-in — sign in to Post Engineer when prompted. Tools that read a file from your own machine (upload_media, add_persona_image, publish_video_direct) are not available remotely: upload a video with create_video_upload (PUT the bytes to its signed URL), then complete_video_upload and publish_uploaded_video.",
+  "",
   "Available tools after connecting:",
   "- list_personas: list my existing personas (id, name, voice, language, niche).",
   "- list_voices: list available persona voices (live catalog, never hardcoded).",
@@ -265,6 +284,9 @@ const EXPECTED_PT_PROMPT: string[] = [
   "     }",
   "   }",
   "2. Substitua <MINHA_API_KEY> pela minha API key real. Não é necessário clonar o repositório nem fazer build local. A tag @latest força o npx a baixar a versão mais nova em vez de reutilizar uma cópia antiga em cache.",
+  "",
+  "Opção remota (hospedada) — sem instalação local:",
+  "Se o seu agente suporta servidores MCP remotos (por exemplo, ChatGPT), conecte-o a https://post-engineer.com/mcp em vez do comando npx acima. Ele serve as mesmas tools por Streamable HTTP com login OAuth — faça login no Post Engineer quando solicitado. Tools que leem um arquivo da sua máquina (upload_media, add_persona_image, publish_video_direct) não estão disponíveis remotamente: envie um vídeo com create_video_upload (PUT dos bytes na signed URL), depois complete_video_upload e publish_uploaded_video.",
   "",
   "Tools disponíveis após conectar:",
   "- list_personas: listar minhas personas existentes (id, nome, voz, idioma, nicho).",
