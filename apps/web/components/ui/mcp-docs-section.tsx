@@ -9,7 +9,6 @@ import { whatsappUrl } from '@/lib/whatsapp';
 import { Button } from '@/components/ui/button';
 import {
   AccountsIcon,
-  AlertIcon,
   CalendarIcon,
   CheckIcon,
   CoinsIcon,

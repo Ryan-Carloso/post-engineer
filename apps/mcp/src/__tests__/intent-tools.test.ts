@@ -187,3 +187,41 @@ describe('video_tasks over the server', () => {
     expect(seen).toHaveLength(2);
   });
 });
+
+describe('malformed API payloads are reported, not turned into empty results', () => {
+  it('leaves a listing without an accounts array untouched when filtering by provider', async () => {
+    const { call } = setup({ 'GET /api/account': { message: 'odd' } });
+    const result = await call('accounts', { action: 'list', provider: 'youtube' });
+    expect(result.isError).toBe(false);
+    expect(result.text).toContain('"message": "odd"');
+  });
+
+  it('passes an accounts failure through when filtering by provider', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('boom', { status: 500 })));
+    const api = new PostEngineerClient({ apiKey: 'pe_test', baseUrl: BASE });
+    const server = createPostEngineerMcpServer(api, 'stdio');
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 't', version: '0.0.0' });
+    await Promise.all([server.connect(b), client.connect(a)]);
+    try {
+      const result = await client.callTool({ name: 'accounts', arguments: { action: 'list', provider: 'youtube' } });
+      expect(result.isError).toBe(true);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('personas get reports a null library size and null bindings when those payloads are malformed', async () => {
+    const { call } = setup({ 'GET /api/persona/list': PERSONAS, 'GET /api/persona/images': 'odd', 'GET /api/persona/publishing-accounts': 'odd' });
+    const result = await call('personas', { action: 'get', persona: MARIA });
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.text.slice(result.text.indexOf('{')))).toMatchObject({ libraryImages: null, boundAccounts: null });
+  });
+
+  it('personas get does not find a persona in a malformed listing', async () => {
+    const { call } = setup({ 'GET /api/persona/list': { personas: 'nope' }, 'GET /api/persona/images': { images: [] }, 'GET /api/persona/publishing-accounts': { defaults: {} } });
+    const result = await call('personas', { action: 'get', persona: MARIA });
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('No persona with id');
+  });
+});
