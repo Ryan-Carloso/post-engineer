@@ -10,7 +10,7 @@ const specPath = join(root, 'apps/web/public/openapi.json');
 
 type Spec = { paths: Record<string, Record<string, { operationId: string }>> };
 
-const mapping: Record<string, string[]> = JSON.parse(readFileSync(mappingPath, 'utf8'));
+const mapping: Record<string, Array<{ tool: string; action?: string }>> = JSON.parse(readFileSync(mappingPath, 'utf8'));
 const spec: Spec = JSON.parse(readFileSync(specPath, 'utf8'));
 
 const specKeys = (): string[] =>
@@ -25,7 +25,7 @@ describe('public/openapi.json', () => {
   // a stale spec; the committed file must be exactly the generator output.
   it('matches the generator output (run node apps/web/scripts/generate-openapi.mjs)', async () => {
     const generator: {
-      buildSpec: (m: Record<string, string[]>, version: string) => unknown;
+      buildSpec: (m: Record<string, Array<{ tool: string; action?: string }>>, version: string) => unknown;
       API_SPEC_VERSION: string;
     } = await import(join(root, 'apps/web/scripts/generate-openapi.mjs'));
     expect(spec).toEqual(generator.buildSpec(mapping, generator.API_SPEC_VERSION));
@@ -110,5 +110,21 @@ describe('public/openapi.json', () => {
     );
     expect(new Set(ids).size).toBe(ids.length);
     expect(JSON.stringify(spec)).toContain('"bearerAuth"');
+  });
+
+  // Issue #566: an endpoint is mapped to { tool, action? }, so an action of an
+  // intent tool names its operation `<tool>_<action>`.
+  it('names an operation after its first mapping entry: <tool>_<action> for an action, <tool> otherwise', async () => {
+    const generator: {
+      buildSpec: (m: Record<string, Array<{ tool: string; action?: string }>>, version: string) => {
+        paths: Record<string, Record<string, { operationId: string; summary: string }>>;
+      };
+    } = await import(join(root, 'apps/web/scripts/generate-openapi.mjs'));
+    const built = generator.buildSpec(
+      { 'GET /api/persona/list': [{ tool: 'personas', action: 'list' }], 'GET /api/billing/tokens': [{ tool: 'get_token_balance' }] },
+      '0.0.0',
+    );
+    expect(built.paths['/api/persona/list'].get).toMatchObject({ operationId: 'get_personas_list', summary: 'personas list' });
+    expect(built.paths['/api/billing/tokens'].get).toMatchObject({ operationId: 'get_get_token_balance', summary: 'get token balance' });
   });
 });
