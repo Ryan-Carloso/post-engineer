@@ -18,6 +18,8 @@ import type { PublishLink } from '@/lib/publish-links';
 import type { PublishProviderFailure, PublishUserNotice } from '@/lib/publish-user-notice';
 import { narrowGeneration, narrowProgressHistory, narrowPublishLinks, type GenerationFacts, type ProgressHistoryEntry } from './slot-detail';
 import { narrowScriptAngle } from './script-angle';
+import { narrowHookPhoto, type HookPhoto } from './hook-photo';
+import { parseJsonBody, throwForBadResponse } from './api-response';
 import type { PersonaRecord } from './persona-record';
 
 // Re-exported so existing import sites (`@/lib/api`) keep working.
@@ -669,28 +671,6 @@ export function useVideoGenerationsQuery(limit?: number) {
 }
 
 //---------------
-// parseJsonBody — reads a JSON response body, tolerating non-JSON error
-// pages (e.g. a Vercel 502 HTML body). Returns null instead of throwing.
-//---------------
-export async function parseJsonBody<T>(response: Response): Promise<T | null> {
-  try {
-    return (await response.json()) as T;
-  } catch {
-    return null;
-  }
-}
-
-//---------------
-// throwForBadResponse — maps a non-OK response to a clean Error, preferring
-// the server's error message when the body is JSON (exported for siblings).
-//---------------
-export async function throwForBadResponse(response: Response, fallback: string): Promise<never> {
-  const data = await parseJsonBody<{ error?: string }>(response);
-  const message = typeof data?.error === 'string' && data.error.length > 0 ? data.error : fallback;
-  throw new HttpStatusError(message, response.status);
-}
-
-//---------------
 // Per-slot operations (Posts page). Only slots not yet dispatched can be
 // edited/deleted — the API returns 409 otherwise, surfaced to the user.
 //---------------
@@ -766,6 +746,9 @@ export interface SlotDetailPayload {
     // Where the post went, one entry per provider. Empty until the slot is
     // published (nothing exists to link to before that).
     publishLinks: PublishLink[];
+    // The photo the lip-sync hook opens with (issue #589): the first
+    // photo of the video's segments. Narrowed at the fetch boundary.
+    hookPhoto: HookPhoto;
     // Observed generation progress transitions, oldest first. Empty for
     // posts that never started generating (or predate the history table).
     progressHistory: ProgressHistoryEntry[];
@@ -833,6 +816,7 @@ export async function fetchPostDetail(id: string): Promise<PostDetail | null> {
       slot: {
         ...payload.slot,
         scriptAngle: narrowScriptAngle((payload.slot as { scriptAngle?: unknown }).scriptAngle),
+        hookPhoto: narrowHookPhoto((payload.slot as { hookPhoto?: unknown }).hookPhoto),
         publishLinks: narrowPublishLinks(payload.slot.publishLinks),
         progressHistory: narrowProgressHistory(payload.slot.progressHistory),
       },

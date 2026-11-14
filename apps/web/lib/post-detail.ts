@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enrichSlot } from './schedule-slot-presentation';
+import { hookPhotoForSegments, type HookPhoto } from './hook-photo';
 import {
   fetchEnginePostMetricsSource,
   fetchEnginePublishResults,
@@ -67,6 +68,12 @@ export interface SlotPostDetail {
     // chat so the owner can watch/download the video (issue #555). Null
     // when the public app URL is not configured.
     postUrl: string | null;
+    // The photo the lip-sync hook opens with (issue #589): the first
+    // photo of the video's segments, derived from the slot's stored
+    // segments — never the persona avatar. A URL photo carries its url;
+    // a mediaId upload or no segment photo carries url null with a
+    // source that says why ('upload' / 'persona').
+    hookPhoto: HookPhoto;
   };
   schedule: {
     id: string;
@@ -177,7 +184,7 @@ export async function getSlotPost(
 ): Promise<SlotPostDetail | null> {
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, publish_outcomes')
+    .select('id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, publish_outcomes, segments')
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();
@@ -196,6 +203,7 @@ export async function getSlotPost(
     task_id: string | null;
     faceless: boolean | null;
     publish_outcomes: unknown;
+    segments: unknown;
   };
 
   const { data: schedule, error: scheduleError } = await supabase
@@ -314,6 +322,7 @@ export async function getSlotPost(
   const publishedAtOut = row.published_at;
   const taskIdOut = row.task_id;
   const postUrlOut = postUrlFor(row.id);
+  const hookPhotoOut = hookPhotoForSegments(row.segments);
   const progressOut = enrichment.progress;
   const stageOut = enrichment.stage;
   const retryableOut = enrichment.retryable;
@@ -335,6 +344,7 @@ export async function getSlotPost(
       publishedAt: publishedAtOut,
       taskId: taskIdOut,
       postUrl: postUrlOut,
+      hookPhoto: hookPhotoOut,
       progress: progressOut,
       stage: stageOut,
       retryable: retryableOut,

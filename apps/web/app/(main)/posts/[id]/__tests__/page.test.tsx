@@ -119,6 +119,7 @@ function slotPayload(
       stage: null,
       retryable: null,
       scriptAngle: null,
+      hookPhoto: { url: null, source: 'persona', segmentIndex: null, imageIndex: null },
       ...overrides,
     },
     schedule: SLOT_SCHEDULE,
@@ -501,6 +502,70 @@ describe('PostDetailPage', () => {
   // with (the post_* snapshot + faceless flag). Never editable: it records
   // what was charged for.
   //---------------
+  //---------------
+  // HookPhotoSection — the photo the lip-sync hook opens with (issue
+  // #589): the first photo of the video, never the persona avatar. A
+  // URL photo renders; an upload or a persona fallback has no durable
+  // URL and renders an explanatory note instead. Faceless videos never
+  // show a face, so the section renders nothing for them.
+  //---------------
+  it('shows the hook photo image and its position when the first photo came from a URL', () => {
+    mockQueries({
+      slot: slotPayload({
+        hookPhoto: {
+          url: 'https://e.com/hook.jpg',
+          source: 'segment',
+          segmentIndex: 0,
+          imageIndex: 0,
+        },
+      }),
+    });
+    render(<DetailPage />);
+
+    const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
+    const image = within(section).getByAltText('posts.hookPhotoAlt');
+    expect(image.getAttribute('src')).toBe('https://e.com/hook.jpg');
+    expect(within(section).getByText('posts.hookPhotoSegmentNote')).toBeInTheDocument();
+  });
+
+  it('explains the upload when the first photo is a media id', () => {
+    mockQueries({
+      slot: slotPayload({
+        hookPhoto: { url: null, source: 'upload', segmentIndex: 1, imageIndex: 2 },
+      }),
+    });
+    render(<DetailPage />);
+
+    const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
+    expect(within(section).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(section).getByText('posts.hookPhotoUploadNote')).toBeInTheDocument();
+  });
+
+  it('explains the persona fallback when no segment photo was sent', () => {
+    mockQueries({ slot: slotPayload() });
+    render(<DetailPage />);
+
+    const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
+    expect(within(section).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(section).getByText('posts.hookPhotoPersonaNote')).toBeInTheDocument();
+  });
+
+  it('renders no hook photo section for a faceless video', () => {
+    mockQueries({
+      slot: slotPayload(
+        {},
+        {
+          persona: null,
+          schedule: { ...SLOT_SCHEDULE, personaId: null },
+          generation: generationPayload({ faceless: true }),
+        },
+      ),
+    });
+    render(<DetailPage />);
+
+    expect(screen.queryByRole('region', { name: 'posts.hookPhotoLabel' })).not.toBeInTheDocument();
+  });
+
   it('shows the language, voice and format the post was generated with', () => {
     mockQueries({
       slot: slotPayload({}, {

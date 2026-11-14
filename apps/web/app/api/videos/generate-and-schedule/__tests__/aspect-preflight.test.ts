@@ -3,9 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextResponse } from 'next/server';
 
 import {
+  checkFirstPhotoFace,
   checkPreChargePreflights,
   checkSegmentMediaAspect,
-  SEGMENT_MEDIA_ASPECT_TIMEOUT_MS,
+  MEDIA_CHECK_TIMEOUT_MS,
 } from '../aspect-preflight';
 import { checkFullLipsyncNarration } from '../full-lipsync-preflight';
 import type { PersonaPrep } from '../persona-prep';
@@ -18,9 +19,12 @@ vi.mock('../full-lipsync-preflight', () => ({
   checkFullLipsyncNarration: vi.fn(),
 }));
 
-function engineBody(code: string, width?: number, height?: number): Response {
+function engineBody(code: string, width?: number, height?: number, hasFace?: boolean): Response {
   return new Response(
-    JSON.stringify({ status: 200, body: { code, width: width ?? null, height: height ?? null } }),
+    JSON.stringify({
+      status: 200,
+      body: { code, width: width ?? null, height: height ?? null, has_face: hasFace ?? null },
+    }),
     { status: 200, headers: { 'content-type': 'application/json' } },
   );
 }
@@ -88,7 +92,7 @@ describe('checkSegmentMediaAspect', () => {
   });
 
   it('pins the per-check timeout at 30s', () => {
-    expect(SEGMENT_MEDIA_ASPECT_TIMEOUT_MS).toBe(30_000);
+    expect(MEDIA_CHECK_TIMEOUT_MS).toBe(30_000);
   });
 
   it('passes when there is no segment media and never calls the engine', async () => {
@@ -202,6 +206,85 @@ describe('checkSegmentMediaAspect', () => {
   });
 });
 
+describe('checkFirstPhotoFace', () => {
+  beforeEach(() => {
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it('passes faceless videos without an engine call: no face shows', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
+    const result = await checkFirstPhotoFace({ ...INPUT, videoType: 'faceless' });
+    expect(result).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('passes when there is no first photo and never calls the engine', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
+    const result = await checkFirstPhotoFace({ ...INPUT, segments: [] });
+    expect(result).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('passes when the first photo has a face and sends the media id', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
+    const result = await checkFirstPhotoFace(INPUT);
+    expect(result).toBeNull();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('https://engine.test/api/v1/media/check');
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      media_id: 'aabbccddeeff00112233445566778899.jpg',
+      video_aspect: '9:16',
+    });
+  });
+
+  it('passes when has_face is missing: an older engine is not a failure', async () => {
+    const calls = stubFetch([
+      new Response(JSON.stringify({ status: 200, body: { code: 'ok' } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ]);
+    const result = await checkFirstPhotoFace(INPUT);
+    expect(result).toBeNull();
+    expect(calls).toHaveLength(1);
+  });
+
+  it('rejects a faceless first photo with a 400 naming segment and image', async () => {
+    stubFetch([engineBody('ok', 1080, 1920, false)]);
+    const result = await checkFirstPhotoFace(INPUT);
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(400);
+    const payload = (await (result as NextResponse).json()) as { error?: string };
+    expect(payload.error).toContain('Segment 0 image 0');
+    expect(payload.error).toContain('no face was detected');
+  });
+
+  it('fails closed with a 502 when the engine is unreachable', async () => {
+    stubFetch([new Error('fetch failed')]);
+    const result = await checkFirstPhotoFace(INPUT);
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(502);
+  });
+
+  it('fails closed with a 502 when the engine returns no code', async () => {
+    stubFetch([
+      new Response(JSON.stringify({ status: 200, body: {} }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ]);
+    const result = await checkFirstPhotoFace(INPUT);
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(502);
+  });
+});
+
 describe('checkPreChargePreflights', () => {
   const COMBINED = {
     userId: 'user-1',
@@ -244,8 +327,9 @@ describe('checkPreChargePreflights', () => {
     });
     expect(result).toBeNull();
     expect(checkFullLipsyncNarration).toHaveBeenCalledTimes(1);
-    // A full lip-sync face fills the whole video, so no photo is gated.
-    expect(calls).toHaveLength(0);
+    // A full lip-sync face fills the whole video, so no photo is aspect-
+    // gated; the single call is the first-photo face check.
+    expect(calls).toHaveLength(1);
   });
 
   it('skips the narration check when full lip-sync is off', async () => {
@@ -254,7 +338,8 @@ describe('checkPreChargePreflights', () => {
     const result = await checkPreChargePreflights(COMBINED);
     expect(result).toBeNull();
     expect(checkFullLipsyncNarration).not.toHaveBeenCalled();
-    expect(calls).toHaveLength(3);
+    // Three aspect checks plus the first-photo face check.
+    expect(calls).toHaveLength(4);
   });
 
   it('returns null with no engine calls for text-only segments and no lip-sync', async () => {
@@ -271,6 +356,23 @@ describe('checkPreChargePreflights', () => {
     expect(result).toBeNull();
     expect(checkFullLipsyncNarration).not.toHaveBeenCalled();
     expect(calls).toHaveLength(0);
+  });
+
+  it('returns the faceless-first-photo failure after the aspect check passes', async () => {
+    const calls = stubFetch([
+      engineBody('ok', 1080, 1920),
+      engineBody('ok', 1080, 1920, false),
+    ]);
+    vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
+    const result = await checkPreChargePreflights(COMBINED);
+    expect(result).not.toBeNull();
+    expect(result?.status).toBe(400);
+    const payload = (await result?.json()) as { error?: string };
+    expect(payload.error).toContain('Segment 0 image 0');
+    expect(payload.error).toContain('no face was detected');
+    expect(checkFullLipsyncNarration).not.toHaveBeenCalled();
+    // Three aspect checks plus the first-photo face check.
+    expect(calls).toHaveLength(4);
   });
 
   it('fails fast with a 400 when the persona stores an unknown aspect, never silently checks as portrait', async () => {

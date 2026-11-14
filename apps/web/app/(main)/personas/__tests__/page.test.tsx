@@ -122,6 +122,11 @@ describe('app/(main)/personas/page — PersonasPage', () => {
     expect(screen.queryByText('personas.emptyTitle')).toBeNull();
   });
 
+  it('labels the avatar as a reference photo: the hook never opens with it', () => {
+    render(<PersonasPage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText('persona.photoLabel')).toHaveLength(2);
+  });
+
   it('shows the library face when the card has no avatar or photo', () => {
     vi.mocked(usePersonaListQuery).mockReturnValue({
       data: [

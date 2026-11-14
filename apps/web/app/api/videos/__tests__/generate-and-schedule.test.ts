@@ -3286,7 +3286,9 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
   it('skips the narration preflight for non-full videos but still checks segment ratios', async () => {
     // The narration check (audio/preflight-duration) is full-lip-sync
     // only; the aspect check (media/check) still runs for the segments'
-    // full-frame photos — the default persona has no face, so all 11 do.
+    // full-frame photos — the default persona has no face, so all 11 do —
+    // plus the first-photo face check, which re-checks the first photo
+    // for a face (issue #589).
     const calls: Array<string> = [];
     vi.stubGlobal(
       'fetch',
@@ -3300,7 +3302,7 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
     );
     const res = await post(baseBody());
     expect(res.status).toBe(200);
-    expect(calls).toHaveLength(11);
+    expect(calls).toHaveLength(12);
     expect(calls.every((url) => url.includes('/api/v1/media/check'))).toBe(true);
     expect(calls.some((url) => url.includes('preflight-duration'))).toBe(false);
     expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);

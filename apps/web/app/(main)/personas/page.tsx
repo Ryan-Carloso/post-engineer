@@ -47,7 +47,7 @@ export default function PersonasPage() {
 ------------------ */
 
 //---------------
-// PersonasHeader — título e subtítulo da tela de personas
+// PersonasHeader — title and subtitle of the personas screen
 //---------------
 const PersonasHeader = () => {
   const { t } = useI18n();
@@ -115,7 +115,7 @@ const PersonasPageError = () => {
 };
 
 //---------------
-// PersonasList — grade das personas do usuário com botão para criar novas
+// PersonasList — the user's persona grid with a button to create new ones
 //---------------
 const PersonasList = ({ personas }: { personas: PersonaRecord[] }) => {
   const { t } = useI18n();
@@ -150,9 +150,9 @@ const PersonasList = ({ personas }: { personas: PersonaRecord[] }) => {
 };
 
 //---------------
-// PersonaCard — cartão da persona: inteiro clicável, leva aos detalhes.
-// Botão de deletar no canto abre o modal de confirmação (com preview do
-// que será apagado), sem navegar para a edição.
+// PersonaCard — the persona card: entirely clickable, leads to details.
+// The delete button in the corner opens the confirmation modal (with a preview of
+// what will be deleted), without navigating to edit.
 //---------------
 const PersonaCard = ({
   persona,
@@ -179,15 +179,23 @@ const PersonaCard = ({
         aria-label={t('personas.details')}
         className="flex min-w-0 flex-1 items-center gap-4"
       >
-        {/* Avatar compartilhado com o seletor de criação de posts (mesmo
-            fallback, mesmo anel) — duas cópias do bloco divergem. */}
-        <PersonaAvatar
-          avatarUrl={persona.avatarUrl}
-          photoUrl={persona.photoUrl}
-          libraryUrl={persona.libraryUrl}
-          name={persona.name}
-          size={56}
-        />
+        {/* Avatar shared with the post-creation picker (same
+            fallback, same ring) — two copies of the block diverge. */}
+        <div className="flex shrink-0 flex-col items-center gap-1">
+          <PersonaAvatar
+            avatarUrl={persona.avatarUrl}
+            photoUrl={persona.photoUrl}
+            libraryUrl={persona.libraryUrl}
+            name={persona.name}
+            size={56}
+          />
+          {/* Issue #589: the avatar is only a reference for the agent —
+              the hook opens with the first photo of each video, never
+              this photo. */}
+          <span className="text-[10px] font-medium whitespace-nowrap text-muted-text">
+            {t('persona.photoLabel')}
+          </span>
+        </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-ink">{persona.name}</div>
           <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-sunken px-2.5 py-1 text-xs font-medium text-muted-text [&_svg]:size-3.5">
@@ -247,7 +255,7 @@ const PersonaCard = ({
 };
 
 //---------------
-// PersonasPageSkeleton — placeholder de carregamento da tela
+// PersonasPageSkeleton — loading placeholder for the screen
 //---------------
 const PersonasPageSkeleton = () => (
   <div aria-busy="true" aria-live="polite" className="space-y-8">

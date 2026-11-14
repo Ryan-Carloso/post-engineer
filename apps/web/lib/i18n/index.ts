@@ -22,6 +22,7 @@ import { pricingContactStrings } from './pricing-contact-i18n';
 import { fullLipsyncPriceStrings } from './full-lipsync-price-i18n';
 import { themeStrings } from './theme-i18n';
 import { postsCalendarStrings } from './posts-calendar-i18n';
+import { hookPhotoStrings } from './hook-photo-i18n';
 import { onboardingStrings } from './onboarding-i18n';
 import type { Locale } from './types';
 
@@ -46,7 +47,7 @@ export const ptDictionary = {
   metrics: { ...metricsStrings.pt.metrics, ...metricsCoverageStrings.pt.metrics, ...metricsFiltersStrings.pt.metrics },
   experiments: experimentsStrings.pt.experiments,
   accounts: { ...basePtDictionary.accounts, ...threadsStrings.pt.accounts, ...facebookStrings.pt.accounts, ...pinterestStrings.pt.accounts, ...fanvueStrings.pt.accounts, ...rumbleStrings.pt.accounts },
-  posts: { ...basePtDictionary.posts, ...postsCalendarStrings.pt.posts },
+  posts: { ...basePtDictionary.posts, ...postsCalendarStrings.pt.posts, ...hookPhotoStrings.pt.posts },
   personas: { ...basePtDictionary.personas, ...personaLayoutHintStrings.pt.personas, ...personaBoundAccountsStrings.pt.personas },
   landing: { ...basePtDictionary.landing, ...pricingContactStrings.pt.landing },
   theme: themeStrings.pt.theme,
@@ -63,7 +64,7 @@ export const enDictionary = {
   metrics: { ...metricsStrings.en.metrics, ...metricsCoverageStrings.en.metrics, ...metricsFiltersStrings.en.metrics },
   experiments: experimentsStrings.en.experiments,
   accounts: { ...baseEnDictionary.accounts, ...threadsStrings.en.accounts, ...facebookStrings.en.accounts, ...pinterestStrings.en.accounts, ...fanvueStrings.en.accounts, ...rumbleStrings.en.accounts },
-  posts: { ...baseEnDictionary.posts, ...postsCalendarStrings.en.posts },
+  posts: { ...baseEnDictionary.posts, ...postsCalendarStrings.en.posts, ...hookPhotoStrings.en.posts },
   personas: { ...baseEnDictionary.personas, ...personaLayoutHintStrings.en.personas, ...personaBoundAccountsStrings.en.personas },
   landing: { ...baseEnDictionary.landing, ...pricingContactStrings.en.landing },
   theme: themeStrings.en.theme,
@@ -84,6 +85,7 @@ type PricingContactKeys = typeof pricingContactStrings.en;
 type FullLipsyncPriceKeys = typeof fullLipsyncPriceStrings.en;
 type ThemeKeys = typeof themeStrings.en;
 type PostsCalendarKeys = typeof postsCalendarStrings.en;
+type HookPhotoKeys = typeof hookPhotoStrings.en;
 type OnboardingKeys = typeof onboardingStrings.en;
 export type Dictionary = BaseDictionary & {
   [Section in keyof ThreadsKeys]: {
@@ -136,6 +138,10 @@ export type Dictionary = BaseDictionary & {
 } & {
   [Section in keyof PostsCalendarKeys]: {
     [Key in keyof PostsCalendarKeys[Section]]: string;
+  };
+} & {
+  [Section in keyof HookPhotoKeys]: {
+    [Key in keyof HookPhotoKeys[Section]]: string;
   };
 } & {
   [Section in keyof OnboardingKeys]: {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { parseJsonBody, throwForBadResponse } from './api';
+import { parseJsonBody, throwForBadResponse } from './api-response';
 
 //---------------
 // rescheduleSlot — move a pending or ready slot's publish time (issue

@@ -843,6 +843,56 @@ describe('api', () => {
     });
   });
 
+  it('fetchPostDetail narrows the hook photo from the route payload', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        kind: 'slot',
+        slot: {
+          id: 'slot-1',
+          hookPhoto: {
+            url: 'https://e.com/hook.jpg',
+            source: 'segment',
+            segmentIndex: 0,
+            imageIndex: 0,
+          },
+        },
+        schedule: { id: 's1' },
+        persona: null,
+      }),
+    );
+    const { fetchPostDetail } = await import('@/lib/api');
+    const payload = await fetchPostDetail('slot-1');
+    if (payload?.kind !== 'slot') throw new Error('expected slot');
+    expect(payload.slot.hookPhoto).toEqual({
+      url: 'https://e.com/hook.jpg',
+      source: 'segment',
+      segmentIndex: 0,
+      imageIndex: 0,
+    });
+  });
+
+  it('fetchPostDetail falls back to the persona hook photo when the route omits it', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        kind: 'slot',
+        slot: { id: 'slot-1' },
+        schedule: { id: 's1' },
+        persona: null,
+      }),
+    );
+    const { fetchPostDetail } = await import('@/lib/api');
+    const payload = await fetchPostDetail('slot-1');
+    if (payload?.kind !== 'slot') throw new Error('expected slot');
+    expect(payload.slot.hookPhoto).toEqual({
+      url: null,
+      source: 'persona',
+      segmentIndex: null,
+      imageIndex: null,
+    });
+  });
+
   it('fetchPostDetail falls back to null leaves when generation is malformed', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonResponse({
