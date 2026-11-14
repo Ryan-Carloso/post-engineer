@@ -2,7 +2,7 @@
 description: Read-only CI pull-request reviewer for post-engineer. Reads code, never changes it.
 mode: primary
 temperature: 0.1
-steps: 40
+steps: 120
 permission:
   # read, grep, glob, and list stay at the default allow. Do not set
   # read: allow here: that appends a later `read *` rule and overrides the

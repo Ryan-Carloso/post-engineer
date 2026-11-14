@@ -82,9 +82,9 @@ env:
 jobs:
   review:
     runs-on: ubuntu-latest
-    # Sized for maxChainLength (8) in model-preferences.json: 10m + 7*7m pass 1,
-    # 8m pass 2, plus install/post overhead. The validator recomputes this.
-    timeout-minutes: 75
+    # Sized for maxChainLength (8) in model-preferences.json: 30m + 7*20m pass 1,
+    # 20m pass 2, plus install/post overhead. The validator recomputes this.
+    timeout-minutes: 200
     permissions:
       contents: read
       pull-requests: write
@@ -418,9 +418,9 @@ jobs:
           chosen=""
           first=true
           for attempt in "${attempts[@]}"; do
-            limit=7m
+            limit=20m
             if [ "$first" = true ]; then
-              limit=10m
+              limit=30m
               first=false
             fi
             echo "Attempting review with $attempt (timeout $limit) ..."
@@ -537,7 +537,7 @@ jobs:
             exit 0
           fi
           set +e
-          timeout 8m opencode run \
+          timeout 20m opencode run \
             --agent reviewer \
             --model "$verify" \
             --file pr.diff \
