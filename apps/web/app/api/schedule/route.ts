@@ -14,6 +14,7 @@ import {
 import { logger } from '@/lib/logger';
 import { batchChargeId, batchSlotRefundKey } from '@/lib/billing/batch-discount';
 import { emitRefundIssued } from '@/lib/billing/refund-tokens';
+import { scrubSecrets } from '@/lib/scrub';
 import { CANCEL_REFUND_REASON, refundsAfterClawback } from './batch-clawback';
 
 //---------------
@@ -483,8 +484,13 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     ),
   });
   // The wrapper never reads the body: attach the cancel facts so the
-  // schedule_deleted event carries them (scheduleId + refundedTokens).
-  attachApiErrorProperties(response, { scheduleId, refundedTokens });
+  // schedule_deleted event carries them (scheduleId + refunded count).
+  // attachApiErrorProperties requires pre-scrubbed values — the success
+  // path never scrubs — and the id comes straight off the query string
+  // with no format check, so scrub at the call site. The count travels
+  // as `refunded`, not `refundedTokens`: the scrubber redacts every
+  // `token*` key, which would erase the audit value.
+  attachApiErrorProperties(response, scrubSecrets({ scheduleId, refunded: refundedTokens }));
   return response;
 }
 

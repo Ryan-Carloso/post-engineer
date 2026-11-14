@@ -852,7 +852,29 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       expect(client.captureAs).toHaveBeenCalledWith(
         USER_ID,
         'schedule_deleted',
-        expect.objectContaining({ scheduleId: 's-1', refundedTokens: 2 }),
+        expect.objectContaining({ scheduleId: 's-1', refunded: 2 }),
+      ),
+    );
+  });
+
+  it('schedule_deleted scrubs a credential-shaped schedule id before PostHog sees it', async () => {
+    const client = mockPostHog();
+    mockSupabase({
+      scheduleSlots: MIXED_SLOTS,
+      remove: { error: null },
+    });
+    // The id comes straight off the query string with no format check, and
+    // the success path never scrubs — attachApiErrorProperties requires
+    // pre-scrubbed values, so the route scrubs at the call site.
+    const res = await DELETE(
+      new Request('http://localhost/api/schedule?id=Bearer%20sk-12345678901234567890'),
+    );
+    expect(res.status).toBe(200);
+    await vi.waitFor(() =>
+      expect(client.captureAs).toHaveBeenCalledWith(
+        USER_ID,
+        'schedule_deleted',
+        expect.objectContaining({ scheduleId: 'Bearer [redacted]', refunded: 2 }),
       ),
     );
   });
