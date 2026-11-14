@@ -22,14 +22,11 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
-import {
-  distributeSlots,
-  SlotDistributionError,
-  type DistributedSlot,
-} from '@/lib/schedule/slot-distribution';
-import { validateScheduleWindow } from '@/lib/schedule-window';
+import { type DistributedSlot } from '@/lib/schedule/slot-distribution';
+import { validateSlots } from './slot-validation';
 import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, netLedgerSpent, toFiniteNumber, unknownVideoTypeMessage, VIDEO_TYPE_ERROR_SUFFIX } from '@/lib/tokens';
+import { refundSlotTokens } from '@/lib/billing/refund-tokens';
 import { buildSlotRows } from './slot-rows';
 import { fetchReplay } from './replay';
 import { refundRollbackSpend } from './rollback-refund';
@@ -146,6 +143,8 @@ interface SlotResult {
   status: string;
   /** Machine code for a failed slot (image_sign_failed, engine_rejected, ...). */
   errorCode?: string;
+  /** Whether the prepaid cost was returned after a failed dispatch. */
+  tokensRefunded?: boolean;
 }
 
 //---------------
@@ -154,50 +153,9 @@ interface SlotResult {
 
 //---------------
 // Validation helpers — all run BEFORE any token is charged.
+// Slot validation lives in slot-validation.ts (extracted so the route
+// module stays under the file-size ratchet).
 //---------------
-
-function validateSlots(
-  startAt: string,
-  times: string[],
-  timezone: string,
-  count: number,
-): DistributedSlot[] | NextResponse {
-  let slots: DistributedSlot[];
-  try {
-    slots = distributeSlots({ startAtISO: startAt, times, timezone, count });
-  } catch (error) {
-    if (error instanceof SlotDistributionError) {
-      const field =
-        error.field === 'times'
-          ? 'publishing.schedule.times'
-          : error.field === 'timezone'
-            ? 'publishing.schedule.timezone'
-            : error.field === 'startAt'
-              ? 'publishing.schedule.startAt'
-              : 'publishing.schedule';
-      const code = error.field === 'times' ? ERROR_CODES.INVALID_SCHEDULE_TIME : ERROR_CODES.VALIDATION_FAILED;
-      const message =
-        code === ERROR_CODES.INVALID_SCHEDULE_TIME ? formatErrorMessage(code) : error.message;
-      return validationFailed(code, message, field);
-    }
-    throw error;
-  }
-  // Every slot must fall inside the 3h–30d publishing window.
-  for (const slot of slots) {
-    const windowCheck = validateScheduleWindow(new Date(slot.slotAtISO));
-    if (!windowCheck.ok) {
-      return validationFailed(
-        ERROR_CODES.SCHEDULE_OUT_OF_RANGE,
-        // windowCheck.error is the only copy for this code at this call
-        // site: the validator always returns a non-empty message on the
-        // failure branch, and it already interpolates the window constants.
-        windowCheck.error,
-        'publishing.schedule',
-      );
-    }
-  }
-  return slots;
-}
 
 //---------------
 // Publish-mode resolution. 'scheduled' (default) keeps the existing
@@ -921,14 +879,15 @@ async function postHandler(request: Request): Promise<NextResponse> {
       // Explicit terminal state + per-slot refund of this video's prepaid
       // cost (the engine's batch refund convention). Siblings continue.
       await supabase.from('scheduled_posts').update({ status: 'failed' }).eq('id', slot.id).eq('user_id', userId);
-      const { error: refundError } = await supabase.rpc('refund_batch_tokens', {
-        p_user_id: userId,
-        p_batch_generation_id: idem.generationId,
-        p_refund_key: `${idem.generationId}:slot:${slot.id}`,
-        p_amount: perVideoCost,
-        p_reason: 'Unified generate+schedule: slot dispatch failed; video refunded',
+      const { refunded, error: refundError } = await refundSlotTokens({
+        supabase,
+        userId,
+        scheduleId: idem.scheduleId,
+        slotId: slot.id,
+        amount: perVideoCost,
+        reason: 'Unified generate+schedule: slot dispatch failed; video refunded',
+        kind: 'dispatch_failed',
       });
-      const refunded = !refundError;
       if (refundError) {
         logger.error('[generate-and-schedule] per-slot refund failed', refundError, {
           slotId: slot.id,
@@ -950,7 +909,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         scheduleId: idem.scheduleId,
         errorCode: dispatchError.errorCode,
       });
-      results.push({ slotId: slot.id, slotAt: slot.slot_at, title, taskId: null, status: 'failed', errorCode: dispatchError.errorCode });
+      results.push({ slotId: slot.id, slotAt: slot.slot_at, title, taskId: null, status: 'failed', errorCode: dispatchError.errorCode, tokensRefunded: refunded });
       failed += 1;
     }
   }
@@ -985,6 +944,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       failureStage: 'dispatch',
       numberOfVideos: 1,
       durationMs,
+      tokensRefunded: results.every((r) => r.status !== 'failed' || r.tokensRefunded === true),
     });
     return NextResponse.json(
       { success: false, error: formatErrorMessage(code), code, ...envelope },

@@ -27,6 +27,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
 import {
   withApiErrorReporting,
+  attachApiErrorProperties,
   markApiErrorReported,
   resolveReportingUserId,
 } from '@/lib/api-error-reporting';
@@ -78,6 +79,43 @@ describe('withApiErrorReporting', () => {
     expect(event).toBe('server_success');
     expect(properties).toMatchObject({ route: 'GET /api/test', status: 200 });
     expect(client.captureException).not.toHaveBeenCalled();
+  });
+
+  it('merges attached properties into the 2xx success event', async () => {
+    const response = NextResponse.json({ ok: true });
+    attachApiErrorProperties(response, { scheduleId: 's-1', refundedTokens: 6 });
+    const wrapped = withApiErrorReporting('DELETE /api/schedule', async () => response);
+
+    const res = await wrapped(getRequest('http://localhost/api/schedule', 'DELETE'));
+
+    expect(res.status).toBe(200);
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [event, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(event).toBe('schedule_deleted');
+    expect(properties).toMatchObject({
+      route: 'DELETE /api/schedule',
+      status: 200,
+      scheduleId: 's-1',
+      refundedTokens: 6,
+    });
+  });
+
+  it('does not leak attached properties to a different response', async () => {
+    const withProps = NextResponse.json({ ok: true });
+    attachApiErrorProperties(withProps, { scheduleId: 's-1' });
+    const wrapped = withApiErrorReporting('GET /api/test', async () => NextResponse.json({ ok: true }));
+
+    await wrapped(getRequest());
+
+    await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
+    const [, properties] = client.capture.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(properties).not.toHaveProperty('scheduleId');
   });
 
   it.each([201, 204])('reports a %i as a server_success event', async (status) => {

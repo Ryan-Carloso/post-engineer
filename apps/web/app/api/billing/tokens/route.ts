@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { toFiniteNumber } from '@/lib/tokens';
 import { logger } from '@/lib/logger';
-import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { withApiErrorReporting, resolveReportingUserId, attachApiErrorProperties } from '@/lib/api-error-reporting';
 
 //---------------
 // GET /api/billing/tokens — authoritative prepaid wallet balance.
@@ -26,7 +26,7 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     ? createSupabaseServiceClient()
     : await createSupabaseServerClient();
 
-  // Bônus de boas-vindas (idempotente, best-effort).
+  // Welcome bonus (idempotent, best-effort).
   try {
     const { error: grantError } = await createSupabaseServiceClient().rpc('grant_signup_bonus', {
       p_user_id: userId,
@@ -38,23 +38,30 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     logger.error('[api/billing/tokens] signup bonus grant threw', grantException, { userId });
   }
 
-  // Busca o profile (pode não existir para usuários free sem billing)
+  // Fetch the profile (may not exist for free users without billing)
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('tokens_balance, free_tokens_balance')
     .eq('id', userId)
     .single();
 
-  // Se não tem profile, é free com 0 tokens.
-  // numeric do Postgres chega como string via PostgREST — coagir para number.
+  // No profile means free with 0 tokens.
+  // Postgres numeric arrives as a string via PostgREST — coerce to number.
   const paid = toFiniteNumber((profile as { tokens_balance?: unknown } | null)?.tokens_balance, 0);
   const free = toFiniteNumber((profile as { free_tokens_balance?: unknown } | null)?.free_tokens_balance, 0);
 
-  return NextResponse.json({
+  const balance = paid + free;
+  const response = NextResponse.json({
     success: true,
-    balance: paid + free,
+    balance,
     free,
   });
+  // The wrapper never reads the body, so attach the balance for the
+  // token_balance_fetched event — without it the balance was invisible in
+  // PostHog (route + status only) and a jump could not be traced to the
+  // value the user actually saw.
+  attachApiErrorProperties(response, { balance });
+  return response;
 }
 
 //---------------

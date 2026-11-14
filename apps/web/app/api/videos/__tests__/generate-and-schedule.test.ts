@@ -1464,7 +1464,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(502);
       expect(json.success).toBe(false);
       expect(json.code).toBe('ENGINE_UNAVAILABLE');
-      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', taskId: null, status: 'failed' });
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', taskId: null, status: 'failed', tokensRefunded: true });
 
       const refunds = rpcCalls.filter((c) => c.name === 'refund_batch_tokens');
       expect(refunds).toHaveLength(1);
@@ -1475,6 +1475,32 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
       const failedUpdates = updates.filter((u) => u.table === 'scheduled_posts' && u.fields.status === 'failed');
       expect(failedUpdates).toHaveLength(1);
+
+      // The refund leaves a trace: refund_issued with the dispatch reason.
+      const issued = capturedEvents.filter((entry) => entry.event === 'refund_issued');
+      expect(issued).toHaveLength(1);
+      expect(issued[0].properties).toMatchObject({
+        kind: 'dispatch_failed',
+        amount: 2,
+        reason: 'Unified generate+schedule: slot dispatch failed; video refunded',
+        slot_id: 'slot-0',
+      });
+      expect(issued[0].properties?.batch_generation_id).toMatch(/^batch:/);
+    });
+
+    it('reports tokensRefunded on the dispatch-failed video_creation_failed event', async () => {
+      setup({ ...DEFAULT_CFG, engineFailSubjects: ['Porto trip'] });
+      const res = await post(baseBody());
+      expect(res.status).toBe(502);
+      const failedEvent = vi
+        .mocked(trackApiEvent)
+        .mock.calls.find((call) => call[0] === 'video_creation_failed');
+      expect(failedEvent).toBeDefined();
+      expect(failedEvent?.[1]).toMatchObject({
+        errorCode: 'ENGINE_UNAVAILABLE',
+        failureStage: 'dispatch',
+        tokensRefunded: true,
+      });
     });
 
     it('refunds the re-charge when a fully-refunded retry fails dispatch', async () => {
@@ -2594,7 +2620,9 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(res.status).toBe(502);
       expect(json.success).toBe(false);
-      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed' });
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', tokensRefunded: false });
+      // A refund that never landed leaves no refund_issued behind.
+      expect(capturedEvents.filter((entry) => entry.event === 'refund_issued')).toEqual([]);
       // The slot still reports failed; the history marks the refund as not
       // delivered so the discrepancy stays visible.
       const failedCall = vi
