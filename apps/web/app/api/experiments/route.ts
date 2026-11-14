@@ -15,7 +15,7 @@ import { listExperiments } from '@/lib/experiments/read';
 // /api/experiments — paired content A/B tests (issue #476).
 //
 // POST creates an experiment and its two variants in one transaction
-// (experiments (action: create) RPC). Videos join it later through
+// (create_experiment RPC). Videos join it later through
 // POST /api/videos/generate-and-schedule with `experiment: { experimentId,
 // variantId, pair }`, which checks pair fairness before charging.
 // GET lists the caller's experiments.
@@ -71,7 +71,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     if (persona === null) return apiErrorResponse(404, 'Persona not found.', { route: ROUTE_POST, code: 'PERSONA_NOT_FOUND' });
   }
 
-  const { data: experimentId, error } = await supabase.rpc('experiments (action: create)', {
+  const { data: experimentId, error } = await supabase.rpc('create_experiment', {
     p_user_id: auth.userId,
     p_name: input.name,
     p_variable: input.variable,
@@ -84,7 +84,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     })),
   });
   if (error || typeof experimentId !== 'string') {
-    logger.error('[api/experiments] experiments (action: create) failed', error, { userId: auth.userId });
+    logger.error('[api/experiments] create_experiment failed', error, { userId: auth.userId });
     return apiErrorResponse(500, 'Failed to create the experiment.', { route: ROUTE_POST, cause: error });
   }
   return NextResponse.json({
