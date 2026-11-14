@@ -104,6 +104,7 @@ import {
   ONBOARDING_WIZARD_STEP_KEY,
   useOnboardingWizardStore,
 } from '@/lib/onboarding-wizard';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 
 const WHATSAPP_ENV = 'NEXT_PUBLIC_WHATSAPP_NUMBER';
 const TEST_NUMBER = '15551234567';
@@ -240,7 +241,7 @@ const RUMBLE_ACCOUNT = {
 
 let accountResponseQueue: Array<Array<Record<string, unknown>>> = [];
 let accountFetchFails = false;
-let connectResponse: { ok: boolean; body: unknown } = { ok: true, body: { success: true } };
+let connectResponse: { ok: boolean; status?: number; body: unknown } = { ok: true, body: { success: true } };
 const fetchMock = vi.fn();
 const popup = { closed: false, close: vi.fn() };
 
@@ -263,7 +264,11 @@ function installStep2Mocks() {
       return { ok: true, json: async () => ({ success: true, auth_url: 'https://accounts.google.com/o/oauth2/auth' }) } as Response;
     }
     if (url === '/api/bluesky-connect' || url === '/api/threespeak-connect' || url === '/api/rumble-connect') {
-      return { ok: connectResponse.ok, json: async () => connectResponse.body } as Response;
+      return {
+        ok: connectResponse.ok,
+        status: connectResponse.status ?? (connectResponse.ok ? 200 : 400),
+        json: async () => connectResponse.body,
+      } as Response;
     }
     throw new Error(`unexpected fetch in wizard test: ${url}`);
   });
@@ -302,6 +307,7 @@ describe('OnboardingWizard step 2', () => {
     useOnboardingWizardStore.setState({ isOpen: false, step: 1 });
     vi.stubEnv(WHATSAPP_ENV, TEST_NUMBER);
     installStep2Mocks();
+    vi.mocked(notifyIfSessionExpired).mockClear();
   });
 
   afterEach(() => {
@@ -468,6 +474,26 @@ describe('OnboardingWizard step 2', () => {
     });
     expect(passwordInput).toHaveValue('');
     expect(screen.getByTestId('bluesky-handle-input')).toHaveValue('alice.bsky.social');
+    expect(within(dialog).getByText('Step 2 of 4')).toBeInTheDocument();
+    // The failed POST delegates to the session-expiry latch: deleting the
+    // notifyIfSessionExpired call must fail this test.
+    expect(notifyIfSessionExpired).toHaveBeenCalledTimes(1);
+    expect(notifyIfSessionExpired).toHaveBeenCalledWith(expect.objectContaining({ ok: false }));
+  });
+
+  it('delegates the session-expiry redirect on a 401 credential POST', async () => {
+    const user = userEvent.setup();
+    connectResponse = { ok: false, status: 401, body: {} };
+    const dialog = await openStep2List();
+    await user.click(screen.getByTestId('onboarding-provider-bluesky'));
+    await user.type(screen.getByTestId('bluesky-handle-input'), 'alice.bsky.social');
+    await user.type(screen.getByTestId('bluesky-password-input'), 'app-password-1');
+    await user.click(screen.getByTestId('bluesky-connect-button'));
+    await waitFor(() => {
+      expect(within(dialog).getByText('Could not connect: check the handle and the app password.')).toBeInTheDocument();
+    });
+    expect(notifyIfSessionExpired).toHaveBeenCalledTimes(1);
+    expect(notifyIfSessionExpired).toHaveBeenCalledWith(expect.objectContaining({ status: 401 }));
     expect(within(dialog).getByText('Step 2 of 4')).toBeInTheDocument();
   });
 
