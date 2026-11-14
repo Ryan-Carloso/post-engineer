@@ -144,7 +144,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mechanically check one image URL or media id (MCP check_media) */
+        /** Mechanically check one image URL or media id (MCP media check) */
         post: operations["check_media_api_v1_media_check_post"];
         delete?: never;
         options?: never;
@@ -746,7 +746,7 @@ export interface components {
         };
         /**
          * SegmentMedia
-         * @description Media reference shape for a segment's photo (upload_media uploads it, check_media verifies it).
+         * @description Media reference shape for a segment's photo (media (action: upload) uploads it, media (action: check) verifies it).
          */
         SegmentMedia: {
             /** Mediaid */

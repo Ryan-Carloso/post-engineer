@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
   withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
+  withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
@@ -166,10 +167,10 @@ describe('script outcome telemetry with the images material', () => {
   it('counts a missing image as a rejected script', async () => {
     const session = new RecipeSession('stdio');
     const recorded = vi.spyOn(session, 'recordScriptRejected');
-    const wrapped = withScriptOutcome(session, 'validate_script', async () => ({
+    const wrapped = withScriptOutcome<{ segments: unknown }>(session, 'check_script_validate', async () => ({
       content: [{ type: 'text' as const, text: 'Script validation failed' }],
       isError: true,
-    }));
+    }), (args) => [{ segments: args.segments }]);
     await wrapped({ segments: bodyWithoutMedia });
     expect(recorded).toHaveBeenCalledTimes(1);
   });
@@ -177,11 +178,22 @@ describe('script outcome telemetry with the images material', () => {
   it('does not count a failure as a script rejection when the script is valid for its material', async () => {
     const session = new RecipeSession('stdio');
     const recorded = vi.spyOn(session, 'recordScriptRejected');
-    const wrapped = withScriptOutcome(session, 'generate_persona_video', async () => ({
+    const wrapped = withScriptOutcome<{ videos: Array<{ segments: unknown }> }>(session, 'generate_video', async () => ({
       content: [{ type: 'text' as const, text: 'upstream error' }],
       isError: true,
-    }));
-    await wrapped({ segments: withMedia, options: {} });
+    }), (args) => args.videos.map((video) => ({ segments: video.segments })));
+    await wrapped({ videos: [{ segments: withMedia }] });
     expect(recorded).not.toHaveBeenCalled();
+  });
+
+  it('counts a batch as rejected when any one of its videos fails the script rules', async () => {
+    const session = new RecipeSession('stdio');
+    const recorded = vi.spyOn(session, 'recordScriptRejected');
+    const wrapped = withScriptOutcome<{ videos: Array<{ segments: unknown }> }>(session, 'generate_video', async () => ({
+      content: [{ type: 'text' as const, text: 'Video 2 was not created' }],
+      isError: true,
+    }), (args) => args.videos.map((video) => ({ segments: video.segments })));
+    await wrapped({ videos: [{ segments: withMedia }, { segments: bodyWithoutMedia }] });
+    expect(recorded).toHaveBeenCalledTimes(1);
   });
 });

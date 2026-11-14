@@ -52,21 +52,21 @@ import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { CreatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar.js';
 
 export type { McpToolResponse } from './tools-call.js';
-// Image path/tag/description limits are shared by create-persona and add_persona_image.
+// Image path/tag/description limits are shared by create-persona and persona_media (action: add_image).
 const LibraryImageFields = {
   path: z.string().min(1).describe(`Local file path to the image (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB)`),
   tag: z.string().max(MAX_LIBRARY_TAG_LENGTH).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
   description: z.string().max(MAX_LIBRARY_DESCRIPTION_LENGTH).optional().describe('Description of the photo for tag/keyword matching (e.g. smiling at the beach at sunset)'),
 };
-// Single source of truth: index.ts registers these shapes directly with the
-// MCP server, so field definitions (and their descriptions) live here only.
+// Single source of truth: the intent-*.ts modules build the advertised shapes from these
+// ones, so field definitions (and their descriptions) live here only.
 const PersonaLibraryImageInputShape = z.object(LibraryImageFields);
 
 export const CreatePersonaShape = {
   name: z.string().min(1, 'Name is required').describe('Name of the persona'),
   // Every persona has a face (avatarUrl or avatarPath); faceless is a per-video mode (options.videoType).
   ...CreatePersonaAvatarFields,
-  voiceId: personaVoiceField('voiceId is required').describe('id or label from list_voices. Never type a provider prefix.'),
+  voiceId: personaVoiceField('voiceId is required').describe('id or label from voices (action: list). Never type a provider prefix.'),
   language: z
     .string()
     .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })
@@ -89,8 +89,6 @@ export const CreatePersonaShape = {
 };
 
 export const CreatePersonaSchema = z.object(CreatePersonaShape).superRefine(refinePersonaAvatar(true));
-export const ListPersonasShape = {};
-export const ListPersonasSchema = z.object(ListPersonasShape);
 
 export { ListVoicesShape, ListVoicesSchema } from './voice-filters.js';
 
@@ -107,15 +105,11 @@ export {
 
 export const ListFacesShape = {};
 
-export const ListFacesSchema = z.object(ListFacesShape);
-// update_persona lives in persona-update.ts (shape, schema and handler);
+// personas (action: update) lives in persona-update.ts (shape, schema and handler);
 // re-exported here so existing import sites keep working.
 export { UpdatePersonaShape, UpdatePersonaSchema, handleUpdatePersona } from './persona-update.js';
 export { ConnectAccountShape, ConnectAccountSchema, handleConnectAccount } from './connect-account.js';
 
-export const ListSocialAccountsShape = {};
-
-export const ListSocialAccountsSchema = z.object(ListSocialAccountsShape);
 
 export const ListVideoGenerationsShape = {
   limit: z
@@ -133,7 +127,7 @@ export const GetVideoGenerationShape = {
   generationId: z
     .string()
     .min(1, 'generationId is required')
-    .describe('The generation ID (the generationId field from list_video_generations).'),
+    .describe('The generation ID (the generationId field from video_tasks (action: list_generations)).'),
 };
 
 export const GetVideoGenerationSchema = z.object(GetVideoGenerationShape);
@@ -156,29 +150,17 @@ export const ListTokenTransactionsShape = {
 
 export const ListTokenTransactionsSchema = z.object(ListTokenTransactionsShape);
 
-export const GetPersonaDeletePreviewShape = {
-  personaId: z
-    .string()
-    .min(1, 'personaId is required')
-    .describe('The persona ID to preview deletion for. Read-only: shows what deleting the persona would remove (counts plus per-video download links).'),
-};
-
-export const GetPersonaDeletePreviewSchema = z.object(GetPersonaDeletePreviewShape);
-
 export const DeletePersonaShape = {
   personaId: z
     .string()
     .min(1, 'personaId is required')
     .describe(
-      'The persona ID to delete. DESTRUCTIVE and irreversible: deletes the persona, all its schedules and slots, all generated videos, and the image library. No token refunds — prepaid tokens for pending slots are forfeited. Call get_persona_delete_preview first to see exactly what will be removed.',
+      'The persona ID to delete. DESTRUCTIVE and irreversible: deletes the persona, all its schedules and slots, all generated videos, and the image library. No token refunds — prepaid tokens for pending slots are forfeited. Call personas (action: delete) first to see exactly what will be removed.',
     ),
 };
 
 export const DeletePersonaSchema = z.object(DeletePersonaShape);
 
-export const GetTokenBalanceShape = {};
-
-export const GetTokenBalanceSchema = z.object(GetTokenBalanceShape);
 
 export const ListPersonaImagesShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona whose image library to list'),
@@ -189,7 +171,7 @@ export const ListPersonaImagesSchema = z.object(ListPersonaImagesShape);
 export const AddPersonaImageShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to add the image to'),
   ...LibraryImageFields,
-  // Swap-only, symmetric with update_persona_image: isPrimary:false on a new
+  // Swap-only, symmetric with persona_media (action: update_image): isPrimary:false on a new
   // image is meaningless (never primary unless marked), so the schema accepts
   // only true and surfaces the constraint at parse time, not as a silent drop.
   isPrimary: z
@@ -234,20 +216,6 @@ export const RemovePersonaImageShape = {
 };
 
 export const RemovePersonaImageSchema = z.object(RemovePersonaImageShape);
-
-export const GetVideoStatusShape = {
-  taskId: z.string().min(1, 'taskId is required').describe('The video generation task ID'),
-};
-
-export const GetVideoStatusSchema = z.object(GetVideoStatusShape);
-// Machine-readable progress for a single video task. Unlike get_video_status
-// (raw status + URLs), this returns only the four progress fields so agents
-// can poll "video 1/6: 60%" style progress without parsing a full payload.
-export const GetVideoTaskProgressShape = {
-  taskId: z.string().min(1, 'taskId is required').describe('The video generation task ID'),
-};
-
-export const GetVideoTaskProgressSchema = z.object(GetVideoTaskProgressShape);
 
 export async function handleCreatePersona(
   client: PostEngineerClient,
@@ -597,54 +565,6 @@ export async function handleListTokenTransactions(
   }
 }
 
-export async function handleGetPersonaDeletePreview(
-  client: PostEngineerClient,
-  args: z.infer<typeof GetPersonaDeletePreviewSchema>
-): Promise<McpToolResponse> {
-  try {
-    const narrowed = narrowDeletePreview(await client.getPersonaDeletePreview(args.personaId));
-    const counts = narrowed.counts;
-    const humanSummary =
-      `Deleting persona "${narrowed.persona.name ?? args.personaId}" would remove ` +
-      `${counts.schedules ?? '?'} schedule(s), ${counts.upcomingSlots ?? '?'} upcoming slot(s), ` +
-      `${counts.publishedSlots ?? '?'} published slot(s), ${counts.generatedVideos ?? '?'} generated video(s), ` +
-      `and ${counts.personaImages ?? '?'} library image(s). No token refunds.`;
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `${humanSummary}\n${JSON.stringify(narrowed, null, 2)}`,
-        },
-      ],
-    };
-  } catch (error) {
-    if (error instanceof ApiError && error.code !== null) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error getting persona delete preview: ${JSON.stringify({
-              code: error.code,
-              message: sanitizeEngineError(getErrorMessage(error)),
-              field: error.field,
-            })}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error getting persona delete preview: ${getErrorMessage(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
 export async function handleDeletePersona(
   client: PostEngineerClient,
   args: z.infer<typeof DeletePersonaSchema>
@@ -734,7 +654,7 @@ export async function handleDisconnectAccount(
 /** Narrows the GET /api/persona/delete-preview envelope: the persona, the
  * removal counts, and the per-video download links. Anything the API adds
  * later rides through unparsed. */
-function narrowDeletePreview(result: unknown): {
+export function narrowDeletePreview(result: unknown): {
   persona: { id: string | null; name: string | null };
   counts: {
     schedules: number | null;
@@ -848,7 +768,7 @@ function narrowTokenTransactions(result: unknown): {
   };
 }
 
-/** Slot, schedule, and persona fields get_slot returns. */
+/** Slot, schedule, and persona fields schedules (action: get_slot) returns. */
 function narrowSlotDetail(result: unknown): {
   slot: {
     id: string | null;
@@ -997,13 +917,6 @@ export async function handleRemovePersonaImage(
   );
 }
 
-export async function handleGetVideoStatus(
-  client: PostEngineerClient,
-  args: z.infer<typeof GetVideoStatusSchema>
-): Promise<McpToolResponse> {
-  return handleLibraryCall(() => client.getVideoStatus(args.taskId), 'fetching video status');
-}
-
 /** Redacts credential-shaped material from an engine failure reason before
  * it reaches the MCP client. The engine error is the user's own task failure
  * text (e.g. "persona hook must end between 3 and 6 seconds"), but provider
@@ -1056,16 +969,6 @@ export function narrowTaskProgress(result: unknown): {
     // (null for direct generations and for tasks with no slot yet).
     postUrl: typeof get('postUrl') === 'string' ? (get('postUrl') as string) : null,
   };
-}
-
-export async function handleGetVideoTaskProgress(
-  client: PostEngineerClient,
-  args: z.infer<typeof GetVideoTaskProgressSchema>
-): Promise<McpToolResponse> {
-  return handleLibraryCall(
-    async () => narrowTaskProgress(await client.getVideoStatus(args.taskId)),
-    'fetching video task progress'
-  );
 }
 
 export async function handlePublishVideoDirect(

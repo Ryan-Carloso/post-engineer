@@ -42,6 +42,7 @@ vi.mock('../analytics.js', () => ({
   // per-call context: mcp_tool_called is recorded by the web API from the
   // request headers, not by the MCP (see analytics.test.ts).
   withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
+  withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
@@ -667,9 +668,9 @@ describe('cloned voice tools run through the MCP server', () => {
     }
   }
 
-  it('list_cloned_voices calls the client request', async () => {
+  it('voices list_clones calls the client request', async () => {
     const request = vi.fn().mockResolvedValue({ voices: [] });
-    await callTool('list_cloned_voices', {}, request);
+    await callTool('voices', { action: 'list_clones' }, request);
     expect(request).toHaveBeenCalledWith(
       '/api/persona/cloned-voices',
       expect.objectContaining({ method: 'GET' }),
@@ -677,7 +678,7 @@ describe('cloned voice tools run through the MCP server', () => {
     );
   });
 
-  it('create_cloned_voice on the remote server uses the URL-only schema', async () => {
+  it('voices create_clone on the remote server uses the URL-only schema', async () => {
     const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-http' } });
     global.fetch = vi.fn().mockResolvedValue(audioResponse([5, 5, 5]));
     const apiClient = fakeHost(request) as unknown as PostEngineerClient;
@@ -687,8 +688,8 @@ describe('cloned voice tools run through the MCP server', () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
       const result = await client.callTool({
-        name: 'create_cloned_voice',
-        arguments: { audioUrl: 'https://cdn.example.com/ref.wav', language: 'en', consent: true, denoise: true },
+        name: 'voices',
+        arguments: { action: 'create_clone', audioUrl: 'https://cdn.example.com/ref.wav', language: 'en', consent: true, denoise: true },
       });
       expect(result.isError).toBeFalsy();
       expect(firstText(result as { content?: unknown })).toContain('Voice clone registration started');
@@ -697,12 +698,12 @@ describe('cloned voice tools run through the MCP server', () => {
     }
   });
 
-  it('create_cloned_voice downloads then uploads', async () => {
+  it('voices create_clone downloads then uploads', async () => {
     const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-1' } });
     global.fetch = vi.fn().mockResolvedValue(audioResponse([5, 5, 5]));
     const result = await callTool(
-      'create_cloned_voice',
-      { audioUrl: 'https://cdn.example.com/ref.wav', language: 'en', consent: true, denoise: true },
+      'voices',
+      { action: 'create_clone', audioUrl: 'https://cdn.example.com/ref.wav', language: 'en', consent: true, denoise: true },
       request
     );
     expect(firstText(result as { content?: unknown })).toContain(
@@ -716,7 +717,7 @@ describe('cloned voice tools run through the MCP server', () => {
     );
   });
 
-  it('create_cloned_voice rejects a non-English language (English-only launch)', async () => {
+  it('voices create_clone rejects a non-English language (English-only launch)', async () => {
     const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-1' } });
     global.fetch = vi.fn().mockResolvedValue(audioResponse([5, 5, 5]));
     // callTool asserts success, so this rejection case drives the linked
@@ -728,8 +729,8 @@ describe('cloned voice tools run through the MCP server', () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
       const result = await client.callTool({
-        name: 'create_cloned_voice',
-        arguments: { audioUrl: 'https://cdn.example.com/ref.wav', language: 'pt', consent: true },
+        name: 'voices',
+        arguments: { action: 'create_clone', audioUrl: 'https://cdn.example.com/ref.wav', language: 'pt', consent: true },
       });
       expect(result.isError).toBe(true);
       expect(firstText(result as { content?: unknown })).toContain(
@@ -748,13 +749,13 @@ describe('cloned voice tools run through the MCP server', () => {
     const client = new Client({ name: 'test-client', version: '0.0.0' });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
-      return await client.callTool({ name: 'create_cloned_voice', arguments: args });
+      return await client.callTool({ name: 'voices', arguments: { action: 'create_clone', ...args } });
     } finally {
       await client.close();
     }
   }
 
-  it('create_cloned_voice rejects both audioUrl and audioPath', async () => {
+  it('voices create_clone rejects both audioUrl and audioPath', async () => {
     const request = vi.fn();
     global.fetch = vi.fn();
     const result = await callToolRaw(
@@ -767,7 +768,7 @@ describe('cloned voice tools run through the MCP server', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it('create_cloned_voice rejects neither audioUrl nor audioPath', async () => {
+  it('voices create_clone rejects neither audioUrl nor audioPath', async () => {
     const request = vi.fn();
     const result = await callToolRaw({ language: 'en', consent: true, denoise: true }, request);
     expect(result.isError).toBe(true);
@@ -775,7 +776,7 @@ describe('cloned voice tools run through the MCP server', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it('create_cloned_voice uploads a local audioPath without downloading anything', async () => {
+  it('voices create_clone uploads a local audioPath without downloading anything', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'clone-tool-'));
     try {
       const path = join(dir, 'voice.m4a');
@@ -783,8 +784,8 @@ describe('cloned voice tools run through the MCP server', () => {
       const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-3' } });
       global.fetch = vi.fn();
       const result = await callTool(
-        'create_cloned_voice',
-        { audioPath: path, language: 'en', consent: true, denoise: false },
+      'voices',
+      { action: 'create_clone', audioPath: path, language: 'en', consent: true, denoise: false },
         request,
       );
       expect(firstText(result as { content?: unknown })).toContain('Voice clone registration started');
@@ -809,8 +810,8 @@ describe('cloned voice tools run through the MCP server', () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
       const result = await client.callTool({
-        name: 'preview_cloned_voice',
-        arguments: { cloneId: 'clone-1', language: 'pt' },
+        name: 'voices',
+        arguments: { action: 'preview_clone', cloneId: 'clone-1', language: 'pt' },
       });
       expect(result.isError).toBe(true);
       expect(firstText(result as { content?: unknown })).toContain(
@@ -824,7 +825,7 @@ describe('cloned voice tools run through the MCP server', () => {
 
   it('get_cloned_voice calls the client request', async () => {
     const request = vi.fn().mockResolvedValue({ success: true, voice: { id: 'clone-1', status: 'ready' } });
-    await callTool('get_cloned_voice', { cloneId: 'clone-1' }, request);
+    await callTool('voices', { action: 'get_clone', cloneId: 'clone-1' }, request);
     expect(request).toHaveBeenCalledWith(
       '/api/persona/cloned-voices/clone-1',
       expect.objectContaining({ method: 'GET' }),
@@ -834,7 +835,7 @@ describe('cloned voice tools run through the MCP server', () => {
 
   it('delete_cloned_voice calls the client request', async () => {
     const request = vi.fn().mockResolvedValue({ success: true });
-    await callTool('delete_cloned_voice', { cloneId: 'clone-1' }, request);
+    await callTool('voices', { action: 'delete_clone', cloneId: 'clone-1' }, request);
     expect(request).toHaveBeenCalledWith(
       '/api/persona/cloned-voices/clone-1',
       expect.objectContaining({ method: 'DELETE' }),
@@ -844,7 +845,7 @@ describe('cloned voice tools run through the MCP server', () => {
 
   it('preview_cloned_voice fetches the preview audio', async () => {
     global.fetch = vi.fn().mockResolvedValue(audioResponse([0x41, 0x42, 0x43], 'audio/mpeg'));
-    const result = await callTool('preview_cloned_voice', { cloneId: 'clone-1' }, vi.fn());
+    const result = await callTool('voices', { action: 'preview_clone', cloneId: 'clone-1' }, vi.fn());
     expect(firstText(result as { content?: unknown })).toContain('QUJD');
     expect(global.fetch).toHaveBeenCalledWith(
       'https://api.test/api/persona/cloned-voices/clone-1/preview',
@@ -852,11 +853,11 @@ describe('cloned voice tools run through the MCP server', () => {
     );
   });
 
-  it('preview_house_voice fetches the house preview audio', async () => {
+  it('voices preview fetches the house preview audio', async () => {
     global.fetch = vi.fn().mockResolvedValue(audioResponse([0x41, 0x42, 0x43], 'audio/mpeg'));
     const result = await callTool(
-      'preview_house_voice',
-      { voiceId: 'chatterbox:phonon_zoey', text: 'hello there' },
+      'voices',
+      { action: 'preview', voiceId: 'chatterbox:phonon_zoey', text: 'hello there' },
       vi.fn(),
     );
     expect(firstText(result as { content?: unknown })).toContain('QUJD');

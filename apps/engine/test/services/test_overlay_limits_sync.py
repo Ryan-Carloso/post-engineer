@@ -1,7 +1,7 @@
 """The overlay text limits live in the engine validator and the shared TS validator.
 
 Both reject what the other rejects, so a limit changed on one side only would
-make validate_script accept a card the engine refuses (or the reverse). The
+make check_script (action: validate) accept a card the engine refuses (or the reverse). The
 shared TS file is the source the web and MCP copies are generated from.
 """
 

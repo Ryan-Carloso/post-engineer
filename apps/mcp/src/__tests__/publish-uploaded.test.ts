@@ -20,6 +20,7 @@ import { createPostEngineerMcpServer } from '../index.js';
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
   withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
+  withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) =>
     handler(args),
 }));
@@ -375,23 +376,19 @@ describe('signed-upload tools on both transports', () => {
 
   it('exposes the JSON-only publish-by-id flow on http with no path field', async () => {
     const tools = await listTools('http');
-    const names = tools.map((t) => t.name);
-    for (const tool of ['create_video_upload', 'complete_video_upload', 'publish_uploaded_video']) {
-      expect(names).toContain(tool);
-    }
-    const publish = tools.find((t) => t.name === 'publish_uploaded_video');
+    const publish = tools.find((t) => t.name === 'publish_video');
+    expect((publish?.inputSchema.properties as { action: { enum: string[] } }).action.enum).toEqual(['create_upload', 'complete_upload', 'publish_upload']);
     expect(publish?.inputSchema.properties).toHaveProperty('uploadId');
     expect(publish?.inputSchema.properties).not.toHaveProperty('videoPath');
     expect(publish?.inputSchema.properties).not.toHaveProperty('path');
   });
 
-  it('keeps publish_video_direct on stdio alongside the new flow', async () => {
-    const names = (await listTools('stdio')).map((t) => t.name);
-    expect(names).toContain('publish_video_direct');
-    expect(names).toContain('publish_uploaded_video');
+  it('keeps publishing a local file on stdio alongside the signed-upload flow', async () => {
+    const publish = (await listTools('stdio')).find((t) => t.name === 'publish_video');
+    expect((publish?.inputSchema.properties as { action: { enum: string[] } }).action.enum).toEqual(['from_file', 'create_upload', 'complete_upload', 'publish_upload']);
   });
 
-  it('invokes the three signed-upload tools', async () => {
+  it('invokes the three signed-upload actions', async () => {
     const request = vi.fn(async (path: string) => {
       if (path.includes('/complete')) {
         return { uploadId: 'up-1', status: 'ready', contentType: 'video/mp4', sizeBytes: 8 };
@@ -418,11 +415,11 @@ describe('signed-upload tools on both transports', () => {
     const client = new Client({ name: 'test-client', version: '0.0.0' });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
-      const created = await client.callTool({ name: 'create_video_upload', arguments: { contentType: 'video/mp4', sizeBytes: 8 } });
-      const completed = await client.callTool({ name: 'complete_video_upload', arguments: { uploadId: 'up-1' } });
+      const created = await client.callTool({ name: 'publish_video', arguments: { action: 'create_upload', contentType: 'video/mp4', sizeBytes: 8 } });
+      const completed = await client.callTool({ name: 'publish_video', arguments: { action: 'complete_upload', uploadId: 'up-1' } });
       const published = await client.callTool({
-        name: 'publish_uploaded_video',
-        arguments: { provider: 'instagram', uploadId: 'up-1', accountIds: ['ig-1'], caption: 'hi' },
+        name: 'publish_video',
+        arguments: { action: 'publish_upload', provider: 'instagram', uploadId: 'up-1', accountIds: ['ig-1'], caption: 'hi' },
       });
       expect(created.isError).toBeFalsy();
       expect(completed.isError).toBeFalsy();

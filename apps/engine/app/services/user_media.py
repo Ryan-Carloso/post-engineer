@@ -1,6 +1,6 @@
 """Per-segment user media (MCP first, Phase 2): photos shown as panels over the video.
 
-A segment carries a list of photos, each a mediaId (an upload_media temp
+A segment carries a list of photos, each a mediaId (an media (action: upload) temp
 asset, 1 hour TTL) or a direct image URL. The segment's spoken time is
 split equally across them. Each photo is shown as a framed panel over the
 video for its slice (segment_panels): the full
@@ -202,7 +202,7 @@ def _validate_photo(source_path: str, aspect: Optional[VideoAspect] = None) -> O
 
 
 def _download_failure_code(exc: Exception) -> str:
-    """Map a download failure onto a check_media code, truthfully."""
+    """Map a download failure onto a media (action: check) code, truthfully."""
     if isinstance(exc, (requests.exceptions.Timeout, TimeoutError)):
         return "timeout"
     if isinstance(exc, UnsafeUrlError):
@@ -248,7 +248,7 @@ def check_media_detail(
 
     Exactly one of url/media_id. No User-Agent or Referer tricks: a host
     that blocks the SSRF-safe download reports blocked_403 and the agent
-    retries with upload_media bytes fetched on its own machine. Never
+    retries with media (action: upload) bytes fetched on its own machine. Never
     logs the URL. A media id that expired or never existed reports
     "media_expired": in the images modes the skip now fails the task
     (images_do_not_cover_audio names the photo); full lip sync only

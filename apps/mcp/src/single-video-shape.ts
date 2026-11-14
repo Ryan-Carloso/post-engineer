@@ -1,7 +1,7 @@
-// Shapes for the singular MCP-first tools (Phase 1): generate_persona_video
-// and validate_script. Kept in a new module so tools.ts stays under the
-// file-size ratchet; index.ts registers both tools with direct server.tool
-// calls using the handlers in tools-single-video.ts.
+// Shapes for the singular MCP-first tools (Phase 1): generate_video
+// and check_script (action: validate). Kept in a new module so tools.ts stays under the
+// file-size ratchet; intent-video.ts and intent-content.ts register the
+// tools with the handlers in tools-single-video.ts and generate-video.ts.
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { GeneratePersonaVideoOptionsShape } from './schedule-shapes.js';
@@ -30,13 +30,13 @@ export const ScriptSegmentShape = {
     .array(z.object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), overlay: SegmentOverlayShape.optional() }).strict())
     .max(MAX_IMAGES_MODE_MEDIAS)
     .optional()
-    .describe('Photos for this segment, as a list. Each item is exactly one of mediaId (from upload_media) or url (a public image URL). One image per ~3s of speech (about 8 words), e.g. a 60s video needs about 20 images; split them across segments (at most 30). Full lip sync allows at most 6 images in total. Each photo is shown while its share of the segment is spoken: full frame on faceless videos, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional overlay on an item: an info card (title, subtitle, badge), e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
+    .describe('Photos for this segment, as a list. Each item is exactly one of mediaId (from media (action: upload)) or url (a public image URL). One image per ~3s of speech (about 8 words), e.g. a 60s video needs about 20 images; split them across segments (at most 30). Full lip sync allows at most 6 images in total. Each photo is shown while its share of the segment is spoken: full frame on faceless videos, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional overlay on an item: an info card (title, subtitle, badge), e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
 };
 
 /** Paired A/B experiment link (issue #476): one variant of one pair. */
 export const ExperimentLinkShape = z
   .object({
-    experimentId: z.string().uuid().describe('Experiment id from create_experiment / list_experiments.'),
+    experimentId: z.string().uuid().describe('Experiment id from experiments (action: create) / experiments (action: list).'),
     variantId: z.string().regex(EXPERIMENT_VARIANT_ID_PATTERN).describe('Variant slug, e.g. hook-aggressive.'),
     pair: z.number().int().min(1).max(EXPERIMENT_TARGET_PAIRS_MAX).describe('Pair number, 1 to the experiment targetPairs.'),
   })
@@ -75,17 +75,17 @@ export const GeneratePersonaVideoShape = {
     .array(z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble']))
     .min(1, 'Provide at least one provider')
     .describe('Where to publish the video.'),
-  youtubeAccountIds: z.array(z.string().min(1)).optional().describe('YouTube channel IDs (the channelId field from list_social_accounts).'),
-  instagramAccountIds: z.array(z.string().min(1)).optional().describe('Instagram account IDs (the igUserId field from list_social_accounts).'),
-  linkedinAccountIds: z.array(z.string().min(1)).optional().describe('LinkedIn account IDs (the providerAccountId field from list_social_accounts).'),
-  blueskyAccountIds: z.array(z.string().min(1)).optional().describe('Bluesky DIDs (the did field from list_social_accounts).'),
-  threadsAccountIds: z.array(z.string().min(1)).optional().describe('Threads account IDs (the providerAccountId field from list_social_accounts).'),
-  facebookAccountIds: z.array(z.string().min(1)).optional().describe('Facebook Page IDs (the providerAccountId field from list_social_accounts).'),
-  pinterestAccountIds: z.array(z.string().min(1)).optional().describe('Pinterest account IDs (the providerAccountId field from list_social_accounts).'),
-  pinterestBoardId: z.string().min(1).optional().describe('Pinterest only: the board to publish the pin to (the id from list_pinterest_boards). Required when pinterest is selected.'),
-  fanvueAccountIds: z.array(z.string().min(1)).optional().describe('Fanvue account IDs (the providerAccountId field from list_social_accounts).'),
-  threespeakAccountIds: z.array(z.string().min(1)).optional().describe('3Speak Hive usernames (the providerAccountId field from list_social_accounts).'),
-  rumbleAccountIds: z.array(z.string().min(1)).optional().describe('Rumble channel IDs (the providerAccountId field from list_social_accounts).'),
+  youtubeAccountIds: z.array(z.string().min(1)).optional().describe('YouTube channel IDs (the channelId field from accounts (action: list)).'),
+  instagramAccountIds: z.array(z.string().min(1)).optional().describe('Instagram account IDs (the igUserId field from accounts (action: list)).'),
+  linkedinAccountIds: z.array(z.string().min(1)).optional().describe('LinkedIn account IDs (the providerAccountId field from accounts (action: list)).'),
+  blueskyAccountIds: z.array(z.string().min(1)).optional().describe('Bluesky DIDs (the did field from accounts (action: list)).'),
+  threadsAccountIds: z.array(z.string().min(1)).optional().describe('Threads account IDs (the providerAccountId field from accounts (action: list)).'),
+  facebookAccountIds: z.array(z.string().min(1)).optional().describe('Facebook Page IDs (the providerAccountId field from accounts (action: list)).'),
+  pinterestAccountIds: z.array(z.string().min(1)).optional().describe('Pinterest account IDs (the providerAccountId field from accounts (action: list)).'),
+  pinterestBoardId: z.string().min(1).optional().describe('Pinterest only: the board to publish the pin to (the id from accounts (action: list_boards)). Required when pinterest is selected.'),
+  fanvueAccountIds: z.array(z.string().min(1)).optional().describe('Fanvue account IDs (the providerAccountId field from accounts (action: list)).'),
+  threespeakAccountIds: z.array(z.string().min(1)).optional().describe('3Speak Hive usernames (the providerAccountId field from accounts (action: list)).'),
+  rumbleAccountIds: z.array(z.string().min(1)).optional().describe('Rumble channel IDs (the providerAccountId field from accounts (action: list)).'),
   mode: z
     .enum(['scheduled', 'asap'])
     .default('scheduled')
@@ -105,15 +105,15 @@ export const GeneratePersonaVideoShape = {
   timezone: z.string().min(1).default('UTC').describe('IANA timezone for a naive startAt and the HH:MM times, e.g. "Europe/Lisbon". Defaults to UTC.'),
   options: z.object(GeneratePersonaVideoOptionsShape).optional().describe('Generation options applied to this video.'),
   idempotencyKey: z.string().min(1).optional().describe('Idempotency key: retrying the call with the same key returns the original schedule (replayed: true) instead of generating again.'),
-  experiment: ExperimentLinkShape.optional().describe('Join a paired A/B experiment (create_experiment): this video is one variant of one pair. The server rejects it when the pair partner differs in: the same providers and accounts, the same title, voice (id and audio URL), video type, video aspect and layout, paragraph number, face quality, language, niche and CTA text, and identical content segments, with a different hook. The pinned options.imageId is not stored, so it is not compared: pass the same imageId (or none) to both videos yourself. Prefer add_experiment_pair, which creates both videos of a pair.'),
+  experiment: ExperimentLinkShape.optional().describe('Join a paired A/B experiment (experiments (action: create)): this video is one variant of one pair. The server rejects it when the pair partner differs in: the same providers and accounts, the same title, voice (id and audio URL), video type, video aspect and layout, paragraph number, face quality, language, niche and CTA text, and identical content segments, with a different hook. The pinned options.imageId is not stored, so it is not compared: pass the same imageId (or none) to both videos yourself. Prefer experiments (action: add_pair), which creates both videos of a pair.'),
   // Telemetry-only: the recipe the script came from. Never forwarded in the
   // request body (handleGeneratePersonaVideo builds it field by field);
   // recipe-session.ts sends it as the X-MCP-Recipe header.
   recipe: z
     .string()
-    .regex(RECIPE_SLUG_PATTERN, 'recipe must be a recipe slug from list_prompts (lowercase letters, digits and hyphens)')
+    .regex(RECIPE_SLUG_PATTERN, 'recipe must be a recipe slug from prompts (action: list) (lowercase letters, digits and hyphens)')
     .optional()
-    .describe('The recipe slug (from list_prompts / get_prompt) this script was written with. Omit when the script was not written from a recipe.'),
+    .describe('The recipe slug (from prompts (action: list) / prompts (action: get)) this script was written with. Omit when the script was not written from a recipe.'),
 };
 
 export const GeneratePersonaVideoSchema = z.object(GeneratePersonaVideoShape).superRefine((value, ctx) => {

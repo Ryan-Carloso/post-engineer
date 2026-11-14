@@ -195,7 +195,7 @@ describe('checkExperimentLink', () => {
     const failedSlot = { data: [{ ...PARTNER_SLOT, variant_id: 'hook-aggressive', status: 'failed' }], error: null };
     const failed = await run({ experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: failedSlot }).promise;
     expect(failed).toMatchObject({ ok: false, status: 409, field: 'experiment.variantId', message: expect.stringContaining('failed') });
-    expect(failed).toMatchObject({ message: expect.stringContaining('delete_slot') });
+    expect(failed).toMatchObject({ message: expect.stringContaining('schedules (action: delete_slot)') });
     const generating = { data: [{ ...PARTNER_SLOT, variant_id: 'hook-aggressive', status: 'generating' }], error: null };
     await expect(run({ experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: generating }).promise).resolves.toMatchObject({
       ok: false, status: 409, message: 'This pair already has a video for this variant.',

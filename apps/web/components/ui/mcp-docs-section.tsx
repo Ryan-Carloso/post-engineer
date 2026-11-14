@@ -9,7 +9,6 @@ import { whatsappUrl } from '@/lib/whatsapp';
 import { Button } from '@/components/ui/button';
 import {
   AccountsIcon,
-  AlertIcon,
   CalendarIcon,
   CheckIcon,
   CoinsIcon,
@@ -29,67 +28,31 @@ import {
 
 interface McpToolCard {
   id: string;
+  /** The actions of an action tool, shown under its name; none for generate_video and cancel_video. */
+  actions: readonly string[];
   descKey: TranslationKey;
   Icon: ComponentType;
 }
 
+// The 16 intent tools of the MCP server (issue #566). apps/mcp/src registers
+// them; the docs-sync test there checks that every one is named here.
 const MCP_TOOL_CARDS: McpToolCard[] = [
-  { id: 'list_personas', descKey: 'apiKeys.toolDescListPersonas', Icon: AccountsIcon },
-  { id: 'list_voices', descKey: 'apiKeys.toolDescListVoices', Icon: MicIcon },
-  { id: 'list_cloned_voices', descKey: 'apiKeys.toolDescListClonedVoices', Icon: MicIcon },
-  { id: 'create_cloned_voice', descKey: 'apiKeys.toolDescCreateClonedVoice', Icon: UploadIcon },
-  { id: 'get_cloned_voice', descKey: 'apiKeys.toolDescGetClonedVoice', Icon: MicIcon },
-  { id: 'delete_cloned_voice', descKey: 'apiKeys.toolDescDeleteClonedVoice', Icon: TrashIcon },
-  { id: 'preview_cloned_voice', descKey: 'apiKeys.toolDescPreviewClonedVoice', Icon: MicIcon },
-  { id: 'preview_house_voice', descKey: 'apiKeys.toolDescPreviewHouseVoice', Icon: MicIcon },
-  { id: 'list_faces', descKey: 'apiKeys.toolDescListFaces', Icon: ImageIcon },
-  { id: 'create_persona', descKey: 'apiKeys.toolDescCreatePersona', Icon: SparklesIcon },
-  { id: 'update_persona', descKey: 'apiKeys.toolDescUpdatePersona', Icon: ComposeIcon },
-  { id: 'list_persona_images', descKey: 'apiKeys.toolDescListPersonaImages', Icon: ImageIcon },
-  { id: 'add_persona_image', descKey: 'apiKeys.toolDescAddPersonaImage', Icon: UploadIcon },
-  { id: 'update_persona_image', descKey: 'apiKeys.toolDescUpdatePersonaImage', Icon: ComposeIcon },
-  { id: 'remove_persona_image', descKey: 'apiKeys.toolDescRemovePersonaImage', Icon: TrashIcon },
-  { id: 'publish_video_direct', descKey: 'apiKeys.toolDescPublishVideoDirect', Icon: UploadIcon },
-  { id: 'create_video_upload', descKey: 'apiKeys.toolDescCreateVideoUpload', Icon: UploadIcon },
-  { id: 'complete_video_upload', descKey: 'apiKeys.toolDescCompleteVideoUpload', Icon: CheckIcon },
-  { id: 'publish_uploaded_video', descKey: 'apiKeys.toolDescPublishUploadedVideo', Icon: UploadIcon },
-  { id: 'get_token_balance', descKey: 'apiKeys.toolDescGetTokenBalance', Icon: CoinsIcon },
-  { id: 'generate_persona_video', descKey: 'apiKeys.toolDescGeneratePersonaVideo', Icon: FilmIcon },
-  { id: 'generate_persona_video_batch', descKey: 'apiKeys.toolDescGeneratePersonaVideoBatch', Icon: FilmIcon },
-  { id: 'validate_script', descKey: 'apiKeys.toolDescValidateScript', Icon: CheckIcon },
-  { id: 'score_draft', descKey: 'apiKeys.toolDescScoreDraft', Icon: CheckIcon },
-  { id: 'upload_media', descKey: 'apiKeys.toolDescUploadMedia', Icon: UploadIcon },
-  { id: 'check_media', descKey: 'apiKeys.toolDescCheckMedia', Icon: CheckIcon },
-  { id: 'list_prompts', descKey: 'apiKeys.toolDescListPrompts', Icon: GlobeIcon },
-  { id: 'get_prompt', descKey: 'apiKeys.toolDescGetPrompt', Icon: ComposeIcon },
-  { id: 'get_video_status', descKey: 'apiKeys.toolDescGetVideoStatus', Icon: CheckIcon },
-  { id: 'get_video_task_progress', descKey: 'apiKeys.toolDescGetVideoTaskProgress', Icon: SpinnerIcon },
-  { id: 'wait_for_video_tasks', descKey: 'apiKeys.toolDescWaitForVideoTasks', Icon: SpinnerIcon },
-  { id: 'list_social_accounts', descKey: 'apiKeys.toolDescListSocialAccounts', Icon: GlobeIcon },
-  { id: 'list_pinterest_boards', descKey: 'apiKeys.toolDescListPinterestBoards', Icon: GlobeIcon },
-  { id: 'get_persona_publishing_accounts', descKey: 'apiKeys.toolDescGetPersonaPublishingAccounts', Icon: GlobeIcon },
-  { id: 'set_persona_publishing_accounts', descKey: 'apiKeys.toolDescSetPersonaPublishingAccounts', Icon: ComposeIcon },
-  { id: 'connect_account', descKey: 'apiKeys.toolDescConnectAccount', Icon: KeyIcon },
-  { id: 'list_schedules', descKey: 'apiKeys.toolDescListSchedules', Icon: HistoryIcon },
-  { id: 'list_posts', descKey: 'apiKeys.toolDescListPosts', Icon: CalendarIcon },
-  { id: 'cancel_schedule', descKey: 'apiKeys.toolDescCancelSchedule', Icon: TrashIcon },
-  { id: 'get_slot', descKey: 'apiKeys.toolDescGetSlot', Icon: ExternalLinkIcon },
-  { id: 'update_slot_title', descKey: 'apiKeys.toolDescUpdateSlotTitle', Icon: ComposeIcon },
-  { id: 'delete_slot', descKey: 'apiKeys.toolDescDeleteSlot', Icon: TrashIcon },
-  { id: 'list_video_generations', descKey: 'apiKeys.toolDescListVideoGenerations', Icon: HistoryIcon },
-  { id: 'get_video_generation', descKey: 'apiKeys.toolDescGetVideoGeneration', Icon: FilmIcon },
-  { id: 'get_post', descKey: 'apiKeys.toolDescGetPost', Icon: ExternalLinkIcon },
-  { id: 'get_post_metrics', descKey: 'apiKeys.toolDescGetPostMetrics', Icon: HistoryIcon },
-  { id: 'get_youtube_retention_curve', descKey: 'apiKeys.toolDescGetYouTubeRetentionCurve', Icon: HistoryIcon },
-  { id: 'create_experiment', descKey: 'apiKeys.toolDescCreateExperiment', Icon: SparklesIcon },
-  { id: 'list_experiments', descKey: 'apiKeys.toolDescListExperiments', Icon: HistoryIcon },
-  { id: 'add_experiment_pair', descKey: 'apiKeys.toolDescAddExperimentPair', Icon: FilmIcon },
-  { id: 'get_experiment_results', descKey: 'apiKeys.toolDescGetExperimentResults', Icon: CheckIcon },
-  { id: 'cancel_video_task', descKey: 'apiKeys.toolDescCancelVideoTask', Icon: TrashIcon },
-  { id: 'list_token_transactions', descKey: 'apiKeys.toolDescListTokenTransactions', Icon: CoinsIcon },
-  { id: 'get_persona_delete_preview', descKey: 'apiKeys.toolDescGetPersonaDeletePreview', Icon: AlertIcon },
-  { id: 'delete_persona', descKey: 'apiKeys.toolDescDeletePersona', Icon: TrashIcon },
-  { id: 'disconnect_account', descKey: 'apiKeys.toolDescDisconnectAccount', Icon: KeyIcon },
+  { id: 'generate_video', actions: [], descKey: 'apiKeys.toolDescGenerateVideo', Icon: FilmIcon },
+  { id: 'video_tasks', actions: ['status', 'list_generations', 'get_generation'], descKey: 'apiKeys.toolDescVideoTasks', Icon: SpinnerIcon },
+  { id: 'cancel_video', actions: [], descKey: 'apiKeys.toolDescCancelVideo', Icon: TrashIcon },
+  { id: 'personas', actions: ['list', 'get', 'create', 'update', 'delete'], descKey: 'apiKeys.toolDescPersonas', Icon: SparklesIcon },
+  { id: 'persona_media', actions: ['list_faces', 'list_images', 'add_image', 'update_image', 'remove_image'], descKey: 'apiKeys.toolDescPersonaMedia', Icon: ImageIcon },
+  { id: 'voices', actions: ['list', 'preview', 'list_clones', 'create_clone', 'get_clone', 'preview_clone', 'delete_clone'], descKey: 'apiKeys.toolDescVoices', Icon: MicIcon },
+  { id: 'accounts', actions: ['list', 'connect', 'disconnect', 'get_persona_publishing', 'set_persona_publishing', 'list_boards'], descKey: 'apiKeys.toolDescAccounts', Icon: AccountsIcon },
+  { id: 'schedules', actions: ['list', 'cancel', 'get_slot', 'update_slot_title', 'delete_slot'], descKey: 'apiKeys.toolDescSchedules', Icon: CalendarIcon },
+  { id: 'posts', actions: ['list', 'get'], descKey: 'apiKeys.toolDescPosts', Icon: ExternalLinkIcon },
+  { id: 'insights', actions: ['post_metrics', 'retention_curve'], descKey: 'apiKeys.toolDescInsights', Icon: HistoryIcon },
+  { id: 'experiments', actions: ['create', 'add_pair', 'list', 'results'], descKey: 'apiKeys.toolDescExperiments', Icon: ComposeIcon },
+  { id: 'media', actions: ['upload', 'check'], descKey: 'apiKeys.toolDescMedia', Icon: UploadIcon },
+  { id: 'billing', actions: ['balance', 'transactions'], descKey: 'apiKeys.toolDescBilling', Icon: CoinsIcon },
+  { id: 'prompts', actions: ['list', 'get'], descKey: 'apiKeys.toolDescPrompts', Icon: GlobeIcon },
+  { id: 'check_script', actions: ['validate', 'score'], descKey: 'apiKeys.toolDescCheckScript', Icon: CheckIcon },
+  { id: 'publish_video', actions: ['from_file', 'create_upload', 'complete_upload', 'publish_upload'], descKey: 'apiKeys.toolDescPublishVideo', Icon: KeyIcon },
 ];
 
 //---------------
@@ -158,7 +121,10 @@ export default function McpDocsSection({ apiKey }: { apiKey: string | null }): R
                 </span>
                 <div className="min-w-0">
                   <p className="truncate font-mono text-xs font-bold text-ink">{tool.id}</p>
-                  <p className="mt-0.5 truncate text-xs text-muted-text">{t(tool.descKey)}</p>
+                  <p className="mt-0.5 text-xs text-muted-text">{t(tool.descKey)}</p>
+                  {tool.actions.length > 0 ? (
+                    <p className="mt-1 font-mono text-[11px] leading-4 text-muted-text/80">{tool.actions.join(' · ')}</p>
+                  ) : null}
                 </div>
               </div>
             ))}

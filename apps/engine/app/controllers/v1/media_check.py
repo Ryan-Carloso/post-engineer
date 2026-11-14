@@ -1,6 +1,6 @@
 """POST /api/v1/media/check — mechanical check of one image URL or media id.
 
-The MCP check_media tool's engine side: the web route authenticates the
+The MCP media (action: check) tool's engine side: the web route authenticates the
 user, then calls here with the server secret, and this endpoint runs
 the SSRF-safe download and the mechanical checks in user_media
 (download refusal, real image type, size bounds) and
@@ -46,7 +46,7 @@ class MediaCheckRequest(BaseModel):
 
 @router.post(
     "/media/check",
-    summary="Mechanically check one image URL or media id (MCP check_media)",
+    summary="Mechanically check one image URL or media id (MCP media check)",
 )
 def check_media(request: Request, body: MediaCheckRequest):
     base.get_auth_context(request)

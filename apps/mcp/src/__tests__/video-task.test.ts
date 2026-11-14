@@ -16,6 +16,7 @@ vi.mock('../analytics.js', () => ({
   // per-call context: mcp_tool_called is recorded by the web API from the
   // request headers, not by the MCP (see analytics.test.ts).
   withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
+  withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
@@ -73,7 +74,7 @@ describe('handleCancelVideoTask', () => {
   });
 });
 
-describe('registered cancel_video_task tool', () => {
+describe('registered cancel_video tool', () => {
   async function callTool(name: string, args: Record<string, unknown>, request: ReturnType<typeof vi.fn>) {
     const server = createPostEngineerMcpServer(fakeClient(request));
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -88,7 +89,7 @@ describe('registered cancel_video_task tool', () => {
 
   it('calls DELETE /api/persona/video-task/[taskId] through the server', async () => {
     const request = vi.fn().mockResolvedValue({ status: 'deleted' });
-    const result = await callTool('cancel_video_task', { taskId: 'task-1' }, request);
+    const result = await callTool('cancel_video', { taskId: 'task-1' }, request);
     expect(result.isError).toBeFalsy();
     expect(request).toHaveBeenCalledWith(
       '/api/persona/video-task/task-1',

@@ -120,7 +120,7 @@ describe('requireSupabaseSession', () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue(mockServerClient as unknown as SupabaseClient);
 
     const request = new Request('http://localhost:3434/api/persona/list', {
-      headers: { 'x-mcp-tool': 'list_personas' },
+      headers: { 'x-mcp-tool': 'personas' },
     });
     const result = await requireSupabaseSession(request);
     expect(result.auth?.userId).toBe('user-cookie-456');

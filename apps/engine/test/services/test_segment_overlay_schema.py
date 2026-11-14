@@ -47,7 +47,7 @@ def test_overlay_rejects_what_the_validator_rejects(overlay):
 
 
 def test_overlay_text_is_measured_after_trimming_like_the_validators():
-    # validate_script and the TS validators measure the trimmed string, so a
+    # check_script (action: validate) and the TS validators measure the trimmed string, so a
     # title that only exceeds the limit by its padding must be accepted here.
     overlay = SegmentOverlay(
         title="x" * script_segments.MAX_OVERLAY_TITLE_CHARS + "  ", badge=" EUR 35 "

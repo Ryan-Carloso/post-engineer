@@ -10,7 +10,7 @@
 // exception in normalize() below (Python casefold vs JS toLowerCase).
 // No LLM, no network, no TTS: the hook word guard runs here; measured TTS
 // duration is checked by the engine when a hook-only TTS endpoint exists
-// (Phase 1 gap, see validate_script).
+// (Phase 1 gap, see check_script (action: validate)).
 
 export const MAX_SEGMENTS = 12;
 // Full lip sync renders the persona's face over the whole video, so media

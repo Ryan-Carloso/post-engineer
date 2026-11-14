@@ -230,7 +230,7 @@ export async function checkExperimentLink(
     return failure(
       409,
       same.status === 'failed'
-        ? 'The earlier video of this pair for this variant failed and its failed slot still holds the pair. Delete that slot with delete_slot if its schedule has other slots; a single-video schedule cannot be deleted that way, so use the next free pair number instead.'
+        ? 'The earlier video of this pair for this variant failed and its failed slot still holds the pair. Delete that slot with schedules (action: delete_slot) if its schedule has other slots; a single-video schedule cannot be deleted that way, so use the next free pair number instead.'
         : 'This pair already has a video for this variant.',
       'experiment.variantId',
     );

@@ -1,13 +1,13 @@
-// Singular MCP-first tools: generate_persona_video and validate_script.
+// Singular MCP-first tools: generate_video and check_script (action: validate).
 // One call is one video, with a title and a complete segments script.
-// generate_persona_video_batch (tools-batch.ts) creates several videos by
+// generate_video (tools-batch.ts) creates several videos by
 // running generatePersonaVideoOutcome once per video.
 // Validation runs mechanically before the client call, so a rejected script
-// never reaches the web route and never debits tokens. validate_script
+// never reaches the web route and never debits tokens. check_script (action: validate)
 // then calls POST /api/videos/validate-script, which re-runs the same
 // mechanical validation server-side without debiting tokens, scheduling,
 // or calling the engine or Modal. Measured hook duration is a documented
-// Phase 1 gap: no hook-only TTS endpoint exists yet, so validate_script
+// Phase 1 gap: no hook-only TTS endpoint exists yet, so check_script (action: validate)
 // reports the 8-12s window and the hook word count and states that the
 // measured duration is pending that endpoint — it does not invent a
 // duration and does not call Modal.
@@ -147,7 +147,7 @@ export async function generatePersonaVideoOutcome(
     // Pinterest needs exactly one board for the batch (a pin cannot exist
     // without one); the web route 400s without it, so fail fast here.
     if (args.providers.includes('pinterest') && (args.pinterestBoardId === undefined || args.pinterestBoardId.trim() === '')) {
-      throw new Error('pinterestBoardId is required when pinterest is selected (list the boards with list_pinterest_boards).');
+      throw new Error('pinterestBoardId is required when pinterest is selected (list the boards with accounts (action: list_boards)).');
     }
     // Voice resolution is an explicit pre-step after mechanical validation
     // and before the generating call: an unknown voice fails without
@@ -246,23 +246,18 @@ function narrowScheduledVideos(result: unknown): {
   };
 }
 
-// NOTE: validate_script IS registered in index.ts (direct server.tool
-// call, which the parity graph discovers) and maps to POST
-// /api/videos/validate-script, which it really calls through the client
-// after the local mechanical pre-check. generate_persona_video IS
-// registered the same way and maps to POST
-// /api/videos/generate-and-schedule.
-export const ValidateScriptDescription =
-  'Validate a segments script mechanically, without spending tokens: hook first, then content takes in order, exactly one hook, no placeholders/links/markdown/emoji/stage directions, hook terminal punctuation, word limits (total 60-200, content at least 30, hook 15-40 words before TTS). A CTA is just a content take, placed anywhere. Returns the word counts and the hook window (8-12 seconds spoken). Measured hook duration is pending a hook-only TTS endpoint and is reported as pending, never invented.';
-
+// NOTE: check_script (action: validate) is registered by intent-content.ts and
+// maps to POST /api/videos/validate-script, which it really calls through the
+// client after the local mechanical pre-check. generate_video is registered by
+// intent-video.ts and maps to POST /api/videos/generate-and-schedule.
 //---------------
-// score_draft — mechanical draft scoring, no tokens spent.
+// check_script (action: score) — mechanical draft scoring, no tokens spent.
 //
 // The shape mirrors the web route's body (same names, same caps); the
 // handler does no local pre-check beyond the schema because every signal
 // needs the server-side baseline (the caller's own stored post metrics).
 // The route really is called through the client, so the parity graph
-// maps score_draft to POST /api/videos/score-draft.
+// maps check_script (action: score) to POST /api/videos/score-draft.
 //---------------
 const SCORE_DRAFT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -285,9 +280,6 @@ export const ScoreDraftShape = {
 };
 
 export const ScoreDraftSchema = z.object(ScoreDraftShape);
-
-export const ScoreDraftDescription =
-  'Score a draft mechanically against the caller\'s own measured posts, without spending tokens. Returns a 0-100 score where every point is explained (hook, length, hashtags, slop markers, links, top-theme match, call to action), the baseline it was scored against (top angles by engagement), and the publish check for the requested network (linkedin, youtube, instagram, bluesky, threads, facebook, pinterest, 3speak, rumble): it fails only on an empty draft or the network\'s own ceiling where this repo has evidence for it (LinkedIn 3000 characters, Threads 500 characters, Facebook 63206 characters, Pinterest 800 characters, Bluesky 300 graphemes); the rest are warnings. A failing publish check means: fix the draft before scheduling it for that network. Pass kind \'script\' for a video script (segments joined by newlines, hook first, then content takes): hashtags are not scored and publishCheck is null.';
 
 export async function handleScoreDraft(
   client: PostEngineerClient,

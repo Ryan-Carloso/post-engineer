@@ -19,6 +19,7 @@ vi.mock('../analytics.js', () => ({
   // per-call context: mcp_tool_called is recorded by the web API from the
   // request headers, not by the MCP (see analytics.test.ts).
   withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
+  withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
@@ -170,7 +171,7 @@ describe('get_youtube_retention_curve', () => {
   });
 });
 
-describe('registered get_post / get_post_metrics tools', () => {
+describe('registered posts and insights tools', () => {
   async function callTool(name: string, args: Record<string, unknown>, request: ReturnType<typeof vi.fn>) {
     const server = createPostEngineerMcpServer(fakeClient(request));
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -185,14 +186,14 @@ describe('registered get_post / get_post_metrics tools', () => {
 
   it('get_post calls GET /api/posts/[id] through the server', async () => {
     const request = vi.fn().mockResolvedValue({ success: true, kind: 'slot' });
-    const result = await callTool('get_post', { id: 'slot-1' }, request);
-    expect(result.isError).toBeFalsy();
+    const result = await callTool('posts', { action: 'get', id: 'slot-1' }, request);
+    expect(result.isError, JSON.stringify(result.content)).toBeFalsy();
     expect(request).toHaveBeenCalledWith('/api/posts/slot-1', { method: 'GET', headers: HEADERS }, 'get post');
   });
 
   it('get_post_metrics calls GET /api/metrics through the server', async () => {
     const request = vi.fn().mockResolvedValue({ success: true, rows: [], truncated: false });
-    const result = await callTool('get_post_metrics', { window: '7d', provider: 'linkedin' }, request);
+    const result = await callTool('insights', { action: 'post_metrics', window: '7d', provider: 'linkedin' }, request);
     expect(result.isError).toBeFalsy();
     expect(request).toHaveBeenCalledWith(
       '/api/metrics?window=7d&provider=linkedin',
@@ -203,7 +204,7 @@ describe('registered get_post / get_post_metrics tools', () => {
 
   it('get_youtube_retention_curve calls GET /api/metrics/retention-curve through the server', async () => {
     const request = vi.fn().mockResolvedValue({ success: true, points: [] });
-    const result = await callTool('get_youtube_retention_curve', { account: 'UC own', video: 'vid_1' }, request);
+    const result = await callTool('insights', { action: 'retention_curve', account: 'UC own', video: 'vid_1' }, request);
     expect(result.isError).toBeFalsy();
     expect(request).toHaveBeenCalledWith(
       '/api/metrics/retention-curve?account=UC+own&video=vid_1',
@@ -214,7 +215,7 @@ describe('registered get_post / get_post_metrics tools', () => {
 
   it('get_youtube_retention_curve rejects a malformed video id before any request', async () => {
     const request = vi.fn();
-    const result = await callTool('get_youtube_retention_curve', { account: 'UC1', video: 'a;b' }, request);
+    const result = await callTool('insights', { action: 'retention_curve', account: 'UC1', video: 'a;b' }, request);
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain('video must be a YouTube video id');
     expect(request).not.toHaveBeenCalled();
@@ -222,7 +223,7 @@ describe('registered get_post / get_post_metrics tools', () => {
 
   it('get_post_metrics rejects a bad persona before any request', async () => {
     const request = vi.fn();
-    const result = await callTool('get_post_metrics', { window: '7d', persona: 'nope' }, request);
+    const result = await callTool('insights', { action: 'post_metrics', window: '7d', persona: 'nope' }, request);
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain('persona must be a uuid or ^@none');
     expect(request).not.toHaveBeenCalled();

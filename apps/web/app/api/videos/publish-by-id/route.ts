@@ -1,6 +1,6 @@
 //---------------
 // POST /api/videos/publish-by-id — publish a signed-upload video by id
-// (issue #561). The remote replacement for publish_video_direct: instead
+// (issue #561). The remote replacement for publish_video (action: from_file): instead
 // of a local videoPath, the caller names the uploadId from the
 // signed-upload flow (mint -> PUT bytes -> complete). The server checks
 // ownership, verifies the stored bytes again, and consumes the upload

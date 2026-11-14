@@ -25,7 +25,7 @@ import { fetchProviderCounters } from '@/lib/metrics/provider-counters';
 // per experiment + window; a failed provider read keeps the snapshot
 // fact and is reported in liveFailures. Live mode only covers the 24h
 // and 7d windows — the 28d window is snapshot-only. Without ?live=1 the
-// response is byte-identical to before, so the MCP get_experiment_results
+// response is byte-identical to before, so the MCP experiments (action: results)
 // tool (snapshot mode) is unchanged.
 //
 // Service role bypasses RLS: every read filters by the caller's user id; an

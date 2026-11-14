@@ -91,7 +91,7 @@ direct import breaks mutation testing (verified: Stryker fails with
 "No tests were executed" on a directly imported shared file). The
 symlink is dereferenced by `tsc`, webpack, vitest, and Stryker.
 
-The MCP has no copy: `list_prompts`, `get_prompt` and the slash commands
+The MCP has no copy: `prompts (action: list)`, `prompts (action: get)` and the slash commands
 fetch the recipes from the web API (`GET /api/prompts`,
 `GET /api/prompts/[slug]`), so a recipe edit reaches every MCP install
 without a package release.

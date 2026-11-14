@@ -16,7 +16,7 @@ const POST_ROUTE = 'POST /api/persona/cloned-voices/denoise-preview';
 // runs an ffmpeg pass on the engine.
 //
 // Session-only: a UI-only A/B listen (agents pass `denoise` to
-// create_cloned_voice instead). requireSupabaseSession() is called without
+// voices (action: create_clone) instead). requireSupabaseSession() is called without
 // the request, so API-key and OAuth bearer headers are never resolved and
 // only the browser's cookie session authenticates.
 //---------------

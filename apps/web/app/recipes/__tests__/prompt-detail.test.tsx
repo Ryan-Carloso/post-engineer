@@ -155,8 +155,8 @@ describe('prompt detail page', () => {
     fireEvent.click(copyButton);
     expect(writeText).toHaveBeenCalledOnce();
     const copied = writeText.mock.calls[0][0] as string;
-    expect(copied).toContain('validate_script');
-    expect(copied).toContain('generate_persona_video');
+    expect(copied).toContain('check_script (action: validate)');
+    expect(copied).toContain('generate_video');
     expect(
       screen.getByText(/Paste it into your agent/),
     ).toBeInTheDocument();
@@ -257,10 +257,10 @@ describe('place-spotlight detail page', () => {
       'Ask me which place',
       'Search the place once',
       'image search',
-      'check_media',
+      'media (action: check)',
       'media overlay',
-      'validate_script',
-      'generate_persona_video',
+      'check_script (action: validate)',
+      'generate_video',
     ]) {
       expect(screen.getByText(new RegExp(marker.replace(/[.[\\(\\)|*+?^$]/g, '\\$&')))).toBeInTheDocument();
     }
@@ -301,10 +301,10 @@ describe('subject-spotlight detail page', () => {
       'Ask me what the subject is',
       'Pin the identity first',
       'image search',
-      'check_media',
+      'media (action: check)',
       'media overlay',
-      'validate_script',
-      'generate_persona_video',
+      'check_script (action: validate)',
+      'generate_video',
     ]) {
       expect(screen.getByText(new RegExp(marker.replace(/[.[\\(\\)|*+?^$]/g, '\\$&')))).toBeInTheDocument();
     }
@@ -342,12 +342,12 @@ describe('full-setup detail page', () => {
   it('shows the full prompt with the ordered setup flow', () => {
     render(<PromptDetail prompt={prompt} />);
     for (const marker of [
-      'list_social_accounts',
+      'accounts (action: list)',
       'never repeat, print, or log it',
-      'create_persona',
-      'get_token_balance',
+      'personas (action: create)',
+      'billing (action: balance)',
       'confirm the providers/accounts and the mode (scheduled|asap)',
-      'generate_persona_video',
+      'generate_video',
     ]) {
       expect(screen.getByText(new RegExp(marker.replace(/[.[\\(\\)|*+?^$]/g, '\\$&')))).toBeInTheDocument();
     }

@@ -7,7 +7,7 @@ import { logger } from '@/lib/logger';
 
 //---------------
 // GET /api/schedule/status — upcoming slots + recent results of the
-// user's schedules (for the home schedule card and the MCP list_posts tool).
+// user's schedules (for the home schedule card and the MCP posts (action: list) tool).
 // Optional ?limit= (default 10, max 500) — the posts page raises it
 // to render the full history.
 // Optional ?from=&to= (ISO-8601, both required, mutually exclusive with
@@ -215,7 +215,7 @@ async function getHandler(request?: Request): Promise<NextResponse> {
 
   // task_id is included on BOTH selects so callers can poll per-video
   // progress: the engine sets it on the slot when generation dispatches,
-  // and the MCP get_video_task_progress tool reads the engine task by
+  // and the MCP video_tasks (action: status) tool reads the engine task by
   // that id. The recent select needs it too — failed slots report their
   // last known engine progress.
   let upcomingQuery = supabase

@@ -107,6 +107,11 @@ async function readSseJson(response: Response): Promise<Record<string, unknown>>
   return JSON.parse(last.slice('data: '.length)) as Record<string, unknown>;
 }
 
+function toolActions(result: Record<string, unknown>, name: string): string[] {
+  const tools = (result as { tools?: Array<{ name?: unknown; inputSchema?: { properties?: { action?: { enum?: string[] } } } }> }).tools ?? [];
+  return tools.find((tool) => tool.name === name)?.inputSchema?.properties?.action?.enum ?? [];
+}
+
 function toolNames(result: Record<string, unknown>): string[] {
   const tools = (result as { tools?: Array<{ name?: unknown }> }).tools ?? [];
   return tools.map((tool) => String(tool.name)).sort();
@@ -217,13 +222,16 @@ describe('POST /mcp', () => {
     expect(list.status).toBe(200);
     const listResult = (await readSseJson(list)) as { result?: Record<string, unknown> };
     const names = toolNames(listResult.result ?? {});
-    expect(names).toContain('list_personas');
-    expect(names).toContain('validate_script');
-    expect(names).toContain('publish_uploaded_video');
+    // The 16 intent tools (issue #566): the same tools as stdio, minus the actions below.
+    expect(names).toHaveLength(16);
+    expect(names).toContain('personas');
+    expect(names).toContain('check_script');
+    expect(names).toContain('publish_video');
+    expect(toolActions(listResult.result ?? {}, 'publish_video')).toEqual(['create_upload', 'complete_upload', 'publish_upload']);
     // #451: the hosted server must never read a path on its host.
-    expect(names).not.toContain('upload_media');
-    expect(names).not.toContain('add_persona_image');
-    expect(names).not.toContain('publish_video_direct');
+    expect(toolActions(listResult.result ?? {}, 'media')).not.toContain('upload');
+    expect(toolActions(listResult.result ?? {}, 'persona_media')).not.toContain('add_image');
+    expect(toolActions(listResult.result ?? {}, 'publish_video')).not.toContain('from_file');
   });
 
   it('rate-limits one subject at 120 requests per minute', async () => {
