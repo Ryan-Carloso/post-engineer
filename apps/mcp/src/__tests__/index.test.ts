@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { createPostEngineerMcpServer, isMainModule, requireApiKey } from '../index.js';
+import { createPostEngineerMcpServer, isMainModule } from '../index.js';
 import type { PostEngineerClient } from '../client.js';
 
 vi.mock('../analytics.js', async (importOriginal) => {
@@ -161,16 +161,6 @@ describe('server version', () => {
     } finally {
       await client.close();
     }
-  });
-});
-
-describe('requireApiKey', () => {
-  it('throws when POST_ENGINEER_API_KEY is missing', () => {
-    expect(() => requireApiKey({})).toThrow('POST_ENGINEER_API_KEY is required');
-  });
-
-  it('returns the key when set', () => {
-    expect(requireApiKey({ POST_ENGINEER_API_KEY: 'k' })).toBe('k');
   });
 });
 

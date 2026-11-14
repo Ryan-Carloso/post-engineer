@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { PostEngineerClient } from './client.js';
+import { requireApiKey } from './require-api-key.js';
 import { registerAccountTools } from './intent-accounts.js';
 import { registerContentTools } from './intent-content.js';
 import { registerLibraryTools } from './intent-library.js';
@@ -19,13 +20,12 @@ import { registerRemotePrompts } from './prompts.js';
 // package.json flows through without touching this file.
 const { default: pkg } = await import('../package.json', { with: { type: 'json' } });
 
-export function requireApiKey(env: NodeJS.ProcessEnv = process.env): string {
-  const apiKey = env.POST_ENGINEER_API_KEY;
-  if (!apiKey) {
-    throw new Error('POST_ENGINEER_API_KEY is required');
-  }
-  return apiKey;
-}
+// The web's hosted /mcp route (issue #561) builds the remote server from
+// this package: the Web Standard request handler plus the client it feeds
+// the verified bearer to. Re-exported here so the package entry stays the
+// single public surface.
+export { PostEngineerClient };
+export { handleMcpWebRequest } from './http-web.js';
 
 //---------------
 // The tools are intent tools (issue #566), not one tool per endpoint: 16

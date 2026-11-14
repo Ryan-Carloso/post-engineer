@@ -121,6 +121,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The web app imports the MCP package (workspace:*) for the hosted
+      # /mcp route (issue #561): Stryker runs vitest/tsc directly (no
+      # prebuild), and they resolve it through apps/mcp/dist — build it
+      # first. Harmless for the mcp matrix app (its own dist).
+      - name: Build MCP package
+        run: pnpm --filter post-engineer-mcp build
+
       # Changed source files for this app, relative to the app dir
       # (Stryker resolves --mutate against its working directory).
       # Excludes tests, generated *.gen.ts files (drift-tested, often

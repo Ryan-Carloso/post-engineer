@@ -146,6 +146,9 @@ importers:
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      post-engineer-mcp:
+        specifier: workspace:*
+        version: link:../mcp
       posthog-js:
         specifier: ^1.447.15
         version: 1.447.15(@types/react@19.2.18)(react@19.3.1)
