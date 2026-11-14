@@ -199,7 +199,7 @@ describe('publish_existing client call', () => {
   });
 
   it('rejects a malformed body instead of reporting success', async () => {
-    const request = vi.fn(async () => ({ success: true }));
+    const request = vi.fn(async (): Promise<unknown> => ({ success: true }));
     await expect(publishExisting(fakeClient(request), SCHEDULED_TASK)).rejects.toThrow(/Malformed publish-existing/);
     request.mockResolvedValueOnce({ success: true, mode: 'scheduled', schedule: { id: 'sched-1' }, slots: [{ id: 'slot-1' }] });
     await expect(publishExisting(fakeClient(request), SCHEDULED_TASK)).rejects.toThrow(/Malformed publish-existing/);
@@ -298,7 +298,7 @@ describe('publish_existing tool on both transports', () => {
     try {
       const called = await client.callTool({ name: 'publish_video', arguments: { action: 'publish_existing', ...SCHEDULED_TASK } });
       expect(called.isError).toBeFalsy();
-      expect(request.mock.calls[0]?.[0]).toBe('/api/media/publish-existing');
+      expect((request.mock.calls[0] as unknown as [string])[0]).toBe('/api/media/publish-existing');
     } finally {
       await client.close();
     }
