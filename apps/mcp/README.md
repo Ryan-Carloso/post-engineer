@@ -160,6 +160,20 @@ export POST_ENGINEER_API_KEY="<MY_API_KEY>"
 ```
 
 The `Authorization: Bearer` API key header is sent to the configured base URL, so only point `POST_ENGINEER_API_URL` at a server you trust.
+
+### Measuring the `tools/list` payload
+
+Every session loads all tool schemas into the agent's context. To see how big that is (tool count, bytes, estimated tokens, the largest tools), build and run the measurement script. It needs no API key and makes no network call:
+
+```bash
+pnpm build
+node scripts/measure-tools-list.mjs                      # stdio tool set
+node scripts/measure-tools-list.mjs --transport http     # remote tool set
+node scripts/measure-tools-list.mjs --top 15 --json
+```
+
+Run it before and after a change to tool schemas and put both outputs in the PR.
+
 ## Tools
 
 - `list_personas`: list existing personas.
