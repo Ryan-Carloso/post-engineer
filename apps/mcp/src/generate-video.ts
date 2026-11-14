@@ -156,7 +156,7 @@ export async function prepareVideo(
     providers = [...accountIds.keys()];
   } else {
     if (personaId === undefined) {
-      return { kind: 'response', response: failure('A video with no persona needs providers or accounts: say where to publish it (accounts list shows your accounts).') };
+      return { kind: 'response', response: failure('A video with no persona needs providers or accounts: say where to publish it (accounts (action: list) shows your accounts).') };
     }
     let bound: Map<Provider, string[]>;
     try {
@@ -165,7 +165,7 @@ export async function prepareVideo(
       return { kind: 'response', response: failure(`Error reading the persona's publishing accounts: ${getErrorMessage(error)}`) };
     }
     if (bound.size === 0) {
-      return { kind: 'response', response: failure('The persona has no bound publishing accounts. Pass providers or accounts, or bind accounts with accounts set_persona_publishing.') };
+      return { kind: 'response', response: failure('The persona has no bound publishing accounts. Pass providers or accounts, or bind accounts with accounts (action: set_persona_publishing).') };
     }
     providers = [...bound.keys()];
     notes.push(`publishing to the persona's bound accounts: ${[...bound].map(([provider, ids]) => `${provider} (${ids.join(', ')})`).join('; ')}`);
@@ -187,7 +187,7 @@ export async function handleGenerateVideo(client: PostEngineerClient, args: Gene
   if (videos.length > 1) {
     if (batchKey === undefined) return failure(`batchKey is required with ${videos.length} videos: name the batch (e.g. "launch-week-1") so a retry replays instead of charging again.`);
     if (idempotencyKey !== undefined) return failure('idempotencyKey is for one video. Use batchKey for a batch.');
-    if (videos.some((video) => video.experiment !== undefined)) return failure('experiment is for one video at a time. Create both videos of a pair with experiments add_pair.');
+    if (videos.some((video) => video.experiment !== undefined)) return failure('experiment is for one video at a time. Create both videos of a pair with experiments (action: add_pair).');
   } else if (batchKey !== undefined) {
     return failure('batchKey is for a batch of 2 or more videos. Use idempotencyKey to make one video safe to retry.');
   }
