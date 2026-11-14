@@ -8,17 +8,22 @@ import { findRepoRoot } from '@/test/repo-root';
 // depends on for every per-slot batch refund.
 //
 // The engine's fill_schedule store (`apps/engine/app/services/fill_schedule/
-// store.py::refund_batch_tokens`) and the web's generate-and-schedule route
-// both POST `rpc/refund_batch_tokens`, but no migration ever created the
-// function: every per-slot batch refund 404'd (PGRST202) and the tokens were
-// never credited back. These assertions pin the two halves of the contract:
+// store.py::refund_batch_tokens`) and the web's shared refund helper
+// (`apps/web/lib/billing/refund-tokens.ts::refundSlotTokens`) both POST
+// `rpc/refund_batch_tokens`, but no migration ever created the function:
+// every per-slot batch refund 404'd (PGRST202) and the tokens were never
+// credited back. These assertions pin the two halves of the contract:
 //
 //   1. the SQL file declares the function with the exact signature the app
 //      calls (p_user_id, p_batch_generation_id, p_refund_key, p_amount,
-//      p_reason) and the ledger semantics of the sibling
-//      `refund_generation_tokens` (idempotent, capped at the charge,
-//      restores the free/paid split, returns {refunded}), and
-//   2. both app call sites pass exactly those five p_ arguments.
+//      p_reason — plus the optional p_engine_task_id migration 018 added)
+//      and the ledger semantics of the sibling `refund_generation_tokens`
+//      (idempotent, capped at the charge, restores the free/paid split,
+//      returns {refunded}), and
+//   2. both app call sites pass exactly those p_ arguments: the engine
+//      store posts the RPC directly, and the web's generate-and-schedule
+//      route refunds a failed dispatch through the shared helper, which
+//      posts the RPC with the same arguments.
 //---------------
 
 const repoRoot = findRepoRoot(import.meta.url);
@@ -48,6 +53,15 @@ const webRoutePath = join(
   'videos',
   'generate-and-schedule',
   'route.ts',
+);
+
+const webRefundHelperPath = join(
+  repoRoot,
+  'apps',
+  'web',
+  'lib',
+  'billing',
+  'refund-tokens.ts',
 );
 
 function readSql(): string {
@@ -139,11 +153,29 @@ describe('refund_batch_tokens call sites', () => {
     }
   });
 
-  it('web generate-and-schedule route passes exactly the five p_ arguments', () => {
+  it('web generate-and-schedule route refunds a failed dispatch through the shared helper', () => {
     const src = readFileSync(webRoutePath, 'utf8');
+    // The route no longer posts the RPC itself: the dispatch catch calls
+    // refundSlotTokens, which posts the RPC and emits refund_issued. The
+    // five logical arguments must still arrive — the batch id and refund
+    // key are derived from the schedule and slot ids inside the helper.
+    expect(src).toContain('refundSlotTokens({');
+    expect(src).toContain('scheduleId: idem.scheduleId');
+    expect(src).toContain('slotId: slot.id');
+    expect(src).toContain('amount: perVideoCost');
+    expect(src).toContain("reason: 'Unified generate+schedule: slot dispatch failed; video refunded'");
+    expect(src).toContain("kind: 'dispatch_failed'");
+  });
+
+  it('shared refund helper passes the five p_ arguments plus the optional task id', () => {
+    const src = readFileSync(webRefundHelperPath, 'utf8');
     expect(src).toContain("rpc('refund_batch_tokens'");
     for (const p of params) {
       expect(src).toContain(`${p}:`);
     }
+    // Migration 018 added the optional task id so a refund can be traced
+    // to the engine task it covers; the helper passes it (null when the
+    // dispatch never produced a task).
+    expect(src).toContain('p_engine_task_id:');
   });
 });
