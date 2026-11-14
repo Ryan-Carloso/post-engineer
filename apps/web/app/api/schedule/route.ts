@@ -353,6 +353,13 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     if (clawback.settledSlotIds.has(slot.id)) {
       // settle_batch_clawback already refunded this slot (and pulled the
       // discount back). Refunding the net again would pay it twice.
+      // A charged-0 slot was never in p_refunds, so the settlement reports
+      // no outcome for it by design — there is nothing to confirm, and
+      // the reason is not_charged, not a failed refund.
+      if (slot.chargedTokens === 0) {
+        refunds.push({ slotId: slot.id, refunded: false, alreadyRefunded: false, reason: 'not_charged' });
+        continue;
+      }
       const net = clawback.refundBySlot.get(slot.id) ?? 0;
       const outcome = clawback.settledBySlot.get(slot.id);
       if (outcome === undefined) {

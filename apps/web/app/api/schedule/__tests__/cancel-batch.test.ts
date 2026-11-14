@@ -14,6 +14,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { trackApiEvent } from '@/lib/analytics';
 import { getPostHogServer } from '@/lib/posthog-server';
+import { logger } from '@/lib/logger';
 import { createFakeSupabase, slotRow } from '@/app/api/videos/batch-discount/__tests__/fake-supabase';
 
 function mockPostHog() {
@@ -130,6 +131,40 @@ describe('DELETE /api/schedule on a discounted batch', () => {
       reason: 'Schedule cancelled before publish; video refunded',
       slot_id: '1',
     });
+  });
+
+  it('reports not_charged for a charged-0 slot the settlement legitimately excluded', async () => {
+    // A charged-0 slot of a settled batch is in settledSlotIds (every
+    // inBatch slot is) but never in p_refunds, so the settlement reports
+    // no outcome for it by design — that is not a lost refund. The paid
+    // slot of the same schedule forces the settlement to run.
+    const sharedSchedule = '00000000-0000-4000-8000-000000000099';
+    const paid = slotRow('1', { batch_id: BATCH, status: 'pending', task_id: null, schedule_id: sharedSchedule });
+    const freeZero = slotRow('7', { batch_id: BATCH, status: 'pending', task_id: null, charged_tokens: 0, schedule_id: sharedSchedule });
+    const free = slotRow('6', { batch_id: BATCH, status: 'pending', task_id: null, charged_tokens: 0, discount_tokens: 2 });
+    const slots = [paid, freeZero, free];
+    const schedules = [
+      { id: sharedSchedule, user_id: USER_ID, persona_id: null },
+      { id: free.schedule_id, user_id: USER_ID, persona_id: null },
+    ];
+    const fake = createFakeSupabase({ tables: { scheduled_posts: slots, schedules } });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(fake.client as never);
+
+    const res = await cancel(sharedSchedule);
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { refunds: unknown[] };
+    expect(json.refunds).toEqual([
+      { slotId: '1', refunded: false, alreadyRefunded: false, reason: 'discount_withheld' },
+      { slotId: '7', refunded: false, alreadyRefunded: false, reason: 'not_charged' },
+    ]);
+    // The settlement ran, so the charged-0 slot went through the settled
+    // branch — yet no billing error was logged for it.
+    expect(fake.rpcCalls.map((call) => call.name)).toEqual(['settle_batch_clawback']);
+    expect(logger.error).not.toHaveBeenCalledWith(
+      '[api/schedule] cancel refund missing settlement outcome',
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it('emits cancel_refund_skipped when the batch re-check fails', async () => {
