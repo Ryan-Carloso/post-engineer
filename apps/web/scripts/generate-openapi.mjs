@@ -18,10 +18,16 @@ const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 // the MCP package.json and would leave the committed spec stale.
 export const API_SPEC_VERSION = '1.4.0';
 
-// `<method>_<first tool>`; when two endpoints share it (one MCP tool fronting
-// two routes, e.g. connect_account), the last route segment disambiguates.
+// The name an endpoint's first mapping entry gives it: `<tool>` for a tool
+// without actions, `<tool>_<action>` for an action of an intent tool.
+function entryName(entry) {
+  return entry.action === undefined ? entry.tool : `${entry.tool}_${entry.action}`;
+}
+
+// `<method>_<first entry name>`; when two endpoints share it (one MCP tool
+// fronting two routes, e.g. connect_account), the last route segment disambiguates.
 function buildOperationIds(mapping) {
-  const base = (key) => `${key.split(' ')[0].toLowerCase()}_${mapping[key][0]}`;
+  const base = (key) => `${key.split(' ')[0].toLowerCase()}_${entryName(mapping[key][0])}`;
   const counts = new Map();
   for (const key of Object.keys(mapping)) counts.set(base(key), (counts.get(base(key)) ?? 0) + 1);
   return new Map(
@@ -35,7 +41,7 @@ function buildOperationIds(mapping) {
 export function buildSpec(mapping, version) {
   const paths = {};
   const operationIds = buildOperationIds(mapping);
-  for (const [key, tools] of Object.entries(mapping)) {
+  for (const [key, entries] of Object.entries(mapping)) {
     const [method, route] = key.split(' ');
     if (!METHODS.includes(method) || !route.startsWith('/api/')) {
       throw new Error(`Unexpected mapping key: ${key}`);
@@ -45,7 +51,7 @@ export function buildSpec(mapping, version) {
     const path = route.replace(/\[(?:\.\.\.)?(\w+)\]/g, '{$1}');
     const operation = {
       operationId: operationIds.get(key),
-      summary: tools[0].replaceAll('_', ' '),
+      summary: entryName(entries[0]).replaceAll('_', ' '),
       tags: [route.split('/')[2]],
       security: [{ bearerAuth: [] }],
       responses: {
