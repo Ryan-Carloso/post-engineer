@@ -233,7 +233,7 @@ export function WizardStepTwo() {
         <DialogTitle>{t('onboarding.step2Title')}</DialogTitle>
         <DialogDescription>{t('onboarding.step2Body')}</DialogDescription>
       </DialogHeader>
-      <div className="flex flex-col gap-1">
+      <div className="flex max-h-[50vh] flex-col gap-1 overflow-y-auto pr-1">
         {STEP2_PROVIDERS.map((provider) => (
           <button
             key={provider}
