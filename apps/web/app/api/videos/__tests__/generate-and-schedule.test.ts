@@ -1502,10 +1502,13 @@ describe('POST /api/videos/generate-and-schedule', () => {
         failureStage: 'dispatch',
         refunded: true,
       });
-      // trackApiEvent scrubs every property: a `token*` key would reach
-      // PostHog as '[redacted]'. The renamed key survives the scrub, so
-      // assert on the scrubbed payload, not just the mock arguments.
-      expect(scrubSecrets({ refunded: true })).toEqual({ refunded: true });
+      // Run the actual event payload through the scrubber: the renamed key
+      // must survive it (a `token*` key would reach PostHog as '[redacted]').
+      expect(scrubSecrets(failedEvent?.[1] as Record<string, unknown>)).toMatchObject({
+        errorCode: 'ENGINE_UNAVAILABLE',
+        failureStage: 'dispatch',
+        refunded: true,
+      });
     });
 
     it('refunds the re-charge when a fully-refunded retry fails dispatch', async () => {
