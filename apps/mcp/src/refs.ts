@@ -6,7 +6,7 @@ import type { McpToolResponse } from './tools-call.js';
 //---------------
 // Reference resolution (issue #566 §7): a persona or an account is given as
 // an id or as a display name, and the tool resolves it inside the call, so
-// the agent does not chain list_* calls just to copy ids around.
+// the agent does not chain list calls just to copy ids around.
 //
 // - An id wins: a UUID is a persona id (an unknown one is a 404 from the
 //   API later), and an account id is the provider-specific id the listing

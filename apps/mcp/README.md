@@ -51,10 +51,12 @@ The hosted remote endpoint is `https://post-engineer.com/mcp`
 a remote MCP client — including ChatGPT, which requires a public HTTPS
 endpoint, OAuth, and tool annotations — at that URL and sign in; no
 local install or API key is needed. Every tool carries MCP annotations
-(`readOnlyHint` for `list_*`/`get_*`/`check_*`/`check_script (action: validate)`/
-`check_script (action: score)`, `destructiveHint` for `delete_*`/publish/disconnect/
-cancel tools, `openWorldHint` throughout) so annotation-aware clients
-can auto-approve reads and confirm writes. The stdio package above
+(`readOnlyHint` for `video_tasks`/`posts`/`insights`/`billing`/`prompts`/
+`check_script`, `destructiveHint` for `personas`/`persona_media`/`voices`/
+`accounts`/`schedules`/`publish_video`/`cancel_video`, `openWorldHint`
+throughout) so annotation-aware clients can auto-approve reads and confirm
+writes. Annotations are per tool, so a tool with a destructive action is
+destructive for all its actions. The stdio package above
 remains fully supported for local agents.
 
 ### Deployment (remote HTTP service)

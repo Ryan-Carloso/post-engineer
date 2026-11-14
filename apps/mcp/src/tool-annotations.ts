@@ -4,9 +4,12 @@
 // overload carries these hints into tools/list. They are hints only, but
 // clients use them to decide auto-approve vs. confirm vs. warn, so every
 // registration passes one explicitly:
-// - READ_ONLY: list_*/get_*/check_*/validate/score and other pure reads.
-// - DESTRUCTIVE: delete_*, publish, disconnect and cancel tools.
-// - MUTATING: creates/updates/generation that change state but do not
+// Hints are per tool, not per action: a tool with one destructive action is
+// DESTRUCTIVE for all its actions (issue #566 §12).
+// - READ_ONLY: video_tasks, posts, insights, billing, prompts, check_script.
+// - DESTRUCTIVE: cancel_video, personas, persona_media, voices, accounts,
+//   schedules, publish_video.
+// - MUTATING (generate_video, experiments, media): creates/updates/generation that change state but do not
 //   destroy existing content.
 // openWorldHint is true for every tool here: each one talks to the Post
 // Engineer API (or, for media (action: check), a caller-supplied public URL).

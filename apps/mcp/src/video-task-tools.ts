@@ -18,7 +18,7 @@ export const CancelVideoTaskShape = {
     .string()
     .min(1, 'taskId is required')
     .describe(
-      'Engine task id of the video to cancel (taskId from video_tasks (action: status), video_tasks (action: status), posts (action: get) or posts (action: list)). Only your own task can be cancelled.',
+      'Engine task id of the video to cancel (taskId from video_tasks (action: status), posts (action: get) or posts (action: list)). Only your own task can be cancelled.',
     ),
 };
 
