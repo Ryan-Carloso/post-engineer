@@ -108,6 +108,31 @@ describe('McpDocsSection', () => {
       'check_script',
       'publish_video',
     ]);
+    // The actions of every tool sit under its name, in order, so a blanked or
+    // reordered action fails; generate_video and cancel_video have none.
+    const ACTIONS: Record<string, string> = {
+      generate_video: '',
+      video_tasks: 'status · list_generations · get_generation',
+      cancel_video: '',
+      personas: 'list · get · create · update · delete',
+      persona_media: 'list_faces · list_images · add_image · update_image · remove_image',
+      voices: 'list · preview · list_clones · create_clone · get_clone · preview_clone · delete_clone',
+      accounts: 'list · connect · disconnect · get_persona_publishing · set_persona_publishing · list_boards',
+      schedules: 'list · cancel · get_slot · update_slot_title · delete_slot',
+      posts: 'list · get',
+      insights: 'post_metrics · retention_curve',
+      experiments: 'create · add_pair · list · results',
+      media: 'upload · check',
+      billing: 'balance · transactions',
+      prompts: 'list · get',
+      check_script: 'validate · score',
+      publish_video: 'from_file · create_upload · complete_upload · publish_upload',
+    };
+    for (const [tool, actions] of Object.entries(ACTIONS)) {
+      const card = [...grid.querySelectorAll('p.font-bold')].find((p) => p.textContent === tool)?.parentElement;
+      const actionLine = card?.querySelector('p.font-mono:not(.font-bold)')?.textContent ?? '';
+      expect(actionLine, `${tool} actions`).toBe(actions);
+    }
     // The actions of an action tool sit under its name; generate_video and cancel_video have none.
     const personas = [...grid.querySelectorAll('p.font-bold')].find((p) => p.textContent === 'personas')?.parentElement;
     expect(personas?.textContent).toContain('list · get · create · update · delete');
