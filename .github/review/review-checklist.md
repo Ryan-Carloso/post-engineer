@@ -106,17 +106,21 @@ Trigger: `apps/web/**`, `apps/mcp/**`.
   components. Supabase RLS / service-role usage only server-side.
 - UI changes: loading/empty/error states exist.
 - **MCP parity:** a new or changed `apps/web/app/api/**/route.ts` endpoint
-  has an MCP tool that calls it (mapped in
-  `apps/mcp/src/__tests__/parity-endpoint-tools.json`; the parity test
-  proves the tool reaches that method and path) or a typed exclusion in
-  `apps/mcp/src/__tests__/parity-exclusions.json` whose kind the parity
-  test verifies against the route per handler. A PR that adds or changes an
-  exclusion, or touches the parity test, its `parity/` verifier, the
-  behavioural bearer test, the guard scripts/workflow or CODEOWNERS, fails
-  `parity-exclusion-guard` until the code owner approves the current head
-  in a review and applies `parity-exclusion-approved` (the guard checks the
-  timeline and the review SHA, not just the label list). Never suggest
-  weakening the test or adding a free-text exemption; the fix is the tool.
+  is reachable through an MCP intent tool: mapped as `{ tool, action }` in
+  `apps/mcp/src/__tests__/parity-endpoint-tools.json` (the parity test proves
+  that the tool, or the named action's handler, reaches that method and
+  path, and that invoking the action sends the request) or covered by a
+  typed exclusion in `apps/mcp/src/__tests__/parity-exclusions.json` whose
+  kind the parity test verifies against the route per handler. A tool is a
+  complete abstraction of an intent: flag a new tool or action that only
+  mirrors one endpoint when an existing intent tool should call it. A PR that
+  adds or changes an exclusion, or touches the parity test, its `parity/`
+  verifier, the behavioural bearer test, the guard scripts/workflow or
+  CODEOWNERS, fails `parity-exclusion-guard` until the code owner approves
+  the current head in a review and applies `parity-exclusion-approved` (the
+  guard checks the timeline and the review SHA, not just the label list).
+  Never suggest weakening the test or adding a free-text exemption; the fix
+  is the action.
 
 ## 8. Migrations and config
 

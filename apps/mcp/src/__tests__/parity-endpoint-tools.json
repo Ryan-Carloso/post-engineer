@@ -1,174 +1,294 @@
 {
   "POST /api/account/connect-url": [
-    "connect_account"
+    {
+      "tool": "connect_account"
+    }
   ],
   "GET /api/account": [
-    "list_social_accounts"
+    {
+      "tool": "list_social_accounts"
+    }
   ],
   "GET /api/billing/tokens": [
-    "get_token_balance"
+    {
+      "tool": "get_token_balance"
+    }
   ],
   "POST /api/bluesky-connect": [
-    "connect_account"
+    {
+      "tool": "connect_account"
+    }
   ],
   "POST /api/threespeak-connect": [
-    "connect_account"
+    {
+      "tool": "connect_account"
+    }
   ],
   "POST /api/rumble-connect": [
-    "connect_account"
+    {
+      "tool": "connect_account"
+    }
   ],
   "GET /api/persona/faces": [
-    "list_faces"
+    {
+      "tool": "list_faces"
+    }
   ],
   "GET /api/persona/images": [
-    "list_persona_images"
+    {
+      "tool": "list_persona_images"
+    }
   ],
   "POST /api/persona/images": [
-    "add_persona_image"
+    {
+      "tool": "add_persona_image"
+    }
   ],
   "DELETE /api/persona/images": [
-    "remove_persona_image"
+    {
+      "tool": "remove_persona_image"
+    }
   ],
   "PATCH /api/persona/images": [
-    "update_persona_image"
+    {
+      "tool": "update_persona_image"
+    }
   ],
   "GET /api/persona/list": [
-    "list_personas"
+    {
+      "tool": "list_personas"
+    }
   ],
   "POST /api/persona": [
-    "create_persona"
+    {
+      "tool": "create_persona"
+    }
   ],
   "PATCH /api/persona": [
-    "update_persona"
+    {
+      "tool": "update_persona"
+    }
   ],
   "POST /api/media/upload": [
-    "upload_media"
+    {
+      "tool": "upload_media"
+    }
   ],
   "POST /api/media/check": [
-    "check_media"
+    {
+      "tool": "check_media"
+    }
   ],
   "GET /api/metrics": [
-    "get_post_metrics"
+    {
+      "tool": "get_post_metrics"
+    }
   ],
   "GET /api/metrics/retention-curve": [
-    "get_youtube_retention_curve"
+    {
+      "tool": "get_youtube_retention_curve"
+    }
   ],
   "GET /api/pinterest/boards": [
-    "list_pinterest_boards"
+    {
+      "tool": "list_pinterest_boards"
+    }
   ],
   "GET /api/posts/[id]": [
-    "get_post"
+    {
+      "tool": "get_post"
+    }
   ],
   "GET /api/persona/video-status/[taskId]": [
-    "get_video_status",
-    "get_video_task_progress",
-    "wait_for_video_tasks"
+    {
+      "tool": "get_video_status"
+    },
+    {
+      "tool": "get_video_task_progress"
+    },
+    {
+      "tool": "wait_for_video_tasks"
+    }
   ],
   "GET /api/persona/voices": [
-    "list_voices"
+    {
+      "tool": "list_voices"
+    }
   ],
   "POST /api/persona/voices/[voiceId]/preview": [
-    "preview_house_voice"
+    {
+      "tool": "preview_house_voice"
+    }
   ],
   "GET /api/persona/cloned-voices": [
-    "list_cloned_voices"
+    {
+      "tool": "list_cloned_voices"
+    }
   ],
   "POST /api/persona/cloned-voices": [
-    "create_cloned_voice"
+    {
+      "tool": "create_cloned_voice"
+    }
   ],
   "GET /api/persona/cloned-voices/[cloneId]": [
-    "get_cloned_voice"
+    {
+      "tool": "get_cloned_voice"
+    }
   ],
   "DELETE /api/persona/cloned-voices/[cloneId]": [
-    "delete_cloned_voice"
+    {
+      "tool": "delete_cloned_voice"
+    }
   ],
   "POST /api/persona/cloned-voices/[cloneId]/preview": [
-    "preview_cloned_voice"
+    {
+      "tool": "preview_cloned_voice"
+    }
   ],
   "GET /api/schedule": [
-    "list_schedules"
+    {
+      "tool": "list_schedules"
+    }
   ],
   "DELETE /api/schedule": [
-    "cancel_schedule"
+    {
+      "tool": "cancel_schedule"
+    }
   ],
   "GET /api/schedule/slots/[slotId]": [
-    "get_slot"
+    {
+      "tool": "get_slot"
+    }
   ],
   "PATCH /api/schedule/slots/[slotId]": [
-    "update_slot_title"
+    {
+      "tool": "update_slot_title"
+    }
   ],
   "DELETE /api/schedule/slots/[slotId]": [
-    "delete_slot"
+    {
+      "tool": "delete_slot"
+    }
   ],
   "GET /api/schedule/status": [
-    "list_posts"
+    {
+      "tool": "list_posts"
+    }
   ],
   "GET /api/persona/delete-preview": [
-    "get_persona_delete_preview"
+    {
+      "tool": "get_persona_delete_preview"
+    }
   ],
   "GET /api/persona/publishing-accounts": [
-    "get_persona_publishing_accounts"
+    {
+      "tool": "get_persona_publishing_accounts"
+    }
   ],
   "PUT /api/persona/publishing-accounts": [
-    "set_persona_publishing_accounts"
+    {
+      "tool": "set_persona_publishing_accounts"
+    }
   ],
   "DELETE /api/persona": [
-    "delete_persona"
+    {
+      "tool": "delete_persona"
+    }
   ],
   "DELETE /api/account": [
-    "disconnect_account"
+    {
+      "tool": "disconnect_account"
+    }
   ],
   "GET /api/persona/video-generations": [
-    "list_video_generations"
+    {
+      "tool": "list_video_generations"
+    }
   ],
   "GET /api/persona/video-generations/[generationId]": [
-    "get_video_generation"
+    {
+      "tool": "get_video_generation"
+    }
   ],
   "DELETE /api/persona/video-task/[taskId]": [
-    "cancel_video_task"
+    {
+      "tool": "cancel_video_task"
+    }
   ],
   "GET /api/billing/transactions": [
-    "list_token_transactions"
+    {
+      "tool": "list_token_transactions"
+    }
   ],
   "POST /api/upload-content": [
-    "publish_video_direct"
+    {
+      "tool": "publish_video_direct"
+    }
   ],
   "POST /api/videos/upload-url": [
-    "create_video_upload"
+    {
+      "tool": "create_video_upload"
+    }
   ],
   "POST /api/videos/uploads/[uploadId]/complete": [
-    "complete_video_upload"
+    {
+      "tool": "complete_video_upload"
+    }
   ],
   "POST /api/videos/publish-by-id": [
-    "publish_uploaded_video"
+    {
+      "tool": "publish_uploaded_video"
+    }
   ],
   "POST /api/videos/generate-and-schedule": [
-    "generate_persona_video",
-    "add_experiment_pair",
-    "generate_persona_video_batch"
+    {
+      "tool": "generate_persona_video"
+    },
+    {
+      "tool": "add_experiment_pair"
+    },
+    {
+      "tool": "generate_persona_video_batch"
+    }
   ],
   "POST /api/videos/batch-discount": [
-    "generate_persona_video_batch"
+    {
+      "tool": "generate_persona_video_batch"
+    }
   ],
   "POST /api/videos/validate-script": [
-    "validate_script"
+    {
+      "tool": "validate_script"
+    }
   ],
   "POST /api/videos/score-draft": [
-    "score_draft"
+    {
+      "tool": "score_draft"
+    }
   ],
   "GET /api/prompts": [
-    "list_prompts"
+    {
+      "tool": "list_prompts"
+    }
   ],
   "GET /api/prompts/[slug]": [
-    "get_prompt"
+    {
+      "tool": "get_prompt"
+    }
   ],
   "POST /api/experiments": [
-    "create_experiment"
+    {
+      "tool": "create_experiment"
+    }
   ],
   "GET /api/experiments": [
-    "list_experiments"
+    {
+      "tool": "list_experiments"
+    }
   ],
   "GET /api/experiments/[id]": [
-    "get_experiment_results"
+    {
+      "tool": "get_experiment_results"
+    }
   ]
 }

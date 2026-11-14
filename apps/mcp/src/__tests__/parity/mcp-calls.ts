@@ -15,6 +15,14 @@ import { calleeName, parseSource, staticText, walk } from './ts-source.js';
 //
 // Resolution is by name: a plain call `foo()` resolves to top-level
 // functions named foo, a property call `x.foo()` to class methods named foo.
+//
+// Action tools (issue #566): a tool whose callback is `byAction({ list:
+// handleList, create: async (c) => c.createX() })` has one handler per
+// action. Each action is walked on its own, so a mapping can name the action
+// that reaches an endpoint; the tool's own sites are the union of its actions.
+// The `byAction` object literal is the only form the gate reads: an action
+// tool registered any other way has no provable actions, and a mapping that
+// names one fails closed.
 //---------------
 
 export interface RequestSite {
@@ -31,8 +39,10 @@ interface Unit {
 }
 
 export interface McpCallGraph {
-  /** Registered tool name → the request sites it reaches. */
+  /** Registered tool name → the request sites it reaches (all actions, for an action tool). */
   toolSites: Map<string, RequestSite[]>;
+  /** Action tool name → action name → the request sites that action's handler reaches. */
+  toolActions: Map<string, Map<string, RequestSite[]>>;
   /** Tool names in registration order. */
   tools: string[];
 }
@@ -124,6 +134,27 @@ function unitOf(node: ts.Node): Unit {
   return unit;
 }
 
+/**
+ * The per-action handlers of a `byAction({ name: handler, … })` callback, or
+ * null when the callback is anything else. A handler is an arrow/function
+ * expression, a method, or an identifier (plain or shorthand) naming a
+ * top-level function.
+ */
+function actionHandlers(callback: ts.Expression): Array<{ action: string; node: ts.Node }> | null {
+  if (!ts.isCallExpression(callback) || !ts.isIdentifier(callback.expression) || callback.expression.text !== 'byAction') return null;
+  const map = callback.arguments[0];
+  if (map === undefined || !ts.isObjectLiteralExpression(map)) return null;
+  const actions: Array<{ action: string; node: ts.Node }> = [];
+  for (const prop of map.properties) {
+    const name = prop.name === undefined ? null : ts.isIdentifier(prop.name) ? prop.name.text : ts.isStringLiteral(prop.name) ? prop.name.text : null;
+    if (name === null) continue;
+    if (ts.isPropertyAssignment(prop)) actions.push({ action: name, node: prop.initializer });
+    else if (ts.isShorthandPropertyAssignment(prop)) actions.push({ action: name, node: prop.name });
+    else if (ts.isMethodDeclaration(prop) && prop.body !== undefined) actions.push({ action: name, node: prop.body });
+  }
+  return actions;
+}
+
 export function buildMcpCallGraph(files: ReadonlyArray<{ file: string; text: string }>): McpCallGraph {
   const functions = new Map<string, Unit[]>();
   const methods = new Map<string, Unit[]>();
@@ -131,6 +162,7 @@ export function buildMcpCallGraph(files: ReadonlyArray<{ file: string; text: str
     map.set(name, [...(map.get(name) ?? []), unitOf(node)]);
   };
   const registrations: Array<{ tool: string; node: ts.Node }> = [];
+  const actionRegistrations: Array<{ tool: string; actions: Array<{ action: string; node: ts.Node }> }> = [];
 
   for (const { file, text } of files) {
     const source = parseSource(file, text);
@@ -156,13 +188,17 @@ export function buildMcpCallGraph(files: ReadonlyArray<{ file: string; text: str
         node.arguments.length > 0
       ) {
         const tool = staticText(node.arguments[0]);
-        if (tool !== null) registrations.push({ tool, node: node.arguments[node.arguments.length - 1] });
+        if (tool === null) return;
+        const callback = node.arguments[node.arguments.length - 1];
+        const actions = actionHandlers(callback);
+        if (actions === null) registrations.push({ tool, node: callback });
+        else actionRegistrations.push({ tool, actions });
       }
     });
   }
 
-  const toolSites = new Map<string, RequestSite[]>();
-  for (const { tool, node } of registrations) {
+  /** Request sites reachable from `node`, following named calls across apps/mcp/src. */
+  const sitesFrom = (node: ts.Node): RequestSite[] => {
     const seen = new Set<Unit>();
     const queue: Unit[] = [unitOf(node)];
     const sites: RequestSite[] = [];
@@ -174,9 +210,25 @@ export function buildMcpCallGraph(files: ReadonlyArray<{ file: string; text: str
       for (const name of unit.plainCalls) queue.push(...(functions.get(name) ?? []));
       for (const name of unit.memberCalls) queue.push(...(methods.get(name) ?? []));
     }
-    toolSites.set(tool, sites);
+    return sites;
+  };
+
+  const toolSites = new Map<string, RequestSite[]>();
+  const toolActions = new Map<string, Map<string, RequestSite[]>>();
+  for (const { tool, node } of registrations) toolSites.set(tool, sitesFrom(node));
+  for (const { tool, actions } of actionRegistrations) {
+    const bySite = new Map<string, RequestSite[]>();
+    for (const { action, node } of actions) {
+      // A handler named by identifier resolves like a call: every top-level function with that name.
+      const sites = ts.isIdentifier(node)
+        ? (functions.get(node.text) ?? []).flatMap((unit) => sitesFrom(unit.node))
+        : sitesFrom(node);
+      bySite.set(action, sites);
+    }
+    toolActions.set(tool, bySite);
+    toolSites.set(tool, [...bySite.values()].flat());
   }
-  return { toolSites, tools: registrations.map((r) => r.tool) };
+  return { toolSites, toolActions, tools: [...registrations.map((r) => r.tool), ...actionRegistrations.map((r) => r.tool)] };
 }
 
 /** `GET /api/posts/[id]` → `{ method: 'GET', path: '/api/posts/{}' }`. */
@@ -193,6 +245,14 @@ export function endpointSite(key: string): RequestSite {
 export function toolCallsEndpoint(graph: McpCallGraph, tool: string, key: string): boolean {
   const wanted = endpointSite(key);
   return (graph.toolSites.get(tool) ?? []).some(
+    (site) => site.method === wanted.method && site.path === wanted.path,
+  );
+}
+
+/** Whether the handler of `action` on `tool` reaches the endpoint (same method and path). */
+export function toolActionCallsEndpoint(graph: McpCallGraph, tool: string, action: string, key: string): boolean {
+  const wanted = endpointSite(key);
+  return (graph.toolActions.get(tool)?.get(action) ?? []).some(
     (site) => site.method === wanted.method && site.path === wanted.path,
   );
 }

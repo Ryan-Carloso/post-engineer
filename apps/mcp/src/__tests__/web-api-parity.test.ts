@@ -3,7 +3,11 @@ import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { buildMcpCallGraph, toolCallsEndpoint } from './parity/mcp-calls.js';
+import { PostEngineerClient } from '../client.js';
+import { createPostEngineerMcpServer } from '../index.js';
+import { callToolRecordingRequests, requestReaches } from './parity/behaviour.js';
+import { buildMcpCallGraph } from './parity/mcp-calls.js';
+import { EndpointMappingSchema, endpointToolNames, uncoveredEndpoints, verifyMapping } from './parity/mappings.js';
 import { ParityDataSchema, verifyExclusion, type VerifyContext } from './parity/exclusions.js';
 import { readRouteFile, type HandlerFacts, type RouteFile } from './parity/route-facts.js';
 
@@ -20,9 +24,14 @@ import { readRouteFile, type HandlerFacts, type RouteFile } from './parity/route
 // exported handler.
 //
 // Data files:
-// - parity-endpoint-tools.json: endpoint → MCP tools. Each pair is proven
-//   by the MCP sources (the tool reaches a request site with that method
-//   and path), so adding a tool needs no approval.
+// - parity-endpoint-tools.json: endpoint → [{ tool, action? }]. Capability
+//   parity (issue #566): a tool is a complete abstraction of an intent, and
+//   no endpoint needs a tool or an action of its own. Each entry is proven by
+//   the MCP sources (the tool, or for an action tool the named action's
+//   handler, reaches a request site with that method and path) and, for an
+//   action, by invoking it (parity-action-samples.json holds the arguments),
+//   so adding or extending a tool needs no approval. Coverage stays total:
+//   an endpoint no tool reaches and no exclusion covers fails.
 // - parity-exclusions.json: { opsPublic, exclusions }. Guarded: adding or
 //   changing an entry needs code-owner approval (parity-exclusion-guard).
 
@@ -36,9 +45,16 @@ const PARITY: z.infer<typeof ParityDataSchema> = ParityDataSchema.parse(
 );
 const EXCLUDED_ENDPOINTS = PARITY.exclusions;
 
-const ENDPOINT_TOOLS: Record<string, string[]> = z
-  .record(z.string(), z.array(z.string().min(1)))
-  .parse(JSON.parse(readFileSync(join(here, 'parity-endpoint-tools.json'), 'utf8')));
+const ENDPOINT_MAPPING = EndpointMappingSchema.parse(
+  JSON.parse(readFileSync(join(here, 'parity-endpoint-tools.json'), 'utf8')),
+);
+const ENDPOINT_TOOLS = endpointToolNames(ENDPOINT_MAPPING);
+
+// Arguments that invoke one mapped action: `<tool>.<action>` → tool arguments
+// (including `action`). Only for actions, so it stays empty until a tool has any.
+const ACTION_SAMPLES: Record<string, Record<string, unknown>> = z
+  .record(z.string(), z.record(z.string(), z.unknown()))
+  .parse(JSON.parse(readFileSync(join(here, 'parity-action-samples.json'), 'utf8')));
 
 // Tools with no backing web endpoint. Empty today: every tool calls the
 // web API through the MCP client. A tool registered anywhere in
@@ -136,32 +152,24 @@ describe('Web -> MCP parity', () => {
   });
 
   it('maps every discovered endpoint to an MCP tool or a typed exclusion', () => {
-    const uncovered = discovered.filter(
-      (key) => !(key in ENDPOINT_TOOLS) && !(key in EXCLUDED_ENDPOINTS),
-    );
+    const uncovered = uncoveredEndpoints(discovered, ENDPOINT_MAPPING, EXCLUDED_ENDPOINTS);
     expect(
       uncovered,
-      `New web endpoint(s) with no MCP coverage. Add an MCP tool that calls the endpoint and map it in parity-endpoint-tools.json: ${uncovered.join(', ')}`,
+      `New web endpoint(s) with no MCP coverage. Make the intent tool that serves it call the endpoint (a new action of an existing tool, not a tool per endpoint) and map { tool, action } in parity-endpoint-tools.json: ${uncovered.join(', ')}`,
     ).toEqual([]);
   });
 
   it('has no mapping or exclusion for an endpoint that no longer exists', () => {
     const known = new Set(discovered);
-    const stale = [...Object.keys(ENDPOINT_TOOLS), ...Object.keys(EXCLUDED_ENDPOINTS)].filter(
+    const stale = [...Object.keys(ENDPOINT_MAPPING), ...Object.keys(EXCLUDED_ENDPOINTS)].filter(
       (key) => !known.has(key),
     );
     expect(stale, `Stale parity entries for removed endpoints: ${stale.join(', ')}`).toEqual([]);
   });
 
   it('never maps and excludes the same endpoint', () => {
-    const overlap = Object.keys(ENDPOINT_TOOLS).filter((key) => key in EXCLUDED_ENDPOINTS);
+    const overlap = Object.keys(ENDPOINT_MAPPING).filter((key) => key in EXCLUDED_ENDPOINTS);
     expect(overlap).toEqual([]);
-  });
-
-  it('maps every endpoint to at least one tool', () => {
-    for (const [key, tools] of Object.entries(ENDPOINT_TOOLS)) {
-      expect(tools.length, `${key} maps to no tool`).toBeGreaterThan(0);
-    }
   });
 
   it('maps only to tools registered in the MCP server', () => {
@@ -169,17 +177,30 @@ describe('Web -> MCP parity', () => {
     expect(unknown, `Mapped tools not registered in index.ts: ${unknown.join(', ')}`).toEqual([]);
   });
 
-  it('proves every mapping: each mapped tool calls its endpoint (same method and path)', () => {
-    const unproven: string[] = [];
-    for (const [key, tools] of Object.entries(ENDPOINT_TOOLS)) {
-      for (const tool of tools) {
-        if (!toolCallsEndpoint(graph, tool, key)) unproven.push(`${key} -> ${tool}`);
-      }
-    }
-    expect(
-      unproven,
-      `Mapped tool(s) that never call their endpoint in the MCP sources: ${unproven.join(', ')}`,
-    ).toEqual([]);
+  it('proves every mapping: each mapped tool (or action) calls its endpoint (same method and path)', () => {
+    const unproven = Object.entries(ENDPOINT_MAPPING).flatMap(([key, entries]) => verifyMapping(key, entries, graph));
+    expect(unproven, `Mapping(s) the MCP sources do not back:\n${unproven.join('\n')}`).toEqual([]);
+  });
+
+  // The syntax tree proves an action's handler can reach its endpoint; this
+  // proves that invoking the action sends the request. Vacuous while no tool
+  // has actions (the mechanism is pinned in parity/action-mappings.test.ts).
+  const mappedActions = Object.entries(ENDPOINT_MAPPING).flatMap(([key, entries]) =>
+    entries.flatMap((entry) => (entry.action === undefined ? [] : [{ key, tool: entry.tool, action: entry.action }])),
+  );
+
+  it.each(mappedActions)('invoking $tool · $action sends the request for $key', async ({ key, tool, action }) => {
+    const args = ACTION_SAMPLES[`${tool}.${action}`];
+    expect(args, `Add arguments for ${tool}.${action} to parity-action-samples.json`).toBeDefined();
+    expect(args?.action, `${tool}.${action} sample must select the action`).toBe(action);
+    const server = createPostEngineerMcpServer(new PostEngineerClient({ apiKey: 'parity-proof' }), 'stdio');
+    const recorded = await callToolRecordingRequests(server, tool, args ?? {});
+    expect(requestReaches(recorded, key), `${tool}.${action} sent ${JSON.stringify(recorded)}, not ${key}`).toBe(true);
+  });
+
+  it('keeps an action sample only for a mapped action', () => {
+    const mapped = new Set(mappedActions.map(({ tool, action }) => `${tool}.${action}`));
+    expect(Object.keys(ACTION_SAMPLES).filter((name) => !mapped.has(name))).toEqual([]);
   });
 
   it('covers every registered MCP tool with at least one endpoint or a webless declaration', () => {
