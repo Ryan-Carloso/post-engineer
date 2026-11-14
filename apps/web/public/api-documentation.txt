@@ -56,8 +56,8 @@ Check the balance first: GET /api/billing/tokens.
 2. POST /api/videos/score-draft       mechanical score + publish check, no tokens
 3. POST /api/videos/generate-and-schedule
    One call generates the video, schedules it and auto-publishes it. There
-   are no orphan videos. Script is segments: hook first, body, CTA last,
-   60-200 words total. Slot is 3h to 30d ahead, or mode "asap".
+   are no orphan videos. Script is segments: hook first, then content takes
+   in order, 60-200 words total. Slot is 3h to 30d ahead, or mode "asap".
 4. GET  /api/persona/video-status/{taskId}   task state
    state: -1 failed, 1 complete, 3 queued, 4 processing. Only -1 and 1 are
    terminal. HTTP 200 does not mean the job is alive: read `state`.
