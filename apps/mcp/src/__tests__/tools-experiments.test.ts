@@ -41,8 +41,8 @@ function photos(count: number, prefix: string): Array<{ url: string }> {
 }
 
 const BODY = [
-  { kind: 'body' as const, text: 'Most people bounce at the bottom of the squat, which moves the load off the legs and onto the lower back, so slow the last inch down and pause before you drive up again. Keep your chest tall, brace like someone is about to poke your stomach, and let the bar travel in a straight line over the middle of your foot on every single rep.', media: photos(9, 'body') },
-  { kind: 'cta' as const, text: 'Follow for one fix a day.', media: photos(1, 'cta') },
+  { kind: 'content' as const, text: 'Most people bounce at the bottom of the squat, which moves the load off the legs and onto the lower back, so slow the last inch down and pause before you drive up again. Keep your chest tall, brace like someone is about to poke your stomach, and let the bar travel in a straight line over the middle of your foot on every single rep.', media: photos(9, 'content') },
+  { kind: 'content' as const, text: 'Follow for one fix a day.', media: photos(1, 'ctaTake') },
 ];
 
 function pairArgs(overrides: Record<string, unknown> = {}) {
@@ -76,7 +76,7 @@ describe('shiftStartAt', () => {
 });
 
 describe('add_experiment_pair', () => {
-  it('creates both videos: hook first, shared body and CTA, link, deterministic keys, second one spaced', async () => {
+  it('creates both videos: hook first, shared content and CTA, link, deterministic keys, second one spaced', async () => {
     const client = mockClient();
     const response = await handleAddExperimentPair(client, pairArgs());
     expect(response.isError).toBeUndefined();

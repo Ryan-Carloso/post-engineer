@@ -22,8 +22,8 @@ describe('buildSlotRows', () => {
       chargedTokens: 1,
       segments: [
         { kind: 'hook', text: 'Porto wins you over slowly.' },
-        { kind: 'body', text: 'Walk the Ribeira in the morning light.' },
-        { kind: 'cta', text: 'Follow for more.' },
+        { kind: 'content', text: 'Walk the Ribeira in the morning light.' },
+        { kind: 'content', text: 'Follow for more.' },
       ],
     });
     expect(rows).toHaveLength(1);
@@ -41,8 +41,8 @@ describe('buildSlotRows', () => {
       charged_tokens: 1,
       segments: [
         { kind: 'hook', text: 'Porto wins you over slowly.' },
-        { kind: 'body', text: 'Walk the Ribeira in the morning light.' },
-        { kind: 'cta', text: 'Follow for more.' },
+        { kind: 'content', text: 'Walk the Ribeira in the morning light.' },
+        { kind: 'content', text: 'Follow for more.' },
       ],
       experiment_id: null,
       variant_id: null,

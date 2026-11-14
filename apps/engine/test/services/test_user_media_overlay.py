@@ -26,7 +26,7 @@ WORDS = [
 ]
 SEGMENTS_TEXT = [
     {"kind": "hook", "text": "Welcome to Porto."},
-    {"kind": "cta", "text": "Visit Porto."},
+    {"kind": "content", "text": "Visit Porto."},
 ]
 RED = (200, 30, 30)
 
@@ -145,7 +145,7 @@ def test_a_photo_is_drawn_without_any_face_gate(tmp_path):
 def test_segment_with_no_spoken_time_is_skipped_with_a_reason(tmp_path):
     segments = [
         {**SEGMENTS_TEXT[0], "media": [{"url": "https://e.com/p.jpg"}]},
-        {"kind": "body", "text": "!!! ???"},
+        {"kind": "content", "text": "!!! ???"},
     ]
     segments[1]["media"] = [{"url": "https://e.com/q.jpg"}]
     panels, skipped = _prepare(tmp_path, segments)

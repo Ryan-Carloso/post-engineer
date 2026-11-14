@@ -18,8 +18,8 @@ const SCHEDULE_ID = 'sched-current';
 
 const SEGMENTS = [
   { kind: 'hook', text: 'Stop doing squats like this.' },
-  { kind: 'body', text: 'Your knees track over your toes and the load moves.', media: [{ url: 'https://x/a.png' }] },
-  { kind: 'cta', text: 'Follow for more.' },
+  { kind: 'content', text: 'Your knees track over your toes and the load moves.', media: [{ url: 'https://x/a.png' }] },
+  { kind: 'content', text: 'Follow for more.' },
 ];
 
 function facts(overrides: Partial<PairFacts> = {}): PairFacts {
@@ -106,8 +106,8 @@ const PARTNER_SLOT = {
   title: 'Squat form',
   segments: [
     { text: SEGMENTS[0].text, kind: 'hook' },
-    { media: [{ url: 'https://x/a.png' }], text: SEGMENTS[1].text, kind: 'body' },
-    { text: SEGMENTS[2].text, kind: 'cta' },
+    { media: [{ url: 'https://x/a.png' }], text: SEGMENTS[1].text, kind: 'content' },
+    { text: SEGMENTS[2].text, kind: 'content' },
   ],
 };
 
@@ -277,8 +277,8 @@ describe('pairMismatch', () => {
     const pinterestPartner = facts({ providers: ['pinterest'], accountIds: { pinterest: ['u1'] }, pinterestBoardId: 'b1', segments: SEGMENTS });
     expect(pairMismatch(pinterestPartner, facts({ providers: ['pinterest'], accountIds: { pinterest: ['u1'] }, pinterestBoardId: 'b2' }))?.field).toBe('publishing.pinterestBoardId');
     expect(pairMismatch(pinterestPartner, facts({ providers: ['pinterest'], accountIds: { pinterest: ['u1'] }, pinterestBoardId: 'b1' }))).toBeNull();
-    const otherBody = facts({ segments: [{ kind: 'hook', text: 'New hook.' }, { kind: 'body', text: 'Different body.' }, SEGMENTS[2]] });
-    expect(pairMismatch(partner, otherBody)?.message).toContain('body and CTA segments must be identical');
+    const otherBody = facts({ segments: [{ kind: 'hook', text: 'New hook.' }, { kind: 'content', text: 'Different content.' }, SEGMENTS[2]] });
+    expect(pairMismatch(partner, otherBody)?.message).toContain('content segments must be identical');
   });
 
   it('compares account lists regardless of order', () => {

@@ -33,23 +33,23 @@ const BASE_URL = 'https://api.example.test';
 
 const hook =
   'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
-const body =
+const content =
   'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
-const cta = 'Save this video before your next trip to Porto.';
+const ctaTake = 'Save this video before your next trip to Porto.';
 function photos(count: number, prefix: string): Array<{ url: string }> {
   return Array.from({ length: count }, (_, i) => ({ url: `https://example.com/${prefix}-${i + 1}.jpg` }));
 }
 
 const validSegments = [
   { kind: 'hook' as const, text: hook, media: photos(3, 'hook') },
-  { kind: 'body' as const, text: body, media: photos(6, 'body') },
-  { kind: 'cta' as const, text: cta, media: photos(2, 'cta') },
+  { kind: 'content' as const, text: content, media: photos(6, 'content') },
+  { kind: 'content' as const, text: ctaTake, media: photos(2, 'ctaTake') },
 ];
 // Too short: the mechanical validator rejects it before any request.
 const rejectedSegments = [
   { kind: 'hook' as const, text: 'Short hook.' },
-  { kind: 'body' as const, text: 'Short body.' },
-  { kind: 'cta' as const, text: 'Follow now.' },
+  { kind: 'content' as const, text: 'Short content.' },
+  { kind: 'content' as const, text: 'Follow now.' },
 ];
 
 type FetchArgs = [url: string, init: RequestInit];

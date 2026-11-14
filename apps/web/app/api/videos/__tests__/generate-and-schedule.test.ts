@@ -419,7 +419,7 @@ function setup(cfg: DbConfig = {}): void {
 }
 
 // Images mode needs media on every segment (one photo per ~3s): hook 24
-// words -> 3, body 42 -> 6, CTA 9 -> 2.
+// words -> 3, content 42 -> 6, content take 9 -> 2.
 const DEFAULT_SEGMENTS = [
   {
     kind: 'hook',
@@ -427,12 +427,12 @@ const DEFAULT_SEGMENTS = [
     media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })),
   },
   {
-    kind: 'body',
+    kind: 'content',
     text: 'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.',
     media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
   },
   {
-    kind: 'cta',
+    kind: 'content',
     text: 'Save this video before your next trip to Porto.',
     media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })),
   },
@@ -935,24 +935,24 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
     const segmentsHook =
       'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
-    const segmentsBody =
+    const segmentsContent =
       'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
-    const segmentsCta = 'Save this video before your next trip to Porto.';
+    const segmentsCtaTake = 'Save this video before your next trip to Porto.';
     const validSegments = [
       { kind: 'hook', text: segmentsHook, media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
       {
-        kind: 'body',
-        text: segmentsBody,
+        kind: 'content',
+        text: segmentsContent,
         media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
       },
-      { kind: 'cta', text: segmentsCta, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
+      { kind: 'content', text: segmentsCtaTake, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
     ];
 
     it('rejects invalid segments before any charge', async () => {
       const bad = [
-        { kind: 'body', text: segmentsBody },
+        { kind: 'content', text: segmentsContent },
         { kind: 'hook', text: segmentsHook },
-        { kind: 'cta', text: segmentsCta },
+        { kind: 'content', text: segmentsCtaTake },
       ];
       const res = await post(baseBody({ options: { segments: bad } }));
       const json = await res.json();
@@ -965,8 +965,8 @@ describe('POST /api/videos/generate-and-schedule', () => {
     it('rejects an unknown segment key at parse time instead of stripping it', async () => {
       const withVoice = [
         { kind: 'hook', text: segmentsHook },
-        { kind: 'body', text: segmentsBody, voice: 'narrator' },
-        { kind: 'cta', text: segmentsCta },
+        { kind: 'content', text: segmentsContent, voice: 'narrator' },
+        { kind: 'content', text: segmentsCtaTake },
       ];
       const res = await post(baseBody({ options: { segments: withVoice } }));
       const json = await res.json();
@@ -979,8 +979,8 @@ describe('POST /api/videos/generate-and-schedule', () => {
     it('rejects an unknown media key at parse time instead of stripping it', async () => {
       const withAlt = [
         { kind: 'hook', text: segmentsHook },
-        { kind: 'body', text: segmentsBody, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
-        { kind: 'cta', text: segmentsCta },
+        { kind: 'content', text: segmentsContent, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
+        { kind: 'content', text: segmentsCtaTake },
       ];
       const res = await post(baseBody({ options: { segments: withAlt } }));
       const json = await res.json();
@@ -996,8 +996,8 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // the content validator ever sees it.
       const withTerms = [
         { kind: 'hook', text: segmentsHook },
-        { kind: 'body', text: segmentsBody, terms: ['restaurant kitchen'] },
-        { kind: 'cta', text: segmentsCta },
+        { kind: 'content', text: segmentsContent, terms: ['restaurant kitchen'] },
+        { kind: 'content', text: segmentsCtaTake },
       ];
       const res = await post(baseBody({ options: { segments: withTerms } }));
       const json = await res.json();
@@ -1018,7 +1018,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const res = await post(baseBody({ options: { segments: validSegments } }));
       expect(res.status).toBe(200);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      expect(payload.video_script).toBe(`${segmentsHook}\n\n${segmentsBody}\n\n${segmentsCta}`);
+      expect(payload.video_script).toBe(`${segmentsHook}\n\n${segmentsContent}\n\n${segmentsCtaTake}`);
     });
   });
 
@@ -3118,17 +3118,17 @@ describe('POST /api/videos/generate-and-schedule', () => {
 describe('segments-only contract (Phase 4)', () => {
   const hook =
     'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
-  const bodyText =
+  const contentText =
     'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
-  const cta = 'Save this video before your next trip to Porto.';
+  const ctaTake = 'Save this video before your next trip to Porto.';
   const segments = [
     { kind: 'hook', text: hook, media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
     {
-      kind: 'body',
-      text: bodyText,
+      kind: 'content',
+      text: contentText,
       media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
     },
-    { kind: 'cta', text: cta, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
+    { kind: 'content', text: ctaTake, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
   ];
   function singleBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     const base: Record<string, unknown> = {
@@ -3197,7 +3197,7 @@ describe('segments-only contract (Phase 4)', () => {
     expect(spend?.args.p_amount).toBe(2);
     const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
     expect(payload.video_title).toBe('Porto trip');
-    expect(payload.video_script).toBe(`${hook}\n\n${bodyText}\n\n${cta}`);
+    expect(payload.video_script).toBe(`${hook}\n\n${contentText}\n\n${ctaTake}`);
   });
 });
 

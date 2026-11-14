@@ -45,8 +45,8 @@ function stubFetch(responses: Array<Response | Error>): Array<{ url: string; ini
 
 const SEGMENTS = [
   { kind: 'hook', text: 'Welcome to Porto.', media: [{ mediaId: 'aabbccddeeff00112233445566778899.jpg' }] },
-  { kind: 'body', text: 'Where the river meets the sea.', media: [{ url: 'https://e.com/body.jpg' }] },
-  { kind: 'cta', text: 'Visit Porto soon.', media: [{ mediaId: '00112233445566778899aabbccddeeff.jpg' }] },
+  { kind: 'content', text: 'Where the river meets the sea.', media: [{ url: 'https://e.com/body.jpg' }] },
+  { kind: 'content', text: 'Visit Porto soon.', media: [{ mediaId: '00112233445566778899aabbccddeeff.jpg' }] },
 ];
 
 const INPUT = {
@@ -109,8 +109,8 @@ describe('checkSegmentMediaAspect', () => {
       ...INPUT,
       segments: [
         { kind: 'hook', text: 'Welcome to Porto.' },
-        { kind: 'body', text: 'Where the river meets the sea.' },
-        { kind: 'cta', text: 'Visit Porto soon.' },
+        { kind: 'content', text: 'Where the river meets the sea.' },
+        { kind: 'content', text: 'Visit Porto soon.' },
       ],
     });
     expect(result).toBeNull();
@@ -156,7 +156,7 @@ describe('checkSegmentMediaAspect', () => {
     const calls = stubFetch([engineBody('ok')]);
     const result = await checkSegmentMediaAspect({ ...INPUT, hasFace: true });
     expect(result).toBeNull();
-    // Hook (segment 0) is a panel over the face: only body + CTA are checked.
+    // Hook (segment 0) is a panel over the face: only content takes are checked.
     expect(calls).toHaveLength(2);
     expect(JSON.parse(calls[0].init.body as string)).toEqual({
       url: 'https://e.com/body.jpg',
@@ -264,8 +264,8 @@ describe('checkPreChargePreflights', () => {
       ...COMBINED,
       segments: [
         { kind: 'hook', text: 'Welcome to Porto.' },
-        { kind: 'body', text: 'Where the river meets the sea.' },
-        { kind: 'cta', text: 'Visit Porto soon.' },
+        { kind: 'content', text: 'Where the river meets the sea.' },
+        { kind: 'content', text: 'Visit Porto soon.' },
       ],
     });
     expect(result).toBeNull();

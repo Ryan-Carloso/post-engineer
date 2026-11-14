@@ -118,9 +118,9 @@ export interface GeneratePersonaVideoInput {
     paragraphNumber?: number;
     language?: string;
     niche?: string;
-    /** Segments script (MCP first, Phase 1): first hook, body segments, last CTA. Validated by the web route before any token debit. */
+    /** Segments script (MCP first, Phase 1): first hook, then content takes in order. Validated by the web route before any token debit. */
     segments?: Array<{
-      kind: 'hook' | 'body' | 'cta';
+      kind: 'hook' | 'content';
       text: string;
       media?: Array<{ mediaId?: string; url?: string; overlay?: { title: string; subtitle?: string; badge?: string } }>;
     }>;

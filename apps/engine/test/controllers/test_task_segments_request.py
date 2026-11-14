@@ -27,8 +27,8 @@ def valid_segments():
     # body 42 → 6, CTA 9 → 2.
     return [
         {"kind": "hook", "text": HOOK, "media": _photos("h", 3)},
-        {"kind": "body", "text": BODY, "media": _photos("b", 6)},
-        {"kind": "cta", "text": CTA, "media": _photos("c", 2)},
+        {"kind": "content", "text": BODY, "media": _photos("b", 6)},
+        {"kind": "content", "text": CTA, "media": _photos("c", 2)},
     ]
 
 
@@ -130,8 +130,8 @@ def test_segments_joining_beyond_video_script_cap_is_rejected():
     long_body = "x" * 20001 + " " + " ".join(["word"] * 29) + "."
     segments = [
         {"kind": "hook", "text": HOOK, "media": _photos("h", 3)},
-        {"kind": "body", "text": long_body, "media": _photos("b", 4)},
-        {"kind": "cta", "text": CTA, "media": _photos("c", 2)},
+        {"kind": "content", "text": long_body, "media": _photos("b", 4)},
+        {"kind": "content", "text": CTA, "media": _photos("c", 2)},
     ]
     with pytest.raises(ValidationError, match="video_script"):
         TaskVideoRequest(

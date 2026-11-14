@@ -19,7 +19,7 @@ import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 // list_experiments, add_experiment_pair and get_experiment_results.
 //
 // An experiment tests ONE variable (the hook) with two variants. It is a
-// set of pairs: inside a pair both videos share topic, body and CTA and only
+// set of pairs: inside a pair both videos share topic and content and only
 // the hook differs; across pairs the topic changes. add_experiment_pair
 // creates both videos of one pair through generate-and-schedule (two normal
 // charged videos) and the server rejects a pair that differs in anything
@@ -87,7 +87,7 @@ export const AddExperimentPairShape = {
     .min(2)
     .max(11)
     .refine((list) => list.every((segment) => segment.kind !== 'hook'), { message: 'segments must not contain the hook: put each variant\'s hook in hooks' })
-    .describe('The shared script WITHOUT the hook: body segments, then the CTA. Identical for both videos of the pair.'),
+    .describe('The shared script WITHOUT the hook: content takes only. Identical for both videos of the pair.'),
   hooks: z
     .array(
       z
