@@ -22,7 +22,6 @@
     "build": "tsc -p tsconfig.json",
     "prepublishOnly": "pnpm build",
     "start": "node dist/index.js",
-    "measure:tools-list": "node scripts/measure-tools-list.mjs",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "lint": "eslint src/",

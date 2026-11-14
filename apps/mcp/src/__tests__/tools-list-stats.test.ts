@@ -1,3 +1,5 @@
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { describe, expect, it } from 'vitest';
 import { PostEngineerClient } from '../client.js';
 import { createPostEngineerMcpServer } from '../index.js';
@@ -79,5 +81,19 @@ describe('listServerTools', () => {
     const stdio = await listServerTools(createPostEngineerMcpServer(new PostEngineerClient({ apiKey: 'measure-only' }), 'stdio'));
     const http = await listServerTools(createPostEngineerMcpServer(new PostEngineerClient({ apiKey: 'measure-only' }), 'http'));
     expect(http.map((entry) => entry.name)).not.toEqual(stdio.map((entry) => entry.name));
+  });
+
+  it('follows nextCursor until the last page, so a paginated tools/list is counted whole', async () => {
+    const server = new Server({ name: 'paged', version: '0.0.0' }, { capabilities: { tools: {} } });
+    const cursorsSeen: Array<string | undefined> = [];
+    server.setRequestHandler(ListToolsRequestSchema, async (request) => {
+      cursorsSeen.push(request.params?.cursor);
+      return request.params?.cursor === undefined
+        ? { tools: [tool('first', 'x')], nextCursor: 'page-2' }
+        : { tools: [tool('second', 'x')] };
+    });
+    const tools = await listServerTools(server);
+    expect(tools.map((entry) => entry.name)).toEqual(['first', 'second']);
+    expect(cursorsSeen).toEqual([undefined, 'page-2']);
   });
 });

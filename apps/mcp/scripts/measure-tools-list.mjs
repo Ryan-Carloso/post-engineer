@@ -2,7 +2,7 @@
 // #566): tool count, total bytes, estimated tokens and the largest tools. Run
 // it before and after a tool change and paste both outputs in the PR.
 //
-//   pnpm build && pnpm measure:tools-list [--transport stdio|http] [--top 10] [--json]
+//   pnpm build && node scripts/measure-tools-list.mjs [--transport stdio|http] [--top 10] [--json]
 //
 // Needs no API key and makes no network call: the server is created with a
 // placeholder key and listed over an in-memory transport.

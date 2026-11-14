@@ -167,9 +167,9 @@ Every session loads all tool schemas into the agent's context. To see how big th
 
 ```bash
 pnpm build
-pnpm measure:tools-list                      # stdio tool set
-pnpm measure:tools-list --transport http     # remote tool set
-pnpm measure:tools-list --top 15 --json
+node scripts/measure-tools-list.mjs                      # stdio tool set
+node scripts/measure-tools-list.mjs --transport http     # remote tool set
+node scripts/measure-tools-list.mjs --top 15 --json
 ```
 
 Run it before and after a change to tool schemas and put both outputs in the PR.

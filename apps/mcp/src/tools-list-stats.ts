@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 // Measures the `tools/list` payload an agent loads into its context. Used by
@@ -58,7 +58,7 @@ export function formatToolsListReport(summary: ToolsListSummary): string {
 }
 
 /** Lists a server's tools through a real MCP client over an in-memory pair, as an agent would. */
-export async function listServerTools(server: McpServer): Promise<Tool[]> {
+export async function listServerTools(server: { connect(transport: Transport): Promise<void>; close(): Promise<void> }): Promise<Tool[]> {
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'measure-tools-list', version: '0.0.0' });
   await server.connect(serverSide);
