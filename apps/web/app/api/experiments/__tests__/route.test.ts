@@ -94,7 +94,7 @@ describe('POST /api/experiments', () => {
     expect(response.status).toBe(200);
     expect(applyRateLimit).toHaveBeenCalledWith(expect.any(Request), RATE_LIMITS.experimentCreate, USER);
     expect(db.calls).toContainEqual(['personas', 'eq', 'user_id', USER]);
-    expect(db.rpc).toHaveBeenCalledWith('create_experiment', {
+    expect(db.rpc).toHaveBeenCalledWith('experiments (action: create)', {
       p_user_id: USER,
       p_name: 'Hook test',
       p_variable: 'hook',
@@ -113,7 +113,7 @@ describe('POST /api/experiments', () => {
     const response = await post(createBody({ personaId: null }));
     expect(response.status).toBe(200);
     expect(db.from).not.toHaveBeenCalledWith('personas');
-    expect(db.rpc.mock.calls[0]).toEqual(['create_experiment', expect.objectContaining({ p_persona_id: null })]);
+    expect(db.rpc.mock.calls[0]).toEqual(['experiments (action: create)', expect.objectContaining({ p_persona_id: null })]);
   });
 
   it.each([
@@ -157,7 +157,7 @@ describe('POST /api/experiments', () => {
     mockDb({ personas: { data: { id: PERSONA }, error: null } }, { data: null, error: { message: 'check violation' } });
     expect((await post(createBody())).status).toBe(500);
     expect(logger.error).toHaveBeenCalledWith('[api/experiments] persona lookup failed', expect.anything(), { personaId: PERSONA });
-    expect(logger.error).toHaveBeenCalledWith('[api/experiments] create_experiment failed', expect.anything(), { userId: USER });
+    expect(logger.error).toHaveBeenCalledWith('[api/experiments] experiments (action: create) failed', expect.anything(), { userId: USER });
   });
 });
 
@@ -527,7 +527,7 @@ describe('exact response contracts', () => {
     const second = await post(createBody());
     expect(second.status).toBe(500);
     expect(await second.json()).toMatchObject({ success: false, error: 'Failed to create the experiment.' });
-    expect(logger.error).toHaveBeenCalledWith('[api/experiments] create_experiment failed', rpcError, { userId: USER });
+    expect(logger.error).toHaveBeenCalledWith('[api/experiments] experiments (action: create) failed', rpcError, { userId: USER });
   });
 
   it('POST 500 when the RPC answers without an id string, even with no error', async () => {

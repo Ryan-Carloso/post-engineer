@@ -214,8 +214,8 @@ async function resolvePostUrl(userId: string, taskId: string): Promise<string | 
 //---------------
 // attachPostUrl — postUrl inside the envelope's body (issue #555), where
 // BaseResponse readers look: the MCP narrows result.body, so a top-level
-// postUrl on the envelope would never reach get_video_task_progress or
-// wait_for_video_tasks. A non-envelope body (a bare string, an array, or
+// postUrl on the envelope would never reach video_tasks (action: status) or
+// video_tasks (action: status). A non-envelope body (a bare string, an array, or
 // an envelope without an object body) passes through untouched.
 //---------------
 function attachPostUrl(envelope: unknown, postUrl: string | null): unknown {

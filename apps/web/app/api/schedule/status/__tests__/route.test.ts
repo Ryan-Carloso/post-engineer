@@ -467,7 +467,7 @@ describe('GET progress linkage', () => {
     vi.clearAllMocks();
   });
 
-  it('selects task_id on upcoming slots so callers can poll get_video_task_progress', async () => {
+  it('selects task_id on upcoming slots so callers can poll video_tasks (action: status)', async () => {
     const upcoming = [
       { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'generating', title: 'Next', schedule_id: 's1', task_id: 'task-1' },
     ];

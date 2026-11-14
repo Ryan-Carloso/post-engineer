@@ -15,6 +15,7 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import ts from 'typescript';
 import { findRepoRoot } from '@/test/repo-root';
 import * as promptBase from '../prompt-base';
 
@@ -54,29 +55,75 @@ function collectSourceFiles(dir: string): string[] {
   return out.sort();
 }
 
-function registeredToolNames(): Set<string> {
+//---------------
+// The MCP's tools and their actions, read from its sources as syntax trees:
+// every `server.tool('name', …)` registration, and for an action tool the
+// keys of the `byAction({ key: handler, … })` object literal in its callback.
+// A prompt may name a tool, or `tool (action: x)` with an action that tool
+// really has; the MCP sources are the one source of truth (issue #566).
+//---------------
+function registeredTools(): Map<string, Set<string>> {
   const root = findRepoRoot(import.meta.url);
   const srcDir = join(root, 'apps', 'mcp', 'src');
   expect(existsSync(srcDir)).toBe(true);
-  const names = new Set<string>();
-  // Registrations span lines: server.tool(\n    'name', — \s matches the
-  // newline between the paren and the quoted name.
+  const tools = new Map<string, Set<string>>();
   for (const file of collectSourceFiles(srcDir)) {
-    const source = readFileSync(file, 'utf8');
-    for (const match of source.matchAll(/server\.tool\(\s*'([a-z_]+)'/g)) {
-      const name = match[1];
-      if (name !== undefined) {
-        names.add(name);
+    const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === 'tool' &&
+        ts.isIdentifier(node.expression.expression) &&
+        node.expression.expression.text === 'server'
+      ) {
+        const [first] = node.arguments;
+        const callback = node.arguments[node.arguments.length - 1];
+        if (first !== undefined && ts.isStringLiteralLike(first)) {
+          const actions = new Set<string>();
+          if (
+            callback !== undefined &&
+            ts.isCallExpression(callback) &&
+            ts.isIdentifier(callback.expression) &&
+            callback.expression.text === 'byAction' &&
+            callback.arguments[0] !== undefined &&
+            ts.isObjectLiteralExpression(callback.arguments[0])
+          ) {
+            for (const property of callback.arguments[0].properties) {
+              if (property.name !== undefined && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))) {
+                actions.add(property.name.text);
+              }
+            }
+          }
+          tools.set(first.text, actions);
+        }
       }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return tools;
+}
+
+const ACTION_PAIR = /([a-z][a-z0-9_]*) \(action: ([a-z][a-z0-9_]*)\)/g;
+
+/** `tool (action: x)` pairs the served prompts name. */
+function mentionedActions(): Array<{ tool: string; action: string }> {
+  const pairs = new Map<string, { tool: string; action: string }>();
+  for (const { text } of servedPromptTexts()) {
+    for (const match of text.matchAll(ACTION_PAIR)) {
+      const [, tool = '', action = ''] = match;
+      pairs.set(`${tool}.${action}`, { tool, action });
     }
   }
-  return names;
+  return [...pairs.values()].sort((a, b) => `${a.tool}.${a.action}`.localeCompare(`${b.tool}.${b.action}`));
 }
 
 function mentionedToolNames(): string[] {
   const mentioned = new Set<string>();
   for (const { text } of servedPromptTexts()) {
-    for (const match of text.matchAll(/[a-z][a-z0-9]*(?:_[a-z0-9]+)+/g)) {
+    // The action of a `tool (action: x)` pair is checked against the tool's own actions below.
+    for (const match of text.replace(ACTION_PAIR, '$1').matchAll(/[a-z][a-z0-9]*(?:_[a-z0-9]+)+/g)) {
       const token = match[0];
       if (!NON_TOOL_TOKENS.has(token)) {
         mentioned.add(token);
@@ -143,17 +190,33 @@ describe('prompt status claims', () => {
 });
 
 describe('prompt tool names match registered MCP tools', () => {
-  it('finds registered tools and mentioned tool names', () => {
-    const registered = registeredToolNames();
-    expect(registered.size).toBeGreaterThan(0);
-    expect(registered.has('generate_persona_video')).toBe(true);
+  it('finds registered tools, their actions and the tool names the prompts mention', () => {
+    const registered = registeredTools();
+    expect(registered.size).toBe(16);
+    expect(registered.has('generate_video')).toBe(true);
+    expect([...(registered.get('personas') ?? [])].sort()).toEqual(['create', 'delete', 'get', 'list', 'update']);
+    expect(registered.get('generate_video')?.size).toBe(0);
     expect(mentionedToolNames().length).toBeGreaterThan(0);
+    expect(mentionedActions().length).toBeGreaterThan(0);
   });
 
   it('registers every tool name mentioned in the served prompts', () => {
-    const registered = registeredToolNames();
+    const registered = registeredTools();
     const missing = mentionedToolNames().filter((name) => !registered.has(name));
     expect(missing).toEqual([]);
+  });
+
+  it('only names an action that the tool really has', () => {
+    const registered = registeredTools();
+    const unknown = mentionedActions().filter(({ tool, action }) => !registered.get(tool)?.has(action));
+    expect(unknown).toEqual([]);
+  });
+
+  it('never gives an action to a tool that has none', () => {
+    const registered = registeredTools();
+    for (const { tool } of mentionedActions()) {
+      expect(registered.get(tool)?.size, `${tool} has no actions`).toBeGreaterThan(0);
+    }
   });
 });
 

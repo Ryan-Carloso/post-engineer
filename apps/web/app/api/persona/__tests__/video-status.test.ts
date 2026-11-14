@@ -370,7 +370,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
         expect(response.status).toBe(200);
         // Inside the envelope's body, where BaseResponse readers look: the
         // MCP narrows result.body, so a top-level postUrl would never reach
-        // get_video_task_progress or wait_for_video_tasks (OpenCode #556).
+        // video_tasks (action: status) or video_tasks (action: status) (OpenCode #556).
         const envelope = (await response.json()) as {
           body: { postUrl: string | null };
           postUrl?: unknown;

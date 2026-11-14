@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 // Persona scope through the real post-detail helpers: a persona-scoped API
 // key must not read another persona's post through GET /api/posts/[id] (MCP
-// get_post) or GET /api/schedule/slots/[slotId] (MCP get_slot). Out of
+// posts (action: get)) or GET /api/schedule/slots/[slotId] (MCP schedules (action: get_slot)). Out of
 // scope is a 404 like an unknown id; persona-less posts stay visible, the
 // same policy as GET /api/schedule/status and GET /api/metrics.
 

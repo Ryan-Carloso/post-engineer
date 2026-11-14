@@ -5,7 +5,7 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 
 //---------------
 // GET /api/prompts/[slug] — one recipe prompt with its full text, for the
-// MCP get_prompt tool and slash commands. Unknown slug → 404 with the
+// MCP prompts (action: get) tool and slash commands. Unknown slug → 404 with the
 // stable PROMPT_NOT_FOUND code (the MCP then lists the valid slugs).
 // Auth = Supabase session (cookie) OR personal API key / OAuth (MCP).
 //---------------

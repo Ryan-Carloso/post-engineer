@@ -1,10 +1,8 @@
 // en-US dictionary — mirrors the pt Dictionary key structure.
 
 import type { Dictionary } from './pt';
-import { personaVoiceCloneEn, voiceCloneApiToolDescEn } from './voice-clone-i18n-en';
-import { postToolDescEn } from './post-tools-i18n-en';
-import { segmentMediaToolDescEn } from './segment-media-i18n-en';
-import { videoUploadToolDescEn } from './video-upload-i18n-en';
+import { personaVoiceCloneEn } from './voice-clone-i18n-en';
+import { mcpToolDescEn } from './mcp-tools-i18n-en';
 import { accountI18nEn } from './account-i18n-en';
 import { accountsI18nEn } from './accounts-i18n-en';
 import { recipesI18nEn } from './recipes-i18n-en';
@@ -186,31 +184,7 @@ export const enDictionary: Dictionary = {
     copy: 'Copy',
     toolsTitle: 'Available tools',
     toolsSubtitle: 'Here are the tools your AI agent gets access to after connecting.',
-    toolDescListPersonas: 'List your personas',
-    toolDescListVoices: 'List available voices',
-    ...voiceCloneApiToolDescEn,
-    toolDescListFaces: 'List stock avatar faces',
-    toolDescCreatePersona: 'Create a new persona',
-    toolDescUpdatePersona: 'Update an existing persona',
-    toolDescGetTokenBalance: 'Check token balance',
-    ...segmentMediaToolDescEn,
-    toolDescGetVideoStatus: 'Check video status',
-    toolDescGetVideoTaskProgress: 'Poll per-video progress (%, stage)',
-    toolDescWaitForVideoTasks: 'Wait until videos finish or fail',
-    toolDescListPersonaImages: "List a persona's image library",
-    toolDescAddPersonaImage: 'Add an image to the library',
-    toolDescUpdatePersonaImage: 'Update a library image',
-    toolDescRemovePersonaImage: 'Remove a library image',
-    ...videoUploadToolDescEn,
-    toolDescListSocialAccounts: 'List connected social accounts',
-    toolDescListSchedules: 'List automation schedules',
-    toolDescListPosts: 'List upcoming and past posts',
-    toolDescCancelSchedule: 'Cancel a schedule',
-    ...postToolDescEn,
-    toolDescListTokenTransactions: 'List the token ledger',
-    toolDescGetPersonaDeletePreview: 'Preview persona deletion impact',
-    toolDescDeletePersona: 'Delete a persona (destructive)',
-    toolDescDisconnectAccount: 'Disconnect a social account',
+    ...mcpToolDescEn,
   },
   // App API Key
   persona: {

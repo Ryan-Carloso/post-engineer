@@ -606,7 +606,7 @@
       },
       "SegmentMedia": {
         "additionalProperties": false,
-        "description": "Media reference shape for a segment's photo (upload_media uploads it, check_media verifies it).",
+        "description": "Media reference shape for a segment's photo (media (action: upload) uploads it, media (action: check) verifies it).",
         "properties": {
           "mediaId": {
             "anyOf": [
@@ -1942,7 +1942,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Mechanically check one image URL or media id (MCP check_media)",
+        "summary": "Mechanically check one image URL or media id (MCP media check)",
         "tags": [
           "V1"
         ]

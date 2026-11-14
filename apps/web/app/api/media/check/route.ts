@@ -1,5 +1,5 @@
 //---------------
-// POST /api/media/check — mechanical image URL check (MCP check_media).
+// POST /api/media/check — mechanical image URL check (MCP media (action: check)).
 //
 // The caller authenticates with a session or API key; the route proxies
 // to the engine's /api/v1/media/check with the server secret, where the

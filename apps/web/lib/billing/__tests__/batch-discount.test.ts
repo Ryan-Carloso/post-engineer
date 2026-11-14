@@ -230,9 +230,9 @@ describe('narrowBatchSlot', () => {
 
 describe('batch discount copy', () => {
   it('states the BATCH_FREE_EVERY threshold in both locales of the MCP docs card', async () => {
-    const { segmentMediaToolDescEn } = await import('@/lib/i18n/segment-media-i18n-en');
-    const { segmentMediaToolDescPt } = await import('@/lib/i18n/segment-media-i18n-pt');
-    expect(segmentMediaToolDescEn.toolDescGeneratePersonaVideoBatch).toContain(`every ${BATCH_FREE_EVERY}th face video`);
-    expect(segmentMediaToolDescPt.toolDescGeneratePersonaVideoBatch).toContain(`a cada ${BATCH_FREE_EVERY} vídeos com rosto`);
+    const { mcpToolDescEn } = await import('@/lib/i18n/mcp-tools-i18n-en');
+    const { mcpToolDescPt } = await import('@/lib/i18n/mcp-tools-i18n-pt');
+    expect(mcpToolDescEn.toolDescGenerateVideo).toContain(`every ${BATCH_FREE_EVERY}th face video`);
+    expect(mcpToolDescPt.toolDescGenerateVideo).toContain(`a cada ${BATCH_FREE_EVERY} vídeos com rosto`);
   });
 });

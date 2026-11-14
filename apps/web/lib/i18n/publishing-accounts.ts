@@ -11,10 +11,6 @@
 
 export const publishingAccountsStrings = {
   en: {
-    apiKeys: {
-      toolDescGetPersonaPublishingAccounts: 'List a persona\u2019s bound publishing accounts',
-      toolDescSetPersonaPublishingAccounts: 'Set a persona\u2019s bound publishing accounts',
-    },
     persona: {
       publishingAccountsLabel: 'Publishing accounts',
       publishingAccountsHint:
@@ -29,10 +25,6 @@ export const publishingAccountsStrings = {
     },
   },
   pt: {
-    apiKeys: {
-      toolDescGetPersonaPublishingAccounts: 'Liste as contas de publicação vinculadas da persona',
-      toolDescSetPersonaPublishingAccounts: 'Defina as contas de publicação vinculadas da persona',
-    },
     persona: {
       publishingAccountsLabel: 'Contas de publicação',
       publishingAccountsHint:

@@ -250,7 +250,7 @@ function mockSupabase(handlers: {
 //---------------
 // The route's HTTP surface is its contract, so it is pinned directly.
 // A schedule is created by POST /api/videos/generate-and-schedule and
-// cancelled by DELETE (the MCP cancel_schedule tool); there is no edit
+// cancelled by DELETE (the MCP schedules (action: cancel) tool); there is no edit
 // verb. Adding a write path back here needs a deliberate decision, not
 // an accident, so this test fails if a PATCH handler reappears.
 //---------------

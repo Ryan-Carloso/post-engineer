@@ -4,7 +4,7 @@ import { listHubPrompts } from '@/lib/recipes/hub-prompts';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
-// GET /api/prompts — recipe prompt catalog for the MCP (list_prompts tool
+// GET /api/prompts — recipe prompt catalog for the MCP (prompts (action: list) tool
 // and slash commands): slug, title, description, no prompt text.
 // Auth = Supabase session (cookie) OR personal API key / OAuth (MCP).
 // Static in-memory data, no fan-out: no rate limit, like /api/persona/faces.

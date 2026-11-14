@@ -25,7 +25,7 @@ function entryName(entry) {
 }
 
 // `<method>_<first entry name>`; when two endpoints share it (one MCP tool
-// fronting two routes, e.g. connect_account), the last route segment disambiguates.
+// fronting two routes, e.g. accounts (action: connect)), the last route segment disambiguates.
 function buildOperationIds(mapping) {
   const base = (key) => `${key.split(' ')[0].toLowerCase()}_${entryName(mapping[key][0])}`;
   const counts = new Map();
