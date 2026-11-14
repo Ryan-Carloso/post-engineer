@@ -37,8 +37,8 @@ WORDS = [
 
 SEGMENTS = [
     {"kind": "hook", "text": "Welcome to Porto."},
-    {"kind": "body", "text": "Where the river meets the sea."},
-    {"kind": "cta", "text": "Visit Porto soon."},
+    {"kind": "content", "text": "Where the river meets the sea."},
+    {"kind": "content", "text": "Visit Porto soon."},
 ]
 
 
@@ -95,8 +95,8 @@ def test_zero_token_segment_inherits_the_previous_boundary_instead_of_crashing()
     words = [("Porto", 0.0, 1.0), ("walks", 1.0, 2.0), ("now", 2.0, 3.0)]
     segments = [
         {"kind": "hook", "text": "Porto walks."},
-        {"kind": "body", "text": "!!! ???"},
-        {"kind": "cta", "text": "now."},
+        {"kind": "content", "text": "!!! ???"},
+        {"kind": "content", "text": "now."},
     ]
     intervals, fallback = user_media.segment_intervals(segments, words, 3.0)
     assert fallback is False
@@ -109,7 +109,7 @@ def test_word_list_shorter_than_segments_falls_back_to_proportional_timing():
     words = [("I", 0.0, 0.3), ("don't", 0.3, 0.8), ("know", 0.8, 1.2)]
     segments = [
         {"kind": "hook", "text": "I don't know."},
-        {"kind": "cta", "text": "Visit Porto soon."},
+        {"kind": "content", "text": "Visit Porto soon."},
     ]
     intervals, fallback = user_media.segment_intervals(segments, words, 10.0)
     assert fallback is True
@@ -212,8 +212,8 @@ def test_one_bad_url_costs_only_that_segment(tmp_path, monkeypatch):
 
     segments = [
         {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/bad.jpg"}]},
-        {"kind": "body", "text": "Where the river meets the sea.", "media": [{"url": "https://e.com/good.jpg"}]},
-        {"kind": "cta", "text": "Visit Porto soon."},
+        {"kind": "content", "text": "Where the river meets the sea.", "media": [{"url": "https://e.com/good.jpg"}]},
+        {"kind": "content", "text": "Visit Porto soon."},
     ]
     with patch.object(image_fetch, "download_image", side_effect=fake_download):
         prepared, skipped = user_media.prepare_segment_media(
@@ -243,8 +243,8 @@ def test_only_the_too_small_photo_is_skipped(tmp_path, monkeypatch):
 
     segments = [
         {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/small.jpg"}]},
-        {"kind": "body", "text": "Where the river meets the sea.", "media": [{"url": "https://e.com/face.jpg"}]},
-        {"kind": "cta", "text": "Visit Porto soon."},
+        {"kind": "content", "text": "Where the river meets the sea.", "media": [{"url": "https://e.com/face.jpg"}]},
+        {"kind": "content", "text": "Visit Porto soon."},
     ]
     with patch.object(image_fetch, "download_image", side_effect=fake_download):
         prepared, skipped = user_media.prepare_segment_media(

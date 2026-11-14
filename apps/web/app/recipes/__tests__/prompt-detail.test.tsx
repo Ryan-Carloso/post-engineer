@@ -13,12 +13,12 @@ vi.mock('@/lib/i18n/provider', () => {
       'It solves picking, scripting, and validating a story without guessing.',
     'recipes.dailyNewsStep3': 'Pick one clear story with a named place.',
     'recipes.dailyNewsStep4':
-      'Write hook first, CTA last, then validate before any token is spent.',
+      'Write hook first, then content takes, and validate before any token is spent.',
     'recipes.dailyNewsStep5':
       'Generate one video and publish it where you asked.',
     'recipes.dailyNewsDeliver1': 'One persona video from one story.',
     'recipes.dailyNewsDeliver2':
-      'A validated script: 60–200 words, hook first, CTA last.',
+      'A validated script: 60–200 words, hook first, then content takes.',
     'recipes.dailyNewsDeliver3': 'A published post on your connected accounts.',
     'recipes.dailyNewsExampleInput':
       'Riverside city opens park after ten-year build.',
@@ -55,12 +55,12 @@ vi.mock('@/lib/i18n/provider', () => {
     'recipes.placeSpotlightStep3':
       'Every photo passes a mechanical check before it enters the script; a refused photo drops out without hurting the video.',
     'recipes.placeSpotlightStep4':
-      'Write hook first, CTA last, then validate before any token is spent.',
+      'Write hook first, then content takes, and validate before any token is spent.',
     'recipes.placeSpotlightStep5':
       'Generate one video: the photos come in as cards with name, address, and price.',
     'recipes.placeSpotlightDeliver1': 'One persona video with up to 6 real photos of the place.',
     'recipes.placeSpotlightDeliver2':
-      'A validated script: 60–200 words, hook first, CTA last.',
+      'A validated script: 60–200 words, hook first, then content takes.',
     'recipes.placeSpotlightDeliver3':
       'On-screen cards with the place name, the address, and one detail like a price.',
     'recipes.placeSpotlightExampleInput':
@@ -76,12 +76,12 @@ vi.mock('@/lib/i18n/provider', () => {
     'recipes.subjectSpotlightStep3':
       'Only photos of the exact subject enter the script; a refused photo drops out without hurting the video.',
     'recipes.subjectSpotlightStep4':
-      'Write hook first, CTA last, then validate before any token is spent.',
+      'Write hook first, then content takes, and validate before any token is spent.',
     'recipes.subjectSpotlightStep5':
       'Generate one video: the photos come in as cards with the name, the trim, and the real price.',
     'recipes.subjectSpotlightDeliver1': 'One persona video with up to 6 real photos of the subject.',
     'recipes.subjectSpotlightDeliver2':
-      'A validated script: 60–200 words, hook first, CTA last.',
+      'A validated script: 60–200 words, hook first, then content takes.',
     'recipes.subjectSpotlightDeliver3':
       'On-screen cards with the name, the trim, and the real price pinned to a date and market.',
     'recipes.subjectSpotlightExampleInput':

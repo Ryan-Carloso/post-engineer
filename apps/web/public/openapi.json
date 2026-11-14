@@ -79,8 +79,7 @@
             "type": "string",
             "enum": [
               "hook",
-              "body",
-              "cta"
+              "content"
             ]
           },
           "text": {
@@ -6000,10 +5999,7 @@
                     "hookWords": {
                       "type": "integer"
                     },
-                    "bodyWords": {
-                      "type": "integer"
-                    },
-                    "ctaWords": {
+                    "contentWords": {
                       "type": "integer"
                     },
                     "mediaCount": {
@@ -6091,7 +6087,7 @@
                 "properties": {
                   "segments": {
                     "type": "array",
-                    "description": "Hook first, body, CTA last. 60-200 words in total.",
+                    "description": "Segments in order: hook first, then content takes. 60-200 words in total.",
                     "items": {
                       "$ref": "#/components/schemas/Segment"
                     }

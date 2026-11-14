@@ -1,8 +1,8 @@
-"""CTA-safe trim pins for live persona_hook code.
+"""Closing-take-safe trim pins for live persona_hook code.
 
 Restored from test_script_prompt_cta.py (Phase 5 PR 5 review): that file
 was deleted with the dead LLM prompt-structure tests, but its
-TestCtaSafeTrim class and the CTA-length literal sync pin cover code that
+TestClosingSafeTrim class and the CTA-length literal sync pin cover code that
 stays — persona_hook._limit_generated_script runs on the persona-lipsync
 path (task.py), and the 200 cap is mirrored across the DB check, the web
 form cap, and the engine schema. The LLM prompt cap went with the
@@ -21,7 +21,7 @@ from app.config import config  # noqa: E402
 from app.services import persona_hook  # noqa: E402
 
 
-class TestCtaSafeTrim:
+class TestClosingSafeTrim:
     @pytest.fixture(autouse=True)
     def _budget(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setitem(config.app, "max_video_script_characters", 60)
@@ -29,7 +29,7 @@ class TestCtaSafeTrim:
     def test_short_script_is_untouched(self):
         assert persona_hook._limit_generated_script("Hook curto.\n\nSegue aí.") == "Hook curto.\n\nSegue aí."
 
-    def test_overlong_body_is_trimmed_before_the_closing_cta(self):
+    def test_overlong_content_is_trimmed_before_the_closing_take(self):
         script = "Hook forte aqui.\n\nCorpo um longo. Corpo dois longo. Corpo três longo.\n\nSegue pra mais."
         result = persona_hook._limit_generated_script(script)
 
@@ -38,7 +38,7 @@ class TestCtaSafeTrim:
         assert result.endswith("Segue pra mais.")
         assert "Corpo três" not in result
 
-    def test_cta_keeps_its_own_paragraph_when_only_the_hook_survives(self):
+    def test_closing_take_keeps_its_own_paragraph_when_only_the_hook_survives(self):
         script = "Hook forte aqui.\n\nCorpo bem longo que não cabe no orçamento todo. Segue pra mais."
         result = persona_hook._limit_generated_script(script)
 
@@ -60,23 +60,23 @@ class TestCtaSafeTrim:
 
         assert len(result) <= 60
         # No body text fits next to the closing sentence, but the closing
-        # sentence fits on its own — it is the CTA and must survive.
+        # sentence fits on its own — it is the closing take and must survive.
         assert result == closing
 
     def test_closing_sentence_survives_when_no_head_budget_remains(self):
         # head_budget < 0 (closing + paragraph separator exceed the limit)
         # while the closing sentence alone still fits: the plain-cut
-        # fallback would end before it and drop the CTA.
+        # fallback would end before it and drop the closing take.
         closing = "C" * 58 + "."
         script = f"Hook forte aqui.\n\n{closing}"
         result = persona_hook._limit_generated_script(script)
 
         assert result == closing
 
-    def test_multi_sentence_cta_paragraph_survives_whole(self):
-        # Issue #534 defect 2: the CTA is a paragraph, not one sentence.
+    def test_multi_sentence_closing_paragraph_survives_whole(self):
+        # Issue #534 defect 2: the closing take is a paragraph, not one sentence.
         # The old trim kept only its last sentence and silently dropped
-        # the CTA's opening sentence into the trimmed body.
+        # the closing take's opening sentence into the trimmed body.
         script = (
             "Hook forte aqui.\n\n"
             "Corpo um longo. Corpo dois longo. Corpo três longo.\n\n"
@@ -88,7 +88,7 @@ class TestCtaSafeTrim:
         assert result == "Hook forte aqui.\n\nIdeia grande. Segue pra mais."
         assert "Corpo três" not in result
 
-    def test_cta_paragraph_ships_alone_when_no_head_fits(self):
+    def test_closing_paragraph_ships_alone_when_no_head_fits(self):
         # The closing paragraph fits on its own (59 chars of a 60 budget)
         # but no head text fits next to it: it ships alone, whole — the
         # old trim kept only its last sentence next to the hook instead.
@@ -98,7 +98,7 @@ class TestCtaSafeTrim:
 
         assert result == closing
 
-    def test_overlong_cta_paragraph_falls_back_to_last_sentence(self):
+    def test_overlong_closing_paragraph_falls_back_to_last_sentence(self):
         # The closing paragraph itself (68 chars) exceeds the 60 budget,
         # so the paragraph cannot ship whole: its last sentence is still
         # preserved instead of a plain cut that ends before it.
@@ -111,18 +111,19 @@ class TestCtaSafeTrim:
         assert len(result) <= 60
         assert result == "Hook forte aqui.\n\nSegue pra mais."
 
-    def test_habitloom_shaped_script_keeps_full_cta_at_prod_limit(
+    def test_habitloom_shaped_script_keeps_full_closing_take_at_prod_limit(
         self, monkeypatch: pytest.MonkeyPatch
     ):
         # Issue #534 defect 2, representative shape of the HabitLoom video
         # (task 42daee48-6ad9-4006-8bec-cfd7668be0a7): 98 words — hook 17,
-        # body 66, CTA 15 — 615 chars, over the prod 600-char limit. The
-        # full Video C text is not recoverable, so this rebuilds its shape:
-        # same word counts, same last spoken body line, same two-sentence
-        # CTA. The whole CTA paragraph must survive the trim.
+        # content 66, closing take 15 — 615 chars, over the prod 600-char
+        # limit. The full Video C text is not recoverable, so this rebuilds
+        # its shape: same word counts, same last spoken content line, same
+        # two-sentence closing take. The whole closing paragraph must
+        # survive the trim.
         monkeypatch.setitem(config.app, "max_video_script_characters", 600)
         hook = "Go to bed an hour earlier and lose more bodyweight, reports a brand new 2026 study now."
-        body = (
+        content = (
             "Investigators followed 196 participants aged 21 to 64 with prediabetes who slept "
             "under six and a half hours a nighttime. "
             "For eight weeks everyone followed the same lifestyle intervention while tracking "
@@ -131,23 +132,23 @@ class TestCtaSafeTrim:
             "without sleeping longer. "
             "But this is an association, not proof, so try this tonight, lights out one hour earlier."
         )
-        cta = "Small study, big idea, start with sleep tonight. Follow HabitLoom for straightforward daily health habits."
-        script = "\n\n".join([hook, body, cta])
+        closing = "Small study, big idea, start with sleep tonight. Follow HabitLoom for straightforward daily health habits."
+        script = "\n\n".join([hook, content, closing])
 
         assert len(script.split()) == 98
         assert len(hook.split()) == 17
-        assert len(body.split()) == 66
-        assert len(cta.split()) == 15
+        assert len(content.split()) == 66
+        assert len(closing.split()) == 15
         assert len(script) == 615
 
         result = persona_hook._limit_generated_script(script)
 
         assert len(result) <= 600
-        assert result.endswith(cta)
+        assert result.endswith(closing)
         assert "Small study, big idea" in result
-        # The trim's cost lands on the body, never the CTA: the last body
-        # sentence ("lights out one hour earlier") is cut so the whole CTA
-        # paragraph fits, while the earlier body sentences survive.
+        # The trim's cost lands on the content, never the closing take: the last content
+        # sentence ("lights out one hour earlier") is cut so the whole closing
+        # paragraph fits, while the earlier content sentences survive.
         assert "without sleeping longer" in result
         assert "lights out one hour earlier" not in result
 

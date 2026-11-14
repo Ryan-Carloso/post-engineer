@@ -738,7 +738,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "hook" | "body" | "cta";
+            kind: "hook" | "content";
             /** Media */
             media?: components["schemas"]["SegmentMedia"][] | null;
             /** Text */

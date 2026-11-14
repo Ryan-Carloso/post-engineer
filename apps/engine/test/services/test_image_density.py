@@ -55,8 +55,8 @@ def test_split_interval_covers_the_segment_without_a_gap_or_an_overlap():
 def test_validate_segments_reports_the_same_density_counts():
     segments = [
         {"kind": "hook", "text": _words(24, "hook"), "media": _photos(3, "h")},
-        {"kind": "body", "text": _words(32, "body"), "media": _photos(1, "b")},
-        {"kind": "cta", "text": _words(8, "cta"), "media": _photos(1, "c")},
+        {"kind": "content", "text": _words(32, "body"), "media": _photos(1, "b")},
+        {"kind": "content", "text": _words(8, "cta"), "media": _photos(1, "c")},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         validate_segments(segments)
@@ -76,8 +76,8 @@ def test_validate_segments_reports_the_same_density_counts():
 def test_validate_segments_rejects_more_than_thirty_photos_and_seven_on_full_lipsync():
     segments = [
         {"kind": "hook", "text": _words(40, "hook"), "media": _photos(13, "h")},
-        {"kind": "body", "text": _words(140, "body"), "media": _photos(18, "b")},
-        {"kind": "cta", "text": _words(20, "cta"), "media": _photos(6, "c")},
+        {"kind": "content", "text": _words(140, "body"), "media": _photos(18, "b")},
+        {"kind": "content", "text": _words(20, "cta"), "media": _photos(6, "c")},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         validate_segments(segments)
@@ -85,8 +85,8 @@ def test_validate_segments_rejects_more_than_thirty_photos_and_seven_on_full_lip
     assert "30" in exc_info.value.rule
     full_lipsync = [
         {"kind": "hook", "text": _words(24, "hook"), "media": _photos(7, "h")},
-        {"kind": "body", "text": _words(32, "body")},
-        {"kind": "cta", "text": _words(8, "cta")},
+        {"kind": "content", "text": _words(32, "body")},
+        {"kind": "content", "text": _words(8, "cta")},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         validate_segments(full_lipsync, video_type="full_lipsync")
@@ -96,8 +96,8 @@ def test_validate_segments_rejects_more_than_thirty_photos_and_seven_on_full_lip
 def test_an_item_without_a_reference_fails_on_that_item():
     segments = [
         {"kind": "hook", "text": _words(24, "hook"), "media": _photos(3, "h")},
-        {"kind": "body", "text": _words(32, "body"), "media": [{}, *_photos(3, "b")]},
-        {"kind": "cta", "text": _words(8, "cta"), "media": _photos(1, "c")},
+        {"kind": "content", "text": _words(32, "body"), "media": [{}, *_photos(3, "b")]},
+        {"kind": "content", "text": _words(8, "cta"), "media": _photos(1, "c")},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         validate_segments(segments)

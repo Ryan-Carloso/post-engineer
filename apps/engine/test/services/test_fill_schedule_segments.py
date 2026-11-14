@@ -24,12 +24,12 @@ SEGMENTS = [
         "media": [{"url": f"https://e.com/h{i}.jpg"} for i in range(3)],
     },
     {
-        "kind": "body",
+        "kind": "content",
         "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold at sunset before heading home through the old town streets.",
         "media": [{"mediaId": "abc123def456abc123def456abc12345.jpg"}]
         + [{"url": f"https://e.com/b{i}.jpg"} for i in range(4)],
     },
-    {"kind": "cta", "text": "Follow for more Porto walks every week.", "media": [{"url": "https://e.com/c0.jpg"}]},
+    {"kind": "content", "text": "Follow for more Porto walks every week.", "media": [{"url": "https://e.com/c0.jpg"}]},
 ]
 
 
@@ -99,11 +99,36 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
         self.assertIsNotNone(request.segments)
         self.assertEqual(
             [segment.kind for segment in request.segments],
-            ["hook", "body", "cta"],
+            ["hook", "content", "content"],
         )
         self.assertEqual(
             request.segments[1].media[0].mediaId,
             "abc123def456abc123def456abc12345.jpg",
+        )
+        self.assertEqual(
+            request.video_script,
+            "Porto is the city that wins you over slowly, one riverside morning "
+            "and one golden sunset at a time.\n\n"
+            "Walk the Ribeira in the morning light, cross the Dom Luis bridge, "
+            "taste francesinha where the locals eat, and finish with port wine "
+            "as the river turns gold at sunset before heading home through "
+            "the old town streets.\n\n"
+            "Follow for more Porto walks every week.",
+        )
+
+    def test_slot_with_pre_takes_kinds_dispatches_as_content(self):
+        # Rows stored before the takes contract carry kind body/cta;
+        # dispatch maps both to content, so the prepaid slot renders
+        # instead of failing validation on the renamed kind.
+        legacy = [
+            {**SEGMENTS[0]},
+            {**SEGMENTS[1], "kind": "body"},
+            {**SEGMENTS[2], "kind": "cta"},
+        ]
+        request = self._dispatched_request(_slot(video_type="faceless", segments=legacy))
+        self.assertEqual(
+            [segment.kind for segment in request.segments],
+            ["hook", "content", "content"],
         )
         self.assertEqual(
             request.video_script,

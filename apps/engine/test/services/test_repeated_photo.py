@@ -28,8 +28,8 @@ CTA = "Save this video before your next trip to Porto."
 def _segments():
     return [
         {"kind": "hook", "text": HOOK},
-        {"kind": "body", "text": BODY},
-        {"kind": "cta", "text": CTA},
+        {"kind": "content", "text": BODY},
+        {"kind": "content", "text": CTA},
     ]
 
 

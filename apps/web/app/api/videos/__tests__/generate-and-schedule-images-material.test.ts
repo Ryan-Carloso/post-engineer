@@ -28,16 +28,16 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 
 const hook =
   'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
-const bodyText =
+const contentText =
   'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
-const cta = 'Save this video before your next trip to Porto.';
+const ctaTake = 'Save this video before your next trip to Porto.';
 function photos(count: number, prefix: string) {
   return Array.from({ length: count }, (_, index) => ({ url: `https://e.com/${prefix}${index}.jpg` }));
 }
 const withMedia = [
   { kind: 'hook', text: hook, media: photos(3, 'h') },
-  { kind: 'body', text: bodyText, media: [{ mediaId: `${'a'.repeat(32)}.jpg` }, ...photos(5, 'b')] },
-  { kind: 'cta', text: cta, media: photos(2, 'c') },
+  { kind: 'content', text: contentText, media: [{ mediaId: `${'a'.repeat(32)}.jpg` }, ...photos(5, 'b')] },
+  { kind: 'content', text: ctaTake, media: photos(2, 'c') },
 ];
 const bodyWithoutMedia = withMedia.map((segment, index) =>
   index === 1 ? { kind: segment.kind, text: segment.text } : segment,
@@ -94,7 +94,7 @@ describe('generate-and-schedule with the images material', () => {
     const checked = semantics(withMedia);
     expect(checked.ok).toBe(true);
     if (checked.ok) {
-      expect(checked.value.script).toBe(`${hook}\n\n${bodyText}\n\n${cta}`);
+      expect(checked.value.script).toBe(`${hook}\n\n${contentText}\n\n${ctaTake}`);
     }
   });
 

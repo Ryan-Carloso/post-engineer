@@ -15,8 +15,8 @@ function photos(count: number, prefix: string): Array<{ url: string }> {
 
 const SEGMENTS = [
   { kind: 'hook' as const, text: 'Here is a small squat detail that quietly changes how your legs grow over the next few months.', media: photos(3, 'hook') },
-  { kind: 'body' as const, text: 'Most people bounce at the bottom of the squat, which moves the load off the legs and onto the lower back, so slow the last inch down and pause before you drive up again. Keep your chest tall and brace before every single rep.', media: photos(6, 'body') },
-  { kind: 'cta' as const, text: 'Follow for one fix a day.', media: photos(1, 'cta') },
+  { kind: 'content' as const, text: 'Most people bounce at the bottom of the squat, which moves the load off the legs and onto the lower back, so slow the last inch down and pause before you drive up again. Keep your chest tall and brace before every single rep.', media: photos(6, 'content') },
+  { kind: 'content' as const, text: 'Follow for one fix a day.', media: photos(1, 'ctaTake') },
 ];
 
 function video(title: string) {

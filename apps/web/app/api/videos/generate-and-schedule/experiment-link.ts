@@ -164,7 +164,7 @@ export function pairMismatch(partner: PairFacts, current: PairFacts): { field: s
   const partnerScript = splitHook(partner.segments);
   const currentScript = splitHook(current.segments);
   if (canonical(partnerScript.rest) !== canonical(currentScript.rest)) {
-    return { field: 'options.segments', message: 'Only the hook may differ inside a pair: body and CTA segments must be identical.' };
+    return { field: 'options.segments', message: 'Only the hook may differ inside a pair: content segments must be identical.' };
   }
   if (partnerScript.hook === currentScript.hook) {
     return { field: 'options.segments', message: 'The hook must differ from the other variant in this pair.' };

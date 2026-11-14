@@ -6,7 +6,7 @@ splits the script into per-sentence chunks of at most
 ``CHATTERBOX_MAX_CHUNK_CHARS`` chars, synthesizes one chunk per POST, and
 concatenates the chunk audios in order. The split is section-aware: a
 chunk never crosses a paragraph boundary (paragraphs are the agent's
-hook / body / CTA segments). Short scripts still take the old
+hook and content takes). Short scripts still take the old
 single-POST path unchanged.
 """
 
@@ -64,7 +64,7 @@ def test_incident_script_splits_into_two_ordered_chunks() -> None:
     chunks = split_chatterbox_script(INCIDENT_SCRIPT)
     assert len(chunks) == 2
     assert all(len(chunk) <= CHATTERBOX_MAX_CHUNK_CHARS for chunk in chunks)
-    # Order preserved, hook first, CTA last, nothing lost or reordered.
+    # Order preserved, hook first, content takes after, nothing lost or reordered.
     assert " ".join(chunks) == INCIDENT_SCRIPT
     assert chunks[0].startswith("Finished dinner.")
     assert chunks[-1].endswith("Follow HabitLoom for one habit a day.")

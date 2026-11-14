@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { segmentsRequestSchema } from '../segments-schema';
 
-const segment = (item: unknown) => [{ kind: 'body', text: 'Where the river meets the sea.', media: [item] }];
+const segment = (item: unknown) => [{ kind: 'content', text: 'Where the river meets the sea.', media: [item] }];
 
 describe('segmentsRequestSchema overlay', () => {
   it('keeps a card on the parsed segment so it reaches the engine', () => {
