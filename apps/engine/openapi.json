@@ -572,8 +572,7 @@
           "kind": {
             "enum": [
               "hook",
-              "body",
-              "cta"
+              "content"
             ],
             "title": "Kind",
             "type": "string"

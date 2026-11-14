@@ -15,9 +15,9 @@ function goodScript(overrides = {}) {
     title: 'Porto in one day: what to visit first',
     segments: [
       { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly.' },
-      { kind: 'body', text: 'Start in Ribeira in the morning, walk along the water, cross the Dom Luis I bridge on the lower deck, and look back at the coloured houses from the Gaia side.' },
-      { kind: 'body', text: 'Spend the afternoon in one cellar in Vila Nova de Gaia, taste a ruby and a tawny port, and finish back in Ribeira for dinner when the lights come on over the river.' },
-      { kind: 'cta', text: 'Save this one day plan and tell me which stop you would skip first.' },
+      { kind: 'content', text: 'Start in Ribeira in the morning, walk along the water, cross the Dom Luis I bridge on the lower deck, and look back at the coloured houses from the Gaia side.' },
+      { kind: 'content', text: 'Spend the afternoon in one cellar in Vila Nova de Gaia, taste a ruby and a tawny port, and finish back in Ribeira for dinner when the lights come on over the river.' },
+      { kind: 'content', text: 'Save this one day plan and tell me which stop you would skip first.' },
     ],
     ...overrides,
   };
@@ -29,43 +29,64 @@ test('validateScript accepts a good script', () => {
   assert.equal(result.value.totalWords, 102);
 });
 
-test('validateScript rejects a hook that is too short, a body that is too short, and a CTA out of range', () => {
+test('validateScript rejects a hook that is too short and content that is too short', () => {
   assert.equal(validateScript(goodScript({ segments: [
     { kind: 'hook', text: 'Porto is nice.' },
-    { kind: 'body', text: 'Walk around and eat something good while you are there.' },
-    { kind: 'cta', text: 'Save this.' },
+    { kind: 'content', text: 'Walk around and eat something good while you are there.' },
+    { kind: 'content', text: 'Save this.' },
   ] })).ok, false);
   assert.match(validateScript(goodScript({ segments: [
     { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly.' },
-    { kind: 'body', text: 'Walk around.' },
-    { kind: 'cta', text: 'Save this one day plan and tell me which stop you would skip first.' },
-  ] })).error.rule, /Body must have at least/);
-  assert.match(validateScript(goodScript({ segments: [
+    { kind: 'content', text: 'Walk around.' },
+    { kind: 'content', text: 'Save this one day plan and tell me which stop you would skip first.' },
+  ] })).error.rule, /Content must have at least/);
+});
+
+test('validateScript accepts short and long content takes: there is no CTA word range', () => {
+  // Issue #577: a two-word content take and a 21-word content take
+  // both pass — the old 5-20 CTA range does not apply to content takes.
+  assert.equal(validateScript(goodScript({ segments: [
     { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly.' },
-    { kind: 'body', text: 'Start in Ribeira in the morning, walk along the water, cross the Dom Luis I bridge on the lower deck, and look back at the coloured houses from the Gaia side.' },
-    { kind: 'body', text: 'Spend the afternoon in one cellar in Vila Nova de Gaia, taste a ruby and a tawny port, and finish back in Ribeira for dinner when the lights come on over the river.' },
-    { kind: 'cta', text: 'Save this.' },
-  ] })).error.rule, /CTA must be/);
+    { kind: 'content', text: 'Start in Ribeira in the morning, walk along the water, cross the Dom Luis I bridge on the lower deck, and look back at the coloured houses from the Gaia side.' },
+    { kind: 'content', text: 'Spend the afternoon in one cellar in Vila Nova de Gaia, taste a ruby and a tawny port, and finish back in Ribeira for dinner when the lights come on over the river.' },
+    { kind: 'content', text: 'Save this.' },
+  ] })).ok, true);
+  assert.equal(validateScript(goodScript({ segments: [
+    { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly.' },
+    { kind: 'content', text: 'Start in Ribeira in the morning, walk along the water, cross the Dom Luis I bridge on the lower deck, and look back at the coloured houses from the Gaia side.' },
+    { kind: 'content', text: Array.from({ length: 21 }, () => 'word').join(' ') + '.' },
+  ] })).ok, true);
+});
+
+test('validateScript accepts a CTA take in the middle of the video', () => {
+  // Issue #577: a CTA is just a content take, so it may sit anywhere
+  // after the hook — here in the middle — and the video still renders
+  // in take order.
+  assert.equal(validateScript(goodScript({ segments: [
+    { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly.' },
+    { kind: 'content', text: 'Save this one day plan and tell me which stop you would skip first.' },
+    { kind: 'content', text: 'Start in Ribeira in the morning, walk along the water, cross the Dom Luis I bridge on the lower deck, and look back at the coloured houses from the Gaia side.' },
+  ] })).ok, true);
 });
 
 test('validateScript rejects wrong order, repeated text, and forbidden content', () => {
   const script = goodScript();
   assert.equal(validateScript({ ...script, segments: [...script.segments].reverse() }).ok, false);
   const repeated = goodScript();
-  repeated.segments[2] = { kind: 'body', text: repeated.segments[1].text };
+  repeated.segments[2] = { kind: 'content', text: repeated.segments[1].text };
   assert.match(validateScript(repeated).error.rule, /must not repeat/);
   const linked = goodScript();
-  linked.segments[1] = { kind: 'body', text: 'Start in Ribeira, see https://example.com for details, and walk along the water to the bridge in the morning.' };
+  linked.segments[1] = { kind: 'content', text: 'Start in Ribeira, see https://example.com for details, and walk along the water to the bridge in the morning.' };
   assert.equal(validateScript(linked).ok, false);
   const slop = goodScript();
-  slop.segments[1] = { kind: 'body', text: 'Start in Ribeira in the morning for a seamless experience that will unlock the next-level magic of Porto, and walk along the water to the bridge.' };
+  slop.segments[1] = { kind: 'content', text: 'Start in Ribeira in the morning for a seamless experience that will unlock the next-level magic of Porto, and walk along the water to the bridge.' };
   assert.equal(validateScript(slop).ok, false);
 });
 
 test('validateScript rejects every banned phrase in the prompt base', () => {
   for (const phrase of BANNED_PHRASES) {
     const script = goodScript();
-    script.segments[1] = { kind: 'body', text: `Start in Ribeira in the morning, walk along the water, cross the bridge, and enjoy ${phrase} while you look back at the coloured houses from the Gaia side today.` };
+    script.segments[1] = { kind: 'content', text: `Start in Ribeira in the morning, walk along the water, cross the bridge, and enjoy ${phrase} while you look back at the coloured houses from the Gaia side today.` };
     assert.equal(validateScript(script).ok, false, phrase);
   }
 });

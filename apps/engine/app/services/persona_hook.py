@@ -251,10 +251,10 @@ def _limit_to_closing_sentence(text: str, limit: int) -> str:
 
     Sentence-level fallback for `_limit_generated_script`, used when the
     script has a single paragraph or its closing paragraph alone exceeds
-    the budget: the last sentence is the CTA's tail, so it is trimmed
-    from the body before it, and ships alone when no body fits next to
-    it. Only a single over-long sentence falls back to a plain cut —
-    nothing of the CTA fits in the budget then.
+    the budget: the last sentence is the closing take's tail, so it is
+    trimmed from the takes before it, and ships alone when no earlier
+    take fits next to it. Only a single over-long sentence falls back
+    to a plain cut — nothing of the closing take fits in the budget then.
     """
     sentences = _SENTENCE_END_RE.split(text)
     closing = sentences[-1]
@@ -265,8 +265,8 @@ def _limit_to_closing_sentence(text: str, limit: int) -> str:
     head_budget = limit - len(separator) - len(closing)
     if len(sentences) > 1 and len(closing) <= limit:
         # The closing sentence fits on its own: never fall back to a plain
-        # cut, which ends before it and drops the CTA this trim exists to
-        # preserve — even when no body text fits next to it.
+        # cut, which ends before it and drops the closing take this trim
+        # exists to preserve — even when no earlier text fits next to it.
         if head_budget > 0:
             trimmed_head = _cut_to_budget(head, head_budget)
             if "\n\n" in head and "\n\n" not in trimmed_head and "\n" not in separator:
@@ -287,13 +287,13 @@ def _limit_to_closing_sentence(text: str, limit: int) -> str:
 def _limit_generated_script(script: str) -> str:
     """Keep generated speech inside the configured character budget.
 
-    The call to action is the script's last paragraph, so an over-budget
-    script is trimmed from the body before it: cutting from the end would
-    drop exactly the CTA. When no body text fits next to it, the closing
-    paragraph ships alone; when the closing paragraph itself cannot fit,
-    its last sentence is preserved instead (see
-    `_limit_to_closing_sentence`), and only a single over-long sentence
-    falls back to a plain cut.
+    The script's last paragraph is its closing take, so an over-budget
+    script is trimmed from the takes before it: cutting from the end
+    would drop exactly the closing take. When no earlier text fits next
+    to it, the closing paragraph ships alone; when the closing
+    paragraph itself cannot fit, its last sentence is preserved instead
+    (see `_limit_to_closing_sentence`), and only a single over-long
+    sentence falls back to a plain cut.
     """
     limit = int(config.app.get("max_video_script_characters", 700))
     normalized = re.sub(r"[ \t]+", " ", script.strip())
@@ -304,7 +304,7 @@ def _limit_generated_script(script: str) -> str:
     if len(paragraphs) > 1 and len(closing) <= limit:
         head = normalized[: len(normalized) - len(closing)].rstrip()
         # The separator between head and closing paragraph (a blank line)
-        # keeps the CTA its own paragraph in the trimmed script.
+        # keeps the closing take its own paragraph in the trimmed script.
         separator = normalized[len(head) : len(normalized) - len(closing)]
         head_budget = limit - len(separator) - len(closing)
         if head_budget > 0:

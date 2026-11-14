@@ -16,7 +16,7 @@ export function validateSegmentsRequest(rawSegments: unknown, videoType: string 
       ok: false,
       issues: [
         invalid(
-          'options.segments is required: send the full script as segments (first hook, then body, last CTA).',
+          'options.segments is required: send the full script as segments (first hook, then content takes).',
           'options.segments',
         ),
       ],

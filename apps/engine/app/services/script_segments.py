@@ -1,12 +1,13 @@
 """Mechanical validation for the script-segments contract.
 
-One call = one video. ``segments`` is a list whose first segment is the
-hook, whose last segment is the CTA, and whose middle segments are the
-body. Validation here is mechanical only: shape, forbidden content,
-word counts, and the hook word guard. It never calls an LLM, never
-calls a TTS service, and never fixes the input silently: the first
-failed rule raises ``SegmentValidationError`` with the field, the rule,
-and how to fix it.
+One call = one video. ``segments`` is an ordered list of takes whose
+first segment is the hook and whose later segments are all content. A
+CTA is just a content take, placed anywhere — there is no cta kind, no
+CTA count rule, and no CTA position rule. Validation here is mechanical
+only: shape, forbidden content, word counts, and the hook word guard.
+It never calls an LLM, never calls a TTS service, and never fixes the
+input silently: the first failed rule raises ``SegmentValidationError``
+with the field, the rule, and how to fix it.
 
 Hook duration is a separate, measured check. Word counts alone cannot
 prove a hook lasts 8-12 seconds, so ``check_hook_duration`` validates a
@@ -35,9 +36,7 @@ MAX_SEGMENTS = 12
 MAX_MEDIAS = 6
 MIN_TOTAL_WORDS = 60
 MAX_TOTAL_WORDS = 200
-MIN_BODY_WORDS = 30
-MIN_CTA_WORDS = 5
-MAX_CTA_WORDS = 20
+MIN_CONTENT_WORDS = 30
 MIN_HOOK_WORDS = 15
 MAX_HOOK_WORDS = 40
 # The info card painted inside a segment photo's panel (media_overlay). The limits are
@@ -240,22 +239,30 @@ def _check_overlay(overlay: Any, field: str) -> None:
 
 
 def legacy_media_list(segments: Any) -> Any:
-    """Wrap pre-list-contract single-object media in a list.
+    """Normalize persisted-row segments to the current contract.
 
     Rows stored before the media-list contract carry one object per
-    segment (`media: { mediaId | url, overlay? }`). Persisted-row
-    dispatch normalizes that shape here; fresh requests still reject
-    a single object in _check_media, so this must never run on the
-    request path.
+    segment (`media: { mediaId | url, overlay? }`), and rows stored
+    before the takes contract carry kind body/cta. Persisted-row
+    dispatch normalizes both shapes here — media objects are wrapped
+    in a list and old kinds map to content — so a prepaid slot renders
+    instead of failing on a renamed kind. Fresh requests still reject
+    a single object in _check_media and the old kinds in
+    validate_segments, so this must never run on the request path.
     """
     if not isinstance(segments, list):
         return segments
     normalized = []
     for segment in segments:
-        if isinstance(segment, dict) and isinstance(segment.get("media"), dict):
-            normalized.append({**segment, "media": [segment["media"]]})
-        else:
+        if not isinstance(segment, dict):
             normalized.append(segment)
+            continue
+        fixed = dict(segment)
+        if fixed.get("kind") in ("body", "cta"):
+            fixed["kind"] = "content"
+        if isinstance(fixed.get("media"), dict):
+            fixed["media"] = [fixed["media"]]
+        normalized.append(fixed)
     return normalized
 
 
@@ -278,7 +285,7 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
         raise SegmentValidationError(
             "segments",
             "Segments must be a non-empty list.",
-            "Send at least a hook, one body segment, and a CTA.",
+            "Send at least a hook and one content segment.",
         )
     kinds: list[str] = []
     texts: list[str] = []
@@ -296,11 +303,11 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
                 "Remove unknown fields from the segment.",
             )
         kind = segment.get("kind")
-        if kind not in ("hook", "body", "cta"):
+        if kind not in ("hook", "content"):
             raise SegmentValidationError(
                 f"{field}.kind",
-                "Segment kind must be hook, body, or cta.",
-                "Set kind to hook for the first segment, body for the middle, cta for the last.",
+                "Segment kind must be hook or content.",
+                "Set kind to hook for the first segment, content for the rest.",
             )
         kinds.append(kind)
         text = segment.get("text")
@@ -318,30 +325,18 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
             "The first segment must be the hook.",
             "Move the hook segment to position 0.",
         )
-    if kinds[-1] != "cta":
-        raise SegmentValidationError(
-            f"segments.{len(segments) - 1}.kind",
-            "The last segment must be the CTA.",
-            "Move the CTA segment to the last position.",
-        )
     if kinds.count("hook") != 1:
         raise SegmentValidationError(
             "segments",
             "There must be exactly one hook.",
             "Keep a single hook segment, first.",
         )
-    if kinds.count("cta") != 1:
+    content_indices = [i for i, kind in enumerate(kinds) if kind == "content"]
+    if not content_indices:
         raise SegmentValidationError(
             "segments",
-            "There must be exactly one CTA.",
-            "Keep a single CTA segment, last.",
-        )
-    body_indices = [i for i, kind in enumerate(kinds) if kind == "body"]
-    if not body_indices:
-        raise SegmentValidationError(
-            "segments",
-            "There must be at least one body segment.",
-            "Add at least one body segment between the hook and the CTA.",
+            "There must be at least one content segment.",
+            "Add at least one content segment after the hook.",
         )
     hook_text = texts[0]
     if not hook_text.endswith(_TERMINAL_PUNCTUATION):
@@ -360,20 +355,12 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
                 "Rewrite the repeated segment so each segment is distinct.",
             )
         seen[normalized] = index
-    body_words = sum(_word_count(texts[i]) for i in body_indices)
-    if body_words < MIN_BODY_WORDS:
+    content_words = sum(_word_count(texts[i]) for i in content_indices)
+    if content_words < MIN_CONTENT_WORDS:
         raise SegmentValidationError(
-            f"segments.{body_indices[0]}.text",
-            f"Body must have at least {MIN_BODY_WORDS} words.",
-            "Add body words until the body reaches 30 words.",
-        )
-    cta_index = len(segments) - 1
-    cta_words = _word_count(texts[cta_index])
-    if cta_words < MIN_CTA_WORDS or cta_words > MAX_CTA_WORDS:
-        raise SegmentValidationError(
-            f"segments.{cta_index}.text",
-            f"CTA must have {MIN_CTA_WORDS} to {MAX_CTA_WORDS} words.",
-            "Shorten or lengthen the CTA to 5-20 words.",
+            f"segments.{content_indices[0]}.text",
+            f"Content must have at least {MIN_CONTENT_WORDS} words.",
+            "Add content words until the content reaches 30 words.",
         )
     hook_words = _word_count(hook_text)
     if hook_words < MIN_HOOK_WORDS or hook_words > MAX_HOOK_WORDS:
@@ -436,15 +423,13 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
             f"At most {media_cap} medias are allowed.",
             fix,
         )
-    body_texts = [texts[i] for i in body_indices]
+    content_texts = [texts[i] for i in content_indices]
     return {
         "hook_text": hook_text,
-        "body_texts": body_texts,
-        "cta_text": texts[cta_index],
+        "content_texts": content_texts,
         "total_words": total_words,
-        "body_words": body_words,
+        "content_words": content_words,
         "hook_words": hook_words,
-        "cta_words": cta_words,
         "segment_count": len(segments),
         "media_count": media_count,
     }
@@ -454,12 +439,12 @@ def segments_to_script(segments: Sequence[dict[str, Any]], video_type: str = "ho
     """Validate and join segment texts into the single spoken script.
 
     This function runs the full mechanical validation itself and raises
-    SegmentValidationError on the first failed rule, then joins hook,
-    body paragraphs, and CTA with blank lines, which is the paragraph
-    layout the existing TTS and subtitle pipeline reads.
+    SegmentValidationError on the first failed rule, then joins the hook
+    and the content takes in agent order with blank lines, which is the
+    paragraph layout the existing TTS and subtitle pipeline reads.
     """
     validated = validate_segments(list(segments), video_type)
-    parts = [validated["hook_text"], *validated["body_texts"], validated["cta_text"]]
+    parts = [validated["hook_text"], *validated["content_texts"]]
     return "\n\n".join(parts)
 
 

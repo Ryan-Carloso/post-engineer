@@ -11,15 +11,15 @@ import { GeneratePersonaVideoSchema } from '../single-video-shape.js';
 
 const hook =
   'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
-const body =
+const content =
   'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
 const cta = 'Save this video before your next trip to Porto.';
 
 function withOverlay(overlay: unknown) {
   return [
     { kind: 'hook', text: hook },
-    { kind: 'body', text: body, media: [{ url: 'https://example.com/x.jpg', overlay }] },
-    { kind: 'cta', text: cta },
+    { kind: 'content', text: content, media: [{ url: 'https://example.com/x.jpg', overlay }] },
+    { kind: 'content', text: cta },
   ];
 }
 
@@ -71,8 +71,8 @@ describe('segment media overlay', () => {
     const result = validateSegments(
       [
         { kind: 'hook', text: hook },
-        { kind: 'body', text: body, media: [{ overlay: { title: 'Sushi' } }] },
-        { kind: 'cta', text: cta },
+        { kind: 'content', text: content, media: [{ overlay: { title: 'Sushi' } }] },
+        { kind: 'content', text: cta },
       ],
       'full_lipsync',
     );
@@ -84,8 +84,8 @@ describe('segment media overlay', () => {
 describe('overlay in the tool schema', () => {
   const segmentsWith = (overlay: unknown) => [
     { kind: 'hook', text: hook },
-    { kind: 'body', text: body, media: [{ url: 'https://example.com/x.jpg', overlay }] },
-    { kind: 'cta', text: cta },
+    { kind: 'content', text: content, media: [{ url: 'https://example.com/x.jpg', overlay }] },
+    { kind: 'content', text: cta },
   ];
   const base = {
     title: 'Porto food',

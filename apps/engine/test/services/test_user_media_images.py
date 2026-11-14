@@ -14,7 +14,7 @@ from app.services import image_coverage, image_fetch, segment_panels, user_media
 WORDS = [("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2), ("Visit", 5.0, 5.4), ("Porto", 5.4, 5.9)]
 SEGMENTS = [
     {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/hook.jpg"}]},
-    {"kind": "cta", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
+    {"kind": "content", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
 ]
 
 
@@ -74,7 +74,7 @@ def test_a_dropped_photo_fails_the_task_naming_the_photo(task_dir):
             "text": "Welcome to Porto.",
             "media": [{"url": "https://e.com/drop.jpg"}, {"url": "https://e.com/hook.jpg"}],
         },
-        {"kind": "cta", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
+        {"kind": "content", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
     ]
 
     def only_kept(url, dest_path, session=None):
@@ -117,11 +117,11 @@ def test_blocked_photos_fail_with_the_counts_and_every_skip_reason(task_dir):
     segments = [
         {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/hook.jpg"}]},
         {
-            "kind": "body",
+            "kind": "content",
             "text": body,
             "media": [{"url": f"https://e.com/body{i}.jpg"} for i in range(5)],
         },
-        {"kind": "cta", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
+        {"kind": "content", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
     ]
 
     def mostly_blocked(url, dest_path, session=None):
@@ -184,7 +184,7 @@ def test_a_wrong_ratio_photo_fails_the_task_naming_the_ratios(task_dir):
             "text": "Welcome to Porto.",
             "media": [{"url": "https://e.com/hook-bad.jpg"}, {"url": "https://e.com/hook-good.jpg"}],
         },
-        {"kind": "cta", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
+        {"kind": "content", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
     ]
 
     def mixed(url, dest_path, session=None):
@@ -215,8 +215,8 @@ def test_a_landscape_hook_photo_stays_a_panel_when_the_face_shows(task_dir):
     ]
     segments = [
         {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/hook.jpg"}]},
-        {"kind": "body", "text": "Where the river.", "media": [{"url": "https://e.com/body.jpg"}]},
-        {"kind": "cta", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
+        {"kind": "content", "text": "Where the river.", "media": [{"url": "https://e.com/body.jpg"}]},
+        {"kind": "content", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
     ]
 
     def mixed(url, dest_path, session=None):

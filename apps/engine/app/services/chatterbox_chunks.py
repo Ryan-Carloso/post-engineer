@@ -11,7 +11,7 @@ chunks of at most ``CHATTERBOX_MAX_CHUNK_CHARS`` chars (~8-10 s of audio,
 inside the model's stable window), synthesize one chunk per POST in script
 order, and concatenate the chunk audios into the single output file. The
 split is section-aware: the agent sends the script as labeled segments
-(hook / body / CTA) and the engine joins them with blank lines, so the
+(hook first, then content takes) and the engine joins them with blank lines, so the
 script's paragraphs ARE the sections — a chunk never contains text from
 two paragraphs, because the image changes at the same boundaries too.
 Short scripts that fit in one chunk take the old single-POST path
@@ -139,7 +139,7 @@ def _pack_pieces(pieces: list[str], max_chars: int) -> list[str]:
 def _split_paragraphs(text: str) -> list[str]:
     """Split text on blank lines; each paragraph is one agent segment.
 
-    The agent sends segments (hook / body / CTA) and the engine joins them
+    The agent sends segments (hook first, then content takes) and the engine joins them
     with blank lines, so a paragraph boundary is a section boundary — and
     the image changes at the same place. Empty paragraphs are dropped.
     """
@@ -150,7 +150,7 @@ def split_chatterbox_script(text: str, max_chars: int = CHATTERBOX_MAX_CHUNK_CHA
     """Split a script into per-sentence chunks for Chatterbox, in order.
 
     Paragraphs are split first and never merged back: a chunk never
-    contains text from two paragraphs, so hook, body, and CTA each keep
+    contains text from two paragraphs, so the hook and each content take keep
     their own chunks. Within a paragraph, sentences are packed greedily
     up to `max_chars` per chunk; a single sentence over the cap splits at
     clause boundaries, never mid-word and never reordered — except a

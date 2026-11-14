@@ -14,8 +14,8 @@ from app.services import task as tm
 
 SEGMENTS = [
     {"kind": "hook", "text": "Welcome to Porto where the river meets the sea and every bridge tells a story of trade and wine for sure.", "media": [{"url": f"https://e.com/h{i}.jpg"} for i in range(3)]},
-    {"kind": "body", "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold before heading home through the old town streets.", "media": [{"url": f"https://e.com/b{i}.jpg"} for i in range(5)]},
-    {"kind": "cta", "text": "Follow for more Porto walks.", "media": [{"url": "https://e.com/c0.jpg"}]},
+    {"kind": "content", "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold before heading home through the old town streets.", "media": [{"url": f"https://e.com/b{i}.jpg"} for i in range(5)]},
+    {"kind": "content", "text": "Follow for more Porto walks.", "media": [{"url": "https://e.com/c0.jpg"}]},
 ]
 
 

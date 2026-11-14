@@ -189,11 +189,11 @@ export function resolveScript(env, { readFile = readFileSync } = {}) {
     if (
       typeof segment !== 'object' ||
       segment === null ||
-      (segment.kind !== 'hook' && segment.kind !== 'body' && segment.kind !== 'cta') ||
+      (segment.kind !== 'hook' && segment.kind !== 'content') ||
       typeof segment.text !== 'string' ||
       segment.text.trim() === ''
     ) {
-      throw new FlightError('test-flight: every script segment must be { kind: hook|body|cta, text: non-empty }');
+      throw new FlightError('test-flight: every script segment must be { kind: hook|content, text: non-empty }');
     }
   }
   // The script JSON carries no description, and the route requires one:

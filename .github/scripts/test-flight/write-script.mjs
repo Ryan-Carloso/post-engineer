@@ -79,11 +79,9 @@ export class ScriptError extends Error {}
 // fails here must never be sent.
 export const MIN_TOTAL_WORDS = 60;
 export const MAX_TOTAL_WORDS = 200;
-export const MIN_BODY_WORDS = 30;
+export const MIN_CONTENT_WORDS = 30;
 export const MIN_HOOK_WORDS = 15;
 export const MAX_HOOK_WORDS = 40;
-export const MIN_CTA_WORDS = 5;
-export const MAX_CTA_WORDS = 20;
 export const MAX_SEGMENTS = 12;
 // Streaming timeouts: abort only on silence (a thinking model sends
 // nothing while it thinks, so a total-only timeout kills it mid-thought),
@@ -184,15 +182,15 @@ export function validateScript(script) {
   }
   const segments = script.segments;
   if (!Array.isArray(segments) || segments.length === 0 || segments.length > MAX_SEGMENTS) {
-    return { ok: false, error: { field: 'segments', rule: `segments must be 1-${MAX_SEGMENTS} items`, fix: 'Send hook, body and CTA segments in one array.' } };
+    return { ok: false, error: { field: 'segments', rule: `segments must be 1-${MAX_SEGMENTS} items`, fix: 'Send hook and content segments in one array.' } };
   }
   for (let i = 0; i < segments.length; i += 1) {
     const segment = segments[i];
     if (typeof segment !== 'object' || segment === null) {
       return { ok: false, error: { field: `segments.${i}`, rule: 'Segment must be an object.', fix: 'Send each segment as { kind, text }.' } };
     }
-    if (segment.kind !== 'hook' && segment.kind !== 'body' && segment.kind !== 'cta') {
-      return { ok: false, error: { field: `segments.${i}.kind`, rule: 'Segment kind must be hook, body, or cta.', fix: 'Set kind to hook for the first segment, body for the middle, cta for the last.' } };
+    if (segment.kind !== 'hook' && segment.kind !== 'content') {
+      return { ok: false, error: { field: `segments.${i}.kind`, rule: 'Segment kind must be hook or content.', fix: 'Set kind to hook for the first segment, content for the rest.' } };
     }
     if (typeof segment.text !== 'string' || segment.text.trim() === '') {
       return { ok: false, error: { field: `segments.${i}.text`, rule: 'Segment text must be a non-empty string.', fix: 'Write the spoken text for this segment.' } };
@@ -203,16 +201,12 @@ export function validateScript(script) {
     }
   }
   const hooks = segments.filter((segment) => segment.kind === 'hook');
-  const ctas = segments.filter((segment) => segment.kind === 'cta');
-  const bodies = segments.filter((segment) => segment.kind === 'body');
+  const contents = segments.filter((segment) => segment.kind === 'content');
   if (segments[0].kind !== 'hook') {
     return { ok: false, error: { field: 'segments.0.kind', rule: 'the first segment must be the hook', fix: 'Move the hook segment first.' } };
   }
-  if (segments[segments.length - 1].kind !== 'cta') {
-    return { ok: false, error: { field: `segments.${segments.length - 1}.kind`, rule: 'the last segment must be the CTA', fix: 'Move the CTA segment last.' } };
-  }
-  if (hooks.length !== 1 || ctas.length !== 1 || bodies.length < 1) {
-    return { ok: false, error: { field: 'segments', rule: 'segments need exactly one hook, at least one body segment and exactly one CTA', fix: 'Send exactly one hook, one or more body segments and exactly one CTA.' } };
+  if (hooks.length !== 1 || contents.length < 1) {
+    return { ok: false, error: { field: 'segments', rule: 'segments need exactly one hook and at least one content segment', fix: 'Send exactly one hook and one or more content segments.' } };
   }
   for (let i = 0; i < segments.length; i += 1) {
     if (hasForbiddenContent(segments[i].text)) {
@@ -231,23 +225,19 @@ export function validateScript(script) {
     }
     seen.add(normalized);
   }
-  const bodyWords = bodies.reduce((sum, segment) => sum + countWords(segment.text), 0);
-  if (bodyWords < MIN_BODY_WORDS) {
-    return { ok: false, error: { field: 'segments.text', rule: `Body must have at least ${MIN_BODY_WORDS} words.`, fix: `Add body words until the body reaches ${MIN_BODY_WORDS} words.` } };
-  }
-  const ctaWords = countWords(ctas[0].text);
-  if (ctaWords < MIN_CTA_WORDS || ctaWords > MAX_CTA_WORDS) {
-    return { ok: false, error: { field: 'segments.text', rule: `the CTA must be ${MIN_CTA_WORDS}-${MAX_CTA_WORDS} words`, fix: 'Shorten or lengthen the CTA to fit the word range.' } };
+  const contentWords = contents.reduce((sum, segment) => sum + countWords(segment.text), 0);
+  if (contentWords < MIN_CONTENT_WORDS) {
+    return { ok: false, error: { field: 'segments.text', rule: `Content must have at least ${MIN_CONTENT_WORDS} words.`, fix: `Add content words until the content reaches ${MIN_CONTENT_WORDS} words.` } };
   }
   const hookWords = countWords(hookText);
   if (hookWords < MIN_HOOK_WORDS || hookWords > MAX_HOOK_WORDS) {
     return { ok: false, error: { field: 'segments.text', rule: `the hook must be ${MIN_HOOK_WORDS}-${MAX_HOOK_WORDS} words`, fix: 'Rewrite the hook to fit the word range.' } };
   }
-  const totalWords = hookWords + bodyWords + ctaWords;
+  const totalWords = hookWords + contentWords;
   if (totalWords < MIN_TOTAL_WORDS || totalWords > MAX_TOTAL_WORDS) {
-    return { ok: false, error: { field: 'segments', rule: `the script must be ${MIN_TOTAL_WORDS}-${MAX_TOTAL_WORDS} words in total`, fix: 'Add or remove body content to fit the total word range.' } };
+    return { ok: false, error: { field: 'segments', rule: `the script must be ${MIN_TOTAL_WORDS}-${MAX_TOTAL_WORDS} words in total`, fix: 'Add or remove content to fit the total word range.' } };
   }
-  return { ok: true, value: { title, segments, totalWords, bodyWords, hookWords, ctaWords } };
+  return { ok: true, value: { title, segments, totalWords, contentWords, hookWords } };
 }
 
 // Deterministic angle from the run seed, so the same topic still gets a
@@ -290,12 +280,12 @@ export function buildPrompt({ topic, angle, facts = '' }) {
     'Test each line before you send it: could the viewer picture it, could it be proven true or false, and could another creator say it about another city? If yes to the last question, rewrite it.',
     '',
     'Script contract, every line of it is required:',
-    `Segments: first hook, last CTA, exactly one of each, at least one body segment, at most ${MAX_SEGMENTS} segments.`,
-    `Length: ${MIN_TOTAL_WORDS}-${MAX_TOTAL_WORDS} words in total. Hook ${MIN_HOOK_WORDS}-${MAX_HOOK_WORDS} words, aim for 20-30, ending with a period, exclamation mark, or question mark. Body at least ${MIN_BODY_WORDS} words. CTA ${MIN_CTA_WORDS}-${MAX_CTA_WORDS} words.`,
+    `Segments: first hook, then content takes in order, exactly one hook, at least one content take, at most ${MAX_SEGMENTS} segments.`,
+    `Length: ${MIN_TOTAL_WORDS}-${MAX_TOTAL_WORDS} words in total. Hook ${MIN_HOOK_WORDS}-${MAX_HOOK_WORDS} words, aim for 20-30, ending with a period, exclamation mark, or question mark. Content at least ${MIN_CONTENT_WORDS} words. A CTA is a content take and may appear anywhere after the hook.`,
     'Title: short, specific, and true to this script. Never clickbait that promises more than the video delivers.',
     '',
     'Respond with JSON only, exactly this shape, no other text:',
-    '{"title": "<video title>", "segments": [{"kind": "hook", "text": "..."}, {"kind": "body", "text": "..."}, {"kind": "cta", "text": "..."}]}',
+    '{"title": "<video title>", "segments": [{"kind": "hook", "text": "..."}, {"kind": "content", "text": "..."}, {"kind": "content", "text": "..."}]}',
   ].join('\n');
 }
 

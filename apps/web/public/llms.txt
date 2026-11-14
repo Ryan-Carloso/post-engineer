@@ -49,7 +49,7 @@
 - Video: `validate_script` (mechanical validation, no tokens spent),
   `score_draft` (mechanical draft score and publish check, no tokens spent),
   `generate_persona_video` (one video per call; script as segments — hook
-  first, body, CTA last, 60–200 words total; slot 3h–30d ahead or
+  first, then content takes in order, 60–200 words total; slot 3h–30d ahead or
   `mode: 'asap'`), `get_video_status`, `get_video_task_progress`,
   `cancel_video_task`, `upload_media`, `check_media`,
   `publish_video_direct`.

@@ -25,15 +25,15 @@ const hook =
   'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
 const bodyText =
   'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
-const cta = 'Save this video before your next trip to Porto.';
+const ctaTake = 'Save this video before your next trip to Porto.';
 function photos(count: number, prefix: string): Array<{ url: string }> {
   return Array.from({ length: count }, (_, i) => ({ url: `https://example.com/${prefix}-${i + 1}.jpg` }));
 }
 
 const segments = [
   { kind: 'hook', text: hook, media: photos(3, 'hook') },
-  { kind: 'body', text: bodyText, media: photos(6, 'body') },
-  { kind: 'cta', text: cta, media: photos(2, 'cta') },
+  { kind: 'content', text: bodyText, media: photos(6, 'content') },
+  { kind: 'content', text: ctaTake, media: photos(2, 'ctaTake') },
 ];
 
 function futureISO(hours: number): string {
@@ -111,7 +111,7 @@ describe('generate-and-schedule reports every validation problem in one 400 (#35
           segments: [
             { kind: 'intro', text: hook },
             ...segments.slice(1, -1),
-            { kind: 'outro', text: cta },
+            { kind: 'outro', text: ctaTake },
           ],
         },
       }),

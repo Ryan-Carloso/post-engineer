@@ -42,7 +42,7 @@ export const componentSchemas = {
     additionalProperties: false,
     required: ['kind', 'text'],
     properties: {
-      kind: { type: 'string', enum: ['hook', 'body', 'cta'] },
+      kind: { type: 'string', enum: ['hook', 'content'] },
       text: str,
       media: { type: 'array', maxItems: 30, items: { type: 'object', additionalProperties: false, properties: { mediaId: str, url: str } } },
     },
@@ -53,7 +53,7 @@ const segmentsBody = object(
   {
     segments: {
       type: 'array',
-      description: 'Hook first, body, CTA last. 60-200 words in total.',
+      description: 'Segments in order: hook first, then content takes. 60-200 words in total.',
       items: { $ref: '#/components/schemas/Segment' },
     },
     fullLipsync: {
@@ -202,7 +202,7 @@ export const operationSchemas = {
     request: segmentsBody,
     response: success({
       valid: { type: 'boolean' },
-      ...fields(int, ['segmentCount', 'totalWords', 'hookWords', 'bodyWords', 'ctaWords', 'mediaCount']),
+      ...fields(int, ['segmentCount', 'totalWords', 'hookWords', 'contentWords', 'mediaCount']),
       hookWindowSeconds: object({ min: { type: 'number' }, max: { type: 'number' } }),
       measuredDurationSeconds: { type: 'number', nullable: true },
       measured: { type: 'string', enum: ['pending'] },

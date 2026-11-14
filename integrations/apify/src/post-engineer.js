@@ -287,21 +287,21 @@ export function parseInput(raw) {
   };
 }
 
-/** Hook first, body, CTA last: the segments contract of generate-and-schedule.
- *  With images, each body paragraph is a segment and the URL list is split
+/** Hook first, then content takes in order: the segments contract of generate-and-schedule.
+ *  With images, each body paragraph is a content take and the URL list is split
  *  across segments, about one image per 3 seconds, in the order given. */
 export function buildSegments(input) {
   if (input.images === undefined) {
     return [
       { kind: 'hook', text: input.hook },
-      { kind: 'body', text: input.body },
-      { kind: 'cta', text: input.cta },
+      { kind: 'content', text: input.body },
+      { kind: 'content', text: input.cta },
     ];
   }
   const texts = [
     { kind: 'hook', text: input.hook },
-    ...bodyParagraphs(input.body).map((text) => ({ kind: 'body', text })),
-    { kind: 'cta', text: input.cta },
+    ...bodyParagraphs(input.body).map((text) => ({ kind: 'content', text })),
+    { kind: 'content', text: input.cta },
   ];
   const groups = assignImages(input.images, texts.map((segment) => segment.text));
   return texts.map((segment, index) => ({

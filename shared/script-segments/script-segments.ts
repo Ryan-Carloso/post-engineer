@@ -25,9 +25,7 @@ export const MIN_WORDS_PER_IMAGE = 3;
 export const MAX_IMAGES_MODE_MEDIAS = 30;
 export const MIN_TOTAL_WORDS = 60;
 export const MAX_TOTAL_WORDS = 200;
-export const MIN_BODY_WORDS = 30;
-export const MIN_CTA_WORDS = 5;
-export const MAX_CTA_WORDS = 20;
+export const MIN_CONTENT_WORDS = 30;
 export const MIN_HOOK_WORDS = 15;
 export const MAX_HOOK_WORDS = 40;
 // The info card painted inside a segment photo's panel (engine media_overlay). Same
@@ -45,7 +43,7 @@ const OVERLAY_LIMITS: Record<string, number> = {
 export const HOOK_MIN_SECONDS = 8;
 export const HOOK_MAX_SECONDS = 12;
 
-export type SegmentKind = 'hook' | 'body' | 'cta';
+export type SegmentKind = 'hook' | 'content';
 
 export type SegmentOverlay = {
   title: string;
@@ -73,12 +71,10 @@ export type SegmentsError = {
 
 export type ValidatedSegments = {
   hookText: string;
-  bodyTexts: string[];
-  ctaText: string;
+  contentTexts: string[];
   totalWords: number;
-  bodyWords: number;
+  contentWords: number;
   hookWords: number;
-  ctaWords: number;
   segmentCount: number;
   mediaCount: number;
 };
@@ -267,7 +263,7 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
     return fail(
       'segments',
       'segments must be a non-empty array',
-      'Send hook, body and CTA segments in one array.',
+      'Send hook and content segments in one array.',
     );
   }
   const segments = input as ScriptSegment[];
@@ -276,11 +272,11 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
     if (typeof segment !== 'object' || segment === null) {
       return fail(`segments.${i}`, 'Segment must be an object.', 'Send each segment as { kind, text }.');
     }
-    if (segment.kind !== 'hook' && segment.kind !== 'body' && segment.kind !== 'cta') {
+    if (segment.kind !== 'hook' && segment.kind !== 'content') {
       return fail(
         `segments.${i}.kind`,
-        'Segment kind must be hook, body, or cta.',
-        'Set kind to hook for the first segment, body for the middle, cta for the last.',
+        'Segment kind must be hook or content.',
+        'Set kind to hook for the first segment, content for the rest.',
       );
     }
     if (typeof segment.text !== 'string' || segment.text.trim().length === 0) {
@@ -305,23 +301,15 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
     }
   }
   const hooks = segments.filter((segment) => segment.kind === 'hook');
-  const ctas = segments.filter((segment) => segment.kind === 'cta');
-  const bodies = segments.filter((segment) => segment.kind === 'body');
+  const contents = segments.filter((segment) => segment.kind === 'content');
   if (segments[0].kind !== 'hook') {
     return fail('segments.0.kind', 'the first segment must be the hook', 'Move the hook segment first.');
   }
-  if (segments[segments.length - 1].kind !== 'cta') {
-    return fail(
-      `segments.${segments.length - 1}.kind`,
-      'the last segment must be the CTA',
-      'Move the CTA segment last.',
-    );
-  }
-  if (hooks.length !== 1 || ctas.length !== 1 || bodies.length < 1) {
+  if (hooks.length !== 1 || contents.length < 1) {
     return fail(
       'segments',
-      'segments need exactly one hook, at least one body segment and exactly one CTA',
-      'Send exactly one hook, one or more body segments and exactly one CTA.',
+      'segments need exactly one hook and at least one content segment',
+      'Send exactly one hook and one or more content segments.',
     );
   }
   for (let i = 0; i < segments.length; i += 1) {
@@ -354,22 +342,13 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
     }
     seen.add(normalized);
   }
-  const bodyTexts = bodies.map((segment) => segment.text);
-  const bodyWords = bodyTexts.reduce((sum, text) => sum + countWords(text), 0);
-  if (bodyWords < MIN_BODY_WORDS) {
+  const contentTexts = contents.map((segment) => segment.text);
+  const contentWords = contentTexts.reduce((sum, text) => sum + countWords(text), 0);
+  if (contentWords < MIN_CONTENT_WORDS) {
     return fail(
-      `segments.${segments.indexOf(bodies[0])}.text`,
-      `Body must have at least ${MIN_BODY_WORDS} words.`,
-      `Add body words until the body reaches ${MIN_BODY_WORDS} words.`,
-    );
-  }
-  const ctaText = ctas[0].text;
-  const ctaWords = countWords(ctaText);
-  if (ctaWords < MIN_CTA_WORDS || ctaWords > MAX_CTA_WORDS) {
-    return fail(
-      `segments.${segments.indexOf(ctas[0])}.text`,
-      `the CTA must be ${MIN_CTA_WORDS}-${MAX_CTA_WORDS} words`,
-      'Shorten or lengthen the CTA to fit the word range.',
+      `segments.${segments.indexOf(contents[0])}.text`,
+      `Content must have at least ${MIN_CONTENT_WORDS} words.`,
+      `Add content words until the content reaches ${MIN_CONTENT_WORDS} words.`,
     );
   }
   const hookWords = countWords(hookText);
@@ -380,19 +359,19 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
       'Rewrite the hook to fit the word range, then measure its spoken duration.',
     );
   }
-  const totalWords = hookWords + bodyWords + ctaWords;
+  const totalWords = hookWords + contentWords;
   if (totalWords < MIN_TOTAL_WORDS || totalWords > MAX_TOTAL_WORDS) {
     return fail(
       'segments',
       `the script must be ${MIN_TOTAL_WORDS}-${MAX_TOTAL_WORDS} words in total`,
-      'Add or remove body content to fit the total word range.',
+      'Add or remove content to fit the total word range.',
     );
   }
   if (segments.length > MAX_SEGMENTS) {
     return fail(
       'segments',
       `at most ${MAX_SEGMENTS} segments are allowed`,
-      'Merge body segments until the count fits.',
+      'Merge content segments until the count fits.',
     );
   }
   const imagesMode = videoType !== 'full_lipsync';
@@ -451,12 +430,10 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
     ok: true,
     value: {
       hookText,
-      bodyTexts,
-      ctaText,
+      contentTexts,
       totalWords,
-      bodyWords,
+      contentWords,
       hookWords,
-      ctaWords,
       segmentCount: segments.length,
       mediaCount,
     },
@@ -472,9 +449,7 @@ export function joinSegments(input: unknown, videoType: VideoType = 'hook_lipsyn
   // TaskVideoRequest rejects a supplied script that differs from that
   // join — so a padded segment must join stripped here, or the
   // generation fails validation on a script the caller never mistyped.
-  return [
-    result.value.hookText.trim(),
-    ...result.value.bodyTexts.map((text) => text.trim()),
-    result.value.ctaText.trim(),
-  ].join('\n\n');
+  return [result.value.hookText.trim(), ...result.value.contentTexts.map((text) => text.trim())].join(
+    '\n\n',
+  );
 }

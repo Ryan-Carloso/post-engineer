@@ -25,19 +25,19 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 
 const hook =
   'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
-const body =
+const content =
   'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
-const cta = 'Save this video before your next trip to Porto.';
-// Images mode needs media on every segment (hook 24 words -> 3, body 42
-// -> 6, CTA 9 -> 2).
+const ctaTake = 'Save this video before your next trip to Porto.';
+// Images mode needs media on every segment (hook 24 words -> 3, content 42
+// -> 6, content take 9 -> 2).
 const segments = [
   { kind: 'hook', text: hook, media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
   {
-    kind: 'body',
-    text: body,
+    kind: 'content',
+    text: content,
     media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
   },
-  { kind: 'cta', text: cta, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
+  { kind: 'content', text: ctaTake, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
 ];
 
 function authRequest(payload: unknown): Request {
@@ -64,8 +64,7 @@ describe('POST /api/videos/validate-script', () => {
     expect(payload.segmentCount).toBe(3);
     expect(payload.totalWords).toBe(75);
     expect(payload.hookWords).toBe(24);
-    expect(payload.bodyWords).toBe(42);
-    expect(payload.ctaWords).toBe(9);
+    expect(payload.contentWords).toBe(51);
     expect(payload.hookWindowSeconds).toEqual({ min: 8, max: 12 });
     // Measured duration is pending, never invented.
     expect(payload.measuredDurationSeconds).toBeNull();
@@ -76,9 +75,9 @@ describe('POST /api/videos/validate-script', () => {
 
   it('rejects an invalid script with 400 carrying field, rule and fix', async () => {
     const bad = [
-      { kind: 'body', text: body },
+      { kind: 'content', text: content },
       { kind: 'hook', text: hook },
-      { kind: 'cta', text: cta },
+      { kind: 'content', text: ctaTake },
     ];
     const response = await POST(authRequest({ segments: bad }));
     expect(response.status).toBe(400);
@@ -93,8 +92,8 @@ describe('POST /api/videos/validate-script', () => {
   it('rejects media with an unknown key, like the generation route does', async () => {
     const withAlt = [
       { kind: 'hook', text: hook, media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
-      { kind: 'body', text: body, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
-      { kind: 'cta', text: cta, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
+      { kind: 'content', text: content, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
+      { kind: 'content', text: ctaTake, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
     ];
     const response = await POST(authRequest({ segments: withAlt }));
     expect(response.status).toBe(400);

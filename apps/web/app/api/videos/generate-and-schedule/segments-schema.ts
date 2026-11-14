@@ -20,7 +20,7 @@ export const segmentOverlaySchema = z
 export const segmentsRequestSchema = z.array(
   z
     .object({
-      kind: z.enum(['hook', 'body', 'cta']),
+      kind: z.enum(['hook', 'content']),
       text: z.string(),
       media: z
         .array(
