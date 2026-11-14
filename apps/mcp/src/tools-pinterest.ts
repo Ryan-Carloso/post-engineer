@@ -5,10 +5,10 @@ import { sanitizeEngineError } from './tools.js';
 import type { McpToolResponse } from './tools-call.js';
 
 //---------------
-// list_pinterest_boards — the board picker for Pinterest publishing.
+// accounts (action: list_boards) — the board picker for Pinterest publishing.
 //
-// Pinterest pins cannot exist without a board, so generate_persona_video
-// and publish_video_direct take the board id separately from the account
+// Pinterest pins cannot exist without a board, so generate_video
+// and publish_video (action: from_file) take the board id separately from the account
 // ids. The web route lists the boards of one connected Pinterest account
 // (the account id is the v5 user_account id stored at OAuth time); an
 // expired access token is refreshed server-side before listing.
@@ -18,13 +18,10 @@ export const ListPinterestBoardsShape = {
   accountId: z
     .string()
     .min(1, 'accountId is required')
-    .describe('The Pinterest account ID (the providerAccountId field from list_social_accounts).'),
+    .describe('The Pinterest account ID (the providerAccountId field from accounts (action: list)).'),
 };
 
 export const ListPinterestBoardsSchema = z.object(ListPinterestBoardsShape);
-
-export const ListPinterestBoardsDescription =
-  'List the boards of a connected Pinterest account (id + name). Use the id as pinterestBoardId on generate_persona_video when pinterest is selected, or as boardId on publish_video_direct for pinterest.';
 
 interface PinterestBoard {
   id: string;
@@ -56,7 +53,7 @@ export async function handleListPinterestBoards(
     const result = await client.request(
       `/api/pinterest/boards?accountId=${encodeURIComponent(args.accountId)}`,
       { method: 'GET', headers: client.getHeaders() },
-      'list_pinterest_boards',
+      'list Pinterest boards',
     );
     const boards = narrowBoards(result);
     return {

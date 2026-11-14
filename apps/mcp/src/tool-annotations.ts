@@ -9,7 +9,7 @@
 // - MUTATING: creates/updates/generation that change state but do not
 //   destroy existing content.
 // openWorldHint is true for every tool here: each one talks to the Post
-// Engineer API (or, for check_media, a caller-supplied public URL).
+// Engineer API (or, for media (action: check), a caller-supplied public URL).
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 
 export const READ_ONLY: ToolAnnotations = {

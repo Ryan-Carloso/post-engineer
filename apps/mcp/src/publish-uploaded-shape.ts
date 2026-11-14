@@ -1,9 +1,9 @@
 // Shapes for the signed-upload publish flow (issue #561): the remote
-// (HTTP) replacement for publish_video_direct. JSON only — no field
+// (HTTP) replacement for publish_video (action: from_file). JSON only — no field
 // names a file on disk. The caller first mints a signed upload with
-// create_video_upload, PUTs the video bytes to the returned signedUrl,
-// completes it with complete_video_upload, and finally publishes by id
-// with publish_uploaded_video. Kept in a new module so tools.ts stays
+// publish_video (action: create_upload), PUTs the video bytes to the returned signedUrl,
+// completes it with publish_video (action: complete_upload), and finally publishes by id
+// with publish_video (action: publish_upload). Kept in a new module so tools.ts stays
 // under the file-size ratchet.
 import { z } from 'zod';
 import { MAX_UPLOAD_VIDEO_BYTES, MAX_UPLOAD_VIDEO_GB } from './limits.js';
@@ -27,7 +27,7 @@ export const CompleteVideoUploadShape = {
   uploadId: z
     .string()
     .min(1, 'uploadId is required')
-    .describe('The uploadId returned by create_video_upload, after the bytes were PUT to its signedUrl.'),
+    .describe('The uploadId returned by publish_video (action: create_upload), after the bytes were PUT to its signedUrl.'),
 };
 
 export const CompleteVideoUploadSchema = z.object(CompleteVideoUploadShape).strict();
@@ -37,7 +37,7 @@ export const PublishUploadedVideoShape = {
   uploadId: z
     .string()
     .min(1, 'uploadId is required')
-    .describe('The uploadId of a completed signed upload (create_video_upload + complete_video_upload). Single-use: one publish consumes it.'),
+    .describe('The uploadId of a completed signed upload (publish_video (action: create_upload) + publish_video (action: complete_upload)). Single-use: one publish consumes it.'),
   accountIds: PublishVideoDirectShape.accountIds,
   title: PublishVideoDirectShape.title,
   description: PublishVideoDirectShape.description,

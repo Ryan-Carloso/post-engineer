@@ -7,7 +7,7 @@ import { narrowTaskProgress } from './tools.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
 //---------------
-// cancel_video_task — MCP tool over DELETE /api/persona/video-task/[taskId].
+// cancel_video — MCP tool over DELETE /api/persona/video-task/[taskId].
 //
 // Extracted from tools.ts so the tools module stays under the file-size
 // ratchet.
@@ -18,7 +18,7 @@ export const CancelVideoTaskShape = {
     .string()
     .min(1, 'taskId is required')
     .describe(
-      'Engine task id of the video to cancel (taskId from get_video_status, get_video_task_progress, get_post or list_posts). Only your own task can be cancelled.',
+      'Engine task id of the video to cancel (taskId from video_tasks (action: status), video_tasks (action: status), posts (action: get) or posts (action: list)). Only your own task can be cancelled.',
     ),
 };
 
@@ -32,9 +32,9 @@ export async function handleCancelVideoTask(
 }
 
 //---------------
-// wait_for_video_tasks — block until every listed video task finishes.
+// video_tasks (action: status) — block until every listed video task finishes.
 //
-// The agent alternative to polling get_video_task_progress: one call waits
+// The agent alternative to polling video_tasks (action: status): one call waits
 // for all taskIds (a single video, or every video of a batch) and only
 // returns when each is completed (state 1, or a 410 whose body says the
 // video was delivered before the engine lost it) or failed (state -1, gone

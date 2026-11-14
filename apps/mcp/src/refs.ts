@@ -67,7 +67,7 @@ type Listing = () => Promise<unknown>;
 
 async function resolvePersona(listPersonas: Listing, ref: string): Promise<RefOutcome<ResolvedPersona>> {
   const wanted = ref.trim();
-  if (wanted === '') return fail('persona is empty. Pass a persona name or id; call personas {action:"list"} to see them.');
+  if (wanted === '') return fail('persona is empty. Pass a persona name or id; call personas (action: list) to see them.');
   if (UUID.test(wanted)) return { kind: 'ok', value: { id: wanted, name: null } };
   let listing: unknown;
   try {
@@ -77,7 +77,7 @@ async function resolvePersona(listPersonas: Listing, ref: string): Promise<RefOu
   }
   const personas = record(listing)?.personas;
   if (!Array.isArray(personas)) {
-    return fail(`Error resolving persona "${wanted}": the personas listing was malformed. Call personas {action:"list"} and pass the persona id.`);
+    return fail(`Error resolving persona "${wanted}": the personas listing was malformed. Call personas (action: list) and pass the persona id.`);
   }
   const matches = personas.flatMap((entry) => {
     const item = record(entry);
@@ -87,7 +87,7 @@ async function resolvePersona(listPersonas: Listing, ref: string): Promise<RefOu
     const niche = text(item.niche);
     return [{ id, name, summary: niche === null ? name : `${name} (${niche})` }];
   });
-  if (matches.length === 0) return fail(`No persona named "${wanted}". Call personas {action:"list"} to see the names and ids.`);
+  if (matches.length === 0) return fail(`No persona named "${wanted}". Call personas (action: list) to see the names and ids.`);
   if (matches.length > 1) return candidates('persona', wanted, matches);
   return { kind: 'ok', value: { id: matches[0].id, name: matches[0].name } };
 }
@@ -109,7 +109,7 @@ function accountOf(entry: unknown): { provider: string; id: string; names: strin
 
 async function resolveAccount(listAccounts: Listing, ref: string, provider?: string): Promise<RefOutcome<ResolvedAccount>> {
   const wanted = ref.trim();
-  if (wanted === '') return fail('An account reference is empty. Pass an account name or id; call accounts {action:"list"} to see them.');
+  if (wanted === '') return fail('An account reference is empty. Pass an account name or id; call accounts (action: list) to see them.');
   let listing: unknown;
   try {
     listing = await listAccounts();
@@ -118,7 +118,7 @@ async function resolveAccount(listAccounts: Listing, ref: string, provider?: str
   }
   const accounts = record(listing)?.accounts;
   if (!Array.isArray(accounts)) {
-    return fail(`Error resolving account "${wanted}": the accounts listing was malformed. Call accounts {action:"list"} and pass the account id.`);
+    return fail(`Error resolving account "${wanted}": the accounts listing was malformed. Call accounts (action: list) and pass the account id.`);
   }
   const all = accounts.flatMap((entry) => {
     const account = accountOf(entry);
@@ -126,7 +126,7 @@ async function resolveAccount(listAccounts: Listing, ref: string, provider?: str
   });
   const byId = all.filter((account) => account.id === wanted);
   const matches = byId.length > 0 ? byId : all.filter((account) => account.names.some((name) => normalize(name) === normalize(wanted)));
-  if (matches.length === 0) return fail(`No account matches "${wanted}"${provider === undefined ? '' : ` on ${provider}`}. Call accounts {action:"list"} to see the names and ids.`);
+  if (matches.length === 0) return fail(`No account matches "${wanted}"${provider === undefined ? '' : ` on ${provider}`}. Call accounts (action: list) to see the names and ids.`);
   if (matches.length > 1) {
     return candidates('account', wanted, matches.map((account) => ({ id: account.id, name: account.label, summary: `${account.label} on ${account.provider}` })));
   }

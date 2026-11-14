@@ -52,7 +52,7 @@ function personasOptions(remote: boolean): ActionOptions<typeof PERSONAS_SPECS> 
 }
 
 export function personasDescription(remote: boolean): string {
-  const face = remote ? 'avatarUrl (a public URL or a list_faces url)' : 'avatarUrl or avatarPath (a local photo, uploaded directly)';
+  const face = remote ? 'avatarUrl (a public URL or a url from persona_media (action: list_faces))' : 'avatarUrl or avatarPath (a local photo, uploaded directly)';
   return actionDescription(
     `Manage your personas (the on-camera presenter, voice and defaults). list: names and ids. get: one persona with its image count and bound publishing accounts. create: a face is REQUIRED (${face}) and at least one publishing account (accounts); a faceless video is chosen per video, not per persona. update: only the given fields change. delete: preview first, then confirm with the token.`,
     offeredSpecs(PERSONAS_SPECS, personasOptions(remote)),

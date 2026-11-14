@@ -17,7 +17,7 @@ function mockClient() {
   } as unknown as PostEngineerClient;
 }
 
-describe('list_pinterest_boards tool', () => {
+describe('accounts list_boards (Pinterest boards)', () => {
   it('lists the boards of the account through the boards route', async () => {
     const client = mockClient();
     vi.mocked(client.request).mockResolvedValue({
@@ -32,7 +32,7 @@ describe('list_pinterest_boards tool', () => {
     expect(client.request).toHaveBeenCalledWith(
       '/api/pinterest/boards?accountId=user-9',
       { method: 'GET', headers: {} },
-      'list_pinterest_boards',
+      'list Pinterest boards',
     );
     expect(JSON.parse(textOf(response))).toEqual({
       boards: [

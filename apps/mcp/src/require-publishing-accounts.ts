@@ -14,7 +14,7 @@ export function requirePublishingAccounts(
   );
   if (total === 0) {
     throw new Error(
-      'Select at least one publishing account for this persona: pass accounts, e.g. { youtube: ["UC..."] }. Account IDs come from list_social_accounts.',
+      'Select at least one publishing account for this persona: pass accounts, e.g. { youtube: ["UC..."] }. Account IDs come from accounts (action: list).',
     );
   }
   return accounts ?? {};

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
 
 //---------------
-// list_voices filters — mirror the web picker: gender (female/male), origin
+// voices (action: list) filters — mirror the web picker: gender (female/male), origin
 // (us/gb/character) and a free-text search. Characters have no accent but
 // keep a gender, so the gender filter applies to them too. Omitted = no
 // filter. Entries come from GET /api/persona/voices: { id, label, provider,
@@ -102,17 +102,17 @@ export function filterVoicesPayload(payload: unknown, args: ListVoicesArgs): unk
 }
 
 //---------------
-// persona-voice — the single voiceId gate for create_persona, update_persona
-// and generate_persona_video options.voiceId (issue #353). Living here keeps
+// persona-voice — the single voiceId gate for personas (action: create), personas (action: update)
+// and generate_video options.voiceId (issue #353). Living here keeps
 // tools.ts a line-swap only: the module is under the file-size ratchet, so
 // everything the tool schemas need is defined in this smaller file.
 //
-// Agents pass a house voice NAME or LABEL from list_voices ('phonon_zoey',
+// Agents pass a house voice NAME or LABEL from voices (action: list) ('phonon_zoey',
 // 'Zoey') — never a provider prefix. All 65 house names are exposed as a
 // JSON-schema enum so MCP UIs can autocomplete them. resolvePersonaVoiceId
 // runs before any mutating client call (createPersona, updatePersona,
 // generatePersonaVideo): an unknown voice never reaches the web route and
-// never debits tokens. Clones are copied verbatim from list_voices: prod
+// never debits tokens. Clones are copied verbatim from voices (action: list): prod
 // clones have label null and serve `chatterbox_nano:<key>` ids.
 //---------------
 
@@ -199,7 +199,7 @@ export const NO_VOICE_SENTINELS = ['no-voice', 'none'] as const;
  *  truncated voice the agent typed — included so a looping agent can see
  *  what it keeps passing. */
 const UNKNOWN_VOICE_COPY = (attempt: string) =>
-  `Unknown voice "${attempt}". Not a house voice and not one of your clones. Call list_voices and pass the id or label from that list.`;
+  `Unknown voice "${attempt}". Not a house voice and not one of your clones. Call voices (action: list) and pass the id or label from that list.`;
 
 // Cap on the echoed voice attempt in the rejection copy.
 const MAX_VOICE_ATTEMPT = 80;
@@ -311,7 +311,7 @@ function storedPersonaVoice(payload: unknown, personaId: string): string | undef
 }
 
 /** withResolvedPersonaVoiceForUpdate — like withResolvedPersonaVoice, but
- *  an update_persona that resends the persona's own stored voice skips
+ *  an personas (action: update) that resends the persona's own stored voice skips
  *  resolution entirely (trim-exact, mirroring the web PATCH carve-out):
  *  the 16 personas storing legacy bare names must survive a name-only
  *  read-modify-write through the agent interface instead of 400ing on
@@ -367,7 +367,7 @@ export function personaVoiceField(requiredMessage?: string) {
   // The description sits on the refined wrapper so MCP UIs read it, and the
   // union keeps the house-name enum for autocomplete.
   return field.describe(
-    'id or label from list_voices. Never type a provider prefix.',
+    'id or label from voices (action: list). Never type a provider prefix.',
   );
 }
 

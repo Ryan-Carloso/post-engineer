@@ -2,14 +2,14 @@ import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
 import { applyBatchDiscount } from './client-batch.js';
 import { ApiError, getErrorMessage } from './errors.js';
-import { BATCH_FREE_EVERY, BATCH_KEY_MAX_LENGTH, BATCH_WINDOW_MINUTES, BATCH_KEY_PATTERN, MAX_BATCH_VIDEOS } from './limits.js';
+import { BATCH_FREE_EVERY, BATCH_KEY_MAX_LENGTH, BATCH_KEY_PATTERN, MAX_BATCH_VIDEOS } from './limits.js';
 import { GeneratePersonaVideoShape } from './single-video-shape.js';
 import { sanitizeEngineError } from './tools.js';
 import type { McpToolResponse } from './tools-call.js';
 import { generatePersonaVideoOutcome } from './tools-single-video.js';
 
 //---------------
-// generate_persona_video_batch — the batch discount of issue #487.
+// generate_video — the batch discount of issue #487.
 //
 // Creates every video of the batch with generate-and-schedule, one after
 // the other, so the engine receives them back to back and renders them in
@@ -43,21 +43,18 @@ export const GeneratePersonaVideoBatchShape = {
     .min(2, 'A batch needs at least 2 videos')
     .max(MAX_BATCH_VIDEOS, `A batch holds at most ${MAX_BATCH_VIDEOS} videos`)
     .describe(
-      `The videos, each with the same fields as generate_persona_video (no idempotencyKey, experiment or recipe). Up to ${MAX_BATCH_VIDEOS}.`,
+      `The videos, each with the same fields as generate_video (no idempotencyKey, experiment or recipe). Up to ${MAX_BATCH_VIDEOS}.`,
     ),
 };
 
 export const GeneratePersonaVideoBatchSchema = z.object(GeneratePersonaVideoBatchShape);
-
-export const GeneratePersonaVideoBatchDescription =
-  `Generate and schedule a BATCH of persona videos in one call (2-${MAX_BATCH_VIDEOS}), cheaper than one by one: for every ${BATCH_FREE_EVERY} videos with the persona face in the batch, the cheapest one is free (its tokens are credited back right after creation). Faceless videos can be in the batch but pay full price, do not count toward the ${BATCH_FREE_EVERY} and are never free. Each video takes the same fields as generate_persona_video and is created and dispatched right away, one after the other, so the batch renders together. All videos must be created within ${BATCH_WINDOW_MINUTES} minutes of the first. Cancelling a video of a discounted batch (cancel_schedule) gives back the discount the batch no longer earns: it is withheld from that video's refund. If a video fails validation or creation, the videos before it stay created and discounted; fix the error and call again with the same batchKey and the same videos in the same order — created videos replay without a new charge. After creation, wait for every taskId with wait_for_video_tasks.`;
 
 function discountFailureText(error: unknown): string {
   const message = sanitizeEngineError(getErrorMessage(error));
   const code = error instanceof ApiError ? error.code : null;
   const next = PERMANENT_DISCOUNT_CODES.has(code ?? '')
     ? ' This batch cannot earn the discount; use a new batchKey for future videos.'
-    : ' Call generate_persona_video_batch again with the same arguments to retry the discount (created videos replay without a new charge).';
+    : ' Call generate_video again with the same arguments to retry the discount (created videos replay without a new charge).';
   return `The batch discount could not be applied: ${message}. The videos are created and charged at full price.${next}`;
 }
 
@@ -113,7 +110,7 @@ function describeDiscount(summary: DiscountSummary): string {
   }
   if (summary.warnings.length > 0) {
     lines.push(
-      `The discount was not fully applied (${summary.warnings.join(', ')}). Call generate_persona_video_batch again with the same arguments to retry it.`,
+      `The discount was not fully applied (${summary.warnings.join(', ')}). Call generate_video again with the same arguments to retry it.`,
     );
   }
   return lines.join('\n');
@@ -147,7 +144,7 @@ export async function handleGeneratePersonaVideoBatch(
       const summary = narrowDiscount(await applyBatchDiscount(client, { batchKey: args.batchKey, scheduleIds }));
       if (summary === null) {
         discountFailed = true;
-        discountText = 'The batch discount answer could not be read. Call generate_persona_video_batch again with the same arguments to retry it.';
+        discountText = 'The batch discount answer could not be read. Call generate_video again with the same arguments to retry it.';
       } else {
         discountFailed = summary.warnings.length > 0;
         discountText = describeDiscount(summary);
@@ -161,7 +158,7 @@ export async function handleGeneratePersonaVideoBatch(
   const header =
     stoppedAt === null
       ? `Created ${scheduleIds.length} video(s) in batch ${args.batchKey}.`
-      : `Batch ${args.batchKey} stopped: ${scheduleIds.length} of ${args.videos.length} video(s) created.\n${stoppedAt}\nFix the error and call generate_persona_video_batch again with the same batchKey and the same videos in the same order: created videos replay without a new charge.`;
+      : `Batch ${args.batchKey} stopped: ${scheduleIds.length} of ${args.videos.length} video(s) created.\n${stoppedAt}\nFix the error and call generate_video again with the same batchKey and the same videos in the same order: created videos replay without a new charge.`;
   return {
     content: [{ type: 'text', text: [header, discountText, ...parts].join('\n\n') }],
     ...(stoppedAt !== null || discountFailed ? { isError: true } : {}),

@@ -11,7 +11,7 @@ export const DisconnectAccountShape = {
     .string()
     .min(1, 'providerAccountId is required')
     .describe(
-      'The account ID on that provider (the channelId / igUserId / providerAccountId / did field from list_social_accounts).',
+      'The account ID on that provider (the channelId / igUserId / providerAccountId / did field from accounts (action: list)).',
     ),
 };
 
@@ -33,5 +33,5 @@ export const createPersonaAccountsField = z
   })
   .describe(
     'Publishing accounts this persona is bound to, per provider, e.g. { youtube: ["UC..."], bluesky: ["did:plc:..."], \'3speak\': ["alice"] }. ' +
-      'At least one account is required. Account IDs come from list_social_accounts (channelId / igUserId / providerAccountId / did).',
+      'At least one account is required. Account IDs come from accounts (action: list) (channelId / igUserId / providerAccountId / did).',
   );

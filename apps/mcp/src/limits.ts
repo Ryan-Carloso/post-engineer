@@ -7,7 +7,7 @@
  */
 
 /**
- * Max caller text for preview_cloned_voice, in characters after trimming.
+ * Max caller text for voices (action: preview_clone), in characters after trimming.
  * Same literal as the engine (app/services/cloned_voices/preview_text.py)
  * and the web preview route (preview/preview-text.ts), pinned by
  * __tests__/clone-preview-text-sync.test.ts.
@@ -15,7 +15,7 @@
 export const CLONE_PREVIEW_TEXT_MAX_CHARS = 300;
 
 /**
- * Max caller text for preview_house_voice, in characters after trimming.
+ * Max caller text for voices (action: preview), in characters after trimming.
  * Same literal as the engine (the house preview reuses the cloned-voice
  * validator in app/services/cloned_voices/preview_text.py) and the web
  * house preview route (preview/preview-text.ts), pinned by

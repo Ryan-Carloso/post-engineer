@@ -58,7 +58,7 @@ export const CreateClonedVoiceSchema = z
     message: CREATE_CLONE_AUDIO_SOURCE_MESSAGE,
   });
 
-/** create_cloned_voice over HTTP: audioUrl only — a local audioPath would
+/** voices (action: create_clone) over HTTP: audioUrl only — a local audioPath would
  * resolve on the MCP server's filesystem, not on the agent's machine.
  * The SDK strips unknown keys before the handler runs, so a smuggled
  * audioPath is dropped (never read), not loudly rejected; the strict
@@ -85,13 +85,13 @@ export const CreateClonedVoiceRemoteSchema = z
   });
 
 export const DeleteClonedVoiceShape = {
-  cloneId: z.string().min(1).describe('Cloned voice id from list_cloned_voices'),
+  cloneId: z.string().min(1).describe('Cloned voice id from voices (action: list_clones)'),
 };
 
 export const DeleteClonedVoiceSchema = z.object(DeleteClonedVoiceShape);
 
 export const GetClonedVoiceShape = {
-  cloneId: z.string().min(1).describe('Cloned voice id (the id returned by create_cloned_voice or list_cloned_voices)'),
+  cloneId: z.string().min(1).describe('Cloned voice id (the id returned by voices (action: create_clone) or voices (action: list_clones))'),
 };
 
 export const GetClonedVoiceSchema = z.object(GetClonedVoiceShape);
@@ -120,7 +120,7 @@ export const PreviewHouseVoiceShape = {
   voiceId: z
     .string()
     .min(1)
-    .describe('House voice id from list_voices (e.g. chatterbox:phonon_zoey)'),
+    .describe('House voice id from voices (action: list) (e.g. chatterbox:phonon_zoey)'),
   text: z
     .string()
     .trim()

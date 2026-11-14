@@ -1,4 +1,4 @@
-// Shape for publish_video_direct (publish a user-provided video without
+// Shape for publish_video (action: from_file) (publish a user-provided video without
 // generation or schedule). Kept in a new module so tools.ts stays under the
 // file-size ratchet; tools.ts re-exports it so existing import sites
 // (`./tools.js`) keep working.
@@ -19,7 +19,7 @@ export const PublishVideoDirectShape = {
     .array(z.string().min(1))
     .min(1, 'At least one account ID is required')
     .describe(
-      'Target accounts: the IDs from list_social_accounts (channel IDs for YouTube, IG user IDs for Instagram, DIDs for Bluesky, member IDs or org URNs for LinkedIn, user IDs for Threads, Page IDs for Facebook, user IDs for Pinterest, Fanvue account IDs, Hive usernames for 3Speak, Channel IDs for Rumble).',
+      'Target accounts: the IDs from accounts (action: list) (channel IDs for YouTube, IG user IDs for Instagram, DIDs for Bluesky, member IDs or org URNs for LinkedIn, user IDs for Threads, Page IDs for Facebook, user IDs for Pinterest, Fanvue account IDs, Hive usernames for 3Speak, Channel IDs for Rumble).',
     ),
   title: z
     .string()
@@ -44,7 +44,7 @@ export const PublishVideoDirectShape = {
   boardId: z
     .string()
     .optional()
-    .describe('Pinterest only: the board to publish the pin to (the id from list_pinterest_boards). Required for pinterest.'),
+    .describe('Pinterest only: the board to publish the pin to (the id from accounts (action: list_boards)). Required for pinterest.'),
   idempotencyKey: z
     .string()
     .min(1)

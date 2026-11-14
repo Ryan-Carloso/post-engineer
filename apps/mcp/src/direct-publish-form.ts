@@ -1,5 +1,5 @@
 // direct-publish-form — provider-specific fields and the multipart form
-// for publish_video_direct.
+// for publish_video (action: from_file).
 //
 // Extracted from client.ts so client.ts stays under the file-size ratchet.
 // Rumble and Fanvue take title + description (like YouTube, minus tags and

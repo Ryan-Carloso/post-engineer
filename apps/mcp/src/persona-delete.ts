@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { PostEngineerClient } from './client.js';
-import { handleDeletePersona, handleLibraryCall, narrowDeletePreview } from './tools.js';
+import { ApiError, getErrorMessage } from './errors.js';
+import { handleDeletePersona, handleLibraryCall, narrowDeletePreview, sanitizeEngineError } from './tools.js';
 import type { McpToolResponse } from './tools-call.js';
 
 //---------------
@@ -42,6 +43,11 @@ export async function handlePersonaDelete(
   try {
     preview = narrowDeletePreview(await client.getPersonaDeletePreview(args.personaId));
   } catch (error) {
+    // An API error keeps its structured contract (code, message, field), as the other persona tools.
+    if (error instanceof ApiError && error.code !== null) {
+      const body = JSON.stringify({ code: error.code, message: sanitizeEngineError(getErrorMessage(error)), field: error.field });
+      return { content: [{ type: 'text', text: `Error previewing the persona deletion: ${body}` }], isError: true };
+    }
     return handleLibraryCall(async () => { throw error; }, 'previewing the persona deletion');
   }
   const token = digest(args.personaId, preview);

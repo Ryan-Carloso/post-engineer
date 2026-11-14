@@ -12,7 +12,7 @@ import type { McpToolResponse } from './tools-call.js';
 // connection, or one HTTP request — the HTTP transport is stateless) and:
 //
 // 1. Nudges. Entry tools (the calls an agent makes before its first video)
-//    get one extra text block pointing at list_prompts, and a script the
+//    get one extra text block pointing at prompts (action: list), and a script the
 //    mechanical validator rejects gets a hint that recipes produce scripts
 //    that pass. The nudge stops once the agent has listed or fetched a
 //    recipe.
@@ -57,15 +57,15 @@ export const RECIPE_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const MAX_SCRIPT_REJECTIONS = 999;
 
 export const RECIPE_NUDGE_TEXT =
-  'Next step for a video about a topic (news, a place, a product, GitHub PRs): call list_prompts and follow the matching recipe with get_prompt instead of improvising the script — recipes pre-validate the script, media, and price facts before any token is spent.';
+  'Next step for a video about a topic (news, a place, a product, GitHub PRs): call prompts (action: list) and follow the matching recipe with prompts (action: get) instead of improvising the script — recipes pre-validate the script, media, and price facts before any token is spent.';
 
 export const SCRIPT_REJECTED_RECIPE_HINT =
-  'Recipes produce scripts that pass these limits: call list_prompts and follow the matching recipe with get_prompt.';
+  'Recipes produce scripts that pass these limits: call prompts (action: list) and follow the matching recipe with prompts (action: get).';
 
 //---------------
 // The text an agent runs for a recipe: the hub text plus a footer asking
 // it to declare the recipe on generate_video, so its request
-// carries X-MCP-Recipe. Shared by get_prompt and the slash commands.
+// carries X-MCP-Recipe. Shared by prompts (action: get) and the slash commands.
 //---------------
 export function recipeRunText(slug: string, prompt: string): string {
   return `${prompt}\n\nWhen you call generate_video for this recipe, pass recipe: "${slug}".`;
@@ -152,7 +152,7 @@ export function withRecipeNudge<TArgs>(
 }
 
 //---------------
-// Wrap a script tool (validate_script, generate_persona_video): its
+// Wrap a script tool (check_script (action: validate), generate_video): its
 // requests carry the session headers plus the declared recipe; a script
 // the mechanical validator rejects (no API request is sent then) bumps the
 // session's rejection counter, which the next request reports, and gets

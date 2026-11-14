@@ -15,7 +15,7 @@ import {
 } from '../voice-filters.js';
 
 const UNKNOWN_VOICE = (attempt: string) =>
-  `Unknown voice "${attempt}". Not a house voice and not one of your clones. Call list_voices and pass the id or label from that list.`;
+  `Unknown voice "${attempt}". Not a house voice and not one of your clones. Call voices (action: list) and pass the id or label from that list.`;
 
 const PAYLOAD = {
   voices: [
@@ -156,7 +156,7 @@ describe('resolvePersonaVoiceId', () => {
     );
   });
 
-  it('matches a clone by full id from list_voices', async () => {
+  it('matches a clone by full id from voices (action: list)', async () => {
     const client = clientWith(vi.fn().mockResolvedValue(CATALOG));
     await expect(
       resolvePersonaVoiceId(client, 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb'),
@@ -208,7 +208,7 @@ describe('resolvePersonaVoiceId', () => {
     );
   });
 
-  it('propagates a list_voices failure instead of the Unknown message', async () => {
+  it('propagates a voices (action: list) failure instead of the Unknown message', async () => {
     const client = clientWith(vi.fn().mockRejectedValue(new Error('boom: 502')));
     await expect(resolvePersonaVoiceId(client, 'energetic')).rejects.toThrow('boom: 502');
   });
@@ -224,7 +224,7 @@ describe('resolvePersonaVoiceId', () => {
 });
 
 describe('withResolvedPersonaVoiceForUpdate', () => {
-  it('passes an unchanged legacy stored voice through without consulting list_voices', async () => {
+  it('passes an unchanged legacy stored voice through without consulting voices (action: list)', async () => {
     const listVoices = vi.fn().mockResolvedValue({ voices: [] });
     const listPersonas = vi
       .fn()

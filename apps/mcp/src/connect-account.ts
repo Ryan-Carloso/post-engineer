@@ -1,4 +1,4 @@
-// connect_account: shape, schema and handler.
+// accounts (action: connect): shape, schema and handler.
 //
 // Extracted from tools.ts so tools.ts stays under the file-size ratchet.
 // Re-exported from tools.ts, so existing import sites (`./tools.js`) keep
@@ -159,7 +159,7 @@ export async function handleConnectAccount(
           text:
             `To connect your ${args.provider} account, open this URL in a browser where you are signed in to Post Engineer with the same account as this API key, and authorize Post Engineer:\n\n` +
             `${result.auth_url}\n\n` +
-            `Once you authorize, the account is connected automatically. Verify with list_social_accounts.`,
+            `Once you authorize, the account is connected automatically. Verify with accounts (action: list).`,
         },
       ],
     };

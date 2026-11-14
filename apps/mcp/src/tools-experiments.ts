@@ -17,12 +17,12 @@ import { generatePersonaVideoOutcome } from './tools-single-video.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
 //---------------
-// Paired A/B content experiments (issue #476): create_experiment,
-// list_experiments, add_experiment_pair and get_experiment_results.
+// Paired A/B content experiments (issue #476): experiments (action: create),
+// experiments (action: list), experiments (action: add_pair) and experiments (action: results).
 //
 // An experiment tests ONE variable (the hook) with two variants. It is a
 // set of pairs: inside a pair both videos share topic and content and only
-// the hook differs; across pairs the topic changes. add_experiment_pair
+// the hook differs; across pairs the topic changes. experiments (action: add_pair)
 // creates both videos of one pair through generate-and-schedule (two normal
 // charged videos) and the server rejects a pair that differs in anything
 // but the hook, before charging.
@@ -72,7 +72,7 @@ export const CreateExperimentSchema = z.object(CreateExperimentShape);
 export const ListExperimentsShape = {};
 
 export const GetExperimentResultsShape = {
-  experimentId: z.string().uuid().describe('Experiment id from create_experiment / list_experiments.'),
+  experimentId: z.string().uuid().describe('Experiment id from experiments (action: create) / experiments (action: list).'),
   window: z.enum(METRICS_WINDOWS).optional().describe('Metrics window to compare: 24h, 7d (default) or 28d.'),
 };
 export const GetExperimentResultsSchema = z.object(GetExperimentResultsShape);
@@ -82,7 +82,7 @@ export const GetExperimentResultsSchema = z.object(GetExperimentResultsShape);
 const { segments: _segments, title: _title, experiment: _experiment, ...deliveryShape } = GenerateVideoItemSchema.shape;
 
 export const AddExperimentPairShape = {
-  experimentId: z.string().uuid().describe('Experiment id from create_experiment.'),
+  experimentId: z.string().uuid().describe('Experiment id from experiments (action: create).'),
   pair: z.number().int().min(1).max(EXPERIMENT_TARGET_PAIRS_MAX).describe('Pair number: 1 for the first pair, then 2, 3... up to targetPairs.'),
   title: z.string().min(1).describe('Slot label for both videos (the pair topic).'),
   segments: z
@@ -130,7 +130,7 @@ export async function handleCreateExperiment(
         variants: args.variants,
       }),
     'creating experiment',
-    'Experiment created. Next: add_experiment_pair for pair 1, 2, ... (each pair = 2 charged videos)',
+    'Experiment created. Next: experiments (action: add_pair) for pair 1, 2, ... (each pair = 2 charged videos)',
   );
 }
 
@@ -190,14 +190,14 @@ export async function handleAddExperimentPair(
       experiment: { experimentId, variantId: hook.variantId, pair },
     });
     if (response.isError === true) {
-      const done = index === 1 ? ` The ${ordered[0].variantId} video of pair ${pair} was created; call add_experiment_pair again with the same arguments after fixing the error — it replays that video and only creates the missing one.` : '';
+      const done = index === 1 ? ` The ${ordered[0].variantId} video of pair ${pair} was created; call experiments (action: add_pair) again with the same arguments after fixing the error — it replays that video and only creates the missing one.` : '';
       return { content: [{ type: 'text', text: `Pair ${pair}, variant ${hook.variantId}: ${textOf(response)}${done}` }], isError: true };
     }
     if (failedSlotIds.length > 0) {
       // A 2xx can carry a failed slot: a dispatch failure (502) leaves the
       // failed slot behind and a retry on the same key replays it. The slot
-      // is its schedule's only slot, so delete_slot answers 409 (last slot)
-      // and cancel_schedule leaves a failed row alone, which keeps the
+      // is its schedule's only slot, so schedules (action: delete_slot) answers 409 (last slot)
+      // and schedules (action: cancel) leaves a failed row alone, which keeps the
       // (experiment, pair, variant) unique key taken: this pair number
       // cannot be redone, so the recovery is a new pair number.
       const done = index === 1 ? ` The ${ordered[0].variantId} video of pair ${pair} was created and stays; it is left without a partner and does not count toward the result.` : '';
@@ -205,7 +205,7 @@ export async function handleAddExperimentPair(
         content: [
           {
             type: 'text',
-            text: `Pair ${pair}, variant ${hook.variantId}: the video failed (slot ${failedSlotIds.join(', ')}, its tokens are refunded), so this pair was NOT created. The failed slot cannot be removed (delete_slot refuses a schedule's last slot and cancel_schedule leaves failed slots in place) and it keeps pair ${pair} taken, so calling add_experiment_pair again with pair ${pair} only replays the failed video. Call add_experiment_pair with the next free pair number instead (up to the experiment's targetPairs).${done}`,
+            text: `Pair ${pair}, variant ${hook.variantId}: the video failed (slot ${failedSlotIds.join(', ')}, its tokens are refunded), so this pair was NOT created. The failed slot cannot be removed (schedules (action: delete_slot) refuses a schedule's last slot and schedules (action: cancel) leaves failed slots in place) and it keeps pair ${pair} taken, so calling experiments (action: add_pair) again with pair ${pair} only replays the failed video. Call experiments (action: add_pair) with the next free pair number instead (up to the experiment's targetPairs).${done}`,
           },
         ],
         isError: true,

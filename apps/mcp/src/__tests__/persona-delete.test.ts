@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PostEngineerClient } from '../client.js';
+import { ApiError } from '../errors.js';
 import { handlePersonaDelete } from '../persona-delete.js';
 import type { McpToolResponse } from '../tools-call.js';
 
@@ -75,5 +76,54 @@ describe('personas · delete', () => {
     const response = await handlePersonaDelete(c, { personaId: 'p1', confirmToken: 'abc' });
     expect(response.isError).toBe(true);
     expect(text(response)).toContain('boom');
+  });
+
+  it('keeps the structured API error contract when the preview fails with an ApiError', async () => {
+    const c = {
+      getPersonaDeletePreview: vi.fn(async () => { throw new ApiError('Failed to get delete preview: 404 Persona not found.', 'PERSONA_NOT_FOUND', 'personaId'); }),
+      deletePersona: vi.fn(),
+    } as unknown as PostEngineerClient;
+    const response = await handlePersonaDelete(c, { personaId: 'nope' });
+    expect(response.isError).toBe(true);
+    expect(text(response)).toContain('"code":"PERSONA_NOT_FOUND"');
+    expect(text(response)).toContain('"field":"personaId"');
+    expect(c.deletePersona).not.toHaveBeenCalled();
+  });
+
+  it('coerces a malformed preview envelope to nulls and still previews', async () => {
+    const c = {
+      getPersonaDeletePreview: vi.fn(async () => ({ persona: { id: 5 }, counts: { schedules: 'many' }, videos: [null], videosTruncated: 'yes' })),
+      deletePersona: vi.fn(),
+    } as unknown as PostEngineerClient;
+    const response = await handlePersonaDelete(c, { personaId: 'persona-1' });
+    expect(response.isError).not.toBe(true);
+    expect(text(response)).toContain('Deleting persona "persona-1" would remove ? schedule(s)');
+    expect(text(response)).toContain('"schedules": null');
+    expect(text(response)).toContain('"taskId": null');
+  });
+
+  it('treats a missing envelope as all-null', async () => {
+    const c = { getPersonaDeletePreview: vi.fn(async () => null), deletePersona: vi.fn() } as unknown as PostEngineerClient;
+    const response = await handlePersonaDelete(c, { personaId: 'persona-1' });
+    expect(response.isError).not.toBe(true);
+    expect(text(response)).toContain('"videos": []');
+  });
+
+  it('narrows the counts and the per-video download links of the preview', async () => {
+    const c = {
+      getPersonaDeletePreview: vi.fn(async () => ({
+        success: true,
+        persona: { id: 'persona-1', name: 'Ava' },
+        counts: { schedules: 2, upcomingSlots: 5, publishedSlots: 10, failedSlots: 1, generatedVideos: 12, personaImages: 4 },
+        videos: [{ taskId: 'task-1', title: 'Gym', status: 'completed', downloadUrl: 'https://cdn.test/v1.mp4', extra: 'dropped' }],
+        videosTruncated: false,
+        linksIncomplete: false,
+      })),
+      deletePersona: vi.fn(),
+    } as unknown as PostEngineerClient;
+    const response = await handlePersonaDelete(c, { personaId: 'persona-1' });
+    expect(text(response)).toContain('Deleting persona "Ava" would remove 2 schedule(s), 5 upcoming slot(s), 10 published slot(s), 12 generated video(s), and 4 library image(s).');
+    expect(text(response)).toContain('"downloadUrl": "https://cdn.test/v1.mp4"');
+    expect(text(response)).not.toContain('dropped');
   });
 });

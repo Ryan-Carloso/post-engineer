@@ -17,6 +17,7 @@ vi.mock('../analytics.js', () => ({
   // per-call context: mcp_tool_called is recorded by the web API from the
   // request headers, not by the MCP (see analytics.test.ts).
   withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
+  withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
@@ -134,7 +135,8 @@ describe('parseHttpTransportOptions', () => {
   });
 });
 
-const FILE_ONLY_TOOLS = ['upload_media', 'add_persona_image', 'publish_video_direct'];
+// Actions that read a file from the disk: offered on the stdio server only.
+const FILE_ONLY_ACTIONS: Array<[string, string]> = [['media', 'upload'], ['persona_media', 'add_image'], ['publish_video', 'from_file']];
 
 async function listedNames(client: PostEngineerClient, transport: 'stdio' | 'http'): Promise<string[]> {
   const server = createPostEngineerMcpServer(client, transport);
@@ -169,18 +171,20 @@ describe('serveHttpTransport', () => {
       const memoryNames = await listedNames(client, 'http');
       const stdioNames = await listedNames(client, 'stdio');
 
-      // The HTTP listener must serve the same tools as the http factory.
-      // That set is the stdio set without the three local-file tools.
+      // The HTTP listener must serve the same tools as the http factory,
+      // and the stdio server has the same 16 tools with extra file actions.
       expect(httpNames).toEqual(memoryNames);
-      for (const tool of FILE_ONLY_TOOLS) {
-        expect(httpNames).not.toContain(tool);
-        expect(stdioNames).toContain(tool);
+      expect(stdioNames).toEqual(httpNames);
+      expect(httpNames).toHaveLength(16);
+      expect(httpNames).toContain('prompts');
+      expect(httpNames).toContain('check_script');
+      const actionsOf = (tools: typeof httpTools.tools, name: string): string[] =>
+        (tools.find((tool) => tool.name === name)?.inputSchema.properties as { action?: { enum?: string[] } } | undefined)?.action?.enum ?? [];
+      for (const [tool, action] of FILE_ONLY_ACTIONS) {
+        expect(actionsOf(httpTools.tools, tool)).not.toContain(action);
       }
-      expect(stdioNames.filter((name) => !FILE_ONLY_TOOLS.includes(name))).toEqual(httpNames);
-      expect(httpNames).toContain('list_prompts');
-      expect(httpNames).toContain('validate_script');
 
-      const result = await mcpClient.callTool({ name: 'validate_script', arguments: { segments } });
+      const result = await mcpClient.callTool({ name: 'check_script', arguments: { action: 'validate', segments } });
       expect(result.isError).toBeUndefined();
       const content = result.content as Array<{ type?: unknown; text?: unknown }> | undefined;
       const block = content?.[0];

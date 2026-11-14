@@ -9,7 +9,7 @@ import { DESTRUCTIVE } from './tool-annotations.js';
 import { DisconnectAccountShape, handleDisconnectAccount, handleListSocialAccounts } from './tools.js';
 import type { McpToolResponse } from './tools-call.js';
 import { GetPersonaPublishingAccountsShape, SetPersonaPublishingAccountsShape, handleGetPersonaPublishingAccounts, handleSetPersonaPublishingAccounts } from './tools-publishing-accounts.js';
-import { ListPinterestBoardsShape, handleListPinterestBoards } from './tools-pinterest.js';
+import { handleListPinterestBoards } from './tools-pinterest.js';
 
 //---------------
 // accounts (issue #566): connected social accounts and the accounts each
