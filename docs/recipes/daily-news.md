@@ -8,7 +8,7 @@
 ## The prompt lives once, in the hub
 
 The full ordered prompt — one story, the script contract, media, validation,
-and the single `generate_persona_video` call — is served from the prompts
+and the single `generate_video` call — is served from the prompts
 hub, not repeated here:
 
 **https://post-engineer.com/recipes/daily-news**
@@ -20,7 +20,7 @@ reach the hub, the MCP, and this page from that one source, with no
 hand-maintained copy to drift.
 
 In short: the agent turns one news story of the day into one short persona
-video. One story, one video, one `generate_persona_video` call. Validation
+video. One story, one video, one `generate_video` call. Validation
 runs before any token is spent.
 
 ## Prerequisites (not part of the prompt)
@@ -31,10 +31,10 @@ runs before any token is spent.
   its own setup prompt for you; never paste the key anywhere else — no other
   chat, prompt, or this repo. Use `npx -y post-engineer-mcp@latest` so the MCP
   is the newest version instead of a stale cached copy.
-- A persona (`personaId` from `list_personas`), or a faceless setup
+- A persona (its name or id from `personas (action: list)`), or a faceless setup
   (`options.videoType: 'faceless'` plus `options.voiceId` or `options.audioUrl`).
-- A token balance that covers one video: check with `get_token_balance`
-  before generating. Generation costs tokens; `validate_script` does not.
+- A token balance that covers one video: check with `billing (action: balance)`
+  before generating. Generation costs tokens; `check_script (action: validate)` does not.
 - The user's own news API key, in the user's own agent environment only.
   This recipe uses GNews as the example source. The key is never pasted,
   never committed, and never appears in examples: the name `YOUR_GNEWS_KEY`
@@ -46,5 +46,5 @@ runs before any token is spent.
 real story is misquoted): a riverside city opens a twelve-acre park.
 
 **Output:** one validated script from only the facts that story supports,
-one `generate_persona_video` call in the confirmed mode, and the published
+one `generate_video` call in the confirmed mode, and the published
 video URL in the chat.

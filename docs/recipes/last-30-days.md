@@ -7,7 +7,7 @@
 ## The prompt lives once, in the hub
 
 The full ordered prompt — niche question, 30-day web search, facts-only
-script, validation, scoring, and the single `generate_persona_video`
+script, validation, scoring, and the single `generate_video`
 call — is served from the prompts hub, not repeated here:
 
 **https://post-engineer.com/recipes/last-30-days**
@@ -35,16 +35,16 @@ those results support. Validation runs before any token is spent.
   agent's own web search). If it needs a key, the key lives in the
   agent's own environment as `YOUR_TAVILY_API_KEY` or `YOUR_EXA_API_KEY`;
   it is never pasted, never committed, and never appears in examples.
-- A persona (`personaId` from `list_personas`), or a faceless setup
+- A persona (its name or id from `personas (action: list)`), or a faceless setup
   (`options.videoType: 'faceless'` plus `options.voiceId` or `options.audioUrl`).
-- A token balance that covers one video: check with `get_token_balance`
-  before generating. Generation costs tokens; `validate_script` and
-  `score_draft` do not debit tokens.
+- A token balance that covers one video: check with `billing (action: balance)`
+  before generating. Generation costs tokens; `check_script (action: validate)` and
+  `check_script (action: score)` do not debit tokens.
 
 ## Example
 
 **Input:** a niche event from the last 30 days with a named place.
 
 **Output:** one validated 60–200 word script from only the facts the
-search results support, one `generate_persona_video` call in the
+search results support, one `generate_video` call in the
 confirmed mode, and the published video URL in the chat.

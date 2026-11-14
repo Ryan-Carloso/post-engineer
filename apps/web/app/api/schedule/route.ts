@@ -20,9 +20,9 @@ import { CANCEL_REFUND_REASON, refundsAfterClawback } from './batch-clawback';
 //---------------
 // /api/schedule — read and cancel the automatic fill-schedule timetables.
 // Schedules are created by POST /api/videos/generate-and-schedule (the
-// singular MCP generate_persona_video tool or the web API directly);
+// singular MCP generate_video tool or the web API directly);
 // this route only lists them (GET) and cancels one (DELETE, used by the
-// MCP cancel_schedule tool). There is no edit verb. Cancel deletes every
+// MCP schedules (action: cancel) tool). There is no edit verb. Cancel deletes every
 // unpublished slot (pending, generating, ready) before the schedule row: generate-and-schedule
 // dispatches those slots immediately, and the publisher posts from the slot
 // row, so deleting only the schedule would leave a post that still goes out.

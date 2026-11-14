@@ -1,9 +1,6 @@
 import { z } from 'zod';
 
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { PostEngineerClient } from './client.js';
-import { withTracking } from './analytics.js';
-import { READ_ONLY, MUTATING, DESTRUCTIVE } from './tool-annotations.js';
 import {
   createClonedVoiceFromFile,
   createClonedVoiceFromUrl,
@@ -61,7 +58,7 @@ export const CreateClonedVoiceSchema = z
     message: CREATE_CLONE_AUDIO_SOURCE_MESSAGE,
   });
 
-/** create_cloned_voice over HTTP: audioUrl only — a local audioPath would
+/** voices (action: create_clone) over HTTP: audioUrl only — a local audioPath would
  * resolve on the MCP server's filesystem, not on the agent's machine.
  * The SDK strips unknown keys before the handler runs, so a smuggled
  * audioPath is dropped (never read), not loudly rejected; the strict
@@ -88,13 +85,13 @@ export const CreateClonedVoiceRemoteSchema = z
   });
 
 export const DeleteClonedVoiceShape = {
-  cloneId: z.string().min(1).describe('Cloned voice id from list_cloned_voices'),
+  cloneId: z.string().min(1).describe('Cloned voice id from voices (action: list_clones)'),
 };
 
 export const DeleteClonedVoiceSchema = z.object(DeleteClonedVoiceShape);
 
 export const GetClonedVoiceShape = {
-  cloneId: z.string().min(1).describe('Cloned voice id (the id returned by create_cloned_voice or list_cloned_voices)'),
+  cloneId: z.string().min(1).describe('Cloned voice id (the id returned by voices (action: create_clone) or voices (action: list_clones))'),
 };
 
 export const GetClonedVoiceSchema = z.object(GetClonedVoiceShape);
@@ -123,7 +120,7 @@ export const PreviewHouseVoiceShape = {
   voiceId: z
     .string()
     .min(1)
-    .describe('House voice id from list_voices (e.g. chatterbox:phonon_zoey)'),
+    .describe('House voice id from voices (action: list) (e.g. chatterbox:phonon_zoey)'),
   text: z
     .string()
     .trim()
@@ -202,68 +199,5 @@ export async function handlePreviewHouseVoice(
   return handleLibraryCall(
     () => previewHouseVoice(client, args.voiceId, args.text),
     'previewing house voice',
-  );
-}
-
-// Registers the cloned-voice tools (list/create/get/delete/preview, plus the
-// house-voice preview) on the server. Kept here, next to their shapes and
-// handlers, so index.ts stays under the 500-line cap.
-export function registerClonedVoiceTools(server: McpServer, apiClient: PostEngineerClient, remote = false): void {
-  server.tool(
-    'list_cloned_voices',
-    'List per-user Chatterbox voice clones (status, voice_id when ready).',
-    ListClonedVoicesShape, READ_ONLY,
-    withTracking('list_cloned_voices', async () => {
-      return handleListClonedVoices(apiClient);
-    }),
-  );
-
-  server.tool(
-    'create_cloned_voice',
-    remote
-      ? 'Register a voice clone from a short HTTPS audio URL (requires explicit consent).'
-      : 'Register a voice clone from a short HTTPS audio URL or a local audio file path (requires explicit consent).',
-    remote ? CreateClonedVoiceRemoteShape : CreateClonedVoiceShape, MUTATING,
-    withTracking('create_cloned_voice', async (args) => {
-      return remote
-        ? handleCreateClonedVoice(apiClient, CreateClonedVoiceRemoteSchema.parse(args))
-        : handleCreateClonedVoice(apiClient, args);
-    }),
-  );
-
-  server.tool(
-    'get_cloned_voice',
-    'Get one voice clone by id: its status (poll after create_cloned_voice until ready or failed) and voice_id once ready.',
-    GetClonedVoiceShape, READ_ONLY,
-    withTracking('get_cloned_voice', async (args) => {
-      return handleGetClonedVoice(apiClient, args);
-    }),
-  );
-
-  server.tool(
-    'delete_cloned_voice',
-    'Delete one of your voice clones by id.',
-    DeleteClonedVoiceShape, DESTRUCTIVE,
-    withTracking('delete_cloned_voice', async (args) => {
-      return handleDeleteClonedVoice(apiClient, args);
-    }),
-  );
-
-  server.tool(
-    'preview_cloned_voice',
-    'Synthesize a short MP3 preview for a ready voice clone, optionally speaking your own text (returns base64 audio; 10 previews per day).',
-    PreviewClonedVoiceShape, MUTATING,
-    withTracking('preview_cloned_voice', async (args) => {
-      return handlePreviewClonedVoice(apiClient, args);
-    }),
-  );
-
-  server.tool(
-    'preview_house_voice',
-    'Synthesize a short MP3 preview for a house voice, optionally speaking your own text (returns base64 audio; 10 previews per day).',
-    PreviewHouseVoiceShape, MUTATING,
-    withTracking('preview_house_voice', async (args) => {
-      return handlePreviewHouseVoice(apiClient, args);
-    }),
   );
 }

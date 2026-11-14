@@ -4,6 +4,7 @@ import { z } from 'zod';
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
   withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
+  withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
@@ -135,7 +136,7 @@ describe('MCP Tool Handlers', () => {
 
     expect(response.isError).toBe(true);
     expect(textOf(response)).toContain(
-      'Unknown voice "energetic". Not a house voice and not one of your clones. Call list_voices and pass the id or label from that list.',
+      'Unknown voice "energetic". Not a house voice and not one of your clones. Call voices (action: list) and pass the id or label from that list.',
     );
     expect(mockClient.createPersona).not.toHaveBeenCalled();
   });
@@ -392,7 +393,7 @@ describe('MCP Tool Handlers', () => {
     expect(text).toMatch(/authorize/i);
     // the callback only accepts a browser signed in as the connect URL owner
     expect(text).toMatch(/signed in to Post Engineer/i);
-    expect(text).toContain('list_social_accounts');
+    expect(text).toContain('accounts (action: list)');
   });
 
   it('handleConnectAccount returns the OAuth authorization URL for fanvue', async () => {
@@ -688,7 +689,7 @@ describe('persona image library tools', () => {
     vi.restoreAllMocks();
   });
 
-  it('create_persona accepts images and imagePrimaryIndex', async () => {
+  it('personas (action: create) accepts images and imagePrimaryIndex', async () => {
     vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1' });
     const args = CreatePersonaSchema.parse({
       accounts: { youtube: ['acct-1'] },
@@ -707,7 +708,7 @@ describe('persona image library tools', () => {
     expect(textOf(response)).toContain('p-1');
   });
 
-  it('create_persona rejects more than 10 images at the schema level', () => {
+  it('personas (action: create) rejects more than 10 images at the schema level', () => {
     const images = Array.from({ length: 11 }, (_, i) => ({ path: `/tmp/img-${i}.jpg` }));
     expect(() =>
       CreatePersonaSchema.parse({ name: 'X', avatarUrl: 'https://example.com/a.png', voiceId: 'chatterbox:kokoro_am_michael', images })
@@ -716,7 +717,7 @@ describe('persona image library tools', () => {
 
   it('CreatePersonaSchema rejects a missing avatarUrl at parse time', () => {
     // avatarUrl is always required: every persona has a face, and "no face"
-    // is a per-video choice (generate_persona_video options.videoType 'faceless'),
+    // is a per-video choice (generate_video options.videoType 'faceless'),
     // never a persona one. There is no images-specific rule anymore — the
     // schema-level rule (avatarUrl or avatarPath) fails the parse on its own.
     // voiceId is supplied so the parse fails on the face rule, not on it.
@@ -769,7 +770,7 @@ describe('persona image library tools', () => {
     ).not.toThrow();
   });
 
-  it('create_persona handler fails on a missing avatarUrl and avatarPath before the client call', async () => {
+  it('personas (action: create) handler fails on a missing avatarUrl and avatarPath before the client call', async () => {
     // Simulates args that bypassed the SDK's raw-shape validation: the
     // handler re-parses with the full schema, so the required avatarUrl
     // becomes a loud isError — no file is read, no fetch happens.
@@ -796,7 +797,7 @@ describe('persona image library tools', () => {
     expect(() => CreatePersonaSchema.parse({ ...base, voiceId: '' })).toThrow(/voiceId is required/);
   });
 
-  it('create_persona handler fails on a missing voiceId before the client call', async () => {
+  it('personas (action: create) handler fails on a missing voiceId before the client call', async () => {
     vi.clearAllMocks();
     vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true });
     const sdkArgs = {
@@ -810,7 +811,7 @@ describe('persona image library tools', () => {
     expect(mockClient.createPersona).not.toHaveBeenCalled();
   });
 
-  it('update_persona_image documents that whitespace-only metadata clears the stored value', () => {
+  it('persona_media (action: update_image) documents that whitespace-only metadata clears the stored value', () => {
     // Server convention: undefined = keep, '' = clear. A whitespace-only
     // value trims to '' client-side, so the field docs must say so —
     // otherwise a caller passing "   " wipes the value unknowingly.
@@ -820,7 +821,7 @@ describe('persona image library tools', () => {
     }
   });
 
-  it('list_persona_images returns the library', async () => {
+  it('persona_media (action: list_images) returns the library', async () => {
     vi.mocked(mockClient.listPersonaImages).mockResolvedValue({ images: [] });
     const response = await handleListPersonaImages(
       mockClient,
@@ -830,7 +831,7 @@ describe('persona image library tools', () => {
     expect(textOf(response)).toContain('images');
   });
 
-  it('add_persona_image forwards path, tag, description, isPrimary', async () => {
+  it('persona_media (action: add_image) forwards path, tag, description, isPrimary', async () => {
     vi.mocked(mockClient.addPersonaImage).mockResolvedValue({ success: true, id: 'img-1' });
     const response = await handleAddPersonaImage(
       mockClient,
@@ -843,8 +844,8 @@ describe('persona image library tools', () => {
     expect(textOf(response)).toContain('img-1');
   });
 
-  it('add_persona_image rejects isPrimary:false at parse time', async () => {
-    // Symmetric with update_persona_image (swap-only): isPrimary:false on a
+  it('persona_media (action: add_image) rejects isPrimary:false at parse time', async () => {
+    // Symmetric with persona_media (action: update_image) (swap-only): isPrimary:false on a
     // brand-new image is meaningless — the image is never primary unless
     // explicitly marked. Reject loudly instead of silently dropping it.
     expect(() =>
@@ -852,7 +853,7 @@ describe('persona image library tools', () => {
     ).toThrow();
   });
 
-  it('update_persona_image forwards metadata', async () => {
+  it('persona_media (action: update_image) forwards metadata', async () => {
     vi.mocked(mockClient.updatePersonaImage).mockResolvedValue({ success: true });
     await handleUpdatePersonaImage(
       mockClient,
@@ -863,7 +864,7 @@ describe('persona image library tools', () => {
     );
   });
 
-  it('update_persona_image rejects a no-op update with only an id', async () => {
+  it('persona_media (action: update_image) rejects a no-op update with only an id', async () => {
     // The refine encodes the domain rule "at least one of tag/description/
     // isPrimary" in the schema: an id-only call must fail at parse time,
     // before any client call.
@@ -878,13 +879,13 @@ describe('persona image library tools', () => {
     ['tag', { id: 'img-1', tag: 'portrait' }],
     ['description', { id: 'img-1', description: 'Studio headshot' }],
     ['isPrimary', { id: 'img-1', isPrimary: true }],
-  ])('update_persona_image accepts when only %s is set', (_field, args) => {
+  ])('persona_media (action: update_image) accepts when only %s is set', (_field, args) => {
     // Each || branch of the refine must independently accept: a mutant
     // dropping any branch must be caught.
     expect(() => UpdatePersonaImageSchema.parse(args)).not.toThrow();
   });
 
-  it('update_persona_image re-parses raw handler args with the refined schema', async () => {
+  it('persona_media (action: update_image) re-parses raw handler args with the refined schema', async () => {
     // The MCP SDK parses tool args against the raw UpdatePersonaImageShape,
     // so the .refine would never fire on the tool path. The handler
     // re-parses (like handleCreatePersona) so the id-only call fails at
@@ -898,7 +899,7 @@ describe('persona image library tools', () => {
     expect(mockClient.updatePersonaImage).not.toHaveBeenCalled();
   });
 
-  it('update_persona_image rejects isPrimary:false at parse time', async () => {
+  it('persona_media (action: update_image) rejects isPrimary:false at parse time', async () => {
     // The server PATCH is swap-only and 400s isPrimary:false. The schema
     // is z.literal(true) so an agent learns the constraint from the tool
     // contract instead of a server error.
@@ -908,7 +909,7 @@ describe('persona image library tools', () => {
     expect(mockClient.updatePersonaImage).not.toHaveBeenCalled();
   });
 
-  it('remove_persona_image forwards the id', async () => {
+  it('persona_media (action: remove_image) forwards the id', async () => {
     vi.mocked(mockClient.deletePersonaImage).mockResolvedValue({ success: true });
     await handleRemovePersonaImage(mockClient, RemovePersonaImageSchema.parse({ id: 'img-1' }));
     expect(mockClient.deletePersonaImage).toHaveBeenCalledWith('img-1');
@@ -925,7 +926,13 @@ describe('persona image library tools', () => {
   });
 });
 
-describe('video task progress tools', () => {
+// The progress narrowing every video_tasks status result is built from, as a response for textOf().
+async function progressResponse(client: PostEngineerClient, taskId: string): Promise<McpToolResponse> {
+  const { narrowTaskProgress } = await import('../tools.js');
+  return { content: [{ type: 'text', text: JSON.stringify(narrowTaskProgress(await client.getVideoStatus(taskId)), null, 2) }] };
+}
+
+describe('video task progress narrowing', () => {
   const mockClient = {
     getVideoStatus: vi.fn(),
   } as unknown as PostEngineerClient;
@@ -934,15 +941,14 @@ describe('video task progress tools', () => {
     vi.clearAllMocks();
   });
 
-  it('handleGetVideoTaskProgress narrows the status body to task_id/state/progress/stage', async () => {
-    const { handleGetVideoTaskProgress } = await import('../tools.js');
+  it('narrowTaskProgress narrows the status body to task_id/state/progress/stage', async () => {
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
       status: 200,
       message: 'success',
       body: { task_id: 'task-1', state: 4, progress: 42, stage: 'audio' },
     });
 
-    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 'task-1' });
+    const response = await progressResponse(mockClient, 'task-1');
 
     expect(mockClient.getVideoStatus).toHaveBeenCalledWith('task-1');
     const text = textOf(response);
@@ -952,8 +958,7 @@ describe('video task progress tools', () => {
     expect(text).toContain('"stage": "audio"');
   });
 
-  it('handleGetVideoTaskProgress surfaces the engine error when the task failed', async () => {
-    const { handleGetVideoTaskProgress } = await import('../tools.js');
+  it('narrowTaskProgress surfaces the engine error when the task failed', async () => {
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
       status: 200,
       message: 'success',
@@ -966,14 +971,13 @@ describe('video task progress tools', () => {
       },
     });
 
-    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 'task-1' });
+    const response = await progressResponse(mockClient, 'task-1');
     const text = textOf(response);
     expect(text).toContain('"state": -1');
     expect(text).toContain('"error": "persona hook must end between 3 and 6 seconds, got 6.55"');
   });
 
-  it('handleGetVideoTaskProgress redacts credential-like material from the engine error', async () => {
-    const { handleGetVideoTaskProgress } = await import('../tools.js');
+  it('narrowTaskProgress redacts credential-like material from the engine error', async () => {
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
       status: 200,
       message: 'success',
@@ -989,7 +993,7 @@ describe('video task progress tools', () => {
       },
     });
 
-    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 'task-1' });
+    const response = await progressResponse(mockClient, 'task-1');
     const text = textOf(response);
     expect(text).toContain('Bearer [redacted]');
     expect(text).toContain('https://[redacted]@ingest.example.com/9');
@@ -1001,8 +1005,7 @@ describe('video task progress tools', () => {
     expect(text).toContain('upload failed');
   });
 
-  it('handleGetVideoTaskProgress leaves an ordinary engine error untouched', async () => {
-    const { handleGetVideoTaskProgress } = await import('../tools.js');
+  it('narrowTaskProgress leaves an ordinary engine error untouched', async () => {
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
       status: 200,
       message: 'success',
@@ -1015,17 +1018,16 @@ describe('video task progress tools', () => {
       },
     });
 
-    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 'task-1' });
+    const response = await progressResponse(mockClient, 'task-1');
     expect(textOf(response)).toContain(
       '"error": "persona hook must end between 3 and 6 seconds, got 6.55"'
     );
   });
 
-  it('handleGetVideoTaskProgress reports explicit nulls when the task payload is missing', async () => {
-    const { handleGetVideoTaskProgress } = await import('../tools.js');
+  it('narrowTaskProgress reports explicit nulls when the task payload is missing', async () => {
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({ ok: true });
 
-    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 'task-9' });
+    const response = await progressResponse(mockClient, 'task-9');
     const text = textOf(response);
     expect(text).toContain('"task_id": null');
     expect(text).toContain('"state": null');
@@ -1109,7 +1111,6 @@ describe('narrowTaskProgress type narrowing', () => {
   });
 
   it('coerces wrong-typed fields to null instead of passing them through', async () => {
-    const { handleGetVideoTaskProgress } = await import('../tools.js');
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
       body: {
         task_id: 42,
@@ -1121,7 +1122,7 @@ describe('narrowTaskProgress type narrowing', () => {
       },
     });
 
-    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 't-1' });
+    const response = await progressResponse(mockClient, 't-1');
     const text = textOf(response);
     expect(text).toContain('"task_id": null');
     expect(text).toContain('"state": null');
@@ -1132,10 +1133,9 @@ describe('narrowTaskProgress type narrowing', () => {
   });
 
   it('reports all nulls when the payload is not an object', async () => {
-    const { handleGetVideoTaskProgress } = await import('../tools.js');
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue('not-an-object');
 
-    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 't-1' });
+    const response = await progressResponse(mockClient, 't-1');
     const text = textOf(response);
     expect(text).toContain('"task_id": null');
     expect(text).toContain('"state": null');
@@ -1146,12 +1146,11 @@ describe('narrowTaskProgress type narrowing', () => {
   });
 
   it('keeps well-typed fields and nulls only the missing ones', async () => {
-    const { handleGetVideoTaskProgress } = await import('../tools.js');
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
       body: { task_id: 't-2', state: 1, progress: 60, postUrl: 'https://post-engineer.com/posts/slot-1' },
     });
 
-    const response = await handleGetVideoTaskProgress(mockClient, { taskId: 't-2' });
+    const response = await progressResponse(mockClient, 't-2');
     const text = textOf(response);
     expect(text).toContain('"task_id": "t-2"');
     expect(text).toContain('"state": 1');
@@ -1471,44 +1470,6 @@ describe('delete persona tools', () => {
     vi.clearAllMocks();
   });
 
-  it('GetPersonaDeletePreviewSchema requires a non-empty personaId', async () => {
-    const { GetPersonaDeletePreviewSchema } = await import('../tools.js');
-    expect(GetPersonaDeletePreviewSchema.safeParse({ personaId: 'persona-1' }).success).toBe(true);
-    expect(GetPersonaDeletePreviewSchema.safeParse({ personaId: '' }).success).toBe(false);
-  });
-
-  it('handleGetPersonaDeletePreview narrows counts and videos, and summarizes', async () => {
-    const { handleGetPersonaDeletePreview } = await import('../tools.js');
-    vi.mocked(mockClient.getPersonaDeletePreview).mockResolvedValue({
-      success: true,
-      persona: { id: 'persona-1', name: 'Ava' },
-      counts: {
-        schedules: 2,
-        upcomingSlots: 5,
-        publishedSlots: 10,
-        failedSlots: 1,
-        generatedVideos: 16,
-        personaImages: 3,
-      },
-      videos: [
-        { taskId: 'task-1', title: 'Launch day', status: 'completed', downloadUrl: 'https://cdn.example.com/v.mp4' },
-      ],
-      videosTruncated: false,
-      linksIncomplete: false,
-      internalField: 'rides through unparsed',
-    });
-
-    const response = await handleGetPersonaDeletePreview(mockClient, { personaId: 'persona-1' });
-    expect(mockClient.getPersonaDeletePreview).toHaveBeenCalledWith('persona-1');
-    expect(response.isError).toBeUndefined();
-    const text = textOf(response);
-    expect(text).toContain('Ava');
-    expect(text).toContain('5');
-    expect(text).toContain('"upcomingSlots": 5');
-    expect(text).toContain('https://cdn.example.com/v.mp4');
-    expect(text).not.toContain('internalField');
-  });
-
   it('DeletePersonaSchema requires a non-empty personaId', async () => {
     const { DeletePersonaSchema } = await import('../tools.js');
     expect(DeletePersonaSchema.safeParse({ personaId: 'persona-1' }).success).toBe(true);
@@ -1771,56 +1732,6 @@ describe('new tool error paths and narrowing fallbacks', () => {
     const text = textOf(response);
     expect(text).toContain('"id": null');
     expect(text).toContain('"amount": null');
-  });
-
-  it('handleGetPersonaDeletePreview surfaces API errors with the structured contract', async () => {
-    const { handleGetPersonaDeletePreview } = await import('../tools.js');
-    const { ApiError } = await import('../errors.js');
-    vi.mocked(mockClient.getPersonaDeletePreview).mockRejectedValue(
-      new ApiError('Failed to get delete preview: 404 Persona not found.', 'PERSONA_NOT_FOUND', 'personaId')
-    );
-
-    const response = await handleGetPersonaDeletePreview(mockClient, { personaId: 'nope' });
-    expect(response.isError).toBe(true);
-    expect(textOf(response)).toContain('"code":"PERSONA_NOT_FOUND"');
-  });
-
-  it('handleGetPersonaDeletePreview surfaces a plain failure without the structured contract', async () => {
-    const { handleGetPersonaDeletePreview } = await import('../tools.js');
-    vi.mocked(mockClient.getPersonaDeletePreview).mockRejectedValue(new Error('network down'));
-
-    const response = await handleGetPersonaDeletePreview(mockClient, { personaId: 'persona-1' });
-    expect(response.isError).toBe(true);
-    expect(textOf(response)).toBe('Error getting persona delete preview: network down');
-  });
-
-  it('handleGetPersonaDeletePreview coerces a malformed envelope to nulls', async () => {
-    const { handleGetPersonaDeletePreview } = await import('../tools.js');
-    vi.mocked(mockClient.getPersonaDeletePreview).mockResolvedValue({
-      persona: { id: 5 },
-      counts: { schedules: 'many' },
-      videos: [null],
-      videosTruncated: 'yes',
-    });
-
-    const response = await handleGetPersonaDeletePreview(mockClient, { personaId: 'persona-1' });
-    expect(response.isError).toBeUndefined();
-    const text = textOf(response);
-    expect(text).toContain('Deleting persona "persona-1" would remove ? schedule(s)');
-    expect(text).toContain('"schedules": null');
-    expect(text).toContain('"taskId": null');
-    expect(text).toContain('"videosTruncated": null');
-  });
-
-  it('handleGetPersonaDeletePreview treats a missing envelope as all-null', async () => {
-    const { handleGetPersonaDeletePreview } = await import('../tools.js');
-    vi.mocked(mockClient.getPersonaDeletePreview).mockResolvedValue(null);
-
-    const response = await handleGetPersonaDeletePreview(mockClient, { personaId: 'persona-1' });
-    expect(response.isError).toBeUndefined();
-    const text = textOf(response);
-    expect(text).toContain('Deleting persona "persona-1" would remove ? schedule(s)');
-    expect(text).toContain('"videos": []');
   });
 
   it('handleDeletePersona surfaces a plain failure without the structured contract', async () => {

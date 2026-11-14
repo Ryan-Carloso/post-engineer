@@ -8,7 +8,7 @@
 ## The prompt lives once, in the hub
 
 The full ordered prompt — which pull request, the script contract, media
-only when it matches the change, and the single `generate_persona_video`
+only when it matches the change, and the single `generate_video`
 call — is served from the prompts hub, not repeated here:
 
 **https://post-engineer.com/recipes/github-prs**
@@ -32,10 +32,10 @@ spent.
   its own setup prompt for you; never paste the key anywhere else — no other
   chat, prompt, or this repo. Use `npx -y post-engineer-mcp@latest` so the MCP
   is the newest version instead of a stale cached copy.
-- A persona (`personaId` from `list_personas`), or a faceless setup
+- A persona (its name or id from `personas (action: list)`), or a faceless setup
   (`options.videoType: 'faceless'` plus `options.voiceId` or `options.audioUrl`).
-- A token balance that covers one video: check with `get_token_balance`
-  before generating. Generation costs tokens; `validate_script` does not.
+- A token balance that covers one video: check with `billing (action: balance)`
+  before generating. Generation costs tokens; `check_script (action: validate)` does not.
 
 ## Example
 
@@ -43,4 +43,4 @@ spent.
 with a description of transient 5xx failures and a change that retries them.
 
 **Output:** one validated script about that change, one
-`generate_persona_video` call, and the published video URL in the chat.
+`generate_video` call, and the published video URL in the chat.

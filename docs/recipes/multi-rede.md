@@ -8,7 +8,7 @@
 
 The full ordered prompt — niche and week questions, one topic for the
 week, one script per network, per-network validation and scoring,
-week confirmation, and one `generate_persona_video` call per network —
+week confirmation, and one `generate_video` call per network —
 is served from the prompts hub, not repeated here:
 
 **https://post-engineer.com/recipes/multi-rede**
@@ -33,18 +33,18 @@ week is confirmed once before generating.
   chat, prompt, or this repo. Use `npx -y post-engineer-mcp@latest` so the MCP
   is the newest version instead of a stale cached copy.
 - Connected accounts on the networks the week includes
-  (`list_social_accounts`): LinkedIn, YouTube, Instagram, Bluesky. A
+  (`accounts (action: list)`): LinkedIn, YouTube, Instagram, Bluesky. A
   network with no connected account is skipped for that week.
-- A persona (`personaId` from `list_personas`), or a faceless setup
+- A persona (its name or id from `personas (action: list)`), or a faceless setup
   (`options.videoType: 'faceless'` plus `options.voiceId` or `options.audioUrl`).
 - A token balance that covers one video per network: check with
-  `get_token_balance` before generating. Generation costs tokens;
-  `validate_script` and `score_draft` do not debit tokens.
+  `billing (action: balance)` before generating. Generation costs tokens;
+  `check_script (action: validate)` and `check_script (action: score)` do not debit tokens.
 
 ## Example
 
 **Input:** one weekly topic for LinkedIn, YouTube, Instagram, and Bluesky.
 
 **Output:** four validated scripts (one per network), four
-`generate_persona_video` calls in the confirmed mode, and the published
+`generate_video` calls in the confirmed mode, and the published
 video URLs in the chat.

@@ -1,9 +1,7 @@
 // pt-BR dictionary — defines the typed contract (Dictionary).
 
-import { personaVoiceClonePt, voiceCloneApiToolDescPt } from './voice-clone-i18n-pt';
-import { postToolDescPt } from './post-tools-i18n-pt';
-import { segmentMediaToolDescPt } from './segment-media-i18n-pt';
-import { videoUploadToolDescPt } from './video-upload-i18n-pt';
+import { personaVoiceClonePt } from './voice-clone-i18n-pt';
+import { mcpToolDescPt } from './mcp-tools-i18n-pt';
 import { accountI18nPt } from './account-i18n-pt';
 import { accountsI18nPt } from './accounts-i18n-pt';
 import { recipesI18nPt } from './recipes-i18n-pt';
@@ -188,31 +186,7 @@ export const ptDictionary = {
     copy: 'Copiar',
     toolsTitle: 'Tools disponíveis',
     toolsSubtitle: 'Estas são as tools que seu agente de IA recebe acesso após conectar.',
-    toolDescListPersonas: 'Liste suas personas',
-    toolDescListVoices: 'Liste as vozes disponíveis',
-    ...voiceCloneApiToolDescPt,
-    toolDescListFaces: 'Liste rostos de avatar padrão',
-    toolDescCreatePersona: 'Crie uma nova persona',
-    toolDescUpdatePersona: 'Atualize uma persona existente',
-    toolDescGetTokenBalance: 'Consulte o saldo de tokens',
-    ...segmentMediaToolDescPt,
-    toolDescGetVideoStatus: 'Confira o status do vídeo',
-    toolDescGetVideoTaskProgress: 'Acompanhe o progresso por vídeo (%, etapa)',
-    toolDescWaitForVideoTasks: 'Espere até os vídeos terminarem ou falharem',
-    toolDescListPersonaImages: 'Liste a biblioteca de imagens da persona',
-    toolDescAddPersonaImage: 'Adicione uma imagem à biblioteca',
-    toolDescUpdatePersonaImage: 'Atualize uma imagem da biblioteca',
-    toolDescRemovePersonaImage: 'Remova uma imagem da biblioteca',
-    ...videoUploadToolDescPt,
-    toolDescListSocialAccounts: 'Liste contas sociais conectadas',
-    toolDescListSchedules: 'Liste agendamentos automáticos',
-    toolDescListPosts: 'Liste posts futuros e passados',
-    toolDescCancelSchedule: 'Cancele um agendamento',
-    ...postToolDescPt,
-    toolDescListTokenTransactions: 'Listar o extrato de tokens',
-    toolDescGetPersonaDeletePreview: 'Ver impacto de deletar persona',
-    toolDescDeletePersona: 'Deletar uma persona (destrutivo)',
-    toolDescDisconnectAccount: 'Desconectar uma conta social',
+    ...mcpToolDescPt,
   },
   // App API Key
   persona: {

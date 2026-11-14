@@ -9,7 +9,7 @@
 
 The full ordered prompt — the subject and the goal, identity and price,
 photos of that exact subject with overlay cards, validation, scoring, and
-the single `generate_persona_video` call — is served from the prompts hub,
+the single `generate_video` call — is served from the prompts hub,
 not repeated here:
 
 **https://post-engineer.com/recipes/subject-spotlight**
@@ -23,7 +23,7 @@ hand-maintained copy to drift.
 In short: one concrete subject (a car, a product, a gadget, a tool) becomes
 one persona video. The photos show that subject, with the real name, the
 exact version, and the real price when the search supports it. One subject,
-one video, one `generate_persona_video` call. Validation runs before any
+one video, one `generate_video` call. Validation runs before any
 token is spent.
 
 ## Prerequisites (not part of the prompt)
@@ -34,10 +34,10 @@ token is spent.
   its own setup prompt for you; never paste the key anywhere else — no other
   chat, prompt, or this repo. Use `npx -y post-engineer-mcp@latest` so the MCP
   is the newest version instead of a stale cached copy.
-- A persona (`personaId` from `list_personas`), or a faceless setup
+- A persona (its name or id from `personas (action: list)`), or a faceless setup
   (`options.videoType: 'faceless'` plus `options.voiceId` or `options.audioUrl`).
-- A token balance that covers one video: check with `get_token_balance`
-  before generating. Generation costs tokens; `validate_script` does not.
+- A token balance that covers one video: check with `billing (action: balance)`
+  before generating. Generation costs tokens; `check_script (action: validate)` does not.
 - A search tool in the agent's own environment (Tavily, Exa, or the agent's
   own web search) that can return facts and direct image URLs. If it needs
   a key, the key lives in the agent's own environment as
@@ -51,7 +51,7 @@ year, a range, and a launch price for one trim (invented here so no real
 model is misquoted).
 
 **Output:** one validated script about that subject, photos of that subject
-on the segments, one `generate_persona_video` call, and the published video
+on the segments, one `generate_video` call, and the published video
 URL in the chat.
 
 ## Related

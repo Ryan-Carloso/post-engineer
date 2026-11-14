@@ -3,8 +3,8 @@
 //
 // A path served over HTTP would resolve on the MCP server's filesystem,
 // not on the agent's machine, so the remote surface cannot carry one:
-// create_persona keeps only avatarUrl (no avatarPath, no library images),
-// and update_persona keeps only avatarUrl. The SDK parses tool args with
+// personas (action: create) keeps only avatarUrl (no avatarPath, no library images),
+// and personas (action: update) keeps only avatarUrl. The SDK parses tool args with
 // the registered raw shape, which strips unknown keys before the handler
 // runs — so a smuggled path is dropped (never read), not loudly rejected.
 // The strict re-parse is defense-in-depth for direct handler callers only.
@@ -14,7 +14,7 @@ import { UpdatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar
 import { UpdatePersonaShape } from './persona-update.js';
 import { CreatePersonaShape } from './tools.js';
 
-/** create_persona over HTTP: avatarUrl only, no library image files. */
+/** personas (action: create) over HTTP: avatarUrl only, no library image files. */
 export const CreatePersonaRemoteShape = {
   name: CreatePersonaShape.name,
   avatarUrl: z
@@ -22,7 +22,7 @@ export const CreatePersonaRemoteShape = {
     .url()
     .optional()
     .describe(
-      'Public URL to the persona avatar image (use list_faces for stock face URLs). Required: every persona has a face; "no face" is chosen per video with generate_persona_video options.videoType: \'faceless\'.',
+      'Public URL to the persona avatar image (use persona_media (action: list_faces) for stock face URLs). Required: every persona has a face; "no face" is chosen per video with generate_video options.videoType: \'faceless\'.',
     ),
   voiceId: CreatePersonaShape.voiceId,
   language: CreatePersonaShape.language,
@@ -35,7 +35,7 @@ export const CreatePersonaRemoteShape = {
   // Issue #572: same binding rule as the local shape — a persona is born
   // bound to at least one publishing account. Without this field the
   // handler's re-parse against CreatePersonaSchema (which requires
-  // accounts) would reject every remote create_persona call.
+  // accounts) would reject every remote personas (action: create) call.
   accounts: CreatePersonaShape.accounts,
 };
 
@@ -44,7 +44,7 @@ export const CreatePersonaRemoteSchema = z
   .strict()
   .superRefine(refinePersonaAvatar(true));
 
-/** update_persona over HTTP: avatarUrl only. */
+/** personas (action: update) over HTTP: avatarUrl only. */
 export const UpdatePersonaRemoteShape = {
   personaId: UpdatePersonaShape.personaId,
   name: UpdatePersonaShape.name,

@@ -42,4 +42,11 @@ describe('MCP recipe-adoption headers stay in sync with the web telemetry', () =
     expect(surfaces.length).toBeGreaterThan(0);
     expect([...RECIPE_NUDGE_SURFACES].sort()).toEqual(['none', ...surfaces].sort());
   });
+
+  it('reads the X-MCP-Action header the MCP sends for an action tool', () => {
+    const analytics = readFileSync(join(repoRoot, 'apps/mcp/src/analytics.ts'), 'utf8');
+    const header = /export const MCP_ACTION_HEADER = '(X-MCP-[A-Za-z-]+)';/.exec(analytics)?.[1];
+    expect(header).toBe('X-MCP-Action');
+    expect(webSource).toContain(`'${header?.toLowerCase()}'`);
+  });
 });

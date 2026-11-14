@@ -56,9 +56,8 @@ function pairArgs(overrides: Record<string, unknown> = {}) {
       { variantId: 'hook-calm', text: 'Here is a small squat detail that quietly changes how your legs grow over the next few months.', media: photos(3, 'hook-calm') },
       { variantId: 'hook-aggressive', text: 'Stop squatting like this right now, because you are wrecking your back and wasting every single leg day.', media: photos(3, 'hook-aggressive') },
     ],
-    personaId: '11111111-2222-4333-8444-555555555555',
+    persona: '11111111-2222-4333-8444-555555555555',
     providers: ['youtube'],
-    youtubeAccountIds: ['chan-1'],
     startAt: '2026-11-10T18:00:00',
     times: ['18:00'],
     timezone: 'Europe/Lisbon',
@@ -75,7 +74,7 @@ describe('shiftStartAt', () => {
   });
 });
 
-describe('add_experiment_pair', () => {
+describe('experiments (action: add_pair)', () => {
   it('creates both videos: hook first, shared content and CTA, link, deterministic keys, second one spaced', async () => {
     const client = mockClient();
     const response = await handleAddExperimentPair(client, pairArgs());
@@ -114,7 +113,7 @@ describe('add_experiment_pair', () => {
     const failedFirst = await handleAddExperimentPair(first, pairArgs());
     expect(failedFirst.isError).toBe(true);
     expect(first.generatePersonaVideo).toHaveBeenCalledTimes(1);
-    expect(failedFirst.content[0]).toMatchObject({ text: expect.not.stringContaining('call add_experiment_pair again') });
+    expect(failedFirst.content[0]).toMatchObject({ text: expect.not.stringContaining('call experiments (action: add_pair) again') });
 
     const second = mockClient({
       generatePersonaVideo: vi.fn()
@@ -123,7 +122,7 @@ describe('add_experiment_pair', () => {
     });
     const failedSecond = await handleAddExperimentPair(second, pairArgs());
     expect(failedSecond.isError).toBe(true);
-    expect(failedSecond.content[0]).toMatchObject({ text: expect.stringContaining('call add_experiment_pair again with the same arguments') });
+    expect(failedSecond.content[0]).toMatchObject({ text: expect.stringContaining('call experiments (action: add_pair) again with the same arguments') });
   });
 
   it('treats a failed slot on the first video as a failure and stops before the second', async () => {

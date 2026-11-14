@@ -11,7 +11,7 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 // DELETE /api/persona/video-task/:taskId — cancels/removes the task on the
 // engine.
 //
-// Auth: cookie session (web) or API key / OAuth token (MCP cancel_video_task)
+// Auth: cookie session (web) or API key / OAuth token (MCP cancel_video)
 // via requireSupabaseSession(request). The engine's own delete handler reads
 // the task through `get_task(task_id, user_id=auth.user_id)`
 // (apps/engine/app/controllers/v1/video.py:586), so one user can never

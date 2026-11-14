@@ -11,7 +11,7 @@ import {
 } from '../tools-prompts.js';
 import { createPostEngineerMcpServer } from '../index.js';
 import { PostEngineerClient } from '../client.js';
-import { MCP_TOOL_HEADER } from '../analytics.js';
+import { MCP_ACTION_HEADER, MCP_TOOL_HEADER } from '../analytics.js';
 import { recipeRunText } from '../recipe-session.js';
 
 //---------------
@@ -63,6 +63,10 @@ function requestedPaths(): string[] {
 
 function toolHeaders(): Array<string | undefined> {
   return fetchMock.mock.calls.map(([, init]) => (init.headers as Record<string, string>)[MCP_TOOL_HEADER]);
+}
+
+function actionHeaders(): Array<string | undefined> {
+  return fetchMock.mock.calls.map(([, init]) => (init.headers as Record<string, string>)[MCP_ACTION_HEADER]);
 }
 
 function textOf(result: CallToolResult | { toolResult?: unknown }): string {
@@ -170,41 +174,51 @@ describe('handleGetPrompt', () => {
 });
 
 describe('SERVER_INSTRUCTIONS', () => {
-  it('points topic-shaped requests at list_prompts before any scripting', () => {
-    expect(SERVER_INSTRUCTIONS).toContain('call list_prompts first');
-    expect(SERVER_INSTRUCTIONS).toContain('get_prompt');
+  it('points topic-shaped requests at the prompts tool before any scripting', () => {
+    expect(SERVER_INSTRUCTIONS).toContain('call prompts (action: list) first');
+    expect(SERVER_INSTRUCTIONS).toContain('prompts (action: get)');
     expect(SERVER_INSTRUCTIONS).toContain('instead of assembling the script yourself');
   });
 });
 
 describe('prompt tools over MCP', () => {
-  it('registers list_prompts zero-arg and get_prompt with a required slug', async () => {
+  it('registers one prompts tool with the list and get actions, and a slug for get', async () => {
     await withMcpClient(async (mcp) => {
       const { tools } = await mcp.listTools();
-      const listPrompts = tools.find((tool) => tool.name === 'list_prompts');
-      const getPrompt = tools.find((tool) => tool.name === 'get_prompt');
-      expect(Object.keys(listPrompts?.inputSchema.properties ?? {})).toEqual([]);
-      expect(Object.keys(getPrompt?.inputSchema.properties ?? {})).toEqual(['slug']);
-      expect(getPrompt?.inputSchema.required).toEqual(['slug']);
+      const prompts = tools.find((tool) => tool.name === 'prompts');
+      expect(Object.keys(prompts?.inputSchema.properties ?? {}).sort()).toEqual(['action', 'slug']);
+      expect(prompts?.inputSchema.required).toEqual(['action']);
+      expect(prompts?.description).toContain('get (slug)');
+      expect(tools.some((tool) => tool.name === 'list_prompts' || tool.name === 'get_prompt')).toBe(false);
     });
   });
 
-  it('runs list_prompts and get_prompt end to end, tagging each API request with the tool name', async () => {
+  it('rejects get without a slug before any request is sent', async () => {
     await withMcpClient(async (mcp) => {
-      const listed = await mcp.callTool({ name: 'list_prompts', arguments: {} });
+      const result = await mcp.callTool({ name: 'prompts', arguments: { action: 'get' } });
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain('prompts · get');
+      expect(requestedPaths()).toEqual([]);
+    });
+  });
+
+  it('runs list and get end to end, tagging each API request with the tool and the action', async () => {
+    await withMcpClient(async (mcp) => {
+      const listed = await mcp.callTool({ name: 'prompts', arguments: { action: 'list' } });
       expect(JSON.parse(textOf(listed))).toEqual(CATALOG);
-      const fetched = await mcp.callTool({ name: 'get_prompt', arguments: { slug: 'full-setup' } });
+      const fetched = await mcp.callTool({ name: 'prompts', arguments: { action: 'get', slug: 'full-setup' } });
       expect(textOf(fetched)).toBe(recipeRunText('full-setup', PROMPT_TEXT['full-setup'] ?? ''));
-      expect(toolHeaders()).toEqual(['list_prompts', 'get_prompt']);
+      expect(toolHeaders()).toEqual(['prompts', 'prompts']);
+      expect(actionHeaders()).toEqual(['list', 'get']);
     });
   });
 
-  it('keeps generate_persona_video pointing topic-shaped requests back at the recipes', async () => {
+  it('keeps generate_video pointing topic-shaped requests back at the recipes', async () => {
     await withMcpClient(async (mcp) => {
       const { tools } = await mcp.listTools();
-      const generate = tools.find((tool) => tool.name === 'generate_persona_video');
-      expect(generate?.description).toContain('call list_prompts first');
-      expect(generate?.description).toContain('get_prompt');
+      const generate = tools.find((tool) => tool.name === 'generate_video');
+      expect(generate?.description).toContain('call prompts (action: list) first');
+      expect(generate?.description).toContain('prompts (action: get)');
     });
   });
 

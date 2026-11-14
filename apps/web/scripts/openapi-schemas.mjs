@@ -531,7 +531,7 @@ export const operationSchemas = {
   // apps/web/app/api/upload-content/route.ts
   'POST /api/upload-content': {
     contentType: multipart,
-    description: 'Provider-specific form fields (video file, title, caption) are read by the provider handler; see the MCP publish_video_direct tool.',
+    description: 'Provider-specific form fields (video file, title, caption) are read by the provider handler; see the MCP publish_video (action: from_file) tool.',
     request: object({ provider: { type: 'string', enum: providers }, userId: str }, ['provider']),
     response: object({ success: { type: 'boolean' } }, ['success']),
   },

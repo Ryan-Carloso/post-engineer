@@ -1,6 +1,6 @@
 """user_media: per-segment photos for faceless videos (MCP first, Phase 2).
 
-A segment carries either a mediaId (an upload_media temp asset) or a
+A segment carries either a mediaId (an media (action: upload) temp asset) or a
 direct image URL. The photo occupies the segment's spoken interval, found
 by walking Whisper's word times; when the walk cannot match exactly
 (numbers, contractions, punctuation) the intervals fall back to timing
@@ -274,7 +274,7 @@ def test_expired_media_id_reports_expired_not_invalid(tmp_path, monkeypatch):
     assert reason == "media expired or missing"
 
 
-# ---- check_media codes (engine side of the MCP check_media tool)
+# ---- media (action: check) codes (engine side of the MCP media (action: check) tool)
 
 
 def _check(url, tmp_path, download=None):

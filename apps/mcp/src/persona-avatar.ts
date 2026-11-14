@@ -1,4 +1,4 @@
-// Persona face sources for create_persona and update_persona: a public
+// Persona face sources for personas (action: create) and personas (action: update): a public
 // image URL (avatarUrl) or a local image file (avatarPath). The file goes
 // up as the multipart `photo` field, the same field the web form uses, so
 // the face never depends on the server downloading a link. Extracted from
@@ -56,19 +56,19 @@ export async function imageFormFile(path: string): Promise<Blob> {
 
 const AVATAR_PATH_DESCRIPTION = `Local file path to the persona face photo (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB), uploaded directly. Use instead of avatarUrl for your own photo.`;
 
-/** create_persona: exactly one of avatarUrl or avatarPath (checked in the client). */
+/** personas (action: create): exactly one of avatarUrl or avatarPath (checked in the client). */
 export const CreatePersonaAvatarFields = {
   avatarUrl: z
     .string()
     .url()
     .optional()
     .describe(
-      'Public URL to the persona avatar image (use list_faces for stock face URLs). Give exactly one of avatarUrl or avatarPath: every persona has a face; "no face" is chosen per video with generate_persona_video options.videoType: \'faceless\'.',
+      'Public URL to the persona avatar image (use persona_media (action: list_faces) for stock face URLs). Give exactly one of avatarUrl or avatarPath: every persona has a face; "no face" is chosen per video with generate_video options.videoType: \'faceless\'.',
     ),
   avatarPath: z.string().min(1).optional().describe(AVATAR_PATH_DESCRIPTION),
 };
 
-/** update_persona: at most one of avatarUrl or avatarPath. */
+/** personas (action: update): at most one of avatarUrl or avatarPath. */
 export const UpdatePersonaAvatarFields = {
   // No .nullable(): the API has no "clear avatar" sentinel — null would be silently ignored.
   avatarUrl: z.string().url().optional().describe('New public avatar image URL'),
@@ -126,7 +126,7 @@ export async function appendPersonaAvatar(
   }
   if (required) {
     throw new Error(
-      'avatarUrl or avatarPath is required: every persona has a face. Use list_faces for a stock face URL, avatarPath for a local photo, and generate_persona_video options.videoType: \'faceless\' for videos without a face.',
+      'avatarUrl or avatarPath is required: every persona has a face. Use persona_media (action: list_faces) for a stock face URL, avatarPath for a local photo, and generate_video options.videoType: \'faceless\' for videos without a face.',
     );
   }
 }

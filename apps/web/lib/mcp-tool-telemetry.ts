@@ -14,6 +14,10 @@ import { PROMPTS } from '@/app/recipes/prompts';
 //
 // - Headers are validated by format; an absent or malformed tool header
 //   records nothing and never affects the request.
+// - A tool with actions (apps/mcp/src/action-tool.ts) also sends
+//   X-MCP-Action, recorded as `action` under the same format check as the
+//   tool name: `tool: personas, action: create` instead of one tool name per
+//   endpoint.
 // - One tool call can send several API requests sharing one call id, so
 //   PostHog counts tool calls with count(distinct properties.call_id).
 // - requireSupabaseSession can run more than once for the same request
@@ -43,12 +47,12 @@ const trackedRequests = new WeakSet<Request>();
 
 export const RECIPE_NUDGE_SURFACES: ReadonlySet<string> = new Set([
   'none',
-  'create_persona',
-  'list_personas',
-  'list_social_accounts',
-  'get_token_balance',
-  'validate_script',
-  'generate_persona_video',
+  'personas_create',
+  'personas_list',
+  'accounts_list',
+  'billing_balance',
+  'check_script_validate',
+  'generate_video',
 ]);
 const TRANSPORTS: ReadonlySet<string> = new Set(['stdio', 'http']);
 const HUB_SLUGS: ReadonlySet<string> = new Set(PROMPTS.map((entry) => entry.slug));
@@ -125,6 +129,8 @@ export function trackMcpToolCall(request: Request, userId: string, authMethod: M
       method: request.method,
       path: telemetryPath(request.url),
     };
+    const action = headerMatching(request, 'x-mcp-action', TOOL_NAME);
+    if (action !== undefined) properties.action = action;
     const callId = headerMatching(request, 'x-mcp-call-id', CALL_ID);
     if (callId !== undefined) properties.call_id = callId;
     const version = headerMatching(request, 'x-mcp-version', VERSION);

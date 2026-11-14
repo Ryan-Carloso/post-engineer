@@ -8,7 +8,7 @@
 
 The full ordered prompt — niche question, top-5 search by views, study
 of the top video without downloading it, structure breakdown, fresh
-script, validation, scoring, and the single `generate_persona_video`
+script, validation, scoring, and the single `generate_video`
 call — is served from the prompts hub, not repeated here:
 
 **https://post-engineer.com/recipes/viral-shorts**
@@ -44,16 +44,16 @@ the fetch date.
   yt-dlp`). It is not in the repo and no new dependency is added: it is
   an agent-side instruction only. If it is missing, the prompt tells the
   user to install it instead of failing silently.
-- A persona (`personaId` from `list_personas`), or a faceless setup
+- A persona (its name or id from `personas (action: list)`), or a faceless setup
   (`options.videoType: 'faceless'` plus `options.voiceId` or `options.audioUrl`).
-- A token balance that covers one video: check with `get_token_balance`
-  before generating. Generation costs tokens; `validate_script` and
-  `score_draft` do not debit tokens.
+- A token balance that covers one video: check with `billing (action: balance)`
+  before generating. Generation costs tokens; `check_script (action: validate)` and
+  `check_script (action: score)` do not debit tokens.
 
 ## Example
 
 **Input:** the most-viewed video in your niche this year.
 
 **Output:** one validated 60–200 word script in the viral structure —
-your facts, your voice — one `generate_persona_video` call in the
+your facts, your voice — one `generate_video` call in the
 confirmed mode, and the published video URL in the chat.

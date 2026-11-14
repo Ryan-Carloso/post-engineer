@@ -19,7 +19,7 @@
 /** One free video per this many face videos in a batch. */
 export const BATCH_FREE_EVERY = 6;
 
-/** Most videos one batch may hold (MCP `generate_persona_video_batch` mirrors it). */
+/** Most videos one batch may hold (MCP `generate_video` mirrors it). */
 export const MAX_BATCH_VIDEOS = 12;
 
 /** Every video of a batch must be created within this window of the first. */

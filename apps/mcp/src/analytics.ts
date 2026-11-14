@@ -21,10 +21,13 @@ const { default: pkg } = await import('../package.json', { with: { type: 'json' 
 
 export const MCP_TOOL_HEADER = 'X-MCP-Tool';
 export const MCP_CALL_ID_HEADER = 'X-MCP-Call-Id';
+export const MCP_ACTION_HEADER = 'X-MCP-Action';
 export const MCP_VERSION_HEADER = 'X-MCP-Version';
 
 interface ToolCallContext {
   toolName: string;
+  /** The action of an action tool (personas · create); absent for a tool without actions. */
+  action?: string;
   callId: string;
 }
 
@@ -60,8 +63,17 @@ export function mcpTelemetryHeaders(options?: { includeVersion?: boolean }): Rec
   if (context !== undefined) {
     headers[MCP_TOOL_HEADER] = context.toolName;
     headers[MCP_CALL_ID_HEADER] = context.callId;
+    if (context.action !== undefined) headers[MCP_ACTION_HEADER] = context.action;
   }
   return headers;
+}
+
+//---------------
+// Run one action of an action tool: every API request it sends is tagged
+// with the tool name, the action and a fresh call id.
+//---------------
+export function withToolCall<TResult>(toolName: string, action: string, run: () => Promise<TResult>): Promise<TResult> {
+  return toolCallContext.run({ toolName, action, callId: randomUUID() }, run);
 }
 
 //---------------
