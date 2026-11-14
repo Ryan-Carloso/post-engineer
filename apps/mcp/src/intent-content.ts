@@ -61,7 +61,7 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
   server.tool(
     'media',
     actionDescription(
-      `Images for video segments. check: mechanically check one public image URL (no LLM, relevance is for you to judge): returns one code (ok, blocked_403 when the host blocks the download — then use upload with bytes fetched on your own machine — and the size, type and aspect failures)${remote ? '.' : '. upload: a local image becomes a mediaId for a segment (a temporary asset, 1 hour: upload shortly before generating).'}`,
+      `Images for video segments. check: mechanically check one public image URL (no LLM, relevance is for you to judge): returns one code (ok, blocked_403 when the host blocks the download — ${remote ? 'use another public URL for that photo' : 'then use upload with bytes fetched on your own machine'} — and the size, type and aspect failures)${remote ? '.' : '. upload: a local image becomes a mediaId for a segment (a temporary asset, 1 hour: upload shortly before generating).'}`,
       offeredSpecs(MEDIA_SPECS, mediaOptions),
     ),
     actionShape(offeredSpecs(MEDIA_SPECS, mediaOptions)),

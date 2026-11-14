@@ -119,6 +119,16 @@ describe('action tools advertise one flat schema', () => {
     }
   });
 
+  it('never tells the remote server\'s agent to use an action it does not offer', async () => {
+    const remote = await listTools('http');
+    expect(remote.get('media')?.description).not.toContain('use upload');
+    expect(remote.get('media')?.description).toContain('another public URL');
+    expect(remote.get('persona_media')?.description).not.toContain('add_image');
+    expect(remote.get('publish_video')?.description).not.toContain('from_file');
+    const stdio = await listTools('stdio');
+    expect(stdio.get('media')?.description).toContain('use upload');
+  });
+
   it('names the required fields of each action in the description, so a flat schema stays usable', async () => {
     const tools = await listTools('stdio');
     expect(tools.get('personas')?.description).toContain('create (');
