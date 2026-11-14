@@ -12,8 +12,8 @@ import {
   attachApiErrorProperties,
 } from '@/lib/api-error-reporting';
 import { logger } from '@/lib/logger';
-import { batchChargeId, batchSlotRefundKey } from '@/lib/billing/batch-discount';
-import { emitRefundIssued } from '@/lib/billing/refund-tokens';
+import { batchChargeId } from '@/lib/billing/batch-discount';
+import { emitRefundIssued, refundSlotTokens } from '@/lib/billing/refund-tokens';
 import { scrubSecrets } from '@/lib/scrub';
 import { CANCEL_REFUND_REASON, refundsAfterClawback } from './batch-clawback';
 
@@ -414,24 +414,26 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
       refunds.push({ slotId: slot.id, refunded: false, alreadyRefunded: false, reason: 'not_charged' });
       continue;
     }
-    // The key matches the dispatch-failure refund so a slot that was
-    // already refunded is not credited twice.
-    const { data: refundData, error: refundError } = await supabase.rpc('refund_batch_tokens', {
-      p_user_id: user.id,
-      p_batch_generation_id: batchGenerationId,
-      p_refund_key: batchSlotRefundKey(scheduleId, slot.id),
-      p_amount: amount,
-      p_reason: CANCEL_REFUND_REASON,
-      p_engine_task_id: slot.taskId,
+    // The shared helper moves the tokens (same key the dispatch-failure
+    // refund uses, so a slot already refunded is not credited twice) and
+    // emits refund_issued on a landed refund.
+    const { refunded, alreadyRefunded, error: refundError } = await refundSlotTokens({
+      supabase,
+      userId: user.id,
+      scheduleId,
+      slotId: slot.id,
+      amount,
+      reason: CANCEL_REFUND_REASON,
+      kind: 'schedule_cancelled',
+      engineTaskId: slot.taskId,
     });
-    const payload = (refundData ?? {}) as { refunded?: unknown; already_refunded?: unknown };
-    const alreadyRefunded = payload.already_refunded === true;
-    const refunded = payload.refunded === true;
     if (refundError || (!refunded && !alreadyRefunded)) {
       // False from the RPC is a real failure (billing rule): the slot is
       // gone, the charge may still be standing. Loud log, keep going — the
       // publish is already stopped, and the response tells the caller.
-      logger.error('[api/schedule] cancel refund failed', refundError ?? payload, {
+      // The log keeps the raw RPC payload shape so the failure stays
+      // greppable next to the engine's identical log line.
+      logger.error('[api/schedule] cancel refund failed', refundError ?? { refunded, already_refunded: alreadyRefunded }, {
         scheduleId,
         slotId: slot.id,
         userId: user.id,
@@ -441,15 +443,6 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     }
     if (refunded) {
       refundedTokens += amount;
-      emitRefundIssued(user.id, {
-        kind: 'schedule_cancelled',
-        amount,
-        reason: CANCEL_REFUND_REASON,
-        batchGenerationId,
-        scheduleId,
-        slotId: slot.id,
-        engineTaskId: slot.taskId,
-      });
     }
     refunds.push({
       slotId: slot.id,

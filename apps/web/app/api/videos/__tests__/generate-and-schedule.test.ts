@@ -115,6 +115,7 @@ import { resolveVideoImage, recordRecentImageId } from '@/lib/persona-images';
 import { ensureEngineImageUrl } from '@/lib/engine-image-url';
 import { fetchPersonaVoiceCatalogIds } from '@/lib/voice-catalog-fetch';
 import { trackApiEvent } from '@/lib/analytics';
+import { scrubSecrets } from '@/lib/scrub';
 import { IDEMPOTENCY_NAMESPACE, deterministicUuid } from '@/lib/idempotency';
 import { logger } from '@/lib/logger';
 
@@ -1488,7 +1489,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(issued[0].properties?.batch_generation_id).toMatch(/^batch:/);
     });
 
-    it('reports tokensRefunded on the dispatch-failed video_creation_failed event', async () => {
+    it('reports refunded on the dispatch-failed video_creation_failed event', async () => {
       setup({ ...DEFAULT_CFG, engineFailSubjects: ['Porto trip'] });
       const res = await post(baseBody());
       expect(res.status).toBe(502);
@@ -1499,8 +1500,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(failedEvent?.[1]).toMatchObject({
         errorCode: 'ENGINE_UNAVAILABLE',
         failureStage: 'dispatch',
-        tokensRefunded: true,
+        refunded: true,
       });
+      // trackApiEvent scrubs every property: a `token*` key would reach
+      // PostHog as '[redacted]'. The renamed key survives the scrub, so
+      // assert on the scrubbed payload, not just the mock arguments.
+      expect(scrubSecrets({ refunded: true })).toEqual({ refunded: true });
     });
 
     it('refunds the re-charge when a fully-refunded retry fails dispatch', async () => {

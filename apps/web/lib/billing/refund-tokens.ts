@@ -7,7 +7,10 @@
 // emitted anything: only the engine emits refund_issued, so a user who
 // cancelled a ready video (or whose dispatch failed) had no trace in
 // PostHog that their tokens came back. Every request-path refund funnels
-// through here so the tokens move and the audit event fires together.
+// through here so the tokens move and the audit event fires together:
+// refundSlotTokens moves the tokens and emits, and the batch-clawback
+// settlement path emits through emitRefundIssued after the settlement
+// itself moves them.
 //
 // Telemetry rules (same as the engine's track_refund_issued in
 // apps/engine/app/services/fill_schedule/support.py and the web
@@ -19,10 +22,12 @@
 //   scrubber redacts every key containing "token", which would erase
 //   the audit value of the event.
 // - These events intentionally bypass scrubSecrets (the call goes to
-//   captureAs directly). That is safe here because every property is
-//   constructed from typed store outputs (uuids, counts, fixed reason
-//   literals): no request input, no secrets, no credential-shaped
-//   values can reach these calls.
+//   captureAs directly) — but the id fields are fragment-scrubbed inside
+//   emitRefundIssued, because callers may pass request-derived ids: the
+//   cancel route's scheduleId comes straight off the query string with
+//   no format check. UUIDs pass through unchanged; only credential-shaped
+//   fragments are redacted. The remaining properties are a fixed reason
+//   literal and counts, so they cannot carry secrets.
 // - Telemetry must never break the request path: emitRefundIssued never
 //   throws, and refundSlotTokens reports RPC failures in its result
 //   instead of throwing, so the caller can log them and keep going.
@@ -30,6 +35,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getPostHogServer } from '@/lib/posthog-server';
+import { redactCredentialFragments } from '@/lib/scrub';
 import { batchChargeId, batchSlotRefundKey } from './batch-discount';
 
 /** Request paths that refund a prepaid slot. */
@@ -53,7 +59,9 @@ export interface RefundIssuedProperties {
  * travels both as the distinct_id (captureAs) and as user_id, matching
  * the engine event. Callers must invoke this ONLY after the refund RPC
  * reports refunded === true — never optimistically, never for an
- * already-refunded slot.
+ * already-refunded slot. The id fields are fragment-scrubbed here, at
+ * the funnel every request-path refund_issued passes through, because a
+ * caller may hand over a request-derived id (the cancel scheduleId).
  */
 export function emitRefundIssued(userId: string, props: RefundIssuedProperties): void {
   try {
@@ -62,10 +70,11 @@ export function emitRefundIssued(userId: string, props: RefundIssuedProperties):
       user_id: userId,
       amount: props.amount,
       reason: props.reason,
-      batch_generation_id: props.batchGenerationId,
-      schedule_id: props.scheduleId,
-      slot_id: props.slotId,
-      engine_task_id: props.engineTaskId,
+      batch_generation_id: redactCredentialFragments(props.batchGenerationId),
+      schedule_id: redactCredentialFragments(props.scheduleId),
+      slot_id: redactCredentialFragments(props.slotId),
+      engine_task_id:
+        props.engineTaskId === null ? null : redactCredentialFragments(props.engineTaskId),
     });
   } catch {
     // Telemetry must never break the request path.

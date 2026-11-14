@@ -865,9 +865,11 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     });
     // The id comes straight off the query string with no format check, and
     // the success path never scrubs — attachApiErrorProperties requires
-    // pre-scrubbed values, so the route scrubs at the call site.
+    // pre-scrubbed values, so the route scrubs at the call site. The same
+    // raw id must not leak through the refund_issued the pending slot's
+    // refund emits either (the helper fragment-scrubs the ids).
     const res = await DELETE(
-      new Request('http://localhost/api/schedule?id=Bearer%20sk-12345678901234567890'),
+      new Request('http://localhost/api/schedule?id=Bearer%20not-a-real-token'),
     );
     expect(res.status).toBe(200);
     await vi.waitFor(() =>
@@ -877,6 +879,13 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
         expect.objectContaining({ scheduleId: 'Bearer [redacted]', refunded: 2 }),
       ),
     );
+    await vi.waitFor(() => expect(refundIssuedCalls(client)).toHaveLength(1));
+    const issued = refundIssuedCalls(client);
+    expect(issued[0][2]).toMatchObject({
+      schedule_id: 'Bearer [redacted]',
+      batch_generation_id: 'batch:Bearer [redacted]',
+    });
+    expect(JSON.stringify(issued)).not.toContain('not-a-real-token');
   });
 
   it('emits cancel_refund_skipped when the post-delete re-read fails', async () => {

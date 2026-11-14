@@ -63,6 +63,33 @@ describe('emitRefundIssued', () => {
     });
   });
 
+  it('scrubs credential-shaped fragments out of the ids before emitting', () => {
+    // The cancel route's scheduleId comes straight off the query string,
+    // so the funnel must scrub it — including inside batch_generation_id,
+    // which carries the same id after `batch:`.
+    emitRefundIssued('user-1', {
+      kind: 'schedule_cancelled',
+      amount: 2,
+      reason: 'Schedule cancelled before publish; video refunded',
+      batchGenerationId: 'batch:Bearer not-a-real-token',
+      scheduleId: 'Bearer not-a-real-token',
+      slotId: 'slot-1',
+      engineTaskId: 'task-1',
+    });
+
+    expect(captureAs).toHaveBeenCalledWith('user-1', 'refund_issued', {
+      kind: 'schedule_cancelled',
+      user_id: 'user-1',
+      amount: 2,
+      reason: 'Schedule cancelled before publish; video refunded',
+      batch_generation_id: 'batch:Bearer [redacted]',
+      schedule_id: 'Bearer [redacted]',
+      slot_id: 'slot-1',
+      engine_task_id: 'task-1',
+    });
+    expect(JSON.stringify(captureAs.mock.calls)).not.toContain('not-a-real-token');
+  });
+
   it('sends a null engine_task_id when the slot never reached the engine', () => {
     emitRefundIssued('user-1', {
       kind: 'dispatch_failed',

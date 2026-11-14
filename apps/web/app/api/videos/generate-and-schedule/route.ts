@@ -152,9 +152,8 @@ interface SlotResult {
 //---------------
 
 //---------------
-// Validation helpers — all run BEFORE any token is charged.
-// Slot validation lives in slot-validation.ts (extracted so the route
-// module stays under the file-size ratchet).
+// Validation helpers — all run BEFORE any token is charged. Slot
+// validation lives in slot-validation.ts (extracted for the ratchet).
 //---------------
 
 //---------------
@@ -944,7 +943,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
       failureStage: 'dispatch',
       numberOfVideos: 1,
       durationMs,
-      tokensRefunded: results.every((r) => r.status !== 'failed' || r.tokensRefunded === true),
+      // Scrub-safe key: trackApiEvent redacts every `token*` key.
+      refunded: results.every((r) => r.status !== 'failed' || r.tokensRefunded === true),
     });
     return NextResponse.json(
       { success: false, error: formatErrorMessage(code), code, ...envelope },
