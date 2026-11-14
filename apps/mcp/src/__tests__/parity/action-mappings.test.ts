@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { callToolRecordingRequests, requestReaches } from './behaviour.js';
-import { buildMcpCallGraph } from './mcp-calls.js';
+import { buildMcpCallGraph, toolActionCallsEndpoint, toolCallsEndpoint } from './mcp-calls.js';
 import { EndpointMappingSchema, endpointToolNames, uncoveredEndpoints, verifyMapping } from './mappings.js';
 
 // Parity gate v2 (issue #566, §6): an endpoint maps to `{ tool, action? }`,
@@ -83,13 +83,14 @@ describe('parity gate v2: every byAction handler form is read', () => {
           'quoted-key': async (client: Client) => client.b(),
           method(client: Client) { return client.c(); },
           [computed]: async (client: Client) => client.d(),
+          ...inherited,
           missing: neverDefined,
         }));
       `,
     },
   ]);
 
-  it('reads shorthand, quoted-key and method handlers, and skips a computed key', () => {
+  it('reads shorthand, quoted-key and method handlers, and skips a computed key and a spread', () => {
     const actions = forms.toolActions.get('forms');
     expect([...(actions?.keys() ?? [])].sort()).toEqual(['method', 'missing', 'quoted-key', 'shorthand']);
     expect(actions?.get('shorthand')).toEqual([{ method: 'GET', path: '/api/a' }]);
@@ -102,6 +103,19 @@ describe('parity gate v2: every byAction handler form is read', () => {
     expect(verifyMapping('GET /api/a', [{ tool: 'forms', action: 'missing' }], forms)).toContainEqual(
       expect.stringContaining('never calls GET /api/a'),
     );
+  });
+
+  it('ignores a registration whose tool name is not a static string, so nothing can be mapped to it', () => {
+    const dynamic = buildMcpCallGraph([{ file: 'x.ts', text: `server.tool(nameFromConfig, 'd', {}, async () => client.listPersonas());` }]);
+    expect(dynamic.tools).toEqual([]);
+    expect(dynamic.toolActions.size).toBe(0);
+  });
+
+  it('answers false, not an error, for a tool or action that is not in the graph', () => {
+    expect(toolCallsEndpoint(forms, 'ghost', 'GET /api/a')).toBe(false);
+    expect(toolActionCallsEndpoint(forms, 'ghost', 'shorthand', 'GET /api/a')).toBe(false);
+    expect(toolActionCallsEndpoint(forms, 'forms', 'ghost', 'GET /api/a')).toBe(false);
+    expect(toolActionCallsEndpoint(forms, 'forms', 'shorthand', 'GET /api/a')).toBe(true);
   });
 
   it('does not treat byAction with a non-object argument as an action tool', () => {
