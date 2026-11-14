@@ -17,6 +17,7 @@ import {
   type OAuthProvider,
   type SocialProvider,
 } from '@/lib/providers/registry';
+import type { AccountSyncStatus } from '@/lib/types';
 import { useOnboardingWizardStore } from '@/lib/onboarding-wizard';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { useSocialAccountsQuery } from '@/lib/social-accounts-queries';
@@ -205,10 +206,14 @@ const CREDENTIAL_CONFIG: Record<CredentialProvider, CredentialConnectConfig> = {
   },
 };
 
-function connectedProviders(accounts: Array<{ provider: string }>): Set<SocialProvider> {
+// An account with sync status 'error' has a dead credential (revoked
+// token, undecryptable secret) — the /accounts page flags it as invalid
+// instead of healthy, so the wizard must not badge it Connected either.
+// The field is optional: payloads without it read as healthy.
+function connectedProviders(accounts: Array<{ provider: string; status?: AccountSyncStatus }>): Set<SocialProvider> {
   const connected = new Set<SocialProvider>();
   for (const account of accounts) {
-    if (isSocialProvider(account.provider)) connected.add(account.provider);
+    if (isSocialProvider(account.provider) && account.status !== 'error') connected.add(account.provider);
   }
   return connected;
 }
@@ -233,6 +238,9 @@ export function WizardStepTwo() {
         <DialogTitle>{t('onboarding.step2Title')}</DialogTitle>
         <DialogDescription>{t('onboarding.step2Body')}</DialogDescription>
       </DialogHeader>
+      {accountsQuery.isError ? (
+        <p className="text-sm text-destructive">{t('accounts.loadError')}</p>
+      ) : null}
       <div className="flex max-h-[50vh] flex-col gap-1 overflow-y-auto pr-1">
         {STEP2_PROVIDERS.map((provider) => (
           <button
@@ -275,7 +283,11 @@ function WizardStepTwoConnect({ provider, onBack }: { provider: SocialProvider; 
   const { t } = useI18n();
   const next = useOnboardingWizardStore((s) => s.next);
   const accountsQuery = useSocialAccountsQuery();
-  const connected = (accountsQuery.data?.accounts ?? []).some((account) => account.provider === provider);
+  // Same dead-credential guard as connectedProviders: an 'error' account
+  // must not show Connected or Continue here either.
+  const connected = (accountsQuery.data?.accounts ?? []).some(
+    (account) => account.provider === provider && account.status !== 'error',
+  );
 
   return (
     <>
@@ -299,6 +311,9 @@ function WizardStepTwoConnect({ provider, onBack }: { provider: SocialProvider; 
         </div>
         <DialogDescription>{t(PROVIDER_DESCRIPTIONS[provider])}</DialogDescription>
       </DialogHeader>
+      {accountsQuery.isError ? (
+        <p className="text-sm text-destructive">{t('accounts.loadError')}</p>
+      ) : null}
       {isOAuthProvider(provider) ? (
         <OAuthConnectView provider={provider} connected={connected} />
       ) : (

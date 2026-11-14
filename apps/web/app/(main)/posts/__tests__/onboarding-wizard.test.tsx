@@ -30,6 +30,7 @@ vi.mock('@/lib/i18n/provider', () => ({
         'onboarding.skip': 'Skip for now',
         'accounts.connectFirst': 'Connect an account',
         'accounts.connectAnother': '+ Connect another account',
+        'accounts.loadError': 'We could not load the accounts.',
         'accounts.youtubeDescription': 'Publish videos and Shorts, and manage your channels.',
         'accounts.instagramDescription': 'Publish reels, stories, and posts automatically.',
         'accounts.blueskyDescription': 'Publish text posts, links, and videos.',
@@ -221,19 +222,40 @@ const BLUESKY_ACCOUNT = {
   lastUsed: 1,
 } as const;
 
+// Same YouTube account with a dead token: /api/account reports it with
+// status 'error', so the wizard must not show it as Connected.
+const YOUTUBE_ERROR_ACCOUNT = {
+  ...YOUTUBE_ACCOUNT,
+  status: 'error',
+} as const;
+
+const RUMBLE_ACCOUNT = {
+  provider: 'rumble',
+  recordId: 'rec-rumble-1',
+  channelId: 'ch-1',
+  channelName: 'Rumble Channel',
+  connectedAt: 1,
+  lastUsed: 1,
+} as const;
+
 let accountResponseQueue: Array<Array<Record<string, unknown>>> = [];
+let accountFetchFails = false;
 let connectResponse: { ok: boolean; body: unknown } = { ok: true, body: { success: true } };
 const fetchMock = vi.fn();
 const popup = { closed: false, close: vi.fn() };
 
 function installStep2Mocks() {
   accountResponseQueue = [[], []];
+  accountFetchFails = false;
   connectResponse = { ok: true, body: { success: true } };
   fetchMock.mockReset();
   popup.close.mockClear();
   fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url === '/api/account') {
+      if (accountFetchFails) {
+        return { ok: false, status: 500, json: async () => ({}) } as Response;
+      }
       const accounts = accountResponseQueue.shift() ?? [];
       return { ok: true, json: async () => ({ authenticated: true, accounts }) } as Response;
     }
@@ -315,6 +337,41 @@ describe('OnboardingWizard step 2', () => {
     });
     expect(within(screen.getByTestId('onboarding-provider-instagram')).queryByText('Connected')).not.toBeInTheDocument();
     expect(within(dialog).getByText('Connect your account')).toBeInTheDocument();
+  });
+
+  it('does not show Connected for an account whose sync status is error', async () => {
+    accountResponseQueue = [[YOUTUBE_ERROR_ACCOUNT as unknown as Record<string, unknown>], []];
+    await openStep2List();
+    await waitFor(() => {
+      expect(screen.getByTestId('onboarding-provider-youtube')).toBeInTheDocument();
+    });
+    expect(within(screen.getByTestId('onboarding-provider-youtube')).queryByText('Connected')).not.toBeInTheDocument();
+    expect(screen.queryByText('Connected')).not.toBeInTheDocument();
+  });
+
+  it('does not offer Continue for an error-status account in the connect view', async () => {
+    const user = userEvent.setup();
+    accountResponseQueue = [[YOUTUBE_ERROR_ACCOUNT as unknown as Record<string, unknown>], []];
+    const dialog = await openStep2List();
+    await user.click(screen.getByTestId('onboarding-provider-youtube'));
+    expect(within(dialog).getByRole('button', { name: 'Connect an account' })).toBeInTheDocument();
+    expect(within(dialog).queryByText('Connected')).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
+  });
+
+  it('shows the load error when the accounts read fails', async () => {
+    const user = userEvent.setup();
+    accountFetchFails = true;
+    const dialog = await openStep2List();
+    await waitFor(() => {
+      expect(within(dialog).getByText('We could not load the accounts.')).toBeInTheDocument();
+    });
+    expect(within(screen.getByTestId('onboarding-provider-youtube')).queryByText('Connected')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('onboarding-provider-youtube'));
+    await waitFor(() => {
+      expect(within(dialog).getByText('We could not load the accounts.')).toBeInTheDocument();
+    });
+    expect(within(dialog).queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
   });
 
   it('opens the inline connect view on tap and stays on step 2', async () => {
@@ -431,6 +488,28 @@ describe('OnboardingWizard step 2', () => {
     const body = postCall?.[1]?.body as FormData;
     expect(body.get('username')).toBe('alice');
     expect(body.get('postingKey')).toBe('wrong-key');
+  });
+
+  it('connects Rumble inline with channel ID plus access token', async () => {
+    const user = userEvent.setup();
+    accountResponseQueue = [[], [RUMBLE_ACCOUNT as unknown as Record<string, unknown>]];
+    const dialog = await openStep2List();
+    await user.click(screen.getByTestId('onboarding-provider-rumble'));
+    await user.type(screen.getByTestId('rumble-handle-input'), 'ch-1');
+    await user.type(screen.getByTestId('rumble-password-input'), 't'.repeat(40));
+    await user.click(screen.getByTestId('rumble-connect-button'));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => url === '/api/rumble-connect')).toBe(true);
+    });
+    const postCall = fetchMock.mock.calls.find(([url]) => url === '/api/rumble-connect');
+    const body = postCall?.[1]?.body as FormData;
+    expect(body.get('channelId')).toBe('ch-1');
+    expect(body.get('accessToken')).toBe('t'.repeat(40));
+    await waitFor(() => {
+      expect(within(dialog).getByText('Connected')).toBeInTheDocument();
+    });
+    await user.click(within(dialog).getByRole('button', { name: 'Continue' }));
+    expect(within(dialog).getByText('Connect your agent')).toBeInTheDocument();
   });
 
   it('keeps step 2 across unmount and remount', async () => {

@@ -70,6 +70,14 @@ describe('Onboarding wizard', () => {
     });
   });
 
+  it('shows the load error when the accounts read fails', () => {
+    cy.intercept('GET', '/api/account', { statusCode: 500, body: { success: false } }).as('accountsFailed');
+    visitPosts();
+    cy.contains('button', 'Continuar').click();
+    cy.contains('Não foi possível carregar as contas.', { timeout: 10000 }).should('be.visible');
+    cy.get('[data-testid=onboarding-provider-youtube]').should('be.visible');
+  });
+
   it('connects inline without leaving /posts', () => {
     visitPosts();
     cy.contains('button', 'Continuar').click();
