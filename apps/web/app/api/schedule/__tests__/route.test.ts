@@ -90,6 +90,8 @@ function mockSupabase(handlers: {
   /** The post-delete re-read fails. The first select still returns scheduleSlots. */
   remainingSlotsError?: unknown;
   slotDeleteError?: unknown;
+  /** Storage object removal fails (DELETE cancel image cleanup). */
+  storageRemoveError?: unknown;
 }) {
   const insertedRows: Record<string, unknown>[] = [];
   const updatedRows: Record<string, unknown>[] = [];
@@ -102,11 +104,20 @@ function mockSupabase(handlers: {
   // pins that the route reads back id, title AND slot_at (MINOR 7).
   const slotSelectArgs: string[] = [];
   const slotDeleteFilters: Record<string, unknown>[] = [];
+  const removedStoragePaths: string[] = [];
   let slotReads = 0;
   let liveSlots: (Record<string, unknown> | null)[] = Array.isArray(handlers.scheduleSlots)
     ? handlers.scheduleSlots.map((row) => (row === null ? null : { ...row }))
     : [];
   const client = {
+    storage: {
+      from: vi.fn(() => ({
+        remove: vi.fn(async (paths: string[]) => {
+          removedStoragePaths.push(...paths);
+          return { error: handlers.storageRemoveError ?? null };
+        }),
+      })),
+    },
     auth: {
       getUser: vi.fn(async () =>
         handlers.noSession
@@ -266,6 +277,7 @@ function mockSupabase(handlers: {
     sentSlotRows,
     slotSelectArgs,
     slotDeleteFilters,
+    removedStoragePaths,
     deleteCalls,
     rpcCalls,
     selectArgs,
@@ -595,6 +607,26 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     // columns, so pin the column list itself: a dropped column would pass
     // the amount check above while production skips every slot.
     expect(db.slotSelectArgs.every((arg) => arg.includes('charged_tokens'))).toBe(true);
+  });
+
+  it('removes stored images of cancelled image slots, and only those', async () => {
+    const db = mockSupabase({
+      scheduleSlots: [
+        { id: 'slot-img', status: 'ready', charged_tokens: 0, task_id: null, media_kind: 'image', media_ref: 'scheduled-media/user-1/a.jpg' },
+        { id: 'slot-vid', status: 'ready', charged_tokens: 0, task_id: 'task-r', media_kind: null, media_ref: null },
+        { id: 'slot-pub-img', status: 'published', charged_tokens: 0, task_id: null, media_kind: 'image', media_ref: 'scheduled-media/user-1/keep.jpg' },
+      ],
+      remove: { error: null },
+    });
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    expect(res.status).toBe(200);
+    // The ready image slot is cancelled, so its bytes go with it; the
+    // ready video slot has no stored image, and the published image slot
+    // survives the cancel, so its bytes stay.
+    expect(db.removedStoragePaths).toEqual(['scheduled-media/user-1/a.jpg']);
+    // Pin the column list: without media_kind/media_ref the route cannot
+    // tell an image slot from a video slot, and the bytes would leak.
+    expect(db.slotSelectArgs.every((arg) => arg.includes('media_kind') && arg.includes('media_ref'))).toBe(true);
   });
 
   it('cancels a free slot (charged 0) without calling the refund RPC', async () => {

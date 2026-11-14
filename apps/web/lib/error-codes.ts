@@ -36,6 +36,12 @@ export const ERROR_CODES = {
   UNKNOWN_VOICE: 'UNKNOWN_VOICE',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   ENGINE_UNAVAILABLE: 'ENGINE_UNAVAILABLE',
+  // Issue #384: an image can only go to providers whose handler accepts
+  // images — Instagram first, the rest are a follow-up.
+  IMAGE_PROVIDER_UNSUPPORTED: 'IMAGE_PROVIDER_UNSUPPORTED',
+  // Issue #384: a ready video upload was already consumed (or expired) by
+  // the time the scheduled publish tried to hold it.
+  VIDEO_UPLOAD_CONSUMED: 'VIDEO_UPLOAD_CONSUMED',
   MCP_VERSION_MISMATCH: 'MCP_VERSION_MISMATCH',
 } as const;
 
@@ -68,6 +74,8 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   // technical detail goes to server logs (and errorId) only.
   INTERNAL_ERROR: 'Something went wrong. Please try again later.',
   ENGINE_UNAVAILABLE: 'Video generation is temporarily unavailable. Please try again later.',
+  IMAGE_PROVIDER_UNSUPPORTED: 'Images can only be published to Instagram for now.',
+  VIDEO_UPLOAD_CONSUMED: 'This video upload was already used. Upload it again to publish.',
   // The gate (mcp-version-gate.ts) always sends a specific message naming
   // both versions; this default only names the fix.
   MCP_VERSION_MISMATCH: 'This post-engineer-mcp version does not match the server. Restart the MCP with the version the server requires.',

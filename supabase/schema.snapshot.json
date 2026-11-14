@@ -1209,12 +1209,32 @@
                     "type": "text",
                     "default": "'hook_lipsync'::text",
                     "notNull": true
+                },
+                {
+                    "name": "media_kind",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "media_ref",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "media_content_type",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
                 }
             ],
             "policies": {
             },
             "constraints": {
                 "scheduled_posts_pkey": "PRIMARY KEY (id)",
+                "scheduled_posts_media_ref_check": "CHECK (((media_kind IS NULL) OR (media_ref IS NOT NULL)))",
+                "scheduled_posts_media_kind_check": "CHECK (((media_kind IS NULL) OR (media_kind = ANY (ARRAY['upload'::text, 'image'::text]))))",
                 "scheduled_posts_video_type_check": "CHECK ((video_type = ANY (ARRAY['full_lipsync'::text, 'hook_lipsync'::text, 'faceless'::text])))",
                 "scheduled_posts_charged_tokens_check": "CHECK ((charged_tokens >= 0))",
                 "scheduled_posts_discount_tokens_check": "CHECK ((discount_tokens >= 0))",

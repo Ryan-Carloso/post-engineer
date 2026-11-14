@@ -16,6 +16,14 @@ import { batchChargeId } from '@/lib/billing/batch-discount';
 import { emitRefundIssued, refundSlotTokens } from '@/lib/billing/refund-tokens';
 import { scrubSecrets } from '@/lib/scrub';
 import { CANCEL_REFUND_REASON, refundsAfterClawback } from './batch-clawback';
+import { removeCancelledMediaImages } from './cancel-media-cleanup';
+import {
+  CANCELLABLE_SLOT_STATUSES,
+  isCancellableStatus,
+  narrowCancelSlot,
+  neverGenerated,
+  type ScheduleCancelSlot,
+} from './cancel-slots';
 
 //---------------
 // /api/schedule — read and cancel the automatic fill-schedule timetables.
@@ -129,22 +137,6 @@ async function getHandler(request?: Request): Promise<NextResponse> {
   return NextResponse.json({ success: true, schedules });
 }
 
-// Statuses the publisher can still turn into a post. `pending` has not
-// been dispatched; `generating` and `ready` already have (generate-and-schedule
-// dispatches every slot immediately, and the reconciler promotes generating
-// → ready when the engine task finishes). `publishing` is left alone: the
-// claim already happened and the upload may be in flight. `published` and
-// `failed` are terminal.
-const CANCELLABLE_SLOT_STATUSES = ['pending', 'generating', 'ready'] as const;
-
-interface ScheduleCancelSlot {
-  id: string;
-  status: string;
-  chargedTokens: number;
-  batchId: string | null;
-  taskId: string | null;
-}
-
 interface CancelRefund {
   slotId: string;
   refunded: boolean;
@@ -160,42 +152,6 @@ type CancelRefundReason =
   | 'not_charged'
   | 'refund_failed'
   | 'discount_withheld';
-
-function narrowCancelSlot(value: unknown): ScheduleCancelSlot | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const row = value as Record<string, unknown>;
-  if (typeof row.id !== 'string' || row.id.length === 0) return null;
-  if (typeof row.status !== 'string') return null;
-  const taskId = row.task_id;
-  if (taskId !== null && taskId !== undefined && typeof taskId !== 'string') return null;
-  // NOT NULL integer >= 0 in the schema: anything else is an unreadable row.
-  const chargedTokens = row.charged_tokens;
-  if (typeof chargedTokens !== 'number' || !Number.isInteger(chargedTokens) || chargedTokens < 0) return null;
-  const batchId = row.batch_id;
-  if (batchId !== null && batchId !== undefined && typeof batchId !== 'string') return null;
-  return {
-    id: row.id,
-    status: row.status,
-    chargedTokens,
-    batchId: typeof batchId === 'string' ? batchId : null,
-    taskId: typeof taskId === 'string' && taskId.length > 0 ? taskId : null,
-  };
-}
-
-function isCancellableStatus(status: string): boolean {
-  return (CANCELLABLE_SLOT_STATUSES as readonly string[]).includes(status);
-}
-
-/**
- * True when a slot's generation never ran: still `pending` with no engine
- * task. Anything else means the engine accepted the job (or finished it),
- * so the GPU cost is already sunk and the charge stands. A `pending` slot
- * that somehow carries a task id fails closed the same way — the engine
- * may have accepted the job before the status write landed.
- */
-function neverGenerated(slot: ScheduleCancelSlot): boolean {
-  return slot.status === 'pending' && slot.taskId === null;
-}
 
 async function deleteHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
@@ -220,7 +176,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   // migration chain) are priced and removed like any other.
   const { data: slotData, error: slotsError } = await supabase
     .from('scheduled_posts')
-    .select('id, status, charged_tokens, batch_id, task_id')
+    .select('id, status, charged_tokens, batch_id, task_id, media_kind, media_ref')
     .eq('schedule_id', scheduleId)
     .eq('user_id', user.id);
   if (slotsError) {
@@ -267,7 +223,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
 
   const { data: remainingData, error: remainingError } = await supabase
     .from('scheduled_posts')
-    .select('id, status, charged_tokens, batch_id, task_id')
+    .select('id, status, charged_tokens, batch_id, task_id, media_kind, media_ref')
     .eq('schedule_id', scheduleId)
     .eq('user_id', user.id);
   if (remainingError) {
@@ -303,6 +259,11 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   // `publishing` between the snapshot and the delete is still in
   // remainingIds and must keep its charge — the post may still go out.
   const removed = cancellable.filter((slot) => !remainingIds.has(slot.id));
+
+  // Scheduled images (issue #384) store their bytes in the `uploads`
+  // bucket: the rows are gone, so remove the objects now (best-effort —
+  // a failure is logged inside, never fails the cancel).
+  await removeCancelledMediaImages(createSupabaseServiceClient(), removed);
 
   // Only slots whose generation never ran go to the clawback: the
   // settlement refunds the slots it is given, so passing a generated slot

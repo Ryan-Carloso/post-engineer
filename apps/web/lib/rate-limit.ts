@@ -69,6 +69,10 @@ export const RATE_LIMITS = {
   // in one window. Keyed by user id (falling back to API-key id, then IP
   // inside applyRateLimit).
   generateAndSchedule: { name: 'generate-and-schedule', limit: 12, windowMs: 60_000 },
+  // Publish/schedule existing media (issue #384): one call fans out to the
+  // providers, no generation. Own bucket so publishing never eats the
+  // generation budget, or vice versa.
+  publishExisting: { name: 'publish-existing', limit: 10, windowMs: 60_000 },
   // Batch discount: one call per MCP batch (plus retries). Each call reads
   // up to MAX_BATCH_VIDEOS slots and credits at most two of them.
   batchDiscount: { name: 'batch-discount', limit: 10, windowMs: 60_000 },
