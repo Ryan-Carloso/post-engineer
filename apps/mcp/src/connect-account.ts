@@ -2,7 +2,7 @@
 //
 // Extracted from tools.ts so tools.ts stays under the file-size ratchet.
 // Re-exported from tools.ts, so existing import sites (`./tools.js`) keep
-// working, including the tool registration in index.ts.
+// working, including the personas and accounts registration (intent-*.ts).
 import { z } from 'zod';
 
 import type { PostEngineerClient } from './client.js';

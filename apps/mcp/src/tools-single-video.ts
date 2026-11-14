@@ -246,12 +246,10 @@ function narrowScheduledVideos(result: unknown): {
   };
 }
 
-// NOTE: check_script (action: validate) IS registered in index.ts (direct server.tool
-// call, which the parity graph discovers) and maps to POST
-// /api/videos/validate-script, which it really calls through the client
-// after the local mechanical pre-check. generate_video IS
-// registered the same way and maps to POST
-// /api/videos/generate-and-schedule.
+// NOTE: check_script (action: validate) is registered by intent-content.ts and
+// maps to POST /api/videos/validate-script, which it really calls through the
+// client after the local mechanical pre-check. generate_video is registered by
+// intent-video.ts and maps to POST /api/videos/generate-and-schedule.
 //---------------
 // check_script (action: score) — mechanical draft scoring, no tokens spent.
 //

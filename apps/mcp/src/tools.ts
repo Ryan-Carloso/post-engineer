@@ -58,8 +58,8 @@ const LibraryImageFields = {
   tag: z.string().max(MAX_LIBRARY_TAG_LENGTH).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
   description: z.string().max(MAX_LIBRARY_DESCRIPTION_LENGTH).optional().describe('Description of the photo for tag/keyword matching (e.g. smiling at the beach at sunset)'),
 };
-// Single source of truth: index.ts registers these shapes directly with the
-// MCP server, so field definitions (and their descriptions) live here only.
+// Single source of truth: the intent-*.ts modules build the advertised shapes from these
+// ones, so field definitions (and their descriptions) live here only.
 const PersonaLibraryImageInputShape = z.object(LibraryImageFields);
 
 export const CreatePersonaShape = {

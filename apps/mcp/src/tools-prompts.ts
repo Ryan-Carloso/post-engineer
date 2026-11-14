@@ -8,7 +8,7 @@ import { actionDescription, actionShape, byAction } from './action-tool.js';
 import { READ_ONLY } from './tool-annotations.js';
 import { RecipeSession, isRecipeSlug, recipeRunText, type McpTransportKind } from './recipe-session.js';
 
-// Re-exported so index.ts pays one import line (it sits at the file-size cap).
+// Re-exported so the intent modules and index.ts import the recipe wrappers from one place.
 export { withRecipeNudge, withScriptOutcome, type McpTransportKind } from './recipe-session.js';
 
 //---------------
@@ -77,11 +77,10 @@ function errorResponse(action: string, message: string): McpToolResponse {
 }
 
 //---------------
-// Registration lives here (not in index.ts, which sits at the file-size
-// cap). The prompts tool runs inside the server's RecipeSession: its
+// Registration lives here (index.ts only wires the intent modules). The prompts tool runs inside the server's RecipeSession: its
 // requests carry the recipe-adoption headers, `list` marks the recipes as
 // known, and `get` records the slug once the API returned it. Returns the
-// session so index.ts wraps the entry and script tools with the same one.
+// session so the other intent modules wrap the entry and script actions with the same one.
 //---------------
 const PROMPTS_SPECS = { list: ListPromptsShape, get: GetPromptShape };
 

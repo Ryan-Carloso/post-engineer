@@ -12,7 +12,7 @@ import { CancelVideoTaskShape, WaitForVideoTasksShape, handleCancelVideoTask, ha
 //---------------
 // The video tools of issue #566: generate_video (one or a batch),
 // video_tasks (status/wait, generation history) and cancel_video. Registered
-// here, not in index.ts, which sits at the file-size cap.
+// here; index.ts only wires the intent modules.
 //---------------
 
 const VIDEO_TASKS_SPECS = {
