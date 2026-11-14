@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import requests
@@ -321,6 +321,82 @@ class ScheduleStore:
             },
         )
         return bool(rows)
+
+    def get_video_upload(self, upload_id: str) -> dict[str, Any] | None:
+        """One video_uploads row by id (issue #384)."""
+        rows = self._request(
+            "GET",
+            "video_uploads",
+            params={"id": f"eq.{upload_id}", "select": "*", "limit": 1},
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        return row if isinstance(row, dict) else None
+
+    def claim_video_upload(self, upload_id: str) -> dict[str, Any] | None:
+        """Atomic ready→consumed claim for a signed-upload video (issue #384).
+
+        Conditional PATCH: only transitions if the row is STILL 'ready'.
+        The web route extended the expiry at schedule time, but a
+        concurrent publish (or a sweep) may have consumed it first — the
+        claim loses and the slot fails permanently instead of publishing
+        twice. PostgREST returns the row when it wins, [] otherwise.
+        """
+        rows = self._request(
+            "PATCH",
+            "video_uploads",
+            json={
+                "status": "consumed",
+                "consumed_at": datetime.now(timezone.utc).isoformat(),
+            },
+            params={"id": f"eq.{upload_id}", "status": "eq.ready"},
+            headers={
+                **self._headers,
+                "Prefer": "return=representation",
+            },
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        return row if isinstance(row, dict) else None
+
+    def download_storage_object(self, bucket: str, path: str) -> bytes:
+        """Download one object from Supabase Storage (issue #384).
+
+        The authenticated endpoint serves private buckets with the service
+        key. The path comes from a row the engine already verified (a
+        claimed upload, or a slot's own scheduled-media path), never from
+        caller input.
+        """
+        response = self._requests.get(
+            f"{self._base_url}/storage/v1/object/authenticated/{bucket}/{path}",
+            headers=self._headers,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return response.content
+
+    def remove_storage_object(self, bucket: str, path: str) -> bool:
+        """Delete one object from Supabase Storage (issue #384).
+
+        Best-effort cleanup for single-use media after a terminal publish
+        outcome: False (never an exception) when the object is already
+        gone or the delete fails, so a missing object never fails the tick.
+        """
+        try:
+            response = self._requests.delete(
+                f"{self._base_url}/storage/v1/object/{bucket}/{path}",
+                headers=self._headers,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+        except Exception as exc:  # noqa: BLE001 - best-effort cleanup
+            logger.warning(
+                f"fill_schedule: storage object removal failed for {bucket}/{path}: {exc}"
+            )
+            return False
+        return True
 
     def resumable_publishing_slots(self, now_utc: datetime) -> list[dict[str, Any]]:
         """Publishing slots whose backoff (or crash lease) has elapsed.
