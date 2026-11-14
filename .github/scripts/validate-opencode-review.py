@@ -201,8 +201,26 @@ def main() -> int:
         and text.find("Review attempt order:") < text.find("Attempting review with"),
     )
     max_chain = int(prefs.get("maxChainLength") or 8)
-    pass1_minutes = 10 + max(max_chain - 1, 0) * 7
-    pass2_minutes = 8
+    # Reviewer budget (raised 2026-11-14: 40 steps died on PR #586's 83-file
+    # review, and the attempt timeouts must cover the extra steps). These
+    # constants must match the workflow literals pinned below.
+    check(
+        "pass 1 first-attempt timeout is 30m",
+        "limit=30m" in text,
+        "the first attempt needs room for 120 steps",
+    )
+    check(
+        "pass 1 fallback timeout is 20m",
+        "limit=20m" in text,
+        "fallback attempts need room for 120 steps",
+    )
+    check(
+        "pass 2 timeout is 20m",
+        "timeout 20m opencode run" in text,
+        "pass 2 uses the same reviewer agent, so the same budget applies",
+    )
+    pass1_minutes = 30 + max(max_chain - 1, 0) * 20
+    pass2_minutes = 20
     overhead_minutes = 5
     required_minutes = pass1_minutes + pass2_minutes + overhead_minutes
     timeout_match = re.search(r"^\s*timeout-minutes:\s*(\d+)\s*$", text, re.M)
@@ -453,6 +471,12 @@ def main() -> int:
         "reviewer agent mode is primary",
         re.search(r"^mode:\s*primary\s*$", frontmatter, re.M) is not None
         and "subagent" not in frontmatter,
+    )
+    check(
+        "reviewer agent step budget is 120",
+        re.search(r"^steps:\s*120\s*$", frontmatter, re.M) is not None,
+        "steps: 40 died on PR #586 (83 files, diff truncated at 200 KB); "
+        "120 gives the reviewer room to finish",
     )
     check(
         "reviewer denies edit and bash",
