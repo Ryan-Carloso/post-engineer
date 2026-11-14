@@ -484,12 +484,9 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     ),
   });
   // The wrapper never reads the body: attach the cancel facts so the
-  // schedule_deleted event carries them (scheduleId + refunded count).
-  // attachApiErrorProperties requires pre-scrubbed values — the success
-  // path never scrubs — and the id comes straight off the query string
-  // with no format check, so scrub at the call site. The count travels
-  // as `refunded`, not `refundedTokens`: the scrubber redacts every
-  // `token*` key, which would erase the audit value.
+  // schedule_deleted event carries them. attachApiErrorProperties needs
+  // pre-scrubbed values (the success path never scrubs), and the count
+  // travels as `refunded` — the scrubber redacts every `token*` key.
   attachApiErrorProperties(response, scrubSecrets({ scheduleId, refunded: refundedTokens }));
   return response;
 }
