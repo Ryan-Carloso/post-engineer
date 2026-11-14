@@ -108,7 +108,11 @@ const attachedProperties = new WeakMap<object, Record<string, unknown>>();
 /**
  * attachApiErrorProperties — called by apiErrorResponse for responses it
  * does NOT report itself (leaveReportingToWrapper) so the wrapper merges
- * these into the event properties. Values must already be scrubbed.
+ * these into the event properties, and by handlers that want per-request
+ * facts on their 2xx success event (e.g. the refunded token total on a
+ * schedule cancel) — the wrapper never reads the response body, so this
+ * is the only way those facts reach PostHog. Values must already be
+ * scrubbed.
  */
 export function attachApiErrorProperties(response: object, properties: Record<string, unknown>): void {
   attachedProperties.set(response, properties);
@@ -261,6 +265,7 @@ async function reportApiIssue(
 async function reportApiSuccess(
   route: string,
   status: number,
+  response: Response,
   request: Request | undefined,
   getUserId?: ApiErrorReportingOptions['getUserId'],
 ): Promise<void> {
@@ -273,6 +278,13 @@ async function reportApiSuccess(
     const user = await resolveUser(request, getUserId);
     const properties: Record<string, unknown> = { route, status };
     if (user !== undefined) withUserProperties(properties, user);
+    // Metadata attached on the response (e.g. the refunded token total
+    // on a schedule cancel) merges last so it always lands in the single
+    // reported event — the wrapper never reads the body, so without this
+    // the per-request facts would stay invisible in PostHog.
+    if (attachedProperties.has(response)) {
+      Object.assign(properties, attachedProperties.get(response));
+    }
     // Plain event, never an $exception. No body read — success bodies are
     // large and varied; route+status is the signal. The event name is the
     // route's semantic name when mapped (see api-telemetry-names.ts);
@@ -325,7 +337,7 @@ export function withApiErrorReporting(
     if (status >= 400) {
       void reportApiIssue(route, status, response, request, options?.getUserId);
     } else if (status >= 200 && status < 300 && options?.reportSuccess !== false) {
-      void reportApiSuccess(route, status, request, options?.getUserId);
+      void reportApiSuccess(route, status, response, request, options?.getUserId);
     }
     return response;
   };

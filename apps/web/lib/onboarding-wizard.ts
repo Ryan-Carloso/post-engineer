@@ -6,9 +6,10 @@ import { create } from 'zustand';
 // First-visit onboarding wizard state (issue #573). The wizard shows on
 // the first visit to the posts calendar and is dismissable: closing it or
 // finishing it marks the visit seen, so it never pops again on its own.
-// The current step is saved as the user advances, so leaving mid-flow
-// (to connect an account, or to copy the setup prompt) resumes where it
-// stopped. The reopen button clears nothing — it always starts at step 1.
+// The current step is saved as the user advances, so a detour (e.g. to
+// /recipes for the setup prompt) resumes where it stopped. Step 2
+// connects inline and never navigates; the resume stays as a safety net.
+// The reopen button clears nothing — it always starts at step 1.
 //---------------
 
 export const ONBOARDING_WIZARD_SEEN_KEY = 'post-engineer-onboarding-wizard-seen';

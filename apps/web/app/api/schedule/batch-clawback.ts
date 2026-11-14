@@ -114,6 +114,9 @@ async function readBatch(
  * inside settle_batch_clawback; the caller must not refund them again.
  * `refundBySlot` is the net the user keeps (full charge minus the discount
  * pulled back), which is what `batchDiscountWithheld` is computed from.
+ * The caller passes only slots whose generation never ran: a generated
+ * slot keeps its charge and never enters the settlement, so cancelling it
+ * cannot claw the free video's discount.
  */
 export async function refundsAfterClawback(
   supabase: SupabaseClient,

@@ -52,7 +52,7 @@ export function registerLibraryTools(server: McpServer, client: PostEngineerClie
   server.tool(
     'schedules',
     actionDescription(
-      'Your scheduled videos (future slots). list: the schedules. get_slot / update_slot_title / delete_slot: one slot of a schedule. cancel: cancels a whole schedule and refunds the slots that did not publish (a cancelled video of a discounted batch gives back the discount the batch no longer earns).',
+      'Your scheduled videos (future slots). list: the schedules. get_slot / update_slot_title / delete_slot: one slot of a schedule. cancel: cancels a whole schedule: unpublished slots are removed, but only slots whose generation never ran get their prepaid tokens back (a generating or ready slot keeps its charge, the GPU cost is spent); a post already publishing or published is not recalled; a cancelled video of a discounted batch gives back the discount the batch no longer earns.',
       SCHEDULES_SPECS,
     ),
     actionShape(SCHEDULES_SPECS),

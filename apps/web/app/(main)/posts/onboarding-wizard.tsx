@@ -15,31 +15,18 @@ import {
 } from '@/lib/onboarding-wizard';
 import { whatsappUrl } from '@/lib/whatsapp';
 import { CREATE_POSTS_HREF } from './day-section';
+import { WizardStepTwo } from './onboarding-step2';
 
 //---------------
 // First-visit onboarding wizard (issue #573). Four steps with room to
 // explain: what the app is, connect an account, connect the agent, tokens.
 // It opens on the first visit to the posts calendar and resumes at the
-// saved step after a detour (to /accounts, or to /recipes for the setup
-// prompt). Closing it or finishing it marks the visit seen; the header
-// button reopens it from step 1. It never creates anything itself: account
-// connect lives on /accounts, the setup prompt on /recipes, tokens are
-// contact-only (WhatsApp / email, no billing UI).
+// saved step after a detour (to /recipes for the setup prompt). Closing it
+// or finishing it marks the visit seen; the header button reopens it from
+// step 1. Step 2 connects inline, inside this dialog (issue #578): no
+// step-2 action navigates away, so the dialog never unmounts mid-connect.
+// Tokens are contact-only (WhatsApp / email, no billing UI).
 //---------------
-
-// Brand names are the same in both locales, so the chips use literals.
-const PROVIDERS = [
-  'YouTube',
-  'Instagram',
-  'Bluesky',
-  'LinkedIn',
-  'Threads',
-  'Facebook',
-  'Pinterest',
-  'Fanvue',
-  '3Speak',
-  'Rumble',
-] as const;
 
 export function OnboardingWizardButton({ testId }: { testId?: string }) {
   const { t } = useI18n();
@@ -105,40 +92,6 @@ function WizardStepOne() {
       <div className="flex justify-end">
         <Button type="button" size="sm" onClick={next}>
           {t('onboarding.continue')}
-        </Button>
-      </div>
-    </>
-  );
-}
-
-function WizardStepTwo() {
-  const { t } = useI18n();
-  const next = useOnboardingWizardStore((s) => s.next);
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>{t('onboarding.step2Title')}</DialogTitle>
-        <DialogDescription>{t('onboarding.step2Body')}</DialogDescription>
-      </DialogHeader>
-      <div className="flex flex-wrap gap-2">
-        {PROVIDERS.map((provider) => (
-          <Button
-            key={provider}
-            asChild
-            variant="outline"
-            size="sm"
-            data-testid={`onboarding-provider-${provider.toLowerCase()}`}
-          >
-            <Link href="/accounts">{provider}</Link>
-          </Button>
-        ))}
-      </div>
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button type="button" size="sm" variant="outline" onClick={next}>
-          {t('onboarding.skip')}
-        </Button>
-        <Button asChild size="sm">
-          <Link href="/accounts">{t('onboarding.connectAccount')}</Link>
         </Button>
       </div>
     </>

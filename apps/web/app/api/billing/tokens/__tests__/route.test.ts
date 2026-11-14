@@ -13,15 +13,20 @@ vi.mock('@/lib/api-keys', () => ({
   validateApiKeyFormat: (key: string) => key.startsWith('post-engineer_'),
 }));
 
+vi.mock('@/lib/posthog-server', () => ({
+  getPostHogServer: vi.fn(),
+}));
+
 //---------------
-// Testes de GET /api/billing/tokens — saldo da carteira pré-paga.
-// Auth = sessão Supabase (cookie) OU API key pessoal (Bearer, MCP).
+// Tests for GET /api/billing/tokens — prepaid wallet balance.
+// Auth = Supabase session (cookie) OR personal API key (Bearer, MCP).
 //---------------
 
 import { GET } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { resolveApiKey } from '@/lib/api-keys';
+import { getPostHogServer } from '@/lib/posthog-server';
 
 const USER_ID = 'user-1';
 
@@ -64,20 +69,38 @@ describe('GET /api/billing/tokens', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(
       queryClient({ tokens_balance: '5', free_tokens_balance: '3' }) as never,
     );
+    vi.mocked(getPostHogServer).mockReturnValue({ capture: vi.fn(), captureAs: vi.fn() } as never);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('retorna o saldo somando paid + free na sessão', async () => {
+  it('returns the balance summing paid + free for the session', async () => {
     const res = await GET();
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ success: true, balance: 8, free: 3 });
   });
 
-  it('retorna 401 sem sessão', async () => {
+  it('carries the fetched balance on the token_balance_fetched event', async () => {
+    const client = { capture: vi.fn(), captureAs: vi.fn() };
+    vi.mocked(getPostHogServer).mockReturnValue(client as never);
+    const res = await GET();
+
+    expect(res.status).toBe(200);
+    // The wrapper reports fire-and-forget; the balance used to be
+    // invisible in PostHog (route + status only), so a balance jump
+    // could not be traced to the value the user actually saw.
+    await vi.waitFor(() =>
+      expect(client.capture).toHaveBeenCalledWith(
+        'token_balance_fetched',
+        expect.objectContaining({ balance: 8, route: 'GET /api/billing/tokens', status: 200 }),
+      ),
+    );
+  });
+
+  it('returns 401 without a session', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: {
         getUser: () => Promise.resolve({ data: { user: null }, error: null }),
@@ -90,7 +113,7 @@ describe('GET /api/billing/tokens', () => {
     expect(res.status).toBe(401);
   });
 
-  it('aceita API key pessoal via Authorization Bearer (MCP)', async () => {
+  it('accepts a personal API key via Authorization Bearer (MCP)', async () => {
     vi.mocked(resolveApiKey).mockResolvedValue({
       userId: USER_ID,
       keyId: 'key-1',
@@ -106,7 +129,7 @@ describe('GET /api/billing/tokens', () => {
     expect(await res.json()).toEqual({ success: true, balance: 8, free: 3 });
   });
 
-  it('retorna saldo zero quando não tem profile', async () => {
+  it('returns a zero balance when there is no profile', async () => {
     mockServerProfile(null);
 
     const res = await GET();
@@ -115,7 +138,7 @@ describe('GET /api/billing/tokens', () => {
     expect(await res.json()).toEqual({ success: true, balance: 0, free: 0 });
   });
 
-  it('concede o bônus de boas-vindas (lazy grant) via service role', async () => {
+  it('grants the welcome bonus (lazy grant) via service role', async () => {
     const rpc = vi.fn().mockResolvedValue({ error: null });
     vi.mocked(createSupabaseServiceClient).mockReturnValue({ rpc } as never);
     mockServerProfile({ tokens_balance: 0, free_tokens_balance: 3 });
@@ -127,7 +150,7 @@ describe('GET /api/billing/tokens', () => {
     expect(await res.json()).toEqual({ success: true, balance: 3, free: 3 });
   });
 
-  it('não quebra quando o grant falha (migration pendente)', async () => {
+  it('does not break when the grant fails (pending migration)', async () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue({
       rpc: vi.fn().mockRejectedValue(new Error('rpc missing')),
     } as never);
@@ -139,7 +162,7 @@ describe('GET /api/billing/tokens', () => {
     expect(await res.json()).toEqual({ success: true, balance: 7, free: 0 });
   });
 
-  it('retorna 401 com API key inválida', async () => {
+  it('returns 401 with an invalid API key', async () => {
     vi.mocked(resolveApiKey).mockResolvedValue(null);
 
     const req = new Request('http://localhost:3434/api/billing/tokens', {
