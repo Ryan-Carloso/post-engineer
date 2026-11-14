@@ -3,38 +3,38 @@ import { joinSegments, validateSegments } from '../script-segments';
 
 const hook =
   'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
-const body =
+const content =
   'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
 const cta = 'Save this video before your next trip to Porto.';
 
 function validSegments() {
   return [
     { kind: 'hook', text: hook },
-    { kind: 'body', text: body },
-    { kind: 'cta', text: cta },
+    { kind: 'content', text: content },
+    { kind: 'content', text: cta },
   ];
 }
 
 describe('validateSegments', () => {
-  it('accepts a valid hook, body and CTA and joins them with blank lines', () => {
+  it('accepts a valid hook and content takes and joins them with blank lines', () => {
     // Full lip sync leaves media optional: these fixtures carry no media
     // on purpose, so the content rules are what this pins.
     const result = validateSegments(validSegments(), 'full_lipsync');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.hookText).toBe(hook);
-    expect(result.value.ctaText).toBe(cta);
-    expect(result.value.bodyWords).toBeGreaterThanOrEqual(30);
-    expect(joinSegments(validSegments(), 'full_lipsync')).toBe(`${hook}\n\n${body}\n\n${cta}`);
+    expect(result.value.contentTexts).toEqual([content, cta]);
+    expect(result.value.contentWords).toBeGreaterThanOrEqual(30);
+    expect(joinSegments(validSegments(), 'full_lipsync')).toBe(`${hook}\n\n${content}\n\n${cta}`);
   });
 
   it('strips padding before joining, matching the engine join the TaskVideoRequest validator compares against', () => {
     const padded = [
       { kind: 'hook', text: `  ${hook}  ` },
-      { kind: 'body', text: `  ${body} ` },
-      { kind: 'cta', text: `${cta}   ` },
+      { kind: 'content', text: `  ${content} ` },
+      { kind: 'content', text: `${cta}   ` },
     ];
-    expect(joinSegments(padded, 'full_lipsync')).toBe(`${hook}\n\n${body}\n\n${cta}`);
+    expect(joinSegments(padded, 'full_lipsync')).toBe(`${hook}\n\n${content}\n\n${cta}`);
   });
 
   it('rejects empty segments with the segments field', () => {
@@ -45,19 +45,27 @@ describe('validateSegments', () => {
     expect(result.error.fix.length).toBeGreaterThan(0);
   });
 
-  it('rejects a hook that is not first and a CTA that is not last', () => {
+  it('rejects a hook that is not first', () => {
     const noHookFirst = validateSegments([
-      { kind: 'body', text: body },
+      { kind: 'content', text: content },
       { kind: 'hook', text: hook },
-      { kind: 'cta', text: cta },
+      { kind: 'content', text: cta },
     ]);
     expect(noHookFirst.ok).toBe(false);
-    const noCtaLast = validateSegments([
+  });
+
+  it('accepts a CTA take in the middle of the video', () => {
+    // Issue #577 acceptance: a CTA is just a content take, so it may
+    // sit anywhere after the hook — here in the middle — and the video
+    // still renders in take order.
+    const segments = [
       { kind: 'hook', text: hook },
-      { kind: 'cta', text: cta },
-      { kind: 'body', text: body },
-    ]);
-    expect(noCtaLast.ok).toBe(false);
+      { kind: 'content', text: cta },
+      { kind: 'content', text: content },
+    ];
+    const result = validateSegments(segments, 'full_lipsync');
+    expect(result.ok).toBe(true);
+    expect(joinSegments(segments, 'full_lipsync')).toBe(`${hook}\n\n${cta}\n\n${content}`);
   });
 
   it('rejects placeholder, link, markdown, emoji and stage direction text', () => {
@@ -72,8 +80,8 @@ describe('validateSegments', () => {
     for (const bad of badTexts) {
       const result = validateSegments([
         { kind: 'hook', text: hook },
-        { kind: 'body', text: `${body} ${bad}` },
-        { kind: 'cta', text: cta },
+        { kind: 'content', text: `${content} ${bad}` },
+        { kind: 'content', text: cta },
       ]);
       expect(result.ok).toBe(false);
     }
@@ -82,51 +90,69 @@ describe('validateSegments', () => {
   it('rejects a hook without terminal punctuation', () => {
     const result = validateSegments([
       { kind: 'hook', text: hook.replace(/\.$/, '') },
-      { kind: 'body', text: body },
-      { kind: 'cta', text: cta },
+      { kind: 'content', text: content },
+      { kind: 'content', text: cta },
     ]);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.field).toBe('segments.0.text');
   });
 
-  it('rejects a repeated segment, a short body and an out-of-range CTA', () => {
+  it('rejects a repeated segment and short content', () => {
     expect(
       validateSegments([
         { kind: 'hook', text: hook },
-        { kind: 'body', text: body },
-        { kind: 'body', text: body },
-        { kind: 'cta', text: cta },
+        { kind: 'content', text: content },
+        { kind: 'content', text: content },
+        { kind: 'content', text: cta },
       ]).ok,
     ).toBe(false);
     expect(
       validateSegments([
         { kind: 'hook', text: hook },
-        { kind: 'body', text: 'Short body text here.' },
-        { kind: 'cta', text: cta },
+        { kind: 'content', text: 'Short content text here.' },
+        { kind: 'content', text: cta },
       ]).ok,
     ).toBe(false);
+  });
+
+  it('accepts short and long content takes: there is no CTA word range', () => {
+    // Issue #577: a two-word content take and a 21-word content take
+    // both pass — the old 5-20 CTA range does not apply to content takes.
     expect(
-      validateSegments([
-        { kind: 'hook', text: hook },
-        { kind: 'body', text: body },
-        { kind: 'cta', text: 'Save it.' },
-      ]).ok,
-    ).toBe(false);
+      validateSegments(
+        [
+          { kind: 'hook', text: hook },
+          { kind: 'content', text: Array.from({ length: 35 }, () => 'word').join(' ') + '.' },
+          { kind: 'content', text: 'Save it.' },
+        ],
+        'full_lipsync',
+      ).ok,
+    ).toBe(true);
+    expect(
+      validateSegments(
+        [
+          { kind: 'hook', text: hook },
+          { kind: 'content', text: content },
+          { kind: 'content', text: Array.from({ length: 21 }, () => 'word').join(' ') + '.' },
+        ],
+        'full_lipsync',
+      ).ok,
+    ).toBe(true);
   });
 
   it('rejects totals outside 60-200 words', () => {
     const short = validateSegments([
       { kind: 'hook', text: Array.from({ length: 20 }, () => 'word').join(' ') + '.' },
-      { kind: 'body', text: Array.from({ length: 30 }, () => 'word').join(' ') + '.' },
-      { kind: 'cta', text: 'Save this video now please.' },
+      { kind: 'content', text: Array.from({ length: 30 }, () => 'word').join(' ') + '.' },
+      { kind: 'content', text: 'Save this video now please.' },
     ]);
     expect(short.ok).toBe(false);
     // Above-maximum case: every component is in range, only the total exceeds 200.
     const long = validateSegments([
       { kind: 'hook', text: Array.from({ length: 30 }, () => 'word').join(' ') + '.' },
-      { kind: 'body', text: Array.from({ length: 160 }, () => 'word').join(' ') + '.' },
-      { kind: 'cta', text: Array.from({ length: 20 }, () => 'word').join(' ') + '.' },
+      { kind: 'content', text: Array.from({ length: 160 }, () => 'word').join(' ') + '.' },
+      { kind: 'content', text: Array.from({ length: 20 }, () => 'word').join(' ') + '.' },
     ]);
     expect(long.ok).toBe(false);
     if (!long.ok) expect(long.error.field).toBe('segments');
@@ -138,9 +164,9 @@ describe('validateSegments', () => {
     const hook20 = Array.from({ length: 20 }, () => 'word').join(' ') + '.';
     const segments: Array<{ kind: string; text: string }> = [{ kind: 'hook', text: hook20 }];
     for (let i = 0; i < 11; i += 1) {
-      segments.push({ kind: 'body', text: Array.from({ length: 12 }, () => 'body').join(' ') + ` number ${i}.` });
+      segments.push({ kind: 'content', text: Array.from({ length: 12 }, () => 'body').join(' ') + ` number ${i}.` });
     }
-    segments.push({ kind: 'cta', text: 'Save this video now please.' });
+    segments.push({ kind: 'content', text: 'Save this video now please.' });
     const result = validateSegments(segments);
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -152,27 +178,27 @@ describe('validateSegments', () => {
     expect(
       validateSegments([
         { kind: 'hook', text: 'Short hook here today.' },
-        { kind: 'body', text: body },
-        { kind: 'cta', text: cta },
+        { kind: 'content', text: content },
+        { kind: 'content', text: cta },
       ]).ok,
     ).toBe(false);
     expect(
       validateSegments([
         { kind: 'hook', text: Array.from({ length: 41 }, () => 'word').join(' ') + '.' },
-        { kind: 'body', text: body },
-        { kind: 'cta', text: cta },
+        { kind: 'content', text: content },
+        { kind: 'content', text: cta },
       ]).ok,
     ).toBe(false);
   });
 
   it('rejects media with both mediaId and url', () => {
     // Full lip sync leaves the hook media optional, so the both-fields
-    // error on the body is what fires.
+    // error on the content is what fires.
     const both = validateSegments(
       [
         { kind: 'hook', text: hook },
-        { kind: 'body', text: body, media: [{ mediaId: 'abc', url: 'https://example.com/x.jpg' }] },
-        { kind: 'cta', text: cta },
+        { kind: 'content', text: content, media: [{ mediaId: 'abc', url: 'https://example.com/x.jpg' }] },
+        { kind: 'content', text: cta },
       ],
       'full_lipsync',
     );
@@ -187,12 +213,12 @@ describe('validateSegments', () => {
     const segments: Array<{ kind: string; text: string; media?: Array<{ url: string }> }> = [{ kind: 'hook', text: hook20 }];
     for (let i = 0; i < 7; i += 1) {
       segments.push({
-        kind: 'body',
+        kind: 'content',
         text: Array.from({ length: 12 }, () => 'body').join(' ') + ` number ${i}.`,
         media: [{ url: `https://example.com/${i}.jpg` }],
       });
     }
-    segments.push({ kind: 'cta', text: 'Save this video now please.' });
+    segments.push({ kind: 'content', text: 'Save this video now please.' });
     const result = validateSegments(segments, 'full_lipsync');
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -205,49 +231,49 @@ describe('validateSegments', () => {
     // pins, and the null-media case reads as absent there too.
     const blankUrl = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: [{ mediaId: 'abc', url: '' }] },
-      { kind: 'cta', text: cta },
+      { kind: 'content', text: content, media: [{ mediaId: 'abc', url: '' }] },
+      { kind: 'content', text: cta },
     ], 'full_lipsync');
     expect(blankUrl.ok).toBe(false);
     if (!blankUrl.ok) expect(blankUrl.error.field).toBe('segments.1.media.0');
     const blankId = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: [{ mediaId: '   ' }] },
-      { kind: 'cta', text: cta },
+      { kind: 'content', text: content, media: [{ mediaId: '   ' }] },
+      { kind: 'content', text: cta },
     ], 'full_lipsync');
     expect(blankId.ok).toBe(false);
     if (!blankId.ok) expect(blankId.error.field).toBe('segments.1.media.0');
     const neither = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: [{}] },
-      { kind: 'cta', text: cta },
+      { kind: 'content', text: content, media: [{}] },
+      { kind: 'content', text: cta },
     ], 'full_lipsync');
     expect(neither.ok).toBe(false);
     if (!neither.ok) expect(neither.error.field).toBe('segments.1.media.0');
     const nullMedia = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, media: null },
-      { kind: 'cta', text: cta },
+      { kind: 'content', text: content, media: null },
+      { kind: 'content', text: cta },
     ], 'full_lipsync');
     expect(nullMedia.ok).toBe(true);
   });
 
-  it('reports the engine field for a bad kind and a short body', () => {
+  it('reports the engine field for a bad kind and short content', () => {
     const badKind = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'middle', text: body },
-      { kind: 'cta', text: cta },
+      { kind: 'middle', text: content },
+      { kind: 'content', text: cta },
     ]);
     expect(badKind.ok).toBe(false);
     if (!badKind.ok) expect(badKind.error.field).toBe('segments.1.kind');
-    const shortBody = validateSegments([
+    const shortContent = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: 'Short body text here.' },
-      { kind: 'cta', text: cta },
+      { kind: 'content', text: 'Short content text here.' },
+      { kind: 'content', text: cta },
     ]);
-    expect(shortBody.ok).toBe(false);
-    if (!shortBody.ok) expect(shortBody.error.field).toBe('segments.1.text');
-    const notObject = validateSegments([{ kind: 'hook', text: hook }, 'not a segment', { kind: 'cta', text: cta }]);
+    expect(shortContent.ok).toBe(false);
+    if (!shortContent.ok) expect(shortContent.error.field).toBe('segments.1.text');
+    const notObject = validateSegments([{ kind: 'hook', text: hook }, 'not a segment', { kind: 'content', text: cta }]);
     expect(notObject.ok).toBe(false);
     if (!notObject.ok) expect(notObject.error.field).toBe('segments.1');
   });
@@ -258,9 +284,9 @@ describe('validateSegments', () => {
     const result = validateSegments(
       [
         { kind: 'hook', text: hook },
-        { kind: 'body', text: body, media: [{ mediaId: 'abc' }] },
-        { kind: 'body', text: `${body} Second part.`, media: [{ url: 'https://example.com/x.jpg' }] },
-        { kind: 'cta', text: cta },
+        { kind: 'content', text: content, media: [{ mediaId: 'abc' }] },
+        { kind: 'content', text: `${content} Second part.`, media: [{ url: 'https://example.com/x.jpg' }] },
+        { kind: 'content', text: cta },
       ],
       'full_lipsync',
     );
@@ -272,8 +298,8 @@ describe('validateSegments', () => {
   it('rejects a segment with an unknown key, like the engine does', () => {
     const result = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: body, voice: 'narrator' },
-      { kind: 'cta', text: cta },
+      { kind: 'content', text: content, voice: 'narrator' },
+      { kind: 'content', text: cta },
     ]);
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -282,12 +308,12 @@ describe('validateSegments', () => {
 
   it('rejects media with an unknown key, like the generation route does', () => {
     // Full lip sync leaves the hook media optional, so the unknown key on
-    // the body is the error that fires.
+    // the content is the error that fires.
     const result = validateSegments(
       [
         { kind: 'hook', text: hook },
-        { kind: 'body', text: body, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
-        { kind: 'cta', text: cta },
+        { kind: 'content', text: content, media: [{ mediaId: 'abc', alt: 'kitchen' }] },
+        { kind: 'content', text: cta },
       ],
       'full_lipsync',
     );
@@ -299,14 +325,14 @@ describe('validateSegments', () => {
   it('does not treat double-space or underscore differences as repeats, like the engine does', () => {
     // The engine normalisation keeps whitespace runs and underscores, so
     // these pairs are distinct there and must be distinct here too.
-    const baseBody =
+    const baseContent =
       'The hello_world kitchen in Porto serves fresh fish with local bread and sweet dessert after lunch today while guests enjoy stories music and warm light before they walk home happy tonight.';
     const doubleSpaced = validateSegments(
       [
         { kind: 'hook', text: hook },
-        { kind: 'body', text: baseBody },
-        { kind: 'body', text: baseBody.replace(/ /g, '  ') },
-        { kind: 'cta', text: cta },
+        { kind: 'content', text: baseContent },
+        { kind: 'content', text: baseContent.replace(/ /g, '  ') },
+        { kind: 'content', text: cta },
       ],
       'full_lipsync',
     );
@@ -314,9 +340,9 @@ describe('validateSegments', () => {
     const underscore = validateSegments(
       [
         { kind: 'hook', text: hook },
-        { kind: 'body', text: baseBody },
-        { kind: 'body', text: baseBody.replace('hello_world', 'helloworld') },
-        { kind: 'cta', text: cta },
+        { kind: 'content', text: baseContent },
+        { kind: 'content', text: baseContent.replace('hello_world', 'helloworld') },
+        { kind: 'content', text: cta },
       ],
       'full_lipsync',
     );
@@ -324,13 +350,13 @@ describe('validateSegments', () => {
   });
 
   it('still treats case and punctuation only differences as repeats', () => {
-    const baseBody =
+    const baseContent =
       'The hello_world kitchen in Porto serves fresh fish with local bread and sweet dessert after lunch today while guests enjoy stories music and warm light before they walk home happy tonight.';
     const result = validateSegments([
       { kind: 'hook', text: hook },
-      { kind: 'body', text: baseBody },
-      { kind: 'body', text: baseBody.toUpperCase().replace(/\.$/, '!') },
-      { kind: 'cta', text: cta },
+      { kind: 'content', text: baseContent },
+      { kind: 'content', text: baseContent.toUpperCase().replace(/\.$/, '!') },
+      { kind: 'content', text: cta },
     ]);
     expect(result.ok).toBe(false);
     if (result.ok) return;

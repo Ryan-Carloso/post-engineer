@@ -24,12 +24,12 @@ SEGMENTS = [
         "media": [{"url": f"https://e.com/0-{i}.jpg"} for i in range(3)],
     },
     {
-        "kind": "body",
+        "kind": "content",
         "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold at sunset before heading home through the old town streets.",
         "media": [{"url": f"https://e.com/1-{i}.jpg"} for i in range(5)],
     },
     {
-        "kind": "cta",
+        "kind": "content",
         "text": "Follow for more Porto walks every week.",
         "media": [{"url": "https://e.com/2-0.jpg"}],
     },

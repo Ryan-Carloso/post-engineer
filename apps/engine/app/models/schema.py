@@ -351,7 +351,8 @@ class ScriptSegment(BaseModel):
     # request validation instead of being dropped before validation.
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["hook", "body", "cta"]
+    # Takes (issue #577): hook first, content after; a CTA is a content take.
+    kind: Literal["hook", "content"]
     text: str
     media: Optional[list[SegmentMedia]] = Field(None, max_length=MAX_IMAGES_MODE_MEDIAS)
 

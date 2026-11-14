@@ -128,9 +128,9 @@ describe('parseInput', () => {
 });
 
 describe('buildGenerateBody', () => {
-  it('sends segments hook, body, cta in order with the idempotency key', () => {
+  it('sends segments hook, content, content in order with the idempotency key', () => {
     const body = buildGenerateBody(parseInput({ ...baseInput(), faceless: true }), 'apify-run-abc');
-    assert.deepEqual(body.options.segments.map((s) => s.kind), ['hook', 'body', 'cta']);
+    assert.deepEqual(body.options.segments.map((s) => s.kind), ['hook', 'content', 'content']);
     assert.equal(body.options.videoType, 'faceless');
     assert.equal(body.options.voiceId, 'chatterbox:kokoro_af_heart');
     assert.equal('faceless' in body.options, false);
@@ -208,7 +208,7 @@ describe('runActor', () => {
     const result = await promise;
     assert.equal(calls.length, 0);
     assert.equal(result.dryRun, true);
-    assert.deepEqual(result.request.options.segments.map((s) => s.kind), ['hook', 'body', 'cta']);
+    assert.deepEqual(result.request.options.segments.map((s) => s.kind), ['hook', 'content', 'content']);
     assert.match(logs[0], /dry run/);
   });
 
@@ -453,15 +453,15 @@ describe('images material', () => {
     const body = buildGenerateBody(parseInput(imagesInput(urls(4))));
     assert.deepEqual(body.options.segments, [
       { kind: 'hook', text: 'Stop scrolling.', media: [{ url: 'https://e.com/0.jpg' }] },
-      { kind: 'body', text: 'Short videos keep attention.', media: [{ url: 'https://e.com/1.jpg' }] },
-      { kind: 'body', text: 'They show a face early.', media: [{ url: 'https://e.com/2.jpg' }] },
-      { kind: 'cta', text: 'Follow for more.', media: [{ url: 'https://e.com/3.jpg' }] },
+      { kind: 'content', text: 'Short videos keep attention.', media: [{ url: 'https://e.com/1.jpg' }] },
+      { kind: 'content', text: 'They show a face early.', media: [{ url: 'https://e.com/2.jpg' }] },
+      { kind: 'content', text: 'Follow for more.', media: [{ url: 'https://e.com/3.jpg' }] },
     ]);
   });
 
   it('keeps the body as one segment without images for full lip sync', () => {
     const body = buildGenerateBody(parseInput({ ...baseInput(), personaId: 'p1', fullLipsync: true, images: undefined, body: 'One.\n\nTwo.' }));
-    assert.deepEqual(body.options.segments.map((s) => s.kind), ['hook', 'body', 'cta']);
+    assert.deepEqual(body.options.segments.map((s) => s.kind), ['hook', 'content', 'content']);
     assert.equal(body.options.segments.some((s) => 'media' in s), false);
   });
 

@@ -23,7 +23,7 @@ import { BLUESKY_CAPTION_MAX_GRAPHEMES, countBlueskyGraphemes } from './bluesky'
 export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue';
 
 // What the text is: a post body, or a video script (segments joined by
-// newlines, hook first, CTA last). A script is spoken, so hashtags do not
+// newlines, hook first, then content takes). A script is spoken, so hashtags do not
 // apply and the caption publish check would be vacuous.
 export type DraftKind = 'post' | 'script';
 export const DRAFT_KINDS: DraftKind[] = ['post', 'script'];

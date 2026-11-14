@@ -1,10 +1,11 @@
 """Tests for the mechanical script-segments contract (no LLM).
 
-The contract is one call = one video: segments is a list whose first
-segment is the hook, whose last segment is the CTA, and whose middle
-segments are the body. Validation is mechanical only: word counts,
-forbidden content, and shape. It never calls an LLM and never fixes
-the input silently.
+The contract is one call = one video: segments is an ordered list of
+takes whose first segment is the hook and whose later segments are all
+content. A CTA is just a content take, placed anywhere — there is no
+cta kind, no CTA count rule, and no CTA position rule. Validation is
+mechanical only: word counts, forbidden content, and shape. It never
+calls an LLM and never fixes the input silently.
 """
 
 from unittest.mock import MagicMock
@@ -26,7 +27,7 @@ def _hook(words=24):
     return base
 
 
-def _body():
+def _content():
     return (
         "Locals skip the famous house and walk two minutes to a smaller "
         "kitchen where the sauce recipe has not changed since nineteen "
@@ -35,15 +36,15 @@ def _body():
     )
 
 
-def _cta():
+def _cta_take():
     return "Save this video before your next trip to Porto."
 
 
 def _valid_segments():
     return [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body()},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _content()},
+        {"kind": "content", "text": _cta_take()},
     ]
 
 
@@ -54,13 +55,15 @@ def _word_count(text):
 def test_valid_segments_pass_and_join_to_script():
     result = script_segments.validate_segments(_valid_segments(), video_type="full_lipsync")
     assert result["hook_text"] == _hook()
-    assert result["cta_text"] == _cta()
-    assert result["total_words"] == _word_count(_hook()) + _word_count(_body()) + _word_count(
-        _cta()
+    assert result["content_texts"] == [_content(), _cta_take()]
+    assert "cta_text" not in result
+    assert "cta_words" not in result
+    assert result["total_words"] == _word_count(_hook()) + _word_count(_content()) + _word_count(
+        _cta_take()
     )
-    assert result["body_words"] >= 30
+    assert result["content_words"] >= 30
     joined = script_segments.segments_to_script(_valid_segments(), video_type="full_lipsync")
-    assert joined == f"{_hook()}\n\n{_body()}\n\n{_cta()}"
+    assert joined == f"{_hook()}\n\n{_content()}\n\n{_cta_take()}"
 
 
 def test_empty_segments_is_400():
@@ -78,31 +81,35 @@ def test_non_list_segments_is_400():
 
 def test_hook_must_be_first():
     segments = [
-        {"kind": "body", "text": _body()},
+        {"kind": "content", "text": _content()},
         {"kind": "hook", "text": _hook()},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
     assert exc_info.value.field == "segments.0.kind"
 
 
-def test_cta_must_be_last():
+def test_cta_take_may_sit_mid_video():
+    # Issue #577 acceptance: a CTA is just a content take, so it may
+    # sit anywhere after the hook — here in the middle — and the video
+    # still renders in take order.
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "cta", "text": _cta()},
-        {"kind": "body", "text": _body()},
+        {"kind": "content", "text": _cta_take()},
+        {"kind": "content", "text": _content()},
     ]
-    with pytest.raises(SegmentValidationError) as exc_info:
-        script_segments.validate_segments(segments, video_type="full_lipsync")
-    assert exc_info.value.field == "segments.2.kind"
+    result = script_segments.validate_segments(segments, video_type="full_lipsync")
+    assert result["content_texts"] == [_cta_take(), _content()]
+    joined = script_segments.segments_to_script(segments, video_type="full_lipsync")
+    assert joined == f"{_hook()}\n\n{_cta_take()}\n\n{_content()}"
 
 
-def test_exactly_one_hook_and_one_cta():
+def test_exactly_one_hook():
     segments = [
         {"kind": "hook", "text": _hook()},
         {"kind": "hook", "text": _hook()},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -112,8 +119,8 @@ def test_exactly_one_hook_and_one_cta():
 def test_empty_segment_text_is_400():
     segments = [
         {"kind": "hook", "text": "   "},
-        {"kind": "body", "text": _body()},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _content()},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -124,8 +131,8 @@ def test_placeholder_is_400():
     for bad in ("[insira o texto aqui]", "TODO write this", "lorem ipsum dolor"):
         segments = [
             {"kind": "hook", "text": _hook()},
-            {"kind": "body", "text": bad + " " + _body()},
-            {"kind": "cta", "text": _cta()},
+            {"kind": "content", "text": bad + " " + _content()},
+            {"kind": "content", "text": _cta_take()},
         ]
         with pytest.raises(SegmentValidationError) as exc_info:
             script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -135,8 +142,8 @@ def test_placeholder_is_400():
 def test_link_is_400():
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body() + " See https://example.com for more."},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _content() + " See https://example.com for more."},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -146,8 +153,8 @@ def test_link_is_400():
 def test_markdown_is_400():
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": "**Bold claim** " + _body()},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": "**Bold claim** " + _content()},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -157,8 +164,8 @@ def test_markdown_is_400():
 def test_emoji_is_400():
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body() + " \U0001f600"},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _content() + " \U0001f600"},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -181,8 +188,8 @@ def test_emoji_is_400():
 def test_emoji_rejected_across_all_ranges(emoji):
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body() + " " + emoji},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _content() + " " + emoji},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -202,8 +209,8 @@ def test_emoji_rejected_across_all_ranges(emoji):
 def test_boundary_chars_outside_emoji_ranges_pass(char):
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body() + " " + char},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _content() + " " + char},
+        {"kind": "content", "text": _cta_take()},
     ]
     script_segments.validate_segments(segments, video_type="full_lipsync")
 
@@ -211,8 +218,8 @@ def test_boundary_chars_outside_emoji_ranges_pass(char):
 def test_stage_direction_is_400():
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": "[pausa] " + _body()},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": "[pausa] " + _content()},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -222,8 +229,8 @@ def test_stage_direction_is_400():
 def test_hook_must_end_with_terminal_punctuation():
     segments = [
         {"kind": "hook", "text": _hook().rstrip(".")},
-        {"kind": "body", "text": _body()},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _content()},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -233,9 +240,9 @@ def test_hook_must_end_with_terminal_punctuation():
 def test_repeated_segment_is_400():
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body()},
-        {"kind": "body", "text": _body()},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _content()},
+        {"kind": "content", "text": _content()},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -245,8 +252,8 @@ def test_repeated_segment_is_400():
 def test_total_below_minimum_is_400():
     segments = [
         {"kind": "hook", "text": " ".join(["word"] * 20) + "."},
-        {"kind": "body", "text": " ".join(["word"] * 30) + "."},
-        {"kind": "cta", "text": "Save this video now please."},
+        {"kind": "content", "text": " ".join(["word"] * 30) + "."},
+        {"kind": "content", "text": "Save this video now please."},
     ]
     # Total is 55 words: below the 60-word minimum.
     assert (
@@ -261,45 +268,52 @@ def test_total_below_minimum_is_400():
 
 
 def test_total_above_maximum_is_400():
-    long_body = " ".join(["word"] * 170) + "."
+    long_content = " ".join(["word"] * 170) + "."
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": long_body},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": long_content},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
     assert exc_info.value.field == "segments"
 
 
-def test_body_below_minimum_is_400():
+def test_content_below_minimum_is_400():
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": "Short body text here."},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": "Short content text here."},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
     assert exc_info.value.field == "segments.1.text"
 
 
-def test_cta_word_range_is_400():
-    short_cta = [
+def test_short_content_take_is_allowed():
+    # Issue #577: there is no CTA word rule anymore — a two-word
+    # content take passes as long as the content total reaches 30
+    # words (35 + 2) and the video total reaches 60 (24 + 37).
+    segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body()},
-        {"kind": "cta", "text": "Save it."},
+        {"kind": "content", "text": " ".join(["word"] * 35) + "."},
+        {"kind": "content", "text": "Save it."},
     ]
-    with pytest.raises(SegmentValidationError) as exc_info:
-        script_segments.validate_segments(short_cta, video_type="full_lipsync")
-    assert exc_info.value.field == "segments.2.text"
-    long_cta = [
+    result = script_segments.validate_segments(segments, video_type="full_lipsync")
+    assert result["content_words"] == 37
+    assert result["total_words"] == 61
+
+
+def test_long_content_take_is_allowed():
+    # Same: a 21-word content take is fine — the old 5-20 CTA range
+    # does not apply to content takes.
+    segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body()},
-        {"kind": "cta", "text": " ".join(["word"] * 21) + "."},
+        {"kind": "content", "text": _content()},
+        {"kind": "content", "text": " ".join(["word"] * 21) + "."},
     ]
-    with pytest.raises(SegmentValidationError) as exc_info:
-        script_segments.validate_segments(long_cta, video_type="full_lipsync")
-    assert exc_info.value.field == "segments.2.text"
+    result = script_segments.validate_segments(segments, video_type="full_lipsync")
+    assert result["content_words"] == _word_count(_content()) + 21
 
 
 def test_max_segments_is_400():
@@ -307,8 +321,8 @@ def test_max_segments_is_400():
     # cap rule is what fires, not the total rule.
     segments = [{"kind": "hook", "text": " ".join(["word"] * 20) + "."}]
     for i in range(11):
-        segments.append({"kind": "body", "text": " ".join(["body"] * 12) + f" number {i}."})
-    segments.append({"kind": "cta", "text": "Save this video now please."})
+        segments.append({"kind": "content", "text": " ".join(["body"] * 12) + f" number {i}."})
+    segments.append({"kind": "content", "text": "Save this video now please."})
     assert len(segments) == 13
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -323,12 +337,12 @@ def test_max_medias_is_400():
     for i in range(7):
         segments.append(
             {
-                "kind": "body",
+                "kind": "content",
                 "text": " ".join(["body"] * 12) + f" number {i}.",
                 "media": [{"url": f"https://example.com/{i}.jpg"}],
             }
         )
-    segments.append({"kind": "cta", "text": "Save this video now please."})
+    segments.append({"kind": "content", "text": "Save this video now please."})
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
     assert exc_info.value.field == "segments"
@@ -339,11 +353,11 @@ def test_media_id_and_url_together_is_400():
     segments = [
         {"kind": "hook", "text": _hook()},
         {
-            "kind": "body",
-            "text": _body(),
+            "kind": "content",
+            "text": _content(),
             "media": [{"mediaId": "abc", "url": "https://example.com/x.jpg"}],
         },
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -353,8 +367,8 @@ def test_media_id_and_url_together_is_400():
 def test_media_with_neither_id_nor_url_is_400():
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body(), "media": [{}]},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _content(), "media": [{}]},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -364,8 +378,8 @@ def test_media_with_neither_id_nor_url_is_400():
 def test_media_with_unknown_key_is_400():
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body(), "media": [{"mediaId": "abc", "alt": "kitchen"}]},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _content(), "media": [{"mediaId": "abc", "alt": "kitchen"}]},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -383,12 +397,12 @@ def test_media_shape_error_precedes_media_cap():
             media = {"mediaId": "abc", "alt": "kitchen"}
         segments.append(
             {
-                "kind": "body",
+                "kind": "content",
                 "text": " ".join(["body"] * 12) + f" number {i}.",
                 "media": [media],
             }
         )
-    segments.append({"kind": "cta", "text": _cta()})
+    segments.append({"kind": "content", "text": _cta_take()})
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
     assert exc_info.value.field == "segments.2.media.0"
@@ -400,12 +414,12 @@ def test_a_segment_terms_field_is_rejected_as_unknown():
     segments = [
         {"kind": "hook", "text": _hook()},
         {
-            "kind": "body",
-            "text": _body(),
+            "kind": "content",
+            "text": _content(),
             "media": [{"url": "https://example.com/x.jpg"}],
             "terms": ["restaurant kitchen"],
         },
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -416,13 +430,13 @@ def test_a_segment_terms_field_is_rejected_as_unknown():
 def test_valid_media_shape_passes():
     segments = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body(), "media": [{"mediaId": "abc"}]},
+        {"kind": "content", "text": _content(), "media": [{"mediaId": "abc"}]},
         {
-            "kind": "body",
-            "text": _body() + " Second part.",
+            "kind": "content",
+            "text": _content() + " Second part.",
             "media": [{"url": "https://example.com/x.jpg"}],
         },
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _cta_take()},
     ]
     result = script_segments.validate_segments(segments, video_type="full_lipsync")
     assert result["media_count"] == 2
@@ -432,11 +446,11 @@ def _with_overlay(overlay):
     return [
         {"kind": "hook", "text": _hook()},
         {
-            "kind": "body",
-            "text": _body(),
+            "kind": "content",
+            "text": _content(),
             "media": [{"url": "https://example.com/x.jpg", "overlay": overlay}],
         },
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _cta_take()},
     ]
 
 
@@ -515,8 +529,8 @@ def test_media_overlay_needs_a_photo_to_sit_on():
 def test_hook_word_guard_below_15_is_400():
     segments = [
         {"kind": "hook", "text": "Short hook here today."},
-        {"kind": "body", "text": _body()},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _content()},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -527,8 +541,8 @@ def test_hook_word_guard_above_40_is_400():
     long_hook = " ".join(["word"] * 41) + "."
     segments = [
         {"kind": "hook", "text": long_hook},
-        {"kind": "body", "text": _body()},
-        {"kind": "cta", "text": _cta()},
+        {"kind": "content", "text": _content()},
+        {"kind": "content", "text": _cta_take()},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -587,10 +601,10 @@ def _photos(count, prefix):
 def _images_segments(media=True):
     segments = [
         {"kind": "hook", "text": _hook(), "media": _photos(3, "h")},
-        {"kind": "body", "text": _body(), "media": _photos(6, "b")},
+        {"kind": "content", "text": _content(), "media": _photos(6, "b")},
         {
-            "kind": "cta",
-            "text": _cta(),
+            "kind": "content",
+            "text": _cta_take(),
             "media": [{"mediaId": "a" * 32 + ".jpg"}, {"url": "https://example.com/c.jpg"}],
         },
     ]
@@ -640,14 +654,14 @@ def _many_media_segments(count):
     for i in range(count):
         segments.append(
             {
-                "kind": "body",
+                "kind": "content",
                 "text": " ".join(["body"] * 12) + f" number {i}.",
                 "media": [{"url": f"https://example.com/{i}.jpg"}],
             }
         )
     segments.append(
         {
-            "kind": "cta",
+            "kind": "content",
             "text": "Save this video now please.",
             "media": [{"url": "https://example.com/c.jpg"}],
         }
@@ -705,7 +719,7 @@ def test_the_six_media_cap_still_holds_for_full_lipsync():
     assert exc_info.value.fix == "Remove medias until there are at most 6."
 
 
-def test_images_cap_fix_names_merging_when_minimums_exceed_the_cap():  # Hook 25 words + six 25-word body segments + a 20-word CTA = 195
+def test_images_cap_fix_names_merging_when_minimums_exceed_the_cap():  # Hook 25 words + six 25-word content segments + a 20-word content take = 195
     # words: every segment meets its density minimum (4, 4 x 6, 3 = 31
     # photos) yet the 30-photo cap fires, and removing any photo
     # re-triggers density. The cap fix must name the escape (merge
@@ -714,10 +728,10 @@ def test_images_cap_fix_names_merging_when_minimums_exceed_the_cap():  # Hook 25
     segments = [
         {"kind": "hook", "text": " ".join(["hook"] * 25) + ".", "media": _photos(4, "h")},
         *[
-            {"kind": "body", "text": " ".join([f"body{i}"] * 25), "media": _photos(4, f"b{i}")}
+            {"kind": "content", "text": " ".join([f"body{i}"] * 25), "media": _photos(4, f"b{i}")}
             for i in range(6)
         ],
-        {"kind": "cta", "text": " ".join(["cta"] * 20), "media": _photos(3, "c")},
+        {"kind": "content", "text": " ".join(["cta"] * 20), "media": _photos(3, "c")},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments)
@@ -729,10 +743,10 @@ def test_images_cap_fix_names_merging_when_minimums_exceed_the_cap():  # Hook 25
 def test_legacy_media_list_wraps_a_single_object_media():
     segments = [
         {"kind": "hook", "text": "Hook text."},
-        {"kind": "body", "text": "Body text.", "media": {"mediaId": "abc.jpg"}},
-        {"kind": "cta", "text": "Cta text.", "media": [{"url": "https://example.com/x.jpg"}]},
-        {"kind": "body", "text": "No media here."},
-        {"kind": "body", "text": "Null media.", "media": None},
+        {"kind": "content", "text": "Body text.", "media": {"mediaId": "abc.jpg"}},
+        {"kind": "content", "text": "Cta text.", "media": [{"url": "https://example.com/x.jpg"}]},
+        {"kind": "content", "text": "No media here."},
+        {"kind": "content", "text": "Null media.", "media": None},
     ]
     wrapped = script_segments.legacy_media_list(segments)
     assert wrapped[1]["media"] == [{"mediaId": "abc.jpg"}]
@@ -740,6 +754,22 @@ def test_legacy_media_list_wraps_a_single_object_media():
     assert "media" not in wrapped[3]
     assert wrapped[4]["media"] is None
     assert script_segments.legacy_media_list("not a list") == "not a list"
+
+
+def test_legacy_media_list_maps_old_kinds_to_content():
+    # Rows stored before the takes contract carry kind body/cta;
+    # persisted-row dispatch maps both to content, so a prepaid slot
+    # renders instead of failing on the renamed kind. Fresh requests
+    # still reject those kinds in validate_segments.
+    segments = [
+        {"kind": "hook", "text": "Hook text."},
+        {"kind": "body", "text": "Body text."},
+        {"kind": "cta", "text": "Cta text."},
+    ]
+    wrapped = script_segments.legacy_media_list(segments)
+    assert [segment["kind"] for segment in wrapped] == ["hook", "content", "content"]
+    assert wrapped[1]["text"] == "Body text."
+    assert wrapped[2]["text"] == "Cta text."
 
 
 def test_fresh_single_object_media_is_still_rejected():
@@ -758,12 +788,12 @@ def test_segments_to_script_forwards_full_lipsync_to_validation():
     # images rules reject but full lip-sync allows.
     sparse = [
         {"kind": "hook", "text": _hook()},
-        {"kind": "body", "text": _body(), "media": _photos(1, "b")},
-        {"kind": "cta", "text": _cta(), "media": _photos(1, "c")},
+        {"kind": "content", "text": _content(), "media": _photos(1, "b")},
+        {"kind": "content", "text": _cta_take(), "media": _photos(1, "c")},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.segments_to_script(sparse)
     assert exc_info.value.field == "segments.0.media"
     assert script_segments.segments_to_script(sparse, video_type="full_lipsync") == "\n\n".join(
-        [_hook(), _body(), _cta()]
+        [_hook(), _content(), _cta_take()]
     )

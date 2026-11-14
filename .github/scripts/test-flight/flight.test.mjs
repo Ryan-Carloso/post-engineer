@@ -30,8 +30,8 @@ const TEST_SCRIPT = {
   source: 'llm',
   segments: [
     { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly.' },
-    { kind: 'body', text: 'Start in Ribeira in the morning, walk along the water, cross the Dom Luis I bridge on the lower deck, and look back at the coloured houses from the Gaia side.' },
-    { kind: 'cta', text: 'Save this one day plan and tell me which stop you would skip first.' },
+    { kind: 'content', text: 'Start in Ribeira in the morning, walk along the water, cross the Dom Luis I bridge on the lower deck, and look back at the coloured houses from the Gaia side.' },
+    { kind: 'content', text: 'Save this one day plan and tell me which stop you would skip first.' },
   ],
 };
 

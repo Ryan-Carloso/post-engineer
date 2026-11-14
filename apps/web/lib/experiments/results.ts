@@ -2,7 +2,7 @@
 // Paired A/B experiment results (issue #476). Pure: the route loads the
 // rows, this module compares them.
 //
-// Inside a pair both videos share topic, body and CTA, so comparing the
+// Inside a pair both videos share topic and content, so comparing the
 // two videos of one pair isolates the tested segment. Comparisons are per
 // provider (YouTube views never mix with Bluesky views) and the winner of
 // a pair is the variant with more views. An exact two-sided sign test over

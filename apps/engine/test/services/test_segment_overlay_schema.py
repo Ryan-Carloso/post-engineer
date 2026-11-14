@@ -21,7 +21,7 @@ def test_overlay_limits_come_from_the_segments_validator():
 
 def test_segment_media_carries_an_overlay_through_a_request_dump():
     segment = ScriptSegment(
-        kind="body",
+        kind="content",
         text="Where the river meets the sea.",
         media=[
             {"url": "https://example.com/x.jpg", "overlay": {"title": "Sushi", "badge": "EUR 35"}}
@@ -67,8 +67,8 @@ def _request_segments(with_media):
     cta = "Save this video before your next trip to Porto."
     segments = [
         {"kind": "hook", "text": hook},
-        {"kind": "body", "text": body},
-        {"kind": "cta", "text": cta},
+        {"kind": "content", "text": body},
+        {"kind": "content", "text": cta},
     ]
     if with_media:
         counts = (3, 6, 2)

@@ -24,7 +24,7 @@ export const SegmentOverlayShape = z
   .strict();
 
 export const ScriptSegmentShape = {
-  kind: z.enum(['hook', 'body', 'cta']).describe('Segment role: hook first, body in the middle, CTA last. Exactly one hook and one CTA.'),
+  kind: z.enum(['hook', 'content']).describe('Segment role: hook first, content after. Exactly one hook; a CTA is just a content take, placed anywhere.'),
   text: z.string().min(1, 'Each segment text must be non-empty').describe('Spoken text only: no placeholders, links, markdown, emoji or stage directions.'),
   media: z
     .array(z.object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), overlay: SegmentOverlayShape.optional() }).strict())
@@ -52,7 +52,7 @@ export const GeneratePersonaVideoShape = {
     .array(z.object(ScriptSegmentShape).strict())
     .min(1, 'Provide at least one segment')
     .max(12, 'At most 12 segments per video')
-    .describe('The complete script as segments: first hook, then body segments, last CTA. Total 60-200 words, body at least 30, CTA 5-20, hook 15-40 words before TTS. The hook must end with terminal punctuation. No LLM expands this script.'),
+    .describe('The complete script as segments (takes): first hook, then content takes in order. Total 60-200 words, content at least 30, hook 15-40 words before TTS. The hook must end with terminal punctuation. A CTA is just a content take, placed anywhere. No LLM expands this script.'),
   title: z.string().min(1, 'title must be a non-empty string').max(100, 'title must be at most 100 characters').describe('Video title: the slot label sent to the web route (one call is one video).'),
   // Agent-supplied video description (issue #542 follow-up): REQUIRED —
   // the publish copy, sent top-level to the web route. The 5000-char cap
@@ -105,7 +105,7 @@ export const GeneratePersonaVideoShape = {
   timezone: z.string().min(1).default('UTC').describe('IANA timezone for a naive startAt and the HH:MM times, e.g. "Europe/Lisbon". Defaults to UTC.'),
   options: z.object(GeneratePersonaVideoOptionsShape).optional().describe('Generation options applied to this video.'),
   idempotencyKey: z.string().min(1).optional().describe('Idempotency key: retrying the call with the same key returns the original schedule (replayed: true) instead of generating again.'),
-  experiment: ExperimentLinkShape.optional().describe('Join a paired A/B experiment (create_experiment): this video is one variant of one pair. The server rejects it when the pair partner differs in: the same providers and accounts, the same title, voice (id and audio URL), video type, video aspect and layout, paragraph number, face quality, language, niche and CTA text, and identical body and CTA segments, with a different hook. The pinned options.imageId is not stored, so it is not compared: pass the same imageId (or none) to both videos yourself. Prefer add_experiment_pair, which creates both videos of a pair.'),
+  experiment: ExperimentLinkShape.optional().describe('Join a paired A/B experiment (create_experiment): this video is one variant of one pair. The server rejects it when the pair partner differs in: the same providers and accounts, the same title, voice (id and audio URL), video type, video aspect and layout, paragraph number, face quality, language, niche and CTA text, and identical content segments, with a different hook. The pinned options.imageId is not stored, so it is not compared: pass the same imageId (or none) to both videos yourself. Prefer add_experiment_pair, which creates both videos of a pair.'),
   // Telemetry-only: the recipe the script came from. Never forwarded in the
   // request body (handleGeneratePersonaVideo builds it field by field);
   // recipe-session.ts sends it as the X-MCP-Recipe header.
