@@ -3,11 +3,18 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { trackApiEvent } from '@/lib/analytics';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { apiErrorResponse } from '@/lib/api-error';
-import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import {
+  withApiErrorReporting,
+  resolveReportingUserId,
+  attachApiErrorProperties,
+} from '@/lib/api-error-reporting';
 import { logger } from '@/lib/logger';
-import { batchChargeId, batchSlotRefundKey } from '@/lib/billing/batch-discount';
+import { batchChargeId } from '@/lib/billing/batch-discount';
+import { emitRefundIssued, refundSlotTokens } from '@/lib/billing/refund-tokens';
+import { scrubSecrets } from '@/lib/scrub';
 import { CANCEL_REFUND_REASON, refundsAfterClawback } from './batch-clawback';
 
 //---------------
@@ -19,16 +26,21 @@ import { CANCEL_REFUND_REASON, refundsAfterClawback } from './batch-clawback';
 // unpublished slot (pending, generating, ready) before the schedule row: generate-and-schedule
 // dispatches those slots immediately, and the publisher posts from the slot
 // row, so deleting only the schedule would leave a post that still goes out.
-// Prepaid tokens for the removed slots are refunded: each slot gives back
-// its stored `charged_tokens` (migration 045), never a recomputed price, and
-// a slot charged 0 has nothing to refund. A cancelled video of a batch
-// gives back the batch discount it no longer earns (batch-clawback.ts):
-// the cancelled slots are refunded in full and the same amount is pulled
-// back out of the free slot's discount credit, in one transaction, so a
-// later refund of that re-charged video still fits under the charge cap.
-// A failed free slot is not clawed back. A soft refund failure
-// is logged and reported on the response; the slot stays deleted. A slot
-// already `publishing`, `published`, or `failed` is left alone.
+// Only slots whose generation never ran are refunded (status `pending`
+// with no task): each gives back its stored `charged_tokens`
+// (migration 045), never a recomputed price, and a slot charged 0 has
+// nothing to refund. A slot the engine already accepted (`generating`) or
+// finished (`ready`) keeps its charge — the GPU cost is already sunk —
+// but it is still deleted, so the post cannot go out. A cancelled video
+// of a batch gives back the batch discount it no longer earns
+// (batch-clawback.ts): the refundable slots are refunded in full and the
+// same amount is pulled back out of the free slot's discount credit, in
+// one transaction, so a later refund of that re-charged video still fits
+// under the charge cap. A failed free slot is not clawed back. A soft
+// refund failure is logged and reported on the response; the slot stays
+// deleted. A slot already `publishing`, `published`, or `failed` is left
+// alone. Every removed slot gets a response entry stating whether it was
+// refunded and why.
 //
 // One schedule is one generate-and-schedule batch. The engine
 // (fill-schedule-scheduler thread, starts with the app) reads these tables
@@ -137,7 +149,17 @@ interface CancelRefund {
   slotId: string;
   refunded: boolean;
   alreadyRefunded: boolean;
+  /** Why this slot got its tokens back — or why it did not. */
+  reason: CancelRefundReason;
 }
+
+type CancelRefundReason =
+  | 'not_generated'
+  | 'already_generated'
+  | 'already_refunded'
+  | 'not_charged'
+  | 'refund_failed'
+  | 'discount_withheld';
 
 function narrowCancelSlot(value: unknown): ScheduleCancelSlot | null {
   if (typeof value !== 'object' || value === null) return null;
@@ -162,6 +184,17 @@ function narrowCancelSlot(value: unknown): ScheduleCancelSlot | null {
 
 function isCancellableStatus(status: string): boolean {
   return (CANCELLABLE_SLOT_STATUSES as readonly string[]).includes(status);
+}
+
+/**
+ * True when a slot's generation never ran: still `pending` with no engine
+ * task. Anything else means the engine accepted the job (or finished it),
+ * so the GPU cost is already sunk and the charge stands. A `pending` slot
+ * that somehow carries a task id fails closed the same way — the engine
+ * may have accepted the job before the status write landed.
+ */
+function neverGenerated(slot: ScheduleCancelSlot): boolean {
+  return slot.status === 'pending' && slot.taskId === null;
 }
 
 async function deleteHandler(request: Request): Promise<NextResponse> {
@@ -245,6 +278,14 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
       scheduleId,
       userId: user.id,
     });
+    // The slots are gone with no refund: leave a plain event (not just a
+    // log line) so the skipped refund is findable by the daily billing
+    // reconcile instead of surfacing only when the user asks.
+    trackApiEvent('cancel_refund_skipped', {
+      scheduleId,
+      reason: 'slots_reread_failed',
+      userId: user.id,
+    });
     return errorResponse(
       500,
       'Unpublished slots were removed but could not be confirmed, so prepaid tokens were not refunded.',
@@ -263,13 +304,27 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   // remainingIds and must keep its charge — the post may still go out.
   const removed = cancellable.filter((slot) => !remainingIds.has(slot.id));
 
-  const clawback = await refundsAfterClawback(supabase, user.id, removed, scheduleId);
+  // Only slots whose generation never ran go to the clawback: the
+  // settlement refunds the slots it is given, so passing a generated slot
+  // would pay back GPU cost that is already sunk. A generated slot keeps
+  // its charge and never enters the settlement — cancelling it cannot claw
+  // the free video's discount either, because the charges that earned it
+  // still stand.
+  const refundable = removed.filter(neverGenerated);
+  const clawback = await refundsAfterClawback(supabase, user.id, refundable, scheduleId);
   if (!clawback.ok) {
     // The slots are gone but the batch could not be re-checked: refunding
     // blind could leave a free batch video behind, so no refund is issued
     // and the schedule row stays (same contract as the re-read failure).
     logger.error('[api/schedule] cancel could not re-check the batch discount; refunds skipped', clawback.error, {
       scheduleId,
+      userId: user.id,
+    });
+    // Same trace as the re-read failure above: the slots are gone with no
+    // refund, and the reconcile needs a findable record of it.
+    trackApiEvent('cancel_refund_skipped', {
+      scheduleId,
+      reason: 'batch_recheck_failed',
       userId: user.id,
     });
     return errorResponse(
@@ -282,59 +337,126 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   }
 
   const refunds: CancelRefund[] = [];
+  // Tokens actually returned by this call (landed refunds only). An
+  // already-refunded slot was returned by an earlier call, so it adds
+  // nothing here — counting it would double-count across retries.
+  let refundedTokens = 0;
   const batchGenerationId = batchChargeId(scheduleId);
   for (const slot of removed) {
+    // A slot whose generation already ran keeps its charge: the GPU cost
+    // is sunk, so there is nothing to give back. The slot is already
+    // deleted above — the post cannot go out — but no refund RPC runs.
+    if (!neverGenerated(slot)) {
+      refunds.push({ slotId: slot.id, refunded: false, alreadyRefunded: false, reason: 'already_generated' });
+      continue;
+    }
     if (clawback.settledSlotIds.has(slot.id)) {
       // settle_batch_clawback already refunded this slot (and pulled the
       // discount back). Refunding the net again would pay it twice.
+      // A charged-0 slot was never in p_refunds, so the settlement reports
+      // no outcome for it by design — there is nothing to confirm, and
+      // the reason is not_charged, not a failed refund.
+      if (slot.chargedTokens === 0) {
+        refunds.push({ slotId: slot.id, refunded: false, alreadyRefunded: false, reason: 'not_charged' });
+        continue;
+      }
       const net = clawback.refundBySlot.get(slot.id) ?? 0;
       const outcome = clawback.settledBySlot.get(slot.id);
-      if (net > 0 && outcome) {
-        if (!outcome.refunded && !outcome.alreadyRefunded) {
-          logger.error('[api/schedule] cancel refund failed', outcome, {
-            scheduleId,
-            slotId: slot.id,
-            userId: user.id,
-          });
-        }
+      if (outcome === undefined) {
+        // The settlement claims the slot but reports no outcome: the
+        // tokens cannot be confirmed as moved, so say so loudly.
+        logger.error('[api/schedule] cancel refund missing settlement outcome', {
+          scheduleId,
+          slotId: slot.id,
+          userId: user.id,
+        });
+        refunds.push({ slotId: slot.id, refunded: false, alreadyRefunded: false, reason: 'refund_failed' });
+        continue;
+      }
+      if (net === 0) {
+        // Fully withheld: the settlement refunded the gross charge and
+        // pulled it all back into the free slot's discount, so the user
+        // keeps nothing — but the slot still gets an entry saying why.
         refunds.push({
           slotId: slot.id,
-          refunded: outcome.refunded,
+          refunded: false,
           alreadyRefunded: outcome.alreadyRefunded,
+          reason: 'discount_withheld',
+        });
+        continue;
+      }
+      if (!outcome.refunded && !outcome.alreadyRefunded) {
+        logger.error('[api/schedule] cancel refund failed', outcome, {
+          scheduleId,
+          slotId: slot.id,
+          userId: user.id,
+        });
+        refunds.push({ slotId: slot.id, refunded: false, alreadyRefunded: false, reason: 'refund_failed' });
+        continue;
+      }
+      if (outcome.refunded) {
+        refundedTokens += net;
+        emitRefundIssued(user.id, {
+          kind: 'schedule_cancelled',
+          amount: net,
+          reason: CANCEL_REFUND_REASON,
+          batchGenerationId,
+          scheduleId,
+          slotId: slot.id,
+          engineTaskId: slot.taskId,
         });
       }
+      refunds.push({
+        slotId: slot.id,
+        refunded: outcome.refunded,
+        alreadyRefunded: outcome.alreadyRefunded,
+        reason: outcome.refunded ? 'not_generated' : 'already_refunded',
+      });
       continue;
     }
     const amount = clawback.refundBySlot.get(slot.id) ?? slot.chargedTokens;
     // Nothing to give back: a free video (charged 0), or a refund the batch
     // clawback fully withheld. The RPC rejects a non-positive amount.
-    if (amount === 0) continue;
-    // The engine task is already running (GPU spent). The user gets no
-    // post, so the prepaid charge is refunded — charging for a cancelled
-    // post is the worse error. The key matches the dispatch-failure refund
-    // so a slot that was already refunded is not credited twice.
-    const { data: refundData, error: refundError } = await supabase.rpc('refund_batch_tokens', {
-      p_user_id: user.id,
-      p_batch_generation_id: batchGenerationId,
-      p_refund_key: batchSlotRefundKey(scheduleId, slot.id),
-      p_amount: amount,
-      p_reason: CANCEL_REFUND_REASON,
-      p_engine_task_id: slot.taskId,
+    if (amount === 0) {
+      refunds.push({ slotId: slot.id, refunded: false, alreadyRefunded: false, reason: 'not_charged' });
+      continue;
+    }
+    // The shared helper moves the tokens (same key the dispatch-failure
+    // refund uses, so a slot already refunded is not credited twice) and
+    // emits refund_issued on a landed refund.
+    const { refunded, alreadyRefunded, error: refundError } = await refundSlotTokens({
+      supabase,
+      userId: user.id,
+      scheduleId,
+      slotId: slot.id,
+      amount,
+      reason: CANCEL_REFUND_REASON,
+      kind: 'schedule_cancelled',
+      engineTaskId: slot.taskId,
     });
-    const payload = (refundData ?? {}) as { refunded?: unknown; already_refunded?: unknown };
-    const alreadyRefunded = payload.already_refunded === true;
-    const refunded = payload.refunded === true;
     if (refundError || (!refunded && !alreadyRefunded)) {
       // False from the RPC is a real failure (billing rule): the slot is
       // gone, the charge may still be standing. Loud log, keep going — the
       // publish is already stopped, and the response tells the caller.
-      logger.error('[api/schedule] cancel refund failed', refundError ?? payload, {
+      // The log keeps the raw RPC payload shape so the failure stays
+      // greppable next to the engine's identical log line.
+      logger.error('[api/schedule] cancel refund failed', refundError ?? { refunded, already_refunded: alreadyRefunded }, {
         scheduleId,
         slotId: slot.id,
         userId: user.id,
       });
+      refunds.push({ slotId: slot.id, refunded: false, alreadyRefunded: false, reason: 'refund_failed' });
+      continue;
     }
-    refunds.push({ slotId: slot.id, refunded, alreadyRefunded });
+    if (refunded) {
+      refundedTokens += amount;
+    }
+    refunds.push({
+      slotId: slot.id,
+      refunded,
+      alreadyRefunded,
+      reason: refunded ? 'not_generated' : 'already_refunded',
+    });
   }
 
   const { error: deleteError } = await supabase
@@ -352,7 +474,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
       { cause: deleteError },
     );
   }
-  return NextResponse.json({
+  const response = NextResponse.json({
     success: true,
     cancelledSlotIds: removed.map((slot) => slot.id),
     refunds,
@@ -361,6 +483,12 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
       0,
     ),
   });
+  // The wrapper never reads the body: attach the cancel facts so the
+  // schedule_deleted event carries them. attachApiErrorProperties needs
+  // pre-scrubbed values (the success path never scrubs), and the count
+  // travels as `refunded` — the scrubber redacts every `token*` key.
+  attachApiErrorProperties(response, scrubSecrets({ scheduleId, refunded: refundedTokens }));
+  return response;
 }
 
 //---------------

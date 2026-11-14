@@ -34,7 +34,7 @@ export const CancelScheduleShape = {
     .string()
     .min(1, 'scheduleId is required')
     .describe(
-      'The ID of the schedule to cancel. Unpublished slots (pending, generating, or ready) are removed and their prepaid tokens are refunded. A post already publishing or published is not recalled.',
+      'The ID of the schedule to cancel. Unpublished slots (pending, generating, or ready) are removed. Only slots whose generation never ran get their prepaid tokens back — a generating or ready slot keeps its charge, because the GPU cost is already spent. A post already publishing or published is not recalled.',
     ),
 };
 

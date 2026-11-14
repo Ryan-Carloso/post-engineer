@@ -253,7 +253,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
 
   server.tool(
     'cancel_schedule',
-    'Cancel (delete) an automation schedule by its schedule ID. Unpublished slots (pending, generating, or ready) are removed so they cannot publish, and their prepaid tokens are refunded. A post already publishing or already published is not recalled. Use list_schedules to find the ID.',
+    'Cancel (delete) an automation schedule by its schedule ID. Unpublished slots (pending, generating, or ready) are removed so they cannot publish. Only slots whose generation never ran get their prepaid tokens back — a slot the engine already accepted (generating) or a ready video keeps its charge, because the GPU cost is already spent. A post already publishing or already published is not recalled. Use list_schedules to find the ID.',
     CancelScheduleShape, DESTRUCTIVE,
     withTracking('cancel_schedule', async (args) => {
       return handleCancelSchedule(apiClient, args);
