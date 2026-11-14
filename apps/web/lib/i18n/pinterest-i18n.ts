@@ -12,17 +12,11 @@ export const pinterestStrings = {
       pinterestLabel: 'Pinterest',
       pinterestDescription: 'Publish video Pins to your Pinterest boards.',
     },
-    apiKeys: {
-      toolDescListPinterestBoards: 'List Pinterest boards',
-    },
   },
   pt: {
     accounts: {
       pinterestLabel: 'Pinterest',
       pinterestDescription: 'Publique Pins de vídeo nos seus quadros do Pinterest.',
-    },
-    apiKeys: {
-      toolDescListPinterestBoards: 'Liste quadros do Pinterest',
     },
   },
 };

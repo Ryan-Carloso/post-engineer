@@ -70,17 +70,19 @@ describe('listServerTools', () => {
     const server = createPostEngineerMcpServer(new PostEngineerClient({ apiKey: 'measure-only' }), 'stdio');
     const tools = await listServerTools(server);
     const names = tools.map((entry) => entry.name);
-    expect(tools.length).toBeGreaterThan(30);
+    expect(tools).toHaveLength(16);
     expect(new Set(names).size).toBe(names.length);
-    expect(names).toContain('generate_persona_video');
+    expect(names).toContain('generate_video');
     // Each tool carries a usable input schema, which is what makes up most of the payload.
     for (const entry of tools) expect(entry.inputSchema.type).toBe('object');
   });
 
-  it('lists the remote (http) tool set when asked, which differs from stdio', async () => {
+  it('lists the remote (http) tool set when asked, which offers fewer actions than stdio', async () => {
     const stdio = await listServerTools(createPostEngineerMcpServer(new PostEngineerClient({ apiKey: 'measure-only' }), 'stdio'));
     const http = await listServerTools(createPostEngineerMcpServer(new PostEngineerClient({ apiKey: 'measure-only' }), 'http'));
-    expect(http.map((entry) => entry.name)).not.toEqual(stdio.map((entry) => entry.name));
+    expect(http.map((entry) => entry.name)).toEqual(stdio.map((entry) => entry.name));
+    expect(JSON.stringify(http)).not.toEqual(JSON.stringify(stdio));
+    expect(summarizeTools(http).totalBytes).toBeLessThan(summarizeTools(stdio).totalBytes);
   });
 
   it('follows nextCursor until the last page, so a paginated tools/list is counted whole', async () => {

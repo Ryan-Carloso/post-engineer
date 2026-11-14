@@ -32,16 +32,16 @@ credits is billed by Modal.
 ## Remote (HTTP) surface
 
 With `--http-transport` the same server speaks Streamable HTTP, but it
-never reads files from the host it runs on: `upload_media`,
-`add_persona_image` and `publish_video_direct` are not registered, and
-`create_persona`, `update_persona` and `create_cloned_voice` accept only
+never reads files from the host it runs on: `media (action: upload)`,
+`persona_media (action: add_image)` and `publish_video (action: from_file)` are not registered, and
+`personas (action: create)`, `personas (action: update)` and `voices (action: create_clone)` accept only
 public URLs (`avatarUrl` / `audioUrl`) — no `avatarPath`, `audioPath` or
 library image files. Local paths stay available on the default stdio
 server, where the disk is the agent's own machine. Signed upload
-replaces them on the remote surface: `create_video_upload` mints a
+replaces them on the remote surface: `publish_video (action: create_upload)` mints a
 short-lived signed URL, the caller PUTs the video bytes to it directly,
-`complete_video_upload` verifies the stored bytes, and
-`publish_uploaded_video` publishes by id (single-use).
+`publish_video (action: complete_upload)` verifies the stored bytes, and
+`publish_video (action: publish_upload)` publishes by id (single-use).
 
 ### Hosted endpoint and ChatGPT
 
@@ -51,10 +51,12 @@ The hosted remote endpoint is `https://post-engineer.com/mcp`
 a remote MCP client — including ChatGPT, which requires a public HTTPS
 endpoint, OAuth, and tool annotations — at that URL and sign in; no
 local install or API key is needed. Every tool carries MCP annotations
-(`readOnlyHint` for `list_*`/`get_*`/`check_*`/`validate_script`/
-`score_draft`, `destructiveHint` for `delete_*`/publish/disconnect/
-cancel tools, `openWorldHint` throughout) so annotation-aware clients
-can auto-approve reads and confirm writes. The stdio package above
+(`readOnlyHint` for `video_tasks`/`posts`/`insights`/`billing`/`prompts`/
+`check_script`, `destructiveHint` for `personas`/`persona_media`/`voices`/
+`accounts`/`schedules`/`publish_video`/`cancel_video`, `openWorldHint`
+throughout) so annotation-aware clients can auto-approve reads and confirm
+writes. Annotations are per tool, so a tool with a destructive action is
+destructive for all its actions. The stdio package above
 remains fully supported for local agents.
 
 ### Deployment (remote HTTP service)
@@ -80,9 +82,9 @@ No script content, media or credentials are sent. The server itself never
 contacts any analytics service.
 
 To measure whether agents use the recipes, the requests of the recipe-aware
-tools (`list_prompts`, `get_prompt`, `create_persona`, `list_personas`,
-`list_social_accounts`, `get_token_balance`, `validate_script`,
-`generate_persona_video`) also carry:
+tools (`prompts (action: list)`, `prompts (action: get)`, `personas (action: create)`, `personas (action: list)`,
+`accounts (action: list)`, `billing (action: balance)`, `check_script (action: validate)`,
+`generate_video`) also carry:
 
 | Header | Value |
 | --- | --- |
@@ -90,9 +92,9 @@ tools (`list_prompts`, `get_prompt`, `create_persona`, `list_personas`,
 | `X-MCP-Transport` | `stdio` or `http` |
 | `X-MCP-Nudged-By` | The last tool whose result showed the recipe nudge, or `none` |
 | `X-MCP-Recipes-Known` | `true` once the agent listed or fetched a recipe |
-| `X-MCP-Recipe-Fetched` | The last recipe slug `get_prompt` returned, or `none` |
+| `X-MCP-Recipe-Fetched` | The last recipe slug `prompts (action: get)` returned, or `none` |
 | `X-MCP-Script-Rejections` | Scripts the local validator rejected so far in the session |
-| `X-MCP-Recipe` | The recipe slug of this call (`get_prompt`'s slug, `generate_persona_video`'s `recipe`) |
+| `X-MCP-Recipe` | The recipe slug of this call (`prompts (action: get)`'s slug, `generate_video`'s `recipe`) |
 
 The web API records them as `mcp_tool_called` properties; a slug that is not
 a hub slug is recorded as `unknown`.
@@ -176,84 +178,71 @@ Run it before and after a change to tool schemas and put both outputs in the PR.
 
 ## Tools
 
-- `list_personas`: list existing personas.
-- `list_voices`: list available persona voices (live catalog: 65 English house voices with `gender`/`accent`/`kind`, plus your ready clones). Each voice has a `description` of how it sounds. Optional filters: `gender` (`female`|`male`), `origin` (`us`|`gb`|`character`), `search` (words matched in name/description, e.g. `"deep calm"`). The response never contains `openrouter:` or `elevenlabs:` ids — the picker is house voices + your clones only.
-- `list_cloned_voices`: list your per-user Chatterbox voice clones (status and `voice_id` when ready).
-- `create_cloned_voice`: register a voice clone from a short reference recording — exactly one of `audioUrl` (HTTPS URL) or `audioPath` (local `.mp3`/`.wav`/`.m4a`/`.webm` file, max 20MB, checked before it is read; errors name only the file, never the full path) (requires `consent: true` and `denoise`: `true` cleans background noise first, `false` keeps the original).
-- `get_cloned_voice`: get one voice clone by id — poll its `status` after `create_cloned_voice` until `ready` (then `voice_id` is set) or `failed`.
-- `delete_cloned_voice`: delete a voice clone by id.
-- `preview_cloned_voice`: synthesize a short MP3 preview for a ready clone (returns base64 audio). Optional `text` (1-300 chars, English) makes the clone speak your words instead of the fixed sample; previews are free and limited to 10 per user per day.
-- `preview_house_voice`: synthesize a short MP3 preview for a house voice from `list_voices` (returns base64 audio). Optional `text` (1-300 chars, English) makes the voice speak your words instead of the fixed sample; previews are free and limited to 10 per user per day.
-- `list_faces`: list default/stock persona faces (live catalog from `/api/persona/faces`). Each item has `id`, `url`, `name`, `gender`, `age` (single number, e.g. 23), `ethnicity`, `hair`, and `description` (English) so agents can choose without the photo; pass a face `url` as `avatarUrl` on `create_persona`.
-- `create_persona`: create an AI persona (avatar, voice, language, niche). A face is REQUIRED, from exactly one source: `avatarUrl` (a public image URL or a `list_faces` url) or `avatarPath` (a local JPG/PNG/WebP file, max 10MB, uploaded directly as the persona photo, so the server never has to download a link). Passing both is rejected before anything is sent. "No face" is a per-video choice (`options.videoType: 'faceless'` on `generate_persona_video`). `voiceId` takes a house name or label from `list_voices` (`phonon_zoey`, `Zoey`) or a clone id/key you copied from `list_voices`; never type a provider prefix (`elevenlabs:`/`openrouter:`) — an unknown voice is rejected before anything is sent.
-- `update_persona`: update an existing persona (only the provided fields change). Replace the face with `avatarUrl` or `avatarPath` (local photo file, uploaded directly); at most one of the two. `faceQuality` (`ok` 480p / `very_good` 720p) can be changed without recreating the persona: future videos price at the new quality, already-scheduled posts keep the quality they were charged for.
-- `get_token_balance`: get the prepaid token wallet balance. Check before generating videos, which cost tokens.
-- `list_prompts`: list the recipe prompts this server can run — one entry per recipe with `slug`, `title`, and `description` (news, place spotlight, subject spotlight, GitHub PRs, full setup), no prompt text (cheap discovery). Call this first when the request is a topic instead of a ready script; then fetch the matching recipe with `get_prompt`.
-- `get_prompt`: get one recipe prompt by its `slug` (from `list_prompts`) as ready-to-run instructions covering the full validated flow (script limits, media checks, the generation call), ending with a line asking the agent to pass the slug as `recipe` on `generate_persona_video`. Unknown slugs return an error naming the valid slugs.
-- `validate_script`: validate a segments script mechanically, without spending tokens — hook first, then content takes in order, exactly one hook, word limits (total 60-200, content at least 30, hook 15-40 words before TTS). Returns the word counts and the hook window (8-12 seconds spoken). Measured hook duration is pending a hook-only TTS endpoint and is reported as pending, never invented. It also checks that every segment's `media` is a list with about one image per ~3s of speech (a 60s video needs about 20 images, at most 30); optional `fullLipsync` leaves media optional there (at most 6 images in total).
-- `score_draft`: score a draft mechanically against the caller's own measured posts, without spending tokens. Returns a 0-100 score where every point is explained (hook, length, hashtags, slop markers, links, top-theme match, call to action), the baseline it was scored against (top angles by engagement), and the publish check for the requested network (linkedin, youtube, instagram, bluesky, threads, facebook, 3speak): it fails only on an empty draft or the network's own ceiling where this repo has evidence for it (LinkedIn 3000 characters, Threads 500 characters, Facebook 63206 characters, Bluesky 300 graphemes); the rest are warnings. A failing publish check means: fix the draft before scheduling it for that network. Pass kind 'script' for a video script (segments joined by newlines, hook first, then content takes): hashtags are not scored and publishCheck is null.
-- `score_draft`: score a draft mechanically against the caller's own measured posts, without spending tokens. Returns a 0-100 score where every point is explained (hook, length, hashtags, slop markers, links, top-theme match, call to action), the baseline it was scored against (top angles by engagement), and the publish check for the requested network (linkedin, youtube, instagram, bluesky, threads, facebook, rumble): it fails only on an empty draft or the network's own ceiling where this repo has evidence for it (LinkedIn 3000 characters, Threads 500 characters, Facebook 63206 characters, Bluesky 300 graphemes); the rest are warnings. A failing publish check means: fix the draft before scheduling it for that network. Pass kind 'script' for a video script (segments joined by newlines, hook first, then content takes): hashtags are not scored and publishCheck is null.
-- `upload_media`: upload a local image for a video segment and get a `mediaId` to use in a segment's `media` field. JPG/JPEG, PNG, or WebP, max 8MB (the engine photo limit, not the 10MB library limit); the real content type is validated, not the extension. The file is stored as a temporary engine asset (1 hour TTL): upload shortly before generating, since a scheduled slot far in the future may outlive the asset — in the images modes an expired mediaId fails the task at render; full lip sync only warns. Returns only the `mediaId`. Each item in a segment's `media` list may also carry an `overlay` (`title`, optional `subtitle` and `badge`, at most 60, 80 and 30 characters): an info card with the real place name, address and price, painted at the top of the photo. The photo is shown over the video for the seconds its segment is spoken, with the subtitles on top: full frame on faceless videos (the whole photo over a blurred copy of itself, so it never leaves black bars), and as a framed panel (about 38% of the frame, 30 px from the bottom edge) where a persona's face is on screen, so the face still shows behind it. That means the hook of a hook-only lip-sync video and every segment of a full lip-sync video get the panel; once a hook-only video switches to the agent's images the photo goes full frame. In the react layout the persona fills the top half, so the panel sits at the bottom. A card that cannot be drawn is skipped with a task warning while the photo still ships.
-- `check_media`: mechanically check one public image URL for a segment, without an LLM and without judging relevance (the agent, who sees the image, decides relevance). Returns exactly one code: `ok`, `blocked_403`, `not_image`, `too_small`, `too_large`, `timeout`, or `wrong_aspect`. No fake User-Agent or Referer is sent to bypass hotlink blocks, and private addresses are never fetched.
-- `generate_persona_video`: generate and schedule ONE persona video from a complete script — generation is always tied to publishing (one call = generate + schedule + auto-publish; no orphan videos, no separate schedule step). Send the full script as `segments` (first `hook`, then content takes in order; 60-200 words total, content at least 30, hook 15-40 words ending with terminal punctuation). A CTA is just a content take, placed anywhere — no LLM expands it. `title` is the slot label for this video. `personaId` is optional: omit it for a faceless post with no persona, in which case set `options.videoType: 'faceless'` and `options.voiceId` (or `options.audioUrl`), plus `videoAspect` / `language` / `niche` as needed. `options.voiceId` takes a house name or label from `list_voices` (`phonon_zoey`, `Zoey`) or a clone id/key from `list_voices`; never type a provider prefix — an unknown voice is rejected before generation (no tokens spent). Pass `providers` plus per-provider account IDs (see the account ID table below), `startAt` + `times` in `timezone` (or `mode: 'asap'` with no `startAt`/`times`). The slot must be 3h–30d ahead. `idempotencyKey` is generated automatically; reuse it to retry without generating twice (`replayed: true`). Optional `recipe`: the recipe slug the script was written with — sent only as the `X-MCP-Recipe` telemetry header, never in the request body. Wait for the slot's `taskId` with `wait_for_video_tasks` — it blocks until the video completes or fails and reports the outcome. The video shows only the images you send on the segments. A segment's `media` is a list of `{ mediaId }` or `{ url }` items. Every segment needs about one image per ~3s of speech (about 8 words; a 60s video needs about 20 images, split across the segments, at most 30), checked before any token is spent; each image is shown full frame with a slow zoom for its share of the segment. If an image fails at render time the task fails with `images_do_not_cover_audio` — naming the skipped photos and why each one died — and the tokens are refunded, so send only photos that will survive (right aspect, big enough, fresh mediaId). Full lip-sync videos are the exception: the face is on screen throughout, so a failed photo there is only a warning. The images are third-party content you supply: use only images you have the rights to.
-- `generate_persona_video_batch`: generate and schedule a BATCH of 2-12 persona videos in one call, cheaper than one by one: for every 6 videos with the persona face, the cheapest one is free. Each video takes the same fields as `generate_persona_video` (no `idempotencyKey`, `experiment` or `recipe`). The videos are created one after the other through the same route (each charged its normal price and dispatched at once, so the batch renders back to back in one warm GPU container), then the server credits back the free ones (`POST /api/videos/batch-discount`). Faceless videos can be in the batch but pay full price, do not count toward the 6 and are never free. All videos must be created within 10 minutes of the first, and a video belongs to one batch only. `batchKey` names the batch: calling again with the same `batchKey` and the same videos in the same order replays the created videos (no second charge), creates the missing ones and retries the discount. Cancelling a video of a discounted batch (`cancel_schedule`) withholds, from that video's refund, the discount the batch no longer earns. After creation, wait for every `taskId` with `wait_for_video_tasks`.
-- `get_video_status`: check generation status and get the final video URL. When the video belongs to a scheduled slot the body also carries `postUrl`, the link to its post detail page — send it in chat so the user can watch or download the video.
-- `get_video_task_progress`: poll one video task for machine-readable progress: returns `{task_id, state, progress, stage, error, postUrl}`. `error` is the engine failure reason when `state` is `-1` (failed), `null` otherwise. `postUrl` is the link to the post detail page when the video belongs to a scheduled slot (`null` otherwise) — send it in chat so the user can watch or download the video. Use per-video after `generate_persona_video`; prefer this over `get_video_status` when only progress matters. Prefer `wait_for_video_tasks` when you need the final outcome instead of progress snapshots.
-- `wait_for_video_tasks`: wait for one or more video tasks to reach a terminal state: blocks until every `taskId` completes or fails, or the timeout elapses. Returns `{summary, allTerminal, timedOut, results}` with one entry per task: `{task_id, state, outcome, progress, stage, error, postUrl}`. `postUrl` is the link to the post detail page when the video belongs to a scheduled slot (`null` otherwise) — send it in chat so the user can watch or download the video. Use after `generate_persona_video` or `generate_persona_video_batch` instead of polling `get_video_task_progress`. On timeout the results are partial: call again with the unfinished `taskId`s.
-- `cancel_video_task`: cancel/remove one of your video tasks on the engine by `taskId` (from `get_video_status`, `get_video_task_progress`, `get_post` or `list_posts`). Only your own task can be cancelled; a persona-scoped API key can only cancel tasks belonging to its personas. Unknown or already-finished tasks return an error; no token refund is issued by this call.
-- `list_persona_images`: list a persona's image library (id, tag, description, is_primary). Use the ids with `generate_persona_video` `options.imageId` to force a specific image for every video in one call.
-- `add_persona_image`: add an image to a persona image library from a local file path (JPG/JPEG, PNG, or WebP, max 9MB). Optional tag and description drive the deterministic per-video image selection.
-- `update_persona_image`: update a persona library image tag, description, or primary flag.
-- `remove_persona_image`: remove an image from a persona image library.
-- `publish_video_direct`: publish a ready-made video file directly to social accounts — no generation, no schedule (local .mp4/.mov, max 2GB; YouTube needs title, description, tags, privacyStatus; Rumble needs title and description; Pinterest needs a boardId from `list_pinterest_boards`; others need caption).
-- `create_video_upload`: mint a short-lived signed upload for one video (MP4 or MOV, max 2GB) — returns an uploadId and a signedUrl to PUT the bytes to directly; bound to your account, expires in 15 minutes.
-- `complete_video_upload`: verify a signed video upload after the PUT (the server checks the real bytes and size) and mark it ready to publish; safe to retry.
-- `publish_uploaded_video`: publish a completed signed-upload video by uploadId — no generation, no schedule, no local path; single-use (same provider field rules as `publish_video_direct`).
-- `list_social_accounts`: list connected social accounts with the account IDs needed for scheduling.
-- `list_pinterest_boards`: list the boards of a connected Pinterest account (id + name) — the id is the boardId for Pinterest publishing.
-- `get_persona_publishing_accounts`: list a persona's default publishing accounts per provider. `generate_persona_video` falls back to these when no account IDs are passed; explicit IDs always win.
-- `set_persona_publishing_accounts`: replace a persona's default publishing accounts per provider (account IDs from `list_social_accounts`; providers mapped to `[]` keep no defaults).
-- `connect_account`: connect a social account. For youtube/instagram/linkedin/threads/facebook/pinterest/fanvue: returns an authorization URL — the user must open it in a browser where they are signed in to Post Engineer with the same account, and authorize; the account then connects automatically (verify with `list_social_accounts`). A browser that is not signed in, or signed in as another user, is rejected. For bluesky: connects directly with handle + app password. For 3speak: connects directly with Hive username + posting key (posting key, not the owner/active/master password) For rumble: connects directly with channelId + accessToken (the 40-character Simple Upload API token, issued by emailing bd@rumble.com — no OAuth).
-- `list_schedules`: list automation schedules.
-- `list_posts`: list upcoming (scheduled) and past (published/failed) posts across all connected accounts. With `from` + `to` (ISO-8601 with UTC offset, at most 62 days) it returns every post of any status in that window as one `slots` list, plus `truncated`. Each slot carries `postUrl`, the link to its post detail page — send it in chat so the user can watch or download the video and edit, reschedule or delete the post.
-- `cancel_schedule`: cancel a schedule by its ID.
-- `get_slot`: get one scheduled post's full detail by slot ID (status, title, scheduled time, progress, schedule, persona). The slot carries `postUrl`, the link to its post detail page — send it in chat so the user can watch or download the video and edit, reschedule or delete the post.
-- `update_slot_title`: edit the title of a scheduled post (pending/awaiting or ready slots only).
-- `delete_slot`: delete one scheduled post slot (only pending/awaiting, ready or failed slots; never the schedule's last slot).
-- `list_video_generations`: list the video generation history, newest first (status, error code, token refunds).
-- `get_video_generation`: get one video generation's detail by generation ID.
-- `get_post`: get one post's full detail by id, whether the id is a slot id or a generation id (the server resolves it; the response says `kind: "slot"` or `kind: "generation"`). Both kinds carry live generation progress. A scheduled slot carries `postUrl`, the link to its post detail page — send it in chat so the user can watch or download the video and edit, reschedule or delete the post.
-- `get_post_metrics`: per-video performance snapshots (views, likes, comments, saves) for a `window` of `24h`, `7d` or `28d`, newest first. Optional exact-match filters: `persona` (uuid, or `^@none` for posts without a persona), `account`, `provider`, `angle` (or `^@none`). Returns `rows` and `truncated`. YouTube rows also carry YouTube Analytics retention for your own videos: `engagedViews`, `stayedToWatchPct` (derived: engaged views / views, not a native metric), `averageViewPercentage`, `contentType`, `provisional` (Analytics data is not final for ~3 days; `28d` rows are final), and `analyticsStatus` (`scope_missing` = reconnect YouTube to grant `yt-analytics.readonly`).
-- `get_youtube_retention_curve`: the audience retention curve of one of your own published YouTube videos (`account` + `video` from a youtube `get_post_metrics` row), read live from YouTube Analytics: `points` of `ratio` (0.01–1.0 of the video), `audienceWatchRatio`, `relativeRetentionPerformance`. Only your own channel is queried. Shorts have no per-second curve in YouTube Studio; long-form videos do.
-- `create_experiment`: create a paired A/B test of ONE script variable (the hook): a name, an optional `personaId`, `targetPairs` (3–20, default 6) and exactly two variants, each with a slug `variantId` (e.g. `hook-aggressive`, never "A"/"B"), a `name` and a style `description` you follow when writing its hooks. Nothing is charged.
-- `list_experiments`: your experiments with their two variants and target pairs.
-- `add_experiment_pair`: create both videos of one pair: same `title` and content (`segments` without the hook) and one hook per variant in `hooks`, plus the usual delivery fields of `generate_persona_video`. Each video is a normal charged video; the second starts `spacingHours` (default 24) after the first and the order alternates per pair. The server rejects the second video of a pair (before charging; a concurrent race is caught after the insert and refunded) unless it matches the first in: the same providers and accounts, the same title, voice (id and audio URL), faceless and faceless material, full lip-sync, video aspect and layout, paragraph number, face quality, language, niche and CTA text, and identical content segments, with a different hook. The pinned options.imageId is not stored, so it is not compared: pass the same imageId (or none) to both videos yourself; calling again with the same arguments replays what was already created; if a video's dispatch failed (its slot is `failed`, tokens refunded) the call reports an error and that pair number stays taken (a single-video schedule's only slot cannot be removed with `delete_slot`), so continue with the next free pair number.
-- `get_experiment_results`: the experiment's videos by pair and, per provider, each pair's views/likes/comments/average view duration, wins per variant, a sign-test `pValue` and a `label`: `pending`, `indicative` (not proven yet) or `clear` (every target pair decided and p < 0.05). `window` is `24h`, `7d` (default) or `28d`.
-- `list_token_transactions`: list the token ledger — every credit and debit (purchases, generation spends, refunds), newest first.
-- `get_persona_delete_preview`: preview what deleting a persona would remove (counts + per-video download links). Read-only.
-- `delete_persona`: DESTRUCTIVE — delete a persona with all its schedules, slots, videos, and image library. No token refunds.
-- `disconnect_account`: disconnect a social account by provider and account ID.
+The server offers **16 intent tools**, not one tool per API endpoint. A tool is a complete abstraction of an intent: it takes what you would say ("the persona Maria", "my YouTube channel"), resolves the ids inside the call, and returns only what the agent needs for the next step. Most tools take an `action`; the schema is one flat object (a required `action` plus the fields of every action), and each tool's description lists the required fields per action. A field of another action, or a missing required field, is rejected before any request is sent, naming the tool, the action and the field.
 
-### Social account IDs for `generate_persona_video`
-
-Each provider's `*AccountIds` field expects the provider's account identifier
-from `list_social_accounts` — **not** the `recordId` (that is the internal
-database row id and is rejected):
-
-| Provider | `generate_persona_video` field | Use this `list_social_accounts` field |
+| Tool | Actions | What it is for |
 |---|---|---|
-| YouTube | `youtubeAccountIds` | `channelId` |
-| Instagram | `instagramAccountIds` | `igUserId` |
-| LinkedIn | `linkedinAccountIds` | `providerAccountId` |
-| Threads | `threadsAccountIds` | `providerAccountId` |
-| Facebook | `facebookAccountIds` | `providerAccountId` (Page ID) |
-| Pinterest | `pinterestAccountIds` (+ `pinterestBoardId` from `list_pinterest_boards`) | `providerAccountId` |
-| Fanvue | `fanvueAccountIds` | `providerAccountId` |
-| Bluesky | `blueskyAccountIds` | `did` (e.g. `did:plc:...`) |
-| 3Speak | `threespeakAccountIds` | `providerAccountId` (Hive username) |
-| Rumble | `rumbleAccountIds` | `providerAccountId` (Channel ID) |
+| `generate_video` | — | Generate and schedule one video, or a batch of 2-12 (every 6 face videos, the cheapest is free). `persona` and `accounts` by name or id; the result echoes what was resolved. |
+| `video_tasks` | `status`, `list_generations`, `get_generation` | Follow videos: `status` takes up to 12 `taskIds`; `waitSeconds` 0 is a snapshot, more blocks until they finish. |
+| `cancel_video` | — | Cancel a video that is still generating. Separate so a client can allow status without cancel. |
+| `personas` | `list`, `get`, `create`, `update`, `delete` | Personas. `delete` previews first and needs the `confirmToken` of that preview to delete. |
+| `persona_media` | `list_faces`, `list_images`, `add_image`, `update_image`, `remove_image` | Stock faces and a persona's image library. |
+| `voices` | `list`, `preview`, `list_clones`, `create_clone`, `get_clone`, `preview_clone`, `delete_clone` | House voices and voice clones. |
+| `accounts` | `list`, `connect`, `disconnect`, `get_persona_publishing`, `set_persona_publishing`, `list_boards` | Social accounts and the accounts each persona publishes to. |
+| `schedules` | `list`, `cancel`, `get_slot`, `update_slot_title`, `delete_slot` | Future slots. |
+| `posts` | `list`, `get` | Published and scheduled posts. |
+| `insights` | `post_metrics`, `retention_curve` | How posts performed. |
+| `experiments` | `create`, `list`, `add_pair`, `results` | Paired A/B hook experiments. |
+| `media` | `upload`, `check` | Images for video segments. |
+| `billing` | `balance`, `transactions` | Prepaid tokens. |
+| `prompts` | `list`, `get` | The recipe prompts. |
+| `check_script` | `validate`, `score` | Check a script before spending tokens. |
+| `publish_video` | `from_file`, `create_upload`, `complete_upload`, `publish_upload` | Publish a ready-made video directly. |
 
-Passing a `recordId` fails fast with an error naming the right field.
+Actions that read a file from the disk (`persona_media` `add_image`, `media` `upload`, `publish_video` `from_file`, and a local `audioPath`/`avatarPath`) exist only on the stdio server: a path served over HTTP would resolve on the server's host. Over HTTP use public URLs, or the signed upload of `publish_video`.
+
+### Names instead of ids
+
+`persona` and `accounts` accept a display name or an id. An id wins; otherwise the name must match **exactly** (case-insensitive, trimmed; never a prefix). No match is an error that says how to list the candidates. Several matches is **not** an error and not a guess: the result lists the candidates and says nothing was done, so you call again with the id. In `generate_video` every reference of every video is resolved before the first video is created, and `accounts` omitted means the persona's bound publishing accounts.
+
+```json
+{ "videos": [ { "persona": "Maria", "accounts": ["Maria Cooks"], "title": "...", "description": "...", "segments": [ ... ], "mode": "asap", "options": { "videoType": "full_lipsync" } } ] }
+```
+
+`mode: "scheduled"` (the default) slots a video 3h-30d ahead (`startAt` and `times`); `mode: "asap"` publishes it when generation finishes.
+
+Batch (2-12 videos) needs a `batchKey` and rejects `idempotencyKey`; one video takes an `idempotencyKey` and rejects `batchKey`. A batch is created video by video: if one fails, the earlier videos stay created; call again with the same `batchKey` and the same videos and the created ones replay without a new charge.
+
+### Measuring the size of `tools/list`
+
+See "Measuring the `tools/list` payload" above. The 16 tools weigh about 59 KB on the stdio server (the 56 tools they replace weighed about 102 KB).
+
+### Breaking change: the 56 old tool names are gone
+
+There is no alias for the old names. Saved prompts, recipes and agent configuration that call them must be updated:
+
+| Old tool | Now |
+|---|---|
+| `generate_persona_video`, `generate_persona_video_batch` | `generate_video` (`videos` has 1-12 entries) |
+| `get_video_status`, `get_video_task_progress`, `wait_for_video_tasks` | `video_tasks` `status` (`taskIds`, `waitSeconds`) |
+| `list_video_generations`, `get_video_generation` | `video_tasks` `list_generations`, `get_generation` |
+| `cancel_video_task` | `cancel_video` |
+| `list_personas`, `create_persona`, `update_persona` | `personas` `list`, `create`, `update` |
+| `get_persona_delete_preview`, `delete_persona` | `personas` `delete` (no token = preview, then the token deletes) |
+| `list_faces`, `list_persona_images`, `add_persona_image`, `update_persona_image`, `remove_persona_image` | `persona_media` `list_faces`, `list_images`, `add_image`, `update_image`, `remove_image` |
+| `list_voices`, `preview_house_voice` | `voices` `list`, `preview` |
+| `list_cloned_voices`, `create_cloned_voice`, `get_cloned_voice`, `preview_cloned_voice`, `delete_cloned_voice` | `voices` `list_clones`, `create_clone`, `get_clone`, `preview_clone`, `delete_clone` |
+| `list_social_accounts`, `connect_account`, `disconnect_account` | `accounts` `list`, `connect`, `disconnect` |
+| `get_persona_publishing_accounts`, `set_persona_publishing_accounts`, `list_pinterest_boards` | `accounts` `get_persona_publishing`, `set_persona_publishing`, `list_boards` |
+| `list_schedules`, `cancel_schedule`, `get_slot`, `update_slot_title`, `delete_slot` | `schedules` `list`, `cancel`, `get_slot`, `update_slot_title`, `delete_slot` |
+| `list_posts`, `get_post` | `posts` `list`, `get` |
+| `get_post_metrics`, `get_youtube_retention_curve` | `insights` `post_metrics`, `retention_curve` |
+| `create_experiment`, `list_experiments`, `add_experiment_pair`, `get_experiment_results` | `experiments` `create`, `list`, `add_pair`, `results` |
+| `upload_media`, `check_media` | `media` `upload`, `check` |
+| `get_token_balance`, `list_token_transactions` | `billing` `balance`, `transactions` |
+| `list_prompts`, `get_prompt` | `prompts` `list`, `get` |
+| `validate_script`, `score_draft` | `check_script` `validate`, `score` |
+| `publish_video_direct`, `create_video_upload`, `complete_video_upload`, `publish_uploaded_video` | `publish_video` `from_file`, `create_upload`, `complete_upload`, `publish_upload` |
 
 ## Prompts (slash commands)
 
@@ -275,14 +264,14 @@ web reaches every install without a package update.
 - `/full-setup`: Full setup becomes videos — connect accounts, create a persona, validate the script, and publish your first video without skipping a step.
 
 An agent that arrives without a human typing a slash command can still self-serve
-the same hub through MCP **tools**: `list_prompts` lists the recipes
-(slug/title/description) and `get_prompt` returns one recipe's full text by
+the same hub through MCP **tools**: `prompts (action: list)` lists the recipes
+(slug/title/description) and `prompts (action: get)` returns one recipe's full text by
 `slug`. The server's initialize instructions point agents there for
 topic-shaped requests. Until the agent lists or fetches a recipe, the results
-of `create_persona`, `list_personas`, `list_social_accounts`, and
-`get_token_balance` end with a short next-step block pointing at
-`list_prompts`, and a script rejected by `validate_script` or
-`generate_persona_video` gets a hint that recipes produce scripts that pass.
+of `personas (action: create)`, `personas (action: list)`, `accounts (action: list)`, and
+`billing (action: balance)` end with a short next-step block pointing at
+`prompts (action: list)`, and a script rejected by `check_script (action: validate)` or
+`generate_video` gets a hint that recipes produce scripts that pass.
 
 To add a prompt, add its text to `shared/prompt-base/prompt-base.ts` and its
 entry to the web hub (`apps/web/app/recipes/prompts.ts` + its i18n title and

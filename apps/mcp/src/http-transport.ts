@@ -2,10 +2,9 @@
 //
 // This module wires the McpServer built by createPostEngineerMcpServer()
 // to the SDK's StreamableHTTPServerTransport instead of stdio. The HTTP
-// endpoint serves the JSON tools with the same handlers, but never the
-// local-file tools: createPostEngineerMcpServer(..., 'http') omits every
-// tool and field that would read a path from this host's filesystem
-// (see remote-shapes.ts and local-file-tools.ts).
+// endpoint serves the same 16 intent tools with the same handlers, minus
+// every action and field that would read a path from this host's filesystem
+// (see remote-shapes.ts and the `unavailable` options in intent-*.ts).
 //
 // Authentication (Phase 6, P6-2): when OAuth is configured
 // (MCP_OAUTH_ISSUER + MCP_RESOURCE, see http-auth.ts), every /mcp

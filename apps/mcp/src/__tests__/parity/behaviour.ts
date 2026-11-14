@@ -8,8 +8,10 @@ import { endpointSite } from './mcp-calls.js';
 // MCP client and record the HTTP requests it sends. The syntax-tree proof says
 // an action's handler *can* reach an endpoint; this proves that invoking it
 // does. `fetch` is replaced for the duration of the call only, so no request
-// leaves the process; the stub answers 200 `{}` and the tool may then fail on
-// the empty body, which does not matter: the request is what is asserted.
+// leaves the process; the stub answers 200 `{ success, body, data }` (or the
+// JSON given for that `METHOD /path`, for an action that must read a listing
+// before it sends its request) and the tool may then fail on the empty body,
+// which does not matter: the request is what is asserted.
 //---------------
 
 export interface RecordedRequest {
@@ -22,13 +24,15 @@ export async function callToolRecordingRequests(
   server: McpServer,
   tool: string,
   args: Record<string, unknown>,
+  responses: Readonly<Record<string, unknown>> = {},
 ): Promise<RecordedRequest[]> {
   const recorded: RecordedRequest[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
-    recorded.push({ method: (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase(), pathname: new URL(url).pathname });
-    return Response.json({ success: true, body: {}, data: {} });
+    const request = { method: (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase(), pathname: new URL(url).pathname };
+    recorded.push(request);
+    return Response.json(responses[`${request.method} ${request.pathname}`] ?? { success: true, body: {}, data: {} });
   };
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'parity-behaviour', version: '0.0.0' });

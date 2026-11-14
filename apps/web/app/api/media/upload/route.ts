@@ -1,5 +1,5 @@
 //---------------
-// POST /api/media/upload — segment media upload (MCP upload_media).
+// POST /api/media/upload — segment media upload (MCP media (action: upload)).
 //
 // The MCP server has no engine secret and must never get one, so it
 // cannot call the engine's temp_assets endpoint directly. This route is

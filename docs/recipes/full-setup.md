@@ -7,7 +7,7 @@
 ## The prompt lives once, in the hub
 
 The full ordered prompt — account connection, persona creation, script
-contract, publish confirmation, and the single `generate_persona_video`
+contract, publish confirmation, and the single `generate_video`
 call — is served from the prompts hub, not repeated here:
 
 **https://post-engineer.com/recipes/full-setup**
@@ -38,7 +38,7 @@ never a blocker.
   provider's OAuth link in their own browser; only the accounts they choose
   get connected.
 - For Bluesky (optional): the user gives the Bluesky app password to the agent
-  only for `connect_account`; the agent never repeats, prints, or logs it —
+  only for `accounts (action: connect)`; the agent never repeats, prints, or logs it —
   not in chat, not in a file. The user creates it in their Bluesky security
   settings if they do not have one.
 - Script planning answers: what the user's channel is about, and the persona
@@ -51,5 +51,5 @@ video.
 
 **Output:** the accounts the user chose connected (OAuth, or Bluesky with an
 app password), one persona created from their face and voice pick, a validated
-60–200 word script, one `generate_persona_video` call in the confirmed mode,
+60–200 word script, one `generate_video` call in the confirmed mode,
 and the published video URL in the chat.

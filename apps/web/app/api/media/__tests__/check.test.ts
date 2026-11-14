@@ -1,6 +1,6 @@
 // @vitest-environment node
 //---------------
-// Tests for POST /api/media/check (MCP check_media).
+// Tests for POST /api/media/check (MCP media (action: check)).
 //
 // The route authenticates the caller and proxies to the engine's
 // /api/v1/media/check with the server secret; the engine runs the

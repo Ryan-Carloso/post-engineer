@@ -87,7 +87,7 @@ export interface GeneratePersonaVideoInput {
   threadsAccountIds?: string[];
   facebookAccountIds?: string[];
   pinterestAccountIds?: string[];
-  /** Pinterest only: the board the pin goes to (the id from list_pinterest_boards). Required when pinterest is selected. */
+  /** Pinterest only: the board the pin goes to (the id from accounts (action: list_boards)). Required when pinterest is selected. */
   pinterestBoardId?: string;
   fanvueAccountIds?: string[];
   threespeakAccountIds?: string[];
@@ -161,7 +161,7 @@ export interface PublishVideoDirectInput {
   privacyStatus?: 'public' | 'private' | 'unlisted';
   /** Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak: required. Pinterest: pin description when description is omitted. */
   caption?: string;
-  /** Pinterest only: required. The board the pin goes to (the id from list_pinterest_boards). */
+  /** Pinterest only: required. The board the pin goes to (the id from accounts (action: list_boards)). */
   boardId?: string;
   /**
    * Omitted: a UUID is generated per call. Reuse the same key when retrying
@@ -190,7 +190,7 @@ export interface PublishUploadedVideoInput {
   privacyStatus?: 'public' | 'private' | 'unlisted';
   /** Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak: required. Pinterest: pin description when description is omitted. */
   caption?: string;
-  /** Pinterest only: required. The board the pin goes to (the id from list_pinterest_boards). */
+  /** Pinterest only: required. The board the pin goes to (the id from accounts (action: list_boards)). */
   boardId?: string;
 }
 

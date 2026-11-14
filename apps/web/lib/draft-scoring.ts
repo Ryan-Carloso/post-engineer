@@ -420,7 +420,7 @@ export function scoreDraft(
   }
 
   if (kind === 'script') {
-    // No hashtag bucket: the script contract forbids them (validate_script).
+    // No hashtag bucket: the script contract forbids them (check_script (action: validate)).
   } else if (hashtags.length >= 1 && hashtags.length <= 5) {
     reasons.push({ rule: 'hashtags', detail: `Draft has ${hashtags.length} hashtags.`, points: 15 });
   } else if (hashtags.length >= 6 && hashtags.length <= 10) {

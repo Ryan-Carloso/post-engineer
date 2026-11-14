@@ -1,6 +1,6 @@
 // @vitest-environment node
 //---------------
-// Tests for POST /api/media/upload (MCP upload_media).
+// Tests for POST /api/media/upload (MCP media (action: upload)).
 //
 // The route authenticates the caller, validates the real image type and
 // the 8MB engine photo limit, then hands the bytes to the engine's

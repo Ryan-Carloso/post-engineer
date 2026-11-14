@@ -17,12 +17,20 @@ import {
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
   withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
+  withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
 }));
 
-const FILE_ONLY_TOOLS = ['upload_media', 'add_persona_image', 'publish_video_direct'];
+// Actions that read a file from the disk: offered on stdio only.
+const FILE_ONLY_ACTIONS: Array<[string, string]> = [['media', 'upload'], ['persona_media', 'add_image'], ['publish_video', 'from_file']];
+const PERSONA = '11111111-1111-4111-8111-111111111111';
+
+function actionsOf(tools: Awaited<ReturnType<typeof listTools>>, name: string): string[] {
+  const action = (tools.find((tool) => tool.name === name)?.inputSchema.properties as Record<string, { enum?: string[] }> | undefined)?.action;
+  return action?.enum ?? [];
+}
 
 async function listTools(transport: 'stdio' | 'http') {
   const server = createPostEngineerMcpServer({} as unknown as PostEngineerClient, transport);
@@ -38,46 +46,47 @@ async function listTools(transport: 'stdio' | 'http') {
 }
 
 describe('remote (http) tool surface', () => {
-  it('does not expose tools that read files from disk', async () => {
-    const names = (await listTools('http')).map((t) => t.name);
-    for (const tool of FILE_ONLY_TOOLS) {
-      expect(names).not.toContain(tool);
+  it('does not offer the actions that read files from disk', async () => {
+    const tools = await listTools('http');
+    for (const [tool, action] of FILE_ONLY_ACTIONS) {
+      expect(actionsOf(tools, tool)).not.toContain(action);
     }
   });
 
-  it('still exposes the JSON tools on http', async () => {
-    const names = (await listTools('http')).map((t) => t.name);
-    for (const tool of ['create_persona', 'update_persona', 'create_cloned_voice', 'check_media', 'generate_persona_video', 'list_personas']) {
-      expect(names).toContain(tool);
-    }
+  it('still offers the JSON actions on http', async () => {
+    const tools = await listTools('http');
+    const names = tools.map((t) => t.name);
+    for (const tool of ['personas', 'voices', 'media', 'generate_video']) expect(names).toContain(tool);
+    expect(actionsOf(tools, 'personas')).toEqual(expect.arrayContaining(['create', 'update', 'list']));
+    expect(actionsOf(tools, 'voices')).toContain('create_clone');
+    expect(actionsOf(tools, 'media')).toEqual(['check']);
+    expect(actionsOf(tools, 'publish_video')).toEqual(['create_upload', 'complete_upload', 'publish_upload']);
   });
 
-  it('keeps every tool on stdio', async () => {
-    const names = (await listTools('stdio')).map((t) => t.name);
-    for (const tool of FILE_ONLY_TOOLS) {
-      expect(names).toContain(tool);
+  it('keeps every action on stdio', async () => {
+    const tools = await listTools('stdio');
+    for (const [tool, action] of FILE_ONLY_ACTIONS) {
+      expect(actionsOf(tools, tool)).toContain(action);
     }
   });
 
   it('exposes no local-path field on http schemas', async () => {
     const tools = await listTools('http');
     const byName = new Map(tools.map((t) => [t.name, t.inputSchema.properties ?? {}]));
-    expect(byName.get('create_persona')).toHaveProperty('avatarUrl');
-    expect(byName.get('create_persona')).not.toHaveProperty('avatarPath');
-    expect(byName.get('create_persona')).not.toHaveProperty('images');
-    expect(byName.get('create_persona')).not.toHaveProperty('imagePrimaryIndex');
-    expect(byName.get('update_persona')).not.toHaveProperty('avatarPath');
-    expect(byName.get('create_cloned_voice')).toHaveProperty('audioUrl');
-    expect(byName.get('create_cloned_voice')).not.toHaveProperty('audioPath');
+    expect(byName.get('personas')).toHaveProperty('avatarUrl');
+    expect(byName.get('personas')).not.toHaveProperty('avatarPath');
+    expect(byName.get('personas')).not.toHaveProperty('images');
+    expect(byName.get('personas')).not.toHaveProperty('imagePrimaryIndex');
+    expect(byName.get('voices')).toHaveProperty('audioUrl');
+    expect(byName.get('voices')).not.toHaveProperty('audioPath');
   });
 
   it('keeps local-path fields on stdio schemas', async () => {
     const tools = await listTools('stdio');
     const byName = new Map(tools.map((t) => [t.name, t.inputSchema.properties ?? {}]));
-    expect(byName.get('create_persona')).toHaveProperty('avatarPath');
-    expect(byName.get('create_persona')).toHaveProperty('images');
-    expect(byName.get('update_persona')).toHaveProperty('avatarPath');
-    expect(byName.get('create_cloned_voice')).toHaveProperty('audioPath');
+    expect(byName.get('personas')).toHaveProperty('avatarPath');
+    expect(byName.get('personas')).toHaveProperty('images');
+    expect(byName.get('voices')).toHaveProperty('audioPath');
   });
 });
 
@@ -109,20 +118,21 @@ describe('remote schemas reject local paths', () => {
     }
 
     for (const transport of ['http', 'stdio'] as const) {
-      const created = await callTool(transport, 'create_persona', {
+      const created = await callTool(transport, 'personas', {
+        action: 'create',
         name: 'Ava',
         avatarUrl: 'https://example.com/face.png',
         voiceId: 'alloy',
       });
-      const updated = await callTool(transport, 'update_persona', { personaId: 'p1', name: 'Ava 2' });
+      const updated = await callTool(transport, 'personas', { action: 'update', persona: PERSONA, name: 'Ava 2' });
       expect(created.isError).toBe(true);
       expect(updated.isError).toBe(true);
     }
 
     for (const [name, args] of [
-      ['upload_media', { path: '/no/such-image.png' }],
-      ['add_persona_image', { personaId: 'p1', path: '/no/such-image.png' }],
-      ['publish_video_direct', { provider: 'instagram', videoPath: '/no/such-video.mp4', accountIds: ['ig-1'], caption: 'hi' }],
+      ['media', { action: 'upload', path: '/no/such-image.png' }],
+      ['persona_media', { action: 'add_image', persona: PERSONA, path: '/no/such-image.png' }],
+      ['publish_video', { action: 'from_file', provider: 'instagram', videoPath: '/no/such-video.mp4', accountIds: ['ig-1'], caption: 'hi' }],
     ] as const) {
       const result = await callTool('stdio', name, args);
       expect(result.isError).toBe(true);
@@ -202,9 +212,10 @@ describe('remote smuggled paths are dropped by the SDK, never read', () => {
     return typeof block.text === 'string' ? block.text : '';
   }
 
-  it('create_persona over HTTP with only a smuggled avatarPath fails the face check', async () => {
+  it('personas create over HTTP with only a smuggled avatarPath fails the face check', async () => {
     const { client, createPersona } = stubClient();
-    const result = await callRemoteTool(client, 'create_persona', {
+    const result = await callRemoteTool(client, 'personas', {
+      action: 'create',
       name: 'Ava',
       voiceId: 'no-voice',
       avatarPath: '/etc/passwd.png',
@@ -215,9 +226,10 @@ describe('remote smuggled paths are dropped by the SDK, never read', () => {
     expect(createPersona).not.toHaveBeenCalled();
   });
 
-  it('create_persona over HTTP with avatarUrl and a smuggled avatarPath keeps only the URL', async () => {
+  it('personas create over HTTP with avatarUrl and a smuggled avatarPath keeps only the URL', async () => {
     const { client, createPersona } = stubClient();
-    const result = await callRemoteTool(client, 'create_persona', {
+    const result = await callRemoteTool(client, 'personas', {
+      action: 'create',
       name: 'Ava',
       voiceId: 'no-voice',
       avatarUrl: 'https://example.com/face.png',
@@ -232,18 +244,19 @@ describe('remote smuggled paths are dropped by the SDK, never read', () => {
     expect(createPersona.mock.calls[0][0]).not.toHaveProperty('avatarPath');
   });
 
-  it('update_persona over HTTP with only a smuggled avatarPath updates nothing from the path', async () => {
+  it('personas update over HTTP with only a smuggled avatarPath updates nothing from the path', async () => {
     const { client, updatePersona } = stubClient();
-    const result = await callRemoteTool(client, 'update_persona', {
-      personaId: 'p1',
+    const result = await callRemoteTool(client, 'personas', {
+      action: 'update',
+      persona: PERSONA,
       avatarPath: '/etc/passwd.png',
     });
     expect(result.isError).toBeUndefined();
     expect(updatePersona).toHaveBeenCalledTimes(1);
-    expect(updatePersona).toHaveBeenCalledWith({ personaId: 'p1' });
+    expect(updatePersona).toHaveBeenCalledWith({ personaId: PERSONA });
   });
 
-  it('create_cloned_voice over HTTP with a smuggled audioPath clones from the URL', async () => {
+  it('voices create_clone over HTTP with a smuggled audioPath clones from the URL', async () => {
     const { client, request } = stubClient();
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -252,7 +265,8 @@ describe('remote smuggled paths are dropped by the SDK, never read', () => {
       arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
     });
     global.fetch = fetchMock as unknown as typeof fetch;
-    const result = await callRemoteTool(client, 'create_cloned_voice', {
+    const result = await callRemoteTool(client, 'voices', {
+      action: 'create_clone',
       audioUrl: 'https://example.com/voice.mp3',
       audioPath: '/tmp/voice.mp3',
       language: 'en',
@@ -274,10 +288,10 @@ describe('remote smuggled paths are dropped by the SDK, never read', () => {
   it('remote URL field descriptions never name the local-path field', async () => {
     const tools = await listTools('http');
     const byName = new Map(tools.map((t) => [t.name, t.inputSchema.properties ?? {}]));
-    const personaProps = byName.get('create_persona') as Record<string, { description?: string }>;
+    const personaProps = byName.get('personas') as Record<string, { description?: string }>;
     expect(personaProps.avatarUrl.description).toBeDefined();
     expect(personaProps.avatarUrl.description).not.toContain('avatarPath');
-    const voiceProps = byName.get('create_cloned_voice') as Record<string, { description?: string }>;
+    const voiceProps = byName.get('voices') as Record<string, { description?: string }>;
     expect(voiceProps.audioUrl.description).toBeDefined();
     expect(voiceProps.audioUrl.description).not.toContain('audioPath');
   });

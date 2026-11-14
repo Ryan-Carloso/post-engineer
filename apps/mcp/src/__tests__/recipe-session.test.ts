@@ -132,13 +132,13 @@ describe('RecipeSession.telemetryHeaders', () => {
 
   it('reports the last nudge, the fetched recipe and the rejection count', () => {
     const session = new RecipeSession('stdio');
-    session.recordNudgeShown('list_personas');
-    session.recordNudgeShown('get_token_balance');
+    session.recordNudgeShown('personas_list');
+    session.recordNudgeShown('billing_balance');
     session.recordScriptRejected();
     session.recordScriptRejected();
     session.recordRecipeFetched('daily-news');
     expect(session.telemetryHeaders('daily-news')).toMatchObject({
-      [MCP_NUDGED_BY_HEADER]: 'get_token_balance',
+      [MCP_NUDGED_BY_HEADER]: 'billing_balance',
       [MCP_RECIPES_KNOWN_HEADER]: 'true',
       [MCP_RECIPE_FETCHED_HEADER]: 'daily-news',
       [MCP_SCRIPT_REJECTIONS_HEADER]: '2',
@@ -165,14 +165,14 @@ describe('RecipeSession.telemetryHeaders', () => {
 describe('withRecipeNudge', () => {
   it('appends the nudge as a second block and keeps the payload block first', async () => {
     const session = new RecipeSession('stdio');
-    const wrapped = withRecipeNudge(session, 'list_personas', async () => ok('[{"id":"p1"}]'));
+    const wrapped = withRecipeNudge(session, 'personas_list', async () => ok('[{"id":"p1"}]'));
     expect(texts(await wrapped({}))).toEqual(['[{"id":"p1"}]', RECIPE_NUDGE_TEXT]);
-    expect(session.telemetryHeaders(undefined)[MCP_NUDGED_BY_HEADER]).toBe('list_personas');
+    expect(session.telemetryHeaders(undefined)[MCP_NUDGED_BY_HEADER]).toBe('personas_list');
   });
 
   it('leaves an error response untouched', async () => {
     const session = new RecipeSession('stdio');
-    const wrapped = withRecipeNudge(session, 'list_personas', async () => fail('boom'));
+    const wrapped = withRecipeNudge(session, 'personas_list', async () => fail('boom'));
     expect(texts(await wrapped({}))).toEqual(['boom']);
     expect(session.telemetryHeaders(undefined)[MCP_NUDGED_BY_HEADER]).toBe('none');
   });
@@ -180,7 +180,7 @@ describe('withRecipeNudge', () => {
   it('stops nudging once the agent listed the recipes', async () => {
     const session = new RecipeSession('stdio');
     session.recordRecipesListed();
-    const wrapped = withRecipeNudge(session, 'get_token_balance', async () => ok('{"balance":10}'));
+    const wrapped = withRecipeNudge(session, 'billing_balance', async () => ok('{"balance":10}'));
     expect(texts(await wrapped({}))).toEqual(['{"balance":10}']);
   });
 });
@@ -188,34 +188,34 @@ describe('withRecipeNudge', () => {
 describe('withScriptOutcome', () => {
   it('leaves an accepted script alone and counts no rejection', async () => {
     const session = new RecipeSession('stdio');
-    const wrapped = withScriptOutcome(session, 'generate_persona_video', async () => ok('Scheduled'));
+    const wrapped = withScriptOutcome<{ segments: unknown; recipe?: string }>(session, 'generate_video', async () => ok('Scheduled'), (args) => [{ segments: args.segments }]);
     expect(texts(await wrapped({ segments: validSegments }))).toEqual(['Scheduled']);
     expect(session.telemetryHeaders(undefined)[MCP_SCRIPT_REJECTIONS_HEADER]).toBe('0');
   });
 
   it('counts a validator rejection and appends the recipe hint', async () => {
     const session = new RecipeSession('stdio');
-    const wrapped = withScriptOutcome(session, 'validate_script', async () => fail('Script validation failed'));
+    const wrapped = withScriptOutcome<{ segments: unknown; recipe?: string }>(session, 'check_script_validate', async () => fail('Script validation failed'), (args) => [{ segments: args.segments }]);
     expect(texts(await wrapped({ segments: rejectedSegments }))).toEqual([
       'Script validation failed',
       SCRIPT_REJECTED_RECIPE_HINT,
     ]);
     expect(session.telemetryHeaders(undefined)).toMatchObject({
       [MCP_SCRIPT_REJECTIONS_HEADER]: '1',
-      [MCP_NUDGED_BY_HEADER]: 'validate_script',
+      [MCP_NUDGED_BY_HEADER]: 'check_script_validate',
     });
   });
 
   it('does not count an error on a valid script as a rejection', async () => {
     const session = new RecipeSession('stdio');
-    const wrapped = withScriptOutcome(session, 'generate_persona_video', async () => fail('Insufficient tokens'));
+    const wrapped = withScriptOutcome<{ segments: unknown; recipe?: string }>(session, 'generate_video', async () => fail('Insufficient tokens'), (args) => [{ segments: args.segments }]);
     expect(texts(await wrapped({ segments: validSegments }))).toEqual(['Insufficient tokens']);
     expect(session.telemetryHeaders(undefined)[MCP_SCRIPT_REJECTIONS_HEADER]).toBe('0');
   });
 
   it('counts but does not hint a rejected script that already came from a recipe', async () => {
     const session = new RecipeSession('stdio');
-    const wrapped = withScriptOutcome(session, 'generate_persona_video', async () => fail('hook: too short'));
+    const wrapped = withScriptOutcome<{ segments: unknown; recipe?: string }>(session, 'generate_video', async () => fail('hook: too short'), (args) => [{ segments: args.segments }]);
     expect(texts(await wrapped({ segments: rejectedSegments, recipe: 'daily-news' }))).toEqual(['hook: too short']);
     expect(session.telemetryHeaders(undefined)[MCP_SCRIPT_REJECTIONS_HEADER]).toBe('1');
   });
@@ -235,51 +235,51 @@ describe('recipe adoption through the registered server', () => {
     }
   }
 
-  const generateArgs = {
-    personaId: 'persona-1',
+  const video = {
+    persona: '11111111-1111-4111-8111-111111111111',
     segments: validSegments,
     title: 'Porto trip',
     description: 'Agent description.',
     providers: ['youtube'],
-    youtubeAccountIds: ['acct-1'],
     mode: 'asap',
     options: { videoType: 'hook_lipsync' },
   };
+  const generateArgs = { videos: [video] };
 
-  it('nudges on list_personas, attributes list_prompts to it, then stops nudging', async () => {
+  it('nudges on personas list, attributes prompts list to it, then stops nudging', async () => {
     await withServer('stdio', async (mcp) => {
-      const first = await mcp.callTool({ name: 'list_personas', arguments: {} });
+      const first = await mcp.callTool({ name: 'personas', arguments: { action: 'list' } });
       expect(texts(first)).toContain(RECIPE_NUDGE_TEXT);
       expect(requestHeaders('/api/persona/list')[0]).toMatchObject({
-        [MCP_TOOL_HEADER]: 'list_personas',
+        [MCP_TOOL_HEADER]: 'personas',
         [MCP_NUDGED_BY_HEADER]: 'none',
         [MCP_RECIPES_KNOWN_HEADER]: 'false',
         [MCP_TRANSPORT_HEADER]: 'stdio',
       });
-      await mcp.callTool({ name: 'list_prompts', arguments: {} });
+      await mcp.callTool({ name: 'prompts', arguments: { action: 'list' } });
       expect(requestHeaders('/api/prompts')[0]).toMatchObject({
-        [MCP_TOOL_HEADER]: 'list_prompts',
-        [MCP_NUDGED_BY_HEADER]: 'list_personas',
+        [MCP_TOOL_HEADER]: 'prompts',
+        [MCP_NUDGED_BY_HEADER]: 'personas_list',
       });
-      const second = await mcp.callTool({ name: 'list_personas', arguments: {} });
+      const second = await mcp.callTool({ name: 'personas', arguments: { action: 'list' } });
       expect(texts(second)).not.toContain(RECIPE_NUDGE_TEXT);
       expect(requestHeaders('/api/persona/list')[1]).toMatchObject({ [MCP_RECIPES_KNOWN_HEADER]: 'true' });
     });
   });
 
-  it('sends the declared and fetched recipe on generate_persona_video, never in the body', async () => {
+  it('sends the declared and fetched recipe on generate_video, never in the body', async () => {
     await withServer('stdio', async (mcp) => {
-      const fetched = await mcp.callTool({ name: 'get_prompt', arguments: { slug: 'place-spotlight' } });
+      const fetched = await mcp.callTool({ name: 'prompts', arguments: { action: 'get', slug: 'place-spotlight' } });
       expect(texts(fetched)[0]).toContain('pass recipe: "place-spotlight"');
       expect(requestHeaders('/api/prompts/place-spotlight')[0]).toMatchObject({ [MCP_RECIPE_HEADER]: 'place-spotlight' });
       const result = await mcp.callTool({
-        name: 'generate_persona_video',
+        name: 'generate_video',
         arguments: { ...generateArgs, recipe: 'place-spotlight' },
       });
       expect(result.isError).toBeFalsy();
       const [headers] = requestHeaders('/api/videos/generate-and-schedule');
       expect(headers).toMatchObject({
-        [MCP_TOOL_HEADER]: 'generate_persona_video',
+        [MCP_TOOL_HEADER]: 'generate_video',
         [MCP_RECIPE_HEADER]: 'place-spotlight',
         [MCP_RECIPE_FETCHED_HEADER]: 'place-spotlight',
         [MCP_SCRIPT_REJECTIONS_HEADER]: '0',
@@ -289,11 +289,11 @@ describe('recipe adoption through the registered server', () => {
     });
   });
 
-  it('does not record an unknown get_prompt slug as fetched', async () => {
+  it('does not record an unknown prompts get slug as fetched', async () => {
     await withServer('stdio', async (mcp) => {
-      const result = await mcp.callTool({ name: 'get_prompt', arguments: { slug: 'car-review' } });
+      const result = await mcp.callTool({ name: 'prompts', arguments: { action: 'get', slug: 'car-review' } });
       expect(result.isError).toBe(true);
-      await mcp.callTool({ name: 'get_token_balance', arguments: {} });
+      await mcp.callTool({ name: 'billing', arguments: { action: 'balance' } });
       expect(requestHeaders('/api/billing/tokens')[0]).toMatchObject({
         [MCP_RECIPE_FETCHED_HEADER]: 'none',
         [MCP_RECIPES_KNOWN_HEADER]: 'false',
@@ -304,11 +304,11 @@ describe('recipe adoption through the registered server', () => {
   it('rejects a recipe that is not slug-shaped before any web call', async () => {
     await withServer('stdio', async (mcp) => {
       const result = await mcp.callTool({
-        name: 'generate_persona_video',
+        name: 'generate_video',
         arguments: { ...generateArgs, recipe: 'Place Spotlight' },
       });
       expect(result.isError).toBe(true);
-      expect(texts(result).join('\n')).toContain('recipe must be a recipe slug from list_prompts');
+      expect(texts(result).join('\n')).toContain('recipe must be a recipe slug from prompts (action: list)');
       expect(fetchMock).not.toHaveBeenCalled();
     });
   });
@@ -316,16 +316,16 @@ describe('recipe adoption through the registered server', () => {
   it('hints on a rejected improvised script and reports the rejection on the next request', async () => {
     await withServer('stdio', async (mcp) => {
       const rejected = await mcp.callTool({
-        name: 'generate_persona_video',
-        arguments: { ...generateArgs, segments: rejectedSegments },
+        name: 'generate_video',
+        arguments: { videos: [{ ...video, segments: rejectedSegments }] },
       });
       expect(rejected.isError).toBe(true);
       expect(texts(rejected)).toContain(SCRIPT_REJECTED_RECIPE_HINT);
       expect(fetchMock).not.toHaveBeenCalled();
-      await mcp.callTool({ name: 'generate_persona_video', arguments: generateArgs });
+      await mcp.callTool({ name: 'generate_video', arguments: generateArgs });
       expect(requestHeaders('/api/videos/generate-and-schedule')[0]).toMatchObject({
         [MCP_SCRIPT_REJECTIONS_HEADER]: '1',
-        [MCP_NUDGED_BY_HEADER]: 'generate_persona_video',
+        [MCP_NUDGED_BY_HEADER]: 'generate_video',
       });
       expect(requestHeaders('/api/videos/generate-and-schedule')[0]).not.toHaveProperty(MCP_RECIPE_HEADER);
     });
@@ -333,7 +333,7 @@ describe('recipe adoption through the registered server', () => {
 
   it('tags requests from an HTTP-built server with transport http', async () => {
     await withServer('http', async (mcp) => {
-      await mcp.callTool({ name: 'list_prompts', arguments: {} });
+      await mcp.callTool({ name: 'prompts', arguments: { action: 'list' } });
       expect(requestHeaders('/api/prompts')[0]).toMatchObject({ [MCP_TRANSPORT_HEADER]: 'http' });
     });
   });

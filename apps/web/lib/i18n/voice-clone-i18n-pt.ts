@@ -62,12 +62,3 @@ export const personaVoiceClonePt = {
   voiceTagCharacter: 'Personagem',
   voiceTagCloned: 'Minha voz clonada',
 } as const;
-
-export const voiceCloneApiToolDescPt = {
-  toolDescListClonedVoices: 'Liste seus clones de voz',
-  toolDescGetClonedVoice: 'Ver o status de um clone de voz',
-  toolDescCreateClonedVoice: 'Crie um clone de voz a partir de uma URL de áudio',
-  toolDescDeleteClonedVoice: 'Exclua um clone de voz',
-  toolDescPreviewClonedVoice: 'Ouça a prévia de um clone pronto',
-  toolDescPreviewHouseVoice: 'Ouça a prévia de uma voz da casa',
-} as const;

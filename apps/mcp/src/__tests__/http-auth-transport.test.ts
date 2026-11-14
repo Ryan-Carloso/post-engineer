@@ -23,6 +23,7 @@ vi.mock('../analytics.js', () => ({
   // per-call context: mcp_tool_called is recorded by the web API from the
   // request headers, not by the MCP (see analytics.test.ts).
   withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
+  withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
@@ -209,8 +210,8 @@ describe('HTTP transport with OAuth authentication (P6-2)', () => {
       }),
     );
     const result = await client.callTool({
-      name: 'validate_script',
-      arguments: { segments },
+      name: 'check_script',
+      arguments: { action: 'validate', segments },
     });
     expect(seen?.sub).toBe('user-123');
     expect(seen?.bearer).toBe(token);

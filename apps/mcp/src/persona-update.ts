@@ -1,8 +1,8 @@
-// update_persona: shape, schema and handler.
+// personas (action: update): shape, schema and handler.
 //
 // Extracted from tools.ts so tools.ts stays under the file-size ratchet.
 // Re-exported from tools.ts, so existing import sites (`./tools.js`) keep
-// working, including the tool registration in index.ts.
+// working, including the personas and accounts registration (intent-*.ts).
 import { z } from 'zod';
 
 import type { PostEngineerClient } from './client.js';
@@ -16,7 +16,7 @@ export const UpdatePersonaShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to update'),
   name: z.string().min(1).optional().describe('New name for the persona'),
   ...UpdatePersonaAvatarFields,
-  voiceId: personaVoiceField().optional().describe('New voice id or label from list_voices. Never type a provider prefix.'),
+  voiceId: personaVoiceField().optional().describe('New voice id or label from voices (action: list). Never type a provider prefix.'),
   language: z
     .string()
     .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })

@@ -1,294 +1,339 @@
 {
   "POST /api/account/connect-url": [
     {
-      "tool": "connect_account"
+      "tool": "accounts",
+      "action": "connect"
     }
   ],
   "GET /api/account": [
     {
-      "tool": "list_social_accounts"
+      "tool": "accounts",
+      "action": "list"
     }
   ],
   "GET /api/billing/tokens": [
     {
-      "tool": "get_token_balance"
+      "tool": "billing",
+      "action": "balance"
     }
   ],
   "POST /api/bluesky-connect": [
     {
-      "tool": "connect_account"
+      "tool": "accounts",
+      "action": "connect"
     }
   ],
   "POST /api/threespeak-connect": [
     {
-      "tool": "connect_account"
+      "tool": "accounts",
+      "action": "connect"
     }
   ],
   "POST /api/rumble-connect": [
     {
-      "tool": "connect_account"
+      "tool": "accounts",
+      "action": "connect"
     }
   ],
   "GET /api/persona/faces": [
     {
-      "tool": "list_faces"
+      "tool": "persona_media",
+      "action": "list_faces"
     }
   ],
   "GET /api/persona/images": [
     {
-      "tool": "list_persona_images"
+      "tool": "persona_media",
+      "action": "list_images"
     }
   ],
   "POST /api/persona/images": [
     {
-      "tool": "add_persona_image"
+      "tool": "persona_media",
+      "action": "add_image"
     }
   ],
   "DELETE /api/persona/images": [
     {
-      "tool": "remove_persona_image"
+      "tool": "persona_media",
+      "action": "remove_image"
     }
   ],
   "PATCH /api/persona/images": [
     {
-      "tool": "update_persona_image"
+      "tool": "persona_media",
+      "action": "update_image"
     }
   ],
   "GET /api/persona/list": [
     {
-      "tool": "list_personas"
+      "tool": "personas",
+      "action": "list"
     }
   ],
   "POST /api/persona": [
     {
-      "tool": "create_persona"
+      "tool": "personas",
+      "action": "create"
     }
   ],
   "PATCH /api/persona": [
     {
-      "tool": "update_persona"
+      "tool": "personas",
+      "action": "update"
     }
   ],
   "POST /api/media/upload": [
     {
-      "tool": "upload_media"
+      "tool": "media",
+      "action": "upload"
     }
   ],
   "POST /api/media/check": [
     {
-      "tool": "check_media"
+      "tool": "media",
+      "action": "check"
     }
   ],
   "GET /api/metrics": [
     {
-      "tool": "get_post_metrics"
+      "tool": "insights",
+      "action": "post_metrics"
     }
   ],
   "GET /api/metrics/retention-curve": [
     {
-      "tool": "get_youtube_retention_curve"
+      "tool": "insights",
+      "action": "retention_curve"
     }
   ],
   "GET /api/pinterest/boards": [
     {
-      "tool": "list_pinterest_boards"
+      "tool": "accounts",
+      "action": "list_boards"
     }
   ],
   "GET /api/posts/[id]": [
     {
-      "tool": "get_post"
+      "tool": "posts",
+      "action": "get"
     }
   ],
   "GET /api/persona/video-status/[taskId]": [
     {
-      "tool": "get_video_status"
-    },
-    {
-      "tool": "get_video_task_progress"
-    },
-    {
-      "tool": "wait_for_video_tasks"
+      "tool": "video_tasks",
+      "action": "status"
     }
   ],
   "GET /api/persona/voices": [
     {
-      "tool": "list_voices"
+      "tool": "voices",
+      "action": "list"
     }
   ],
   "POST /api/persona/voices/[voiceId]/preview": [
     {
-      "tool": "preview_house_voice"
+      "tool": "voices",
+      "action": "preview"
     }
   ],
   "GET /api/persona/cloned-voices": [
     {
-      "tool": "list_cloned_voices"
+      "tool": "voices",
+      "action": "list_clones"
     }
   ],
   "POST /api/persona/cloned-voices": [
     {
-      "tool": "create_cloned_voice"
+      "tool": "voices",
+      "action": "create_clone"
     }
   ],
   "GET /api/persona/cloned-voices/[cloneId]": [
     {
-      "tool": "get_cloned_voice"
+      "tool": "voices",
+      "action": "get_clone"
     }
   ],
   "DELETE /api/persona/cloned-voices/[cloneId]": [
     {
-      "tool": "delete_cloned_voice"
+      "tool": "voices",
+      "action": "delete_clone"
     }
   ],
   "POST /api/persona/cloned-voices/[cloneId]/preview": [
     {
-      "tool": "preview_cloned_voice"
+      "tool": "voices",
+      "action": "preview_clone"
     }
   ],
   "GET /api/schedule": [
     {
-      "tool": "list_schedules"
+      "tool": "schedules",
+      "action": "list"
     }
   ],
   "DELETE /api/schedule": [
     {
-      "tool": "cancel_schedule"
+      "tool": "schedules",
+      "action": "cancel"
     }
   ],
   "GET /api/schedule/slots/[slotId]": [
     {
-      "tool": "get_slot"
+      "tool": "schedules",
+      "action": "get_slot"
     }
   ],
   "PATCH /api/schedule/slots/[slotId]": [
     {
-      "tool": "update_slot_title"
+      "tool": "schedules",
+      "action": "update_slot_title"
     }
   ],
   "DELETE /api/schedule/slots/[slotId]": [
     {
-      "tool": "delete_slot"
+      "tool": "schedules",
+      "action": "delete_slot"
     }
   ],
   "GET /api/schedule/status": [
     {
-      "tool": "list_posts"
+      "tool": "posts",
+      "action": "list"
     }
   ],
   "GET /api/persona/delete-preview": [
     {
-      "tool": "get_persona_delete_preview"
+      "tool": "personas",
+      "action": "delete"
     }
   ],
   "GET /api/persona/publishing-accounts": [
     {
-      "tool": "get_persona_publishing_accounts"
+      "tool": "accounts",
+      "action": "get_persona_publishing"
     }
   ],
   "PUT /api/persona/publishing-accounts": [
     {
-      "tool": "set_persona_publishing_accounts"
+      "tool": "accounts",
+      "action": "set_persona_publishing"
     }
   ],
   "DELETE /api/persona": [
     {
-      "tool": "delete_persona"
+      "tool": "personas",
+      "action": "delete"
     }
   ],
   "DELETE /api/account": [
     {
-      "tool": "disconnect_account"
+      "tool": "accounts",
+      "action": "disconnect"
     }
   ],
   "GET /api/persona/video-generations": [
     {
-      "tool": "list_video_generations"
+      "tool": "video_tasks",
+      "action": "list_generations"
     }
   ],
   "GET /api/persona/video-generations/[generationId]": [
     {
-      "tool": "get_video_generation"
+      "tool": "video_tasks",
+      "action": "get_generation"
     }
   ],
   "DELETE /api/persona/video-task/[taskId]": [
     {
-      "tool": "cancel_video_task"
+      "tool": "cancel_video"
     }
   ],
   "GET /api/billing/transactions": [
     {
-      "tool": "list_token_transactions"
+      "tool": "billing",
+      "action": "transactions"
     }
   ],
   "POST /api/upload-content": [
     {
-      "tool": "publish_video_direct"
+      "tool": "publish_video",
+      "action": "from_file"
     }
   ],
   "POST /api/videos/upload-url": [
     {
-      "tool": "create_video_upload"
+      "tool": "publish_video",
+      "action": "create_upload"
     }
   ],
   "POST /api/videos/uploads/[uploadId]/complete": [
     {
-      "tool": "complete_video_upload"
+      "tool": "publish_video",
+      "action": "complete_upload"
     }
   ],
   "POST /api/videos/publish-by-id": [
     {
-      "tool": "publish_uploaded_video"
+      "tool": "publish_video",
+      "action": "publish_upload"
     }
   ],
   "POST /api/videos/generate-and-schedule": [
     {
-      "tool": "generate_persona_video"
+      "tool": "generate_video"
     },
     {
-      "tool": "add_experiment_pair"
-    },
-    {
-      "tool": "generate_persona_video_batch"
+      "tool": "experiments",
+      "action": "add_pair"
     }
   ],
   "POST /api/videos/batch-discount": [
     {
-      "tool": "generate_persona_video_batch"
+      "tool": "generate_video"
     }
   ],
   "POST /api/videos/validate-script": [
     {
-      "tool": "validate_script"
+      "tool": "check_script",
+      "action": "validate"
     }
   ],
   "POST /api/videos/score-draft": [
     {
-      "tool": "score_draft"
+      "tool": "check_script",
+      "action": "score"
     }
   ],
   "GET /api/prompts": [
     {
-      "tool": "list_prompts"
+      "tool": "prompts",
+      "action": "list"
     }
   ],
   "GET /api/prompts/[slug]": [
     {
-      "tool": "get_prompt"
+      "tool": "prompts",
+      "action": "get"
     }
   ],
   "POST /api/experiments": [
     {
-      "tool": "create_experiment"
+      "tool": "experiments",
+      "action": "create"
     }
   ],
   "GET /api/experiments": [
     {
-      "tool": "list_experiments"
+      "tool": "experiments",
+      "action": "list"
     }
   ],
   "GET /api/experiments/[id]": [
     {
-      "tool": "get_experiment_results"
+      "tool": "experiments",
+      "action": "results"
     }
   ]
 }

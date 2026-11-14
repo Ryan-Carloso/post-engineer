@@ -12,7 +12,7 @@ import {
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
 //---------------
-// get_post, get_post_metrics and get_youtube_retention_curve — MCP tools.
+// posts (action: get), insights (action: post_metrics) and insights (action: retention_curve) — MCP tools.
 //
 // Extracted from tools.ts so the tools module stays under the file-size
 // ratchet.
@@ -25,7 +25,7 @@ export const GetPostShape = {
     .string()
     .min(1, 'id is required')
     .describe(
-      'A post id of either kind: a slot id (slotId from list_posts / generate_persona_video) or a generation id (generationId from list_video_generations). The server resolves which one it is.',
+      'A post id of either kind: a slot id (slotId from posts (action: list) / generate_video) or a generation id (generationId from video_tasks (action: list_generations)). The server resolves which one it is.',
     ),
 };
 
@@ -44,10 +44,10 @@ export const GetPostMetricsShape = {
       message: `persona must be a uuid or ${METRICS_NONE}`,
     })
     .optional()
-    .describe(`Optional persona id filter (uuid from list_personas), or ${METRICS_NONE} for posts with no persona.`),
+    .describe(`Optional persona id filter (uuid from personas (action: list)), or ${METRICS_NONE} for posts with no persona.`),
   account: metricsFilter
     .optional()
-    .describe('Optional publishing account id filter (the account ids from list_social_accounts).'),
+    .describe('Optional publishing account id filter (the account ids from accounts (action: list)).'),
   provider: z.enum(METRICS_PROVIDERS).optional().describe('Optional network filter.'),
   angle: metricsFilter
     .optional()
@@ -57,11 +57,11 @@ export const GetPostMetricsShape = {
 export const GetPostMetricsSchema = z.object(GetPostMetricsShape);
 
 export const GetYouTubeRetentionCurveShape = {
-  account: metricsFilter.describe('The YouTube account id (channel id) the video was published on: accountId from get_post_metrics rows.'),
+  account: metricsFilter.describe('The YouTube account id (channel id) the video was published on: accountId from insights (action: post_metrics) rows.'),
   video: z
     .string()
     .regex(YOUTUBE_VIDEO_ID, 'video must be a YouTube video id')
-    .describe('The YouTube video id: externalId from a youtube get_post_metrics row.'),
+    .describe('The YouTube video id: externalId from a youtube insights (action: post_metrics) row.'),
 };
 
 export const GetYouTubeRetentionCurveSchema = z.object(GetYouTubeRetentionCurveShape);
@@ -87,7 +87,7 @@ export async function handleGetYouTubeRetentionCurve(
   return handleLibraryCall(() => getYouTubeRetentionCurve(client, args), 'getting YouTube retention curve');
 }
 
-// list_posts — the upcoming/recent lists, or (with from + to) every post in a
+// posts (action: list) — the upcoming/recent lists, or (with from + to) every post in a
 // window. The schema's from/to pairing is a .refine, which the SDK's shape
 // validation does not run, so the args are re-parsed here.
 export async function handleListPosts(client: PostEngineerClient, args: unknown): Promise<McpToolResponse> {

@@ -81,115 +81,80 @@ describe('McpDocsSection', () => {
     expect(screen.queryByTestId('mcp-docs-help-cta')).toBeNull();
   });
 
-  it('renders the tools grid with all 56 tools', () => {
+  it('renders the tools grid with the 16 intent tools and the actions of each', () => {
     render(<McpDocsSection apiKey={null} />);
 
     const grid = screen.getByTestId('mcp-tools-grid');
     expect(grid).toBeInTheDocument();
-    // Each card renders its tool id in the mono paragraph, in registry
+    // Each card renders its tool id in the bold mono paragraph, in registry
     // order — asserting the id itself (not just grid text) so a blanked id
-    // fails, including the publish_video_direct card added for direct
-    // publishing.
-    const ids = [...grid.querySelectorAll('p.font-mono')].map((p) => p.textContent);
+    // fails. The 16 tools are the MCP server's surface (issue #566).
+    const ids = [...grid.querySelectorAll('p.font-bold')].map((p) => p.textContent);
     expect(ids).toEqual([
-      'list_personas',
-      'list_voices',
-      'list_cloned_voices',
-      'create_cloned_voice',
-      'get_cloned_voice',
-      'delete_cloned_voice',
-      'preview_cloned_voice',
-      'preview_house_voice',
-      'list_faces',
-      'create_persona',
-      'update_persona',
-      'list_persona_images',
-      'add_persona_image',
-      'update_persona_image',
-      'remove_persona_image',
-      'publish_video_direct',
-      'create_video_upload',
-      'complete_video_upload',
-      'publish_uploaded_video',
-      'get_token_balance',
-      'generate_persona_video',
-      'generate_persona_video_batch',
-      'validate_script',
-      'score_draft',
-      'upload_media',
-      'check_media',
-      'list_prompts',
-      'get_prompt',
-      'get_video_status',
-      'get_video_task_progress',
-      'wait_for_video_tasks',
-      'list_social_accounts',
-      'list_pinterest_boards',
-      'get_persona_publishing_accounts',
-      'set_persona_publishing_accounts',
-      'connect_account',
-      'list_schedules',
-      'list_posts',
-      'cancel_schedule',
-      'get_slot',
-      'update_slot_title',
-      'delete_slot',
-      'list_video_generations',
-      'get_video_generation',
-      'get_post',
-      'get_post_metrics',
-      'get_youtube_retention_curve',
-      'create_experiment',
-      'list_experiments',
-      'add_experiment_pair',
-      'get_experiment_results',
-      'cancel_video_task',
-      'list_token_transactions',
-      'get_persona_delete_preview',
-      'delete_persona',
-      'disconnect_account',
+      'generate_video',
+      'video_tasks',
+      'cancel_video',
+      'personas',
+      'persona_media',
+      'voices',
+      'accounts',
+      'schedules',
+      'posts',
+      'insights',
+      'experiments',
+      'media',
+      'billing',
+      'prompts',
+      'check_script',
+      'publish_video',
     ]);
-    // Each card renders its description through i18n. getByText matches the
-    // full element text (not a substring): 'apiKeys.toolDescUpdatePersona'
-    // is a prefix of '...UpdatePersonaImage', so a substring assertion
-    // would pass vacuously on a blanked key.
+    // The actions of every tool sit under its name, in order, so a blanked or
+    // reordered action fails; generate_video and cancel_video have none.
+    const ACTIONS: Record<string, string> = {
+      generate_video: '',
+      video_tasks: 'status · list_generations · get_generation',
+      cancel_video: '',
+      personas: 'list · get · create · update · delete',
+      persona_media: 'list_faces · list_images · add_image · update_image · remove_image',
+      voices: 'list · preview · list_clones · create_clone · get_clone · preview_clone · delete_clone',
+      accounts: 'list · connect · disconnect · get_persona_publishing · set_persona_publishing · list_boards',
+      schedules: 'list · cancel · get_slot · update_slot_title · delete_slot',
+      posts: 'list · get',
+      insights: 'post_metrics · retention_curve',
+      experiments: 'create · add_pair · list · results',
+      media: 'upload · check',
+      billing: 'balance · transactions',
+      prompts: 'list · get',
+      check_script: 'validate · score',
+      publish_video: 'from_file · create_upload · complete_upload · publish_upload',
+    };
+    for (const [tool, actions] of Object.entries(ACTIONS)) {
+      const card = [...grid.querySelectorAll('p.font-bold')].find((p) => p.textContent === tool)?.parentElement;
+      const actionLine = card?.querySelector('p.font-mono:not(.font-bold)')?.textContent ?? '';
+      expect(actionLine, `${tool} actions`).toBe(actions);
+    }
+    // The actions of an action tool sit under its name; generate_video and cancel_video have none.
+    const personas = [...grid.querySelectorAll('p.font-bold')].find((p) => p.textContent === 'personas')?.parentElement;
+    expect(personas?.textContent).toContain('list · get · create · update · delete');
+    const cancel = [...grid.querySelectorAll('p.font-bold')].find((p) => p.textContent === 'cancel_video')?.parentElement;
+    expect(cancel?.querySelectorAll('p')).toHaveLength(2);
     for (const descKey of [
-      'apiKeys.toolDescListPersonas',
-      'apiKeys.toolDescListVoices',
-      'apiKeys.toolDescListFaces',
-      'apiKeys.toolDescCreatePersona',
-      'apiKeys.toolDescUpdatePersona',
-      'apiKeys.toolDescListPersonaImages',
-      'apiKeys.toolDescAddPersonaImage',
-      'apiKeys.toolDescUpdatePersonaImage',
-      'apiKeys.toolDescRemovePersonaImage',
-      'apiKeys.toolDescPublishVideoDirect',
-      'apiKeys.toolDescGetTokenBalance',
-      'apiKeys.toolDescGeneratePersonaVideo',
-      'apiKeys.toolDescGeneratePersonaVideoBatch',
-      'apiKeys.toolDescValidateScript',
-      'apiKeys.toolDescGetVideoStatus',
-      'apiKeys.toolDescGetVideoTaskProgress',
-      'apiKeys.toolDescWaitForVideoTasks',
-      'apiKeys.toolDescListSocialAccounts',
-      'apiKeys.toolDescListPinterestBoards',
-      'apiKeys.toolDescGetPersonaPublishingAccounts',
-      'apiKeys.toolDescSetPersonaPublishingAccounts',
-      'apiKeys.toolDescConnectAccount',
-      'apiKeys.toolDescListSchedules',
-      'apiKeys.toolDescListPosts',
-      'apiKeys.toolDescCancelSchedule',
-      'apiKeys.toolDescGetSlot',
-      'apiKeys.toolDescUpdateSlotTitle',
-      'apiKeys.toolDescDeleteSlot',
-      'apiKeys.toolDescListVideoGenerations',
-      'apiKeys.toolDescGetVideoGeneration',
-      'apiKeys.toolDescListTokenTransactions',
-      'apiKeys.toolDescGetPersonaDeletePreview',
-      'apiKeys.toolDescDeletePersona',
-      'apiKeys.toolDescDisconnectAccount',
-      'apiKeys.toolDescListPrompts',
-      'apiKeys.toolDescGetPrompt',
+      'apiKeys.toolDescGenerateVideo',
+      'apiKeys.toolDescVideoTasks',
+      'apiKeys.toolDescCancelVideo',
+      'apiKeys.toolDescPersonas',
+      'apiKeys.toolDescPersonaMedia',
+      'apiKeys.toolDescVoices',
+      'apiKeys.toolDescAccounts',
+      'apiKeys.toolDescSchedules',
+      'apiKeys.toolDescPosts',
+      'apiKeys.toolDescInsights',
+      'apiKeys.toolDescExperiments',
+      'apiKeys.toolDescMedia',
+      'apiKeys.toolDescBilling',
+      'apiKeys.toolDescPrompts',
+      'apiKeys.toolDescCheckScript',
+      'apiKeys.toolDescPublishVideo',
     ]) {
       expect(within(grid).getByText(descKey)).toBeInTheDocument();
     }

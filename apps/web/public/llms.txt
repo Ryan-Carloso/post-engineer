@@ -41,24 +41,21 @@
 
 ## MCP tools
 
-- Personas and voices: `list_personas`, `create_persona`, `update_persona`,
-  `delete_persona`, `list_voices`, `list_cloned_voices`,
-  `create_cloned_voice`, `get_cloned_voice`, `delete_cloned_voice`,
-  `preview_cloned_voice`, `list_faces`, `list_persona_images`,
-  `add_persona_image`, `update_persona_image`, `remove_persona_image`.
-- Video: `validate_script` (mechanical validation, no tokens spent),
-  `score_draft` (mechanical draft score and publish check, no tokens spent),
-  `generate_persona_video` (one video per call; script as segments — hook
-  first, then content takes in order, 60–200 words total; slot 3h–30d ahead or
-  `mode: 'asap'`), `get_video_status`, `get_video_task_progress`,
-  `cancel_video_task`, `upload_media`, `check_media`,
-  `publish_video_direct`.
-- Accounts and schedule: `connect_account`, `list_social_accounts`,
-  `get_persona_publishing_accounts`, `set_persona_publishing_accounts`,
-  `disconnect_account`, `list_schedules`, `list_posts`, `get_slot`,
-  `update_slot_title`, `delete_slot`, `cancel_schedule`,
-  `list_video_generations`, `get_video_generation`, `get_post`,
-  `get_post_metrics`, `list_token_transactions`,
-  `get_persona_delete_preview`.
+16 intent tools; each takes an `action`, except `generate_video` and `cancel_video`. Personas and
+accounts are given by name or id.
+
+- `generate_video`: one video or a batch of 2-12 (script as segments — hook first, then content takes in
+  order, 60–200 words total; slot 3h–30d ahead or `mode: 'asap'`), `video_tasks`
+  (`status`, `list_generations`, `get_generation`), `cancel_video`.
+- Personas and voices: `personas` (`list`, `get`, `create`, `update`, `delete` — preview, then confirm),
+  `persona_media` (`list_faces`, `list_images`, `add_image`, `update_image`, `remove_image`), `voices`
+  (`list`, `preview`, `list_clones`, `create_clone`, `get_clone`, `preview_clone`, `delete_clone`).
+- Accounts and schedule: `accounts` (`list`, `connect`, `disconnect`, `get_persona_publishing`,
+  `set_persona_publishing`, `list_boards`), `schedules` (`list`, `cancel`, `get_slot`, `update_slot_title`,
+  `delete_slot`), `posts` (`list`, `get`), `insights` (`post_metrics`, `retention_curve`), `billing`
+  (`balance`, `transactions`), `experiments` (`create`, `add_pair`, `list`, `results`).
+- Scripts, media and publishing: `check_script` (`validate`, `score`: mechanical, no tokens spent),
+  `media` (`upload`, `check`), `publish_video` (`from_file`, `create_upload`, `complete_upload`,
+  `publish_upload`), `prompts` (`list`, `get`).
 - Prompts: `/daily-news` (daily news becomes a video), `/github-prs`
   (GitHub PRs become videos), `/full-setup` (full setup becomes videos).

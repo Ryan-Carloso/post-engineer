@@ -328,12 +328,12 @@ class SegmentOverlay(BaseModel):
     @field_validator("title", "subtitle", "badge", mode="before")
     @classmethod
     def _strip_text(cls, value: Optional[str]) -> Optional[str]:
-        """Measure the trimmed text, like validate_script and the TS validators."""
+        """Measure the trimmed text, like check_script (action: validate) and the TS validators."""
         return value.strip() if isinstance(value, str) else value
 
 
 class SegmentMedia(BaseModel):
-    """Media reference shape for a segment's photo (upload_media uploads it, check_media verifies it)."""
+    """Media reference shape for a segment's photo (media (action: upload) uploads it, media (action: check) verifies it)."""
 
     # Unknown keys are forbidden, not stripped: the unknown-field guard in
     # validate_segments runs on model_dump output, so extra='ignore' would

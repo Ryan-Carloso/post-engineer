@@ -1,4 +1,4 @@
-// Schedule/slot tool shapes, plus the generate_persona_video options
+// Schedule/slot tool shapes, plus the generate_video options
 // shape and the URL-field helpers only it uses.
 //
 // Extracted from tools.ts so the tools module stays under the file-size
@@ -44,7 +44,7 @@ export const GetSlotShape = {
   slotId: z
     .string()
     .min(1, 'slotId is required')
-    .describe('The slot ID (the slotId field from list_posts or generate_persona_video).'),
+    .describe('The slot ID (the slotId field from posts (action: list) or generate_video).'),
 };
 
 export const GetSlotSchema = z.object(GetSlotShape);
@@ -53,7 +53,7 @@ export const UpdateSlotTitleShape = {
   slotId: z
     .string()
     .min(1, 'slotId is required')
-    .describe('The slot ID (the slotId field from list_posts or generate_persona_video).'),
+    .describe('The slot ID (the slotId field from posts (action: list) or generate_video).'),
   title: z
     .string()
     .min(1, 'title is required')
@@ -67,7 +67,7 @@ export const DeleteSlotShape = {
     .string()
     .min(1, 'slotId is required')
     .describe(
-      'The slot ID to delete. Only pending (awaiting) or failed slots can be deleted; published or mid-flight slots are rejected. The schedule\'s last slot cannot be deleted — delete the whole schedule with cancel_schedule instead.',
+      'The slot ID to delete. Only pending (awaiting) or failed slots can be deleted; published or mid-flight slots are rejected. The schedule\'s last slot cannot be deleted — delete the whole schedule with schedules (action: cancel) instead.',
     ),
 };
 
@@ -115,8 +115,8 @@ export const GeneratePersonaVideoOptionsShape = {
     .describe('The one video mode: full_lipsync = the whole video is the persona talking (requires a persona with a photo; 8 tokens at face quality ok, 15 at very_good); hook_lipsync = lip sync on the hook only, agent images after (requires a persona with a photo; 2 tokens ok, 3 very_good); faceless = agent images only, no face (persona optional — with one, its voice and niche still apply; 1 token). Required: the mode decides the render path and the price.'),
   musicMood: musicMoodField,
   audioUrl: httpsUrlField('audioUrl').optional().describe('Public URL of custom audio for the videos (overrides the persona voice).'),
-  imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to use for every video (overrides the deterministic per-video selection; see list_persona_images).'),
-  voiceId: personaVoiceField().optional().describe('Voice ID override: id or label from list_voices. Never type a provider prefix.'),
+  imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to use for every video (overrides the deterministic per-video selection; see persona_media (action: list_images)).'),
+  voiceId: personaVoiceField().optional().describe('Voice ID override: id or label from voices (action: list). Never type a provider prefix.'),
   webhookUrl: httpsUrlField('webhookUrl').optional().describe('Callback URL the server POSTs to when each video reaches a terminal state (completed/failed).'),
   videoAspect: z.enum(['9:16', '16:9', '1:1']).optional().describe('Frame shape. Overrides the persona when one is given; a post without a persona defaults to 9:16.'),
   videoLayout: z

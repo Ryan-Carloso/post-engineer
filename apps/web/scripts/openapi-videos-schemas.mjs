@@ -50,7 +50,7 @@ export function videoOperationSchemas({ success, object, str }) {
     // apps/web/app/api/videos/publish-by-id/route.ts (parsePublishBody)
     'POST /api/videos/publish-by-id': {
       description:
-        'Publish a completed signed-upload video by uploadId — the remote replacement for publish_video_direct. Single-use: one publish consumes the upload. Provider field rules mirror publish_video_direct (YouTube: title, description, tags, privacyStatus; Rumble/Fanvue: title, description; Pinterest: boardId plus description or caption; the rest: caption).',
+        'Publish a completed signed-upload video by uploadId — the remote replacement for publish_video (action: from_file). Single-use: one publish consumes the upload. Provider field rules mirror publish_video (action: from_file) (YouTube: title, description, tags, privacyStatus; Rumble/Fanvue: title, description; Pinterest: boardId plus description or caption; the rest: caption).',
       request: object(
         {
           uploadId: str,

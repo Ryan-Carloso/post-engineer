@@ -1,7 +1,7 @@
 //---------------
 // POST /api/videos/batch-discount — the "6 for 5" batch discount (issue #487).
 //
-// The MCP tool generate_persona_video_batch creates each video of a batch
+// The MCP tool generate_video creates each video of a batch
 // with generate-and-schedule (charged at list price, dispatched to the
 // engine at once, so they render back to back in one warm Modal container)
 // and then calls this route with the batch key and the created schedule

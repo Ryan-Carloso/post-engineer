@@ -661,7 +661,7 @@ export class PostEngineerClient {
     if (tag) formData.set('tag', tag);
     if (description) formData.set('description', description);
     // isPrimary is typed as `true` only (swap-only, symmetric with
-    // update_persona_image): an explicit false is rejected at schema parse
+    // persona_media (action: update_image)): an explicit false is rejected at schema parse
     // time and can never reach this branch.
     if (image.isPrimary) formData.set('isPrimary', 'true');
     return this.request(

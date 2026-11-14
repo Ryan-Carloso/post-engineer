@@ -7,6 +7,7 @@ import { WaitForVideoTasksSchema, handleWaitForVideoTasks } from '../video-task-
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
   withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
+  withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
     return handler(args);
   },
@@ -86,7 +87,7 @@ describe('wait_for_video_tasks', () => {
 
     const response = await handleWaitForVideoTasks(
       mockClient,
-      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }),
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 120 }),
       { now: clock.now, sleep },
     );
 
@@ -109,7 +110,7 @@ describe('wait_for_video_tasks', () => {
 
     const response = await handleWaitForVideoTasks(
       mockClient,
-      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }),
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 120 }),
       { now: clock.now, sleep },
     );
 
@@ -128,7 +129,7 @@ describe('wait_for_video_tasks', () => {
 
     const response = await handleWaitForVideoTasks(
       mockClient,
-      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }),
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 120 }),
       { now: clock.now, sleep: clock.sleep },
     );
 
@@ -152,7 +153,7 @@ describe('wait_for_video_tasks', () => {
 
     const response = await handleWaitForVideoTasks(
       mockClient,
-      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], timeoutSeconds: 10 }),
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 10 }),
       { now: clock.now, sleep: clock.sleep },
     );
 
@@ -184,7 +185,7 @@ describe('wait_for_video_tasks', () => {
 
     const response = await handleWaitForVideoTasks(
       mockClient,
-      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }),
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 120 }),
       { now: clock.now, sleep: clock.sleep },
     );
 
@@ -217,7 +218,7 @@ describe('wait_for_video_tasks', () => {
 
     const response = await handleWaitForVideoTasks(
       mockClient,
-      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }),
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 120 }),
       { now: clock.now, sleep: clock.sleep },
     );
 
@@ -244,7 +245,7 @@ describe('wait_for_video_tasks', () => {
 
     const response = await handleWaitForVideoTasks(
       mockClient,
-      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }),
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 120 }),
       { now: clock.now, sleep },
     );
 
@@ -275,7 +276,7 @@ describe('wait_for_video_tasks', () => {
 
       const response = await handleWaitForVideoTasks(
         mockClient,
-        WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }),
+        WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 120 }),
         { now: clock.now, sleep },
       );
 
@@ -300,7 +301,7 @@ describe('wait_for_video_tasks', () => {
 
     const response = await handleWaitForVideoTasks(
       mockClient,
-      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }),
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 120 }),
       { now: clock.now, sleep },
     );
 
@@ -334,7 +335,7 @@ describe('wait_for_video_tasks', () => {
 
     const response = await handleWaitForVideoTasks(
       mockClient,
-      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }),
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 120 }),
       { now: clock.now, sleep },
     );
 
@@ -352,7 +353,7 @@ describe('wait_for_video_tasks', () => {
 
     const response = await handleWaitForVideoTasks(
       mockClient,
-      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }),
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 120 }),
       { now: clock.now, sleep: clock.sleep },
     );
 
@@ -369,7 +370,7 @@ describe('wait_for_video_tasks', () => {
 
     const response = await handleWaitForVideoTasks(
       mockClient,
-      WaitForVideoTasksSchema.parse({ taskIds: ['task-1', 'task-1', 'task-2'] }),
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1', 'task-1', 'task-2'], waitSeconds: 120 }),
       { now: clock.now, sleep: clock.sleep },
     );
 
@@ -393,7 +394,7 @@ describe('wait_for_video_tasks', () => {
 
     const response = await handleWaitForVideoTasks(
       mockClient,
-      WaitForVideoTasksSchema.parse({ taskIds: ['task-1', 'task-2'] }),
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1', 'task-2'], waitSeconds: 120 }),
       { now: clock.now, sleep: clock.sleep },
     );
 
@@ -403,15 +404,33 @@ describe('wait_for_video_tasks', () => {
     expect(result.results.map((entry) => entry.outcome)).toEqual(['completed', 'failed']);
   });
 
-  it('validates taskIds and timeout bounds', () => {
-    expect(() => WaitForVideoTasksSchema.parse({ taskIds: [] })).toThrow();
+  it('validates taskIds and waitSeconds bounds', () => {
+    expect(() => WaitForVideoTasksSchema.parse({ taskIds: [], waitSeconds: 120 })).toThrow();
     expect(() =>
       WaitForVideoTasksSchema.parse({ taskIds: Array.from({ length: 13 }, (_, i) => `task-${i}`) }),
     ).toThrow();
-    expect(() => WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], timeoutSeconds: 9 })).toThrow();
+    expect(() => WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: -1 })).toThrow();
     expect(() =>
-      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], timeoutSeconds: 601 }),
+      WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 601 }),
     ).toThrow();
-    expect(WaitForVideoTasksSchema.parse({ taskIds: ['task-1'] }).timeoutSeconds).toBe(120);
+    expect(WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 120 }).waitSeconds).toBe(120);
+    expect(WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 600 }).waitSeconds).toBe(600);
+  });
+
+  it('defaults to a snapshot: waitSeconds 0 polls every task once and never sleeps', async () => {
+    const clock = fakeClock();
+    const sleep = vi.fn(clock.sleep);
+    vi.mocked(mockClient.getVideoStatus).mockResolvedValue(statusBody('task-1', 4, 30, 'audio'));
+    const args = WaitForVideoTasksSchema.parse({ taskIds: ['task-1', 'task-2'] });
+    expect(args.waitSeconds).toBe(0);
+
+    const response = await handleWaitForVideoTasks(mockClient, args, { now: clock.now, sleep });
+
+    const result = parsed(response);
+    expect(mockClient.getVideoStatus).toHaveBeenCalledTimes(2);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(result.allTerminal).toBe(false);
+    expect(result.summary).toBe('Status now: 0 completed, 0 failed, 2 running.');
+    expect(result.results.map((entry) => entry.outcome)).toEqual(['running', 'running']);
   });
 });

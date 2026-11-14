@@ -63,7 +63,7 @@ describe('prompts hub data', () => {
 
   it('orders the place-spotlight flow: place, facts search, photos with checks and cards, validate, generate', () => {
     // The composed prompt starts with the shared base, which already
-    // mentions validate_script and the 3h-30d window; the flow order
+    // mentions check_script (action: validate) and the 3h-30d window; the flow order
     // below is checked on the specific part only, after stripping that
     // base prefix.
     const fullText = getPrompt('place-spotlight')?.prompt ?? '';
@@ -74,17 +74,17 @@ describe('prompts hub data', () => {
       'Ask me which place',
       'Search the place once',
       'image search',
-      'check_media',
-      'upload_media',
+      'media (action: check)',
+      'media (action: upload)',
       'media overlay',
-      'validate_script',
-      'score_draft',
-      'wait_for_video_tasks',
-      'get_video_status',
+      'check_script (action: validate)',
+      'check_script (action: score)',
+      'video_tasks (action: status)',
+      'video_tasks (action: status)',
     ].map((needle) => text.indexOf(needle));
     expect(positions.every((i) => i >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
-    expect(text).toContain('one generate_persona_video call');
+    expect(text).toContain('one generate_video call');
     expect(text).toContain('only on ok');
     expect(text).toContain('Follow the density rule above; fewer, chosen well, beats every');
     expect(text).toContain('photo you found.');
@@ -141,17 +141,17 @@ describe('prompts hub data', () => {
       'Ask me what the subject is',
       'Pin the identity first',
       'image search',
-      'check_media',
-      'upload_media',
+      'media (action: check)',
+      'media (action: upload)',
       'media overlay',
-      'validate_script',
-      'score_draft',
-      'wait_for_video_tasks',
-      'get_video_status',
+      'check_script (action: validate)',
+      'check_script (action: score)',
+      'video_tasks (action: status)',
+      'video_tasks (action: status)',
     ].map((needle) => text.indexOf(needle));
     expect(positions.every((i) => i >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
-    expect(text).toContain('generate_persona_video call');
+    expect(text).toContain('generate_video call');
     expect(text).toContain('model, trim, and year');
     expect(text).toContain('currency, market, and date');
     expect(text).toContain('a price without a source is a');
@@ -213,7 +213,7 @@ describe('prompts hub data', () => {
 
   it('orders the full-setup flow: accounts, app password, persona, balance/validate, confirm publish, generate', () => {
     // The composed prompt starts with the shared base, which already
-    // mentions validate_script and the 3h-30d window; the flow order
+    // mentions check_script (action: validate) and the 3h-30d window; the flow order
     // below is checked on the specific part only, after stripping that
     // base prefix. The 3h-30d window itself lives in the base.
     const fullText = getPrompt('full-setup')?.prompt ?? '';
@@ -221,24 +221,24 @@ describe('prompts hub data', () => {
     expect(fullText.startsWith(baseText)).toBe(true);
     const text = fullText.slice(baseText.length + 2);
     const positions = [
-      'list_social_accounts',
-      'connect_account',
+      'accounts (action: list)',
+      'accounts (action: connect)',
       'never repeat, print, or log it',
-      'list_faces',
-      'list_voices',
-      'create_persona',
+      'persona_media (action: list_faces)',
+      'voices (action: list)',
+      'personas (action: create)',
       'avatarUrl',
       'voiceId',
       'language "en-US"',
-      'personaId',
-      'get_token_balance',
-      'validate_script',
+      'Remember the persona name',
+      'billing (action: balance)',
+      'check_script (action: validate)',
       'confirm the providers/accounts and the mode (scheduled|asap)',
-      'generate_persona_video',
+      'generate_video',
       'confirmed title',
-      'account IDs',
-      'wait_for_video_tasks',
-      'get_video_status',
+      'each a name or id',
+      'video_tasks (action: status)',
+      'post URL',
     ].map((needle) => text.indexOf(needle));
     expect(positions.every((i) => i >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
@@ -251,7 +251,7 @@ describe('prompts hub data', () => {
     const baseText = SHARED_PROMPT_BASE.join('\n');
     expect(baseText).toContain('images is the only material');
     expect(baseText).toContain('no stock footage and no drawn material');
-    expect(baseText).toContain('options.videoType on generate_persona_video: full_lipsync');
+    expect(baseText).toContain('options.videoType on generate_video: full_lipsync');
     expect(baseText).toContain('media optional, at most 6 photos in total');
     expect(baseText).toContain('hook_lipsync (lip sync only on the hook');
     expect(baseText).toContain('faceless (only the agent\'s photos, no face');
@@ -270,8 +270,8 @@ describe('prompts hub data', () => {
 
   it('bakes the segments contract into every prompt text', () => {
     for (const prompt of PROMPTS) {
-      expect(prompt.prompt).toContain('validate_script');
-      expect(prompt.prompt).toContain('generate_persona_video');
+      expect(prompt.prompt).toContain('check_script (action: validate)');
+      expect(prompt.prompt).toContain('generate_video');
       expect(prompt.prompt).toContain('60–200 words');
       expect(prompt.prompt).toContain('hook');
       expect(prompt.prompt).toContain('CTA');
@@ -285,7 +285,7 @@ describe('prompts hub data', () => {
     expect(baseText).toContain('make me want the next sentence');
     expect(baseText).toContain('another creator');
     expect(baseText).toContain('one specific action');
-    expect(baseText).toContain('score_draft with kind "script"');
+    expect(baseText).toContain('check_script (action: score) with kind "script"');
     expect(baseText).toContain('no recurring schedule');
     expect(baseText).not.toContain('[');
     expect(baseText).toContain('3h-30d ahead');
@@ -377,11 +377,11 @@ describe('prompts hub data', () => {
       'at most 5 results',
       'single event',
       'ONLY facts from those results',
-      'validate_script',
-      'score_draft',
-      'generate_persona_video',
-      'wait_for_video_tasks',
-      'get_video_status',
+      'check_script (action: validate)',
+      'check_script (action: score)',
+      'generate_video',
+      'video_tasks (action: status)',
+      'video_tasks (action: status)',
     ].map((needle) => text.indexOf(needle));
     expect(positions.every((i) => i >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
@@ -424,15 +424,15 @@ describe('prompts hub data', () => {
     const positions = [
       'one video per network',
       'Ask me the niche',
-      'list_social_accounts',
+      'accounts (action: list)',
       'one topic for the week',
       '60–200 words',
-      'validate_script',
-      'score_draft',
+      'check_script (action: validate)',
+      'check_script (action: score)',
       'wait for my yes',
-      'generate_persona_video',
-      'wait_for_video_tasks',
-      'get_video_status',
+      'generate_video',
+      'video_tasks (action: status)',
+      'video_tasks (action: status)',
     ].map((needle) => text.indexOf(needle));
     expect(positions.every((i) => i >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
@@ -487,10 +487,10 @@ describe('prompts hub data', () => {
       '--skip-download',
       'Break down its structure',
       'Write MY script from MY content',
-      'validate_script',
-      'score_draft',
-      'generate_persona_video',
-      'wait_for_video_tasks',
+      'check_script (action: validate)',
+      'check_script (action: score)',
+      'generate_video',
+      'video_tasks (action: status)',
     ].map((needle) => text.indexOf(needle));
     expect(positions.every((i) => i >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
@@ -526,7 +526,7 @@ describe('prompts hub data', () => {
       'HYPOTHESES, never measured causes',
       "retention_evidence: 'unavailable'",
       'Write MY script from MY content',
-      'validate_script',
+      'check_script (action: validate)',
     ].map((needle) => text.indexOf(needle));
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);

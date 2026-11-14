@@ -71,7 +71,7 @@ async function headersFrom(server: McpServer): Promise<Record<string, string>> {
   const client = new Client({ name: 'test-client', version: '0.0.0' });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
-    const result = await client.callTool({ name: 'list_personas', arguments: {} });
+    const result = await client.callTool({ name: 'personas', arguments: { action: 'list' } });
     expect(result.isError).toBeFalsy();
   } finally {
     await client.close();
