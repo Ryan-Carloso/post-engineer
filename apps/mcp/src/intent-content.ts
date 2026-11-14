@@ -5,6 +5,8 @@ import type { PostEngineerClient } from './client.js';
 import { optionalPersonaRefShape, withOptionalPersona } from './refs.js';
 import { withScriptOutcome, type RecipeSession } from './recipe-session.js';
 import { CompleteVideoUploadShape, CreateVideoUploadShape, PublishUploadedVideoShape } from './publish-uploaded-shape.js';
+import { PublishExistingShape } from './publish-existing-shape.js';
+import { handlePublishExisting } from './tools-publish-existing.js';
 import { DESTRUCTIVE, MUTATING, READ_ONLY } from './tool-annotations.js';
 import { PublishVideoDirectShape, handlePublishVideoDirect } from './tools.js';
 import { AddExperimentPairShape, CreateExperimentShape, GetExperimentResultsShape, ListExperimentsShape, handleAddExperimentPair, handleCreateExperiment, handleGetExperimentResults, handleListExperiments } from './tools-experiments.js';
@@ -33,6 +35,7 @@ const PUBLISH_SPECS = {
   create_upload: CreateVideoUploadShape,
   complete_upload: CompleteVideoUploadShape,
   publish_upload: PublishUploadedVideoShape,
+  publish_existing: optionalPersonaRefShape(PublishExistingShape),
 };
 
 export function registerContentTools(server: McpServer, client: PostEngineerClient, session: RecipeSession, remote: boolean): void {
@@ -100,7 +103,7 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
   server.tool(
     'publish_video',
     actionDescription(
-      `Publish a ready-made video directly to social accounts: no generation, no schedule. ${remote ? '' : 'from_file: a local video (.mp4 or .mov) is read and published. '}create_upload → complete_upload → publish_upload: a signed upload (the bytes are PUT straight to storage, never through this server; the upload expires in 15 minutes; publishing consumes it). YouTube needs title, description, tags and privacyStatus; Rumble and Fanvue title and description; the other networks a caption. If a call times out, retry with the same idempotencyKey (the original result is replayed); a result with errorCode publish_unknown must NOT be retried: the post may be live, check the account first.`,
+      `Publish a ready-made video directly to social accounts: no generation, no schedule. ${remote ? '' : 'from_file: a local video (.mp4 or .mov) is read and published. '}create_upload → complete_upload → publish_upload: a signed upload (the bytes are PUT straight to storage, never through this server; the upload expires in 15 minutes; publishing consumes it). publish_existing: publish or schedule existing media (taskId, uploadId, or inline image, instagram only), ASAP or scheduled; no generation, no charge. YouTube needs title, description, tags and privacyStatus; Rumble and Fanvue title and description; the other networks a caption. If a call times out, retry with the same idempotencyKey (the original result is replayed); a result with errorCode publish_unknown must NOT be retried: the post may be live, check the account first.`,
       offeredSpecs(PUBLISH_SPECS, publishOptions),
     ),
     actionShape(offeredSpecs(PUBLISH_SPECS, publishOptions)),
@@ -111,6 +114,7 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
         create_upload: async (args) => handleCreateVideoUpload(client, args),
         complete_upload: async (args) => handleCompleteVideoUpload(client, args),
         publish_upload: async (args) => handlePublishUploadedVideo(client, args),
+        publish_existing: (args) => withOptionalPersona(client, args, (resolved) => handlePublishExisting(client, resolved)),
       },
       PUBLISH_SPECS,
       'publish_video',
