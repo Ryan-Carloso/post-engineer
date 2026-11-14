@@ -61,6 +61,56 @@ describe('parity gate v2: action discovery', () => {
   });
 });
 
+describe('parity gate v2: every byAction handler form is read', () => {
+  const forms = buildMcpCallGraph([
+    {
+      file: 'client.ts',
+      text: `
+        export class Client {
+          async a() { return this.request('/api/a', { method: 'GET' }, 'a'); }
+          async b() { return this.request('/api/b', { method: 'GET' }, 'b'); }
+          async c() { return this.request('/api/c', { method: 'GET' }, 'c'); }
+          async d() { return this.request('/api/d', { method: 'GET' }, 'd'); }
+        }
+      `,
+    },
+    {
+      file: 'forms-tools.ts',
+      text: `
+        const shorthand = async (client: Client) => client.a();
+        server.tool('forms', 'd', {}, byAction({
+          shorthand,
+          'quoted-key': async (client: Client) => client.b(),
+          method(client: Client) { return client.c(); },
+          [computed]: async (client: Client) => client.d(),
+          missing: neverDefined,
+        }));
+      `,
+    },
+  ]);
+
+  it('reads shorthand, quoted-key and method handlers, and skips a computed key', () => {
+    const actions = forms.toolActions.get('forms');
+    expect([...(actions?.keys() ?? [])].sort()).toEqual(['method', 'missing', 'quoted-key', 'shorthand']);
+    expect(actions?.get('shorthand')).toEqual([{ method: 'GET', path: '/api/a' }]);
+    expect(actions?.get('quoted-key')).toEqual([{ method: 'GET', path: '/api/b' }]);
+    expect(actions?.get('method')).toEqual([{ method: 'GET', path: '/api/c' }]);
+  });
+
+  it('gives an action naming an undefined function no request sites, so a mapping to it fails', () => {
+    expect(forms.toolActions.get('forms')?.get('missing')).toEqual([]);
+    expect(verifyMapping('GET /api/a', [{ tool: 'forms', action: 'missing' }], forms)).toContainEqual(
+      expect.stringContaining('never calls GET /api/a'),
+    );
+  });
+
+  it('does not treat byAction with a non-object argument as an action tool', () => {
+    const plain = buildMcpCallGraph([{ file: 'x.ts', text: `server.tool('odd', 'd', {}, byAction(handlers));` }]);
+    expect(plain.toolActions.has('odd')).toBe(false);
+    expect(plain.tools).toContain('odd');
+  });
+});
+
 describe('parity gate v2: mapping format', () => {
   it('accepts { tool } and { tool, action }', () => {
     expect(() =>
@@ -183,6 +233,19 @@ describe('parity gate v2: behavioural proof', () => {
     expect(requestReaches(recorded, 'POST /api/persona/video-status/[taskId]')).toBe(false);
     expect(requestReaches(recorded, 'GET /api/persona/video-status')).toBe(false);
     expect(requestReaches(recorded, 'GET /api/persona/list')).toBe(false);
+  });
+
+  it('records a Request object and a bare URL, with GET as the default method', async () => {
+    const server = new McpServer({ name: 'demo', version: '0.0.0' });
+    server.tool('requests', 'd', {}, async () => {
+      await fetch(new Request('https://example.test/api/a', { method: 'post' }));
+      await fetch('https://example.test/api/b');
+      return { content: [{ type: 'text' as const, text: 'ok' }] };
+    });
+    expect(await callToolRecordingRequests(server, 'requests', {})).toEqual([
+      { method: 'POST', pathname: '/api/a' },
+      { method: 'GET', pathname: '/api/b' },
+    ]);
   });
 
   it('records nothing when the action sends no request, so a label cannot pass', async () => {
