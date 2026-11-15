@@ -61,6 +61,29 @@ describe('answerSchedulePkRace', () => {
 
     expect(result).toBe(replay);
     expect(refundRollbackSpend).toHaveBeenCalledTimes(0);
+    // The else branch logs the skip with the race context: a refund here
+    // would steal the legitimate prior spend.
+    expect(loggerError).toHaveBeenCalledWith(
+      '[generate-and-schedule] schedule PK race; already spent, nothing to refund, replaying winner',
+      { code: '23505' },
+      { scheduleId: 'schedule-1', userId: 'user-1', constraint: 'schedules_pkey' },
+    );
+  });
+
+  it('does not log a refund when the rollback spend fails to land', async () => {
+    const replay = NextResponse.json({ replayed: true });
+    fetchReplay.mockResolvedValue(replay);
+    refundRollbackSpend.mockResolvedValue(false);
+
+    const result = await answerSchedulePkRace(supabase, input(false));
+
+    expect(result).toBe(replay);
+    expect(refundRollbackSpend).toHaveBeenCalledTimes(1);
+    expect(loggerError).not.toHaveBeenCalledWith(
+      '[generate-and-schedule] schedule PK race; refunded redundant spend, replaying winner',
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it('answers 500 without a second refund when the replay read fails', async () => {

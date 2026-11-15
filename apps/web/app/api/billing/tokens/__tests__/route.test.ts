@@ -127,6 +127,11 @@ describe('GET /api/billing/tokens', () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ success: true, balance: 8, free: 3 });
+    // An API-key caller reads through the service client (the cookie
+    // client sees no session, so RLS would hide the profile row and the
+    // balance would degrade to a silent 0).
+    expect(createSupabaseServiceClient).toHaveBeenCalled();
+    expect(createSupabaseServerClient).not.toHaveBeenCalled();
   });
 
   it('returns a zero balance when there is no profile', async () => {
