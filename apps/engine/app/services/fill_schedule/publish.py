@@ -24,6 +24,7 @@ from app.services.fill_schedule.publish_accounts import (
     publish_slot_accounts,
 )
 from app.services.fill_schedule.publish_existing_media import (
+    claimed_upload_cleanup,
     cleanup_existing_media,
     image_cleanup,
     r2_reader,
@@ -125,8 +126,8 @@ class BatchPublisher:
             return 0
         # Issue #384: image cleanup is known from the slot row alone, so
         # a permanent binding failure also removes bytes that will never
-        # publish; an upload has no cleanup until its row is claimed.
-        media_cleanup = image_cleanup(slot)
+        # publish. A resumed upload slot's own claimed bytes are known too.
+        media_cleanup = image_cleanup(slot) or claimed_upload_cleanup(self.store, slot, resumed)
         # Issue #572: re-check the persona binding at publish time, after
         # the claim and before any video leaves the server. The generate
         # pre-flight proves the plan before GPU is spent, but the schedule

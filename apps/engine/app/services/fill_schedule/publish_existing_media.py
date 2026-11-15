@@ -90,6 +90,36 @@ def image_cleanup(slot: dict[str, Any]) -> MediaCleanup:
     return ("uploads", ref)
 
 
+def claimed_upload_cleanup(store: Any, slot: dict[str, Any], resumed: bool) -> MediaCleanup:
+    """Cleanup tuple for a resumed upload slot's own claimed bytes.
+
+    The binding/plan checks run before the resolver, so no upload cleanup
+    exists yet when they fail the slot. A resume whose first attempt
+    already claimed the single-use row would otherwise leak the bytes: no
+    sweeper covers consumed rows. Only the slot's own claim is removed —
+    the row's consumed_at must match the slot's recorded media_claimed_at.
+    A foreign claim, an unclaimed row, or a failed store read returns None.
+    """
+    if not resumed or slot.get("media_kind") != "upload":
+        return None
+    try:
+        row = store.get_video_upload(str(slot.get("media_ref")))
+    except Exception as exc:  # noqa: BLE001 - best-effort cleanup
+        logger.warning(
+            f"fill_schedule: slot {slot['id']} claimed-upload lookup failed, "
+            f"leaving the bytes in place: {scrub_error_text(str(exc), max_chars=200)}"
+        )
+        return None
+    if not isinstance(row, dict) or row.get("status") != "consumed":
+        return None
+    if not _slot_owns_upload_claim(slot, row):
+        return None
+    storage_path = row.get("storage_path")
+    if not isinstance(storage_path, str) or not storage_path:
+        return None
+    return ("videos", storage_path)
+
+
 def cleanup_existing_media(store: Any, slot: dict[str, Any], cleanup: MediaCleanup) -> None:
     """Remove single-use stored media after a terminal outcome.
 

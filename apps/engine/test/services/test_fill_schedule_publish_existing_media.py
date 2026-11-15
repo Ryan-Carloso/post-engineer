@@ -21,6 +21,7 @@ from app.services.fill_schedule import FillScheduleScheduler
 from app.services.fill_schedule.publish import BatchPublisher
 from app.services.fill_schedule.publish_accounts import AccountPublishResult
 from app.services.fill_schedule.publish_existing_media import (
+    claimed_upload_cleanup,
     cleanup_existing_media,
     image_cleanup,
     resolve_existing_media,
@@ -358,6 +359,73 @@ class PublishExistingMediaTests(unittest.TestCase):
         store.remove_storage_object.assert_called_once_with(
             "videos", f"{USER_ID}/direct-uploads/{UPLOAD_ID}.mp4"
         )
+
+    def _bound_upload_slot(self, media_claimed_at):
+        # A resumed upload slot whose persona unbound the account between
+        # attempts: the binding check (before the resolver) fails the slot.
+        return _media_slot(
+            media_claimed_at=media_claimed_at,
+            schedules={
+                "id": "sched-1",
+                "user_id": USER_ID,
+                "persona_id": "persona-1",
+                "providers": ["youtube"],
+                "youtube_account_ids": ["yt-1"],
+            },
+        )
+
+    def test_resumed_upload_slot_failing_binding_removes_its_claimed_bytes(self):
+        # The binding check runs before the resolver, so no upload cleanup
+        # exists yet — the resumed slot's own claimed bytes must still be
+        # removed, or they leak (no sweeper covers consumed rows).
+        store = MagicMock()
+        store.claim_resumable_slot.return_value = True
+        store.persona_bound_accounts.return_value = {"youtube": ["yt-other"]}
+        store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
+        publisher = self._publisher(store)
+        with patch("app.services.fill_schedule.publish.notify_owner_async"):
+            published = publisher._publish_one(
+                self._bound_upload_slot(CLAIMED_AT), NOW, resumed=True
+            )
+        self.assertEqual(published, 0)
+        self.assertTrue(
+            any(
+                call.kwargs.get("status") == "failed"
+                for call in store.update_slot.call_args_list
+            )
+        )
+        store.remove_storage_object.assert_called_once_with(
+            "videos", f"{USER_ID}/direct-uploads/{UPLOAD_ID}.mp4"
+        )
+
+    def test_resumed_upload_slot_failing_binding_keeps_a_foreign_claim(self):
+        # The row was consumed by another consumer: the bytes are theirs
+        # (already live, or already gone) and must not be removed.
+        store = MagicMock()
+        store.claim_resumable_slot.return_value = True
+        store.persona_bound_accounts.return_value = {"youtube": ["yt-other"]}
+        store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
+        publisher = self._publisher(store)
+        with patch("app.services.fill_schedule.publish.notify_owner_async"):
+            published = publisher._publish_one(
+                self._bound_upload_slot("2026-11-14T10:00:00+00:00"), NOW, resumed=True
+            )
+        self.assertEqual(published, 0)
+        store.remove_storage_object.assert_not_called()
+
+    def test_first_attempt_upload_slot_failing_binding_removes_nothing(self):
+        # No claim exists yet on a first attempt: there is nothing of this
+        # slot's to remove, and the still-ready row stays for the sweeper.
+        store = MagicMock()
+        store.claim_ready_slot.return_value = True
+        store.persona_bound_accounts.return_value = {"youtube": ["yt-other"]}
+        store.get_video_upload.return_value = _upload_row()
+        publisher = self._publisher(store)
+        with patch("app.services.fill_schedule.publish.notify_owner_async"):
+            published = publisher._publish_one(self._bound_upload_slot(None), NOW, resumed=False)
+        self.assertEqual(published, 0)
+        store.remove_storage_object.assert_not_called()
+        store.get_video_upload.assert_not_called()
 
     def test_lost_upload_claim_fails_permanently_without_dispatch(self):
         store = MagicMock()
@@ -794,6 +862,38 @@ class PublishExistingMediaSchedulerTests(unittest.TestCase):
         store.remove_storage_object.assert_called_once_with(
             "uploads", "scheduled-media/user-1/a.jpg"
         )
+
+
+class ClaimedUploadCleanupTests(unittest.TestCase):
+    def test_returns_the_owned_claims_bytes_on_resume(self):
+        store = MagicMock()
+        store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
+        slot = _media_slot(media_claimed_at=CLAIMED_AT)
+        self.assertEqual(
+            claimed_upload_cleanup(store, slot, resumed=True),
+            ("videos", f"{USER_ID}/direct-uploads/{UPLOAD_ID}.mp4"),
+        )
+
+    def test_returns_none_for_an_unclaimed_row(self):
+        store = MagicMock()
+        store.get_video_upload.return_value = _upload_row()
+        slot = _media_slot(media_claimed_at=CLAIMED_AT)
+        self.assertIsNone(claimed_upload_cleanup(store, slot, resumed=True))
+
+    def test_returns_none_when_the_store_read_fails(self):
+        # Best-effort cleanup: a transient read failure never fails the tick.
+        store = MagicMock()
+        store.get_video_upload.side_effect = RuntimeError("supabase down")
+        slot = _media_slot(media_claimed_at=CLAIMED_AT)
+        self.assertIsNone(claimed_upload_cleanup(store, slot, resumed=True))
+
+    def test_returns_none_without_a_storage_path(self):
+        store = MagicMock()
+        row = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
+        row["storage_path"] = None
+        store.get_video_upload.return_value = row
+        slot = _media_slot(media_claimed_at=CLAIMED_AT)
+        self.assertIsNone(claimed_upload_cleanup(store, slot, resumed=True))
 
 
 if __name__ == "__main__":
