@@ -10,6 +10,7 @@ import { connectBlueskyAccount, getOAuthConnectUrl, getPersonaPublishingAccounts
 import { cancelSchedule, deleteSlot, getSlot, listPosts, listSchedules, updateSlotTitle } from '@/lib/contracts/schedule';
 import { cancelVideoTask, getVideoGeneration, getVideoStatus, listVideoGenerations } from '@/lib/contracts/video-tasks';
 import { createClonedVoice, deleteClonedVoice, getClonedVoice, listClonedVoices, listVoices } from '@/lib/contracts/voices';
+import { addPersonaImage, createPersona, deletePersona, deletePersonaImage, getPersonaDeletePreview, listFaces, listPersonaImages, listPersonas, updatePersona, updatePersonaImage } from '@/lib/contracts/personas';
 import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
 //---------------
@@ -52,6 +53,20 @@ type GetClonedVoiceResponse = ResponseOf<typeof getClonedVoice>;
 type CreateClonedVoiceBody = BodyOf<typeof createClonedVoice>;
 type CreateClonedVoiceResponse = ResponseOf<typeof createClonedVoice>;
 type DeleteClonedVoiceResponse = ResponseOf<typeof deleteClonedVoice>;
+type ListPersonasResponse = ResponseOf<typeof listPersonas>;
+type ListFacesResponse = ResponseOf<typeof listFaces>;
+type ListPersonaImagesResponse = ResponseOf<typeof listPersonaImages>;
+type CreatePersonaBody = BodyOf<typeof createPersona>;
+type CreatePersonaResponse = ResponseOf<typeof createPersona>;
+type UpdatePersonaBody = BodyOf<typeof updatePersona>;
+type UpdatePersonaResponse = ResponseOf<typeof updatePersona>;
+type DeletePersonaResponse = ResponseOf<typeof deletePersona>;
+type GetPersonaDeletePreviewResponse = ResponseOf<typeof getPersonaDeletePreview>;
+type AddPersonaImageBody = BodyOf<typeof addPersonaImage>;
+type AddPersonaImageResponse = ResponseOf<typeof addPersonaImage>;
+type UpdatePersonaImageBody = BodyOf<typeof updatePersonaImage>;
+type UpdatePersonaImageResponse = ResponseOf<typeof updatePersonaImage>;
+type DeletePersonaImageResponse = ResponseOf<typeof deletePersonaImage>;
 
 describe('contracts typecheck', () => {
   it('pins BodyOf and ResponseOf field names', async () => {
@@ -399,5 +414,88 @@ describe('contracts typecheck', () => {
     expect(deleted.success).toBe(true);
     // @ts-expect-error -- the delete response has no `voice` field
     expect(deleted.voice).toBeUndefined();
+  });
+
+  it('pins the personas field names', () => {
+    const list: ListPersonasResponse = {
+      authenticated: true,
+      personas: [
+        {
+          id: 'p1',
+          name: 'Ava',
+          createdAt: '2026-01-01T00:00:00Z',
+          boundAccounts: {
+            youtube: ['acct-1'], instagram: [], bluesky: [], linkedin: [], threads: [],
+            facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [],
+          },
+        },
+      ],
+    };
+    expect(list.personas[0]?.createdAt).toBe('2026-01-01T00:00:00Z');
+    expect(list.personas[0]?.boundAccounts.youtube).toEqual(['acct-1']);
+    // @ts-expect-error -- the list item field is `createdAt`, not `created_at`
+    expect(list.personas[0]?.created_at).toBeUndefined();
+    // @ts-expect-error -- the list response carries `authenticated`, not `success`
+    expect(list.success).toBeUndefined();
+    const faces: ListFacesResponse = {
+      faces: [{ id: 'f1', url: 'https://example.test/f1.png', name: 'Ava', gender: 'female', age: 30, ethnicity: 'asian', hair: 'black', description: 'Smiling.' }],
+    };
+    expect(faces.faces[0]?.url).toBe('https://example.test/f1.png');
+    // @ts-expect-error -- the face row field is `url`, not `path`
+    expect(faces.faces[0]?.path).toBeUndefined();
+    const images: ListPersonaImagesResponse = {
+      success: true,
+      images: [{ id: 'img-1', tag: 'casual', description: 'Smiling.', is_primary: false, created_at: '2026-01-01T00:00:00Z', image_url: 'https://example.test/signed' }],
+    };
+    expect(images.images[0]?.is_primary).toBe(false);
+    // @ts-expect-error -- the library row keeps its snake_case `created_at`
+    expect(images.images[0]?.createdAt).toBeUndefined();
+    const created: CreatePersonaResponse = { success: true, personaId: 'p1', imageIds: ['img-1'] };
+    expect(created.imageIds).toEqual(['img-1']);
+    // @ts-expect-error -- the create response field is `imageIds`, not `image_ids`
+    expect(created.image_ids).toBeUndefined();
+    const body: CreatePersonaBody = { name: 'Ava', paragraphNumber: '3', imagePrimaryIndex: '0' };
+    expect(body.paragraphNumber).toBe('3');
+    // @ts-expect-error -- the create body takes the digit string, not a number
+    const wrongBody: CreatePersonaBody = { name: 'Ava', imagePrimaryIndex: 0 };
+    expect(typeof wrongBody).toBe('object');
+    const updated: UpdatePersonaResponse = { success: true };
+    expect(updated.success).toBe(true);
+    // @ts-expect-error -- the update response carries only `success`
+    expect(updated.personaId).toBeUndefined();
+    const deleted: DeletePersonaResponse = { success: true };
+    expect(deleted.success).toBe(true);
+    const preview: GetPersonaDeletePreviewResponse = {
+      success: true,
+      persona: { id: 'p1', name: 'Ava' },
+      counts: { schedules: 1, upcomingSlots: 2, publishedSlots: 3, failedSlots: 0, generatedVideos: 4, personaImages: 5 },
+      videos: [{ taskId: 'task-1', title: 'Gym', status: 'completed', downloadUrl: 'https://cdn.test/v1.mp4' }],
+      videosTruncated: false,
+      linksIncomplete: false,
+    };
+    expect(preview.counts.schedules).toBe(1);
+    expect(preview.videos[0]?.taskId).toBe('task-1');
+    // @ts-expect-error -- the delete-preview flag is `videosTruncated`, not `truncated`
+    expect(preview.truncated).toBeUndefined();
+    const addBody: AddPersonaImageBody = { personaId: 'p1', isPrimary: 'true' };
+    expect(addBody.isPrimary).toBe('true');
+    // @ts-expect-error -- the add-image form field takes the string literal 'true', not a boolean
+    const wrongAddBody: AddPersonaImageBody = { personaId: 'p1', isPrimary: true };
+    expect(typeof wrongAddBody).toBe('object');
+    const added: AddPersonaImageResponse = {
+      success: true,
+      image: { id: 'img-1', tag: 'casual', description: 'Smiling.', is_primary: false, created_at: '2026-01-01T00:00:00Z' },
+    };
+    expect(added.image.id).toBe('img-1');
+    // @ts-expect-error -- the mutation row has no `image_path` field
+    expect(added.image.image_path).toBeUndefined();
+    const updateBody: UpdatePersonaBody = { ctaText: '' };
+    expect(updateBody.ctaText).toBe('');
+    const updatedImage: UpdatePersonaImageResponse = { success: true, image: null };
+    expect(updatedImage.image).toBeNull();
+    const updateImageBody: UpdatePersonaImageBody = { id: 'img-1', isPrimary: true };
+    expect(updateImageBody.isPrimary).toBe(true);
+    const deletedImage: DeletePersonaImageResponse = { success: true };
+    expect(deletedImage.success).toBe(true);
   });
 });

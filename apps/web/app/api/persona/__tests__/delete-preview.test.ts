@@ -32,6 +32,7 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
 });
 
 import { GET } from '../delete-preview/route';
+import { GetPersonaDeletePreviewResponseSchema } from '@/lib/contracts/personas';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -197,6 +198,7 @@ describe('GET /api/persona/delete-preview', () => {
     };
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
+    expect(GetPersonaDeletePreviewResponseSchema.safeParse(body).success).toBe(true);
     // 2 schedules; upcoming = pending + ready (published is terminal);
     // publishedSlots/failedSlots count the history the cascade also deletes.
     expect(body.counts).toMatchObject({

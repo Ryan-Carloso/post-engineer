@@ -45,6 +45,16 @@ type GetClonedVoiceResult = Awaited<ReturnType<typeof getClonedVoice>>;
 type CreateClonedVoiceResult = Awaited<ReturnType<typeof createClonedVoiceFromUrl>>;
 type DeleteClonedVoiceResult = Awaited<ReturnType<typeof deleteClonedVoice>>;
 type CancelVideoTaskResult = Awaited<ReturnType<typeof cancelVideoTask>>;
+type ListPersonasResult = Awaited<ReturnType<PostEngineerClient['listPersonas']>>;
+type ListFacesResult = Awaited<ReturnType<PostEngineerClient['listFaces']>>;
+type ListPersonaImagesResult = Awaited<ReturnType<PostEngineerClient['listPersonaImages']>>;
+type CreatePersonaResult = Awaited<ReturnType<PostEngineerClient['createPersona']>>;
+type UpdatePersonaResult = Awaited<ReturnType<PostEngineerClient['updatePersona']>>;
+type DeletePersonaResult = Awaited<ReturnType<PostEngineerClient['deletePersona']>>;
+type GetPersonaDeletePreviewResult = Awaited<ReturnType<PostEngineerClient['getPersonaDeletePreview']>>;
+type AddPersonaImageResult = Awaited<ReturnType<PostEngineerClient['addPersonaImage']>>;
+type UpdatePersonaImageResult = Awaited<ReturnType<PostEngineerClient['updatePersonaImage']>>;
+type DeletePersonaImageResult = Awaited<ReturnType<PostEngineerClient['deletePersonaImage']>>;
 
 describe('contracts typecheck', () => {
   it('rejects an unknown body field and an unknown response field at compile time', () => {
@@ -233,5 +243,68 @@ describe('contracts typecheck', () => {
     expect(typeof detail).toBe('function');
     expect(typeof created).toBe('function');
     expect(typeof deleted).toBe('function');
+  });
+
+  it('rejects unknown personas fields at compile time', () => {
+    const list = (result: ListPersonasResult): unknown => {
+      // @ts-expect-error -- the list item field is `createdAt`, not `created_at`
+      return result.personas[0]?.created_at;
+    };
+    const listAccounts = (result: ListPersonasResult): unknown => {
+      // @ts-expect-error -- the list item field is `boundAccounts`, not `accounts`
+      return result.personas[0]?.accounts;
+    };
+    const faces = (result: ListFacesResult): unknown => {
+      // @ts-expect-error -- the face row field is `url`, not `path`
+      return result.faces[0]?.path;
+    };
+    const images = (result: ListPersonaImagesResult): unknown => {
+      // @ts-expect-error -- the library row keeps its snake_case `is_primary`
+      return result.images[0]?.isPrimary;
+    };
+    const imagesCreated = (result: ListPersonaImagesResult): unknown => {
+      // @ts-expect-error -- the library row keeps its snake_case `created_at`
+      return result.images[0]?.createdAt;
+    };
+    const created = (result: CreatePersonaResult): unknown => {
+      // @ts-expect-error -- the create response field is `imageIds`, not `image_ids`
+      return result.image_ids;
+    };
+    const updated = (result: UpdatePersonaResult): unknown => {
+      // @ts-expect-error -- the update response carries only `success`
+      return result.personaId;
+    };
+    const deleted = (result: DeletePersonaResult): unknown => {
+      // @ts-expect-error -- the delete response carries only `success`
+      return result.personaId;
+    };
+    const preview = (result: GetPersonaDeletePreviewResult): unknown => {
+      // @ts-expect-error -- the delete-preview flag is `videosTruncated`, not `truncated`
+      return result.truncated;
+    };
+    const added = (result: AddPersonaImageResult): unknown => {
+      // @ts-expect-error -- the mutation row has no `image_path` field
+      return result.image.image_path;
+    };
+    const updatedImage = (result: UpdatePersonaImageResult): unknown => {
+      // @ts-expect-error -- the mutation row has no `image_url` field
+      return result.image?.image_url;
+    };
+    const deletedImage = (result: DeletePersonaImageResult): unknown => {
+      // @ts-expect-error -- the delete-image response carries only `success`
+      return result.image;
+    };
+    expect(typeof list).toBe('function');
+    expect(typeof listAccounts).toBe('function');
+    expect(typeof faces).toBe('function');
+    expect(typeof images).toBe('function');
+    expect(typeof imagesCreated).toBe('function');
+    expect(typeof created).toBe('function');
+    expect(typeof updated).toBe('function');
+    expect(typeof deleted).toBe('function');
+    expect(typeof preview).toBe('function');
+    expect(typeof added).toBe('function');
+    expect(typeof updatedImage).toBe('function');
+    expect(typeof deletedImage).toBe('function');
   });
 });

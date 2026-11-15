@@ -25,6 +25,7 @@ vi.mock('@/lib/voice-catalog-fetch', () => ({
 }));
 
 import { POST } from '../route';
+import { CreatePersonaResponseSchema } from '@/lib/contracts/personas';
 import { logger } from '@/lib/logger';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -201,6 +202,7 @@ describe('POST /api/persona with image library', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { success: boolean; personaId: string; imageIds: string[] };
     expect(body.success).toBe(true);
+    expect(CreatePersonaResponseSchema.safeParse(body).success).toBe(true);
     expect(body.personaId).toBe(PERSONA_ID);
     expect(body.imageIds).toHaveLength(2);
     expect(calls.imageInserts[0].tag).toBe('casual');

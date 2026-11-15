@@ -214,7 +214,7 @@ describe('remote smuggled paths are dropped by the SDK, never read', () => {
   function stubClient() {
     const createPersona = vi.fn().mockResolvedValue({ id: 'p1', name: 'Ava' });
     const updatePersona = vi.fn().mockResolvedValue({ id: 'p1', name: 'Ava 2' });
-    const request = vi.fn().mockResolvedValue({ success: true, voice: { id: 'v1', status: 'ready' } });
+    const request = vi.fn().mockResolvedValue({ success: true, voice: { id: 'v1', status: 'ready', language: 'en', voice_id: 'chatterbox:u1', error_code: null, consent_at: null, created_at: null, updated_at: null } });
     const client = {
       createPersona,
       updatePersona,

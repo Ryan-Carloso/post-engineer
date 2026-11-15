@@ -51,6 +51,7 @@ import { getErrorMessage, ApiError } from './errors.js';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { CreatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar.js';
 import { getSlot as getSlotContract } from './contracts/schedule.js';
+import { FACE_QUALITIES, VIDEO_ASPECTS } from './contracts/personas.js';
 import type { ResponseOf } from './contracts/endpoint.js';
 
 export type { McpToolResponse } from './tools-call.js';
@@ -74,7 +75,7 @@ export const CreatePersonaShape = {
     .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })
     .default('en-US')
     .describe('Language code — English only for now (e.g. en-US, en-GB)'),
-  videoAspect: z.enum(['9:16', '16:9', '1:1']).default('9:16').describe('Video aspect ratio'),
+  videoAspect: z.enum(VIDEO_ASPECTS).default('9:16').describe('Video aspect ratio'),
   videoLayout: z
     .enum(VIDEO_LAYOUTS)
     .default('standard')
@@ -84,7 +85,7 @@ export const CreatePersonaShape = {
   scriptPrompt: z.string().optional().default('').describe('System prompt instructions for video scripts'),
   paragraphNumber: z.number().int().min(1).max(10).default(1).describe('Number of paragraphs'),
   niche: z.string().optional().default('General').describe('Content niche'),
-  faceQuality: z.enum(['ok', 'very_good']).default('very_good').describe('Face resolution of the rendered videos: ok (480p, 2 tokens/video) or very_good (720p, 3 tokens/video)'),
+  faceQuality: z.enum(FACE_QUALITIES).default('very_good').describe('Face resolution of the rendered videos: ok (480p, 2 tokens/video) or very_good (720p, 3 tokens/video)'),
   accounts: createPersonaAccountsField,
   images: z.array(PersonaLibraryImageInputShape).max(MAX_LIBRARY_IMAGES).optional().describe(`Up to ${MAX_LIBRARY_IMAGES} local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag.`),
   imagePrimaryIndex: z.number().int().min(0).max(MAX_LIBRARY_IMAGES - 1).optional().describe('Index into images[] marking the primary library image (no primary is set when omitted)'),
@@ -650,71 +651,6 @@ export async function handleDisconnectAccount(
 /** Narrows the GET /api/persona/delete-preview envelope: the persona, the
  * removal counts, and the per-video download links. Anything the API adds
  * later rides through unparsed. */
-export function narrowDeletePreview(result: unknown): {
-  persona: { id: string | null; name: string | null };
-  counts: {
-    schedules: number | null;
-    upcomingSlots: number | null;
-    publishedSlots: number | null;
-    failedSlots: number | null;
-    generatedVideos: number | null;
-    personaImages: number | null;
-  };
-  videos: Array<{
-    taskId: string | null;
-    title: string | null;
-    status: string | null;
-    downloadUrl: string | null;
-  }>;
-  videosTruncated: boolean | null;
-  linksIncomplete: boolean | null;
-} {
-  const record =
-    typeof result === 'object' && result !== null
-      ? (result as Record<string, unknown>)
-      : {};
-  const persona =
-    typeof record.persona === 'object' && record.persona !== null
-      ? (record.persona as Record<string, unknown>)
-      : {};
-  const counts =
-    typeof record.counts === 'object' && record.counts !== null
-      ? (record.counts as Record<string, unknown>)
-      : {};
-  const rawVideos = Array.isArray(record.videos) ? record.videos : [];
-  const str = (value: unknown): string | null =>
-    typeof value === 'string' ? value : null;
-  const num = (value: unknown): number | null =>
-    typeof value === 'number' ? value : null;
-  const bool = (value: unknown): boolean | null =>
-    typeof value === 'boolean' ? value : null;
-  return {
-    persona: { id: str(persona.id), name: str(persona.name) },
-    counts: {
-      schedules: num(counts.schedules),
-      upcomingSlots: num(counts.upcomingSlots),
-      publishedSlots: num(counts.publishedSlots),
-      failedSlots: num(counts.failedSlots),
-      generatedVideos: num(counts.generatedVideos),
-      personaImages: num(counts.personaImages),
-    },
-    videos: rawVideos.map((video) => {
-      const v =
-        typeof video === 'object' && video !== null
-          ? (video as Record<string, unknown>)
-          : {};
-      return {
-        taskId: str(v.taskId),
-        title: str(v.title),
-        status: str(v.status),
-        downloadUrl: str(v.downloadUrl),
-      };
-    }),
-    videosTruncated: bool(record.videosTruncated),
-    linksIncomplete: bool(record.linksIncomplete),
-  };
-}
-
 /** One narrowed token_transactions row: the fields the tool contract promises. */
 interface NarrowedTokenTransaction {
   id: string | null;

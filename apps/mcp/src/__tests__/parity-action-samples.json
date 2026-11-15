@@ -337,13 +337,33 @@
       "args": {
         "action": "delete",
         "persona": "11111111-1111-4111-8111-111111111111"
+      },
+      "responses": {
+        "GET /api/persona/delete-preview": {
+          "success": true,
+          "persona": { "id": "11111111-1111-4111-8111-111111111111", "name": "Maria" },
+          "counts": { "schedules": 1, "upcomingSlots": 0, "publishedSlots": 0, "failedSlots": 0, "generatedVideos": 0, "personaImages": 0 },
+          "videos": [],
+          "videosTruncated": false,
+          "linksIncomplete": false
+        }
       }
     },
     {
       "args": {
         "action": "delete",
         "persona": "11111111-1111-4111-8111-111111111111",
-        "confirmToken": "8e3781988bb4c080"
+        "confirmToken": "d1849d1b43e7d2c8"
+      },
+      "responses": {
+        "GET /api/persona/delete-preview": {
+          "success": true,
+          "persona": { "id": "11111111-1111-4111-8111-111111111111", "name": "Maria" },
+          "counts": { "schedules": 1, "upcomingSlots": 0, "publishedSlots": 0, "failedSlots": 0, "generatedVideos": 0, "personaImages": 0 },
+          "videos": [],
+          "videosTruncated": false,
+          "linksIncomplete": false
+        }
       }
     }
   ],

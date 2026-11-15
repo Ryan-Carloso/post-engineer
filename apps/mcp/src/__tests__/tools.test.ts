@@ -186,6 +186,7 @@ describe('MCP Tool Handlers', () => {
     vi.mocked(mockClient.createPersona).mockResolvedValue({
       success: true,
       personaId: 'persona-123',
+      imageIds: [],
     });
 
     const response = await handleCreatePersona(
@@ -211,6 +212,7 @@ describe('MCP Tool Handlers', () => {
     vi.mocked(mockClient.createPersona).mockResolvedValue({
       success: true,
       personaId: 'persona-123',
+      imageIds: [],
     });
 
     const response = await handleCreatePersona(
@@ -841,7 +843,7 @@ describe('persona image library tools', () => {
   });
 
   it('personas (action: create) accepts images and imagePrimaryIndex', async () => {
-    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1' });
+    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1', imageIds: [] });
     const args = CreatePersonaSchema.parse({
       accounts: { youtube: ['acct-1'] },
       name: 'Alex AI',
@@ -926,7 +928,7 @@ describe('persona image library tools', () => {
     // handler re-parses with the full schema, so the required avatarUrl
     // becomes a loud isError — no file is read, no fetch happens.
     vi.clearAllMocks();
-    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true });
+    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1', imageIds: [] });
     // voiceId is valid so the parse reaches the face refine (zod skips
     // superRefine while any field is still invalid).
     const sdkArgs = {
@@ -950,7 +952,7 @@ describe('persona image library tools', () => {
 
   it('personas (action: create) handler fails on a missing voiceId before the client call', async () => {
     vi.clearAllMocks();
-    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true });
+    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1', imageIds: [] });
     const sdkArgs = {
       name: 'X',
       avatarUrl: 'https://example.com/a.png',
@@ -973,7 +975,7 @@ describe('persona image library tools', () => {
   });
 
   it('persona_media (action: list_images) returns the library', async () => {
-    vi.mocked(mockClient.listPersonaImages).mockResolvedValue({ images: [] });
+    vi.mocked(mockClient.listPersonaImages).mockResolvedValue({ success: true, images: [] });
     const response = await handleListPersonaImages(
       mockClient,
       ListPersonaImagesSchema.parse({ personaId: 'p-1' })
@@ -983,7 +985,7 @@ describe('persona image library tools', () => {
   });
 
   it('persona_media (action: add_image) forwards path, tag, description, isPrimary', async () => {
-    vi.mocked(mockClient.addPersonaImage).mockResolvedValue({ success: true, id: 'img-1' });
+    vi.mocked(mockClient.addPersonaImage).mockResolvedValue({ success: true, image: { id: 'img-1', tag: 'gym', description: '', is_primary: false, created_at: '2026-01-01T00:00:00Z' } });
     const response = await handleAddPersonaImage(
       mockClient,
       AddPersonaImageSchema.parse({ personaId: 'p-1', path: '/tmp/a.jpg', tag: 'gym', isPrimary: true })
@@ -1005,7 +1007,7 @@ describe('persona image library tools', () => {
   });
 
   it('persona_media (action: update_image) forwards metadata', async () => {
-    vi.mocked(mockClient.updatePersonaImage).mockResolvedValue({ success: true });
+    vi.mocked(mockClient.updatePersonaImage).mockResolvedValue({ success: true, image: { id: 'img-1', tag: 'formal', description: '', is_primary: true, created_at: '2026-01-01T00:00:00Z' } });
     await handleUpdatePersonaImage(
       mockClient,
       UpdatePersonaImageSchema.parse({ id: 'img-1', tag: 'formal', isPrimary: true })
@@ -1221,7 +1223,7 @@ describe('handleLibraryCall message contracts', () => {
   });
 
   it('handleCreatePersona prefixes success with "Persona created successfully:"', async () => {
-    vi.mocked(mockClient.createPersona).mockResolvedValue({ personaId: 'p-1' });
+    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1', imageIds: [] });
     const response = await handleCreatePersona(
       mockClient,
       CreatePersonaSchema.parse({

@@ -72,7 +72,7 @@ function apiResponse(url: string): Response {
   if (path.startsWith('/api/prompts/')) {
     return json(404, { success: false, error: 'Unknown prompt slug.', code: 'PROMPT_NOT_FOUND' });
   }
-  if (path === '/api/persona/list') return json(200, { success: true, personas: [] });
+  if (path === '/api/persona/list') return json(200, { authenticated: true, personas: [] });
   if (path === '/api/billing/tokens') return json(200, { success: true, balance: 10 });
   if (path === '/api/videos/generate-and-schedule') {
     return json(200, {

@@ -60,6 +60,21 @@ import {
 import {
   listVoices as listVoicesContract,
 } from './contracts/voices.js';
+import {
+  MAX_DESCRIPTION_LENGTH as MAX_LIBRARY_DESCRIPTION_LENGTH,
+  MAX_LIBRARY_IMAGES,
+  MAX_TAG_LENGTH as MAX_LIBRARY_TAG_LENGTH,
+  addPersonaImage as addPersonaImageContract,
+  createPersona as createPersonaContract,
+  deletePersona as deletePersonaContract,
+  deletePersonaImage as deletePersonaImageContract,
+  getPersonaDeletePreview as getPersonaDeletePreviewContract,
+  listFaces as listFacesContract,
+  listPersonaImages as listPersonaImagesContract,
+  listPersonas as listPersonasContract,
+  updatePersona as updatePersonaContract,
+  updatePersonaImage as updatePersonaImageContract,
+} from './contracts/personas.js';
 
 // Re-exported so existing import sites (`./client.js`) keep working.
 export type {
@@ -84,13 +99,14 @@ const REQUEST_TIMEOUT_MS = 30_000;
 // Multipart uploads can exceed the 30s default (up to 10 10MB images).
 const UPLOAD_TIMEOUT_MS = 120_000;
 // Shared with tools.ts so the client-side guards, the Zod schema limits,
-// and the field description strings can't drift apart.
-export const MAX_LIBRARY_IMAGES = 10;
-
-// Mirrors the server-side addLibraryImages limits: checked in createPersona
-// so an oversized tag/description fails locally before the multipart upload.
-export const MAX_LIBRARY_TAG_LENGTH = 100;
-export const MAX_LIBRARY_DESCRIPTION_LENGTH = 500;
+// and the field description strings can't drift apart. The values live in
+// the shared personas contract; re-exported here so existing import sites
+// (`../client.js`) keep working.
+export {
+  MAX_LIBRARY_DESCRIPTION_LENGTH,
+  MAX_LIBRARY_IMAGES,
+  MAX_LIBRARY_TAG_LENGTH,
+};
 
 // Re-exported from image-guards.ts so existing import sites
 // (`../client.js`) keep working after the extraction.
@@ -226,7 +242,7 @@ export class PostEngineerClient {
     }
   }
 
-  async createPersona(input: CreatePersonaInput): Promise<unknown> {
+  async createPersona(input: CreatePersonaInput): Promise<ResponseOf<typeof createPersonaContract>> {
     const formData = new FormData();
     formData.set('publishingAccounts', JSON.stringify(requirePublishingAccounts(input.accounts)));
     // Every persona has a face: exactly one of avatarUrl or avatarPath (the
@@ -276,20 +292,22 @@ export class PostEngineerClient {
       formData.set('imageTags', JSON.stringify(tags));
       formData.set('imageDescriptions', JSON.stringify(descriptions));
     }
-    return this.request(
+    const raw = await this.request(
       '/api/persona',
       { method: 'POST', headers: this.getHeaders(false), body: formData },
       'create persona',
       UPLOAD_TIMEOUT_MS,
     );
+    return parseContractResponse(createPersonaContract, raw);
   }
 
-  async listPersonas(): Promise<unknown> {
-    return this.request(
+  async listPersonas(): Promise<ResponseOf<typeof listPersonasContract>> {
+    const raw = await this.request(
       '/api/persona/list',
       { method: 'GET', headers: this.getHeaders() },
       'list personas'
     );
+    return parseContractResponse(listPersonasContract, raw);
   }
 
   async listVoices(): Promise<ResponseOf<typeof listVoicesContract>> {
@@ -301,15 +319,16 @@ export class PostEngineerClient {
     return parseContractResponse(listVoicesContract, raw);
   }
 
-  async listFaces(): Promise<unknown> {
-    return this.request(
+  async listFaces(): Promise<ResponseOf<typeof listFacesContract>> {
+    const raw = await this.request(
       '/api/persona/faces',
       { method: 'GET', headers: this.getHeaders() },
       'list faces'
     );
+    return parseContractResponse(listFacesContract, raw);
   }
 
-  async updatePersona(input: UpdatePersonaInput): Promise<unknown> {
+  async updatePersona(input: UpdatePersonaInput): Promise<ResponseOf<typeof updatePersonaContract>> {
     const formData = new FormData();
     if (input.name !== undefined) formData.set('name', input.name);
     await appendPersonaAvatar(formData, input, false);
@@ -322,11 +341,12 @@ export class PostEngineerClient {
     if (input.paragraphNumber !== undefined) formData.set('paragraphNumber', String(input.paragraphNumber));
     if (input.niche !== undefined) formData.set('niche', input.niche);
     if (input.faceQuality !== undefined) formData.set('faceQuality', input.faceQuality);
-    return this.request(
+    const raw = await this.request(
       `/api/persona?personaId=${encodeURIComponent(input.personaId)}`,
       { method: 'PATCH', headers: this.getHeaders(false), body: formData },
       'update persona'
     );
+    return parseContractResponse(updatePersonaContract, raw);
   }
 
   async listSocialAccounts(): Promise<ResponseOf<typeof listSocialAccountsContract>> {
@@ -474,23 +494,25 @@ export class PostEngineerClient {
     return listTokenTransactions(this, limit, offset);
   }
 
-  async getPersonaDeletePreview(personaId: string): Promise<unknown> {
-    return this.request(
+  async getPersonaDeletePreview(personaId: string): Promise<ResponseOf<typeof getPersonaDeletePreviewContract>> {
+    const raw = await this.request(
       `/api/persona/delete-preview?personaId=${encodeURIComponent(personaId)}`,
       { method: 'GET', headers: this.getHeaders() },
       'get persona delete preview'
     );
+    return parseContractResponse(getPersonaDeletePreviewContract, raw);
   }
 
-  async deletePersona(personaId: string): Promise<unknown> {
+  async deletePersona(personaId: string): Promise<ResponseOf<typeof deletePersonaContract>> {
     // Destructive and irreversible: the persona, all its schedules, slots,
     // generated videos, and image library are removed. No token refunds —
     // prepaid tokens for pending slots are forfeited.
-    return this.request(
+    const raw = await this.request(
       `/api/persona?personaId=${encodeURIComponent(personaId)}`,
       { method: 'DELETE', headers: this.getHeaders() },
       'delete persona'
     );
+    return parseContractResponse(deletePersonaContract, raw);
   }
 
   async disconnectAccount(provider: string, providerAccountId: string): Promise<ResponseOf<typeof disconnectAccountContract>> {
@@ -595,18 +617,19 @@ export class PostEngineerClient {
     return parseContractResponse(getVideoStatusContract, raw);
   }
 
-  async listPersonaImages(personaId: string): Promise<unknown> {
-    return this.request(
+  async listPersonaImages(personaId: string): Promise<ResponseOf<typeof listPersonaImagesContract>> {
+    const raw = await this.request(
       `/api/persona/images?personaId=${encodeURIComponent(personaId)}`,
       { method: 'GET', headers: this.getHeaders() },
       'list persona images'
     );
+    return parseContractResponse(listPersonaImagesContract, raw);
   }
 
   async addPersonaImage(
     personaId: string,
     image: PersonaLibraryImageInput & { isPrimary?: true }
-  ): Promise<unknown> {
+  ): Promise<ResponseOf<typeof addPersonaImageContract>> {
     const formData = new FormData();
     formData.set('personaId', personaId);
     formData.append('image', await imageFormFile(image.path), basename(image.path));
@@ -621,12 +644,13 @@ export class PostEngineerClient {
     // persona_media (action: update_image)): an explicit false is rejected at schema parse
     // time and can never reach this branch.
     if (image.isPrimary) formData.set('isPrimary', 'true');
-    return this.request(
+    const raw = await this.request(
       '/api/persona/images',
       { method: 'POST', headers: this.getHeaders(false), body: formData },
       'add persona image',
       UPLOAD_TIMEOUT_MS,
     );
+    return parseContractResponse(addPersonaImageContract, raw);
   }
 
   async updatePersonaImage(input: {
@@ -634,7 +658,7 @@ export class PostEngineerClient {
     tag?: string;
     description?: string;
     isPrimary?: boolean;
-  }): Promise<unknown> {
+  }): Promise<ResponseOf<typeof updatePersonaImageContract>> {
     if (
       input.tag === undefined &&
       input.description === undefined &&
@@ -664,7 +688,7 @@ export class PostEngineerClient {
     // the add/create paths (undefined = leave unchanged, so the check must
     // skip undefined instead of defaulting to '').
     checkLibraryMetadataLengths(tag, description);
-    return this.request(
+    const raw = await this.request(
       '/api/persona/images',
       {
         method: 'PATCH',
@@ -678,14 +702,16 @@ export class PostEngineerClient {
       },
       'update persona image'
     );
+    return parseContractResponse(updatePersonaImageContract, raw);
   }
 
-  async deletePersonaImage(id: string): Promise<unknown> {
-    return this.request(
+  async deletePersonaImage(id: string): Promise<ResponseOf<typeof deletePersonaImageContract>> {
+    const raw = await this.request(
       `/api/persona/images?id=${encodeURIComponent(id)}`,
       { method: 'DELETE', headers: this.getHeaders() },
       'delete persona image'
     );
+    return parseContractResponse(deletePersonaImageContract, raw);
   }
 
   async publishVideoDirect(input: PublishVideoDirectInput): Promise<DirectPublishResult> {

@@ -48,13 +48,13 @@ function setup(routes: Record<string, unknown>): { call: (name: string, args: Re
   };
 }
 
-const PERSONAS = { personas: [{ id: MARIA, name: 'Maria', niche: 'cooking' }] };
+const PERSONAS = { authenticated: true, personas: [{ id: MARIA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] }, niche: 'cooking' }] };
 
 describe('personas get', () => {
   it('joins the persona, its library size and its bound accounts in one call', async () => {
     const { call, seen } = setup({
       'GET /api/persona/list': PERSONAS,
-      'GET /api/persona/images': { images: [{ id: 'i1' }, { id: 'i2' }] },
+      'GET /api/persona/images': { success: true, images: [{ id: 'i1', tag: 'casual', description: '', is_primary: false, created_at: '2026-01-01T00:00:00Z', image_url: null }, { id: 'i2', tag: 'formal', description: '', is_primary: false, created_at: '2026-01-01T00:00:00Z', image_url: null }] },
       'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: ['UC1'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } },
     });
     const result = await call('personas', { action: 'get', persona: 'maria' });
@@ -65,7 +65,7 @@ describe('personas get', () => {
   });
 
   it('says there is no persona with that id instead of returning an empty record', async () => {
-    const { call } = setup({ 'GET /api/persona/list': PERSONAS, 'GET /api/persona/images': { images: [] }, 'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } } });
+    const { call } = setup({ 'GET /api/persona/list': PERSONAS, 'GET /api/persona/images': { success: true, images: [] }, 'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } } });
     const result = await call('personas', { action: 'get', persona: '99999999-9999-4999-8999-999999999999' });
     expect(result.isError).toBe(true);
     expect(result.text).toContain('No persona with id');
@@ -74,7 +74,7 @@ describe('personas get', () => {
 
 describe('personas delete over the server', () => {
   it('previews first, deletes only with that preview’s token', async () => {
-    const { call, seen } = setup({ 'GET /api/persona/delete-preview': { persona: { id: MARIA, name: 'Maria' }, counts: { schedules: 1 }, videos: [] }, 'DELETE /api/persona': { success: true } });
+    const { call, seen } = setup({ 'GET /api/persona/delete-preview': { success: true, persona: { id: MARIA, name: 'Maria' }, counts: { schedules: 1, upcomingSlots: 0, publishedSlots: 0, failedSlots: 0, generatedVideos: 0, personaImages: 0 }, videos: [], videosTruncated: false, linksIncomplete: false }, 'DELETE /api/persona': { success: true } });
     const preview = await call('personas', { action: 'delete', persona: MARIA });
     expect(preview.isError).toBe(false);
     expect(seen.some((request) => request.method === 'DELETE')).toBe(false);
@@ -216,8 +216,8 @@ describe('experiments and check_script with a persona by name', () => {
 describe('video_tasks over the server', () => {
   it('takes a snapshot of several tasks by default and tags the request with the action', async () => {
     const { call, seen } = setup({
-      'GET /api/persona/video-status/t1': { body: { task_id: 't1', state: 4, progress: 30, stage: 'audio' } },
-      'GET /api/persona/video-status/t2': { body: { task_id: 't2', state: 1, progress: 100 } },
+      'GET /api/persona/video-status/t1': { status: 200, message: 'success', body: { task_id: 't1', state: 4, progress: 30, stage: 'audio' } },
+      'GET /api/persona/video-status/t2': { status: 200, message: 'success', body: { task_id: 't2', state: 1, progress: 100 } },
     });
     const result = await call('video_tasks', { action: 'status', taskIds: ['t1', 't2'] });
     expect(result.isError).toBe(false);
@@ -257,10 +257,10 @@ describe('malformed API payloads are reported, not turned into empty results', (
     expect(JSON.parse(result.text.slice(result.text.indexOf('{')))).toMatchObject({ libraryImages: null, boundAccounts: null });
   });
 
-  it('personas get does not find a persona in a malformed listing', async () => {
-    const { call } = setup({ 'GET /api/persona/list': { personas: 'nope' }, 'GET /api/persona/images': { images: [] }, 'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } } });
+  it('personas get reports a malformed listing as an error instead of "no persona"', async () => {
+    const { call } = setup({ 'GET /api/persona/list': { personas: 'nope' }, 'GET /api/persona/images': { success: true, images: [] }, 'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } } });
     const result = await call('personas', { action: 'get', persona: MARIA });
     expect(result.isError).toBe(true);
-    expect(result.text).toContain('No persona with id');
+    expect(result.text).toContain('Malformed response from GET /api/persona/list');
   });
 });

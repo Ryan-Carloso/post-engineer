@@ -19,6 +19,7 @@ import { OAUTH_CONNECT_PROVIDERS, PublicAccountItemSchema } from '@/lib/contract
 import { CancelRefundSchema, RANGE_STATUSES, ScheduleRowSchema } from '@/lib/contracts/schedule';
 import { VideoGenerationRowSchema } from '@/lib/contracts/video-tasks';
 import { VOICE_ACCENTS, VOICE_GENDERS, VOICE_KINDS } from '@/lib/contracts/voices';
+import { FACE_QUALITIES, MAX_DESCRIPTION_LENGTH, MAX_TAG_LENGTH, PERSONA_CTA_MAX_LENGTH, PERSONA_IMAGE_WARNING_CODES, VIDEO_LAYOUTS } from '@/lib/contracts/personas';
 
 const HEADER = '// GENERATED from shared/contracts — do not edit.\n// Run `node scripts/sync-contracts.mjs` from the repo root to regenerate.\n';
 
@@ -273,5 +274,64 @@ describe('contracts shared source', () => {
     expect(VOICE_KINDS).toEqual(['standard', 'character', 'cloned']);
     const types = readFileSync(join(root, 'apps', 'web', 'lib', 'cloned-voices-types.ts'), 'utf8');
     expect(types).toContain("import type { ClonedVoiceRow as ClonedVoicePublicRow } from '@/lib/contracts/voices';");
+  });
+
+  // The persona constants moved into the contract; persona-schema.ts and
+  // persona-images.ts import them from there and re-export them so the
+  // existing import paths keep working. A one-sided edit would make the
+  // contract reject a value the form serves, or the form accept one the
+  // route rejects.
+  it('pins the persona constants to the contract', () => {
+    const root = findRepoRoot(import.meta.url);
+    const schema = readFileSync(join(root, 'apps', 'web', 'lib', 'persona-schema.ts'), 'utf8');
+    expect(schema).toContain("from './contracts/personas'");
+    expect(schema).toContain('FACE_QUALITIES,');
+    expect(schema).toContain('PERSONA_CTA_MAX_LENGTH,');
+    expect(schema).toContain('VALID_VIDEO_ASPECTS,');
+    expect(schema).toContain('VIDEO_LAYOUTS,');
+    expect(schema).toContain('export { FACE_QUALITIES, PERSONA_CTA_MAX_LENGTH, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS };');
+    expect(FACE_QUALITIES).toEqual(['ok', 'very_good']);
+    expect(PERSONA_CTA_MAX_LENGTH).toBe(200);
+    expect(VIDEO_LAYOUTS).toEqual(['standard', 'react']);
+    const images = readFileSync(join(root, 'apps', 'web', 'lib', 'persona-images.ts'), 'utf8');
+    expect(images).toContain("from '@/lib/contracts/personas'");
+    expect(images).toContain('MAX_DESCRIPTION_LENGTH, MAX_TAG_LENGTH');
+    expect(MAX_TAG_LENGTH).toBe(100);
+    expect(MAX_DESCRIPTION_LENGTH).toBe(500);
+  });
+
+  // The warning codes are duplicated in the contract because
+  // persona-image-select.ts must stay dependency-free for the client
+  // bundle (it cannot import the contract or zod). A one-sided rename
+  // would make the contract reject a code the route serves, so the
+  // contract's literals are pinned here against the select module's.
+  it('pins the persona image warning codes to persona-image-select.ts', () => {
+    const root = findRepoRoot(import.meta.url);
+    const select = readFileSync(join(root, 'apps', 'web', 'lib', 'persona-image-select.ts'), 'utf8');
+    expect(select).toContain("'primary_swap_failed'");
+    expect(select).toContain("'metadata_save_failed'");
+    expect(select).toContain("'row_refetch_failed'");
+    expect(PERSONA_IMAGE_WARNING_CODES).toEqual({
+      PRIMARY_SWAP_FAILED: 'primary_swap_failed',
+      METADATA_SAVE_FAILED: 'metadata_save_failed',
+      ROW_REFETCH_FAILED: 'row_refetch_failed',
+    });
+  });
+
+  // The persona routes use the contract query parsers; the route files
+  // keep their own error envelopes, so the pin is only that the parser
+  // comes from the contract.
+  it('pins the persona routes to the contract query parsers', () => {
+    const root = findRepoRoot(import.meta.url);
+    const route = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'persona', 'route.ts'), 'utf8');
+    expect(route).toContain("from '@/lib/contracts/personas'");
+    expect(route).toContain('parsePersonaIdQuery');
+    const images = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'persona', 'images', 'route.ts'), 'utf8');
+    expect(images).toContain("from '@/lib/contracts/personas'");
+    expect(images).toContain('parseListPersonaImagesQuery');
+    expect(images).toContain('parseDeletePersonaImageQuery');
+    const preview = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'persona', 'delete-preview', 'route.ts'), 'utf8');
+    expect(preview).toContain("from '@/lib/contracts/personas'");
+    expect(preview).toContain('parsePersonaIdQuery');
   });
 });

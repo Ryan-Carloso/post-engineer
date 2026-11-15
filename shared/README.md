@@ -129,6 +129,11 @@ including the generations limit parsing) follow the same shape. The voices calls
 (`GET /api/persona/voices`, `GET /api/persona/cloned-voices`, `POST /api/persona/cloned-voices`,
 `GET /api/persona/cloned-voices/[cloneId]`, `DELETE /api/persona/cloned-voices/[cloneId]`,
 including the voice catalog enums and the cloned row shape) follow the same shape.
+The personas calls (`POST /api/persona`, `GET /api/persona/list`, `GET /api/persona/faces`,
+`PATCH /api/persona`, `GET /api/persona/delete-preview`, `DELETE /api/persona`,
+`GET /api/persona/images`, `POST /api/persona/images`, `PATCH /api/persona/images`,
+`DELETE /api/persona/images`, including the persona constants, the library row shapes,
+and the personaId/id query parsing) follow the same shape.
 The two preview endpoints (`POST /api/persona/voices/[voiceId]/preview`,
 `POST /api/persona/cloned-voices/[cloneId]/preview`) return raw audio bytes, not JSON,
 so they share only the request body (`PreviewVoiceBodySchema`, 300-char cap) — the

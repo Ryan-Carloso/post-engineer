@@ -7,7 +7,6 @@ import { forwardLibraryImagesError, personaValidationError } from '../validation
 import {
   addLibraryImages,
   IMAGE_BUCKET,
-  IMAGE_URL_TTL_SECONDS,
   isFileLike,
   MAX_DESCRIPTION_LENGTH,
   MAX_TAG_LENGTH,
@@ -21,6 +20,8 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
+import { parseDeletePersonaImageQuery, parseListPersonaImagesQuery } from '@/lib/contracts/personas';
+import { signImageUrl } from './sign-image-url';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
@@ -223,33 +224,14 @@ async function getOwnedImage(
   return { image, error: null };
 }
 
-/** Signs one library image path; null when signing fails (never throws). */
-async function signImageUrl(
-  supabase: SupabaseClient,
-  imagePath: string,
-): Promise<string | null> {
-  try {
-    const { data, error } = await supabase.storage
-      .from(IMAGE_BUCKET)
-      .createSignedUrl(imagePath, IMAGE_URL_TTL_SECONDS);
-    if (error || !data?.signedUrl) {
-      logger.warn('[api/persona/images] failed to sign storage URL', { imagePath, error });
-      return null;
-    }
-    return data.signedUrl;
-  } catch (error) {
-    logger.warn('[api/persona/images] failed to sign storage URL', { imagePath, error });
-    return null;
-  }
-}
-
 async function getHandler(request: Request): Promise<NextResponse> {
   const authed = await getAuth(request);
   if ('response' in authed) return authed.response;
   const { auth, supabase } = authed;
 
-  const personaId = new URL(request.url).searchParams.get('personaId');
-  if (!personaId) return personaValidationError('personaId is required.', 'GET /api/persona/images', { field: 'personaId' });
+  const parsedPersonaId = parseListPersonaImagesQuery(request.url);
+  if (!parsedPersonaId.ok) return personaValidationError(parsedPersonaId.error, 'GET /api/persona/images', { field: 'personaId' });
+  const personaId = parsedPersonaId.query.personaId;
   const owned = await assertPersonaOwned(supabase, auth, personaId, 'GET');
   if ('response' in owned) return owned.response;
 
@@ -519,8 +501,9 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   if ('response' in authed) return authed.response;
   const { auth, supabase } = authed;
 
-  const id = new URL(request.url).searchParams.get('id');
-  if (!id) return personaValidationError('id is required.', 'DELETE /api/persona/images', { field: 'id' });
+  const parsedId = parseDeletePersonaImageQuery(request.url);
+  if (!parsedId.ok) return personaValidationError(parsedId.error, 'DELETE /api/persona/images', { field: 'id' });
+  const id = parsedId.query.id;
   const { image, error: ownershipError } = await getOwnedImage(supabase, auth, id, 'DELETE');
   if (ownershipError) return ownershipError;
 

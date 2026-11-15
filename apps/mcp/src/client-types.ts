@@ -4,6 +4,7 @@
 // ratchet. client.ts re-exports every name here, so existing import sites
 // (`./client.js`) keep working.
 import { VIDEO_LAYOUTS } from './limits.js';
+import type { FaceQuality, VideoAspect } from './contracts/personas.js';
 import type { VideoType } from './video-type.js';
 
 export type { VideoType } from './video-type.js';
@@ -47,12 +48,12 @@ export interface CreatePersonaInput {
   avatarPath?: string;
   voiceId: string;
   language?: string;
-  videoAspect?: '9:16' | '16:9' | '1:1';
+  videoAspect?: VideoAspect;
   videoLayout?: VideoLayout;
   scriptPrompt?: string;
   paragraphNumber?: number;
   niche?: string;
-  faceQuality?: 'ok' | 'very_good';
+  faceQuality?: FaceQuality;
   /**
    * Bound publishing accounts per provider (issue #572, required): at
    * least one account, e.g. { youtube: ['UC...'] }. The persona publishes
@@ -136,12 +137,12 @@ export interface UpdatePersonaInput {
   avatarPath?: string;
   voiceId?: string;
   language?: string;
-  videoAspect?: '9:16' | '16:9' | '1:1';
+  videoAspect?: VideoAspect;
   videoLayout?: VideoLayout;
   scriptPrompt?: string;
   paragraphNumber?: number;
   niche?: string;
-  faceQuality?: 'ok' | 'very_good';
+  faceQuality?: FaceQuality;
 }
 
 /** Input for publishing a user-provided video directly, without generation. */
