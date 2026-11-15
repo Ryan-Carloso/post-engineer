@@ -749,7 +749,7 @@ export class PostEngineerClient {
 
     const result: unknown = await this.request(
       '/api/upload-content',
-      { method: 'POST', headers: this.getHeaders(), body: formData },
+      { method: 'POST', headers: this.getHeaders(false), body: formData },
       'publish video direct',
       DIRECT_PUBLISH_TIMEOUT_MS
     );
