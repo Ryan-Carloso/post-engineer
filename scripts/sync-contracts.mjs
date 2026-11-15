@@ -27,7 +27,7 @@
 // endpoint.ts itself is still generated for `BodyOf`/`ResponseOf` imports.
 // Usage: node scripts/sync-contracts.mjs [--check]
 //   --check  exit 1 (without writing) when any copy differs from shared.
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -98,7 +98,7 @@ for (const targetDir of targets) {
         console.log(`drifted ${join(targetDir, file)} (no shared source)`);
         continue;
       }
-      writeFileSync(join(targetDir, file), '');
+      unlinkSync(join(targetDir, file));
       console.log(`removed ${join(targetDir, file)}`);
     }
   }

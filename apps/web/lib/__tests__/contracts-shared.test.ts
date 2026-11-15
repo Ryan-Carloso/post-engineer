@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
+import { METRICS_WINDOWS } from '@/lib/contracts/experiments';
 
 const HEADER = '// GENERATED from shared/contracts — do not edit.\n// Run `node scripts/sync-contracts.mjs` from the repo root to regenerate.\n';
 
@@ -32,5 +33,16 @@ describe('contracts shared source', () => {
       expect(generated.includes("from './endpoint.js'")).toBe(false);
       expect(generated).toBe(expected);
     }
+  });
+
+  // The contract carries its own METRICS_WINDOWS copy (the route's
+  // `?window=` validation used to import it straight from
+  // metrics-query.ts). A one-sided edit would make the detail route 400 a
+  // window the metrics layer supports, so the copy is pinned here.
+  it('pins the shared METRICS_WINDOWS to metrics-query.ts', () => {
+    const root = findRepoRoot(import.meta.url);
+    const metricsQuery = readFileSync(join(root, 'apps', 'web', 'lib', 'metrics', 'metrics-query.ts'), 'utf8');
+    const list = METRICS_WINDOWS.map((window) => `'${window}'`).join(', ');
+    expect(metricsQuery).toContain(`export const METRICS_WINDOWS = [${list}] as const;`);
   });
 });
