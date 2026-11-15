@@ -61,6 +61,7 @@ const INPUT = {
   hasFace: false,
   videoType: 'hook_lipsync' as const,
   avatarUrl: null as string | null,
+  libraryPhotoUrl: null as string | null,
 };
 
 const PREP: PersonaPrep = {
@@ -503,6 +504,52 @@ describe('checkFirstPhotoFace', () => {
     expect(payload.field).toBe('personaId');
   });
 
+  it('checks the picked library photo, not the stored avatar, when one was picked', async () => {
+    // The engine's persona fallback is the library image dispatch will
+    // sign: a faceless stored avatar must not block a faced library
+    // photo, and a faced avatar must not wave through a faceless one.
+    const calls = stubFetch([engineBody('ok', 1080, 1920, false)]);
+    const result = await checkFirstPhotoFace({
+      ...INPUT,
+      segments: [],
+      avatarUrl: 'https://e.com/avatar.jpg',
+      libraryPhotoUrl: 'https://cdn.example/signed-library.jpg',
+    });
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(400);
+    const payload = (await (result as NextResponse).json()) as {
+      error?: string;
+      code?: string;
+      field?: string;
+    };
+    expect(payload.error).toContain('The photo selected for this video has no detectable face');
+    expect(payload.code).toBe('VALIDATION_FAILED');
+    expect(payload.field).toBe('personaId');
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      url: 'https://cdn.example/signed-library.jpg',
+      video_aspect: '9:16',
+    });
+  });
+
+  it('passes when the picked library photo has a face even if the stored avatar does not', async () => {
+    // The stored avatar is never the hook image when a library photo was
+    // picked, so its face is irrelevant here.
+    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
+    const result = await checkFirstPhotoFace({
+      ...INPUT,
+      segments: [],
+      avatarUrl: 'https://e.com/avatar.jpg',
+      libraryPhotoUrl: 'https://cdn.example/signed-library.jpg',
+    });
+    expect(result).toBeNull();
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      url: 'https://cdn.example/signed-library.jpg',
+      video_aspect: '9:16',
+    });
+  });
+
   it('fails closed with a 502 when the engine is unreachable', async () => {
     stubFetch([new Error('fetch failed')]);
     const result = await checkFirstPhotoFace(INPUT);
@@ -537,6 +584,7 @@ describe('checkPreChargePreflights', () => {
     prep: PREP,
     options: OPTIONS,
     segments: SEGMENTS,
+    libraryPhotoUrl: null as string | null,
   };
 
   beforeEach(() => {

@@ -2583,7 +2583,11 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('marks the slot image_resolve_failed when dispatch-time resolution fails', async () => {
-      vi.mocked(resolveVideoImage).mockResolvedValue({ ok: false, error: 'library down', status: 500 });
+      // The pre-charge resolution (for the face check) succeeds with an
+      // empty library; only the dispatch-time resolution fails.
+      vi.mocked(resolveVideoImage)
+        .mockResolvedValueOnce({ ok: true, image: null })
+        .mockResolvedValue({ ok: false, error: 'library down', status: 500 });
       const res = await post(baseBody());
       const json = await res.json();
       expect(res.status).toBe(502);
@@ -2594,10 +2598,15 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
     it('marks the slot image_sign_failed when the selected image cannot be signed', async () => {
       setup({ ...DEFAULT_CFG, signUrlError: true });
-      vi.mocked(resolveVideoImage).mockResolvedValue({
-        ok: true,
-        image: { id: 'img-1', image_path: 'library/img-1.png' } as never,
-      });
+      // The pre-charge resolution (for the face check) succeeds with an
+      // empty library, so no signing happens before the charge; only the
+      // dispatch-time signing fails.
+      vi.mocked(resolveVideoImage)
+        .mockResolvedValueOnce({ ok: true, image: null })
+        .mockResolvedValue({
+          ok: true,
+          image: { id: 'img-1', image_path: 'library/img-1.png' } as never,
+        });
       const res = await post(baseBody());
       const json = await res.json();
       expect(res.status).toBe(502);
@@ -2616,6 +2625,34 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.success).toBe(false);
       expect(json.code).toBe('VALIDATION_FAILED');
       expect(json.field).toBe('options.videoType');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('500s before charging when the pre-charge library resolution fails', async () => {
+      // The library cannot be read, so the pre-charge face check cannot
+      // know which photo dispatch would use: fail before the charge
+      // instead of checking the stored avatar and risking a false pass.
+      vi.mocked(resolveVideoImage).mockResolvedValue({ ok: false, error: 'library down', status: 500 });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(500);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('INTERNAL_ERROR');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('500s before charging when the picked library photo cannot be signed', async () => {
+      setup({ ...DEFAULT_CFG, signUrlError: true });
+      vi.mocked(resolveVideoImage).mockResolvedValue({
+        ok: true,
+        image: { id: 'img-1', image_path: 'library/img-1.png' } as never,
+      });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(500);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('INTERNAL_ERROR');
+      expect(json.error).toBe('The selected persona image could not be loaded. Please try again.');
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 

@@ -222,9 +222,14 @@ export interface FirstPhotoFaceInput {
   /** The one video mode: faceless videos never show a face. */
   videoType: VideoType;
   /** The persona's stored avatar URL (or null): the engine falls back
-   * to the persona photo when no segment carries one, so the avatar is
-   * the hook image in that case. */
+   * to the persona photo when no segment carries one and no library
+   * image was picked, so the avatar is the hook image in that case. */
   avatarUrl: string | null;
+  /** Signed URL of the library image dispatch will send as the persona
+   * fallback photo (null when no library image was picked): the engine
+   * face-gates this file, not the stored avatar, so the pre-charge
+   * check must validate it instead. */
+  libraryPhotoUrl: string | null;
 }
 
 /**
@@ -259,12 +264,52 @@ function mechanicalRejectionReason(code: unknown): string | undefined {
  *
  * When no segment carries a photo the engine falls back to the persona
  * photo and face-gates that instead (full_lipsync text-only segments
- * reach it in production: media is optional there), so the stored
- * avatar is checked here too when it is an http(s) URL the engine can
- * download. A data URI, a relative asset path, or a missing avatar
- * cannot be checked through media/check: the engine preflight is the
- * backstop for those.
+ * reach it in production: media is optional there), so the fallback
+ * photo is checked here too: the picked library image when one was
+ * picked (dispatch signs exactly that file), else the stored avatar
+ * when it is an http(s) URL the engine can download. A data URI, a
+ * relative asset path, or a missing avatar cannot be checked through
+ * media/check: the engine preflight is the backstop for those.
  */
+/**
+ * Face-check one persona fallback photo URL through media/check: a
+ * mechanically rejected file is a 400 naming the real reason, a
+ * faceless one a 400 naming the photo; anything else passes. `subject`
+ * names the photo in the 400 ("The photo selected for this video" for
+ * a picked library image, "The persona photo" for the stored avatar).
+ */
+async function checkFallbackPhotoUrl(
+  userId: string,
+  videoAspect: VideoAspectOption,
+  url: string,
+  subject: string,
+  field: string,
+): Promise<null | NextResponse> {
+  const record = await fetchMediaCheck(
+    { segmentIndex: 0, imageIndex: 0, url },
+    userId,
+    videoAspect,
+    'first-photo-face',
+  );
+  if (record instanceof NextResponse) return record;
+  const rejection = mechanicalRejectionReason(record.code);
+  if (rejection !== undefined) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      `${subject} ${rejection}: lip sync needs a usable photo of the persona's face.`,
+      field,
+    );
+  }
+  if (record.has_face === false) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      `${subject} has no detectable face: lip sync needs a photo of the persona's face.`,
+      field,
+    );
+  }
+  return null;
+}
+
 export async function checkFirstPhotoFace(
   input: FirstPhotoFaceInput,
 ): Promise<null | NextResponse> {
@@ -295,32 +340,26 @@ export async function checkFirstPhotoFace(
     }
     return null;
   }
+  // The engine's persona fallback photo is the library image dispatch
+  // will sign, not the stored avatar: when one was picked, check that
+  // file; only fall back to the stored avatar for an empty library.
+  if (input.libraryPhotoUrl !== null) {
+    return checkFallbackPhotoUrl(
+      input.userId,
+      input.videoAspect,
+      input.libraryPhotoUrl,
+      'The photo selected for this video',
+      'personaId',
+    );
+  }
   if (input.avatarUrl === null || !isHttpUrl(input.avatarUrl)) return null;
-  // The avatar is the hook image here: the segment indices on the ref
-  // are unused (the 400 below names the persona photo, not a segment).
-  const record = await fetchMediaCheck(
-    { segmentIndex: 0, imageIndex: 0, url: input.avatarUrl },
+  return checkFallbackPhotoUrl(
     input.userId,
     input.videoAspect,
-    'first-photo-face',
+    input.avatarUrl,
+    'The persona photo',
+    'personaId',
   );
-  if (record instanceof NextResponse) return record;
-  const rejection = mechanicalRejectionReason(record.code);
-  if (rejection !== undefined) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      `The persona photo ${rejection}: lip sync needs a usable photo of the persona's face.`,
-      'personaId',
-    );
-  }
-  if (record.has_face === false) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      `The persona photo has no detectable face: lip sync needs a photo of the persona's face.`,
-      'personaId',
-    );
-  }
-  return null;
 }
 
 export interface PreChargePreflightInput {
@@ -331,6 +370,9 @@ export interface PreChargePreflightInput {
   options: ValidatedOptions;
   /** Raw segments from the request (already shape-validated upstream). */
   segments: unknown;
+  /** Signed URL of the library image dispatch will send as the persona
+   * fallback photo (null when no library image was picked). */
+  libraryPhotoUrl: string | null;
 }
 
 /**
@@ -383,5 +425,6 @@ export async function checkPreChargePreflights(
     videoAspect,
     videoType: input.options.videoType,
     avatarUrl: input.prep.avatarUrl,
+    libraryPhotoUrl: input.libraryPhotoUrl,
   });
 }
