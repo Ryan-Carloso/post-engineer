@@ -88,21 +88,18 @@ export const MAX_UPLOAD_VIDEO_GB = MAX_UPLOAD_VIDEO_BYTES / (1024 * 1024 * 1024)
 export const VIDEO_LAYOUTS = ['standard', 'react'] as const;
 
 /**
- * GET /api/metrics query contract, mirrored from
- * `apps/web/lib/metrics/metrics-query.ts` (METRICS_FILTER_MAX_LENGTH,
- * METRICS_NONE, the window values) and `apps/web/lib/providers/registry.ts`
- * (SOCIAL_PROVIDERS). The MCP rejects what the route would 400 on before
- * the request goes out. Pinned by `metrics-query-sync.test.ts`.
+ * GET /api/metrics query contract, re-exported from the shared contract
+ * (`shared/contracts/metrics.ts`) so the MCP and the web routes cannot
+ * drift. Existing importers keep importing from this path. Pinned by
+ * `metrics-query-sync.test.ts`.
  */
-export const METRICS_FILTER_MAX_LENGTH = 200;
-export const METRICS_NONE = '^@none';
-export const METRICS_WINDOWS = ['24h', '7d', '28d'] as const;
-/**
- * GET /api/metrics/retention-curve `video` param, mirrored from VIDEO_ID in
- * `apps/web/lib/youtube-analytics.ts` (pinned by `metrics-query-sync.test.ts`).
- */
-export const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{1,64}$/;
-export const METRICS_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'] as const;
+export {
+  METRICS_FILTER_MAX_LENGTH,
+  METRICS_NONE,
+  METRICS_WINDOWS,
+  YOUTUBE_VIDEO_ID,
+} from './contracts/metrics.js';
+export { SOCIAL_PROVIDERS as METRICS_PROVIDERS } from './contracts/metrics.js';
 
 /**
  * Paired A/B experiment limits (issue #476), re-exported from the shared

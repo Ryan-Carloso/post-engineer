@@ -60,6 +60,45 @@ const GENERATION_DETAIL = {
   scriptAngle: null,
 };
 
+// A production-shaped metrics row and the two response envelopes: the
+// contract requires every field, so a partial payload is a malformed 200.
+const METRICS_ROW = {
+  postId: 'p-1',
+  personaId: PERSONA,
+  provider: 'youtube',
+  accountId: 'UC-1',
+  externalId: 'vid_1',
+  scriptAngle: 'hot take',
+  views: 10,
+  likes: 2,
+  comments: 1,
+  saves: 0,
+  analyticsViews: 9,
+  engagedViews: 5,
+  stayedToWatchPct: 55.6,
+  averageViewDurationSeconds: 12.5,
+  averageViewPercentage: 41.2,
+  contentType: 'video',
+  analyticsStatus: 'ok',
+  provisional: false,
+  collectedAt: '2026-11-14T10:00:00.000Z',
+};
+const METRICS_RESPONSE = {
+  success: true,
+  rows: [METRICS_ROW],
+  truncated: false,
+  coverage: [],
+  coverageTruncated: false,
+  asOf: '2026-11-14T10:00:00.000Z',
+};
+const RETENTION_RESPONSE = {
+  success: true,
+  points: [{ ratio: 0.01, audienceWatchRatio: 0.5, relativeRetentionPerformance: 1.2 }],
+  startDate: '2026-11-01',
+  endDate: '2026-11-14',
+  provisional: false,
+};
+
 describe('getPost', () => {
   it('GETs /api/posts/[id] with the id percent-encoded', async () => {
     const request = vi.fn().mockResolvedValue({ success: true, kind: 'generation', generation: GENERATION_DETAIL });
@@ -79,7 +118,7 @@ describe('getPost', () => {
 
 describe('getPostMetrics', () => {
   it('sends only the window when no filter is set', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, rows: [], truncated: false });
+    const request = vi.fn().mockResolvedValue(METRICS_RESPONSE);
     await getPostMetrics(fakeClient(request), { window: '7d' });
     expect(request).toHaveBeenCalledWith(
       '/api/metrics?window=7d',
@@ -89,7 +128,7 @@ describe('getPostMetrics', () => {
   });
 
   it('sends every filter under the route parameter names, encoded', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, rows: [], truncated: false });
+    const request = vi.fn().mockResolvedValue(METRICS_RESPONSE);
     await getPostMetrics(fakeClient(request), {
       window: '24h',
       persona: PERSONA,
@@ -107,6 +146,14 @@ describe('getPostMetrics', () => {
       ['provider', 'youtube'],
       ['angle', 'hot take & more'],
     ]);
+  });
+
+  it('rejects a malformed 200 body', async () => {
+    // The pre-contract shape (no coverage/asOf) is now a loud error.
+    const request = vi.fn().mockResolvedValue({ success: true, rows: [], truncated: false });
+    await expect(getPostMetrics(fakeClient(request), { window: '7d' })).rejects.toThrow(
+      'Malformed response from GET /api/metrics',
+    );
   });
 });
 
@@ -152,10 +199,9 @@ describe('get_post / get_post_metrics handlers', () => {
   });
 
   it('handleGetPostMetrics returns rows and truncated', async () => {
-    const payload = { success: true, rows: [{ postId: 'p-1', views: 10 }], truncated: false };
-    const request = vi.fn().mockResolvedValue(payload);
+    const request = vi.fn().mockResolvedValue(METRICS_RESPONSE);
     const result = await handleGetPostMetrics(fakeClient(request), { window: '24h' });
-    expect(JSON.parse(textOf(result))).toEqual(payload);
+    expect(JSON.parse(textOf(result))).toEqual(METRICS_RESPONSE);
   });
 
   it('handleGetPostMetrics maps failures to an error response', async () => {
@@ -175,7 +221,7 @@ describe('get_youtube_retention_curve', () => {
   });
 
   it('getYouTubeRetentionCurve sends account and video encoded', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, points: [] });
+    const request = vi.fn().mockResolvedValue(RETENTION_RESPONSE);
     await getYouTubeRetentionCurve(fakeClient(request), { account: 'UC&1', video: 'v1' });
     expect(request).toHaveBeenCalledWith(
       '/api/metrics/retention-curve?account=UC%261&video=v1',
@@ -184,8 +230,16 @@ describe('get_youtube_retention_curve', () => {
     );
   });
 
+  it('rejects a malformed 200 body', async () => {
+    // The pre-contract shape (no dates/provisional) is now a loud error.
+    const request = vi.fn().mockResolvedValue({ success: true, points: [] });
+    await expect(getYouTubeRetentionCurve(fakeClient(request), { account: 'UC1', video: 'v1' })).rejects.toThrow(
+      'Malformed response from GET /api/metrics/retention-curve',
+    );
+  });
+
   it('handleGetYouTubeRetentionCurve returns the points and maps failures to an error response', async () => {
-    const ok = await handleGetYouTubeRetentionCurve(fakeClient(vi.fn().mockResolvedValue({ success: true, points: [{ ratio: 0.01 }] })), { account: 'UC1', video: 'v1' });
+    const ok = await handleGetYouTubeRetentionCurve(fakeClient(vi.fn().mockResolvedValue(RETENTION_RESPONSE)), { account: 'UC1', video: 'v1' });
     expect(ok.isError).toBeFalsy();
     expect(textOf(ok)).toContain('"ratio": 0.01');
     const failed = await handleGetYouTubeRetentionCurve(fakeClient(vi.fn().mockRejectedValue(new Error('403 YOUTUBE_ANALYTICS_SCOPE_MISSING'))), { account: 'UC1', video: 'v1' });
@@ -215,7 +269,7 @@ describe('registered posts and insights tools', () => {
   });
 
   it('get_post_metrics calls GET /api/metrics through the server', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, rows: [], truncated: false });
+    const request = vi.fn().mockResolvedValue(METRICS_RESPONSE);
     const result = await callTool('insights', { action: 'post_metrics', window: '7d', provider: 'linkedin' }, request);
     expect(result.isError).toBeFalsy();
     expect(request).toHaveBeenCalledWith(
@@ -226,7 +280,7 @@ describe('registered posts and insights tools', () => {
   });
 
   it('get_youtube_retention_curve calls GET /api/metrics/retention-curve through the server', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, points: [] });
+    const request = vi.fn().mockResolvedValue(RETENTION_RESPONSE);
     const result = await callTool('insights', { action: 'retention_curve', account: 'UC own', video: 'vid_1' }, request);
     expect(result.isError).toBeFalsy();
     expect(request).toHaveBeenCalledWith(

@@ -107,9 +107,10 @@ schemas) plus the `BodyOf`/`QueryOf`/`ResponseOf`/`ParamsOf` types derived
 from it. The pilot is the experiments API (`POST /api/experiments`,
 `GET /api/experiments`, `GET /api/experiments/:id`); the prompts catalog
 (`GET /api/prompts`, `GET /api/prompts/[slug]`), the billing wallet
-(`GET /api/billing/tokens`, `GET /api/billing/transactions`) and the post
-detail (`GET /api/posts/[id]`) follow the same shape: renaming a field
-there fails `pnpm typecheck` in BOTH apps in the same change, with no
+(`GET /api/billing/tokens`, `GET /api/billing/transactions`), the post
+detail (`GET /api/posts/[id]`) and the metrics reads
+(`GET /api/metrics`, `GET /api/metrics/retention-curve`, including their
+strict query parsing) follow the same shape: renaming a field there fails `pnpm typecheck` in BOTH apps in the same change, with no
 runtime change (same URLs, same 400 messages). The web route reads the
 body through the shared schema. The MCP functions issue a literal
 `client.request` (method + path) and parse the response with the contract,

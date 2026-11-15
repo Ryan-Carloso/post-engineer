@@ -3,7 +3,7 @@ import type { PostEngineerClient } from '../client.js';
 import { createExperiment } from '../client-experiments.js';
 import { getPrompt, listPrompts } from '../client-prompts.js';
 import { getTokenBalance, listTokenTransactions } from '../client-billing.js';
-import { getPost } from '../client-posts.js';
+import { getPost, getPostMetrics, getYouTubeRetentionCurve } from '../client-posts.js';
 
 //---------------
 // Type-level pins for the shared contracts, checked by
@@ -18,6 +18,8 @@ type GetPromptResult = Awaited<ReturnType<typeof getPrompt>>;
 type TokenBalanceResult = Awaited<ReturnType<typeof getTokenBalance>>;
 type TokenTransactionsResult = Awaited<ReturnType<typeof listTokenTransactions>>;
 type GetPostResult = Awaited<ReturnType<typeof getPost>>;
+type PostMetricsResult = Awaited<ReturnType<typeof getPostMetrics>>;
+type RetentionCurveResult = Awaited<ReturnType<typeof getYouTubeRetentionCurve>>;
 
 describe('contracts typecheck', () => {
   it('rejects an unknown body field and an unknown response field at compile time', () => {
@@ -68,5 +70,18 @@ describe('contracts typecheck', () => {
       return result.generation.subject;
     };
     expect(typeof detail).toBe('function');
+  });
+
+  it('rejects unknown metrics fields at compile time', () => {
+    const row = (result: PostMetricsResult): unknown => {
+      // @ts-expect-error -- the row field is `postId`, not `post_id`
+      return result.rows[0]?.post_id;
+    };
+    const curve = (result: RetentionCurveResult): unknown => {
+      // @ts-expect-error -- the point field is `audienceWatchRatio`, not `watchRatio`
+      return result.points[0]?.watchRatio;
+    };
+    expect(typeof row).toBe('function');
+    expect(typeof curve).toBe('function');
   });
 });

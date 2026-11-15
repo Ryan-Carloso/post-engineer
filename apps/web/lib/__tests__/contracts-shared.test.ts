@@ -12,6 +12,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 import { METRICS_WINDOWS } from '@/lib/contracts/experiments';
+import { SOCIAL_PROVIDERS, YOUTUBE_VIDEO_ID } from '@/lib/contracts/metrics';
 import { PUBLISH_PROVIDERS } from '@/lib/contracts/posts';
 
 const HEADER = '// GENERATED from shared/contracts — do not edit.\n// Run `node scripts/sync-contracts.mjs` from the repo root to regenerate.\n';
@@ -57,5 +58,39 @@ describe('contracts shared source', () => {
     const publishLinks = readFileSync(join(root, 'apps', 'web', 'lib', 'publish-links.ts'), 'utf8');
     const list = PUBLISH_PROVIDERS.map((provider) => `'${provider}'`).join(' | ');
     expect(publishLinks).toContain(`export type PublishProvider = ${list};`);
+  });
+
+  // The metrics contract carries its own SOCIAL_PROVIDERS copy (the
+  // route's `?provider=` validation used to import isSocialProvider
+  // straight from the registry). A one-sided edit would make the
+  // contract reject a provider the route accepts, so the copy is pinned
+  // here.
+  it('pins the shared SOCIAL_PROVIDERS to the provider registry', () => {
+    const root = findRepoRoot(import.meta.url);
+    const registry = readFileSync(join(root, 'apps', 'web', 'lib', 'providers', 'registry.ts'), 'utf8');
+    const list = SOCIAL_PROVIDERS.map((provider) => `'${provider}'`).join(', ');
+    expect(registry).toContain(`export const SOCIAL_PROVIDERS = [${list}] as const;`);
+  });
+
+  // The metrics contract carries its own YOUTUBE_VIDEO_ID copy (the
+  // retention-curve route's `?video=` validation used to import VIDEO_ID
+  // straight from youtube-analytics.ts). A one-sided edit would make the
+  // contract reject a video id the Analytics call accepts, so the copy
+  // is pinned here.
+  it('pins the shared YOUTUBE_VIDEO_ID to youtube-analytics.ts', () => {
+    const root = findRepoRoot(import.meta.url);
+    const youtubeAnalytics = readFileSync(join(root, 'apps', 'web', 'lib', 'youtube-analytics.ts'), 'utf8');
+    expect(youtubeAnalytics).toContain(`export const VIDEO_ID = /${YOUTUBE_VIDEO_ID.source}/;`);
+  });
+
+  // The query parsers moved into the contract; metrics-query.ts keeps
+  // the import paths working by re-exporting them. If the re-export is
+  // dropped, the routes and the dashboard lose their validator.
+  it('pins metrics-query.ts to re-export the contract parsers', () => {
+    const root = findRepoRoot(import.meta.url);
+    const metricsQuery = readFileSync(join(root, 'apps', 'web', 'lib', 'metrics', 'metrics-query.ts'), 'utf8');
+    expect(metricsQuery).toContain("from '@/lib/contracts/metrics'");
+    expect(metricsQuery).toContain('parseMetricsQuery,');
+    expect(metricsQuery).toContain('parseRetentionCurveQuery,');
   });
 });

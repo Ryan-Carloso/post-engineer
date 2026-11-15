@@ -4,6 +4,7 @@ import { createExperiment } from '@/lib/contracts/experiments';
 import { getPrompt, listPrompts } from '@/lib/contracts/prompts';
 import { getTokenBalance, listTokenTransactions } from '@/lib/contracts/billing';
 import { getPost } from '@/lib/contracts/posts';
+import { getRetentionCurve, listMetrics } from '@/lib/contracts/metrics';
 import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
 //---------------
@@ -20,6 +21,8 @@ type GetPromptResponse = ResponseOf<typeof getPrompt>;
 type TokenBalanceResponse = ResponseOf<typeof getTokenBalance>;
 type TokenTransactionsResponse = ResponseOf<typeof listTokenTransactions>;
 type GetPostResponse = ResponseOf<typeof getPost>;
+type MetricsResponse = ResponseOf<typeof listMetrics>;
+type RetentionCurveResponse = ResponseOf<typeof getRetentionCurve>;
 
 describe('contracts typecheck', () => {
   it('pins BodyOf and ResponseOf field names', async () => {
@@ -109,5 +112,51 @@ describe('contracts typecheck', () => {
     if (detail.kind !== 'generation') throw new Error('expected a generation detail');
     // @ts-expect-error -- the generation field is `videoSubject`, not `subject`
     expect(detail.generation.subject).toBeUndefined();
+  });
+
+  it('pins the metrics response field names', () => {
+    const metrics: MetricsResponse = {
+      success: true,
+      rows: [
+        {
+          postId: 'p-1',
+          personaId: null,
+          provider: 'youtube',
+          accountId: 'UC-1',
+          externalId: 'vid_1',
+          scriptAngle: null,
+          views: 10,
+          likes: 2,
+          comments: 1,
+          saves: 0,
+          analyticsViews: 9,
+          engagedViews: 5,
+          stayedToWatchPct: 55.6,
+          averageViewDurationSeconds: 12.5,
+          averageViewPercentage: 41.2,
+          contentType: 'video',
+          analyticsStatus: 'ok',
+          provisional: false,
+          collectedAt: '2026-11-14T10:00:00.000Z',
+        },
+      ],
+      truncated: false,
+      coverage: [],
+      coverageTruncated: false,
+      asOf: '2026-11-14T10:00:00.000Z',
+    };
+    expect(metrics.rows[0]?.postId).toBe('p-1');
+    // @ts-expect-error -- the row field is `postId`, not `post_id`
+    expect(metrics.rows[0]?.post_id).toBeUndefined();
+    const curve: RetentionCurveResponse = {
+      success: true,
+      points: [{ ratio: 0.01, audienceWatchRatio: 0.5, relativeRetentionPerformance: 1.2 }],
+      startDate: '2026-11-01',
+      endDate: '2026-11-14',
+      provisional: false,
+    };
+    expect(curve.points[0]?.ratio).toBe(0.01);
+    // @ts-expect-error -- the point field is `audienceWatchRatio`, not `watchRatio`
+    expect(curve.points[0]?.watchRatio).toBeUndefined();
   });
 });
