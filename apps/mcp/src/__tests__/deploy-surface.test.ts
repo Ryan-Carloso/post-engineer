@@ -47,6 +47,19 @@ describe('MCP HTTP deploy surface', () => {
     expect(compose).toContain('context: ../..');
   });
 
+  it('keeps the host node_modules out of the image build context', () => {
+    // The context is the monorepo root, so `COPY apps/mcp ./apps/mcp` would
+    // copy the host's apps/mcp/node_modules over the install the Dockerfile
+    // just made. Those host links point into .pnpm directories the image never
+    // created, so a stale checkout fails the build with "Cannot find module
+    // 'zod'" (2026-11-15: every deploy logged that failure while a clean
+    // checkout built fine). apps/web/Dockerfile.dockerignore is the twin.
+    expect(read('Dockerfile')).toContain('COPY apps/mcp ./apps/mcp');
+    const ignore = read('Dockerfile.dockerignore');
+    expect(ignore).toContain('**/node_modules');
+    expect(ignore).toContain('.git');
+  });
+
   it('documents the public route in the MCP README and self-hosting guide', () => {
     expect(read('README.md')).toContain('https://post-engineer.com/mcp');
     const selfHosting = readFileSync(join(repoRoot, 'docs', 'SELF_HOSTING.md'), 'utf8');
