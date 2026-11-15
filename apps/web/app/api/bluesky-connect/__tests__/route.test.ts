@@ -48,6 +48,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { loginToBluesky } from '@/lib/bluesky';
 import { encryptTokens } from '@/lib/token-crypto';
+import { BlueskyConnectResponseSchema } from '@/lib/contracts/accounts';
 
 const USER_ID = 'user-uuid-1';
 
@@ -130,6 +131,7 @@ describe('POST /api/bluesky-connect', () => {
     const res = await POST(formRequest({ handle: 'eu.bsky.social', appPassword: 'x' }));
 
     expect(res.status).toBe(200);
+    expect(BlueskyConnectResponseSchema.safeParse(await res.json()).success).toBe(true);
     expect(fetchBlueskyPublicProfile).toHaveBeenCalledWith('did:plc:me');
     expect(upserted[0].account_metadata).toEqual({
       displayName: 'Eu',

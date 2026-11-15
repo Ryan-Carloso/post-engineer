@@ -30,10 +30,19 @@ import {
   listTokenTransactions,
 } from './client-billing.js';
 import type { ResponseOf } from './contracts/endpoint.js';
+import { parseContractResponse } from './contract-response.js';
 import {
   getTokenBalance as getTokenBalanceContract,
   listTokenTransactions as listTokenTransactionsContract,
 } from './contracts/billing.js';
+import {
+  connectBlueskyAccount as connectBlueskyAccountContract,
+  connectRumbleAccount as connectRumbleAccountContract,
+  connectThreespeakAccount as connectThreespeakAccountContract,
+  disconnectAccount as disconnectAccountContract,
+  getOAuthConnectUrl as getOAuthConnectUrlContract,
+  listSocialAccounts as listSocialAccountsContract,
+} from './contracts/accounts.js';
 
 // Re-exported so existing import sites (`./client.js`) keep working.
 export type {
@@ -302,47 +311,52 @@ export class PostEngineerClient {
     );
   }
 
-  async listSocialAccounts(): Promise<unknown> {
-    return this.request(
+  async listSocialAccounts(): Promise<ResponseOf<typeof listSocialAccountsContract>> {
+    const raw = await this.request(
       '/api/account',
       { method: 'GET', headers: this.getHeaders() },
       'list social accounts'
     );
+    return parseContractResponse(listSocialAccountsContract, raw);
   }
 
-  async getOAuthConnectUrl(provider: string): Promise<unknown> {
-    return this.request(
+  async getOAuthConnectUrl(provider: string): Promise<ResponseOf<typeof getOAuthConnectUrlContract>> {
+    const raw = await this.request(
       '/api/account/connect-url',
       { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ provider }) },
       'get OAuth connect URL'
     );
+    return parseContractResponse(getOAuthConnectUrlContract, raw);
   }
 
-  async connectBlueskyAccount(handle: string, appPassword: string): Promise<unknown> {
+  async connectBlueskyAccount(handle: string, appPassword: string): Promise<ResponseOf<typeof connectBlueskyAccountContract>> {
     const endpoint = '/api/bluesky-connect';
     try {
-      return await this.request(endpoint, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ handle, appPassword }) }, 'connect Bluesky account');
+      const raw = await this.request(endpoint, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ handle, appPassword }) }, 'connect Bluesky account');
+      return parseContractResponse(connectBlueskyAccountContract, raw);
     } catch (error) {
       throw redactSecretFromError(error, appPassword);
     }
   }
 
-  async connectThreespeakAccount(username: string, postingKey: string): Promise<unknown> {
+  async connectThreespeakAccount(username: string, postingKey: string): Promise<ResponseOf<typeof connectThreespeakAccountContract>> {
     const endpoint = '/api/threespeak-connect';
     try {
-      return await this.request(endpoint, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ username, postingKey }) }, 'connect 3Speak account');
+      const raw = await this.request(endpoint, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ username, postingKey }) }, 'connect 3Speak account');
+      return parseContractResponse(connectThreespeakAccountContract, raw);
     } catch (error) {
       throw redactSecretFromError(error, postingKey);
     }
   }
 
-  async connectRumbleAccount(channelId: string, accessToken: string): Promise<unknown> {
+  async connectRumbleAccount(channelId: string, accessToken: string): Promise<ResponseOf<typeof connectRumbleAccountContract>> {
     try {
-      return await this.request(
+      const raw = await this.request(
         '/api/rumble-connect',
         { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ channelId, accessToken }) },
         'connect Rumble account',
       );
+      return parseContractResponse(connectRumbleAccountContract, raw);
     } catch (error) {
       throw redactSecretFromError(error, accessToken);
     }
@@ -453,7 +467,7 @@ export class PostEngineerClient {
     );
   }
 
-  async disconnectAccount(provider: string, providerAccountId: string): Promise<unknown> {
+  async disconnectAccount(provider: string, providerAccountId: string): Promise<ResponseOf<typeof disconnectAccountContract>> {
     // The route 400s INVALID_PROVIDER / INVALID_PARAMS — fail fast with the
     // field named before any fetch goes out.
     const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'];
@@ -467,11 +481,12 @@ export class PostEngineerClient {
       provider,
       providerAccountId: providerAccountId.trim(),
     });
-    return this.request(
+    const raw = await this.request(
       `/api/account?${params.toString()}`,
       { method: 'DELETE', headers: this.getHeaders() },
       'disconnect account'
     );
+    return parseContractResponse(disconnectAccountContract, raw);
   }
 
   async validateScript(segments: unknown, videoType: VideoType = 'hook_lipsync'): Promise<unknown> {

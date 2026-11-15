@@ -15,6 +15,7 @@ import { METRICS_WINDOWS } from '@/lib/contracts/experiments';
 import { SOCIAL_PROVIDERS, YOUTUBE_VIDEO_ID } from '@/lib/contracts/metrics';
 import { CHECK_MEDIA_CODES, MEDIA_ID_PATTERN, VIDEO_ASPECTS } from '@/lib/contracts/media';
 import { PUBLISH_PROVIDERS } from '@/lib/contracts/posts';
+import { OAUTH_CONNECT_PROVIDERS, PublicAccountItemSchema } from '@/lib/contracts/accounts';
 
 const HEADER = '// GENERATED from shared/contracts — do not edit.\n// Run `node scripts/sync-contracts.mjs` from the repo root to regenerate.\n';
 
@@ -117,5 +118,34 @@ describe('contracts shared source', () => {
     const root = findRepoRoot(import.meta.url);
     const uploadRoute = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'media', 'upload', 'route.ts'), 'utf8');
     expect(uploadRoute).toContain(`const MEDIA_ID_PATTERN = /${MEDIA_ID_PATTERN.source}/;`);
+  });
+
+  // The accounts contract carries its own OAUTH_CONNECT_PROVIDERS copy
+  // (the connect-url route validates against it). A one-sided edit would
+  // make the contract accept a provider the route rejects (Bluesky,
+  // 3Speak and Rumble connect directly and are not OAuth providers).
+  it('pins the shared OAUTH_CONNECT_PROVIDERS to oauth-connect.ts', () => {
+    const root = findRepoRoot(import.meta.url);
+    const oauthConnect = readFileSync(join(root, 'apps', 'web', 'lib', 'oauth-connect.ts'), 'utf8');
+    const list = OAUTH_CONNECT_PROVIDERS.map((provider) => `'${provider}'`).join(', ');
+    expect(oauthConnect).toContain(`export const OAUTH_CONNECT_PROVIDERS = [${list}] as const;`);
+  });
+
+  // The accounts contract carries its own PublicAccountItem copy (the
+  // GET /api/account response). A one-sided edit would make the contract
+  // reject an account the route serves, so every variant in the
+  // registry's union must appear in the contract union with the same
+  // provider literal.
+  it('pins the shared PublicAccountItem variants to the provider registry', () => {
+    const root = findRepoRoot(import.meta.url);
+    const registry = readFileSync(join(root, 'apps', 'web', 'lib', 'providers', 'registry.ts'), 'utf8');
+    for (const variant of PublicAccountItemSchema.options) {
+      const provider = (variant.shape as { provider: { value: string } }).provider.value;
+      expect(registry).toContain(`provider: '${provider}'`);
+    }
+    expect(PublicAccountItemSchema.options).toHaveLength(10);
+    for (const name of ['AccountData', 'InstagramAccountData', 'BlueskyAccountData', 'LinkedinAccountData', 'ThreadsAccountData', 'FacebookAccountData', 'PinterestAccountData', 'ThreespeakAccountData', 'RumbleAccountData', 'FanvueAccountData']) {
+      expect(registry).toContain(name);
+    }
   });
 });

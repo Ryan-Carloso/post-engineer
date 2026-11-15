@@ -55,7 +55,7 @@ describe('personas get', () => {
     const { call, seen } = setup({
       'GET /api/persona/list': PERSONAS,
       'GET /api/persona/images': { images: [{ id: 'i1' }, { id: 'i2' }] },
-      'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: ['UC1'] } },
+      'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: ['UC1'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } },
     });
     const result = await call('personas', { action: 'get', persona: 'maria' });
     expect(result.isError).toBe(false);
@@ -65,7 +65,7 @@ describe('personas get', () => {
   });
 
   it('says there is no persona with that id instead of returning an empty record', async () => {
-    const { call } = setup({ 'GET /api/persona/list': PERSONAS, 'GET /api/persona/images': { images: [] }, 'GET /api/persona/publishing-accounts': { defaults: {} } });
+    const { call } = setup({ 'GET /api/persona/list': PERSONAS, 'GET /api/persona/images': { images: [] }, 'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } } });
     const result = await call('personas', { action: 'get', persona: '99999999-9999-4999-8999-999999999999' });
     expect(result.isError).toBe(true);
     expect(result.text).toContain('No persona with id');
@@ -87,11 +87,13 @@ describe('personas delete over the server', () => {
 });
 
 const ACCOUNTS = {
+  authenticated: true,
   accounts: [
-    { provider: 'youtube', channelId: 'UC1', channelName: 'Maria' },
-    { provider: 'instagram', igUserId: '9', username: 'maria' },
-    { provider: 'pinterest', providerAccountId: 'PIN1', accountName: 'Maria Pins' },
+    { provider: 'youtube', recordId: 'rec-1', channelId: 'UC1', channelName: 'Maria', connectedAt: 1700000000000, lastUsed: 1700000000000 },
+    { provider: 'instagram', recordId: 'rec-2', igUserId: '9', username: 'maria', connectedAt: 1700000000000, lastUsed: 1700000000000 },
+    { provider: 'pinterest', recordId: 'rec-3', providerAccountId: 'PIN1', accountName: 'Maria Pins', connectedAt: 1700000000000, lastUsed: 1700000000000 },
   ],
+  message: 'Accounts retrieved from Supabase',
 };
 
 describe('accounts', () => {
@@ -119,7 +121,11 @@ describe('accounts', () => {
 
   it('resolves against the accounts as they are on each call, not as they were on the first one', async () => {
     const seen: string[] = [];
-    let accounts: unknown = { accounts: [{ provider: 'youtube', channelId: 'UC1', channelName: 'Maria' }] };
+    let accounts: unknown = {
+      authenticated: true,
+      accounts: [{ provider: 'youtube', recordId: 'rec-1', channelId: 'UC1', channelName: 'Maria', connectedAt: 1700000000000, lastUsed: 1700000000000 }],
+      message: 'Accounts retrieved from Supabase',
+    };
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init: RequestInit) => {
@@ -135,7 +141,11 @@ describe('accounts', () => {
     try {
       expect((await client.callTool({ name: 'accounts', arguments: { action: 'disconnect', account: 'Maria' } })).isError).not.toBe(true);
       // The user reconnects another account; the same server must see it.
-      accounts = { accounts: [{ provider: 'instagram', igUserId: '9', username: 'new.account' }] };
+      accounts = {
+        authenticated: true,
+        accounts: [{ provider: 'instagram', recordId: 'rec-2', igUserId: '9', username: 'new.account', connectedAt: 1700000000000, lastUsed: 1700000000000 }],
+        message: 'Accounts retrieved from Supabase',
+      };
       expect((await client.callTool({ name: 'accounts', arguments: { action: 'disconnect', account: 'new.account' } })).isError).not.toBe(true);
     } finally {
       await client.close();
@@ -147,7 +157,7 @@ describe('accounts', () => {
   });
 
   it('lists the boards of a Pinterest account given by name, using its id', async () => {
-    const { call, seen } = setup({ 'GET /api/account': ACCOUNTS, 'GET /api/pinterest/boards': { boards: [{ id: 'b1', name: 'Board' }] } });
+    const { call, seen } = setup({ 'GET /api/account': ACCOUNTS, 'GET /api/pinterest/boards': { success: true, boards: [{ id: 'b1', name: 'Board' }] } });
     const result = await call('accounts', { action: 'list_boards', account: 'Maria Pins' });
     expect(result.isError).toBe(false);
     expect(seen.some((request) => request.path === '/api/pinterest/boards?accountId=PIN1')).toBe(true);
@@ -218,11 +228,11 @@ describe('video_tasks over the server', () => {
 });
 
 describe('malformed API payloads are reported, not turned into empty results', () => {
-  it('leaves a listing without an accounts array untouched when filtering by provider', async () => {
+  it('reports a listing without an accounts array as a malformed response', async () => {
     const { call } = setup({ 'GET /api/account': { message: 'odd' } });
     const result = await call('accounts', { action: 'list', provider: 'youtube' });
-    expect(result.isError).toBe(false);
-    expect(result.text).toContain('"message": "odd"');
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('Malformed response from GET /api/account');
   });
 
   it('passes an accounts failure through when filtering by provider', async () => {
@@ -248,7 +258,7 @@ describe('malformed API payloads are reported, not turned into empty results', (
   });
 
   it('personas get does not find a persona in a malformed listing', async () => {
-    const { call } = setup({ 'GET /api/persona/list': { personas: 'nope' }, 'GET /api/persona/images': { images: [] }, 'GET /api/persona/publishing-accounts': { defaults: {} } });
+    const { call } = setup({ 'GET /api/persona/list': { personas: 'nope' }, 'GET /api/persona/images': { images: [] }, 'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } } });
     const result = await call('personas', { action: 'get', persona: MARIA });
     expect(result.isError).toBe(true);
     expect(result.text).toContain('No persona with id');

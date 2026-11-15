@@ -235,7 +235,7 @@ describe('every action runs its handler against the client', () => {
 
   it.each(CASES)('%s %j calls %s', async (name, args, method, payload) => {
     if (name === 'accounts' && args.action === 'disconnect') {
-      vi.mocked(mockClient.listSocialAccounts).mockResolvedValue({ accounts: [{ provider: 'bluesky', did: 'did:plc:x', handle: 'a.bsky.social' }] });
+      vi.mocked(mockClient.listSocialAccounts).mockResolvedValue({ authenticated: true, accounts: [{ provider: 'bluesky', recordId: 'rec-1', did: 'did:plc:x', handle: 'a.bsky.social', connectedAt: 1700000000000, lastUsed: 1700000000000 }], message: 'ok' });
     }
     vi.mocked(mockClient[method] as ReturnType<typeof vi.fn>).mockResolvedValue(payload);
     const result = await call(name, args);
@@ -272,9 +272,16 @@ describe('every action runs its handler against the client', () => {
   });
 
   it('filters the accounts list by network', async () => {
-    vi.mocked(mockClient.listSocialAccounts).mockResolvedValue({ accounts: [{ provider: 'youtube', channelId: 'UC1' }, { provider: 'bluesky', did: 'd1' }] });
+    vi.mocked(mockClient.listSocialAccounts).mockResolvedValue({
+      authenticated: true,
+      accounts: [
+        { provider: 'youtube', recordId: 'rec-1', channelId: 'UC1', channelName: 'Maria', connectedAt: 1700000000000, lastUsed: 1700000000000 },
+        { provider: 'bluesky', recordId: 'rec-2', did: 'd1', handle: 'b.bsky.social', connectedAt: 1700000000000, lastUsed: 1700000000000 },
+      ],
+      message: 'ok',
+    });
     const result = await call('accounts', { action: 'list', provider: 'bluesky' });
     const text = (result.content as Array<{ text: string }>)[0].text;
-    expect(JSON.parse(text).accounts).toEqual([{ provider: 'bluesky', did: 'd1' }]);
+    expect(JSON.parse(text).accounts).toEqual([{ provider: 'bluesky', recordId: 'rec-2', did: 'd1', handle: 'b.bsky.social', connectedAt: 1700000000000, lastUsed: 1700000000000 }]);
   });
 });

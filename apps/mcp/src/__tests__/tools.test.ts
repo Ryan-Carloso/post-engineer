@@ -223,7 +223,8 @@ describe('MCP Tool Handlers', () => {
   it('handleListSocialAccounts returns connected accounts', async () => {
     vi.mocked(mockClient.listSocialAccounts).mockResolvedValue({
       authenticated: true,
-      accounts: [{ provider: 'youtube', channelId: 'chan-1' }],
+      accounts: [{ provider: 'youtube', recordId: 'rec-1', channelId: 'chan-1', channelName: 'Chan', connectedAt: 1700000000000, lastUsed: 1700000000000 }],
+      message: 'Accounts retrieved from Supabase',
     });
 
     const response = await handleListSocialAccounts(mockClient);
@@ -235,7 +236,7 @@ describe('MCP Tool Handlers', () => {
   it('handleGetPersonaPublishingAccounts returns the persona defaults', async () => {
     vi.mocked(mockClient.request).mockResolvedValue({
       success: true,
-      defaults: { youtube: [], instagram: [], bluesky: ['did:plc:a'], linkedin: [] },
+      defaults: { youtube: [], instagram: [], bluesky: ['did:plc:a'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] },
     });
 
     const response = await handleGetPersonaPublishingAccounts(mockClient, { personaId: 'p-1' });
@@ -251,7 +252,7 @@ describe('MCP Tool Handlers', () => {
   it('handleSetPersonaPublishingAccounts replaces the defaults', async () => {
     vi.mocked(mockClient.request).mockResolvedValue({
       success: true,
-      defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [] },
+      defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] },
     });
 
     const response = await handleSetPersonaPublishingAccounts(mockClient, {
@@ -667,7 +668,9 @@ describe('schema bounds', () => {
 
   it('handleConnectAccount errors clearly when the response has no auth_url', async () => {
     const client = { getOAuthConnectUrl: vi.fn() } as unknown as PostEngineerClient;
-    vi.mocked(client.getOAuthConnectUrl).mockResolvedValue({ success: true });
+    // The typed client cannot return this; the cast stands in for a
+    // malformed 200 the handler guards against.
+    vi.mocked(client.getOAuthConnectUrl).mockResolvedValue({ success: true } as never);
 
     const response = await handleConnectAccount(client, { provider: 'youtube' });
 

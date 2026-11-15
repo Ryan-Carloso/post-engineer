@@ -6,6 +6,7 @@ import { getTokenBalance, listTokenTransactions } from '../client-billing.js';
 import { getPost, getPostMetrics, getYouTubeRetentionCurve } from '../client-posts.js';
 import { publishVideoDirect } from '../client-publish-uploaded.js';
 import { checkSegmentMedia, uploadSegmentMedia } from '../client-user-media.js';
+import { getPersonaPublishingAccounts } from '../client-publishing-accounts.js';
 
 //---------------
 // Type-level pins for the shared contracts, checked by
@@ -25,6 +26,9 @@ type RetentionCurveResult = Awaited<ReturnType<typeof getYouTubeRetentionCurve>>
 type CheckMediaResult = Awaited<ReturnType<typeof checkSegmentMedia>>;
 type UploadMediaResult = Awaited<ReturnType<typeof uploadSegmentMedia>>;
 type DirectPublishResult = Awaited<ReturnType<typeof publishVideoDirect>>;
+type ListAccountsResult = Awaited<ReturnType<PostEngineerClient['listSocialAccounts']>>;
+type ConnectUrlResult = Awaited<ReturnType<PostEngineerClient['getOAuthConnectUrl']>>;
+type PublishingAccountsResult = Awaited<ReturnType<typeof getPersonaPublishingAccounts>>;
 
 describe('contracts typecheck', () => {
   it('rejects an unknown body field and an unknown response field at compile time', () => {
@@ -106,5 +110,23 @@ describe('contracts typecheck', () => {
     expect(typeof upload).toBe('function');
     expect(typeof check).toBe('function');
     expect(typeof direct).toBe('function');
+  });
+
+  it('rejects unknown accounts fields at compile time', () => {
+    const list = (result: ListAccountsResult): unknown => {
+      // @ts-expect-error -- the account field is `channelId`, not `channel_id`
+      return result.accounts[0]?.channel_id;
+    };
+    const connectUrl = (result: ConnectUrlResult): unknown => {
+      // @ts-expect-error -- the connect field is `auth_url`, not `authUrl`
+      return result.authUrl;
+    };
+    const publishing = (result: PublishingAccountsResult): unknown => {
+      // @ts-expect-error -- the defaults field is `youtube`, not `youtube_id`
+      return result.defaults.youtube_id;
+    };
+    expect(typeof list).toBe('function');
+    expect(typeof connectUrl).toBe('function');
+    expect(typeof publishing).toBe('function');
   });
 });

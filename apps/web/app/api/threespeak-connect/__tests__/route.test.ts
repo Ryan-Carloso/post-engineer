@@ -41,6 +41,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { loginToThreespeak, ThreespeakError } from '@/lib/threespeak';
 import { encryptTokens } from '@/lib/token-crypto';
+import { ThreespeakConnectResponseSchema } from '@/lib/contracts/accounts';
 
 const USER_ID = 'user-uuid-1';
 
@@ -151,6 +152,7 @@ describe('POST /api/threespeak-connect', () => {
     vi.mocked(loginToThreespeak).mockResolvedValueOnce({ username: 'alice', accessToken: 'jwt-1' });
     const res = await POST(formRequest({ username: '  Alice  ', postingKey: '5Kpostingkey' }));
     expect(res.status).toBe(200);
+    expect(ThreespeakConnectResponseSchema.safeParse(await res.json()).success).toBe(true);
     expect(loginToThreespeak).toHaveBeenCalledWith('Alice', '5Kpostingkey');
   });
 

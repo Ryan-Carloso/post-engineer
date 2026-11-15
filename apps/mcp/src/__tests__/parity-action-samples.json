@@ -40,18 +40,26 @@
       },
       "responses": {
         "GET /api/account": {
+          "authenticated": true,
           "accounts": [
             {
               "provider": "youtube",
+              "recordId": "rec-1",
               "channelId": "UC1",
-              "channelName": "Maria Cooks"
+              "channelName": "Maria Cooks",
+              "connectedAt": 1700000000000,
+              "lastUsed": 1700000000000
             },
             {
               "provider": "pinterest",
+              "recordId": "rec-2",
               "providerAccountId": "PIN1",
-              "accountName": "Maria Pins"
+              "accountName": "Maria Pins",
+              "connectedAt": 1700000000000,
+              "lastUsed": 1700000000000
             }
-          ]
+          ],
+          "message": "Accounts retrieved from Supabase"
         }
       }
     }
@@ -79,18 +87,26 @@
       },
       "responses": {
         "GET /api/account": {
+          "authenticated": true,
           "accounts": [
             {
               "provider": "youtube",
+              "recordId": "rec-1",
               "channelId": "UC1",
-              "channelName": "Maria Cooks"
+              "channelName": "Maria Cooks",
+              "connectedAt": 1700000000000,
+              "lastUsed": 1700000000000
             },
             {
               "provider": "pinterest",
+              "recordId": "rec-2",
               "providerAccountId": "PIN1",
-              "accountName": "Maria Pins"
+              "accountName": "Maria Pins",
+              "connectedAt": 1700000000000,
+              "lastUsed": 1700000000000
             }
-          ]
+          ],
+          "message": "Accounts retrieved from Supabase"
         }
       }
     }

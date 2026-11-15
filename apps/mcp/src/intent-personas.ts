@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { actionDescription, actionShape, byAction, offeredSpecs, type ActionOptions } from './action-tool.js';
 import type { PostEngineerClient } from './client.js';
 import { getPersonaPublishingAccounts } from './client-publishing-accounts.js';
+import { MalformedContractResponseError } from './contract-response.js';
 import { handlePersonaDelete } from './persona-delete.js';
 import { UpdatePersonaShape, handleUpdatePersona } from './persona-update.js';
 import { PERSONA_REF, personaRefShape, withPersona } from './refs.js';
@@ -64,7 +65,12 @@ async function getPersona(client: PostEngineerClient, args: { personaId: string 
     const [listing, images, publishing] = await Promise.all([
       client.listPersonas(),
       client.listPersonaImages(args.personaId),
-      getPersonaPublishingAccounts(client, args.personaId),
+      // A malformed binding degrades to null bindings (same as a missing
+      // one); a transport failure still fails the read.
+      getPersonaPublishingAccounts(client, args.personaId).catch((error) => {
+        if (error instanceof MalformedContractResponseError) return undefined;
+        throw error;
+      }),
     ]);
     const personas = typeof listing === 'object' && listing !== null ? (listing as { personas?: unknown }).personas : undefined;
     const persona = Array.isArray(personas) ? personas.find((entry) => typeof entry === 'object' && entry !== null && (entry as { id?: unknown }).id === args.personaId) : undefined;

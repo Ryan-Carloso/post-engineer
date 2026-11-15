@@ -6,6 +6,7 @@ import { getTokenBalance, listTokenTransactions } from '@/lib/contracts/billing'
 import { getPost } from '@/lib/contracts/posts';
 import { getRetentionCurve, listMetrics } from '@/lib/contracts/metrics';
 import { checkMedia, uploadContent, uploadMedia } from '@/lib/contracts/media';
+import { connectBlueskyAccount, getOAuthConnectUrl, getPersonaPublishingAccounts, listSocialAccounts } from '@/lib/contracts/accounts';
 import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
 //---------------
@@ -27,6 +28,10 @@ type RetentionCurveResponse = ResponseOf<typeof getRetentionCurve>;
 type MediaCheckResponse = ResponseOf<typeof checkMedia>;
 type UploadMediaResponse = ResponseOf<typeof uploadMedia>;
 type UploadContentResponse = ResponseOf<typeof uploadContent>;
+type ListAccountsResponse = ResponseOf<typeof listSocialAccounts>;
+type ConnectUrlResponse = ResponseOf<typeof getOAuthConnectUrl>;
+type BlueskyConnectBody = BodyOf<typeof connectBlueskyAccount>;
+type PublishingAccountsResponse = ResponseOf<typeof getPersonaPublishingAccounts>;
 
 describe('contracts typecheck', () => {
   it('pins BodyOf and ResponseOf field names', async () => {
@@ -187,5 +192,31 @@ describe('contracts typecheck', () => {
     expect(content.results[0]?.accountId).toBe('chan-1');
     // @ts-expect-error -- the account field is `accountId`, not `account_id`
     expect(content.results[0]?.account_id).toBeUndefined();
+  });
+
+  it('pins the accounts response field names', () => {
+    const list: ListAccountsResponse = {
+      authenticated: true,
+      accounts: [{ provider: 'youtube', recordId: 'rec-1', channelId: 'chan-1', channelName: 'Chan', connectedAt: 1700000000000, lastUsed: 1700000000000 }],
+      message: 'Accounts retrieved from Supabase',
+    };
+    expect(list.accounts[0]?.provider).toBe('youtube');
+    // @ts-expect-error -- the account field is `channelId`, not `channel_id`
+    expect(list.accounts[0]?.channel_id).toBeUndefined();
+    const connectUrl: ConnectUrlResponse = { success: true, auth_url: 'https://example.com/oauth' };
+    expect(connectUrl.auth_url).toContain('oauth');
+    // @ts-expect-error -- the connect field is `auth_url`, not `authUrl`
+    expect(connectUrl.authUrl).toBeUndefined();
+    const body: BlueskyConnectBody = { handle: 'user.bsky.social', appPassword: 'secret' };
+    expect(body.handle).toBe('user.bsky.social');
+    // @ts-expect-error -- the connect body field is `appPassword`, not `app_password`
+    expect(body.app_password).toBeUndefined();
+    const publishing: PublishingAccountsResponse = {
+      success: true,
+      defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] },
+    };
+    expect(publishing.defaults.youtube).toEqual(['UC-1']);
+    // @ts-expect-error -- the defaults field is `youtube`, not `youtube_id`
+    expect(publishing.defaults.youtube_id).toBeUndefined();
   });
 });

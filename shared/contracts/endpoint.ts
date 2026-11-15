@@ -5,7 +5,7 @@
 // same bytes compile under the web bundler and the MCP NodeNext mode.
 import { z } from 'zod';
 
-export type EndpointMethod = 'GET' | 'POST';
+export type EndpointMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface EndpointDefinition<
   Body extends z.ZodType | undefined,

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { listSocialAccounts, deleteSocialAccount } from '@/lib/social-accounts';
-import { toPublicAccountSafe, type PublicAccountItem, SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/providers/registry';
+import { toPublicAccountSafe, type PublicAccountItem, type SocialProvider } from '@/lib/providers/registry';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -8,6 +8,7 @@ import { syncAccountProfile } from '@/lib/account-profile-sync';
 import { TokenDecryptError } from '@/lib/token-crypto';
 import { isUnauthorizedError } from '@/lib/upload/account-unauthorized';
 import { logger } from '@/lib/logger';
+import { parseDisconnectAccountQuery } from '@/lib/contracts/accounts';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
@@ -114,21 +115,14 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   }
 
   const params = new URL(request.url).searchParams;
-  const provider = params.get('provider');
-  const providerAccountId = params.get('providerAccountId');
-
-  if (!provider || !providerAccountId) {
+  const parsed = parseDisconnectAccountQuery(params);
+  if (!parsed.ok) {
     return NextResponse.json(
-      { success: false, error: 'INVALID_PARAMS', message: 'provider and providerAccountId are required.' },
+      { success: false, error: parsed.code, message: parsed.error },
       { status: 400 }
     );
   }
-  if (!(SOCIAL_PROVIDERS as readonly string[]).includes(provider)) {
-    return NextResponse.json(
-      { success: false, error: 'INVALID_PROVIDER', message: 'Unknown provider.' },
-      { status: 400 }
-    );
-  }
+  const { provider, providerAccountId } = parsed.query;
 
   const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()

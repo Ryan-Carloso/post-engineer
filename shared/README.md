@@ -113,7 +113,12 @@ detail (`GET /api/posts/[id]`) and the metrics reads
 strict query parsing) and the media calls (`POST /api/media/upload`,
 `POST /api/media/check`, `POST /api/upload-content`) follow the same
 shape: renaming a field there fails `pnpm typecheck` in BOTH apps in the same change, with no
-runtime change (same URLs, same 400 messages). The web route reads the
+runtime change (same URLs, same 400 messages). The accounts calls
+(`GET /api/account`, `DELETE /api/account`, `POST /api/account/connect-url`,
+`POST /api/bluesky-connect`, `POST /api/threespeak-connect`,
+`POST /api/rumble-connect`, `GET /api/pinterest/boards`,
+`GET /api/persona/publishing-accounts`, `PUT /api/persona/publishing-accounts`,
+including their strict query parsing) follow the same shape. The web route reads the
 body through the shared schema. The MCP functions issue a literal
 `client.request` (method + path) and parse the response with the contract,
 so the parity gate still sees the endpoint. Request bodies are

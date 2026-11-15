@@ -365,7 +365,17 @@ describe('PostEngineerClient', () => {
   it('lists social accounts successfully', async () => {
     const mockAccounts = {
       authenticated: true,
-      accounts: [{ provider: 'youtube', channelId: 'chan-1' }],
+      accounts: [
+        {
+          provider: 'youtube',
+          recordId: 'rec-1',
+          channelId: 'chan-1',
+          channelName: 'Chan',
+          connectedAt: 1700000000000,
+          lastUsed: 1700000000000,
+        },
+      ],
+      message: 'Accounts retrieved from Supabase',
     };
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -1188,7 +1198,7 @@ describe('generate and schedule video client', () => {
   });
 
   it('connects a 3Speak account with username + posting key', async () => {
-    const mockResponse = { success: true, accountId: 'acc-1', providerAccountId: 'alice' };
+    const mockResponse = { success: true, accountId: 'acc-1', username: 'alice' };
 
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -1387,6 +1397,48 @@ describe('PostEngineerClient configuration', () => {
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).not.toContain(token);
     expect((error as Error).message).toContain('[redacted]');
+  });
+
+  it('rejects a malformed accounts 200 instead of listing a partial account', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ authenticated: true, accounts: [{ provider: 'youtube', channelId: 'chan-1' }], message: 'ok' }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).listSocialAccounts()).rejects.toThrow('Malformed response from GET /api/account');
+  });
+
+  it('rejects a malformed connect-url 200', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).getOAuthConnectUrl('instagram')).rejects.toThrow('Malformed response from POST /api/account/connect-url');
+  });
+
+  it('rejects a malformed Bluesky connect 200', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, accountId: 'acc-1' }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).connectBlueskyAccount('user.bsky.social', 'app-password-123')).rejects.toThrow(
+      'Malformed response from POST /api/bluesky-connect',
+    );
+  });
+
+  it('rejects a malformed disconnect 200', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: false }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).disconnectAccount('youtube', 'chan-1')).rejects.toThrow('Malformed response from DELETE /api/account');
   });
 
   it('rejects a non-http(s) POST_ENGINEER_API_URL override', () => {

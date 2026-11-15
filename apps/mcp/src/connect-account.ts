@@ -9,14 +9,23 @@ import type { PostEngineerClient } from './client.js';
 import { getErrorMessage } from './errors.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
+// A credential present but blank is rejected with the same message the
+// route uses — the route trims and rejects blanks, so the tool does too.
+function nonBlank(message: string) {
+  return z
+    .string()
+    .min(1)
+    .refine((value) => value.trim().length > 0, { message });
+}
+
 export const ConnectAccountShape = {
   provider: z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'fanvue', '3speak', 'rumble']).describe('The social platform to connect'),
-  handle: z.string().min(1).optional().describe('Bluesky handle (e.g. user.bsky.social). Required only for bluesky.'),
-  appPassword: z.string().min(1).optional().describe('Bluesky app password (Settings > App passwords). Required only for bluesky. Never shared or logged.'),
-  username: z.string().min(1).optional().describe('Hive username (e.g. alice). Required only for 3speak.'),
-  postingKey: z.string().min(1).optional().describe('Hive posting key (the posting key only — never the owner, active, or master password). Required only for 3speak. Never shared or logged.'),
-  channelId: z.string().min(1).optional().describe('Rumble channel ID. Required only for rumble.'),
-  accessToken: z.string().min(1).optional().describe('Rumble 40-character Simple Upload API access token (issued by emailing bd@rumble.com). Required only for rumble. Never shared or logged.'),
+  handle: nonBlank('Bluesky handle is required.').optional().describe('Bluesky handle (e.g. user.bsky.social). Required only for bluesky.'),
+  appPassword: nonBlank('Bluesky app password is required.').optional().describe('Bluesky app password (Settings > App passwords). Required only for bluesky. Never shared or logged.'),
+  username: nonBlank('Hive username is required.').optional().describe('Hive username (e.g. alice). Required only for 3speak.'),
+  postingKey: nonBlank('Hive posting key is required.').optional().describe('Hive posting key (the posting key only — never the owner, active, or master password). Required only for 3speak. Never shared or logged.'),
+  channelId: nonBlank('Rumble channel ID is required.').optional().describe('Rumble channel ID. Required only for rumble.'),
+  accessToken: nonBlank('Rumble access token is required.').optional().describe('Rumble 40-character Simple Upload API access token (issued by emailing bd@rumble.com). Required only for rumble. Never shared or logged.'),
 };
 
 export const ConnectAccountSchema = z.object(ConnectAccountShape);
@@ -45,7 +54,7 @@ export async function handleConnectAccount(
       const result = await client.connectBlueskyAccount(args.handle, args.appPassword);
       // Project the upstream response to named fields: stringifying the
       // whole body would surface any field the route adds later.
-      const { accountId, did } = result as { accountId?: string; did?: string };
+      const { accountId, did } = result;
       return {
         content: [
           {
@@ -82,7 +91,7 @@ export async function handleConnectAccount(
       const result = await client.connectThreespeakAccount(args.username, args.postingKey);
       // Project the upstream response to named fields: stringifying the
       // whole body would surface any field the route adds later.
-      const { accountId, username } = result as { accountId?: string; username?: string };
+      const { accountId, username } = result;
       return {
         content: [
           {
