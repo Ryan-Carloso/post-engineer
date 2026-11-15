@@ -689,7 +689,7 @@ describe('cloned voice tools run through the MCP server', () => {
     try {
       const result = await client.callTool({
         name: 'voices',
-        arguments: { action: 'create_clone', audioUrl: 'https://cdn.example.com/ref.wav', language: 'en', consent: true, denoise: true },
+        arguments: { action: 'create_clone', audioUrl: 'https://93.184.216.34/ref.wav', language: 'en', consent: true, denoise: true },
       });
       expect(result.isError).toBeFalsy();
       expect(firstText(result as { content?: unknown })).toContain('Voice clone registration started');
