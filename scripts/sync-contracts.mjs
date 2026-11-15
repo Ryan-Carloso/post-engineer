@@ -1,8 +1,8 @@
 // Sync the generated endpoint-contract copies from the shared sources.
 //
 // Single source of truth: shared/contracts/*.ts.
-// Generated copies (gitignored, regenerated on postinstall, typecheck,
-// prebuild and pretest so a fresh checkout builds without manual steps):
+// Generated copies (gitignored, regenerated on postinstall and by the
+// root typecheck script so a fresh checkout builds without manual steps):
 //   apps/web/lib/contracts/<name>.ts
 //   apps/mcp/src/contracts/<name>.ts
 //

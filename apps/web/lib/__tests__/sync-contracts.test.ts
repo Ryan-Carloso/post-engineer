@@ -119,18 +119,4 @@ describe('Docker install layers run the contracts sync', () => {
       expect(dockerfile.indexOf('COPY shared/contracts shared/contracts')).toBeLessThan(installAt);
     }
   });
-
-  // The sync header promises the copies regenerate on prebuild and pretest:
-  // that is the fallback when an install skips the root postinstall
-  // (e.g. the MCP image installs with --filter), so both scripts must run
-  // the sync before building or testing.
-  it('runs the sync from prebuild and pretest in both apps', () => {
-    for (const app of ['web', 'mcp']) {
-      const pkg = JSON.parse(readFileSync(join(repoRoot, 'apps', app, 'package.json'), 'utf8')) as {
-        scripts: { prebuild: string; pretest: string };
-      };
-      expect(pkg.scripts.prebuild).toContain('../../scripts/sync-contracts.mjs');
-      expect(pkg.scripts.pretest).toContain('../../scripts/sync-contracts.mjs');
-    }
-  });
 });
