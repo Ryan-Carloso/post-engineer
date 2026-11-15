@@ -25,6 +25,7 @@ interface Call {
   url: string;
   authorization: string | null;
   contentType: string | null;
+  contentLength: string | null;
 }
 
 function fakeFetch(respond: (call: Call) => Response): { deps: PublishMediaDeps; calls: Call[] } {
@@ -36,6 +37,7 @@ function fakeFetch(respond: (call: Call) => Response): { deps: PublishMediaDeps;
       url: input.url,
       authorization: input.headers.get('authorization'),
       contentType: input.headers.get('content-type'),
+      contentLength: input.headers.get('content-length'),
     };
     calls.push(call);
     return respond(call);
@@ -80,6 +82,19 @@ describe('uploadPublishMedia', () => {
     expect(signed.searchParams.get('X-Amz-Expires')).toBe(String(PUBLISH_MEDIA_URL_TTL_SECONDS));
     expect(signed.searchParams.get('X-Amz-Signature')).toMatch(/^[0-9a-f]{64}$/);
     expect(url).not.toContain('secret-example');
+  });
+
+  it('sets Content-Length on the PUT: without it R2 answers 411', async () => {
+    // Next's patched fetch rebuilds a Request-input fetch with a stream body,
+    // which undici sends chunked with no Content-Length; R2 rejects the
+    // SigV4 PUT with 411 Length Required (prod, 2026-11-15). The header set
+    // here survives the rebuild, so the length always reaches R2.
+    const { deps, calls } = fakeFetch(() => new Response(null, { status: 200 }));
+
+    await uploadPublishMedia(Buffer.from('video'), 'instagram/1794650460355_3c764afd.mp4', 'video/mp4', deps);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].contentLength).toBe('5');
   });
 
   it('throws when R2 rejects the PUT, so the handler never hands the provider a dead URL', async () => {
