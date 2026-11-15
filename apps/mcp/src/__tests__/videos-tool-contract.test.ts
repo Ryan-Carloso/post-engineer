@@ -52,6 +52,7 @@ import { z } from 'zod';
 import {
   BatchDiscountBodySchema,
   GenerateAndScheduleBodySchema,
+  GenerateAndScheduleResponseSchema,
   MintVideoUploadBodySchema,
   PublishByIdBodySchema,
   ScoreDraftBodySchema,
@@ -221,6 +222,29 @@ describe('generate tool shape vs the videos contract', () => {
     const describe = shared.match(/\.describe\(\s*'([^']+)'/)?.[1];
     if (describe === undefined) throw new Error('musicMood describe text not found in the shared field');
     expect(contract).toContain(describe);
+  });
+});
+
+describe('generate response warnings are objects, not strings', () => {
+  const base = {
+    success: true,
+    schedule: { id: 'sch-1', mode: 'scheduled' },
+    slots: [{ slotId: 'slot-1', slotAt: '2026-10-05T20:00:00Z', title: 'Launch', taskId: 'task-1', status: 'scheduled' }],
+    replayed: false,
+  };
+  it('accepts the voice-fallback warning objects the route returns', () => {
+    expect(
+      accepts(GenerateAndScheduleResponseSchema, {
+        ...base,
+        warnings: [{ code: 'voice_fallback_applied', fromVoice: '', toVoice: 'chatterbox:kokoro_af_heart' }],
+      }),
+    ).toBe(true);
+    expect(accepts(GenerateAndScheduleResponseSchema, base)).toBe(true);
+  });
+
+  it('rejects a bare string warning', () => {
+    expect(accepts(GenerateAndScheduleResponseSchema, { ...base, warnings: ['voice_fallback_applied'] })).toBe(false);
+    expect(firstIssue(GenerateAndScheduleResponseSchema, { ...base, warnings: ['voice_fallback_applied'] })).toContain('expected object');
   });
 });
 

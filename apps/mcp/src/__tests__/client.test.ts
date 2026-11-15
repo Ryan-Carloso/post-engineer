@@ -1100,6 +1100,31 @@ describe('generate and schedule video client', () => {
     );
   });
 
+  it('carries the voice-fallback warning objects the route returns', async () => {
+    const withWarnings = {
+      ...GENERATE_RESPONSE,
+      warnings: [{ code: 'voice_fallback_applied', fromVoice: '', toVoice: 'chatterbox:kokoro_af_heart' }],
+    };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(withWarnings),
+    });
+    const result = await client.generatePersonaVideo(baseInput);
+    expect(result).toEqual(withWarnings);
+  });
+
+  it('reports string warnings as a malformed generate 200', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ...GENERATE_RESPONSE, warnings: ['voice_fallback_applied'] }),
+    });
+    await expect(client.generatePersonaVideo(baseInput)).rejects.toThrow(
+      'Malformed response from POST /api/videos/generate-and-schedule at warnings.0',
+    );
+  });
+
   it('reports a malformed validate 200 as an error instead of an empty result', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,

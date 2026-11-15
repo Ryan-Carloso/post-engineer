@@ -527,9 +527,20 @@ describe('contracts typecheck', () => {
       schedule: { id: 'sch-1', mode: 'scheduled' },
       slots: [{ slotId: 'slot-1', slotAt: '2026-10-05T20:00:00Z', title: 'Launch', taskId: 'task-1', status: 'scheduled' }],
       replayed: false,
+      warnings: [{ code: 'voice_fallback_applied', fromVoice: '', toVoice: 'chatterbox:kokoro_af_heart' }],
     };
     expect(generated.schedule.id).toBe('sch-1');
     expect(generated.slots[0]?.taskId).toBe('task-1');
+    expect(generated.warnings?.[0]?.code).toBe('voice_fallback_applied');
+    const wrongWarnings: GenerateAndScheduleResponse = {
+      success: true,
+      schedule: { id: 'sch-1', mode: 'scheduled' },
+      slots: [{ slotId: 'slot-1', slotAt: '2026-10-05T20:00:00Z', title: 'Launch', taskId: 'task-1', status: 'scheduled' }],
+      replayed: false,
+      // @ts-expect-error -- the generate warnings are objects, not strings
+      warnings: ['voice_fallback_applied'],
+    };
+    expect(typeof wrongWarnings).toBe('object');
     // @ts-expect-error -- the slot field is `taskId`, not `task_id`
     expect(generated.slots[0]?.task_id).toBeUndefined();
     // @ts-expect-error -- the response flag is `replayed`, not `isReplay`

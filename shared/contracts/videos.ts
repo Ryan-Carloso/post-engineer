@@ -234,6 +234,11 @@ export const GenerateSlotResultSchema = z.object({
   tokensRefunded: z.boolean().optional(),
 });
 
+// Voice-fallback warning object (never a bare string): the persona's stored
+// voice was missing or unroutable, so the route dispatched with the house
+// default. Only one code exists today (`voice_fallback_applied`).
+export const GenerateAndScheduleWarningSchema = z.object({ code: z.string(), fromVoice: z.string(), toVoice: z.string() });
+
 // The all-failed 502 envelope ({ success: false, error, code, ... }) is
 // not modelled: the MCP throws on non-2xx before parsing, so only the
 // success shape reaches the client.
@@ -245,7 +250,7 @@ export const GenerateAndScheduleResponseSchema = z.object({
   }),
   slots: z.array(GenerateSlotResultSchema),
   replayed: z.boolean(),
-  warnings: z.array(z.string()).optional(),
+  warnings: z.array(GenerateAndScheduleWarningSchema).optional(),
 });
 
 //---------------

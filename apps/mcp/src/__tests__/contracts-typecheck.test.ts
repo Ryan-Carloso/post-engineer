@@ -372,6 +372,10 @@ describe('contracts typecheck', () => {
       // @ts-expect-error -- the publish-by-id response field is `successCount`, not `count`
       return result.count;
     };
+    const warnings = (result: GenerateAndScheduleResult): unknown => {
+      // @ts-expect-error -- the generate warnings are objects, not strings
+      return result.warnings?.[0]?.toUpperCase();
+    };
     expect(typeof run).toBe('function');
     expect(typeof schedule).toBe('function');
     expect(typeof slot).toBe('function');
@@ -384,6 +388,7 @@ describe('contracts typecheck', () => {
     expect(typeof minted).toBe('function');
     expect(typeof completed).toBe('function');
     expect(typeof published).toBe('function');
+    expect(typeof warnings).toBe('function');
     expect(vi.mocked(client.request)).not.toHaveBeenCalled();
   });
 });
