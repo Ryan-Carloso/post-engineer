@@ -259,19 +259,33 @@ class BatchGenerator:
                     schedule_id=str(schedule.get("id") or ""),
                     persona_id=str(schedule.get("persona_id") or ""),
                 )
-            except Exception:
+            except Exception as dispatch_exc:
                 # Refund just this video's stored charge; the id keeps the
                 # other videos' charges intact. A free slot (charged 0) has
-                # nothing to refund.
+                # nothing to refund. A failing refund is logged and must not
+                # replace the dispatch error as the slot's failure reason.
                 cost = slot_refund_amount(slot)
-                refunded = cost is not None and self.store.refund_batch_tokens(
-                    user_id,
-                    generation_id,
-                    f"{generation_id}:slot:{slot['id']}",
-                    cost,
-                    "Batch generation could not be dispatched",
-                    engine_task_id=task_id,
-                )
+                refunded = False
+                try:
+                    refunded = cost is not None and self.store.refund_batch_tokens(
+                        user_id,
+                        generation_id,
+                        f"{generation_id}:slot:{slot['id']}",
+                        cost,
+                        "Batch generation could not be dispatched",
+                        engine_task_id=task_id,
+                    )
+                except Exception as refund_exc:  # noqa: BLE001 — refund is best-effort here
+                    logger.error(
+                        f"fill_schedule: refund failed for undispatched slot "
+                        f"{slot['id']}: {scrub_secret_values(str(refund_exc))}"
+                    )
+                else:
+                    if cost is not None and not refunded:
+                        logger.error(
+                            f"fill_schedule: refund not applied for undispatched "
+                            f"slot {slot['id']}: rpc returned not-refunded"
+                        )
                 # Fire refund_issued only on a landed refund (see reconcile.py
                 # for why never optimistically). The task never reached the
                 # engine, but the allocated id still links the ledger row.
@@ -284,7 +298,7 @@ class BatchGenerator:
                         slot_id=str(slot["id"]),
                         engine_task_id=task_id,
                     )
-                raise
+                raise dispatch_exc
             self.store.update_slot(
                 slot["id"], status=SLOT_GENERATING, title=title, task_id=task_id
             )
