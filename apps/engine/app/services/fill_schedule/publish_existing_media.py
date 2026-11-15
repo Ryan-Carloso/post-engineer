@@ -73,6 +73,7 @@ def resolve_existing_media(
     fail_permanently: FailPermanently,
     slot: dict[str, Any],
     now: datetime,
+    resumed: bool = False,
 ) -> MediaResolution | None:
     """Resolve a task-less media slot into publishable bytes.
 
@@ -80,7 +81,11 @@ def resolve_existing_media(
     slot failed permanently (already marked through fail_permanently) or
     must retry later (left in `publishing` with a lease). An upload is
     downloaded BEFORE the claim so a storage outage never burns the
-    single-use row; the claim is the last step before dispatch.
+    single-use row; the claim is the last step before dispatch. A resume
+    re-uses the claim its own first attempt won: the row is `consumed`
+    by then, and re-checking for `ready` would fail the slot permanently
+    and leak the claimed object. The slot claim serializes the slot, so
+    a `consumed` row on resume belongs to this slot's first attempt.
     """
     media_kind = slot.get("media_kind")
     media_ref = slot.get("media_ref")
@@ -98,12 +103,18 @@ def resolve_existing_media(
                 "Publish failed: scheduled video upload not found; video refunded",
             )
             return None
-        if row.get("status") != "ready":
+        if row.get("status") == "consumed" and resumed:
+            # This slot's own first attempt claimed the row (the slot
+            # claim serializes the slot); re-use it instead of failing.
+            already_claimed = True
+        elif row.get("status") != "ready":
             fail_permanently(
                 "scheduled video upload is no longer ready",
                 "Publish failed: scheduled video upload is no longer ready; video refunded",
             )
             return None
+        else:
+            already_claimed = False
         storage_path = row.get("storage_path")
         if not isinstance(storage_path, str) or not storage_path:
             fail_permanently(
@@ -120,7 +131,10 @@ def resolve_existing_media(
             )
             store.update_slot(slot["id"], publish_not_before=lease_iso(now))
             return None
-        claimed = store.claim_video_upload(media_ref)
+        if already_claimed:
+            claimed = row
+        else:
+            claimed = store.claim_video_upload(media_ref)
         if claimed is None:
             fail_permanently(
                 "scheduled video upload was already used",

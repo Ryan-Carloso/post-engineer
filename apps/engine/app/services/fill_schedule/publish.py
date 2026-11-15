@@ -178,7 +178,7 @@ class BatchPublisher:
             # Issue #384: a task-less media slot publishes from stored media.
             # The resolver marks permanent failures itself (None = done here).
             fail = partial(self._fail_slot_permanently, slot, schedule)
-            resolved = resolve_existing_media(self.store, fail, slot, now)
+            resolved = resolve_existing_media(self.store, fail, slot, now, resumed)
             if resolved is None:
                 return 0
             videos, video_reader, content_type, upload_cleanup = resolved
