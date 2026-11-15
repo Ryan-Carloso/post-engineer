@@ -51,7 +51,7 @@ import { encryptTokens } from '@/lib/token-crypto';
 
 const USER_ID = 'user-uuid-1';
 
-function mockSupabase(overrides: { user?: { id: string } | null; upsertError?: unknown; isApiKey?: boolean } = {}) {
+function mockSupabase(overrides: { user?: { id: string } | null; upsertError?: unknown; isApiKey?: boolean; isOAuth?: boolean } = {}) {
   const upserted: Array<Record<string, unknown>> = [];
   const upsertOptions: Array<unknown> = [];
   const client = {
@@ -91,6 +91,7 @@ function mockSupabase(overrides: { user?: { id: string } | null; upsertError?: u
           userId: USER_ID,
           accessToken: 'test-key',
           isApiKey: overrides.isApiKey === true,
+          isOAuth: overrides.isOAuth === true,
         },
         error: null,
       }) as never
@@ -200,6 +201,10 @@ describe('POST /api/bluesky-connect', () => {
       provider: 'bluesky',
       provider_account_id: 'did:plc:abc',
     });
+    // A cookie session reads through the server client, not the
+    // service client (which bypasses RLS).
+    expect(vi.mocked(createSupabaseServerClient)).toHaveBeenCalled();
+    expect(vi.mocked(createSupabaseServiceClient)).not.toHaveBeenCalled();
   });
 
   it('refreshes the existing row when the account reconnects', async () => {
@@ -262,5 +267,23 @@ describe('POST /api/bluesky-connect', () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error?: string };
     expect(JSON.stringify(body)).not.toContain('app-pass');
+  });
+
+  it('OAuth flow: OAuth token + JSON connects via the service client', async () => {
+    const { upserted } = mockSupabase({ isOAuth: true });
+    vi.mocked(loginToBluesky).mockResolvedValueOnce({ did: 'did:plc:oauth', handle: 'eu.bsky.social' });
+
+    const res = await POST(jsonRequest({ handle: 'eu.bsky.social', appPassword: 'app-pass-oauth' }));
+    expect(res.status).toBe(200);
+
+    expect(upserted[0]).toMatchObject({
+      user_id: USER_ID,
+      provider: 'bluesky',
+      provider_account_id: 'did:plc:oauth',
+    });
+    // An OAuth caller (remote MCP) has no cookie session, so the cookie
+    // client would see no user and RLS would hide the row.
+    expect(vi.mocked(createSupabaseServiceClient)).toHaveBeenCalled();
+    expect(vi.mocked(createSupabaseServerClient)).not.toHaveBeenCalled();
   });
 });

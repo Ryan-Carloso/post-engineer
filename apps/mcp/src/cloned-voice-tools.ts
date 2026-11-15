@@ -9,6 +9,7 @@ import {
   listClonedVoices,
   previewClonedVoice,
   previewHouseVoice,
+  type CloneAudioFetchOptions,
 } from './cloned-voice-client.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 import { isEnglishLanguage, ONLY_ENGLISH_CLONE_MESSAGE } from './language.js';
@@ -143,6 +144,7 @@ export async function handleListClonedVoices(
 export async function handleCreateClonedVoice(
   client: PostEngineerClient,
   rawArgs: z.infer<typeof CreateClonedVoiceSchema>,
+  options: CloneAudioFetchOptions = {},
 ): Promise<McpToolResponse> {
   return handleLibraryCall(
     () => {
@@ -155,7 +157,7 @@ export async function handleCreateClonedVoice(
         return createClonedVoiceFromFile(client, args.audioPath, args.language, args.consent, args.denoise);
       }
       if (args.audioUrl !== undefined) {
-        return createClonedVoiceFromUrl(client, args.audioUrl, args.language, args.consent, args.denoise);
+        return createClonedVoiceFromUrl(client, args.audioUrl, args.language, args.consent, args.denoise, options);
       }
       throw new Error(CREATE_CLONE_AUDIO_SOURCE_MESSAGE);
     },

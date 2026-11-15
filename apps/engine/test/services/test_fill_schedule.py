@@ -1304,7 +1304,7 @@ class ReconcileTests(unittest.TestCase):
 
     def test_failed_slot_no_refund_issued_when_rpc_raises(self):
         # Telemetry must never invent a refund: when the RPC itself blows
-        # up, no event fires (the tick's run_once isolates the stage).
+        # up, no event fires; the error is logged and isolated to the slot.
         from app.services.fill_schedule import support as support_module
 
         slot = {
@@ -1324,8 +1324,8 @@ class ReconcileTests(unittest.TestCase):
             store=store, task_state=state, publish_video=MagicMock()
         )
         with patch.object(support_module, "track_event") as track:
-            with self.assertRaises(RuntimeError):
-                scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+            updated = scheduler.reconcile(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.assertEqual(updated, 0)
         refund_calls = [c for c in track.call_args_list if c[0][0] == "refund_issued"]
         self.assertEqual(refund_calls, [])
 

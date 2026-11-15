@@ -54,7 +54,7 @@ export function registerVoiceTools(server: McpServer, client: PostEngineerClient
         list: async (args) => handleListVoices(client, args),
         preview: async (args) => handlePreviewHouseVoice(client, args),
         list_clones: async () => handleListClonedVoices(client),
-        create_clone: async (args) => handleCreateClonedVoice(client, remote ? CreateClonedVoiceRemoteSchema.parse(args) : CreateClonedVoiceSchema.parse(args)),
+        create_clone: async (args) => handleCreateClonedVoice(client, remote ? CreateClonedVoiceRemoteSchema.parse(args) : CreateClonedVoiceSchema.parse(args), { remote }),
         get_clone: async (args) => handleGetClonedVoice(client, args),
         preview_clone: async (args) => handlePreviewClonedVoice(client, args),
         delete_clone: async (args) => handleDeleteClonedVoice(client, args),

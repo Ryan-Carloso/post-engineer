@@ -40,7 +40,7 @@ async function getHandler(request?: Request) {
     );
   }
   const userId = auth.userId;
-  const supabase = auth.isApiKey === true
+  const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()
     : await createSupabaseServerClient();
 
@@ -130,7 +130,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     );
   }
 
-  const supabase = auth.isApiKey === true
+  const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()
     : await createSupabaseServerClient();
 
