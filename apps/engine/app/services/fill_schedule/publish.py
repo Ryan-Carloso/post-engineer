@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta
+from functools import partial
 from typing import Any
 
 from loguru import logger
 
 from app.services import notify as notify_module
 from app.services import upload_publisher
-from app.services import video_storage
 from app.services.analytics import scrub_error_text, track_event
 from app.services.fill_schedule.constants import (
     SLOT_FAILED,
@@ -22,6 +22,13 @@ from app.services.fill_schedule.publish_accounts import (
     lease_iso,
     next_delay_seconds,
     publish_slot_accounts,
+)
+from app.services.fill_schedule.publish_existing_media import (
+    claimed_upload_cleanup,
+    cleanup_existing_media,
+    image_cleanup,
+    r2_reader,
+    resolve_existing_media,
 )
 from app.services.fill_schedule.publish_events import (
     partial_failure_properties,
@@ -117,6 +124,10 @@ class BatchPublisher:
                 return 0
         elif not self.store.claim_ready_slot(str(slot["id"]), now):
             return 0
+        # Issue #384: image cleanup is known from the slot row alone, so
+        # a permanent binding failure also removes bytes that will never
+        # publish. A resumed upload slot's own claimed bytes are known too.
+        media_cleanup = image_cleanup(slot) or claimed_upload_cleanup(self.store, slot, resumed)
         # Issue #572: re-check the persona binding at publish time, after
         # the claim and before any video leaves the server. The generate
         # pre-flight proves the plan before GPU is spent, but the schedule
@@ -146,6 +157,7 @@ class BatchPublisher:
                     str(exc),
                     "Publish blocked by the persona binding check; video refunded",
                 )
+                cleanup_existing_media(self.store, slot, media_cleanup)
                 return 0
             except (RuntimeError, ValueError) as exc:
                 # Any other plan failure (blank description, unsupported
@@ -157,42 +169,55 @@ class BatchPublisher:
                     str(exc),
                     "Publish plan failed validation; video refunded",
                 )
+                cleanup_existing_media(self.store, slot, media_cleanup)
                 return 0
         if not resumed:
             # Once per publish: a resume (backoff, crash lease) is the same publish.
             track_event("video_publish_started", publish_tracking_context(slot, schedule))
-        task = self.task_state.get_task(str(slot["task_id"]))
-        videos = (task or {}).get("videos") or []
-        object_path = (task or {}).get("video_storage_path")
-        if not videos:
-            self.store.update_slot(
-                slot["id"], status=SLOT_FAILED,
-                error="task has no finished videos",
-            )
-            track_event(
-                "video_publish_failed",
-                publish_failed_properties(
-                    slot, schedule, "task has no finished videos", retryable=False
-                ),
-            )
-            notify_owner_async(
-                notify_publish_failed,
-                slot_user_id(slot),
-                slot_id=str(slot["id"]),
-                title=str(slot.get("title") or ""),
-                reason="task has no finished videos",
-                persona=persona_name,
-            )
-            return 0
-        if not isinstance(object_path, str) or not object_path:
-            self._fail_slot_permanently(
-                slot,
-                schedule,
-                "task has no verified R2 video archive",
-                "Publish failed: video was generated before the R2 archive; "
-                "video refunded",
-            )
-            return 0
+        if not slot.get("task_id") and slot.get("media_kind") in ("upload", "image"):
+            # Issue #384: task-less media slot publishes from stored media; resolver marks permanent failures (None = done).
+            fail = partial(self._fail_slot_permanently, slot, schedule)
+            resolved = resolve_existing_media(self.store, fail, slot, now, resumed)
+            if resolved is None:
+                return 0
+            videos, video_reader, content_type, upload_cleanup = resolved
+            media_cleanup = upload_cleanup or media_cleanup
+            # Media bytes come from the resolver, not the R2 archive (no presign).
+            task = object_path = None
+        else:
+            task = self.task_state.get_task(str(slot["task_id"]))
+            videos = (task or {}).get("videos") or []
+            object_path = (task or {}).get("video_storage_path")
+            if not videos:
+                self.store.update_slot(
+                    slot["id"], status=SLOT_FAILED,
+                    error="task has no finished videos",
+                )
+                track_event(
+                    "video_publish_failed",
+                    publish_failed_properties(
+                        slot, schedule, "task has no finished videos", retryable=False
+                    ),
+                )
+                notify_owner_async(
+                    notify_publish_failed,
+                    slot_user_id(slot),
+                    slot_id=str(slot["id"]),
+                    title=str(slot.get("title") or ""),
+                    reason="task has no finished videos",
+                    persona=persona_name,
+                )
+                return 0
+            if not isinstance(object_path, str) or not object_path:
+                self._fail_slot_permanently(
+                    slot,
+                    schedule,
+                    "task has no verified R2 video archive",
+                    "Publish failed: video was generated before the R2 archive; video refunded",
+                )
+                return 0
+            video_reader = r2_reader(object_path)
+            content_type = "video/mp4"
         if not resumed:
             self.store.update_slot(slot["id"], publish_not_before=lease_iso(now))
         prior_results = (task or {}).get("publish_results")
@@ -217,7 +242,7 @@ class BatchPublisher:
             slot,
             schedule,
             videos,
-            lambda: video_storage.read_final_video_r2(object_path),
+            video_reader,
             now,
             title,
             description,
@@ -226,6 +251,7 @@ class BatchPublisher:
             publish_video=self.publish_video,
             persist_outcomes=persist_outcomes,
             record_results=record_results,
+            content_type=content_type,
             video_object_path=object_path,
         )
         if account_result.transport_error is not None:
@@ -284,6 +310,8 @@ class BatchPublisher:
                 publish_not_before=None,
                 **outcome_fields,
             )
+            # Single-use media is spent: remove the stored bytes now.
+            cleanup_existing_media(self.store, slot, media_cleanup)
             track_event(
                 "video_published",
                 {
@@ -312,7 +340,8 @@ class BatchPublisher:
                     notify_safe(
                         self.notify,
                         notify_module.partial_publish_msg(
-                            str(slot["id"]), account_result.non_user_failed_providers,
+                            str(slot["id"]),
+                            account_result.non_user_failed_providers,
                         ),
                     )
                 notify_owner_async(
@@ -340,6 +369,7 @@ class BatchPublisher:
                 outcome.get("code") == "publish_unknown" for outcome in account_result.outcomes
             ),
         )
+        cleanup_existing_media(self.store, slot, media_cleanup)
         track_event(
             "video_publish_failed",
             publish_failed_properties(

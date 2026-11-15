@@ -377,7 +377,7 @@ describe('signed-upload tools on both transports', () => {
   it('exposes the JSON-only publish-by-id flow on http with no path field', async () => {
     const tools = await listTools('http');
     const publish = tools.find((t) => t.name === 'publish_video');
-    expect((publish?.inputSchema.properties as { action: { enum: string[] } }).action.enum).toEqual(['create_upload', 'complete_upload', 'publish_upload']);
+    expect((publish?.inputSchema.properties as { action: { enum: string[] } }).action.enum).toEqual(['create_upload', 'complete_upload', 'publish_upload', 'publish_existing']);
     expect(publish?.inputSchema.properties).toHaveProperty('uploadId');
     expect(publish?.inputSchema.properties).not.toHaveProperty('videoPath');
     expect(publish?.inputSchema.properties).not.toHaveProperty('path');
@@ -385,7 +385,7 @@ describe('signed-upload tools on both transports', () => {
 
   it('keeps publishing a local file on stdio alongside the signed-upload flow', async () => {
     const publish = (await listTools('stdio')).find((t) => t.name === 'publish_video');
-    expect((publish?.inputSchema.properties as { action: { enum: string[] } }).action.enum).toEqual(['from_file', 'create_upload', 'complete_upload', 'publish_upload']);
+    expect((publish?.inputSchema.properties as { action: { enum: string[] } }).action.enum).toEqual(['from_file', 'create_upload', 'complete_upload', 'publish_upload', 'publish_existing']);
   });
 
   it('invokes the three signed-upload actions', async () => {

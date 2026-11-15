@@ -71,6 +71,10 @@ def publish_slot_accounts(
     publish_video: Callable[..., Any],
     persist_outcomes: PersistOutcomes,
     record_results: RecordResults | None = None,
+    # Content type of the bytes read_video returns (issue #384): video/mp4
+    # for generated and uploaded videos, image/jpeg|png for scheduled
+    # images. The upload API dispatches on it (Instagram takes images).
+    content_type: str = "video/mp4",
     video_object_path: str | None = None,
 ) -> AccountPublishResult:
     """Publish every account that does not already have a terminal outcome.
@@ -175,7 +179,7 @@ def publish_slot_accounts(
                     metadata=metadata,
                     video_path=video_name,
                     video_bytes=None if use_archive else video_bytes,
-                    content_type="video/mp4",
+                    content_type=content_type,
                     max_attempts=1,
                     surface_application_failure=True,
                     # Deterministic across retries of this slot/video: the

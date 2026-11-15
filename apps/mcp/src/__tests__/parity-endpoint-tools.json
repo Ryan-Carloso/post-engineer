@@ -83,6 +83,12 @@
       "action": "update"
     }
   ],
+  "POST /api/media/publish-existing": [
+    {
+      "tool": "publish_video",
+      "action": "publish_existing"
+    }
+  ],
   "POST /api/media/upload": [
     {
       "tool": "media",

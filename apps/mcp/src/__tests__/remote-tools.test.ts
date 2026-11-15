@@ -70,7 +70,7 @@ describe('remote (http) tool surface', () => {
     expect(actionsOf(tools, 'personas')).toEqual(expect.arrayContaining(['create', 'update', 'list']));
     expect(actionsOf(tools, 'voices')).toContain('create_clone');
     expect(actionsOf(tools, 'media')).toEqual(['check']);
-    expect(actionsOf(tools, 'publish_video')).toEqual(['create_upload', 'complete_upload', 'publish_upload']);
+    expect(actionsOf(tools, 'publish_video')).toEqual(['create_upload', 'complete_upload', 'publish_upload', 'publish_existing']);
   });
 
   it('keeps every action on stdio', async () => {

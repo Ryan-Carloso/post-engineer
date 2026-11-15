@@ -228,7 +228,7 @@ function normalizePublishResponse(
   };
 }
 
-async function dispatchPublish(
+export async function dispatchPublish(
   provider: SocialProvider,
   formData: FormData,
   userId: string,

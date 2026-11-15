@@ -17,6 +17,10 @@ import { createHash, randomUUID } from 'node:crypto';
 /** Namespace separating this operation's ids from any other deterministic id. */
 export const IDEMPOTENCY_NAMESPACE = 'unified-generate-schedule/v1';
 
+/** Namespace for publish-existing (issue #384): its schedule ids must never
+ * collide with a generate-and-schedule retry of the same key. */
+export const PUBLISH_EXISTING_NAMESPACE = 'publish-existing/v1';
+
 /**
  * Deterministic UUID (v5-style: SHA-256 based, version/variant bits set)
  * from a namespace + name. Same input always yields the same id.
@@ -56,6 +60,7 @@ export function resolveIdempotency(
   userId: string,
   bodyKey: unknown,
   request: Request,
+  namespace: string = IDEMPOTENCY_NAMESPACE,
 ): ResolvedIdempotency {
   const headerKey = request.headers.get('idempotency-key');
   const raw = typeof bodyKey === 'string' && bodyKey.trim().length > 0
@@ -64,7 +69,7 @@ export function resolveIdempotency(
       ? headerKey.trim()
       : null;
   const key = raw ?? randomUUID();
-  const scheduleId = deterministicUuid(IDEMPOTENCY_NAMESPACE, `${userId}:${key}`);
+  const scheduleId = deterministicUuid(namespace, `${userId}:${key}`);
   return {
     key,
     clientSupplied: raw !== null,

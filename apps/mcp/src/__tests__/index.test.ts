@@ -36,7 +36,7 @@ const ACTIONS: Record<string, string[]> = {
   billing: ['balance', 'transactions'],
   prompts: ['list', 'get'],
   check_script: ['validate', 'score'],
-  publish_video: ['from_file', 'create_upload', 'complete_upload', 'publish_upload'],
+  publish_video: ['from_file', 'create_upload', 'complete_upload', 'publish_upload', 'publish_existing'],
 };
 const SINGLE_TOOLS: Record<string, string[]> = { generate_video: ['videos'], cancel_video: ['taskId'] };
 const EXPECTED_TOOLS = [...Object.keys(ACTIONS), ...Object.keys(SINGLE_TOOLS)].sort();
