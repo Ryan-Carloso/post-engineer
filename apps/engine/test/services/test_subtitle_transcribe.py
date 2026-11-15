@@ -82,6 +82,26 @@ def test_transcribe_text_returns_none_when_transcribe_raises(
     assert subtitle.transcribe_text("/tmp/audio.mp3") is None
 
 
+def test_transcribe_text_returns_none_when_generator_raises_mid_iteration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """faster-whisper transcribe() returns a lazy segment generator: the
+    inference runs while it is consumed, so a failure mid-stream must also
+    yield None instead of raising out of this helper (OpenCode review)."""
+
+    def _raising_segments():  # type: ignore[no-untyped-def]
+        yield SimpleNamespace(text="hello ")
+        raise RuntimeError("inference crashed mid-stream")
+
+    class _LazyFailingModel(_FakeModel):
+        def transcribe(self, audio_file: str, **kwargs: Any):  # type: ignore[no-untyped-def]
+            info = SimpleNamespace(language="en", language_probability=0.99)
+            return _raising_segments(), info
+
+    _install_fake_model(monkeypatch, _LazyFailingModel)
+    assert subtitle.transcribe_text("/tmp/audio.mp3") is None
+
+
 def test_transcribe_text_reuses_the_loaded_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

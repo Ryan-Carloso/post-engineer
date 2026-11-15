@@ -74,13 +74,16 @@ def transcribe_text(audio_file: str) -> str | None:
             vad_filter=True,
             vad_parameters=dict(min_silence_duration_ms=500),
         )
+        logger.info(
+            f"detected language: '{info.language}', probability: {info.language_probability:.2f}"
+        )
+        # transcribe() returns a lazy segment generator: the inference runs
+        # while it is consumed, so the join stays inside the try — a failure
+        # mid-stream must yield None, not raise out of this helper.
+        return " ".join(segment.text.strip() for segment in segments if segment.text.strip())
     except Exception as exc:
         logger.error(f"whisper transcription failed: {type(exc).__name__}: {exc}")
         return None
-    logger.info(
-        f"detected language: '{info.language}', probability: {info.language_probability:.2f}"
-    )
-    return " ".join(segment.text.strip() for segment in segments if segment.text.strip())
 
 
 def create(audio_file, subtitle_file: str = ""):
