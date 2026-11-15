@@ -16,22 +16,11 @@ import { logger } from '@/lib/logger';
 // Auth: cookie session (web) or API key / OAuth token (MCP clients)
 // via requireSupabaseSession. Persona-scoped API keys only see posts whose
 // schedule belongs to one of their allowed personas.
+//
+// The ?limit= and ?from=/to= parsers live in the shared schedule contract
+// (@/lib/contracts/schedule); ./range re-exports the range parser so its
+// existing tests keep their import path.
 //---------------
-
-const DEFAULT_LIMIT = 10;
-const MAX_LIMIT = 500;
-
-//---------------
-// parseLimit — validates the ?limit= query param; invalid or out of
-// range falls back to DEFAULT_LIMIT. The whole string must be digits —
-// Number.parseInt('12abc') would silently return 12 otherwise.
-//---------------
-export function parseLimit(value: string | null): number {
-  if (value === null || !/^\d+$/.test(value)) return DEFAULT_LIMIT;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed < 1) return DEFAULT_LIMIT;
-  return Math.min(parsed, MAX_LIMIT);
-}
 
 import {
   enrichSlot,
@@ -41,7 +30,12 @@ import {
 import { createEngineProbe, type EngineProbe } from '@/lib/engine-reachability';
 import { recordProgressHistory, type ProgressSample } from '@/lib/schedule-progress-history';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import { parseRange, RANGE_MAX_SLOTS, RANGE_STATUSES } from './range';
+import {
+  parseStatusLimit,
+  parseStatusRange,
+  RANGE_MAX_SLOTS,
+  RANGE_STATUSES,
+} from '@/lib/contracts/schedule';
 import { mergeBySlotAt, presentPublishRows, USER_NOTICE_OUTCOME_FILTER } from '@/lib/publish-user-notice';
 import { postUrlFor } from '@/lib/post-url';
 
@@ -129,7 +123,7 @@ async function withSlotPresentation<T extends { status?: unknown; task_id?: unkn
 
 async function getHandler(request?: Request): Promise<NextResponse> {
   // Cheap validation before any auth round-trip or read.
-  const range = request ? parseRange(new URL(request.url).searchParams) : { kind: 'none' as const };
+  const range = request ? parseStatusRange(new URL(request.url).searchParams) : { kind: 'none' as const };
   if (range.kind === 'error') {
     return NextResponse.json({ success: false, error: range.message }, { status: 400 });
   }
@@ -208,7 +202,7 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     return NextResponse.json({ success: true, slots, truncated });
   }
 
-  const limit = parseLimit(
+  const limit = parseStatusLimit(
     request ? new URL(request.url).searchParams.get('limit') : null,
   );
   const nowIso = new Date().toISOString();

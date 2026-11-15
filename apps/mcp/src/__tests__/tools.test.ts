@@ -32,6 +32,14 @@ import {
   UpdatePersonaImageShape,
   RemovePersonaImageSchema,
 } from '../tools.js';
+import type { ResponseOf } from '../contracts/endpoint.js';
+import {
+  cancelSchedule as cancelScheduleContract,
+  getSlot as getSlotContract,
+  listPosts as listPostsContract,
+  listSchedules as listSchedulesContract,
+} from '../contracts/schedule.js';
+
 import { handleListPosts } from '../tools-posts.js';
 import { listPostsInRange } from '../client-posts.js';
 import {
@@ -46,6 +54,111 @@ function textOf(response: McpToolResponse): string {
   if (!block || block.type !== 'text') throw new Error('expected a text content block');
   return block.text;
 }
+
+// Full production-shaped schedule fixtures: the client methods now parse
+// 200s against the shared schedule contract, so a partial mock is a
+// malformed response at runtime and a type error under tsconfig.spec.
+const FULL_SCHEDULE_ROW: ResponseOf<typeof listSchedulesContract>['schedules'][number] = {
+  id: 'sched-1',
+  persona_id: 'persona-123',
+  providers: ['youtube'],
+  youtube_account_ids: ['yt-1'],
+  instagram_account_ids: [],
+  linkedin_account_ids: [],
+  bluesky_account_ids: [],
+  threads_account_ids: [],
+  facebook_account_ids: [],
+  pinterest_account_ids: [],
+  pinterest_board_id: null,
+  threespeak_account_ids: [],
+  rumble_account_ids: [],
+  days_of_week: [1, 3, 5],
+  start_hour: 9,
+  end_hour: 17,
+  posts_per_day: 2,
+  timezone: 'Europe/Lisbon',
+  active: true,
+  created_at: '2026-10-01T00:00:00Z',
+  publish_mode: 'scheduled',
+};
+
+const FULL_STATUS_SLOT: ResponseOf<typeof listPostsContract>['upcoming'][number] = {
+  id: 'up-1',
+  slot_at: '2026-09-24T10:00:00Z',
+  status: 'awaiting',
+  title: 'Next',
+  error: null,
+  published_at: null,
+  schedule_id: 's1',
+  task_id: null,
+  progress: 0,
+  stage: null,
+  queuePosition: null,
+  queueTotal: null,
+  retryable: null,
+  postUrl: null,
+};
+
+const FULL_CANCEL_RESULT: ResponseOf<typeof cancelScheduleContract> = {
+  success: true,
+  cancelledSlotIds: ['slot-1'],
+  refunds: [{ slotId: 'slot-1', refunded: true, alreadyRefunded: false, reason: 'not_generated' }],
+  batchDiscountWithheld: 0,
+};
+
+const FULL_SLOT_DETAIL: ResponseOf<typeof getSlotContract> = {
+  success: true,
+  slot: {
+    id: 'slot-1',
+    scheduleId: 'sched-1',
+    slotAt: '2026-10-10T20:00:00Z',
+    status: 'awaiting',
+    title: 'Launch day',
+    taskId: 'task-1',
+    progress: 0,
+    stage: null,
+    error: null,
+    publishedAt: null,
+    postUrl: 'https://post-engineer.com/posts/slot-1',
+    publishLinks: [],
+    progressHistory: [],
+    scriptAngle: null,
+    retryable: null,
+    queuePosition: null,
+    queueTotal: null,
+    userNotices: [],
+    providerFailures: [],
+  },
+  schedule: {
+    id: 'sched-1',
+    personaId: 'persona-1',
+    providers: ['youtube'],
+    youtubeAccountIds: ['yt-1'],
+    instagramAccountIds: [],
+    linkedinAccountIds: [],
+    blueskyAccountIds: [],
+    threadsAccountIds: [],
+    facebookAccountIds: [],
+    pinterestAccountIds: [],
+    pinterestBoardId: null,
+    threespeakAccountIds: [],
+    rumbleAccountIds: [],
+    fanvueAccountIds: [],
+    timezone: 'Europe/Lisbon',
+    publishMode: 'scheduled',
+  },
+  persona: { id: 'persona-1', name: 'Ava' },
+  generation: {
+    faceless: false,
+    language: 'en-US',
+    voiceId: null,
+    videoAspect: '9:16',
+    videoLayout: null,
+    niche: null,
+    paragraphNumber: null,
+    faceQuality: null,
+  },
+};
 
 describe('MCP Tool Handlers', () => {
   const mockClient = {
@@ -275,7 +388,7 @@ describe('MCP Tool Handlers', () => {
   it('handleListSchedules returns schedules', async () => {
     vi.mocked(mockClient.listSchedules).mockResolvedValue({
       success: true,
-      schedules: [{ id: 'sched-1', persona_id: 'persona-123' }],
+      schedules: [FULL_SCHEDULE_ROW],
     });
 
     const response = await handleListSchedules(mockClient);
@@ -295,8 +408,20 @@ describe('MCP Tool Handlers', () => {
   it('handleListPosts returns upcoming and past posts', async () => {
     vi.mocked(mockClient.listPosts).mockResolvedValue({
       success: true,
-      upcoming: [{ id: 'up-1', status: 'pending' }],
-      recent: [{ id: 're-1', status: 'published' }],
+      upcoming: [{ ...FULL_STATUS_SLOT, id: 'up-1' }],
+      recent: [
+        {
+          ...FULL_STATUS_SLOT,
+          id: 're-1',
+          slot_at: '2026-09-20T10:00:00Z',
+          status: 'published',
+          title: 'Old',
+          progress: 100,
+          stage: 'done',
+          postUrl: 'https://post-engineer.com/posts/re-1',
+        },
+      ],
+      hasAnyPost: true,
     });
 
     const response = await handleListPosts(mockClient, { limit: 20 });
@@ -328,7 +453,11 @@ describe('MCP Tool Handlers', () => {
   it('handleListPosts in range mode calls the range endpoint and never sends limit', async () => {
     vi.mocked(mockClient.listPosts).mockClear();
     vi.mocked(mockClient.request).mockClear();
-    vi.mocked(mockClient.request).mockResolvedValue({ success: true, slots: [{ id: 's-1' }], truncated: false });
+    vi.mocked(mockClient.request).mockResolvedValue({
+      success: true,
+      slots: [{ ...FULL_STATUS_SLOT, id: 's-1' }],
+      truncated: false,
+    });
 
     const response = await handleListPosts(mockClient, {
       limit: 20,
@@ -360,7 +489,7 @@ describe('MCP Tool Handlers', () => {
   });
 
   it('handleCancelSchedule cancels by id', async () => {
-    vi.mocked(mockClient.cancelSchedule).mockResolvedValue({ success: true });
+    vi.mocked(mockClient.cancelSchedule).mockResolvedValue(FULL_CANCEL_RESULT);
 
     const response = await handleCancelSchedule(mockClient, { scheduleId: 'sched-1' });
 
@@ -1195,25 +1324,12 @@ describe('slot tools', () => {
 
   it('handleGetSlot narrows the detail envelope and summarizes', async () => {
     const { handleGetSlot } = await import('../tools.js');
+    // The extra top-level field is not a production shape: the cast keeps
+    // the pin that the presentation drops it instead of echoing it.
     vi.mocked(mockClient.getSlot).mockResolvedValue({
-      success: true,
-      slot: {
-        id: 'slot-1',
-        scheduleId: 'sched-1',
-        slotAt: '2026-10-10T20:00:00Z',
-        status: 'awaiting',
-        title: 'Launch day',
-        taskId: 'task-1',
-        progress: 0,
-        stage: null,
-        error: null,
-        publishedAt: null,
-        postUrl: 'https://post-engineer.com/posts/slot-1',
-      },
-      schedule: { id: 'sched-1', providers: ['youtube'], publishMode: 'scheduled', timezone: 'Europe/Lisbon' },
-      persona: { id: 'persona-1', name: 'Ava' },
+      ...FULL_SLOT_DETAIL,
       extraUnpinnedField: 'rides through unparsed',
-    });
+    } as never);
 
     const response = await handleGetSlot(mockClient, { slotId: 'slot-1' });
     expect(mockClient.getSlot).toHaveBeenCalledWith('slot-1');
@@ -1232,13 +1348,10 @@ describe('slot tools', () => {
     const { handleGetSlot } = await import('../tools.js');
     const notice = 'Bluesky did not publish because the email on this account is not verified. This is a problem with your account. Only you can fix it: verify the email.';
     vi.mocked(mockClient.getSlot).mockResolvedValue({
-      success: true,
+      ...FULL_SLOT_DETAIL,
       slot: {
-        id: 'slot-1',
-        scheduleId: 'sched-1',
-        slotAt: '2026-10-10T20:00:00Z',
+        ...FULL_SLOT_DETAIL.slot,
         status: 'publishing',
-        title: 'Launch day',
         userNotices: [{ provider: 'bluesky', accountId: 'b1', code: 'email_not_verified', requiresUser: true, notice }],
         providerFailures: [{ provider: 'bluesky', accountId: 'b1', code: 'email_not_verified', requiresUser: false, notice }],
       },
@@ -1588,29 +1701,32 @@ describe('new tool error paths and narrowing fallbacks', () => {
     expect(textOf(response)).toBe('Error getting slot: network down');
   });
 
-  it('handleGetSlot falls back to arg values when the detail has no fields', async () => {
+  it('handleGetSlot surfaces a malformed detail as an error instead of falling back to arg values', async () => {
     const { handleGetSlot } = await import('../tools.js');
-    vi.mocked(mockClient.getSlot).mockResolvedValue(null);
+    const { MalformedContractResponseError } = await import('../contract-response.js');
+    vi.mocked(mockClient.getSlot).mockRejectedValue(
+      new MalformedContractResponseError('Malformed response from GET /api/schedule/slots/:slotId.'),
+    );
 
     const response = await handleGetSlot(mockClient, { slotId: 'slot-1' });
-    expect(response.isError).toBeUndefined();
-    expect(textOf(response)).toContain('Slot slot-1: "(untitled)" — unknown, scheduled for (unscheduled).');
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error getting slot: Malformed response from GET /api/schedule/slots/:slotId.');
   });
 
-  it('handleGetSlot coerces wrong-typed detail fields to null', async () => {
+  it('handleGetSlot surfaces wrong-typed detail fields as a malformed error instead of coercing them', async () => {
     const { handleGetSlot } = await import('../tools.js');
-    vi.mocked(mockClient.getSlot).mockResolvedValue({
-      slot: { id: 'slot-1', progress: 'fast' },
-      schedule: { id: 'sched-1', providers: ['youtube', 42] },
-      persona: { id: 'persona-1', name: 'Ava' },
-    });
+    const { MalformedContractResponseError } = await import('../contract-response.js');
+    vi.mocked(mockClient.getSlot).mockRejectedValue(
+      new MalformedContractResponseError(
+        'Malformed response from GET /api/schedule/slots/:slotId at slot.progress.',
+      ),
+    );
 
     const response = await handleGetSlot(mockClient, { slotId: 'slot-1' });
-    expect(response.isError).toBeUndefined();
-    const text = textOf(response);
-    expect(text).toContain('"progress": null');
-    expect(text).toContain('"providers": [\n      "youtube"\n    ]');
-    expect(text).not.toContain('42');
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe(
+      'Error getting slot: Malformed response from GET /api/schedule/slots/:slotId at slot.progress.',
+    );
   });
 
   it('handleUpdateSlotTitle surfaces API errors with the structured contract', async () => {
@@ -1636,7 +1752,7 @@ describe('new tool error paths and narrowing fallbacks', () => {
 
   it('handleUpdateSlotTitle falls back to the requested title when the response has none', async () => {
     const { handleUpdateSlotTitle } = await import('../tools.js');
-    vi.mocked(mockClient.updateSlotTitle).mockResolvedValue({ success: true, title: 42 });
+    vi.mocked(mockClient.updateSlotTitle).mockResolvedValue({ success: true });
 
     const response = await handleUpdateSlotTitle(mockClient, { slotId: 'slot-1', title: 'New' });
     expect(response.isError).toBeUndefined();

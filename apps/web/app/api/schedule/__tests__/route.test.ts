@@ -28,6 +28,7 @@ vi.mock('@/lib/posthog-server', () => ({
 
 import * as scheduleRoute from '../route';
 import { GET, DELETE } from '../route';
+import { CancelScheduleResponseSchema, ListSchedulesResponseSchema } from '@/lib/contracts/schedule';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -36,6 +37,32 @@ import { trackApiEvent } from '@/lib/analytics';
 import { getPostHogServer } from '@/lib/posthog-server';
 
 const USER_ID = 'user-1';
+
+function scheduleRow(id: string, persona_id: string | null) {
+  return {
+    id,
+    persona_id,
+    providers: ['youtube'],
+    youtube_account_ids: ['yt-1'],
+    instagram_account_ids: [],
+    linkedin_account_ids: [],
+    bluesky_account_ids: [],
+    threads_account_ids: [],
+    facebook_account_ids: [],
+    pinterest_account_ids: [],
+    pinterest_board_id: null,
+    threespeak_account_ids: [],
+    rumble_account_ids: [],
+    days_of_week: [1, 3, 5],
+    start_hour: 9,
+    end_hour: 17,
+    posts_per_day: 2,
+    timezone: 'Europe/Lisbon',
+    active: true,
+    created_at: '2026-10-01T00:00:00Z',
+    publish_mode: 'scheduled',
+  };
+}
 
 // Fake PostHog client for the wrapper's schedule_deleted event and the
 // refund_issued events the cancel emits (same pattern as
@@ -306,11 +333,12 @@ describe('/api/schedule', () => {
   });
 
   it('GET lists the user schedules', async () => {
-    mockSupabase({ list: { data: [{ id: 's-1' }], error: null } });
+    mockSupabase({ list: { data: [scheduleRow('s-1', 'persona-123')], error: null } });
     const res = await GET();
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { schedules: unknown[] };
-    expect(body.schedules).toHaveLength(1);
+    const body = await res.json();
+    expect(ListSchedulesResponseSchema.safeParse(body).success).toBe(true);
+    expect((body as { schedules: unknown[] }).schedules).toHaveLength(1);
   });
 
   it('GET returns an empty list when the query returns no rows', async () => {
@@ -364,7 +392,8 @@ describe('/api/schedule', () => {
     const db = mockSupabase({ remove: { error: null } });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { success: boolean; cancelledSlotIds: string[]; refunds: unknown[] };
+    const body = await res.json();
+    expect(CancelScheduleResponseSchema.safeParse(body).success).toBe(true);
     expect(body).toEqual({ success: true, cancelledSlotIds: [], refunds: [], batchDiscountWithheld: 0 });
     expect(db.deleteCalls.map((call) => call.table)).toEqual(['scheduled_posts', 'schedules']);
   });
@@ -415,10 +444,7 @@ describe('/api/schedule persona scoping (scoped API keys)', () => {
   it('GET lists only schedules whose persona is in scope', async () => {
     scopedSupabase({
       list: {
-        data: [
-          { id: 's-1', persona_id: 'p-allowed' },
-          { id: 's-2', persona_id: 'p-other' },
-        ],
+        data: [scheduleRow('s-1', 'p-allowed'), scheduleRow('s-2', 'p-other')],
         error: null,
       },
     });
@@ -431,10 +457,7 @@ describe('/api/schedule persona scoping (scoped API keys)', () => {
   it('GET with a browser session still lists every schedule', async () => {
     mockSupabase({
       list: {
-        data: [
-          { id: 's-1', persona_id: 'p-allowed' },
-          { id: 's-2', persona_id: 'p-other' },
-        ],
+        data: [scheduleRow('s-1', 'p-allowed'), scheduleRow('s-2', 'p-other')],
         error: null,
       },
     });
@@ -451,11 +474,7 @@ describe('/api/schedule persona scoping (scoped API keys)', () => {
     // persona scope: filtering it away would hide the key's own post.
     scopedSupabase({
       list: {
-        data: [
-          { id: 's-1', persona_id: 'p-allowed' },
-          { id: 's-2', persona_id: 'p-other' },
-          { id: 's-3', persona_id: null },
-        ],
+        data: [scheduleRow('s-1', 'p-allowed'), scheduleRow('s-2', 'p-other'), scheduleRow('s-3', null)],
         error: null,
       },
     });

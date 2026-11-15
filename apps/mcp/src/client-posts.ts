@@ -7,6 +7,7 @@ import {
 } from './contracts/metrics.js';
 import type { SocialProvider } from './contracts/metrics.js';
 import { getPost as getPostContract } from './contracts/posts.js';
+import { listPostsInRange as listPostsInRangeContract } from './contracts/schedule.js';
 import type { ResponseOf } from './contracts/endpoint.js';
 
 //---------------
@@ -99,11 +100,12 @@ export async function scoreDraft(
 export async function listPostsInRange(
   client: PostEngineerClient,
   range: { from: string; to: string },
-): Promise<unknown> {
+): Promise<ResponseOf<typeof listPostsInRangeContract>> {
   const params = new URLSearchParams({ from: range.from, to: range.to });
-  return client.request(
+  const raw = await client.request(
     `/api/schedule/status?${params.toString()}`,
     { method: 'GET', headers: client.getHeaders() },
     'list posts',
   );
+  return parseContractResponse(listPostsInRangeContract, raw);
 }

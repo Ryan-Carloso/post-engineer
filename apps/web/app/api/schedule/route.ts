@@ -16,6 +16,7 @@ import { batchChargeId } from '@/lib/billing/batch-discount';
 import { emitRefundIssued, refundSlotTokens } from '@/lib/billing/refund-tokens';
 import { scrubSecrets } from '@/lib/scrub';
 import { CANCEL_REFUND_REASON, refundsAfterClawback } from './batch-clawback';
+import { parseCancelScheduleQuery } from '@/lib/contracts/schedule';
 
 //---------------
 // /api/schedule — read and cancel the automatic fill-schedule timetables.
@@ -205,8 +206,9 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     ? createSupabaseServiceClient()
     : await createSupabaseServerClient();
 
-  const scheduleId = new URL(request.url).searchParams.get('id');
-  if (!scheduleId) return errorResponse(400, 'id query param is required.', 'DELETE /api/schedule');
+  const cancelQuery = parseCancelScheduleQuery(new URL(request.url).searchParams);
+  if (!cancelQuery.ok) return errorResponse(400, cancelQuery.error, 'DELETE /api/schedule');
+  const scheduleId = cancelQuery.query.id;
 
   // A persona-scoped API key may only delete schedules of its own personas.
   // Sessions and unrestricted keys keep the previous behavior (no lookup).

@@ -29,6 +29,11 @@ type DirectPublishResult = Awaited<ReturnType<typeof publishVideoDirect>>;
 type ListAccountsResult = Awaited<ReturnType<PostEngineerClient['listSocialAccounts']>>;
 type ConnectUrlResult = Awaited<ReturnType<PostEngineerClient['getOAuthConnectUrl']>>;
 type PublishingAccountsResult = Awaited<ReturnType<typeof getPersonaPublishingAccounts>>;
+type ListSchedulesResult = Awaited<ReturnType<PostEngineerClient['listSchedules']>>;
+type ListPostsResult = Awaited<ReturnType<PostEngineerClient['listPosts']>>;
+type CancelScheduleResult = Awaited<ReturnType<PostEngineerClient['cancelSchedule']>>;
+type GetSlotResult = Awaited<ReturnType<PostEngineerClient['getSlot']>>;
+type UpdateSlotResult = Awaited<ReturnType<PostEngineerClient['updateSlotTitle']>>;
 
 describe('contracts typecheck', () => {
   it('rejects an unknown body field and an unknown response field at compile time', () => {
@@ -128,5 +133,33 @@ describe('contracts typecheck', () => {
     expect(typeof list).toBe('function');
     expect(typeof connectUrl).toBe('function');
     expect(typeof publishing).toBe('function');
+  });
+
+  it('rejects unknown schedule fields at compile time', () => {
+    const schedules = (result: ListSchedulesResult): unknown => {
+      // @ts-expect-error -- the schedule row keeps its snake_case `persona_id`
+      return result.schedules[0]?.personaId;
+    };
+    const posts = (result: ListPostsResult): unknown => {
+      // @ts-expect-error -- the status slot keeps its snake_case `slot_at`
+      return result.upcoming[0]?.slotAt;
+    };
+    const cancel = (result: CancelScheduleResult): unknown => {
+      // @ts-expect-error -- the cancel field is `cancelledSlotIds`, not `cancelled_slot_ids`
+      return result.cancelled_slot_ids;
+    };
+    const slot = (result: GetSlotResult): unknown => {
+      // @ts-expect-error -- the slot field is `scheduleId`, not `schedule_id`
+      return result.slot.schedule_id;
+    };
+    const update = (result: UpdateSlotResult): unknown => {
+      // @ts-expect-error -- the update field is `slotAt`, not `slot_at`
+      return result.slot_at;
+    };
+    expect(typeof schedules).toBe('function');
+    expect(typeof posts).toBe('function');
+    expect(typeof cancel).toBe('function');
+    expect(typeof slot).toBe('function');
+    expect(typeof update).toBe('function');
   });
 });

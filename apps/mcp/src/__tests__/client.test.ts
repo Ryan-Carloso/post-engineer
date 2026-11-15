@@ -398,7 +398,34 @@ describe('PostEngineerClient', () => {
   });
 
   it('lists schedules successfully', async () => {
-    const mockSchedules = { success: true, schedules: [{ id: 'sched-1' }] };
+    const mockSchedules = {
+      success: true,
+      schedules: [
+        {
+          id: 'sched-1',
+          persona_id: 'persona-123',
+          providers: ['youtube'],
+          youtube_account_ids: ['yt-1'],
+          instagram_account_ids: [],
+          linkedin_account_ids: [],
+          bluesky_account_ids: [],
+          threads_account_ids: [],
+          facebook_account_ids: [],
+          pinterest_account_ids: [],
+          pinterest_board_id: null,
+          threespeak_account_ids: [],
+          rumble_account_ids: [],
+          days_of_week: [1, 3, 5],
+          start_hour: 9,
+          end_hour: 17,
+          posts_per_day: 2,
+          timezone: 'Europe/Lisbon',
+          active: true,
+          created_at: '2026-10-01T00:00:00Z',
+          publish_mode: 'scheduled',
+        },
+      ],
+    };
 
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -417,8 +444,43 @@ describe('PostEngineerClient', () => {
   it('lists posts with the default limit', async () => {
     const mockPosts = {
       success: true,
-      upcoming: [{ id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending' }],
-      recent: [{ id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'published' }],
+      upcoming: [
+        {
+          id: 'up-1',
+          slot_at: '2026-09-24T10:00:00Z',
+          status: 'awaiting',
+          title: 'Next',
+          error: null,
+          published_at: null,
+          schedule_id: 's1',
+          task_id: null,
+          progress: 0,
+          stage: null,
+          queuePosition: null,
+          queueTotal: null,
+          retryable: null,
+          postUrl: null,
+        },
+      ],
+      recent: [
+        {
+          id: 're-1',
+          slot_at: '2026-09-20T10:00:00Z',
+          status: 'published',
+          title: 'Old',
+          error: null,
+          published_at: '2026-09-20T10:05:00Z',
+          schedule_id: 's1',
+          task_id: 'task-1',
+          progress: 100,
+          stage: 'done',
+          queuePosition: null,
+          queueTotal: null,
+          retryable: null,
+          postUrl: 'https://post-engineer.com/posts/re-1',
+        },
+      ],
+      hasAnyPost: true,
     };
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -444,7 +506,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify(({ success: true, upcoming: [], recent: [] })),
+      text: async () => JSON.stringify(({ success: true, upcoming: [], recent: [], hasAnyPost: false })),
     });
 
     await client.listPosts(50);
@@ -468,7 +530,13 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify(({ success: true })),
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          cancelledSlotIds: ['slot-1'],
+          refunds: [{ slotId: 'slot-1', refunded: true, alreadyRefunded: false, reason: 'not_generated' }],
+          batchDiscountWithheld: 0,
+        }),
     });
 
     await client.cancelSchedule('sched-1');
@@ -479,7 +547,59 @@ describe('PostEngineerClient', () => {
   });
 
   it('gets one slot by id', async () => {
-    const mockSlot = { success: true, slot: { id: 'slot-1', title: 'Hello' } };
+    const mockSlot = {
+      success: true,
+      slot: {
+        id: 'slot-1',
+        scheduleId: 'sched-1',
+        slotAt: '2026-10-10T20:00:00Z',
+        status: 'awaiting',
+        title: 'Hello',
+        taskId: null,
+        progress: 0,
+        stage: null,
+        error: null,
+        publishedAt: null,
+        postUrl: null,
+        publishLinks: [],
+        progressHistory: [],
+        scriptAngle: null,
+        retryable: null,
+        queuePosition: null,
+        queueTotal: null,
+        userNotices: [],
+        providerFailures: [],
+      },
+      schedule: {
+        id: 'sched-1',
+        personaId: null,
+        providers: ['youtube'],
+        youtubeAccountIds: [],
+        instagramAccountIds: [],
+        linkedinAccountIds: [],
+        blueskyAccountIds: [],
+        threadsAccountIds: [],
+        facebookAccountIds: [],
+        pinterestAccountIds: [],
+        pinterestBoardId: null,
+        threespeakAccountIds: [],
+        rumbleAccountIds: [],
+        fanvueAccountIds: [],
+        timezone: 'UTC',
+        publishMode: 'scheduled',
+      },
+      persona: null,
+      generation: {
+        faceless: true,
+        language: null,
+        voiceId: null,
+        videoAspect: '9:16',
+        videoLayout: null,
+        niche: null,
+        paragraphNumber: null,
+        faceQuality: null,
+      },
+    };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -1441,6 +1561,71 @@ describe('PostEngineerClient configuration', () => {
     await expect(new PostEngineerClient({ apiKey: 'k' }).disconnectAccount('youtube', 'chan-1')).rejects.toThrow('Malformed response from DELETE /api/account');
   });
 
+  it('rejects a malformed schedules 200 instead of listing a partial row', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, schedules: [{ id: 'sched-1' }] }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).listSchedules()).rejects.toThrow('Malformed response from GET /api/schedule');
+  });
+
+  it('rejects a malformed posts 200 with a raw DB status instead of a presented one', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          upcoming: [{ id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending' }],
+          recent: [],
+        }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).listPosts()).rejects.toThrow('Malformed response from GET /api/schedule/status');
+  });
+
+  it('rejects a malformed cancel 200 without the cancel facts', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).cancelSchedule('sched-1')).rejects.toThrow('Malformed response from DELETE /api/schedule');
+  });
+
+  it('rejects a malformed slot 200 instead of presenting a partial detail', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, slot: { id: 'slot-1', title: 'Hello' } }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).getSlot('slot-1')).rejects.toThrow('Malformed response from GET /api/schedule/slots/:slotId');
+  });
+
+  it('rejects a malformed title update 200 with a wrong-typed title', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, title: 42 }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).updateSlotTitle('slot-1', 'New')).rejects.toThrow('Malformed response from PATCH /api/schedule/slots/:slotId');
+  });
+
+  it('rejects a malformed slot delete 200', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: false }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).deleteSlot('slot-1')).rejects.toThrow('Malformed response from DELETE /api/schedule/slots/:slotId');
+  });
+
   it('rejects a non-http(s) POST_ENGINEER_API_URL override', () => {
     expect(() => new PostEngineerClient({ apiKey: 'k', baseUrl: 'javascript:alert(1)' })).toThrow(
       /POST_ENGINEER_API_URL/
@@ -1470,7 +1655,10 @@ describe('PostEngineerClient configuration', () => {
     expect(message).not.toContain('s3cret');
   });
 
-  it('cancelSchedule resolves an ok sentinel on 204 No Content instead of undefined', async () => {
+  it('cancelSchedule reports an empty 204 as a malformed response', async () => {
+    // The cancel route always returns the cancel facts; an empty body is
+    // not a production shape for this endpoint, so the contract parse
+    // rejects it instead of resolving the generic ok sentinel.
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 204,
@@ -1478,7 +1666,9 @@ describe('PostEngineerClient configuration', () => {
     });
 
     const c = new PostEngineerClient({ apiKey: 'k' });
-    await expect(c.cancelSchedule('sched-123')).resolves.toEqual({ ok: true });
+    await expect(c.cancelSchedule('sched-123')).rejects.toThrow(
+      'Malformed response from DELETE /api/schedule',
+    );
   });
 
   it('resolves an ok sentinel on 200 with an empty body', async () => {

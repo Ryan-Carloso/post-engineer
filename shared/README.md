@@ -118,7 +118,11 @@ runtime change (same URLs, same 400 messages). The accounts calls
 `POST /api/bluesky-connect`, `POST /api/threespeak-connect`,
 `POST /api/rumble-connect`, `GET /api/pinterest/boards`,
 `GET /api/persona/publishing-accounts`, `PUT /api/persona/publishing-accounts`,
-including their strict query parsing) follow the same shape. The web route reads the
+including their strict query parsing) follow the same shape. The schedule calls
+(`GET /api/schedule`, `DELETE /api/schedule`, `GET /api/schedule/status`,
+`GET /api/schedule/slots/[slotId]`, `PATCH /api/schedule/slots/[slotId]`,
+`DELETE /api/schedule/slots/[slotId]`, including the limit/range query parsing
+and the cancel facts) follow the same shape. The web route reads the
 body through the shared schema. The MCP functions issue a literal
 `client.request` (method + path) and parse the response with the contract,
 so the parity gate still sees the endpoint. Request bodies are

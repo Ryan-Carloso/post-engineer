@@ -43,6 +43,14 @@ import {
   getOAuthConnectUrl as getOAuthConnectUrlContract,
   listSocialAccounts as listSocialAccountsContract,
 } from './contracts/accounts.js';
+import {
+  cancelSchedule as cancelScheduleContract,
+  deleteSlot as deleteSlotContract,
+  getSlot as getSlotContract,
+  listPosts as listPostsContract,
+  listSchedules as listSchedulesContract,
+  updateSlotTitle as updateSlotTitleContract,
+} from './contracts/schedule.js';
 
 // Re-exported so existing import sites (`./client.js`) keep working.
 export type {
@@ -362,41 +370,45 @@ export class PostEngineerClient {
     }
   }
 
-  async listSchedules(): Promise<unknown> {
-    return this.request(
+  async listSchedules(): Promise<ResponseOf<typeof listSchedulesContract>> {
+    const raw = await this.request(
       '/api/schedule',
       { method: 'GET', headers: this.getHeaders() },
       'list schedules'
     );
+    return parseContractResponse(listSchedulesContract, raw);
   }
 
-  async listPosts(limit = 20): Promise<unknown> {
-    return this.request(
+  async listPosts(limit = 20): Promise<ResponseOf<typeof listPostsContract>> {
+    const raw = await this.request(
       `/api/schedule/status?limit=${encodeURIComponent(String(limit))}`,
       { method: 'GET', headers: this.getHeaders() },
       'list posts'
     );
+    return parseContractResponse(listPostsContract, raw);
   }
 
-  async cancelSchedule(scheduleId: string): Promise<unknown> {
-    return this.request(
+  async cancelSchedule(scheduleId: string): Promise<ResponseOf<typeof cancelScheduleContract>> {
+    const raw = await this.request(
       `/api/schedule?id=${encodeURIComponent(scheduleId)}`,
       { method: 'DELETE', headers: this.getHeaders() },
       'cancel schedule'
     );
+    return parseContractResponse(cancelScheduleContract, raw);
   }
 
-  async getSlot(slotId: string): Promise<unknown> {
-    return this.request(
+  async getSlot(slotId: string): Promise<ResponseOf<typeof getSlotContract>> {
+    const raw = await this.request(
       `/api/schedule/slots/${encodeURIComponent(slotId)}`,
       { method: 'GET', headers: this.getHeaders() },
       'get slot'
     );
+    return parseContractResponse(getSlotContract, raw);
   }
 
-  async updateSlotTitle(slotId: string, title: string): Promise<unknown> {
+  async updateSlotTitle(slotId: string, title: string): Promise<ResponseOf<typeof updateSlotTitleContract>> {
     const trimmed = requireTitle(title);
-    return this.request(
+    const raw = await this.request(
       `/api/schedule/slots/${encodeURIComponent(slotId)}`,
       {
         method: 'PATCH',
@@ -405,16 +417,18 @@ export class PostEngineerClient {
       },
       'update slot title'
     );
+    return parseContractResponse(updateSlotTitleContract, raw);
   }
 
-  async deleteSlot(slotId: string): Promise<unknown> {
+  async deleteSlot(slotId: string): Promise<ResponseOf<typeof deleteSlotContract>> {
     // Only pending (awaiting) or failed slots are deletable; the server
     // 409s anything mid-flight or published, and the schedule's last slot.
-    return this.request(
+    const raw = await this.request(
       `/api/schedule/slots/${encodeURIComponent(slotId)}`,
       { method: 'DELETE', headers: this.getHeaders() },
       'delete slot'
     );
+    return parseContractResponse(deleteSlotContract, raw);
   }
 
   async getTokenBalance(): Promise<ResponseOf<typeof getTokenBalanceContract>> {

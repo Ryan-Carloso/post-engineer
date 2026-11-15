@@ -16,6 +16,7 @@ import { SOCIAL_PROVIDERS, YOUTUBE_VIDEO_ID } from '@/lib/contracts/metrics';
 import { CHECK_MEDIA_CODES, MEDIA_ID_PATTERN, VIDEO_ASPECTS } from '@/lib/contracts/media';
 import { PUBLISH_PROVIDERS } from '@/lib/contracts/posts';
 import { OAUTH_CONNECT_PROVIDERS, PublicAccountItemSchema } from '@/lib/contracts/accounts';
+import { CancelRefundSchema, RANGE_STATUSES, ScheduleRowSchema } from '@/lib/contracts/schedule';
 
 const HEADER = '// GENERATED from shared/contracts — do not edit.\n// Run `node scripts/sync-contracts.mjs` from the repo root to regenerate.\n';
 
@@ -147,5 +148,76 @@ describe('contracts shared source', () => {
     for (const name of ['AccountData', 'InstagramAccountData', 'BlueskyAccountData', 'LinkedinAccountData', 'ThreadsAccountData', 'FacebookAccountData', 'PinterestAccountData', 'ThreespeakAccountData', 'RumbleAccountData', 'FanvueAccountData']) {
       expect(registry).toContain(name);
     }
+  });
+
+  // The schedule contract carries its own ScheduleRow copy (GET
+  // /api/schedule returns the raw Supabase rows). A one-sided edit would
+  // make the contract reject a column the route selects, so every row
+  // key must appear in the route's select list.
+  it('pins the shared ScheduleRow keys to the schedule GET select', () => {
+    const root = findRepoRoot(import.meta.url);
+    const route = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'schedule', 'route.ts'), 'utf8');
+    const selects = [...route.matchAll(/\.select\('([^']+)'\)/g)].map((match) => match[1]);
+    const select = selects.find((columns) => columns.includes('publish_mode'));
+    expect(select).not.toBeUndefined();
+    const columns = (select as string).split(',').map((column) => column.trim());
+    for (const key of Object.keys(ScheduleRowSchema.shape)) {
+      expect(columns).toContain(key);
+    }
+    expect(Object.keys(ScheduleRowSchema.shape)).toHaveLength(columns.length);
+  });
+
+  // The schedule contract carries its own cancel-reason copy (the DELETE
+  // /api/schedule response). A one-sided edit would make the contract
+  // reject a reason the route returns, so every reason must appear in
+  // the route's CancelRefundReason union.
+  it('pins the shared cancel reasons to the schedule route', () => {
+    const root = findRepoRoot(import.meta.url);
+    const route = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'schedule', 'route.ts'), 'utf8');
+    for (const reason of CancelRefundSchema.shape.reason.options) {
+      expect(route).toContain(`'${reason}'`);
+    }
+  });
+
+  // The schedule contract carries its own RANGE_STATUSES copy (the range
+  // query filters on it). A one-sided edit would make the contract
+  // reject a status the presentation layer maps, so every member must
+  // appear as a presentStatus case.
+  it('pins the shared RANGE_STATUSES to the slot presentation', () => {
+    const root = findRepoRoot(import.meta.url);
+    const presentation = readFileSync(join(root, 'apps', 'web', 'lib', 'schedule-slot-presentation.ts'), 'utf8');
+    for (const status of RANGE_STATUSES) {
+      expect(presentation).toContain(`case '${status}':`);
+    }
+  });
+
+  // The contract's hasExplicitOffset mirrors lib/timezone.ts (the PATCH
+  // slotAt rule). A one-sided edit would make the contract accept a
+  // slotAt the route rejects, so the offset regex must match.
+  it('pins the shared hasExplicitOffset regex to timezone.ts', () => {
+    const root = findRepoRoot(import.meta.url);
+    const timezone = readFileSync(join(root, 'apps', 'web', 'lib', 'timezone.ts'), 'utf8');
+    const match = timezone.match(/const OFFSET_RE = (\/.*\/);/);
+    expect(match).not.toBeNull();
+    const scheduleContract = readFileSync(join(root, 'shared', 'contracts', 'schedule.ts'), 'utf8');
+    expect(scheduleContract).toContain((match as RegExpMatchArray)[1]);
+  });
+
+  // The range parser and the limit parser moved into the contract; the
+  // status route imports them from there and range.ts keeps the old
+  // import path working by re-exporting. If either import is dropped,
+  // the route loses its validator or the range tests lose theirs.
+  it('pins the status route and range.ts to the contract parsers', () => {
+    const root = findRepoRoot(import.meta.url);
+    const statusRoute = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'schedule', 'status', 'route.ts'), 'utf8');
+    expect(statusRoute).toContain("from '@/lib/contracts/schedule'");
+    expect(statusRoute).toContain('parseStatusLimit,');
+    expect(statusRoute).toContain('parseStatusRange,');
+    const range = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'schedule', 'status', 'range.ts'), 'utf8');
+    expect(range).toContain("from '@/lib/contracts/schedule'");
+    expect(range).toContain('parseStatusRange as parseRange,');
+    expect(range).toContain('RANGE_MAX_SPAN_DAYS,');
+    expect(range).toContain('RANGE_MAX_SLOTS,');
+    expect(range).toContain('RANGE_STATUSES,');
   });
 });

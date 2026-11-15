@@ -7,6 +7,7 @@ import { getPost } from '@/lib/contracts/posts';
 import { getRetentionCurve, listMetrics } from '@/lib/contracts/metrics';
 import { checkMedia, uploadContent, uploadMedia } from '@/lib/contracts/media';
 import { connectBlueskyAccount, getOAuthConnectUrl, getPersonaPublishingAccounts, listSocialAccounts } from '@/lib/contracts/accounts';
+import { cancelSchedule, deleteSlot, getSlot, listPosts, listSchedules, updateSlotTitle } from '@/lib/contracts/schedule';
 import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
 //---------------
@@ -32,6 +33,13 @@ type ListAccountsResponse = ResponseOf<typeof listSocialAccounts>;
 type ConnectUrlResponse = ResponseOf<typeof getOAuthConnectUrl>;
 type BlueskyConnectBody = BodyOf<typeof connectBlueskyAccount>;
 type PublishingAccountsResponse = ResponseOf<typeof getPersonaPublishingAccounts>;
+type ListSchedulesResponse = ResponseOf<typeof listSchedules>;
+type CancelScheduleResponse = ResponseOf<typeof cancelSchedule>;
+type ListPostsResponse = ResponseOf<typeof listPosts>;
+type GetSlotResponse = ResponseOf<typeof getSlot>;
+type UpdateSlotBody = BodyOf<typeof updateSlotTitle>;
+type UpdateSlotResponse = ResponseOf<typeof updateSlotTitle>;
+type DeleteSlotResponse = ResponseOf<typeof deleteSlot>;
 
 describe('contracts typecheck', () => {
   it('pins BodyOf and ResponseOf field names', async () => {
@@ -218,5 +226,67 @@ describe('contracts typecheck', () => {
     expect(publishing.defaults.youtube).toEqual(['UC-1']);
     // @ts-expect-error -- the defaults field is `youtube`, not `youtube_id`
     expect(publishing.defaults.youtube_id).toBeUndefined();
+  });
+
+  it('pins the schedule response field names', () => {
+    const list: ListSchedulesResponse = {
+      success: true,
+      schedules: [
+        {
+          id: 'sched-1', persona_id: null, providers: ['youtube'],
+          youtube_account_ids: [], instagram_account_ids: [], linkedin_account_ids: [],
+          bluesky_account_ids: [], threads_account_ids: [], facebook_account_ids: [],
+          pinterest_account_ids: [], pinterest_board_id: null, threespeak_account_ids: [],
+          rumble_account_ids: [], days_of_week: [1], start_hour: 9, end_hour: 17,
+          posts_per_day: 1, timezone: 'UTC', active: true, created_at: '2026-10-01T00:00:00Z',
+          publish_mode: 'scheduled',
+        },
+      ],
+    };
+    expect(list.schedules[0]?.providers).toEqual(['youtube']);
+    // @ts-expect-error -- the schedule row keeps its snake_case `persona_id`
+    expect(list.schedules[0]?.personaId).toBeUndefined();
+    const cancel: CancelScheduleResponse = {
+      success: true, cancelledSlotIds: [], refunds: [], batchDiscountWithheld: 0,
+    };
+    expect(cancel.cancelledSlotIds).toEqual([]);
+    // @ts-expect-error -- the cancel field is `cancelledSlotIds`, not `cancelled_slot_ids`
+    expect(cancel.cancelled_slot_ids).toBeUndefined();
+    const posts: ListPostsResponse = { success: true, upcoming: [], recent: [], hasAnyPost: false };
+    expect(posts.hasAnyPost).toBe(false);
+    // @ts-expect-error -- the posts field is `hasAnyPost`, not `has_any_post`
+    expect(posts.has_any_post).toBeUndefined();
+    const slot: GetSlotResponse = {
+      success: true,
+      slot: {
+        id: 'slot-1', scheduleId: 'sched-1', slotAt: '2026-10-10T20:00:00Z', status: 'awaiting',
+        title: 'T', taskId: null, progress: 0, stage: null, error: null, publishedAt: null,
+        postUrl: null, publishLinks: [], progressHistory: [], scriptAngle: null,
+        retryable: null, queuePosition: null, queueTotal: null, userNotices: [], providerFailures: [],
+      },
+      schedule: {
+        id: 'sched-1', personaId: null, providers: [], youtubeAccountIds: [],
+        instagramAccountIds: [], linkedinAccountIds: [], blueskyAccountIds: [],
+        threadsAccountIds: [], facebookAccountIds: [], pinterestAccountIds: [],
+        pinterestBoardId: null, threespeakAccountIds: [], rumbleAccountIds: [],
+        fanvueAccountIds: [], timezone: 'UTC', publishMode: 'scheduled',
+      },
+      persona: null,
+      generation: {
+        faceless: true, language: null, voiceId: null, videoAspect: '9:16',
+        videoLayout: null, niche: null, paragraphNumber: null, faceQuality: null,
+      },
+    };
+    expect(slot.slot.title).toBe('T');
+    // @ts-expect-error -- the slot field is `scheduleId`, not `schedule_id`
+    expect(slot.slot.schedule_id).toBeUndefined();
+    const body: UpdateSlotBody = { title: 'New title' };
+    expect(body.title).toBe('New title');
+    // @ts-expect-error -- the update body field is `slotAt`, not `slot_at`
+    expect(body.slot_at).toBeUndefined();
+    const updated: UpdateSlotResponse = { success: true, title: 'New title' };
+    expect(updated.title).toBe('New title');
+    const deleted: DeleteSlotResponse = { success: true };
+    expect(deleted.success).toBe(true);
   });
 });

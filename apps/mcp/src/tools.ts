@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { filterVoicesPayload, ListVoicesSchema, personaVoiceField, withResolvedPersonaVoice, type ListVoicesArgs } from './voice-filters.js';
-import { noticeSummary, readNoticeList } from './publish-notices.js';
+import { noticeSummary } from './publish-notices.js';
 import {
   CancelScheduleSchema,
   CancelScheduleShape,
@@ -50,6 +50,8 @@ import {
 import { getErrorMessage, ApiError } from './errors.js';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { CreatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar.js';
+import { getSlot as getSlotContract } from './contracts/schedule.js';
+import type { ResponseOf } from './contracts/endpoint.js';
 
 export type { McpToolResponse } from './tools-call.js';
 // Image path/tag/description limits are shared by create-persona and persona_media (action: add_image).
@@ -285,14 +287,14 @@ export async function handleGetSlot(
   args: z.infer<typeof GetSlotSchema>
 ): Promise<McpToolResponse> {
   try {
-    const narrowed = narrowSlotDetail(await client.getSlot(args.slotId));
-    const slot = narrowed.slot;
-    const humanSummary = `Slot ${slot.id ?? args.slotId}: "${slot.title ?? '(untitled)'}" — ${slot.status ?? 'unknown'}, scheduled for ${slot.slotAt ?? '(unscheduled)'}.${noticeSummary(slot.userNotices)}`;
+    const presented = presentSlotDetail(await client.getSlot(args.slotId));
+    const slot = presented.slot;
+    const humanSummary = `Slot ${slot.id}: "${slot.title ?? '(untitled)'}" — ${slot.status}, scheduled for ${slot.slotAt}.${noticeSummary(slot.userNotices)}`;
     return {
       content: [
         {
           type: 'text',
-          text: `${humanSummary}\n${JSON.stringify(narrowed, null, 2)}`,
+          text: `${humanSummary}\n${JSON.stringify(presented, null, 2)}`,
         },
       ],
     };
@@ -329,10 +331,8 @@ export async function handleUpdateSlotTitle(
   args: z.infer<typeof UpdateSlotTitleSchema>
 ): Promise<McpToolResponse> {
   try {
-    const result = (await client.updateSlotTitle(args.slotId, args.title)) as {
-      title?: unknown;
-    };
-    const title = typeof result.title === 'string' ? result.title : args.title;
+    const result = await client.updateSlotTitle(args.slotId, args.title);
+    const title = result.title ?? args.title;
     return {
       content: [
         {
@@ -768,83 +768,53 @@ function narrowTokenTransactions(result: unknown): {
   };
 }
 
-/** Slot, schedule, and persona fields schedules (action: get_slot) returns. */
-function narrowSlotDetail(result: unknown): {
-  slot: {
-    id: string | null;
-    scheduleId: string | null;
-    slotAt: string | null;
-    status: string | null;
-    title: string | null;
-    taskId: string | null;
-    progress: number | null;
-    stage: string | null;
-    error: string | null;
-    publishedAt: string | null;
-    postUrl: string | null;
-    userNotices: unknown[];
-    providerFailures: unknown[];
-  };
-  schedule: {
-    id: string | null;
-    providers: string[];
-    publishMode: string | null;
-    timezone: string | null;
-  } | null;
-  persona: { id: string | null; name: string | null } | null;
-} {
-  const record =
-    typeof result === 'object' && result !== null
-      ? (result as Record<string, unknown>)
-      : {};
-  const slot =
-    typeof record.slot === 'object' && record.slot !== null
-      ? (record.slot as Record<string, unknown>)
-      : {};
-  const schedule =
-    typeof record.schedule === 'object' && record.schedule !== null
-      ? (record.schedule as Record<string, unknown>)
-      : null;
-  const persona =
-    typeof record.persona === 'object' && record.persona !== null
-      ? (record.persona as Record<string, unknown>)
-      : null;
-  const str = (value: unknown): string | null =>
-    typeof value === 'string' ? value : null;
-  const num = (value: unknown): number | null =>
-    typeof value === 'number' ? value : null;
-  const providers = Array.isArray(schedule?.providers)
-    ? schedule.providers.filter((p): p is string => typeof p === 'string')
-    : [];
+/** The agent-facing shape of a slot detail: the parsed contract result
+ * with the `success` envelope and the `generation` block dropped (the
+ * slot's own progress/stage already carry it). Fields are picked, never
+ * spread, so unknown fields can never ride through to the agent. */
+function presentSlotDetail(detail: ResponseOf<typeof getSlotContract>) {
+  const { slot, schedule, persona } = detail;
   return {
     slot: {
-      id: str(slot.id),
-      scheduleId: str(slot.scheduleId),
-      slotAt: str(slot.slotAt),
-      status: str(slot.status),
-      title: str(slot.title),
-      taskId: str(slot.taskId),
-      progress: num(slot.progress),
-      stage: str(slot.stage),
-      error: str(slot.error),
-      publishedAt: str(slot.publishedAt),
-      postUrl: str(slot.postUrl),
-      userNotices: readNoticeList(slot.userNotices),
-      providerFailures: readNoticeList(slot.providerFailures),
+      id: slot.id,
+      scheduleId: slot.scheduleId,
+      slotAt: slot.slotAt,
+      status: slot.status,
+      title: slot.title,
+      taskId: slot.taskId,
+      progress: slot.progress,
+      stage: slot.stage,
+      error: slot.error,
+      publishedAt: slot.publishedAt,
+      postUrl: slot.postUrl,
+      publishLinks: slot.publishLinks,
+      progressHistory: slot.progressHistory,
+      scriptAngle: slot.scriptAngle,
+      retryable: slot.retryable,
+      queuePosition: slot.queuePosition,
+      queueTotal: slot.queueTotal,
+      userNotices: slot.userNotices,
+      providerFailures: slot.providerFailures,
     },
-    schedule:
-      schedule === null
-        ? null
-        : {
-            id: str(schedule.id),
-            providers,
-            publishMode: str(schedule.publishMode),
-            timezone: str(schedule.timezone),
-          },
-    persona:
-      persona === null
-        ? null
-        : { id: str(persona.id), name: str(persona.name) },
+    schedule: {
+      id: schedule.id,
+      personaId: schedule.personaId,
+      providers: schedule.providers,
+      youtubeAccountIds: schedule.youtubeAccountIds,
+      instagramAccountIds: schedule.instagramAccountIds,
+      linkedinAccountIds: schedule.linkedinAccountIds,
+      blueskyAccountIds: schedule.blueskyAccountIds,
+      threadsAccountIds: schedule.threadsAccountIds,
+      facebookAccountIds: schedule.facebookAccountIds,
+      pinterestAccountIds: schedule.pinterestAccountIds,
+      pinterestBoardId: schedule.pinterestBoardId,
+      threespeakAccountIds: schedule.threespeakAccountIds,
+      rumbleAccountIds: schedule.rumbleAccountIds,
+      fanvueAccountIds: schedule.fanvueAccountIds,
+      timezone: schedule.timezone,
+      publishMode: schedule.publishMode,
+    },
+    persona: persona === null ? null : { id: persona.id, name: persona.name },
   };
 }
 
