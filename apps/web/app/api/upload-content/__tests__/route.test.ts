@@ -417,7 +417,7 @@ describe('POST /api/upload-content', () => {
     expect(mockBuildUploadErrorResponse).toHaveBeenCalled();
   });
 
-  it('logs UNKNOWN as the error name when the handler throws a non-Error', async () => {
+  it('passes the thrown value as the logger cause when the handler throws a non-Error', async () => {
     mockHandleYoutubeUpload.mockRejectedValue('string-boom');
     mockBuildUploadErrorResponse.mockReturnValue(
       NextResponse.json({ success: false, error: 'boom' }, { status: 500 }),
@@ -428,8 +428,8 @@ describe('POST /api/upload-content', () => {
     expect(mockBuildUploadErrorResponse).toHaveBeenCalled();
     expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
       '[upload-content] ERRO',
-      undefined,
-      expect.objectContaining({ message: 'string-boom', name: 'UNKNOWN' }),
+      'string-boom',
+      expect.objectContaining({ logId: expect.any(String) }),
     );
   });
 });

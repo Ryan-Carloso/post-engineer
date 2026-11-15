@@ -210,7 +210,7 @@ export async function publishVideoDirect(
 
   const result: unknown = await client.request(
     '/api/upload-content',
-    { method: 'POST', headers: client.getHeaders(), body: formData },
+    { method: 'POST', headers: client.getHeaders(false), body: formData },
     'publish video direct',
     DIRECT_PUBLISH_TIMEOUT_MS,
   );
