@@ -9,7 +9,7 @@ from typing import Any
 
 from loguru import logger
 
-from app.models.schema import TaskVideoRequest
+from app.models.schema import LipSyncQuality, TaskVideoRequest
 from app.models import const as model_const
 from app.services import notify as notify_module
 from app.services import task as tm
@@ -157,6 +157,17 @@ class BatchGenerator:
                 video_title=title[:100],
                 video_description=description,
                 video_type=video_type,
+                # Face quality (snapshot first, persona second, via post_identity)
+                # is what the web priced this slot with: without it a
+                # tick-dispatched or requeued very_good slot renders at the
+                # `ok` default it was not charged for. Faceless shows no face,
+                # so it keeps the engine default — mirror of the web direct
+                # path (video-job-payload.ts).
+                video_quality=(
+                    LipSyncQuality.very_good
+                    if video_type != "faceless" and identity.get("face_quality") == "very_good"
+                    else LipSyncQuality.ok
+                ),
                 persona=build_persona_params(identity, self.store, video_type),
                 video_aspect=identity.get("video_aspect") or "9:16",
                 # Layout resolves through post_identity() like every other
