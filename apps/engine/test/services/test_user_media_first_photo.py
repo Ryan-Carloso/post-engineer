@@ -1,8 +1,10 @@
 """user_media first photo: the hook opens with the first photo of the video.
 
-first_segment_media selects the first media item across segments, in
-order; resolve_first_segment_photo downloads it to the task dir. The
-segment-media path itself never checks faces (see
+first_segment_media selects the first usable media item across segments,
+in order — usable means it carries a mediaId or a url, mirroring the web
+selector in apps/web/lib/hook-photo.ts and the segment-media path, which
+both skip ref-less items; resolve_first_segment_photo downloads it to
+the task dir. The segment-media path itself never checks faces (see
 test_segment_photos_no_longer_pass_through_face_detection): the face
 gate lives on the lip-sync image resolution that consumes this photo.
 """
@@ -56,6 +58,29 @@ def test_returns_none_when_no_segment_carries_media():
 def test_skips_non_dict_media_entries():
     segments = [{"kind": "hook", "text": "Hi.", "media": ["not-a-dict", {"url": "https://e.com/a.jpg"}]}]
     assert user_media.first_segment_media(segments) == (0, 1, {"url": "https://e.com/a.jpg"})
+
+
+def test_skips_media_items_without_a_usable_ref():
+    # Mirrors the web selector (apps/web/lib/hook-photo.ts): an item with
+    # neither a mediaId nor a url is not a photo — the next usable one is
+    # the first photo, so the pre-charge face check and the engine agree.
+    segments = [
+        {
+            "kind": "hook",
+            "text": "Hi.",
+            "media": [{}, {"mediaId": ""}, {"url": ""}, {"url": "https://e.com/a.jpg"}],
+        }
+    ]
+    assert user_media.first_segment_media(segments) == (
+        0,
+        3,
+        {"url": "https://e.com/a.jpg"},
+    )
+
+
+def test_returns_none_when_every_media_item_lacks_a_usable_ref():
+    segments = [{"kind": "hook", "text": "Hi.", "media": [{}, {"mediaId": ""}, {"url": ""}]}]
+    assert user_media.first_segment_media(segments) is None
 
 
 def test_selects_from_pydantic_segments():
@@ -121,11 +146,28 @@ def test_expired_media_id_reports_the_per_photo_reason(tmp_path, monkeypatch):
     assert reason == "media expired or missing"
 
 
-def test_media_without_id_or_url_is_unusable(tmp_path):
+def test_media_without_id_or_url_falls_back_to_no_segment_media(tmp_path):
+    # Ref-less items are skipped by selection (see
+    # test_skips_media_items_without_a_usable_ref), so a segment with
+    # only ref-less media carries no usable first photo: the caller falls
+    # back to the persona photo, exactly like the web preflight does.
     segments = [{"kind": "hook", "text": "Hi.", "media": [{}]}]
     photo, segment_index, image_index, reason = user_media.resolve_first_segment_photo(
         str(tmp_path), segments
     )
     assert photo == ""
-    assert (segment_index, image_index) == (0, 0)
-    assert reason == "unusable media"
+    assert (segment_index, image_index) == (-1, -1)
+    assert reason == "no_segment_media"
+
+
+def test_ref_less_first_item_resolves_the_next_usable_photo(tmp_path, monkeypatch):
+    asset = tmp_path / "aabbccddeeff00112233445566778899.jpg"
+    asset.write_bytes(_jpeg())
+    monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
+    segments = [{"kind": "hook", "text": "Hi.", "media": [{}, {"mediaId": asset.name}]}]
+    photo, segment_index, image_index, reason = user_media.resolve_first_segment_photo(
+        str(tmp_path), segments
+    )
+    assert reason is None
+    assert (segment_index, image_index) == (0, 1)
+    assert photo == str(asset)

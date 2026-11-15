@@ -98,16 +98,26 @@ def _segment_dict(segment: Any) -> dict[str, Any]:
 def first_segment_media(segments: Sequence[Any]) -> tuple[int, int, dict] | None:
     """The first photo of the video: (segment index, image index, media dict).
 
-    The first media item across segments, in order — the photo the hook
-    opens with (issue #589). None when no segment carries media. Pure
-    selection; the caller resolves the ref (mediaId or url) to a file.
+    The first usable media item across segments, in order — usable means
+    it carries a mediaId or a url, mirroring the web selector in
+    apps/web/lib/hook-photo.ts and the segment-media path, which both
+    skip ref-less items. None when no segment carries a usable photo.
+    Pure selection; the caller resolves the ref (mediaId or url) to a
+    file. The hook opens with this photo (issue #589).
     """
     for segment_index, segment in enumerate(segments):
         for image_index, media in enumerate(
             _media_list(_segment_dict(segment).get("media"))
         ):
-            if isinstance(media, dict):
-                return segment_index, image_index, media
+            if not isinstance(media, dict):
+                continue
+            media_id = media.get("mediaId")
+            url = media.get("url")
+            if not (isinstance(media_id, str) and media_id) and not (
+                isinstance(url, str) and url
+            ):
+                continue
+            return segment_index, image_index, media
     return None
 
 
@@ -117,7 +127,7 @@ def resolve_first_segment_photo(
     """Download the first photo of the video: (path, segment index, image index, reason).
 
     reason is None on success, "no_segment_media" when no segment
-    carries a photo (the caller falls back to the persona photo), or
+    carries a usable photo (the caller falls back to the persona photo), or
     the per-photo failure (expired media id, blocked download,
     unusable file) — the caller fails the task naming the segment and
     image. The downloaded file is the caller's to remove once copied.
