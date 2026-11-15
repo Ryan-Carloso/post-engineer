@@ -230,7 +230,26 @@ describe('PostEngineerClient', () => {
 
   it('lists voices successfully', async () => {
     const mockVoices = {
-      voices: [{ id: 'calm' }, { id: 'energetic' }],
+      voices: [
+        {
+          id: 'calm',
+          label: 'Calm',
+          provider: 'kokoro',
+          gender: 'female',
+          accent: 'us',
+          kind: 'standard',
+          description: 'A calm voice.',
+        },
+        {
+          id: 'energetic',
+          label: 'Energetic',
+          provider: 'phonon',
+          gender: 'male',
+          accent: 'gb',
+          kind: 'character',
+          description: null,
+        },
+      ],
     };
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -260,6 +279,18 @@ describe('PostEngineerClient', () => {
     });
 
     await expect(client.listVoices()).rejects.toThrow(/Failed to list voices: 502/);
+  });
+
+  it('rejects a malformed voices 200 with a partial entry', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ voices: [{ id: 'calm' }] }),
+    });
+
+    await expect(client.listVoices()).rejects.toThrow(
+      'Malformed response from GET /api/persona/voices',
+    );
   });
 
 

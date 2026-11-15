@@ -22,6 +22,7 @@ vi.mock('@/lib/api-keys', () => ({
 //---------------
 
 import { GET } from '../route';
+import { ListVoicesResponseSchema } from '@/lib/contracts/voices';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { resolveApiKey } from '@/lib/api-keys';
@@ -89,7 +90,9 @@ describe('GET /api/persona/voices', () => {
     const res = await GET();
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
+    const body = await res.json();
+    expect(ListVoicesResponseSchema.safeParse(body).success).toBe(true);
+    expect(body).toEqual({
       voices: [
         voice('chatterbox:kokoro_af_heart'),
         voice('chatterbox:phonon_zoey'),

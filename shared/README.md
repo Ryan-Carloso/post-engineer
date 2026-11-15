@@ -125,7 +125,15 @@ including their strict query parsing) follow the same shape. The schedule calls
 and the cancel facts) follow the same shape. The video-tasks calls
 (`GET /api/persona/video-generations`, `GET /api/persona/video-generations/[generationId]`,
 `GET /api/persona/video-status/[taskId]`, `DELETE /api/persona/video-task/[taskId]`,
-including the generations limit parsing) follow the same shape. The web route reads the
+including the generations limit parsing) follow the same shape. The voices calls
+(`GET /api/persona/voices`, `GET /api/persona/cloned-voices`, `POST /api/persona/cloned-voices`,
+`GET /api/persona/cloned-voices/[cloneId]`, `DELETE /api/persona/cloned-voices/[cloneId]`,
+including the voice catalog enums and the cloned row shape) follow the same shape.
+The two preview endpoints (`POST /api/persona/voices/[voiceId]/preview`,
+`POST /api/persona/cloned-voices/[cloneId]/preview`) return raw audio bytes, not JSON,
+so they share only the request body (`PreviewVoiceBodySchema`, 300-char cap) — the
+preview parsers in each route stay, and the cap is pinned four ways
+(`clone-preview-text-sync.test.ts`). The web route reads the
 body through the shared schema. The MCP functions issue a literal
 `client.request` (method + path) and parse the response with the contract,
 so the parity gate still sees the endpoint. Request bodies are

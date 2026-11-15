@@ -9,6 +9,7 @@ import { checkMedia, uploadContent, uploadMedia } from '@/lib/contracts/media';
 import { connectBlueskyAccount, getOAuthConnectUrl, getPersonaPublishingAccounts, listSocialAccounts } from '@/lib/contracts/accounts';
 import { cancelSchedule, deleteSlot, getSlot, listPosts, listSchedules, updateSlotTitle } from '@/lib/contracts/schedule';
 import { cancelVideoTask, getVideoGeneration, getVideoStatus, listVideoGenerations } from '@/lib/contracts/video-tasks';
+import { createClonedVoice, deleteClonedVoice, getClonedVoice, listClonedVoices, listVoices } from '@/lib/contracts/voices';
 import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
 //---------------
@@ -45,6 +46,12 @@ type ListVideoGenerationsResponse = ResponseOf<typeof listVideoGenerations>;
 type GetVideoGenerationResponse = ResponseOf<typeof getVideoGeneration>;
 type GetVideoStatusResponse = ResponseOf<typeof getVideoStatus>;
 type CancelVideoTaskResponse = ResponseOf<typeof cancelVideoTask>;
+type ListVoicesResponse = ResponseOf<typeof listVoices>;
+type ListClonedVoicesResponse = ResponseOf<typeof listClonedVoices>;
+type GetClonedVoiceResponse = ResponseOf<typeof getClonedVoice>;
+type CreateClonedVoiceBody = BodyOf<typeof createClonedVoice>;
+type CreateClonedVoiceResponse = ResponseOf<typeof createClonedVoice>;
+type DeleteClonedVoiceResponse = ResponseOf<typeof deleteClonedVoice>;
 
 describe('contracts typecheck', () => {
   it('pins BodyOf and ResponseOf field names', async () => {
@@ -338,5 +345,59 @@ describe('contracts typecheck', () => {
     expect(cancelled.status).toBe(200);
     // @ts-expect-error -- the delete response has no `deleted` flag
     expect(cancelled.deleted).toBeUndefined();
+  });
+
+  it('pins the voices field names', () => {
+    const list: ListVoicesResponse = {
+      voices: [
+        {
+          id: 'chatterbox:kokoro_af_heart',
+          label: 'Heart',
+          provider: 'kokoro',
+          gender: 'female',
+          accent: 'us',
+          kind: 'standard',
+          description: 'Warm.',
+        },
+      ],
+    };
+    expect(list.voices[0]?.id).toBe('chatterbox:kokoro_af_heart');
+    // @ts-expect-error -- the voice row field is `kind`, not `type`
+    expect(list.voices[0]?.type).toBeUndefined();
+    const cloneRow = {
+      id: 'clone-1',
+      status: 'ready',
+      language: 'en',
+      voice_id: 'chatterbox:u1',
+      error_code: null,
+      consent_at: null,
+      created_at: null,
+      updated_at: null,
+    };
+    const clones: ListClonedVoicesResponse = {
+      success: true,
+      voices: [cloneRow],
+    };
+    expect(clones.voices[0]?.voice_id).toBe('chatterbox:u1');
+    // @ts-expect-error -- the cloned row keeps its snake_case `voice_id`
+    expect(clones.voices[0]?.voiceId).toBeUndefined();
+    const detail: GetClonedVoiceResponse = {
+      success: true,
+      voice: cloneRow,
+    };
+    expect(detail.voice.id).toBe('clone-1');
+    // @ts-expect-error -- the get response carries `voice`, not `body`
+    expect(detail.body).toBeUndefined();
+    const body: CreateClonedVoiceBody = { consent: 'true', denoise: 'false', language: 'en' };
+    expect(body.consent).toBe('true');
+    // @ts-expect-error -- the form body takes the string literal 'true', not a boolean
+    const wrongBody: CreateClonedVoiceBody = { consent: true, denoise: 'false', language: 'en' };
+    expect(typeof wrongBody).toBe('object');
+    const created: CreateClonedVoiceResponse = { success: true, voice: cloneRow };
+    expect(created.voice.id).toBe('clone-1');
+    const deleted: DeleteClonedVoiceResponse = { success: true };
+    expect(deleted.success).toBe(true);
+    // @ts-expect-error -- the delete response has no `voice` field
+    expect(deleted.voice).toBeUndefined();
   });
 });

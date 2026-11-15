@@ -8,6 +8,7 @@ import { publishVideoDirect } from '../client-publish-uploaded.js';
 import { checkSegmentMedia, uploadSegmentMedia } from '../client-user-media.js';
 import { getPersonaPublishingAccounts } from '../client-publishing-accounts.js';
 import { cancelVideoTask } from '../client-video-task.js';
+import { createClonedVoiceFromUrl, deleteClonedVoice, getClonedVoice, listClonedVoices } from '../cloned-voice-client.js';
 
 //---------------
 // Type-level pins for the shared contracts, checked by
@@ -38,6 +39,11 @@ type UpdateSlotResult = Awaited<ReturnType<PostEngineerClient['updateSlotTitle']
 type ListVideoGenerationsResult = Awaited<ReturnType<PostEngineerClient['listVideoGenerations']>>;
 type GetVideoGenerationResult = Awaited<ReturnType<PostEngineerClient['getVideoGeneration']>>;
 type GetVideoStatusResult = Awaited<ReturnType<PostEngineerClient['getVideoStatus']>>;
+type ListVoicesResult = Awaited<ReturnType<PostEngineerClient['listVoices']>>;
+type ListClonedVoicesResult = Awaited<ReturnType<typeof listClonedVoices>>;
+type GetClonedVoiceResult = Awaited<ReturnType<typeof getClonedVoice>>;
+type CreateClonedVoiceResult = Awaited<ReturnType<typeof createClonedVoiceFromUrl>>;
+type DeleteClonedVoiceResult = Awaited<ReturnType<typeof deleteClonedVoice>>;
 type CancelVideoTaskResult = Awaited<ReturnType<typeof cancelVideoTask>>;
 
 describe('contracts typecheck', () => {
@@ -194,5 +200,38 @@ describe('contracts typecheck', () => {
     expect(typeof status).toBe('function');
     expect(typeof statusEnvelope).toBe('function');
     expect(typeof cancel).toBe('function');
+  });
+
+  it('rejects unknown voices fields at compile time', () => {
+    const list = (result: ListVoicesResult): unknown => {
+      // @ts-expect-error -- the voice row field is `kind`, not `type`
+      return result.voices[0]?.type;
+    };
+    const listId = (result: ListVoicesResult): unknown => {
+      // @ts-expect-error -- the voice row field is `id`, not `voiceId`
+      return result.voices[0]?.voiceId;
+    };
+    const clones = (result: ListClonedVoicesResult): unknown => {
+      // @ts-expect-error -- the cloned row keeps its snake_case `voice_id`
+      return result.voices[0]?.voiceId;
+    };
+    const detail = (result: GetClonedVoiceResult): unknown => {
+      // @ts-expect-error -- the create/get response carries `voice`, not `body`
+      return result.body;
+    };
+    const created = (result: CreateClonedVoiceResult): unknown => {
+      // @ts-expect-error -- the create response carries `voice`, not `body`
+      return result.body;
+    };
+    const deleted = (result: DeleteClonedVoiceResult): unknown => {
+      // @ts-expect-error -- the delete response has no `voice` field
+      return result.voice;
+    };
+    expect(typeof list).toBe('function');
+    expect(typeof listId).toBe('function');
+    expect(typeof clones).toBe('function');
+    expect(typeof detail).toBe('function');
+    expect(typeof created).toBe('function');
+    expect(typeof deleted).toBe('function');
   });
 });

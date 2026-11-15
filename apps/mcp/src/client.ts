@@ -57,6 +57,9 @@ import {
   getVideoStatus as getVideoStatusContract,
   listVideoGenerations as listVideoGenerationsContract,
 } from './contracts/video-tasks.js';
+import {
+  listVoices as listVoicesContract,
+} from './contracts/voices.js';
 
 // Re-exported so existing import sites (`./client.js`) keep working.
 export type {
@@ -289,12 +292,13 @@ export class PostEngineerClient {
     );
   }
 
-  async listVoices(): Promise<unknown> {
-    return this.request(
+  async listVoices(): Promise<ResponseOf<typeof listVoicesContract>> {
+    const raw = await this.request(
       '/api/persona/voices',
       { method: 'GET', headers: this.getHeaders() },
       'list voices'
     );
+    return parseContractResponse(listVoicesContract, raw);
   }
 
   async listFaces(): Promise<unknown> {

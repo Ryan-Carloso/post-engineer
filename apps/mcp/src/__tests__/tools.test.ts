@@ -257,7 +257,26 @@ describe('MCP Tool Handlers', () => {
   it('handleListVoices returns the voice catalog', async () => {
     vi.mocked(mockClient.listVoices).mockClear();
     vi.mocked(mockClient.listVoices).mockResolvedValue({
-      voices: [{ id: 'calm', kind: 'standard' }, { id: 'energetic', kind: 'standard' }],
+      voices: [
+        {
+          id: 'calm',
+          label: 'Calm',
+          provider: 'kokoro',
+          gender: 'female',
+          accent: 'us',
+          kind: 'standard',
+          description: 'A calm voice.',
+        },
+        {
+          id: 'energetic',
+          label: 'Energetic',
+          provider: 'phonon',
+          gender: 'male',
+          accent: 'gb',
+          kind: 'character',
+          description: null,
+        },
+      ],
     });
 
     const response = await handleListVoices(mockClient);

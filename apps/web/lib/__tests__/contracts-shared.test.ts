@@ -18,6 +18,7 @@ import { PUBLISH_PROVIDERS } from '@/lib/contracts/posts';
 import { OAUTH_CONNECT_PROVIDERS, PublicAccountItemSchema } from '@/lib/contracts/accounts';
 import { CancelRefundSchema, RANGE_STATUSES, ScheduleRowSchema } from '@/lib/contracts/schedule';
 import { VideoGenerationRowSchema } from '@/lib/contracts/video-tasks';
+import { VOICE_ACCENTS, VOICE_GENDERS, VOICE_KINDS } from '@/lib/contracts/voices';
 
 const HEADER = '// GENERATED from shared/contracts — do not edit.\n// Run `node scripts/sync-contracts.mjs` from the repo root to regenerate.\n';
 
@@ -253,5 +254,24 @@ describe('contracts shared source', () => {
     expect(route).toContain("export { parseGenerationsLimit } from '@/lib/contracts/video-tasks';");
     const api = readFileSync(join(root, 'apps', 'web', 'lib', 'api.ts'), 'utf8');
     expect(api).toContain("import type { VideoGenerationRow as VideoGeneration } from '@/lib/contracts/video-tasks';");
+  });
+
+  // The voice catalog enums moved into the contract; voice-catalog.ts
+  // imports them from there and the cloned-voice row type is the
+  // contract's ClonedVoiceRow. A one-sided edit would make the contract
+  // reject a voice the picker serves, or the MCP reject a row the route
+  // serves.
+  it('pins the voice catalog enums and cloned row type to the contract', () => {
+    const root = findRepoRoot(import.meta.url);
+    const catalog = readFileSync(join(root, 'apps', 'web', 'lib', 'voice-catalog.ts'), 'utf8');
+    expect(catalog).toContain("from '@/lib/contracts/voices'");
+    expect(catalog).toContain('VOICE_GENDERS,');
+    expect(catalog).toContain('VOICE_ACCENTS,');
+    expect(catalog).toContain('VOICE_KINDS,');
+    expect(VOICE_GENDERS).toEqual(['female', 'male']);
+    expect(VOICE_ACCENTS).toEqual(['us', 'gb']);
+    expect(VOICE_KINDS).toEqual(['standard', 'character', 'cloned']);
+    const types = readFileSync(join(root, 'apps', 'web', 'lib', 'cloned-voices-types.ts'), 'utf8');
+    expect(types).toContain("import type { ClonedVoiceRow as ClonedVoicePublicRow } from '@/lib/contracts/voices';");
   });
 });

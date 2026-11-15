@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { CLONE_PREVIEW_TEXT_MAX_CHARS, HOUSE_PREVIEW_TEXT_MAX_CHARS } from '../limits.js';
+import { PREVIEW_TEXT_MAX_CHARS } from '../contracts/voices.js';
 
 function findRepoRoot(fromUrl: string): string {
   let dir = dirname(fileURLToPath(fromUrl));
@@ -38,6 +39,13 @@ describe('cloned-voice preview text cap', () => {
   it('is the same literal in the web preview route parser', () => {
     const source = readFileSync(join(findRepoRoot(import.meta.url), WEB), 'utf8');
     expect(source.includes(`export const CLONE_PREVIEW_TEXT_MAX_CHARS = ${CLONE_PREVIEW_TEXT_MAX_CHARS};`)).toBe(true);
+  });
+
+  it('is the same literal in the shared voices contract', () => {
+    // The contract's PreviewVoiceBodySchema caps the same text; the route
+    // parsers and the engine validator cannot import it, so the literal is
+    // pinned here instead of shared by import.
+    expect(PREVIEW_TEXT_MAX_CHARS).toBe(CLONE_PREVIEW_TEXT_MAX_CHARS);
   });
 });
 
