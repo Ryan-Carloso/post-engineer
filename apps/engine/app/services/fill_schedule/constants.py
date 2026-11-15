@@ -1,5 +1,7 @@
 """Shared constants for the batch scheduling pipeline."""
 
+import requests
+
 GENERATION_HORIZON_HOURS = 24
 TICK_SECONDS = 60
 SIGNED_URL_EXPIRES_SECONDS = 24 * 3600  # max gap until generation
@@ -35,3 +37,12 @@ PUBLISH_IN_PROGRESS_DELAY_SECONDS = 60
 # Unified generate+schedule batches (POST /api/videos/generate-and-schedule):
 # finite, user-requested, prepaid at request time. Their slots carry the
 # title chosen by the user.
+
+# Transport-level failures: the request did not get a response (DNS, refused,
+# TLS, connect/read timeout). SSLError is a requests ConnectionError.
+CONNECTION_FAILURES = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    ConnectionError,
+    TimeoutError,
+)

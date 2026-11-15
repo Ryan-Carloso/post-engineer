@@ -60,7 +60,7 @@ async function getAuth(request: Request): Promise<
   // scope through one of them and must never query persona_images or storage
   // without it.
   const supabase =
-    auth.isApiKey === true
+    auth.isApiKey === true || auth.isOAuth === true
       ? createSupabaseServiceClient()
       : await createSupabaseServerClient();
   return {

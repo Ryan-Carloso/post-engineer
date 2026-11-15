@@ -8,6 +8,7 @@ import {
   PUBLISH_MEDIA_BUCKET,
   PUBLISH_MEDIA_MAX_AGE_MS,
   PUBLISH_MEDIA_URL_TTL_SECONDS,
+  presignPublishMedia,
   uploadPublishMedia,
   type PublishMediaDeps,
 } from '@/lib/upload/publish-media';
@@ -107,6 +108,35 @@ describe('uploadPublishMedia', () => {
       uploadPublishMedia(Buffer.from('v'), 'facebook/1794650460355_3c764afd.mp4', 'video/mp4', deps),
     ).rejects.toThrow('R2 publish media storage is not configured; missing R2_ACCOUNT_ID, R2_SECRET_ACCESS_KEY');
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe('presignPublishMedia', () => {
+  it('signs the engine archive key directly with a 1h expiry and no publish-media prefix', async () => {
+    const url = await presignPublishMedia('user-1/faceless/task-7/final-1.mp4');
+    const signed = new URL(url);
+    expect(`${signed.origin}${signed.pathname}`).toBe(`${BUCKET_URL}/user-1/faceless/task-7/final-1.mp4`);
+    expect(signed.searchParams.get('X-Amz-Expires')).toBe(String(PUBLISH_MEDIA_URL_TTL_SECONDS));
+    expect(signed.searchParams.get('X-Amz-Signature')).toMatch(/^[0-9a-f]{64}$/);
+    expect(url).not.toContain('publish-media');
+    expect(url).not.toContain('secret-example');
+  });
+
+  it.each([
+    ['temp copy key', 'publish-media/instagram/1794650460355_3c764afd.mp4'],
+    ['traversal', '../final-1.mp4'],
+    ['wrong leaf', 'user-1/faceless/task-7/other.mp4'],
+    ['too few segments', 'user-1/final-1.mp4'],
+    ['leading slash', '/user-1/faceless/task-7/final-1.mp4'],
+  ])('rejects %s before any request', async (_name, key) => {
+    await expect(presignPublishMedia(key)).rejects.toThrow('Invalid video storage path');
+  });
+
+  it('names every missing R2 variable', async () => {
+    vi.stubEnv('R2_ACCESS_KEY_ID', undefined);
+    await expect(presignPublishMedia('user-1/faceless/task-7/final-1.mp4')).rejects.toThrow(
+      'R2 publish media storage is not configured; missing R2_ACCESS_KEY_ID',
+    );
   });
 });
 

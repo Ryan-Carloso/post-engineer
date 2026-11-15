@@ -117,7 +117,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const { handle, appPassword } = credentials;
 
   const supabase =
-    auth.isApiKey === true ? createSupabaseServiceClient() : await createSupabaseServerClient();
+    auth.isApiKey === true || auth.isOAuth === true ? createSupabaseServiceClient() : await createSupabaseServerClient();
 
   try {
     const { did, handle: resolvedHandle } = await loginToBluesky(handle, appPassword);

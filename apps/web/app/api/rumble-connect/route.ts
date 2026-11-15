@@ -115,7 +115,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
 
   const supabase =
-    auth.isApiKey === true ? createSupabaseServiceClient() : await createSupabaseServerClient();
+    auth.isApiKey === true || auth.isOAuth === true ? createSupabaseServiceClient() : await createSupabaseServerClient();
 
   try {
     const encrypted = encryptTokens({

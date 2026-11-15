@@ -28,6 +28,7 @@ import { isValidTimezone } from '@/lib/timezone';
 import { computeVideoTokens, netLedgerSpent, toFiniteNumber, unknownVideoTypeMessage, VIDEO_TYPE_ERROR_SUFFIX } from '@/lib/tokens';
 import { refundSlotTokens } from '@/lib/billing/refund-tokens';
 import { buildSlotRows } from './slot-rows';
+import { answerSchedulePkRace } from './pk-race';
 import { fetchReplay } from './replay';
 import { refundRollbackSpend } from './rollback-refund';
 import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, verifyExperimentPairAfterInsert } from './experiment-link';
@@ -609,48 +610,16 @@ async function postHandler(request: Request): Promise<NextResponse> {
       return coded(409, ERROR_CODES.PERSONA_ALREADY_SCHEDULED, formatErrorMessage(ERROR_CODES.PERSONA_ALREADY_SCHEDULED));
     }
     if (constraint === SCHEDULE_PK_CONSTRAINT) {
-      // Lost a PK race with a concurrent duplicate (or a replay slipped past
-      // the pre-check) on schedules_pkey. If we spent in this request, our
-      // spend is redundant: the winner's own spend under the same
-      // generation_id is the single charge, so undo ours. Without this, the
-      // missing unique constraint on token_transactions.generation_id lets
-      // both spends stand.
-      // When we skipped our spend (alreadySpent), there is nothing of ours
-      // to undo — refunding would steal the legitimate prior spend.
-      if (!alreadySpent) {
-        const refunded = await refundRollbackSpend(supabase, {
-          userId,
-          generationId: idem.generationId,
-          amount: perVideoCost,
-          reason: 'PK race; refunded redundant spend',
-          failureLog: '[generate-and-schedule] PK race refund failed; replaying winner anyway',
-        });
-        // The winner's schedule exists regardless of whether our refund
-        // landed: still replay it below. A failed refund is a billing
-        // discrepancy, not a request failure — the helper logs it loudly
-        // for investigation instead of letting the log claim success.
-        if (refunded) {
-          logger.error('[generate-and-schedule] schedule PK race; refunded redundant spend, replaying winner', scheduleError, {
-            scheduleId: idem.scheduleId,
-            userId,
-            constraint,
-          });
-        }
-      } else {
-        logger.error('[generate-and-schedule] schedule PK race; already spent, nothing to refund, replaying winner', scheduleError, {
-          scheduleId: idem.scheduleId,
-          userId,
-          constraint,
-        });
-      }
-      trackApiEvent('video_creation_failed', {
+      return answerSchedulePkRace(supabase, {
         userId,
         scheduleId: idem.scheduleId,
-        errorCode: 'IDEMPOTENCY_CONFLICT',
-        failureStage: 'schedule_insert_race',
+        generationId: idem.generationId,
+        perVideoCost,
+        alreadySpent,
+        scheduleError,
+        constraint,
+        voiceFallbackWarning,
       });
-      const replayed = await fetchReplay(supabase, userId, idem.scheduleId, voiceFallbackWarning);
-      if (replayed) return replayed;
     }
     // Real DB failure after the spend: refund the whole generation loudly.
     logger.error('[generate-and-schedule] schedule insert failed after spend; refunding', scheduleError, {

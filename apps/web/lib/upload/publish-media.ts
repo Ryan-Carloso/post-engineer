@@ -16,6 +16,14 @@ import { logger } from '@/lib/logger';
 // Objects live in the engine's private R2 bucket under PUBLISH_MEDIA_PREFIX.
 // The engine never writes under that prefix, and the cleanup deletes only
 // keys with the exact shape this module writes.
+//
+// Engine-generated finals already live in the same bucket at
+// `{userId}/{persona|faceless}/{taskId}/final-1.mp4` (see
+// apps/engine/app/services/video_storage.py:storage_object_path). When the
+// caller names that key via `videoStoragePath`, the handlers presign it
+// directly (presignPublishMedia) instead of uploading a publish-media copy:
+// no duplicate bytes, no 24h cleanup for that publish. A file upload still
+// gets a publish-media copy, because UI/MCP videos start outside R2.
 //---------------
 
 // Same literal as the engine's STORAGE_BUCKET (apps/engine/app/services/video_storage.py),
@@ -32,6 +40,10 @@ const LIST_DELETE_TIMEOUT_MS = 15_000;
 
 // `<provider>/<epoch ms>_<8 hex>.<ext>`: the shape every handler builds.
 const MEDIA_PATH = /^[a-z]+\/\d+_[0-9a-f]{8}\.[a-z0-9]+$/;
+// Engine archive shape: {userId}/{persona|faceless}/{taskId}/final-1.mp4.
+// Exactly four segments so an arbitrary R2 key can never be presigned; the
+// `publish-media/` temp prefix is deliberately excluded.
+const ARCHIVE_PATH = /^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/final-1\.mp4$/;
 const PROVIDER = /^[a-z]+$/;
 const CONTENTS_BLOCK = /<Contents>([\s\S]*?)<\/Contents>/g;
 const KEY_TAG = /<Key>([^<]*)<\/Key>/;
@@ -100,6 +112,27 @@ export async function uploadPublishMedia(
     throw new Error(`Failed to upload media to R2: HTTP ${response.status}`);
   }
 
+  const get = await client.sign(`${url}?X-Amz-Expires=${PUBLISH_MEDIA_URL_TTL_SECONDS}`, {
+    method: 'GET',
+    aws: { signQuery: true },
+  });
+  return get.url;
+}
+
+/**
+ * Presign an engine-archived final video without copying it.
+ *
+ * The object is already durable in R2 (verified at generation time), so
+ * this only signs: no PUT, no publish-media copy, no cleanup delete. The
+ * caller must prove ownership (the key starts with the caller's userId);
+ * this function only proves the key has the exact archive shape.
+ */
+export async function presignPublishMedia(objectKey: string): Promise<string> {
+  if (!ARCHIVE_PATH.test(objectKey)) {
+    throw new Error(`Invalid video storage path: ${objectKey}`);
+  }
+  const { client, bucketUrl } = r2Config();
+  const url = objectUrl(bucketUrl, objectKey);
   const get = await client.sign(`${url}?X-Amz-Expires=${PUBLISH_MEDIA_URL_TTL_SECONDS}`, {
     method: 'GET',
     aws: { signQuery: true },

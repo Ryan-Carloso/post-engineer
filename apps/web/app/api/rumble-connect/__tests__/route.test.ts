@@ -38,7 +38,7 @@ import { NextResponse } from 'next/server';
 const USER_ID = 'user-uuid-1';
 const TOKEN = 'a'.repeat(40);
 
-function mockSupabase(overrides: { user?: { id: string } | null; upsertError?: unknown; isApiKey?: boolean } = {}) {
+function mockSupabase(overrides: { user?: { id: string } | null; upsertError?: unknown; isApiKey?: boolean; isOAuth?: boolean } = {}) {
   const upserted: Array<Record<string, unknown>> = [];
   const upsertOptions: Array<unknown> = [];
   const selectMock = vi.fn(() => ({
@@ -79,6 +79,7 @@ function mockSupabase(overrides: { user?: { id: string } | null; upsertError?: u
           userId: USER_ID,
           accessToken: 'test-key',
           isApiKey: overrides.isApiKey === true,
+          isOAuth: overrides.isOAuth === true,
         },
         error: null,
       }) as never
@@ -284,5 +285,22 @@ describe('POST /api/rumble-connect', () => {
     mockSupabase({ isApiKey: true });
     const res = await POST(jsonRequest({ channelId: 'chan-1' }));
     expect(res.status).toBe(400);
+  });
+
+  it('OAuth flow: OAuth token + JSON connects via the service client', async () => {
+    const { upserted } = mockSupabase({ isOAuth: true });
+
+    const res = await POST(jsonRequest({ channelId: 'chan-1', accessToken: TOKEN }));
+    expect(res.status).toBe(200);
+
+    expect(upserted[0]).toMatchObject({
+      user_id: USER_ID,
+      provider: 'rumble',
+      provider_account_id: 'chan-1',
+    });
+    // An OAuth caller (remote MCP) has no cookie session, so the cookie
+    // client would see no user and RLS would hide the row.
+    expect(vi.mocked(createSupabaseServiceClient)).toHaveBeenCalled();
+    expect(vi.mocked(createSupabaseServerClient)).not.toHaveBeenCalled();
   });
 });

@@ -226,6 +226,7 @@ class BatchPublisher:
             publish_video=self.publish_video,
             persist_outcomes=persist_outcomes,
             record_results=record_results,
+            video_object_path=object_path,
         )
         if account_result.transport_error is not None:
             logger.warning(

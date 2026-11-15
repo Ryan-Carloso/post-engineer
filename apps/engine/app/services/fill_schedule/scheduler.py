@@ -12,12 +12,11 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import requests
 from loguru import logger
 
 from app.services import notify as notify_module
 from app.services import upload_publisher
-from app.services.fill_schedule.constants import TICK_SECONDS
+from app.services.fill_schedule.constants import CONNECTION_FAILURES, TICK_SECONDS
 from app.services.fill_schedule.generate import BatchGenerator
 from app.services.fill_schedule.publish import BatchPublisher
 from app.services.fill_schedule.reconcile import BatchReconciler
@@ -28,16 +27,6 @@ from app.services.fill_schedule.store import CONNECT_RETRIES, ScheduleStore
 # every OUTAGE_REMINDER_SECONDS while it lasts, WARNING for the failures in
 # between (the PostHog sink forwards ERROR+ only).
 OUTAGE_REMINDER_SECONDS = 30 * 60
-
-# Transport-level failures: the request did not get a response (DNS, refused,
-# TLS, connect/read timeout). SSLError is a requests ConnectionError.
-_CONNECTION_FAILURES = (
-    requests.exceptions.ConnectionError,
-    requests.exceptions.Timeout,
-    ConnectionError,
-    TimeoutError,
-)
-
 
 class FillScheduleScheduler:
     """Orchestrates batch generation → reconciliation → publishing, one tick at a time."""
@@ -103,7 +92,7 @@ class FillScheduleScheduler:
                 results[stage_name] = stage(now)
             except Exception as exc:  # noqa: BLE001
                 diagnostic = notify_module.safe_diagnostic(exc)
-                if isinstance(exc, _CONNECTION_FAILURES):
+                if isinstance(exc, CONNECTION_FAILURES):
                     connection_failed = True
                     self._report_outage(stage_name, diagnostic, now)
                 else:

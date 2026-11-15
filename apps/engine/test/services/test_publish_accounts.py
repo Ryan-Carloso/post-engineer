@@ -517,6 +517,33 @@ class AccountRetryTests(unittest.TestCase):
         self.assertEqual(store.slot["status"], "failed")
         self.assertEqual(store.refund_batch_calls, [])
 
+    def test_instagram_publish_sends_archive_path_without_reading_bytes(self) -> None:
+        slot = self._slot(["instagram"])
+        slot["schedules"]["instagram_account_ids"] = ["ig-1"]
+        store = _MemoryStore(slot)
+        publish = MagicMock(return_value={"success": True, "results": [{"success": True}]})
+        scheduler = self._scheduler(store, publish)
+        with patch.object(video_storage, "read_final_video_r2") as read_mock:
+            published = scheduler.publish_due(NOW)
+        self.assertEqual(published, 1)
+        # No R2 bytes are downloaded: the web presigns the archive.
+        read_mock.assert_not_called()
+        kwargs = publish.call_args.kwargs
+        self.assertIsNone(kwargs["video_bytes"])
+        self.assertEqual(kwargs["r2_object_path"], "user-1/faceless/t-1/final-1.mp4")
+
+    def test_youtube_publish_still_reads_bytes_with_archive_path_present(self) -> None:
+        store = _MemoryStore(self._slot(["youtube"]))
+        publish = MagicMock(return_value={"success": True, "results": [{"success": True}]})
+        scheduler = self._scheduler(store, publish)
+        with patch.object(video_storage, "read_final_video_r2", return_value=b"fake-video-bytes") as read_mock:
+            published = scheduler.publish_due(NOW)
+        self.assertEqual(published, 1)
+        read_mock.assert_called_once_with("user-1/faceless/t-1/final-1.mp4")
+        kwargs = publish.call_args.kwargs
+        self.assertEqual(kwargs["video_bytes"], b"fake-video-bytes")
+        self.assertIsNone(kwargs["r2_object_path"])
+
     def test_delay_and_classification_trust_the_code_not_the_text(self) -> None:
         self.assertEqual(next_delay_seconds(1), 30)
         self.assertEqual(next_delay_seconds(2), 120)
