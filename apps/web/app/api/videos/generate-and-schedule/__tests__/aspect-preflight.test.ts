@@ -504,6 +504,37 @@ describe('checkFirstPhotoFace', () => {
     expect(payload.field).toBe('personaId');
   });
 
+  it.each(['too_small', 'too_large'])(
+    'passes a %s persona avatar: the engine applies no size bounds to the fallback',
+    async (code) => {
+      // The engine's persona fallback enforces only the 20 MB SSRF
+      // download cap and image/* — a small or over-cap avatar still
+      // renders, so the pre-charge check must not be stricter than the
+      // gate it mirrors. Only an unreadable file stays a 400.
+      stubFetch([engineBody(code)]);
+      const result = await checkFirstPhotoFace({
+        ...INPUT,
+        segments: [],
+        avatarUrl: 'https://e.com/avatar.jpg',
+      });
+      expect(result).toBeNull();
+    },
+  );
+
+  it.each(['too_small', 'too_large'])(
+    'passes a %s picked library photo: the engine applies no size bounds to the fallback',
+    async (code) => {
+      stubFetch([engineBody(code)]);
+      const result = await checkFirstPhotoFace({
+        ...INPUT,
+        segments: [],
+        avatarUrl: 'https://e.com/avatar.jpg',
+        libraryPhotoUrl: 'https://cdn.example/signed-library.jpg',
+      });
+      expect(result).toBeNull();
+    },
+  );
+
   it('checks the picked library photo, not the stored avatar, when one was picked', async () => {
     // The engine's persona fallback is the library image dispatch will
     // sign: a faceless stored avatar must not block a faced library

@@ -236,7 +236,10 @@ export interface FirstPhotoFaceInput {
  * Mechanical rejections from media/check: the file failed the engine's
  * size/decodability checks, so its face verdict is meaningless (the
  * engine reports has_face null for these). The text names the real
- * reason the photo cannot be the hook image.
+ * reason the photo cannot be the hook image. These apply to the first
+ * segment photo only: the engine really rejects those files there
+ * (resolve_first_segment_photo runs _validate_photo), while the persona
+ * fallback has no size bounds — only an unreadable file is a 400 there.
  */
 const MECHANICAL_REJECTION_REASONS: Record<string, string> = {
   not_image: 'is not a readable image',
@@ -250,10 +253,14 @@ function mechanicalRejectionReason(code: unknown): string | undefined {
 
 /**
  * Face-check one persona fallback photo URL through media/check: a
- * mechanically rejected file is a 400 naming the real reason, a
- * faceless one a 400 naming the photo; anything else passes. `subject`
- * names the photo in the 400 ("The photo selected for this video" for
- * a picked library image, "The persona photo" for the stored avatar).
+ * faceless one is a 400 naming the photo; anything else passes.
+ * `subject` names the photo in the 400 ("The photo selected for this
+ * video" for a picked library image, "The persona photo" for the stored
+ * avatar). Only an unreadable file is a 400 here: the engine applies no
+ * mechanical photo bounds to the persona fallback (only the 20 MB SSRF
+ * download cap and image/*), so a too small or too large fallback photo
+ * still renders — while the engine's face gate rejects an undecodable
+ * file too, so that rejection mirrors it.
  */
 async function checkFallbackPhotoUrl(
   userId: string,
@@ -269,11 +276,10 @@ async function checkFallbackPhotoUrl(
     'first-photo-face',
   );
   if (record instanceof NextResponse) return record;
-  const rejection = mechanicalRejectionReason(record.code);
-  if (rejection !== undefined) {
+  if (record.code === 'not_image') {
     return validationFailed(
       ERROR_CODES.VALIDATION_FAILED,
-      `${subject} ${rejection}: lip sync needs a usable photo of the persona's face.`,
+      `${subject} is not a readable image: lip sync needs a usable photo of the persona's face.`,
       field,
     );
   }
