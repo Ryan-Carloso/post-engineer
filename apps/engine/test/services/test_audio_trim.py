@@ -393,3 +393,21 @@ def test_word_cut_match_ignores_case_and_punctuation(tmp_path):
             audio_trim.trim_after_last_word(str(audio), words, "Follow HabitLoom")
             == 28.4 + audio_trim.KEEP_AFTER_WORD_SECONDS
         )
+
+
+def test_word_cut_skipped_when_script_last_word_has_no_ascii_letters(tmp_path):
+    # Issue #534 review: a CJK/Cyrillic/Arabic last word normalizes to "",
+    # which used to silently disable the guard and cut unverified speech.
+    # An unmatchable last word keeps the full audio instead.
+    audio = tmp_path / "audio.mp3"
+    audio.write_bytes(b"x")
+    words = [("你好", 20.0, 28.4)]
+    with patch.object(audio_trim.subprocess, "run") as run, patch.object(
+        audio_trim, "_duration", return_value=33.0
+    ):
+        assert (
+            audio_trim.trim_after_last_word(str(audio), words, "早上好。你好")
+            is None
+        )
+    run.assert_not_called()
+    assert audio.read_bytes() == b"x"

@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from app.config import config
 from app.models.schema import PersonaParams, VideoParams
+from app.services.intro_cost import IntroCostReport
 from app.services import task as task_service
 from app.services import video as video_service
 from app.services.task import (
@@ -312,14 +313,17 @@ class TestLipSyncDurationCap:
     never spoken. The trim fix in #535 and the chunking in #541 closed the
     other two cut sites; the cap must fail the task instead, before any
     GPU/render spend, so a video is never delivered missing its ending.
+    Full lip-sync renders up to 60s of narration, so its cap is 60s, not
+    the 40s hook cap (#597 review).
     """
 
     @pytest.fixture(autouse=True)
     def _cap(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setitem(config.app, "max_video_duration_seconds", 10)
 
-    def _start(self, audio_duration, stop_at="video"):
-        params = _params(name="Ana", voice_id="calm")
+    def _start(self, audio_duration, stop_at="video", params=None):
+        if params is None:
+            params = _params(name="Ana", voice_id="calm")
         with (
             patch.object(task_service.video_storage, "require_r2_configuration"),
             patch.object(task_service.start_preflight, "run"),
@@ -340,6 +344,25 @@ class TestLipSyncDurationCap:
             patch.object(task_service, "generate_subtitle", return_value="sub.srt") as gen_subtitle,
             patch.object(task_service.longcat, "trim_audio") as trim_audio,
             patch.object(task_service, "_complete_task") as complete_task,
+            patch.object(task_service.audio_trim, "task_local_copy", return_value=None),
+            patch.object(task_service, "get_video_materials", return_value=["clip.mp4"]),
+            patch.object(
+                task_service.user_media, "prepare_segment_panels", return_value=[]
+            ),
+            patch.object(task_service, "resolve_music_mood", return_value="none"),
+            patch.object(
+                task_service, "generate_final_videos",
+                return_value=(
+                    ["final-1.mp4"],
+                    ["combined-1.mp4"],
+                    IntroCostReport(ran=False, cost_usd=None, job_id=None),
+                ),
+            ),
+            patch.object(task_service, "archive_final_videos"),
+            patch.object(
+                task_service.upload_post.upload_post_service,
+                "is_configured", return_value=False,
+            ),
         ):
             task_service.start(task_id="task-cap", params=params, stop_at=stop_at)
         return fail_task, cleanup, gen_subtitle, trim_audio, complete_task
@@ -365,10 +388,29 @@ class TestLipSyncDurationCap:
         complete_task.assert_called_once()
 
     def test_narration_at_the_cap_continues(self):
-        fail_task, _cleanup, _gen_subtitle, trim_audio, complete_task = self._start(
-            10.0, stop_at="subtitle"
+        # Runs the full video pipeline: the cap comparison is evaluated
+        # (stop_at="video") and the run completes, so the boundary is
+        # really pinned — a ">=" mutant would fail this test.
+        fail_task, _cleanup, gen_subtitle, trim_audio, complete_task = self._start(
+            10.0, stop_at="video"
         )
 
         fail_task.assert_not_called()
         trim_audio.assert_not_called()
+        gen_subtitle.assert_called_once()
+        complete_task.assert_called_once()
+
+    def test_full_lipsync_narration_up_to_sixty_seconds_continues(self):
+        # Full mode renders up to 60s of narration; a 45s narration is
+        # valid there even though it exceeds the 40s hook cap.
+        params = _params(name="Ana", voice_id="calm").model_copy(
+            update={"video_type": "full_lipsync"}
+        )
+        fail_task, _cleanup, gen_subtitle, trim_audio, complete_task = self._start(
+            45.0, stop_at="video", params=params
+        )
+
+        fail_task.assert_not_called()
+        trim_audio.assert_not_called()
+        gen_subtitle.assert_called_once()
         complete_task.assert_called_once()

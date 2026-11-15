@@ -157,7 +157,17 @@ def trim_after_last_word(
     last_word, _start, last_end = max(words, key=lambda item: item[2])
     if script is not None:
         expected = _normalized_word(script.split()[-1]) if script.split() else ""
-        if expected and _normalized_word(last_word) != expected:
+        if not expected:
+            # A last word with no ASCII letters/digits (CJK, Cyrillic,
+            # Arabic, or a trailing symbol) cannot be compared: skipping
+            # the cut is the safe side — the guard must never silently
+            # disable itself and cut unverified speech (#534 review).
+            logger.warning(
+                "voiceover tail: script's last word has no comparable "
+                "letters/digits; keeping the full audio"
+            )
+            return None
+        if _normalized_word(last_word) != expected:
             logger.warning(
                 "voiceover tail: last transcribed word does not match the "
                 "script's last word; keeping the full audio"

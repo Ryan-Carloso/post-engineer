@@ -8,7 +8,6 @@ from typing import Sequence
 
 from loguru import logger
 
-from app.config import config
 from app.models import const
 from app.models.schema import VideoConcatMode, VideoParams
 from app.services import (
@@ -27,7 +26,7 @@ from app.services import (
 )
 from app.services import state as sm
 from app.services import image_coverage, task_webhook, user_media
-from app.services.lipsync_active import persona_lipsync_active  # noqa: F401 - re-exported for existing callers
+from app.services.lipsync_active import lip_sync_cap_seconds, persona_lipsync_active  # noqa: F401 - re-exported for existing callers
 from app.services import full_lipsync
 from app.services.music_mood import resolve_music_mood
 from app.services.pipeline_stage import PhaseTracker
@@ -960,16 +959,14 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             return {"audio_file": audio_file, "audio_duration": audio_duration}
 
         # Fail loudly: cutting the tail would drop the CTA (#534).
-        max_duration = int(config.app.get("max_video_duration_seconds", 40))
+        max_duration = lip_sync_cap_seconds(params)
         if (
-            stop_at == "video"
-            and persona_lipsync_active(params)
-            and audio_duration is not None
-            and audio_duration > max_duration
+            stop_at == "video" and persona_lipsync_active(params)
+            and audio_duration is not None and audio_duration > max_duration
         ):
             _fail_task(
                 task_id,
-                f"narration is {audio_duration:.1f}s, over the {max_duration}s lip-sync cap",
+                f"narration is {audio_duration:.1f}s, over the {max_duration:g}s lip-sync cap",
                 params, stage="audio",
             )
             cleanup_task_intermediates(task_id, ())
