@@ -32,8 +32,21 @@ const variantId = z
   .string()
   .regex(EXPERIMENT_VARIANT_ID_PATTERN, 'variantId must be a lowercase slug such as hook-aggressive (never "A"/"B")');
 
+// Non-blank text, mirroring the shared contract's text() (shared/contracts/
+// experiments.ts): min 1, max, and no blank-only value. The limits come
+// from the shared constants; the refine is re-typed here because the
+// contract's helper is not exported, and experiments-tool-contract.test.ts
+// pins the two schemas to identical accept/reject sets.
+function nonBlankText(max: number) {
+  return z
+    .string()
+    .min(1)
+    .max(max)
+    .refine((value) => value.trim().length > 0, { message: 'must not be blank' });
+}
+
 export const CreateExperimentShape = {
-  name: z.string().min(1).max(EXPERIMENT_NAME_MAX_LENGTH).describe('Experiment name, e.g. "Calm vs aggressive hook".'),
+  name: nonBlankText(EXPERIMENT_NAME_MAX_LENGTH).describe('Experiment name, e.g. "Calm vs aggressive hook".'),
   personaId: z
     .string()
     .uuid()
@@ -52,12 +65,8 @@ export const CreateExperimentShape = {
       z
         .object({
           variantId: variantId.describe('Slug that identifies the variant in results and PostHog, e.g. hook-aggressive.'),
-          name: z.string().min(1).max(EXPERIMENT_VARIANT_NAME_MAX_LENGTH).describe('Human name, e.g. "Aggressive hook".'),
-          description: z
-            .string()
-            .min(1)
-            .max(EXPERIMENT_VARIANT_DESCRIPTION_MAX_LENGTH)
-            .describe('The style rule you will follow when writing this variant\'s hooks, e.g. "direct, provocative, calls out a mistake".'),
+          name: nonBlankText(EXPERIMENT_VARIANT_NAME_MAX_LENGTH).describe('Human name, e.g. "Aggressive hook".'),
+          description: nonBlankText(EXPERIMENT_VARIANT_DESCRIPTION_MAX_LENGTH).describe('The style rule you will follow when writing this variant\'s hooks, e.g. "direct, provocative, calls out a mistake".'),
         })
         .strict(),
     )
@@ -67,7 +76,7 @@ export const CreateExperimentShape = {
     })
     .describe('Exactly two variants of the hook.'),
 };
-export const CreateExperimentSchema = z.object(CreateExperimentShape);
+export const CreateExperimentSchema = z.object(CreateExperimentShape).strict();
 
 export const ListExperimentsShape = {};
 
