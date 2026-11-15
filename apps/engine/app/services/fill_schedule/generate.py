@@ -146,63 +146,6 @@ class BatchGenerator:
             # (No refund on this path: the slot never reached the dispatch a
             # refund is anchored to.)
             voice_for(identity)
-            request = TaskVideoRequest(
-                # Pre-migration rows were created when the engine cap was
-                # 500 (video_subject) and the web had none, so a stored
-                # title can legally exceed the 100-char video_title cap.
-                # Publish truncates the YouTube title to the same 100
-                # (metadata_for), so the request carries the truncated
-                # title and the row keeps generating instead of failing
-                # validation before the refund block (migration 055).
-                video_title=title[:100],
-                video_description=description,
-                video_type=video_type,
-                # Face quality (snapshot first, persona second, via post_identity)
-                # is what the web priced this slot with: without it a
-                # tick-dispatched or requeued very_good slot renders at the
-                # `ok` default it was not charged for. Faceless shows no face,
-                # so it keeps the engine default — mirror of the web direct
-                # path (video-job-payload.ts).
-                video_quality=(
-                    LipSyncQuality.very_good
-                    if video_type != "faceless" and identity.get("face_quality") == "very_good"
-                    else LipSyncQuality.ok
-                ),
-                persona=build_persona_params(identity, self.store, video_type),
-                video_aspect=identity.get("video_aspect") or "9:16",
-                # Layout resolves through post_identity() like every other
-                # editorial field: snapshot first, persona embed second. The
-                # `or "standard"` covers both a NULL snapshot (schedule created
-                # before migration 018) and a NULL persona column, which is
-                # the behaviour every existing video already has.
-                video_layout=identity.get("video_layout") or "standard",
-                # Per-post BGM mood (migration 045), like direct dispatch.
-                # Without it a tick-dispatched or requeued slot silently
-                # renders the engine's default mood instead of the
-                # requested one; a pre-migration row renders the default,
-                # as every earlier video did.
-                music_mood=slot_music_mood(slot),
-                # Segments (scheduled_posts, migration 030), forwarded exactly
-                # like the web's direct dispatch does. Without this, a
-                # requeued slot (engine restart mid-generation) or a
-                # tick-dispatched pending slot would regenerate a script
-                # from the title alone: the script differs and every user
-                # photo disappears with no warning. The TaskVideoRequest
-                # validator joins them into video_script and rejects a
-                # malformed row, so a corrupt row fails the slot loudly
-                # instead of rendering a different video.
-                segments=segments,
-                video_cta=identity.get("cta_text") or "",
-                # Snapshot (post_language) already resolved by post_identity();
-                # without this the job carries no language for TTS and the
-                # English-only gate below.
-                video_language=str(identity.get("language") or ""),
-                paragraph_number=(
-                    int(identity["paragraph_number"])
-                    if identity.get("paragraph_number") is not None
-                    else None
-                ),
-            )
             user_id = slot_user_id(slot)
             if user_id is None:
                 raise RuntimeError("Scheduled slot has no user_id")
@@ -211,6 +154,69 @@ class BatchGenerator:
             generation_id = f"batch:{schedule['id']}"
             task_id = new_task_id(slot)
             try:
+                # Built inside the refund block on purpose: the validator
+                # re-checks the persisted segments (hook floor included),
+                # so a row stored under an older floor that no longer
+                # validates must refund like a dispatch failure — the
+                # same fail+refund the direct-redispatch path gives a
+                # persisted payload — instead of burning the prepaid slot.
+                request = TaskVideoRequest(
+                    # Pre-migration rows were created when the engine cap was
+                    # 500 (video_subject) and the web had none, so a stored
+                    # title can legally exceed the 100-char video_title cap.
+                    # Publish truncates the YouTube title to the same 100
+                    # (metadata_for), so the request carries the truncated
+                    # title and the row keeps generating instead of failing
+                    # validation on a stored title (migration 055).
+                    video_title=title[:100],
+                    video_description=description,
+                    video_type=video_type,
+                    # Face quality (snapshot first, persona second, via post_identity)
+                    # is what the web priced this slot with: without it a
+                    # tick-dispatched or requeued very_good slot renders at the
+                    # `ok` default it was not charged for. Faceless shows no face,
+                    # so it keeps the engine default — mirror of the web direct
+                    # path (video-job-payload.ts).
+                    video_quality=(
+                        LipSyncQuality.very_good
+                        if video_type != "faceless" and identity.get("face_quality") == "very_good"
+                        else LipSyncQuality.ok
+                    ),
+                    persona=build_persona_params(identity, self.store, video_type),
+                    video_aspect=identity.get("video_aspect") or "9:16",
+                    # Layout resolves through post_identity() like every other
+                    # editorial field: snapshot first, persona embed second. The
+                    # `or "standard"` covers both a NULL snapshot (schedule created
+                    # before migration 018) and a NULL persona column, which is
+                    # the behaviour every existing video already has.
+                    video_layout=identity.get("video_layout") or "standard",
+                    # Per-post BGM mood (migration 045), like direct dispatch.
+                    # Without it a tick-dispatched or requeued slot silently
+                    # renders the engine's default mood instead of the
+                    # requested one; a pre-migration row renders the default,
+                    # as every earlier video did.
+                    music_mood=slot_music_mood(slot),
+                    # Segments (scheduled_posts, migration 030), forwarded exactly
+                    # like the web's direct dispatch does. Without this, a
+                    # requeued slot (engine restart mid-generation) or a
+                    # tick-dispatched pending slot would regenerate a script
+                    # from the title alone: the script differs and every user
+                    # photo disappears with no warning. The TaskVideoRequest
+                    # validator joins them into video_script and rejects a
+                    # malformed row, so a corrupt row fails the slot loudly
+                    # instead of rendering a different video.
+                    segments=segments,
+                    video_cta=identity.get("cta_text") or "",
+                    # Snapshot (post_language) already resolved by post_identity();
+                    # without this the job carries no language for TTS and the
+                    # English-only gate below.
+                    video_language=str(identity.get("language") or ""),
+                    paragraph_number=(
+                        int(identity["paragraph_number"])
+                        if identity.get("paragraph_number") is not None
+                        else None
+                    ),
+                )
                 # Face modes need a face: the photo comes only from the
                 # persona embed (the snapshot carries no photo). A slot
                 # whose persona has none — or one the engine can never

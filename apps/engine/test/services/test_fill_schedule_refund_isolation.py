@@ -181,6 +181,40 @@ def _state(state):
     return task_state
 
 
+class PersistedHookRefundTests(unittest.TestCase):
+    def test_persisted_slot_with_short_hook_refunds_instead_of_burning_the_slot(self):
+        # OpenCode MAJOR on PR #600 (head 3b02e9d): a slot stored under the
+        # old 15-word hook floor (20 words here) is rejected by the new
+        # 25-word floor when the tick re-validates its persisted segments.
+        # That must refund like a dispatch failure (direct_redispatch's
+        # fail+refund), not fail the prepaid slot with no refund.
+        slot = _slot(charged_tokens=2)
+        slot["segments"][0]["text"] = (
+            "Stop wasting your trip stuck in a ninety minute line for the "
+            "original dish when a better table waits nearby."
+        )
+        store = _GenerateStore(slot, True)
+        refund_calls = []
+        store.refund_batch_tokens = lambda *args, **kwargs: (
+            refund_calls.append(args) or True
+        )
+        scheduler = fs.FillScheduleScheduler(
+            store=store, task_state=MagicMock(), publish_video=MagicMock()
+        )
+        with patch.object(
+            scheduler.generator, "_dispatch_generation"
+        ) as dispatch_generation:
+            enqueued = scheduler.generate(NOW)
+
+        self.assertEqual(enqueued, 0)
+        dispatch_generation.assert_not_called()
+        self.assertEqual(len(refund_calls), 1)
+        self.assertEqual(refund_calls[0][3], 2)  # the slot's stored charge
+        failed = [f for _, f in store.updates if f.get("status") == "failed"]
+        self.assertEqual(len(failed), 1)
+        self.assertIn("Hook must have 25", failed[0]["error"])
+
+
 class ReconcileIsolationTests(unittest.TestCase):
     def _slots(self):
         return [_generating("slot-bad"), _generating("slot-good")]
