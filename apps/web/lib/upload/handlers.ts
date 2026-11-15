@@ -16,7 +16,7 @@ import {
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { parseMediaUpload } from '@/lib/media/upload-schema';
 import { InstagramService } from '@/lib/instagram';
-import { cleanupPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
+import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
 import { httpStatusOf, reportAccountUnauthorized } from './account-unauthorized';
 import { classifyUploadAccountError } from '@/lib/upload/account-error';
 import type { OAuth2Client } from 'google-auth-library';
@@ -217,34 +217,55 @@ export async function handleInstagramUpload(
     throw new ValidationError('Caption is required', 'caption');
   }
 
-  let file: File | null = null;
-  let buffer: Buffer = Buffer.alloc(0);
-  if (rawFile instanceof File) {
-    file = rawFile;
-    buffer = Buffer.from(await file.arrayBuffer());
+  const storagePathRaw = formData.get('videoStoragePath');
+  let publicUrl: string;
+  let detectedType: string;
+  let storagePath: string;
+  let fileSize: number;
+  let usedArchive = false;
+  if (storagePathRaw !== null) {
+    // Engine-generated final: already verified in R2, presign it directly.
+    if (typeof storagePathRaw !== 'string' || storagePathRaw.trim() === '') {
+      throw new ValidationError('videoStoragePath must be a string', 'videoStoragePath');
+    }
+    if (rawFile instanceof File) {
+      throw new ValidationError('Send either a file or videoStoragePath, not both', 'videoStoragePath');
+    }
+    const objectKey = storagePathRaw.trim();
+    if (!objectKey.startsWith(`${ownerUserId}/`)) {
+      throw new ValidationError('videoStoragePath must belong to this user', 'videoStoragePath');
+    }
+    publicUrl = await presignPublishMedia(objectKey);
+    detectedType = 'video/mp4';
+    storagePath = objectKey;
+    fileSize = 0;
+    usedArchive = true;
+  } else {
+    let file: File | null = null;
+    let buffer: Buffer = Buffer.alloc(0);
+    if (rawFile instanceof File) {
+      file = rawFile;
+      buffer = Buffer.from(await file.arrayBuffer());
+    }
+    const parsed = parseMediaUpload(file, buffer);
+    if (!parsed.success) {
+      logger.warn('Media upload rejected during validation', {
+        logId,
+        endpoint: '/api/upload-content',
+        metadata: { issues: parsed.issues },
+      });
+      throw new ValidationError(parsed.issues[0]?.code ?? 'FILE_REQUIRED', 'file');
+    }
+    const validated = parsed;
+    detectedType = validated.detectedType;
+    // Instagram fetches the media from a URL: store it on R2 (no egress fees).
+    const timestamp = Date.now();
+    const random = crypto.randomBytes(4).toString('hex');
+    const extension = getExtension(detectedType);
+    storagePath = `instagram/${timestamp}_${random}.${extension}`;
+    publicUrl = await uploadPublishMedia(validated.buffer, storagePath, detectedType);
+    fileSize = validated.buffer.length;
   }
-
-  const parsed = parseMediaUpload(file, buffer);
-  if (!parsed.success) {
-    logger.warn('Media upload rejected during validation', {
-      logId,
-      endpoint: '/api/upload-content',
-      metadata: { issues: parsed.issues },
-    });
-    throw new ValidationError(
-      parsed.issues[0]?.code ?? 'FILE_REQUIRED',
-      'file',
-    );
-  }
-
-  const { buffer: validatedBuffer, detectedType } = parsed;
-
-  // Instagram fetches the media from a URL: store it on R2 (no egress fees).
-  const timestamp = Date.now();
-  const random = crypto.randomBytes(4).toString('hex');
-  const extension = getExtension(detectedType);
-  const storageFilename = `instagram/${timestamp}_${random}.${extension}`;
-  const publicUrl = await uploadPublishMedia(validatedBuffer, storageFilename, detectedType);
   const isVideo = detectedType === 'video/mp4' || detectedType === 'video/quicktime';
 
   logger.info('upload-content/instagram: media stored, starting publishes', {
@@ -253,8 +274,8 @@ export async function handleInstagramUpload(
       accountCount: accountIds.length,
       detectedType,
       isVideo,
-      fileSize: validatedBuffer.length,
-      storagePath: storageFilename,
+      fileSize,
+      storagePath,
     },
   });
 
@@ -302,8 +323,10 @@ export async function handleInstagramUpload(
     }
   }
 
-  // Fire-and-forget: remove this provider's media older than 24h. Never rejects.
-  void cleanupPublishMedia('instagram');
+  // Archive presign created no temp copy, so there is nothing to clean.
+  if (!usedArchive) {
+    void cleanupPublishMedia('instagram');
+  }
 
   logger.info('Content upload (instagram) finished', {
     logId,
