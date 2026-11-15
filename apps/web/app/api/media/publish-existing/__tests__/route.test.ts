@@ -285,6 +285,9 @@ function uploadRow(overrides: Record<string, unknown> = {}): Record<string, unkn
     detected_content_type: 'video/mp4',
     size_bytes: 3,
     status: 'ready',
+    // Relative to now: a fixed date turns into an expired upload once the
+    // clock passes it (410 VIDEO_UPLOAD_EXPIRED) and breaks every test
+    // below that publishes a ready upload.
     expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     created_at: '2026-11-14T11:00:00Z',
     consumed_at: null,
