@@ -8,6 +8,7 @@ from typing import Sequence
 
 from loguru import logger
 
+from app.config import config  # noqa: F401 - re-exported for tests (tm.config)
 from app.models import const
 from app.models.schema import VideoConcatMode, VideoParams
 from app.services import (
