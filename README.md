@@ -108,7 +108,7 @@ cp apps/engine/config.example.toml apps/engine/config.toml
 
 | File | Purpose | Key variables |
 |---|---|---|
-| `apps/web/.env` | Web app + API routes | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only), `TOKEN_ENCRYPTION_KEY` (generate: `openssl rand -base64 32`), `MONEYPRINT_API_SECRET`, `MONEYPRINT_API_URL`, OAuth client ids/secrets + redirect URIs, Stripe keys, `MCP_OAUTH_PRIVATE_KEY_PEM` |
+| `apps/web/.env` | Web app + API routes | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only), `R2_ACCOUNT_ID` + `R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY` (same as the engine; Instagram/Threads/Facebook fetch the video from a presigned R2 URL), `TOKEN_ENCRYPTION_KEY` (generate: `openssl rand -base64 32`), `MONEYPRINT_API_SECRET`, `MONEYPRINT_API_URL`, OAuth client ids/secrets + redirect URIs, Stripe keys, `MCP_OAUTH_PRIVATE_KEY_PEM` |
 | `apps/engine/.env` | Engine runtime | `MONEYPRINT_API_SECRET` (must be **identical** to the web value), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (for the in-process fill scheduler), mandatory `R2_ACCOUNT_ID` + `R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY` (final-video archive), optional `DISCORD_WEBHOOK_URL`, optional `POSTHOG_API_KEY` (error tracking, analytics funnel, AI observability traces) |
 | `apps/engine/config.toml` | Engine behavior config | LLM/TTS provider keys (OpenAI-compatible), `listen_port` (default `8080`) |
 
