@@ -181,4 +181,21 @@ describe('check_media tool', () => {
     expect(textOf(response)).not.toContain('secret-value');
     expect(textOf(response)).not.toContain(url);
   });
+
+  it.each([true, false, null])(
+    'surfaces has_face %s from the check (issue #589)',
+    async (hasFace) => {
+      const client = fakeClient(async () => ({ success: true, code: 'ok', has_face: hasFace }));
+      const response = await handleCheckMedia(client, { url: 'https://e.com/porto.jpg' });
+      expect(response.isError).not.toBe(true);
+      expect(textOf(response)).toContain(`"has_face": ${hasFace === null ? 'null' : String(hasFace)}`);
+    },
+  );
+
+  it('drops a non-boolean has_face instead of passing it through', async () => {
+    const client = fakeClient(async () => ({ success: true, code: 'ok', has_face: 'yes' }));
+    const response = await handleCheckMedia(client, { url: 'https://e.com/porto.jpg' });
+    expect(response.isError).not.toBe(true);
+    expect(textOf(response)).not.toContain('has_face');
+  });
 });

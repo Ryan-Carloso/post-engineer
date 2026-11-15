@@ -148,7 +148,10 @@ function writeConsole(
   error?: Error,
 ): string {
   const timestamp = new Date().toISOString();
-  const logId = `${timestamp.slice(0, 10)}_${timestamp.slice(11, 19).replace(/:/g, '')}_${Math.random().toString(36).substring(2, 8)}`;
+  // crypto.randomUUID (Web Crypto, available in Node and browsers): the
+  // logId is returned to API clients as `errorId`, so it must not come
+  // from Math.random (CodeQL js/insecure-randomness).
+  const logId = `${timestamp.slice(0, 10)}_${timestamp.slice(11, 19).replace(/:/g, '')}_${crypto.randomUUID().replace(/-/g, '').substring(0, 6)}`;
 
   // The logId is the correlation ID returned to API clients as `errorId`.
   // Merge it into metadata so Vercel logs and PostHog events are searchable
@@ -181,7 +184,7 @@ class Logger {
     const now = new Date();
     const date = now.toISOString().split('T')[0];
     const time = now.toTimeString().split(' ')[0].replace(/:/g, '');
-    const random = Math.random().toString(36).substring(2, 8);
+    const random = crypto.randomUUID().replace(/-/g, '').substring(0, 6);
     return `${date}_${time}_${random}`;
   }
 

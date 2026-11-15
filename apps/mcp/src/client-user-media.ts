@@ -105,15 +105,17 @@ export async function uploadSegmentMedia(
  * Mechanically check one image URL through the engine (no LLM, no
  * relevance judgement): the agent, who sees the image, decides
  * relevance. Returns exactly one code plus the probed dimensions when
- * the engine measured them; the URL never reaches output. With a
- * video aspect given, a photo that cannot fill the frame returns
- * wrong_aspect instead of ok.
+ * the engine measured them, plus has_face when the engine reported it
+ * (whether a detectable face is in the photo, or null when there is no
+ * file to check or the detector is unavailable — issue #589); the URL
+ * never reaches output. With a video aspect given, a photo that cannot
+ * fill the frame returns wrong_aspect instead of ok.
  */
 export async function checkSegmentMedia(
   client: PostEngineerClient,
   url: string,
   videoAspect?: VideoAspect,
-): Promise<{ code: CheckMediaCode; width?: number; height?: number }> {
+): Promise<{ code: CheckMediaCode; width?: number; height?: number; has_face?: boolean | null }> {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -135,8 +137,13 @@ export async function checkSegmentMedia(
     'check segment media',
   );
   const checked = parseContractResponse(checkMediaContract, result);
-  const narrowed: { code: CheckMediaCode; width?: number; height?: number } = { code: checked.code };
+  const narrowed: { code: CheckMediaCode; width?: number; height?: number; has_face?: boolean | null } = { code: checked.code };
   if (checked.width !== undefined) narrowed.width = checked.width;
   if (checked.height !== undefined) narrowed.height = checked.height;
+  // has_face is lenient by design (issue #589): a non-boolean value is
+  // dropped (older engines omit the key entirely), never an error.
+  if (checked.has_face === true || checked.has_face === false || checked.has_face === null) {
+    narrowed.has_face = checked.has_face;
+  }
   return narrowed;
 }

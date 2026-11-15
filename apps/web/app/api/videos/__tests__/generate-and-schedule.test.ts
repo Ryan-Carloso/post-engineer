@@ -870,16 +870,23 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
     it('sends video_type full_lipsync to the engine for an opt-in full-mode post', async () => {
       // The preflight runs before charging: stub a fitting narration so
-      // the request proceeds past it to dispatch.
+      // the request proceeds past it to dispatch. The avatar face check
+      // also runs (text-only segments fall back to the persona photo),
+      // so media/check URLs answer with a faced photo like the default stub.
       vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
       vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
       vi.stubGlobal(
         'fetch',
-        vi.fn(async () =>
-          new Response(JSON.stringify({ status: 200, body: { audio_duration_seconds: 51 } }), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          }),
+        vi.fn(async (url: string) =>
+          String(url).includes('/api/v1/media/check')
+            ? new Response(
+              JSON.stringify({ status: 200, body: { code: 'ok', width: 1080, height: 1920, has_face: true } }),
+              { status: 200, headers: { 'content-type': 'application/json' } },
+            )
+            : new Response(JSON.stringify({ status: 200, body: { audio_duration_seconds: 51 } }), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
         ),
       );
       try {
@@ -2578,7 +2585,11 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('marks the slot image_resolve_failed when dispatch-time resolution fails', async () => {
-      vi.mocked(resolveVideoImage).mockResolvedValue({ ok: false, error: 'library down', status: 500 });
+      // The pre-charge resolution (for the face check) succeeds with an
+      // empty library; only the dispatch-time resolution fails.
+      vi.mocked(resolveVideoImage)
+        .mockResolvedValueOnce({ ok: true, image: null })
+        .mockResolvedValue({ ok: false, error: 'library down', status: 500 });
       const res = await post(baseBody());
       const json = await res.json();
       expect(res.status).toBe(502);
@@ -2589,10 +2600,15 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
     it('marks the slot image_sign_failed when the selected image cannot be signed', async () => {
       setup({ ...DEFAULT_CFG, signUrlError: true });
-      vi.mocked(resolveVideoImage).mockResolvedValue({
-        ok: true,
-        image: { id: 'img-1', image_path: 'library/img-1.png' } as never,
-      });
+      // The pre-charge resolution (for the face check) succeeds with an
+      // empty library, so no signing happens before the charge; only the
+      // dispatch-time signing fails.
+      vi.mocked(resolveVideoImage)
+        .mockResolvedValueOnce({ ok: true, image: null })
+        .mockResolvedValue({
+          ok: true,
+          image: { id: 'img-1', image_path: 'library/img-1.png' } as never,
+        });
       const res = await post(baseBody());
       const json = await res.json();
       expect(res.status).toBe(502);
@@ -2611,6 +2627,67 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.success).toBe(false);
       expect(json.code).toBe('VALIDATION_FAILED');
       expect(json.field).toBe('options.videoType');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('500s before charging when the pre-charge library resolution fails', async () => {
+      // The library cannot be read, so the pre-charge face check cannot
+      // know which photo dispatch would use: fail before the charge
+      // instead of checking the stored avatar and risking a false pass.
+      vi.mocked(resolveVideoImage).mockResolvedValue({ ok: false, error: 'library down', status: 500 });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(500);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('INTERNAL_ERROR');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('500s before charging when the picked library photo cannot be signed', async () => {
+      setup({ ...DEFAULT_CFG, signUrlError: true });
+      vi.mocked(resolveVideoImage).mockResolvedValue({
+        ok: true,
+        image: { id: 'img-1', image_path: 'library/img-1.png' } as never,
+      });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(500);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('INTERNAL_ERROR');
+      expect(json.error).toBe('The selected persona image could not be loaded. Please try again.');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('rejects a faceless stored persona photo with 400 before any charge', async () => {
+      // Uploaded/https personas store photo_path with avatar_url null, and
+      // dispatch signs photoPath as the persona fallback: the pre-charge
+      // face check must validate that file, not pass the request through
+      // to a charge and an engine failure. Full lip-sync text-only
+      // segments reach the fallback in production (media is optional
+      // there), so the narration stub answers 51s like the other
+      // full-mode tests.
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: null, photo_path: 'personas/user-1/photo.jpg' } });
+      vi.mocked(resolveVideoImage).mockResolvedValue({ ok: true, image: null });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) =>
+          String(url).includes('/api/v1/media/check')
+            ? new Response(
+              JSON.stringify({ status: 200, body: { code: 'ok', width: 1080, height: 1920, has_face: false } }),
+              { status: 200, headers: { 'content-type': 'application/json' } },
+            )
+            : new Response(JSON.stringify({ status: 200, body: { audio_duration_seconds: 51 } }), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
+        ),
+      );
+      const res = await post(baseBody({ options: { videoType: 'full_lipsync', segments: NO_MEDIA_SEGMENTS } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toContain('The persona photo has no detectable face');
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
@@ -3245,11 +3322,16 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
     vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        new Response(JSON.stringify({ status: 200, body: { audio_duration_seconds: duration } }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
+      vi.fn(async (url: string) =>
+        String(url).includes('/api/v1/media/check')
+          ? new Response(
+            JSON.stringify({ status: 200, body: { code: 'ok', width: 1080, height: 1920, has_face: true } }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          )
+          : new Response(JSON.stringify({ status: 200, body: { audio_duration_seconds: duration } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
       ),
     );
   }
@@ -3288,7 +3370,9 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
   it('skips the narration preflight for non-full videos but still checks segment ratios', async () => {
     // The narration check (audio/preflight-duration) is full-lip-sync
     // only; the aspect check (media/check) still runs for the segments'
-    // full-frame photos — the default persona has no face, so all 11 do.
+    // full-frame photos — the default persona has no face, so all 11 do —
+    // plus the first-photo face check, which re-checks the first photo
+    // for a face (issue #589).
     const calls: Array<string> = [];
     vi.stubGlobal(
       'fetch',
@@ -3302,7 +3386,7 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
     );
     const res = await post(baseBody());
     expect(res.status).toBe(200);
-    expect(calls).toHaveLength(11);
+    expect(calls).toHaveLength(12);
     expect(calls.every((url) => url.includes('/api/v1/media/check'))).toBe(true);
     expect(calls.some((url) => url.includes('preflight-duration'))).toBe(false);
     expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);

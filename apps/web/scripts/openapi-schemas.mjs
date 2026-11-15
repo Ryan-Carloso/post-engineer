@@ -400,6 +400,69 @@ export const operationSchemas = {
     request: object({ file: { type: 'string', format: 'binary', description: 'JPG, PNG or WebP.' } }, ['file']),
     response: success({ mediaId: str, expiresInSeconds: { type: 'integer' } }),
   },
+  // apps/web/app/api/media/publish-existing/route.ts (BodySchema). No
+  // generation runs here, so there is no token charge; the 200 shape
+  // depends on publishing.mode: scheduled returns schedule + slots, asap
+  // returns publishes + logId.
+  'POST /api/media/publish-existing': {
+    request: object(
+      {
+        media: {
+          oneOf: [
+            object({ kind: { type: 'string', enum: ['task'] }, taskId: str }, ['kind', 'taskId']),
+            object(
+              { kind: { type: 'string', enum: ['upload'] }, uploadId: { type: 'string', format: 'uuid' } },
+              ['kind', 'uploadId'],
+            ),
+            object(
+              {
+                kind: { type: 'string', enum: ['image'] },
+                imageData: { type: 'string', description: 'Base64 image bytes (JPEG or PNG, at most 8 MB).' },
+                contentType: { type: 'string', enum: ['image/jpeg', 'image/png'] },
+              },
+              ['kind', 'imageData', 'contentType'],
+            ),
+          ],
+        },
+        title: str,
+        description: str,
+        personaId: str,
+        publishing: object({
+          mode: { type: 'string', enum: ['scheduled', 'asap'] },
+          providers: { type: 'array', items: str, minItems: 1 },
+          accounts: { type: 'object', additionalProperties: strArray },
+          schedule: object({ startAt: str, times: strArray, timezone: str }),
+          pinterestBoardId: str,
+        }),
+        tags: strArray,
+        privacyStatus: str,
+        caption: str,
+        idempotencyKey: str,
+      },
+      ['media', 'title', 'description', 'publishing'],
+    ),
+    response: success({
+      mode: { type: 'string', enum: ['scheduled', 'asap'] },
+      replayed: { type: 'boolean' },
+      schedule: object({ id: str }),
+      slots: {
+        type: 'array',
+        items: object({ id: str, slot_at: { type: 'string', format: 'date-time' }, title: str, status: str }),
+      },
+      mediaKind: { type: 'string', enum: ['task', 'upload', 'image'] },
+      publishes: {
+        type: 'array',
+        items: object({ provider: str, success: { type: 'boolean' }, results: { type: 'array', items: anyObject } }),
+      },
+      logId: str,
+    }),
+    extraResponses: {
+      409: 'The video upload was already used to publish, or is not completed yet.',
+      410: 'The video upload expired before publishing. Mint a new one.',
+      413: 'The finished video is over the 2GB limit.',
+      502: 'The video service is unavailable.',
+    },
+  },
   // apps/web/app/api/media/check/route.ts
   'POST /api/media/check': {
     request: object({ url: { type: 'string', format: 'uri', description: 'http(s) URL.' } }, ['url']),

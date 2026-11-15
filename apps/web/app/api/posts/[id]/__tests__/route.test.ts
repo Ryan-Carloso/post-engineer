@@ -117,6 +117,7 @@ describe('GET /api/posts/[id]', () => {
         userNotices: [],
         providerFailures: [],
         postUrl: 'https://example.com/posts/slot-1',
+        hookPhoto: { url: null, source: 'persona', segmentIndex: null, imageIndex: null },
       },
       schedule: {
         id: 'sched-1',

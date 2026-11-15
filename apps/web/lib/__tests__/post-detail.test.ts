@@ -124,7 +124,7 @@ describe('getSlotPost', () => {
     // Pin the query shape: the select column list is load-bearing for the
     // camelCase mapping below.
     expect(chains['scheduled_posts'].select).toHaveBeenCalledWith(
-      'id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, publish_outcomes'
+      'id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, publish_outcomes, segments'
     );
     expect(chains['schedules'].select).toHaveBeenCalledWith(
       'id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids, fanvue_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode'
@@ -135,6 +135,69 @@ describe('getSlotPost', () => {
     expect(detail?.persona?.name).toBe('Viva Leve');
     expect(detail?.generation).toMatchObject({ faceless: false });
     expect(detail?.generation).not.toHaveProperty('material');
+  });
+
+  it('returns the hook photo URL from the first segment photo', async () => {
+    const { supabase } = mockSupabase({
+      scheduled_posts: {
+        data: {
+          ...SLOT_ROW,
+          segments: [
+            { kind: 'hook', text: 'Welcome.', media: [{ url: 'https://e.com/hook.jpg' }] },
+            { kind: 'content', text: 'More.', media: [{ url: 'https://e.com/body.jpg' }] },
+          ],
+        },
+        error: null,
+      },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
+    expect(detail?.slot.hookPhoto).toEqual({
+      url: 'https://e.com/hook.jpg',
+      source: 'segment',
+      segmentIndex: 0,
+      imageIndex: 0,
+    });
+  });
+
+  it('returns the upload hook photo source when the first photo is a media id', async () => {
+    const { supabase } = mockSupabase({
+      scheduled_posts: {
+        data: {
+          ...SLOT_ROW,
+          segments: [{ kind: 'hook', text: 'Welcome.', media: [{ mediaId: 'aabbcc.jpg' }] }],
+        },
+        error: null,
+      },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
+    expect(detail?.slot.hookPhoto).toEqual({
+      url: null,
+      source: 'upload',
+      segmentIndex: 0,
+      imageIndex: 0,
+    });
+  });
+
+  it('returns the persona hook photo source when no segment carries a photo', async () => {
+    const { supabase } = mockSupabase({
+      scheduled_posts: { data: SLOT_ROW, error: null },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+    });
+    const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
+    expect(detail?.slot.hookPhoto).toEqual({
+      url: null,
+      source: 'persona',
+      segmentIndex: null,
+      imageIndex: null,
+    });
   });
 
   it('returns postUrl built from the public app URL', async () => {

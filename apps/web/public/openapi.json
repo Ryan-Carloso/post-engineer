@@ -1969,6 +1969,352 @@
         ]
       }
     },
+    "/api/media/publish-existing": {
+      "post": {
+        "operationId": "post_publish_video_publish_existing",
+        "summary": "publish video publish existing",
+        "tags": [
+          "media"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "scheduled",
+                        "asap"
+                      ]
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "schedule": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "slots": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "slot_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "mediaKind": {
+                      "type": "string",
+                      "enum": [
+                        "task",
+                        "upload",
+                        "image"
+                      ]
+                    },
+                    "publishes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string"
+                          },
+                          "success": {
+                            "type": "boolean"
+                          },
+                          "results": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "additionalProperties": true
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "logId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The video upload was already used to publish, or is not completed yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The video upload expired before publishing. Mint a new one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The finished video is over the 2GB limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The video service is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "media": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "task"
+                            ]
+                          },
+                          "taskId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "taskId"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "upload"
+                            ]
+                          },
+                          "uploadId": {
+                            "type": "string",
+                            "format": "uuid"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "uploadId"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "image"
+                            ]
+                          },
+                          "imageData": {
+                            "type": "string",
+                            "description": "Base64 image bytes (JPEG or PNG, at most 8 MB)."
+                          },
+                          "contentType": {
+                            "type": "string",
+                            "enum": [
+                              "image/jpeg",
+                              "image/png"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "imageData",
+                          "contentType"
+                        ]
+                      }
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "personaId": {
+                    "type": "string"
+                  },
+                  "publishing": {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "scheduled",
+                          "asap"
+                        ]
+                      },
+                      "providers": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "minItems": 1
+                      },
+                      "accounts": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "schedule": {
+                        "type": "object",
+                        "properties": {
+                          "startAt": {
+                            "type": "string"
+                          },
+                          "times": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "timezone": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "pinterestBoardId": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "privacyStatus": {
+                    "type": "string"
+                  },
+                  "caption": {
+                    "type": "string"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "media",
+                  "title",
+                  "description",
+                  "publishing"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/media/upload": {
       "post": {
         "operationId": "post_media_upload",

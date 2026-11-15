@@ -69,6 +69,10 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
                 return_value=("intro.mp4", 0.05, "job-1", None),
             ),
             patch.object(tm.video, "replace_video_intro_with_lipsync", return_value="final.mp4"),
+            # The face gate is orthogonal to the download security pinned
+            # here (and the fake image bytes are not a decodable photo):
+            # the gate has its own tests in test_persona_preflight.py.
+            patch("app.services.face_detect.image_contains_face", return_value=True),
         ]
         self.started = [p.start() for p in patches]
         for p in patches:

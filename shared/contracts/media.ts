@@ -74,6 +74,13 @@ export const MediaCheckResponseSchema = z.object({
   code: z.enum(CHECK_MEDIA_CODES),
   width: z.number().optional(),
   height: z.number().optional(),
+  // The engine's face verdict (issue #589, hook photo): true when a face
+  // is detectable, false when not, null when there is no file to check or
+  // the detector is unavailable. Deliberately `unknown`: a non-boolean
+  // value is dropped by the projection (older engines omit the key
+  // entirely), never a malformed-response error — the route does the same
+  // drop on its side.
+  has_face: z.unknown().optional(),
 });
 export type MediaCheckResponse = z.infer<typeof MediaCheckResponseSchema>;
 

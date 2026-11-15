@@ -1,8 +1,10 @@
 import threading
 
 from loguru import logger
+from PIL import Image
 
 from app.config import config
+from app.services.image_fetch import MAX_PHOTO_PIXELS
 
 _FACE_MODULE_LOADED = False
 _FACE_MODULE = None
@@ -12,9 +14,10 @@ _FACE_MODULE_LOCK = threading.Lock()
 def _load_cv2():
     """Lazy-load cv2 (opencv-python-headless) to defer the import cost.
 
-    Detection only runs when material_exclude_people=true; if the package
-    is not installed, log it and treat the filter as inactive (don't fail
-    the task).
+    Detection runs from three callers: the material_exclude_people video
+    filter, the media/check has_face report, and the lip-sync hook-photo
+    face gate. If the package is not installed, log it and let each
+    caller treat the detector as unavailable (don't fail the task).
     """
     global _FACE_MODULE, _FACE_MODULE_LOADED
     if _FACE_MODULE_LOADED:
@@ -31,10 +34,67 @@ def _load_cv2():
         except ImportError:
             _FACE_MODULE_LOADED = True
             logger.warning(
-                "material_exclude_people=true but opencv-python-headless is not "
-                "installed; face filtering disabled. Run `uv sync` to install it."
+                "opencv-python-headless is not installed; face detection "
+                "unavailable. Run `uv sync` to install it."
             )
     return _FACE_MODULE
+
+
+def image_contains_face(image_path: str) -> bool | None:
+    """True when a still image contains a detected human face.
+
+    Same Haar cascade and parameters as video_contains_face, on the
+    image downscaled to <w_max=360>. None when the detector is
+    unavailable (opencv not installed, the cascade failed to load, or
+    detection itself raised), or when the image is over the pixel cap:
+    the caller must not block on None — a missing detector must never
+    fail a video, and an over-cap file is not evidence of "no face".
+    False covers both "no face" and "unreadable file": a file cv2
+    cannot decode cannot be lip-synced either.
+    """
+    cv2 = _load_cv2()
+    if cv2 is None:
+        return None
+
+    cascade = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    )
+    if cascade.empty():
+        logger.warning("face detection: Haar cascade failed to load; check inactive")
+        return None
+
+    try:
+        # Header-only probe: a small compressed file can declare enormous
+        # dimensions, and the full decode below would allocate gigabytes.
+        # Undecodable here means cv2 cannot decode it either, so False
+        # keeps its documented "unreadable file" meaning.
+        with Image.open(image_path) as opened:
+            width, height = opened.size
+    except (OSError, ValueError, Image.DecompressionBombError):
+        return False
+    if width * height > MAX_PHOTO_PIXELS:
+        logger.warning("face detection: image over the pixel cap; skipped")
+        return None
+
+    try:
+        image = cv2.imread(image_path)
+        if image is None:
+            return False
+        height, width = image.shape[:2]
+        if width > 360:
+            scale = 360 / width
+            new_size = (360, max(1, int(height * scale)))
+            image = cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        faces = cascade.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=5, minSize=(24, 24)
+        )
+        return len(faces) > 0
+    except Exception as e:
+        # A raise here is a detector failure, not evidence of "no face":
+        # return None so the caller does not fail the video over it.
+        logger.warning(f"face detection failed for '{image_path}': {str(e)}")
+        return None
 
 
 def video_contains_face(

@@ -138,12 +138,17 @@ describe('contracts typecheck', () => {
       // @ts-expect-error -- the result field is `code`, not `status`
       return result.status;
     };
+    const checkFace = (result: CheckMediaResult): unknown => {
+      // @ts-expect-error -- the check response field is `has_face`, not `hasFace`
+      return result.hasFace;
+    };
     const direct = (result: DirectPublishResult): unknown => {
       // @ts-expect-error -- the account field is `accountId`, not `account_id`
       return result.results[0]?.account_id;
     };
     expect(typeof upload).toBe('function');
     expect(typeof check).toBe('function');
+    expect(typeof checkFace).toBe('function');
     expect(typeof direct).toBe('function');
   });
 

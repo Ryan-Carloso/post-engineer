@@ -4,7 +4,9 @@ The MCP media (action: check) tool's engine side: the web route authenticates th
 user, then calls here with the server secret, and this endpoint runs
 the SSRF-safe download and the mechanical checks in user_media
 (download refusal, real image type, size bounds) and
-returns a single code plus the probed dimensions. No judgement, no
+returns a single code plus the probed dimensions and has_face (whether a
+detectable face is in the photo, or null when there is no file to check
+or the detector is unavailable). No judgement, no
 relevance score, and the URL is never logged: a URL can carry
 credentials in its query string.
 

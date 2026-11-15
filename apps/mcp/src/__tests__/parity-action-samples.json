@@ -448,6 +448,46 @@
       }
     }
   ],
+  "publish_video.publish_existing": [
+    {
+      "args": {
+        "action": "publish_existing",
+        "mediaKind": "task",
+        "taskId": "task-1",
+        "provider": "instagram",
+        "accountIds": [
+          "ig-1"
+        ],
+        "title": "T",
+        "description": "D",
+        "mode": "scheduled",
+        "startAt": "2026-11-15T20:00:00",
+        "times": [
+          "20:00"
+        ],
+        "timezone": "UTC",
+        "caption": "D"
+      },
+      "responses": {
+        "POST /api/media/publish-existing": {
+          "success": true,
+          "mode": "scheduled",
+          "replayed": false,
+          "schedule": {
+            "id": "sched-1"
+          },
+          "slots": [
+            {
+              "id": "slot-1",
+              "slot_at": "2026-11-15T20:00:00.000Z",
+              "title": "T",
+              "status": "ready"
+            }
+          ]
+        }
+      }
+    }
+  ],
   "publish_video.publish_upload": [
     {
       "args": {

@@ -584,6 +584,10 @@ export interface Database {
         publish_outcomes: Json;
         description: string | null;
         video_type: 'full_lipsync' | 'hook_lipsync' | 'faceless';
+        media_kind: 'upload' | 'image' | null;
+        media_ref: string | null;
+        media_content_type: string | null;
+        media_claimed_at: string | null;
         };
         Insert: {
         id?: string;
@@ -613,6 +617,10 @@ export interface Database {
         publish_outcomes?: Json;
         description?: string | null;
         video_type?: 'full_lipsync' | 'hook_lipsync' | 'faceless';
+        media_kind?: 'upload' | 'image' | null;
+        media_ref?: string | null;
+        media_content_type?: string | null;
+        media_claimed_at?: string | null;
         };
         Update: {
         id?: string;
@@ -642,6 +650,10 @@ export interface Database {
         publish_outcomes?: Json;
         description?: string | null;
         video_type?: 'full_lipsync' | 'hook_lipsync' | 'faceless';
+        media_kind?: 'upload' | 'image' | null;
+        media_ref?: string | null;
+        media_content_type?: string | null;
+        media_claimed_at?: string | null;
         };
         Relationships: [];
       };

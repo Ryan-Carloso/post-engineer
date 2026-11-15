@@ -23,16 +23,19 @@ error and ship the background video instead.
 from __future__ import annotations
 
 import base64
+import contextlib
 import logging
 import math
+import os
 import re
+import shutil
 import subprocess
 from os import path
 from typing import Callable, Sequence
 
 from app.config import config
 from app.models.schema import VideoLayout, VideoParams
-from app.services import longcat, persona_image
+from app.services import face_detect, longcat, persona_image, user_media
 from app.services.analytics import scrub_error_text
 from app.services.lipsync_active import persona_lipsync_active
 from app.utils import ssrf, utils
@@ -243,44 +246,86 @@ def resolve_persona_image(
     SSRF-safe download: data-URI images are decoded, remote images go
     through the public-address check with a 20 MB cap and image/* content
     type. Failures raise LongCatError and fail the task.
+
+    The hook image is the first photo of the video (issue #589): when the
+    job carries segments, their first photo opens the video, not the
+    persona avatar. Segment-less direct/CLI jobs and text-only segments
+    keep the persona photo. The resolved image must show a detectable
+    face (Haar cascade): a faceless first photo fails here, before any
+    lip-sync spend, with a per-photo error naming the segment and image.
+    A missing detector never blocks.
     """
     persona = params.persona
     if persona is None:
         raise longcat.LongCatError("lip sync requires a persona")
-    image_url = persona.avatar_url or persona.photo_url
-    if not image_url:
-        raise longcat.LongCatError("lip sync requires a persona image")
     task_dir = utils.task_dir(task_id)
     image_path = path.join(task_dir, "persona-lipsync-image.png")
+    source_label = "lip-sync image"
     if path.isfile(image_path) and path.getsize(image_path) > 0:
         # Already fetched by persona_preflight at the start of the task.
-        return image_path
-    if image_url.startswith("data:image/"):
-        try:
-            encoded = image_url.split(",", 1)[1]
-            with open(image_path, "wb") as image_file:
-                image_file.write(base64.b64decode(encoded))
-        except (IndexError, ValueError) as exc:
-            raise longcat.LongCatError("invalid persona image data URI") from exc
+        pass
     else:
-        try:
-            ssrf.download_public_file(
-                persona_image.resolve_persona_image_url(image_url),
-                image_path,
-                what="persona image",
-                max_bytes=max_bytes,
-                allowed_content_types=("image/",),
-                timeout=60,
-                tls_verify=config.app.get("tls_verify", True),
+        fetched = False
+        segments = getattr(params, "segments", None)
+        if segments:
+            photo, segment_index, image_index, reason = (
+                user_media.resolve_first_segment_photo(task_dir, segments)
             )
-        except ssrf.UnsafeUrlError as exc:
-            raise longcat.LongCatError(
-                f"persona image download rejected: {_download_failure_reason(exc)}"
-            ) from exc
-        except OSError as exc:
-            raise longcat.LongCatError(
-                f"persona image download failed: {_download_failure_reason(exc)}"
-            ) from exc
+            if reason is None:
+                source_label = (
+                    f"first photo of the video (segment {segment_index} "
+                    f"image {image_index})"
+                )
+                shutil.copyfile(photo, image_path)
+                # A fresh URL download lives in this task's own dir and
+                # is removed once copied; a shared temp asset is never
+                # touched.
+                if photo.startswith(task_dir + os.sep):
+                    with contextlib.suppress(OSError):
+                        os.remove(photo)
+                fetched = True
+            elif reason != "no_segment_media":
+                raise longcat.LongCatError(
+                    f"first photo of the video (segment {segment_index} "
+                    f"image {image_index}) could not be loaded: {reason}"
+                )
+        if not fetched:
+            image_url = persona.avatar_url or persona.photo_url
+            if not image_url:
+                raise longcat.LongCatError("lip sync requires a persona image")
+            source_label = "persona photo"
+            if image_url.startswith("data:image/"):
+                try:
+                    encoded = image_url.split(",", 1)[1]
+                    with open(image_path, "wb") as image_file:
+                        image_file.write(base64.b64decode(encoded))
+                except (IndexError, ValueError) as exc:
+                    raise longcat.LongCatError("invalid persona image data URI") from exc
+            else:
+                try:
+                    ssrf.download_public_file(
+                        persona_image.resolve_persona_image_url(image_url),
+                        image_path,
+                        what="persona image",
+                        max_bytes=max_bytes,
+                        allowed_content_types=("image/",),
+                        timeout=60,
+                        tls_verify=config.app.get("tls_verify", True),
+                    )
+                except ssrf.UnsafeUrlError as exc:
+                    raise longcat.LongCatError(
+                        f"persona image download rejected: {_download_failure_reason(exc)}"
+                    ) from exc
+                except OSError as exc:
+                    raise longcat.LongCatError(
+                        f"persona image download failed: {_download_failure_reason(exc)}"
+                    ) from exc
+    has_face = face_detect.image_contains_face(image_path)
+    if has_face is False:
+        raise longcat.LongCatError(
+            f"{source_label} has no detectable face: "
+            "lip sync needs a photo of the persona's face"
+        )
     return image_path
 
 

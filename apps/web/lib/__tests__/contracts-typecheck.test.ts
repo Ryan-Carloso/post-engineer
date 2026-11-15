@@ -223,10 +223,13 @@ describe('contracts typecheck', () => {
     expect(upload.mediaId).toContain('.png');
     // @ts-expect-error -- the upload field is `mediaId`, not `media_id`
     expect(upload.media_id).toBeUndefined();
-    const check: MediaCheckResponse = { success: true, code: 'ok', width: 1920, height: 1080 };
+    const check: MediaCheckResponse = { success: true, code: 'ok', width: 1920, height: 1080, has_face: true };
     expect(check.code).toBe('ok');
+    expect(check.has_face).toBe(true);
     // @ts-expect-error -- the check field is `code`, not `status`
     expect(check.status).toBeUndefined();
+    // @ts-expect-error -- the check response field is `has_face`, not `hasFace`
+    expect(check.hasFace).toBeUndefined();
     const content: UploadContentResponse = {
       success: true,
       provider: 'youtube',
