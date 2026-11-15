@@ -38,6 +38,8 @@ import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildUploadErrorResponse } from '@/lib/upload/handlers';
+import { accountFailure } from '@/lib/upload/account-error';
+import type { ContentUploadAccountResult } from '@/lib/upload/content-upload-result';
 import { dispatchPublish } from '@/lib/videos/publish-uploaded';
 import {
   VideoUploadError,
@@ -278,6 +280,32 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
   });
 }
 
+async function dispatchProvider(
+  provider: Provider,
+  form: FormData,
+  ctx: PublishExistingContext,
+): Promise<{ provider: string; success: boolean; results: ContentUploadAccountResult[] }> {
+  try {
+    const result = await dispatchPublish(provider, form, ctx.userId, ctx.logId, ctx.startTime);
+    return { provider, success: result.success, results: result.results };
+  } catch (error) {
+    // A handler throw must not discard the providers that already
+    // published: record the failure per account and keep going, so the
+    // response always carries every provider's outcome.
+    logger.error('[publish-existing] provider publish threw', error, {
+      provider,
+      logId: ctx.logId,
+      userId: ctx.userId,
+    });
+    const accountIds = ctx.accountIds[provider] ?? [];
+    const results =
+      accountIds.length > 0
+        ? accountIds.map((accountId) => accountFailure(accountId, error))
+        : [accountFailure('', error)];
+    return { provider, success: false, results };
+  }
+}
+
 async function publishExistingMediaAsap(ctx: PublishExistingContext): Promise<NextResponse> {
   const { userId, input, accountIds, logId, startTime } = ctx;
   const providers = input.publishing.providers;
@@ -288,8 +316,7 @@ async function publishExistingMediaAsap(ctx: PublishExistingContext): Promise<Ne
       // routes it through the Instagram handler and normalizes the result
       // like every other provider.
       const form = buildExistingMediaForm('instagram', fieldsFor(input, accountIds, 'instagram'), ctx.image.buffer, ctx.image.contentType);
-      const result = await dispatchPublish('instagram', form, userId, logId, startTime);
-      publishes.push({ provider: 'instagram', success: result.success, results: result.results });
+      publishes.push(await dispatchProvider('instagram', form, ctx));
     } else if (ctx.uploadRow !== null) {
       const store = createSupabaseVideoUploadStore();
       const storage = createSupabaseVideoUploadStorage();
@@ -297,8 +324,7 @@ async function publishExistingMediaAsap(ctx: PublishExistingContext): Promise<Ne
       try {
         for (const provider of providers) {
           const form = buildExistingMediaForm(provider, fieldsFor(input, accountIds, provider), claimed.buffer, claimed.contentType);
-          const result = await dispatchPublish(provider, form, userId, logId, startTime);
-          publishes.push({ provider, success: result.success, results: result.results });
+          publishes.push(await dispatchProvider(provider, form, ctx));
         }
       } finally {
         // Single-use claim: the bytes are gone once dispatched, published
@@ -312,8 +338,7 @@ async function publishExistingMediaAsap(ctx: PublishExistingContext): Promise<Ne
       const { buffer, contentType } = await downloadEngineTaskVideo(ctx.taskRecord, userId);
       for (const provider of providers) {
         const form = buildExistingMediaForm(provider, fieldsFor(input, accountIds, provider), buffer, contentType);
-        const result = await dispatchPublish(provider, form, userId, logId, startTime);
-        publishes.push({ provider, success: result.success, results: result.results });
+        publishes.push(await dispatchProvider(provider, form, ctx));
       }
     }
     const success = publishes.every((publish) => publish.success);

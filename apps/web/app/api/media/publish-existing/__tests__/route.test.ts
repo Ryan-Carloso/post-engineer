@@ -73,6 +73,7 @@ import {
   type VideoUploadRow,
 } from '@/lib/videos/signed-upload';
 import { dispatchPublish } from '@/lib/videos/publish-uploaded';
+import type { SocialProvider } from '@/lib/providers/registry';
 import { deterministicUuid } from '@/lib/idempotency';
 
 const USER_ID = 'user-uuid-1';
@@ -369,6 +370,61 @@ describe('POST /api/media/publish-existing', () => {
     expect(storage.remove).toHaveBeenCalledWith([`${USER_ID}/direct-uploads/${UPLOAD_ID}.mp4`]);
   });
 
+  it('keeps the first provider result when a later provider dispatch throws', async () => {
+    const client = fakeSupabase({
+      socialRows: [
+        { provider: 'youtube', provider_account_id: 'UC1' },
+        { provider: 'instagram', provider_account_id: 'ig-1' },
+      ],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const { storage } = mockUploadStore({ uploadRow: uploadRow() });
+    const dispatch = vi.mocked(dispatchPublish);
+    const originalImplementation = dispatch.getMockImplementation();
+    dispatch.mockImplementation(async (provider: SocialProvider, _form: FormData, _userId: string, _logId: string, _startTime: number) => {
+      if (provider === 'instagram') throw new Error('instagram down');
+      return {
+        success: true,
+        provider,
+        results: [{ accountId: 'UC1', success: true, videoId: 'vid-1' }],
+        logId: 'log-1',
+      };
+    });
+    try {
+      const response = await POST(
+        jsonRequest({
+          media: { kind: 'upload', uploadId: UPLOAD_ID },
+          title: 'Ready video',
+          description: 'Edited outside.',
+          publishing: {
+            mode: 'asap',
+            providers: ['youtube', 'instagram'],
+            accounts: { youtube: ['UC1'], instagram: ['ig-1'] },
+          },
+          tags: ['ready'],
+          privacyStatus: 'public',
+        }),
+      );
+      const body = await response.json();
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(false);
+      expect(body.mode).toBe('asap');
+      expect(body.publishes).toHaveLength(2);
+      expect(body.publishes[0]).toMatchObject({ provider: 'youtube', success: true });
+      expect(body.publishes[1]).toEqual({
+        provider: 'instagram',
+        success: false,
+        results: [{ accountId: 'ig-1', success: false, error: 'instagram down', errorCode: 'transient' }],
+      });
+      // The single-use upload was still cleaned up after dispatch.
+      expect(storage.remove).toHaveBeenCalledWith([`${USER_ID}/direct-uploads/${UPLOAD_ID}.mp4`]);
+    } finally {
+      if (originalImplementation !== undefined) {
+        dispatch.mockImplementation(originalImplementation);
+      }
+    }
+  });
+
   it('publishes an image ASAP to instagram through the image handler', async () => {
     const client = fakeSupabase({
       socialRows: [{ provider: 'instagram', provider_account_id: 'ig-1' }],
@@ -392,6 +448,42 @@ describe('POST /api/media/publish-existing', () => {
     expect(provider).toBe('instagram');
     expect(form?.get('file')).toBeInstanceOf(File);
     expect(form?.get('caption')).toBe('Edited photo.');
+  });
+
+  it('reports a throwing image dispatch as a per-account failure instead of a 500', async () => {
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'instagram', provider_account_id: 'ig-1' }],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+    const dispatch = vi.mocked(dispatchPublish);
+    const originalImplementation = dispatch.getMockImplementation();
+    dispatch.mockRejectedValue(new Error('instagram down'));
+    try {
+      const response = await POST(
+        jsonRequest({
+          media: { kind: 'image', imageData: jpeg.toString('base64'), contentType: 'image/jpeg' },
+          title: 'Sunset photo',
+          description: 'Edited photo.',
+          publishing: { mode: 'asap', providers: ['instagram'], accounts: { instagram: ['ig-1'] } },
+        }),
+      );
+      const body = await response.json();
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(false);
+      expect(body.mode).toBe('asap');
+      expect(body.publishes).toEqual([
+        {
+          provider: 'instagram',
+          success: false,
+          results: [{ accountId: 'ig-1', success: false, error: 'instagram down', errorCode: 'transient' }],
+        },
+      ]);
+    } finally {
+      if (originalImplementation !== undefined) {
+        dispatch.mockImplementation(originalImplementation);
+      }
+    }
   });
 
   it('schedules a finished task video as a ready slot with no charge', async () => {
