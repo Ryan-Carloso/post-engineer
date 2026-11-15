@@ -485,6 +485,29 @@ describe('checkFirstPhotoFace', () => {
     },
   );
 
+  it.each(['blocked_403', 'timeout', 'media_expired'])(
+    'rejects an unloadable first photo with a 400 naming the code (%s)',
+    async (code) => {
+      // The engine gate fails the task on any resolve_first_segment_photo
+      // reason except no_segment_media, so a blocked, timed-out, or
+      // expired first photo must block the charge too — otherwise the
+      // route charges and the engine fails the task and refunds it.
+      stubFetch([engineBody(code)]);
+      const result = await checkFirstPhotoFace(INPUT);
+      expect(result).toBeInstanceOf(NextResponse);
+      expect((result as NextResponse).status).toBe(400);
+      const payload = (await (result as NextResponse).json()) as {
+        error?: string;
+        code?: string;
+        field?: string;
+      };
+      expect(payload.error).toContain('Segment 0 image 0');
+      expect(payload.error).toContain(`could not be loaded (${code})`);
+      expect(payload.code).toBe('VALIDATION_FAILED');
+      expect(payload.field).toBe('options.segments');
+    },
+  );
+
   it('rejects a mechanically rejected persona avatar with a 400 naming the real reason', async () => {
     stubFetch([engineBody('not_image')]);
     const result = await checkFirstPhotoFace({

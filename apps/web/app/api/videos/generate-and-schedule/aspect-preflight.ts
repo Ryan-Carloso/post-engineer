@@ -19,7 +19,10 @@
 // Failure is fail-closed: an unreachable engine, a timeout, a non-JSON
 // answer, or a missing code returns a 502 with NO charge, never a
 // proceed. Any other code (ok, or a skip the task already handles — an
-// expired media id, a blocked download, a face) never blocks here.
+// expired media id, a blocked download, a face) never blocks the aspect
+// check. The first-photo face check below is stricter: it blocks an
+// unloadable first photo, because the engine gate fails the task on a
+// blocked download, a timeout, or an expired media id.
 //
 // All three pre-charge checks live in this module — the narration-length
 // check (full lip-sync) first, then the aspect check, then the
@@ -334,6 +337,21 @@ export async function checkFirstPhotoFace(
       return validationFailed(
         ERROR_CODES.VALIDATION_FAILED,
         `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but it ${rejection}: send a usable photo showing the persona's face.`,
+        'options.segments',
+      );
+    }
+    // The engine gate fails the task on any resolve_first_segment_photo
+    // reason except no_segment_media, so a first photo the engine cannot
+    // load must block the charge too — otherwise the route charges and
+    // the engine fails the task and refunds it.
+    if (
+      record.code === 'blocked_403' ||
+      record.code === 'timeout' ||
+      record.code === 'media_expired'
+    ) {
+      return validationFailed(
+        ERROR_CODES.VALIDATION_FAILED,
+        `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but it could not be loaded (${record.code}): send a usable photo showing the persona's face.`,
         'options.segments',
       );
     }
