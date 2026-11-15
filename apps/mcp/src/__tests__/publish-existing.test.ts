@@ -195,6 +195,35 @@ describe('publish_existing client call', () => {
     await expect(
       publishExisting(client, { ...SCHEDULED_TASK, provider: 'tiktok' as 'instagram' }),
     ).rejects.toThrow(/provider must be one of/);
+    await expect(publishExisting(client, { ...SCHEDULED_TASK, accountIds: [] })).rejects.toThrow(
+      /At least one account ID is required/,
+    );
+    await expect(publishExisting(client, { ...SCHEDULED_TASK, title: '   ' })).rejects.toThrow(
+      /title is required/,
+    );
+    await expect(publishExisting(client, { ...SCHEDULED_TASK, description: '' })).rejects.toThrow(
+      /description is required/,
+    );
+    await expect(
+      publishExisting(client, { ...SCHEDULED_TASK, mediaKind: 'upload', taskId: undefined }),
+    ).rejects.toThrow(/uploadId is required/);
+    await expect(
+      publishExisting(client, { ...SCHEDULED_TASK, mediaKind: 'image', taskId: undefined }),
+    ).rejects.toThrow(/imageData and imageContentType are required/);
+    // 'AB==' is valid base64 alphabet with a valid length, but the
+    // round-trip re-encodes to 'AA==', so it is not real base64 bytes.
+    await expect(
+      publishExisting(client, {
+        ...SCHEDULED_TASK,
+        mediaKind: 'image',
+        taskId: undefined,
+        imageData: 'AB==',
+        imageContentType: 'image/png',
+        mode: 'asap',
+        startAt: undefined,
+        times: undefined,
+      }),
+    ).rejects.toThrow(/base64/);
     expect(request).not.toHaveBeenCalled();
   });
 
@@ -203,6 +232,91 @@ describe('publish_existing client call', () => {
     await expect(publishExisting(fakeClient(request), SCHEDULED_TASK)).rejects.toThrow(/Malformed publish-existing/);
     request.mockResolvedValueOnce({ success: true, mode: 'scheduled', schedule: { id: 'sched-1' }, slots: [{ id: 'slot-1' }] });
     await expect(publishExisting(fakeClient(request), SCHEDULED_TASK)).rejects.toThrow(/Malformed publish-existing/);
+  });
+
+  it('rejects malformed asap bodies and slot entries', async () => {
+    const request = vi.fn(async (): Promise<unknown> => ({
+      success: true,
+      mode: 'asap',
+      mediaKind: 'video',
+      publishes: [],
+      logId: 'x',
+    }));
+    await expect(publishExisting(fakeClient(request), SCHEDULED_TASK)).rejects.toThrow(/Malformed publish-existing/);
+    request.mockResolvedValueOnce({
+      success: true,
+      mode: 'asap',
+      mediaKind: 'upload',
+      publishes: [{ provider: 'instagram' }],
+      logId: 'x',
+    });
+    await expect(publishExisting(fakeClient(request), SCHEDULED_TASK)).rejects.toThrow(/Malformed publish-existing/);
+    request.mockResolvedValueOnce({
+      success: true,
+      mode: 'scheduled',
+      schedule: { id: 'sched-1' },
+      slots: ['not-an-object'],
+    });
+    await expect(publishExisting(fakeClient(request), SCHEDULED_TASK)).rejects.toThrow(/Malformed publish-existing/);
+    request.mockResolvedValueOnce({
+      success: true,
+      mode: 'scheduled',
+      schedule: { id: 'sched-1' },
+      slots: [{ id: 'slot-1', slot_at: '2026-11-15T20:00:00.000Z', title: 42 }],
+    });
+    await expect(publishExisting(fakeClient(request), SCHEDULED_TASK)).rejects.toThrow(/Malformed publish-existing/);
+  });
+
+  it('defaults a slot status to ready and omits unset optional fields', async () => {
+    const request = vi.fn(async (_path: string, _init?: unknown) => ({
+      success: true,
+      mode: 'scheduled',
+      replayed: false,
+      schedule: { id: 'sched-1' },
+      slots: [{ id: 'slot-1', slot_at: '2026-11-15T20:00:00.000Z', title: 'T' }],
+    }));
+    const result = await publishExisting(fakeClient(request), {
+      ...SCHEDULED_TASK,
+      caption: undefined,
+      mode: undefined,
+      timezone: undefined,
+    });
+    expect(result.mode).toBe('scheduled');
+    if (result.mode !== 'scheduled') return;
+    expect(result.slots[0]?.status).toBe('ready');
+    const [, init] = request.mock.calls[0] as unknown as [string, { body: string }];
+    const body = JSON.parse(init.body) as Record<string, unknown>;
+    expect(body).not.toHaveProperty('caption');
+    expect(body).not.toHaveProperty('personaId');
+    expect(body).not.toHaveProperty('tags');
+    expect(body).not.toHaveProperty('privacyStatus');
+    expect(body).not.toHaveProperty('idempotencyKey');
+    expect(body.publishing).not.toHaveProperty('pinterestBoardId');
+  });
+
+  it('defaults mode to scheduled with UTC timezone and passes optional fields through', async () => {
+    const request = vi.fn(async (_path: string, _init?: unknown) => SCHEDULED_REPLY);
+    await publishExisting(fakeClient(request), {
+      ...SCHEDULED_TASK,
+      mode: undefined,
+      timezone: undefined,
+      personaId: 'persona-1',
+      tags: ['t1'],
+      privacyStatus: 'public',
+      caption: 'C',
+      idempotencyKey: 'key-1',
+      boardId: 'board-1',
+    });
+    const [, init] = request.mock.calls[0] as unknown as [string, { body: string }];
+    const body = JSON.parse(init.body) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      personaId: 'persona-1',
+      tags: ['t1'],
+      privacyStatus: 'public',
+      caption: 'C',
+      idempotencyKey: 'key-1',
+      publishing: { mode: 'scheduled', schedule: { timezone: 'UTC' }, pinterestBoardId: 'board-1' },
+    });
   });
 });
 
@@ -256,6 +370,75 @@ describe('publish_existing tool handler', () => {
     const text = response.content[0];
     expect(text?.type === 'text' && text.text).toContain('"code":"TASK_NOT_FOUND"');
     expect(text?.type === 'text' && text.text).toContain('"field":"media.taskId"');
+  });
+
+  it('notes a replayed schedule', async () => {
+    const request = vi.fn(async () => ({ ...SCHEDULED_REPLY, replayed: true }));
+    const response = await handlePublishExisting(fakeClient(request), SCHEDULED_TASK);
+    const block = response.content[0];
+    expect(block?.type).toBe('text');
+    if (block?.type !== 'text') return;
+    expect(block.text).toContain('(replayed: the same request was already scheduled)');
+  });
+
+  it('summarizes mixed asap results with links and failures', async () => {
+    const request = vi.fn(async () => ({
+      success: false,
+      mode: 'asap',
+      mediaKind: 'upload',
+      publishes: [
+        {
+          provider: 'instagram',
+          success: false,
+          results: [
+            { accountId: 'ig-1', success: true, videoUrl: 'https://instagram.test/v/1' },
+            { accountId: 'ig-2', success: true, postId: 'p2' },
+            { accountId: 'ig-3', success: true },
+            { accountId: 'ig-4', success: false, error: 'revoked token' },
+            { accountId: 'ig-5', success: false },
+          ],
+        },
+      ],
+      logId: 'log-1',
+    }));
+    const response = await handlePublishExisting(fakeClient(request), {
+      ...SCHEDULED_TASK,
+      mediaKind: 'upload',
+      taskId: undefined,
+      uploadId: '123e4567-e89b-12d3-a456-426614174000',
+      mode: 'asap',
+      startAt: undefined,
+      times: undefined,
+    });
+    const block = response.content[0];
+    expect(block?.type).toBe('text');
+    if (block?.type !== 'text') return;
+    expect(block.text).toContain('instagram: FAILED');
+    expect(block.text).toContain('some providers failed');
+    expect(block.text).toContain('- ig-1: published (https://instagram.test/v/1)');
+    expect(block.text).toContain('- ig-2: published (p2)');
+    expect(block.text).toContain('- ig-3: published\n');
+    expect(block.text).toContain('- ig-4: FAILED — revoked token');
+    expect(block.text).toContain('- ig-5: FAILED — unknown error');
+  });
+
+  it('returns a plain error for a non-ApiError and for an ApiError without a code', async () => {
+    const boom = vi.fn(async () => {
+      throw new Error('boom');
+    });
+    const plain = await handlePublishExisting(fakeClient(boom), SCHEDULED_TASK);
+    expect(plain.isError).toBe(true);
+    const plainText = plain.content[0];
+    expect(plainText?.type === 'text' && plainText.text).toContain('Error publishing existing media: boom');
+    expect(plainText?.type === 'text' && plainText.text).not.toContain('"code"');
+    const codeless = vi.fn(async () => {
+      throw new ApiError('no code', null, null, 500);
+    });
+    const codelessResponse = await handlePublishExisting(fakeClient(codeless), SCHEDULED_TASK);
+    expect(codelessResponse.isError).toBe(true);
+    const codelessText = codelessResponse.content[0];
+    expect(codelessText?.type === 'text' && codelessText.text).toContain('Error publishing existing media: no code');
+    expect(codelessText?.type === 'text' && codelessText.text).not.toContain('"code"');
   });
 });
 
