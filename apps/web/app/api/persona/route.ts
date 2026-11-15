@@ -48,7 +48,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return errorResponse(403, 'This API key is restricted to specific personas and cannot create new ones.', 'POST /api/persona');
   }
   const user = { id: auth.userId };
-  const supabase = auth.isApiKey === true
+  const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()
     : await createSupabaseServerClient();
 
@@ -267,7 +267,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
   const limited = await applyRateLimit(request, RATE_LIMITS.personaWrite, auth.userId);
   if (limited) return limited;
   const user = { id: auth.userId };
-  const supabase = auth.isApiKey === true
+  const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()
     : await createSupabaseServerClient();
 

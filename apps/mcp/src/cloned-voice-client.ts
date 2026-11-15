@@ -1,8 +1,14 @@
+import { request as httpsRequest } from 'node:https';
+import { lookup } from 'node:dns/promises';
 import { readFile, stat } from 'node:fs/promises';
+import { isIP } from 'node:net';
 import { basename, extname } from 'node:path';
+import type { LookupFunction } from 'node:net';
+import type { IncomingMessage } from 'node:http';
 
 import { readApiFailure } from './errors.js';
 import { MAX_CLONE_AUDIO_BYTES, MAX_CLONE_AUDIO_MB } from './limits.js';
+import { isPublicIp } from './public-ip.js';
 
 const UPLOAD_TIMEOUT_MS = 120_000;
 
@@ -53,12 +59,160 @@ async function readBodyWithCap(
   return Buffer.concat(chunks);
 }
 
-export async function fetchCloneReferenceAudio(audioUrl: string): Promise<Blob> {
+export type HostLookup = (hostname: string) => Promise<ReadonlyArray<{ address: string }>>;
+
+export interface CloneAudioFetchOptions {
+  /** Remote (hosted) server: https only, and every resolved address must be public. */
+  readonly remote?: boolean;
+  /** DNS resolution, injectable for tests; defaults to node:dns/promises lookup(all). */
+  readonly lookup?: HostLookup;
+}
+
+const defaultLookup: HostLookup = (hostname) => lookup(hostname, { all: true });
+
+// Fail closed: a resolution error, no address, or any non-public address rejects.
+// Returns the validated addresses so the fetch pins to them (see below).
+async function assertPublicHost(
+  hostname: string,
+  resolve: HostLookup,
+): Promise<ReadonlyArray<{ address: string }>> {
+  const bare = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+  let addresses: ReadonlyArray<{ address: string }>;
+  try {
+    addresses = isIP(bare) ? [{ address: bare }] : await resolve(bare);
+  } catch {
+    throw new Error('audioUrl must point to a public host');
+  }
+  if (addresses.length === 0 || !addresses.every((a) => isPublicIp(a.address))) {
+    throw new Error('audioUrl must point to a public host');
+  }
+  return addresses;
+}
+
+// A lookup that answers only with the addresses the SSRF check validated:
+// the TLS connection can only go to a validated public address, so a second
+// DNS answer (DNS rebinding: the check sees a public address, the fetch
+// sees 169.254.169.254 / 127.0.0.1) cannot diverge from the first. The
+// hostname argument is ignored on purpose — the validated set is the only
+// source of truth. A family the validated set cannot serve fails closed
+// instead of falling back to a fresh resolution.
+function pinnedLookup(addresses: ReadonlyArray<{ address: string }>): LookupFunction {
+  return (hostname, options, callback) => {
+    const wantedFamily = typeof options.family === 'number' ? options.family : 0;
+    const matching = addresses.filter((a) => {
+      const family = isIP(a.address);
+      return wantedFamily === 0 || family === wantedFamily;
+    });
+    if (matching.length === 0) {
+      const error = Object.assign(new Error(`getaddrinfo ENOTFOUND ${hostname}`), {
+        code: 'ENOTFOUND',
+      });
+      callback(error, '', 0);
+      return;
+    }
+    if (options.all === true) {
+      callback(
+        null,
+        matching.map((a) => ({ address: a.address, family: isIP(a.address) })),
+        0,
+      );
+      return;
+    }
+    const first = matching[0];
+    callback(null, first.address, isIP(first.address));
+  };
+}
+
+// Download over pinned DNS: the https request resolves through pinnedLookup,
+// so the socket connects to a validated public address with the original
+// hostname as SNI (the certificate is still verified against the hostname).
+// Redirects are rejected, exactly like redirect: 'error' on the fetch path.
+async function fetchRemoteAudioPinned(
+  parsed: URL,
+  addresses: ReadonlyArray<{ address: string }>,
+  signal: AbortSignal,
+): Promise<{ buffer: Buffer; contentType: string }> {
+  const response = await new Promise<IncomingMessage>((resolve, reject) => {
+    const request = httpsRequest(
+      parsed.toString(),
+      { lookup: pinnedLookup(addresses), signal },
+      resolve,
+    );
+    request.on('error', reject);
+    request.end();
+  });
+  const status = response.statusCode ?? 0;
+  if (status >= 300 && status < 400) {
+    response.resume();
+    throw new Error('Failed to download audio: redirect not allowed');
+  }
+  if (status < 200 || status >= 300) {
+    response.resume();
+    throw new Error(`Failed to download audio: HTTP ${status}`);
+  }
+  const buffer = await readNodeBodyWithCap(response, MAX_CLONE_AUDIO_BYTES);
+  if (buffer.length === 0) {
+    throw new Error('Downloaded audio is empty');
+  }
+  const contentTypeHeader = response.headers['content-type'];
+  const contentType =
+    (Array.isArray(contentTypeHeader) ? contentTypeHeader[0] : contentTypeHeader) ??
+    'application/octet-stream';
+  return { buffer, contentType };
+}
+
+// Stream a Node response body without buffering past maxBytes: cancel the
+// stream as soon as the cap is exceeded, mirroring readBodyWithCap.
+async function readNodeBodyWithCap(response: IncomingMessage, maxBytes: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    for await (const chunk of response) {
+      const buffer = Buffer.from(chunk);
+      total += buffer.byteLength;
+      if (total > maxBytes) {
+        response.destroy();
+        throw new Error(`Downloaded audio exceeds ${maxBytes / (1024 * 1024)} MB`);
+      }
+      chunks.push(buffer);
+    }
+  } catch (error) {
+    response.destroy();
+    throw error;
+  }
+  return Buffer.concat(chunks);
+}
+
+export async function fetchCloneReferenceAudio(
+  audioUrl: string,
+  options: CloneAudioFetchOptions = {},
+): Promise<Blob> {
   let parsed: URL;
   try {
     parsed = new URL(audioUrl);
   } catch {
     throw new Error('audioUrl must be a valid URL');
+  }
+  if (options.remote === true) {
+    if (parsed.protocol !== 'https:') {
+      throw new Error('audioUrl must use https');
+    }
+    // The fetch pins DNS to the addresses this check validated (pinnedLookup
+    // in fetchRemoteAudioPinned): a second resolution cannot rebind the host
+    // to a private address after the check passed.
+    const addresses = await assertPublicHost(parsed.hostname, options.lookup ?? defaultLookup);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+    try {
+      const { buffer, contentType } = await fetchRemoteAudioPinned(
+        parsed,
+        addresses,
+        controller.signal,
+      );
+      return new Blob([buffer], { type: contentType });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
   const loopback =
     parsed.hostname === 'localhost' ||
@@ -155,11 +309,12 @@ export async function createClonedVoiceFromUrl(
   language: string,
   consent: boolean,
   denoise: boolean,
+  options: CloneAudioFetchOptions = {},
 ): Promise<unknown> {
   if (!consent) {
     throw new Error('consent must be true to create a voice clone');
   }
-  const blob = await fetchCloneReferenceAudio(audioUrl);
+  const blob = await fetchCloneReferenceAudio(audioUrl, options);
   return postCloneReference(client, blob, 'reference.bin', language, denoise);
 }
 

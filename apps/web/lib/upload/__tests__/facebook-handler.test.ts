@@ -3,7 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/social-accounts', () => ({ getSocialAccountTokens: vi.fn(), touchSocialAccount: vi.fn() }));
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({ __mock: 'service-client' })) }));
-vi.mock('@/lib/upload/handlers', () => ({ uploadToStorage: vi.fn(async () => 'https://s.example/signed.mp4'), cleanupOldUploads: vi.fn() }));
+vi.mock('@/lib/upload/publish-media', () => ({
+  uploadPublishMedia: vi.fn(async () => 'https://s.example/signed.mp4'),
+  presignPublishMedia: vi.fn(async () => 'https://s.example/archive.mp4'),
+  cleanupPublishMedia: vi.fn(async () => 0),
+}));
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('@/lib/facebook', async (importOriginal) => ({
@@ -15,7 +19,7 @@ import { trackApiEvent } from '@/lib/analytics';
 import { FacebookError } from '@/lib/errors';
 import { handleFacebookUpload } from '@/lib/upload/facebook-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
-import { cleanupOldUploads, uploadToStorage } from '@/lib/upload/handlers';
+import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
 import { publishFacebookVideo, FACEBOOK_TEXT_MAX_CHARS } from '@/lib/facebook';
 import { logger } from '@/lib/logger';
 
@@ -55,16 +59,16 @@ describe('handleFacebookUpload', () => {
       videoUrl: 'https://s.example/signed.mp4',
       description: 'my post',
     });
-    expect(vi.mocked(uploadToStorage).mock.calls[0][1]).toMatch(/^facebook\/\d+_[0-9a-f]{8}\.mp4$/);
-    expect(vi.mocked(uploadToStorage).mock.calls[0][2]).toBe('video/mp4');
+    expect(vi.mocked(uploadPublishMedia).mock.calls[0][1]).toMatch(/^facebook\/\d+_[0-9a-f]{8}\.mp4$/);
+    expect(vi.mocked(uploadPublishMedia).mock.calls[0][2]).toBe('video/mp4');
     expect(touchSocialAccount).toHaveBeenCalledWith(expect.anything(), 'user-1', 'facebook', '111');
-    expect(cleanupOldUploads).toHaveBeenCalledWith('facebook');
+    expect(cleanupPublishMedia).toHaveBeenCalledWith('facebook');
   });
 
   it('stores a MOV upload as quicktime', async () => {
     await handleFacebookUpload(formData({ video: new File([MP4_BYTES], 'clip.mov', { type: 'video/quicktime' }) }), 'user-1');
-    expect(vi.mocked(uploadToStorage).mock.calls[0][1]).toMatch(/\.mov$/);
-    expect(vi.mocked(uploadToStorage).mock.calls[0][2]).toBe('video/quicktime');
+    expect(vi.mocked(uploadPublishMedia).mock.calls[0][1]).toMatch(/\.mov$/);
+    expect(vi.mocked(uploadPublishMedia).mock.calls[0][2]).toBe('video/quicktime');
   });
 
   it('omits the permalink when Facebook returned none', async () => {
@@ -94,7 +98,7 @@ describe('handleFacebookUpload', () => {
     const result = await handleFacebookUpload(formData(overrides), 'user-1');
     expect(result.success).toBe(false);
     expect(result.results[0].error).toContain(message);
-    expect(uploadToStorage).not.toHaveBeenCalled();
+    expect(uploadPublishMedia).not.toHaveBeenCalled();
     expect(publishFacebookVideo).not.toHaveBeenCalled();
   });
 
@@ -139,10 +143,42 @@ describe('handleFacebookUpload', () => {
     expect(touchSocialAccount).toHaveBeenCalledTimes(1);
   });
 
+  it('presigns the engine archive instead of uploading a copy', async () => {
+    const fd = new FormData();
+    fd.append('videoStoragePath', 'user-1/persona-9/task-7/final-1.mp4');
+    fd.append('caption', 'my post');
+    fd.append('facebookAccountIds', '111');
+    const result = await handleFacebookUpload(fd, 'user-1');
+    expect(result.success).toBe(true);
+    expect(presignPublishMedia).toHaveBeenCalledWith('user-1/persona-9/task-7/final-1.mp4');
+    expect(uploadPublishMedia).not.toHaveBeenCalled();
+    expect(cleanupPublishMedia).not.toHaveBeenCalled();
+    expect(vi.mocked(publishFacebookVideo).mock.calls[0][0].videoUrl).toBe('https://s.example/archive.mp4');
+  });
+
+  it('rejects an archive key that belongs to another user', async () => {
+    const fd = new FormData();
+    fd.append('videoStoragePath', 'other-user/faceless/task-7/final-1.mp4');
+    fd.append('caption', 'my post');
+    fd.append('facebookAccountIds', '111');
+    const result = await handleFacebookUpload(fd, 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.results[0].error).toContain('belong to this user');
+    expect(presignPublishMedia).not.toHaveBeenCalled();
+  });
+
+  it('rejects a request that sends both a file and an archive key', async () => {
+    const fd = formData();
+    fd.append('videoStoragePath', 'user-1/faceless/task-7/final-1.mp4');
+    const result = await handleFacebookUpload(fd, 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.results[0].error).toContain('either a file or videoStoragePath');
+  });
+
   it('fails as a whole when every Page fails, and a non-Error throw stays generic', async () => {
     vi.mocked(getSocialAccountTokens).mockRejectedValue('not an error');
     const result = await handleFacebookUpload(formData(), 'user-1');
     expect(result).toEqual({ success: false, results: [{ accountId: '111', success: false, error: 'Unknown error', errorCode: 'transient' }] });
-    expect(cleanupOldUploads).toHaveBeenCalledWith('facebook');
+    expect(cleanupPublishMedia).toHaveBeenCalledWith('facebook');
   });
 });

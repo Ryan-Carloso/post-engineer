@@ -44,7 +44,7 @@ import { encryptTokens } from '@/lib/token-crypto';
 
 const USER_ID = 'user-uuid-1';
 
-function mockSupabase(overrides: { user?: { id: string } | null; upsertError?: unknown; isApiKey?: boolean } = {}) {
+function mockSupabase(overrides: { user?: { id: string } | null; upsertError?: unknown; isApiKey?: boolean; isOAuth?: boolean } = {}) {
   const upserted: Array<Record<string, unknown>> = [];
   const upsertOptions: Array<unknown> = [];
   const client = {
@@ -84,6 +84,7 @@ function mockSupabase(overrides: { user?: { id: string } | null; upsertError?: u
           userId: USER_ID,
           accessToken: 'test-key',
           isApiKey: overrides.isApiKey === true,
+          isOAuth: overrides.isOAuth === true,
         },
         error: null,
       }) as never,
@@ -213,6 +214,10 @@ describe('POST /api/threespeak-connect', () => {
     });
     const body = (await res.json()) as { success: boolean; username: string };
     expect(body).toMatchObject({ success: true, username: 'alice' });
+    // A cookie session reads through the server client, not the
+    // service client (which bypasses RLS).
+    expect(vi.mocked(createSupabaseServerClient)).toHaveBeenCalled();
+    expect(vi.mocked(createSupabaseServiceClient)).not.toHaveBeenCalled();
   });
 
   it('refreshes the existing row when the account reconnects', async () => {
@@ -274,5 +279,23 @@ describe('POST /api/threespeak-connect', () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error?: string };
     expect(JSON.stringify(body)).not.toContain('5Kpostingkey');
+  });
+
+  it('OAuth flow: OAuth token + JSON connects via the service client', async () => {
+    const { upserted } = mockSupabase({ isOAuth: true });
+    vi.mocked(loginToThreespeak).mockResolvedValueOnce({ username: 'alice', accessToken: 'jwt-1' });
+
+    const res = await POST(jsonRequest({ username: 'alice', postingKey: '5Kpostingkey' }));
+    expect(res.status).toBe(200);
+
+    expect(upserted[0]).toMatchObject({
+      user_id: USER_ID,
+      provider: '3speak',
+      provider_account_id: 'alice',
+    });
+    // An OAuth caller (remote MCP) has no cookie session, so the cookie
+    // client would see no user and RLS would hide the row.
+    expect(vi.mocked(createSupabaseServiceClient)).toHaveBeenCalled();
+    expect(vi.mocked(createSupabaseServerClient)).not.toHaveBeenCalled();
   });
 });

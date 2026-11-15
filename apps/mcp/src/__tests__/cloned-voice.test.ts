@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import * as fsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { EventEmitter } from 'node:events';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
@@ -34,6 +35,15 @@ import type { PostEngineerClient } from '../client.js';
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return { ...actual, readFile: vi.fn(actual.readFile) };
+});
+
+const { httpsRequestMock } = vi.hoisted(() => ({ httpsRequestMock: vi.fn() }));
+
+// The remote download goes through node:https with a pinned lookup, not the
+// global fetch: the mock below stands in for the socket.
+vi.mock('node:https', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:https')>();
+  return { ...actual, request: httpsRequestMock };
 });
 
 vi.mock('../analytics.js', () => ({
@@ -76,6 +86,36 @@ function audioResponse(bytes: number[], contentType = 'audio/wav') {
 function firstText(result: { content?: unknown }): string {
   const content = result.content as Array<{ type: string; text: string }>;
   return content?.[0]?.text ?? '';
+}
+
+// Fake IncomingMessage for the pinned remote download: an async-iterable
+// body plus the status, headers and stream controls the download reads.
+function httpsAudioResponse(chunks: Uint8Array[], statusCode = 200, contentType = 'audio/wav'): unknown {
+  const stream = (async function* () {
+    for (const chunk of chunks) yield chunk;
+  })();
+  return Object.assign(stream, {
+    statusCode,
+    headers: { 'content-type': contentType },
+    resume: vi.fn(),
+    destroy: vi.fn(),
+  });
+}
+
+function armHttpsAudio(bytes: number[]): void {
+  httpsRequestMock.mockImplementation(
+    (_url: unknown, _options: unknown, callback: (res: unknown) => void) => {
+      const req = new EventEmitter() as EventEmitter & {
+        end: () => void;
+        destroy: () => void;
+      };
+      req.end = () => {
+        callback(httpsAudioResponse(bytes.map((b) => new Uint8Array([b]))));
+      };
+      req.destroy = () => {};
+      return req;
+    },
+  );
 }
 
 describe('fetchCloneReferenceAudio', () => {
@@ -647,6 +687,7 @@ describe('cloned voice tool handlers', () => {
 describe('cloned voice tools run through the MCP server', () => {
   afterEach(() => {
     global.fetch = realFetch;
+    httpsRequestMock.mockClear();
   });
 
   async function callTool(
@@ -680,7 +721,7 @@ describe('cloned voice tools run through the MCP server', () => {
 
   it('voices create_clone on the remote server uses the URL-only schema', async () => {
     const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-http' } });
-    global.fetch = vi.fn().mockResolvedValue(audioResponse([5, 5, 5]));
+    armHttpsAudio([5, 5, 5]);
     const apiClient = fakeHost(request) as unknown as PostEngineerClient;
     const server = createPostEngineerMcpServer(apiClient, 'http');
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -689,7 +730,7 @@ describe('cloned voice tools run through the MCP server', () => {
     try {
       const result = await client.callTool({
         name: 'voices',
-        arguments: { action: 'create_clone', audioUrl: 'https://cdn.example.com/ref.wav', language: 'en', consent: true, denoise: true },
+        arguments: { action: 'create_clone', audioUrl: 'https://93.184.216.34/ref.wav', language: 'en', consent: true, denoise: true },
       });
       expect(result.isError).toBeFalsy();
       expect(firstText(result as { content?: unknown })).toContain('Voice clone registration started');

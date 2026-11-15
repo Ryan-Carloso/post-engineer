@@ -107,7 +107,7 @@ async function getHandler(request?: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
   const user = { id: auth.userId };
-  const supabase = auth.isApiKey === true
+  const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()
     : await createSupabaseServerClient();
 
@@ -157,7 +157,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
   const user = { id: auth.userId };
-  const supabase = auth.isApiKey === true
+  const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()
     : await createSupabaseServerClient();
 

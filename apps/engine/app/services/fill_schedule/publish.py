@@ -174,17 +174,16 @@ class BatchPublisher:
         if not resumed:
             # Once per publish: a resume (backoff, crash lease) is the same publish.
             track_event("video_publish_started", publish_tracking_context(slot, schedule))
-        media_kind = slot.get("media_kind")
-        if not slot.get("task_id") and isinstance(media_kind, str) and media_kind in ("upload", "image"):
-            # Issue #384: a task-less media slot publishes from stored media.
-            # The resolver marks permanent failures itself (None = done here).
+        if not slot.get("task_id") and slot.get("media_kind") in ("upload", "image"):
+            # Issue #384: task-less media slot publishes from stored media; resolver marks permanent failures (None = done).
             fail = partial(self._fail_slot_permanently, slot, schedule)
             resolved = resolve_existing_media(self.store, fail, slot, now, resumed)
             if resolved is None:
                 return 0
             videos, video_reader, content_type, upload_cleanup = resolved
             media_cleanup = upload_cleanup or media_cleanup
-            task = None
+            # Media bytes come from the resolver, not the R2 archive (no presign).
+            task = object_path = None
         else:
             task = self.task_state.get_task(str(slot["task_id"]))
             videos = (task or {}).get("videos") or []
@@ -253,6 +252,7 @@ class BatchPublisher:
             persist_outcomes=persist_outcomes,
             record_results=record_results,
             content_type=content_type,
+            video_object_path=object_path,
         )
         if account_result.transport_error is not None:
             logger.warning(

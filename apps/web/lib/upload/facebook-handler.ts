@@ -6,12 +6,12 @@ import { publishFacebookVideo, FACEBOOK_TEXT_MAX_CHARS, FACEBOOK_VIDEO_MAX_BYTES
 import { accountFailure } from '@/lib/upload/account-error';
 import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
-import { cleanupOldUploads, uploadToStorage } from '@/lib/upload/handlers';
+import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
 
 //---------------
 // handleFacebookUpload — publishes the video to the user's Facebook Pages.
-// Facebook fetches the video from a URL, so the file goes through Supabase
-// Storage first (signed URL, same path as Threads).
+// Facebook fetches the video from a URL, so the file is stored
+// on R2 first (presigned URL, lib/upload/publish-media.ts, same path as Threads).
 // FormData (multipart, coming from the engine or the UI):
 //   provider=facebook, video (File), caption, facebookAccountIds (repeated),
 //   userId (internal engine call only).
@@ -52,18 +52,32 @@ export async function handleFacebookUpload(
   if (caption.length > FACEBOOK_TEXT_MAX_CHARS) {
     return rejected(`Caption exceeds the Facebook ${FACEBOOK_TEXT_MAX_CHARS}-character limit`);
   }
-  if (!(rawFile instanceof File)) return rejected('Video file is required');
-  if (rawFile.size > FACEBOOK_VIDEO_MAX_BYTES) return rejected('Video exceeds the Facebook 4GB limit');
-
-  // The stored file is served from a signed URL, so the bytes are checked
-  // rather than the client-declared type: MP4 and MOV both carry `ftyp` at offset 4.
-  const buffer = Buffer.from(await rawFile.arrayBuffer());
-  if (buffer.subarray(4, 8).toString('latin1') !== 'ftyp') return rejected('Video must be an MP4 or MOV file');
-
-  const contentType = rawFile.type === 'video/quicktime' ? 'video/quicktime' : 'video/mp4';
-  const extension = contentType === 'video/quicktime' ? 'mov' : 'mp4';
-  const storagePath = `facebook/${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${extension}`;
-  const videoUrl = await uploadToStorage(buffer, storagePath, contentType);
+  const storagePathRaw = formData.get('videoStoragePath');
+  let videoUrl: string;
+  let usedArchive = false;
+  if (storagePathRaw !== null) {
+    // Engine-generated final: already verified in R2, presign it directly.
+    // A caller sends either the file or this key, never both.
+    if (typeof storagePathRaw !== 'string' || storagePathRaw.trim() === '') {
+      return rejected('videoStoragePath must be a string');
+    }
+    if (rawFile instanceof File) return rejected('Send either a file or videoStoragePath, not both');
+    const objectKey = storagePathRaw.trim();
+    if (!objectKey.startsWith(`${ownerUserId}/`)) return rejected('videoStoragePath must belong to this user');
+    videoUrl = await presignPublishMedia(objectKey);
+    usedArchive = true;
+  } else {
+    if (!(rawFile instanceof File)) return rejected('Video file is required');
+    if (rawFile.size > FACEBOOK_VIDEO_MAX_BYTES) return rejected('Video exceeds the Facebook 4GB limit');
+    // The stored file is served from a signed URL, so the bytes are checked
+    // rather than the client-declared type: MP4 and MOV both carry `ftyp` at offset 4.
+    const buffer = Buffer.from(await rawFile.arrayBuffer());
+    if (buffer.subarray(4, 8).toString('latin1') !== 'ftyp') return rejected('Video must be an MP4 or MOV file');
+    const contentType = rawFile.type === 'video/quicktime' ? 'video/quicktime' : 'video/mp4';
+    const extension = contentType === 'video/quicktime' ? 'mov' : 'mp4';
+    const storagePath = `facebook/${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${extension}`;
+    videoUrl = await uploadPublishMedia(buffer, storagePath, contentType);
+  }
 
   const supabase = createSupabaseServiceClient();
   const results: FacebookAccountResult[] = [];
@@ -102,10 +116,10 @@ export async function handleFacebookUpload(
     }
   }
 
-  // Fire-and-forget: remove Facebook media older than 24h from the bucket,
-  // mirroring the Threads handler — otherwise every publish stores
-  // its video under `facebook/` forever.
-  cleanupOldUploads('facebook');
+  // Archive presign created no temp copy, so there is nothing to clean.
+  if (!usedArchive) {
+    void cleanupPublishMedia('facebook');
+  }
 
   return { success: results.some((result) => result.success), results };
 }

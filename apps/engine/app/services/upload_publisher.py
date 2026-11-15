@@ -3,20 +3,21 @@
 Contract target: ``POST https://post-engineer.com/api/upload-content``
 (Next.js route ``apps/web/app/api/upload-content/route.ts``).
 
-Wire contract (multipart/form-data):
+Wire contract (form data — multipart when a file part is sent,
+application/x-www-form-urlencoded when ``videoStoragePath`` replaces it):
 - Authentication: ``Authorization: Bearer <MONEYPRINT_API_SECRET>`` (engine).
 - YouTube: ``provider=youtube``, ``video`` (file), ``title``, ``description``,
   ``tags`` (single comma-separated string), ``privacyStatus``
   (public|private|unlisted), repeated ``accountIds`` fields.
-- Instagram: ``provider=instagram``, ``file`` (file), ``caption``,
-  repeated ``igAccountIds`` fields.
+- Instagram: ``provider=instagram``, ``file`` xor ``videoStoragePath`` (R2 key),
+  ``caption``, repeated ``igAccountIds`` fields.
 - Bluesky: ``provider=bluesky``, ``file`` (file), ``caption``,
   repeated ``accountIds`` fields.
 - LinkedIn: ``provider=linkedin``, ``video`` (file), ``caption``,
   repeated ``accountIds`` fields.
-- Threads: ``provider=threads``, ``video`` (file), ``caption``,
+- Threads: ``provider=threads``, ``video`` xor ``videoStoragePath``, ``caption``,
   repeated ``threadsAccountIds`` fields.
-- Facebook: ``provider=facebook``, ``video`` (file), ``caption``,
+- Facebook: ``provider=facebook``, ``video`` xor ``videoStoragePath``, ``caption``,
   repeated ``facebookAccountIds`` fields (see ``publish_facebook``). Pinterest: ``provider=pinterest``, ``video`` (file), ``title``, ``description``, ``boardId``, repeated ``pinterestAccountIds`` fields (see ``publish_pinterest``; validated by ``fill_schedule/metadata.py``).
 - 3Speak: ``provider=3speak``, ``video`` (file), ``caption``,
   repeated ``threespeakAccountIds`` fields (see ``publish_threespeak``).
@@ -27,8 +28,10 @@ Wire contract (multipart/form-data):
 - Fanvue: ``provider=fanvue``, ``video`` (file), ``title``, ``description``,
   repeated ``fanvueAccountIds`` fields (see ``publish_fanvue``; validated by ``fill_schedule/metadata.py``).
 
-This module owns only types, validation and multipart part builders; the HTTP
-transport lives in the client function of the same module.
+This module owns only types, validation and form-data part builders
+(multipart when a file part is sent, urlencoded when ``videoStoragePath``
+replaces it); the HTTP transport lives in the client function of the
+same module.
 """
 
 from __future__ import annotations
@@ -85,6 +88,7 @@ VALID_PROVIDERS: tuple[str, ...] = (
     RUMBLE_PROVIDER,
     FANVUE_PROVIDER,
 )
+_URL_PROVIDERS = frozenset({INSTAGRAM_PROVIDER, THREADS_PROVIDER, FACEBOOK_PROVIDER})
 
 
 @dataclass
@@ -388,13 +392,14 @@ def publish_video(
     owner_user_id: str,
     metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | PinterestMetadata | ThreespeakMetadata | RumbleMetadata | FanvueMetadata,
     video_path: str,
-    video_bytes: bytes,
+    video_bytes: bytes | None,
     content_type: str,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     sleep: Callable[[float], None] = time.sleep,
     surface_application_failure: bool = False,
     publish_scope_key: str | None = None,
+    r2_object_path: str | None = None,
 ) -> dict[str, Any]:
     """Publish one finished video through the internal upload API.
 
@@ -404,6 +409,8 @@ def publish_video(
     transient errors (408/429/5xx) with linear backoff of ``attempt``
     seconds. Client errors (4xx auth/validation) fail immediately. The
     service key is never included in error messages.
+    Meta providers with ``r2_object_path`` send ``videoStoragePath`` instead
+    of the file part; the web presigns the archive.
     """
     import requests
 
@@ -423,20 +430,24 @@ def publish_video(
         # without a key send nothing and keep today's behaviour.
         parts.fields.append(("publishScopeKey", publish_scope_key))
 
-    file_field, fileobj, file_content_type = build_video_file_part(
-        fileobj=io.BytesIO(video_bytes),
-        filename=video_path,
-        content_type=content_type,
-        provider=provider,
-    )
+    if r2_object_path is not None and provider in _URL_PROVIDERS:
+        parts.fields.append(("videoStoragePath", r2_object_path))
+        file_field, fileobj, file_content_type = "", None, ""
+    elif video_bytes is None:
+        raise PublishError("video bytes are required for this provider")
+    else:
+        file_field, fileobj, file_content_type = build_video_file_part(
+            fileobj=io.BytesIO(video_bytes), filename=video_path, content_type=content_type, provider=provider
+        )
 
     headers: dict[str, str] = {"Authorization": f"Bearer {api_secret}"}
 
     url = f"{base_url.rstrip('/')}{DEFAULT_UPLOAD_PATH}"
     last_error: PublishError | None = None
     for attempt in range(1, max_attempts + 1):
-        fileobj.seek(0)
-        files = {file_field: (video_path, fileobj, file_content_type)}
+        if fileobj is not None:
+            fileobj.seek(0)
+        files = {file_field: (video_path, fileobj, file_content_type)} if fileobj is not None else None
         try:
             response = requests.post(
                 url,

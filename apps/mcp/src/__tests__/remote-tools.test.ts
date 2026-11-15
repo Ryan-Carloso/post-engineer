@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createPostEngineerMcpServer } from '../index.js';
@@ -13,6 +14,15 @@ import {
   CreateClonedVoiceRemoteSchema,
   CreateClonedVoiceRemoteShape,
 } from '../cloned-voice-tools.js';
+
+const { httpsRequestMock } = vi.hoisted(() => ({ httpsRequestMock: vi.fn() }));
+
+// The remote download goes through node:https with a pinned lookup, not the
+// global fetch: the mock below stands in for the socket.
+vi.mock('node:https', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:https')>();
+  return { ...actual, request: httpsRequestMock };
+});
 
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
@@ -171,7 +181,35 @@ describe('remote smuggled paths are dropped by the SDK, never read', () => {
 
   afterEach(() => {
     global.fetch = realFetch;
+    httpsRequestMock.mockClear();
   });
+
+  // Fake IncomingMessage for the pinned remote download: an async-iterable
+  // body plus the status, headers and stream controls the download reads.
+  function armHttpsAudio(bytes: number[]): void {
+    httpsRequestMock.mockImplementation(
+      (_url: unknown, _options: unknown, callback: (res: unknown) => void) => {
+        const stream = (async function* () {
+          for (const byte of bytes) yield new Uint8Array([byte]);
+        })();
+        const response = Object.assign(stream, {
+          statusCode: 200,
+          headers: { 'content-type': 'audio/mpeg' },
+          resume: vi.fn(),
+          destroy: vi.fn(),
+        });
+        const req = new EventEmitter() as EventEmitter & {
+          end: () => void;
+          destroy: () => void;
+        };
+        req.end = () => {
+          callback(response);
+        };
+        req.destroy = () => {};
+        return req;
+      },
+    );
+  }
 
   function stubClient() {
     const createPersona = vi.fn().mockResolvedValue({ id: 'p1', name: 'Ava' });
@@ -258,23 +296,23 @@ describe('remote smuggled paths are dropped by the SDK, never read', () => {
 
   it('voices create_clone over HTTP with a smuggled audioPath clones from the URL', async () => {
     const { client, request } = stubClient();
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: { get: (name: string) => (name === 'content-type' ? 'audio/mpeg' : null) },
-      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
-    });
-    global.fetch = fetchMock as unknown as typeof fetch;
+    // Literal public IP: the SSRF check validates it without a DNS lookup,
+    // so the test stays hermetic.
+    armHttpsAudio([1, 2, 3]);
     const result = await callRemoteTool(client, 'voices', {
       action: 'create_clone',
-      audioUrl: 'https://example.com/voice.mp3',
+      audioUrl: 'https://93.184.216.34/voice.mp3',
       audioPath: '/tmp/voice.mp3',
       language: 'en',
       consent: true,
       denoise: true,
     });
     expect(result.isError).toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledWith('https://example.com/voice.mp3', expect.anything());
+    expect(httpsRequestMock).toHaveBeenCalledWith(
+      'https://93.184.216.34/voice.mp3',
+      expect.anything(),
+      expect.any(Function),
+    );
     expect(request).toHaveBeenCalledWith(
       '/api/persona/cloned-voices',
       expect.objectContaining({ method: 'POST' }),

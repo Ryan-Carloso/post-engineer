@@ -16,6 +16,7 @@ import {
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { parseMediaUpload } from '@/lib/media/upload-schema';
 import { InstagramService } from '@/lib/instagram';
+import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
 import { httpStatusOf, reportAccountUnauthorized } from './account-unauthorized';
 import { classifyUploadAccountError } from '@/lib/upload/account-error';
 import type { OAuth2Client } from 'google-auth-library';
@@ -199,106 +200,6 @@ function getExtension(mimeType: string): string {
   return map[mimeType] || 'bin';
 }
 
-const STORAGE_BUCKET = 'uploads';
-
-//---------------
-// cleanupOldUploads — deletes bucket objects older than CLEANUP_MAX_AGE_MS,
-// ensuring the provider had time to fetch the media. Runs fire-and-forget
-// after each publish; the prefix defaults to Instagram, others pass their own.
-//---------------
-const CLEANUP_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
-const CLEANUP_PREFIX = 'instagram';
-
-export function cleanupOldUploads(prefix: string = CLEANUP_PREFIX): void {
-  void (async (): Promise<void> => {
-    try {
-      const supabase = createSupabaseServiceClient();
-      const { data: objects, error: listError } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .list(prefix, { limit: 1000, sortBy: { column: 'created_at', order: 'asc' } });
-
-      if (listError) {
-        logger.warn('Storage cleanup: failed to list objects', {
-          metadata: { error: listError.message },
-        });
-        return;
-      }
-      if (!objects || objects.length === 0) return;
-
-      const cutoff = Date.now() - CLEANUP_MAX_AGE_MS;
-      const stalePaths = objects
-        .filter((obj) => {
-          const createdAt = typeof obj.created_at === 'string' ? Date.parse(obj.created_at) : Number.NaN;
-          return !Number.isNaN(createdAt) && createdAt < cutoff;
-        })
-        .map((obj) => `${prefix}/${obj.name}`);
-
-      if (stalePaths.length === 0) return;
-
-      const { error: removeError } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .remove(stalePaths);
-
-      if (removeError) {
-        logger.warn('Storage cleanup: failed to remove objects', {
-          metadata: { error: removeError.message, count: stalePaths.length },
-        });
-        return;
-      }
-
-      logger.info('Storage cleanup completed', {
-        metadata: { removed: stalePaths.length },
-      });
-    } catch (error) {
-      logger.warn('Storage cleanup: unexpected error', {
-        metadata: { error: error instanceof Error ? error.message : String(error) },
-      });
-    }
-  })();
-}
-
-export async function uploadToStorage(
-  buffer: Buffer,
-  filename: string,
-  contentType: string,
-): Promise<string> {
-  const supabase = createSupabaseServiceClient();
-
-  // Ensure the bucket exists (idempotent creation)
-  const { data: buckets, error: listErr } = await supabase.storage.listBuckets();
-  if (listErr) {
-    throw new Error(`Failed to list storage buckets: ${listErr.message}`);
-  }
-
-  const bucketExists = buckets?.some((b) => b.name === STORAGE_BUCKET);
-  if (!bucketExists) {
-    const { error: createErr } = await supabase.storage.createBucket(STORAGE_BUCKET, {
-      public: false,
-    });
-    if (createErr) {
-      if (!createErr.message.includes('already exists')) {
-        throw new Error(`Failed to create storage bucket: ${createErr.message}`);
-      }
-    }
-  }
-
-  const { error } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .upload(filename, buffer, { contentType, upsert: false });
-
-  if (error) {
-    throw new Error(`Failed to upload media to storage: ${error.message}`);
-  }
-
-  const { data: urlData, error: signErr } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .createSignedUrl(filename, 3600);
-  if (signErr || !urlData?.signedUrl) {
-    throw new Error(`Failed to generate signed URL: ${signErr?.message ?? 'no URL'}`);
-  }
-  return urlData.signedUrl;
-}
-
 export async function handleInstagramUpload(
   formData: FormData,
   ownerUserId: string,
@@ -316,34 +217,55 @@ export async function handleInstagramUpload(
     throw new ValidationError('Caption is required', 'caption');
   }
 
-  let file: File | null = null;
-  let buffer: Buffer = Buffer.alloc(0);
-  if (rawFile instanceof File) {
-    file = rawFile;
-    buffer = Buffer.from(await file.arrayBuffer());
+  const storagePathRaw = formData.get('videoStoragePath');
+  let publicUrl: string;
+  let detectedType: string;
+  let storagePath: string;
+  let fileSize: number;
+  let usedArchive = false;
+  if (storagePathRaw !== null) {
+    // Engine-generated final: already verified in R2, presign it directly.
+    if (typeof storagePathRaw !== 'string' || storagePathRaw.trim() === '') {
+      throw new ValidationError('videoStoragePath must be a string', 'videoStoragePath');
+    }
+    if (rawFile instanceof File) {
+      throw new ValidationError('Send either a file or videoStoragePath, not both', 'videoStoragePath');
+    }
+    const objectKey = storagePathRaw.trim();
+    if (!objectKey.startsWith(`${ownerUserId}/`)) {
+      throw new ValidationError('videoStoragePath must belong to this user', 'videoStoragePath');
+    }
+    publicUrl = await presignPublishMedia(objectKey);
+    detectedType = 'video/mp4';
+    storagePath = objectKey;
+    fileSize = 0;
+    usedArchive = true;
+  } else {
+    let file: File | null = null;
+    let buffer: Buffer = Buffer.alloc(0);
+    if (rawFile instanceof File) {
+      file = rawFile;
+      buffer = Buffer.from(await file.arrayBuffer());
+    }
+    const parsed = parseMediaUpload(file, buffer);
+    if (!parsed.success) {
+      logger.warn('Media upload rejected during validation', {
+        logId,
+        endpoint: '/api/upload-content',
+        metadata: { issues: parsed.issues },
+      });
+      throw new ValidationError(parsed.issues[0]?.code ?? 'FILE_REQUIRED', 'file');
+    }
+    const validated = parsed;
+    detectedType = validated.detectedType;
+    // Instagram fetches the media from a URL: store it on R2 (no egress fees).
+    const timestamp = Date.now();
+    const random = crypto.randomBytes(4).toString('hex');
+    const extension = getExtension(detectedType);
+    storagePath = `instagram/${timestamp}_${random}.${extension}`;
+    publicUrl = await uploadPublishMedia(validated.buffer, storagePath, detectedType);
+    fileSize = validated.buffer.length;
   }
-
-  const parsed = parseMediaUpload(file, buffer);
-  if (!parsed.success) {
-    logger.warn('Media upload rejected during validation', {
-      logId,
-      endpoint: '/api/upload-content',
-      metadata: { issues: parsed.issues },
-    });
-    throw new ValidationError(
-      parsed.issues[0]?.code ?? 'FILE_REQUIRED',
-      'file',
-    );
-  }
-
-  const { buffer: validatedBuffer, detectedType } = parsed;
-
-  // Upload to Supabase Storage (public URL accessible by Instagram)
-  const timestamp = Date.now();
-  const random = crypto.randomBytes(4).toString('hex');
-  const extension = getExtension(detectedType);
-  const storageFilename = `instagram/${timestamp}_${random}.${extension}`;
-  const publicUrl = await uploadToStorage(validatedBuffer, storageFilename, detectedType);
   const isVideo = detectedType === 'video/mp4' || detectedType === 'video/quicktime';
 
   logger.info('upload-content/instagram: media stored, starting publishes', {
@@ -352,8 +274,8 @@ export async function handleInstagramUpload(
       accountCount: accountIds.length,
       detectedType,
       isVideo,
-      fileSize: validatedBuffer.length,
-      storagePath: storageFilename,
+      fileSize,
+      storagePath,
     },
   });
 
@@ -401,8 +323,10 @@ export async function handleInstagramUpload(
     }
   }
 
-  // Fire-and-forget: remove media older than 24h from the bucket.
-  cleanupOldUploads();
+  // Archive presign created no temp copy, so there is nothing to clean.
+  if (!usedArchive) {
+    void cleanupPublishMedia('instagram');
+  }
 
   logger.info('Content upload (instagram) finished', {
     logId,

@@ -39,11 +39,14 @@ import { startLedgerHeartbeat } from '@/lib/upload/publish-ledger-heartbeat';
 // FormData:
 //   provider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' | '3speak' | 'rumble'
 //   youtube:    video, title, description, tags, privacyStatus, accountIds (repeatable)
-//   instagram:  file, caption, igAccountIds (repeatable)
+//   instagram:  file xor videoStoragePath, caption, igAccountIds (repeatable)
 //   bluesky:    video, caption, did (repeatable)
 //   linkedin:   video, caption, linkedinAccountIds (repeatable; member id or org URN)
-//   threads:    video, caption, threadsAccountIds (repeatable)
-//   facebook:   video, caption, facebookAccountIds (repeatable; Page ids)
+//   threads:    video xor videoStoragePath, caption, threadsAccountIds (repeatable)
+//   facebook:   video xor videoStoragePath, caption, facebookAccountIds (repeatable; Page ids)
+// videoStoragePath is an engine-archived R2 key
+// `{userId}/{persona|faceless}/{taskId}/final-1.mp4`: the handler presigns
+// it directly instead of uploading a publish-media copy.
 //   pinterest:  video, title, description, boardId, pinterestAccountIds (repeatable; user ids)
 //   fanvue:     video, title, description, fanvueAccountIds (repeatable; Fanvue user uuids)
 //   3speak:     video, caption, threespeakAccountIds (repeatable; Hive usernames)
