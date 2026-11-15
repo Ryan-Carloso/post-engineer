@@ -5,6 +5,7 @@ import { getPrompt, listPrompts } from '@/lib/contracts/prompts';
 import { getTokenBalance, listTokenTransactions } from '@/lib/contracts/billing';
 import { getPost } from '@/lib/contracts/posts';
 import { getRetentionCurve, listMetrics } from '@/lib/contracts/metrics';
+import { checkMedia, uploadContent, uploadMedia } from '@/lib/contracts/media';
 import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
 //---------------
@@ -23,6 +24,9 @@ type TokenTransactionsResponse = ResponseOf<typeof listTokenTransactions>;
 type GetPostResponse = ResponseOf<typeof getPost>;
 type MetricsResponse = ResponseOf<typeof listMetrics>;
 type RetentionCurveResponse = ResponseOf<typeof getRetentionCurve>;
+type MediaCheckResponse = ResponseOf<typeof checkMedia>;
+type UploadMediaResponse = ResponseOf<typeof uploadMedia>;
+type UploadContentResponse = ResponseOf<typeof uploadContent>;
 
 describe('contracts typecheck', () => {
   it('pins BodyOf and ResponseOf field names', async () => {
@@ -158,5 +162,30 @@ describe('contracts typecheck', () => {
     expect(curve.points[0]?.ratio).toBe(0.01);
     // @ts-expect-error -- the point field is `audienceWatchRatio`, not `watchRatio`
     expect(curve.points[0]?.watchRatio).toBeUndefined();
+  });
+
+  it('pins the media response field names', () => {
+    const upload: UploadMediaResponse = {
+      success: true,
+      mediaId: 'aabbccddeeff00112233445566778899.png',
+      expiresInSeconds: 3600,
+    };
+    expect(upload.mediaId).toContain('.png');
+    // @ts-expect-error -- the upload field is `mediaId`, not `media_id`
+    expect(upload.media_id).toBeUndefined();
+    const check: MediaCheckResponse = { success: true, code: 'ok', width: 1920, height: 1080 };
+    expect(check.code).toBe('ok');
+    // @ts-expect-error -- the check field is `code`, not `status`
+    expect(check.status).toBeUndefined();
+    const content: UploadContentResponse = {
+      success: true,
+      provider: 'youtube',
+      results: [{ accountId: 'chan-1', success: true, videoId: 'vid-1' }],
+      successCount: 1,
+      logId: 'log-1',
+    };
+    expect(content.results[0]?.accountId).toBe('chan-1');
+    // @ts-expect-error -- the account field is `accountId`, not `account_id`
+    expect(content.results[0]?.account_id).toBeUndefined();
   });
 });

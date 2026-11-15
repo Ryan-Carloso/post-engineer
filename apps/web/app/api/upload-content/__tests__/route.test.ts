@@ -83,6 +83,7 @@ import { logger } from '@/lib/logger';
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import type { ValidationError } from '@/lib/errors';
 import { POST } from '@/app/api/upload-content/route';
+import { UploadContentResponseSchema } from '@/lib/contracts/media';
 
 const USER_ID = 'user-1';
 const API_SECRET = 'engine-shared-secret';
@@ -332,6 +333,8 @@ describe('POST /api/upload-content', () => {
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
     const body = (await res.json()) as { success: boolean; provider: string };
     expect(body).toEqual({ success: true, provider: 'instagram', results: [] });
+    // The 200 body parses against the shared contract the MCP reads.
+    expect(UploadContentResponseSchema.safeParse(body).success).toBe(true);
     // Non-YouTube providers share the instagram-post rate-limit profile.
     const [, profile] = mockApplyRateLimit.mock.calls[0] as unknown[];
     expect(profile).toBe(RATE_LIMITS.instagramPost);
@@ -370,7 +373,10 @@ describe('POST /api/upload-content', () => {
     expect(mockHandleThreadsUpload).not.toHaveBeenCalled();
     expect(mockHandleInstagramUpload).not.toHaveBeenCalled();
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
-    expect(await res.json()).toEqual({ success: true, results: [{ accountId: '111', success: true, postId: 'vid-1' }] });
+    const facebookBody = await res.json();
+    expect(facebookBody).toEqual({ success: true, results: [{ accountId: '111', success: true, postId: 'vid-1' }] });
+    // The 200 body parses against the shared contract the MCP reads.
+    expect(UploadContentResponseSchema.safeParse(facebookBody).success).toBe(true);
   });
 
   it('handles the 3speak upload with the caller as the Hive owner', async () => {

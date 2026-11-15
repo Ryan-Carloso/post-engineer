@@ -4,6 +4,8 @@ import { createExperiment } from '../client-experiments.js';
 import { getPrompt, listPrompts } from '../client-prompts.js';
 import { getTokenBalance, listTokenTransactions } from '../client-billing.js';
 import { getPost, getPostMetrics, getYouTubeRetentionCurve } from '../client-posts.js';
+import { publishVideoDirect } from '../client-publish-uploaded.js';
+import { checkSegmentMedia, uploadSegmentMedia } from '../client-user-media.js';
 
 //---------------
 // Type-level pins for the shared contracts, checked by
@@ -20,6 +22,9 @@ type TokenTransactionsResult = Awaited<ReturnType<typeof listTokenTransactions>>
 type GetPostResult = Awaited<ReturnType<typeof getPost>>;
 type PostMetricsResult = Awaited<ReturnType<typeof getPostMetrics>>;
 type RetentionCurveResult = Awaited<ReturnType<typeof getYouTubeRetentionCurve>>;
+type CheckMediaResult = Awaited<ReturnType<typeof checkSegmentMedia>>;
+type UploadMediaResult = Awaited<ReturnType<typeof uploadSegmentMedia>>;
+type DirectPublishResult = Awaited<ReturnType<typeof publishVideoDirect>>;
 
 describe('contracts typecheck', () => {
   it('rejects an unknown body field and an unknown response field at compile time', () => {
@@ -83,5 +88,23 @@ describe('contracts typecheck', () => {
     };
     expect(typeof row).toBe('function');
     expect(typeof curve).toBe('function');
+  });
+
+  it('rejects unknown media fields at compile time', () => {
+    const upload = (result: UploadMediaResult): unknown => {
+      // @ts-expect-error -- the result field is `mediaId`, not `media_id`
+      return result.media_id;
+    };
+    const check = (result: CheckMediaResult): unknown => {
+      // @ts-expect-error -- the result field is `code`, not `status`
+      return result.status;
+    };
+    const direct = (result: DirectPublishResult): unknown => {
+      // @ts-expect-error -- the account field is `accountId`, not `account_id`
+      return result.results[0]?.account_id;
+    };
+    expect(typeof upload).toBe('function');
+    expect(typeof check).toBe('function');
+    expect(typeof direct).toBe('function');
   });
 });

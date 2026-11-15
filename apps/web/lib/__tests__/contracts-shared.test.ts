@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 import { METRICS_WINDOWS } from '@/lib/contracts/experiments';
 import { SOCIAL_PROVIDERS, YOUTUBE_VIDEO_ID } from '@/lib/contracts/metrics';
+import { CHECK_MEDIA_CODES, MEDIA_ID_PATTERN, VIDEO_ASPECTS } from '@/lib/contracts/media';
 import { PUBLISH_PROVIDERS } from '@/lib/contracts/posts';
 
 const HEADER = '// GENERATED from shared/contracts — do not edit.\n// Run `node scripts/sync-contracts.mjs` from the repo root to regenerate.\n';
@@ -92,5 +93,29 @@ describe('contracts shared source', () => {
     expect(metricsQuery).toContain("from '@/lib/contracts/metrics'");
     expect(metricsQuery).toContain('parseMetricsQuery,');
     expect(metricsQuery).toContain('parseRetentionCurveQuery,');
+  });
+
+  // The media contract carries its own CHECK_MEDIA_CODES and
+  // VIDEO_ASPECTS copies (the check route validates against its own
+  // sets). A one-sided edit would make the contract reject a code or
+  // aspect the route accepts, so the copies are pinned here.
+  it('pins the shared media check codes and aspects to the check route', () => {
+    const root = findRepoRoot(import.meta.url);
+    const checkRoute = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'media', 'check', 'route.ts'), 'utf8');
+    for (const code of CHECK_MEDIA_CODES) {
+      expect(checkRoute).toContain(`'${code}'`);
+    }
+    for (const aspect of VIDEO_ASPECTS) {
+      expect(checkRoute).toContain(`'${aspect}'`);
+    }
+  });
+
+  // The media contract carries its own MEDIA_ID_PATTERN copy (the
+  // upload route 502s when the engine-minted id does not match it). A
+  // one-sided edit would make the MCP reject an id the route serves.
+  it('pins the shared MEDIA_ID_PATTERN to the upload route', () => {
+    const root = findRepoRoot(import.meta.url);
+    const uploadRoute = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'media', 'upload', 'route.ts'), 'utf8');
+    expect(uploadRoute).toContain(`const MEDIA_ID_PATTERN = /${MEDIA_ID_PATTERN.source}/;`);
   });
 });

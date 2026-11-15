@@ -51,7 +51,7 @@ describe('upload_media tool', () => {
 
   it('uploads a real image and returns only the mediaId, never the local path', async () => {
     const path = tempFile('porto.png', PNG_HEADER);
-    const client = fakeClient(async () => ({ success: true, mediaId: 'aabbccddeeff00112233445566778899.png' }));
+    const client = fakeClient(async () => ({ success: true, mediaId: 'aabbccddeeff00112233445566778899.png', expiresInSeconds: 3600 }));
     const response = await handleUploadMedia(client, { path });
     expect(response.isError).not.toBe(true);
     expect(textOf(response)).toContain('aabbccddeeff00112233445566778899.png');
@@ -66,7 +66,7 @@ describe('upload_media tool', () => {
   it('validates the real image type, not the extension', async () => {
     // JPEG bytes in a .png file: the content wins, the upload proceeds.
     const path = tempFile('porto.png', JPEG_HEADER);
-    const client = fakeClient(async () => ({ success: true, mediaId: 'aabbccddeeff00112233445566778899.jpg' }));
+    const client = fakeClient(async () => ({ success: true, mediaId: 'aabbccddeeff00112233445566778899.jpg', expiresInSeconds: 3600 }));
     const response = await handleUploadMedia(client, { path });
     expect(response.isError).not.toBe(true);
     expect(textOf(response)).toContain('aabbccddeeff00112233445566778899.jpg');
@@ -96,6 +96,15 @@ describe('upload_media tool', () => {
     expect(response.isError).toBe(true);
     expect(textOf(response)).not.toContain('/tmp/does-not-exist-porto.png');
   });
+
+  it('rejects a malformed 200 body instead of reporting success', async () => {
+    // The pre-contract shape (no expiry) is now a loud error.
+    const path = tempFile('porto.png', PNG_HEADER);
+    const client = fakeClient(async () => ({ success: true, mediaId: 'aabbccddeeff00112233445566778899.png' }));
+    const response = await handleUploadMedia(client, { path });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('Malformed response from POST /api/media/upload');
+  });
 });
 
 describe('check_media tool', () => {
@@ -117,6 +126,14 @@ describe('check_media tool', () => {
     const client = fakeClient(async () => ({ success: true, code: 'maybe' }));
     const response = await handleCheckMedia(client, { url: 'https://e.com/porto.jpg' });
     expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('Malformed response from POST /api/media/check');
+  });
+
+  it('rejects a malformed 200 body instead of passing it through', async () => {
+    const client = fakeClient(async () => ({ success: true }));
+    const response = await handleCheckMedia(client, { url: 'https://e.com/porto.jpg' });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('Malformed response from POST /api/media/check');
   });
 
   it('rejects a non-http URL before any request goes out', async () => {
