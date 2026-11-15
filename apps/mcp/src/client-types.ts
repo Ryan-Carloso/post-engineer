@@ -249,10 +249,13 @@ export interface PublishExistingInput {
   boardId?: string;
   /**
    * Omitted: a UUID is generated per call. Reuse the same key when retrying
-   * a timed-out call so the server replays the original result instead of
-   * publishing the media again. Exception: a result with errorCode
-   * publish_unknown means the post may already be live but its record was
-   * lost — do not retry it, check the provider account first.
+   * a timed-out SCHEDULED call so the server replays the original result
+   * instead of scheduling the media again. ASAP calls are NOT replayed:
+   * retrying one publishes the media again (task/image) or fails as
+   * already consumed (upload) — check the provider account before
+   * retrying. Exception: a result with errorCode publish_unknown means
+   * the post may already be live but its record was lost — do not retry
+   * it, check the provider account first.
    */
   idempotencyKey?: string;
 }

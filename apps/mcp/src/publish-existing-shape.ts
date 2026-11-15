@@ -71,7 +71,13 @@ export const PublishExistingShape = {
   privacyStatus: PublishVideoDirectShape.privacyStatus,
   caption: PublishVideoDirectShape.caption,
   boardId: PublishVideoDirectShape.boardId,
-  idempotencyKey: PublishVideoDirectShape.idempotencyKey,
+  idempotencyKey: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Idempotency key: for mode scheduled, retrying with the SAME key returns the original schedule. For mode asap the key is NOT replayed: task/image retries publish again, upload retries fail as consumed, check the account first. Omitted: a key is generated per call.',
+    ),
 };
 
 export const PublishExistingSchema = z.object(PublishExistingShape).strict().superRefine((value, ctx) => {
