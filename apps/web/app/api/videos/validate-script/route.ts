@@ -10,7 +10,7 @@
 // Measured hook duration is a documented Phase 1 gap: no hook-only TTS
 // endpoint exists yet, so the response reports measuredDurationSeconds as
 // null with measured 'pending' and an explicit reason — it never invents
-// a duration. The hook word guard (15-40 words) already ran in the
+// a duration. The hook word guard (25-40 words) already ran in the
 // mechanical validation above.
 //---------------
 

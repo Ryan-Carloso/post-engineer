@@ -15,7 +15,7 @@ measured duration (from a real TTS run, which lives outside this
 module), and ``measure_hook_duration`` runs an injected synthesizer
 once, after the word guard, so a hook that already fails the guard
 never spends a TTS call. The hook window constants come from
-``app.services.persona_hook``: 8-12 seconds, target 20-30 words.
+``app.services.persona_hook``: 8-12 seconds, target 25-35 words.
 """
 
 import re
@@ -37,7 +37,7 @@ MAX_MEDIAS = 6
 MIN_TOTAL_WORDS = 60
 MAX_TOTAL_WORDS = 200
 MIN_CONTENT_WORDS = 30
-MIN_HOOK_WORDS = 15
+MIN_HOOK_WORDS = 25
 MAX_HOOK_WORDS = 40
 # The info card painted inside a segment photo's panel (media_overlay). The limits are
 # what the card can show at a readable size; the TS validators and the
@@ -367,7 +367,7 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
         raise SegmentValidationError(
             "segments.0.text",
             f"Hook must have {MIN_HOOK_WORDS} to {MAX_HOOK_WORDS} words before TTS.",
-            "Shorten or lengthen the hook to 15-40 words, aiming for 20-30 words.",
+            "Shorten or lengthen the hook to 25-40 words, aiming for 25-35 words.",
         )
     total_words = sum(_word_count(text) for text in texts)
     if total_words < MIN_TOTAL_WORDS or total_words > MAX_TOTAL_WORDS:
@@ -478,7 +478,7 @@ def measure_hook_duration(
         raise SegmentValidationError(
             "segments.0.text",
             f"Hook must have {MIN_HOOK_WORDS} to {MAX_HOOK_WORDS} words before TTS.",
-            "Shorten or lengthen the hook to 15-40 words, aiming for 20-30 words.",
+            "Shorten or lengthen the hook to 25-40 words, aiming for 25-35 words.",
         )
     measured = synthesizer(hook_text)
     return check_hook_duration(hook_text, measured)

@@ -53,8 +53,8 @@ function pairArgs(overrides: Record<string, unknown> = {}) {
     description: 'Agent description.',
     segments: BODY,
     hooks: [
-      { variantId: 'hook-calm', text: 'Here is a small squat detail that quietly changes how your legs grow over the next few months.', media: photos(3, 'hook-calm') },
-      { variantId: 'hook-aggressive', text: 'Stop squatting like this right now, because you are wrecking your back and wasting every single leg day.', media: photos(3, 'hook-aggressive') },
+      { variantId: 'hook-calm', text: 'Here is a small squat detail that quietly changes how your legs grow over the next few months if you slow down and own every inch.', media: photos(4, 'hook-calm') },
+      { variantId: 'hook-aggressive', text: 'Stop squatting like this right now, because you are wrecking your back and wasting every single leg day, so slow down, brace hard, and own every rep.', media: photos(4, 'hook-aggressive') },
     ],
     persona: '11111111-2222-4333-8444-555555555555',
     providers: ['youtube'],

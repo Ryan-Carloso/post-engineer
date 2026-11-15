@@ -96,7 +96,7 @@ export const AddExperimentPairShape = {
       z
         .object({
           variantId,
-          text: ScriptSegmentShape.text.describe('This variant\'s hook, written following the variant description (15-40 words, ending with terminal punctuation).'),
+          text: ScriptSegmentShape.text.describe('This variant\'s hook, written following the variant description (25-40 words, ending with terminal punctuation).'),
           media: ScriptSegmentShape.media,
         })
         .strict(),

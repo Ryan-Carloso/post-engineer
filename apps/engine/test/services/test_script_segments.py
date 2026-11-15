@@ -18,10 +18,10 @@ from app.services import task as task_service
 from app.services.script_segments import SegmentValidationError
 
 
-def _hook(words=24):
+def _hook(words=25):
     base = (
         "Stop wasting your trip stuck in a ninety minute line for the "
-        "original dish when a better table is waiting nearby for you today."
+        "original dish when a better table is still waiting nearby for you today."
     )
     assert len(base.split()) == words
     return base
@@ -251,16 +251,16 @@ def test_repeated_segment_is_400():
 
 def test_total_below_minimum_is_400():
     segments = [
-        {"kind": "hook", "text": " ".join(["word"] * 20) + "."},
+        {"kind": "hook", "text": " ".join(["word"] * 25) + "."},
         {"kind": "content", "text": " ".join(["word"] * 30) + "."},
-        {"kind": "content", "text": "Save this video now please."},
+        {"kind": "content", "text": "Save this video now."},
     ]
-    # Total is 55 words: below the 60-word minimum.
+    # Total is 59 words: below the 60-word minimum.
     assert (
         _word_count(segments[0]["text"])
         + _word_count(segments[1]["text"])
         + _word_count(segments[2]["text"])
-        == 55
+        == 59
     )
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments, video_type="full_lipsync")
@@ -293,7 +293,7 @@ def test_content_below_minimum_is_400():
 def test_short_content_take_is_allowed():
     # Issue #577: there is no CTA word rule anymore — a two-word
     # content take passes as long as the content total reaches 30
-    # words (35 + 2) and the video total reaches 60 (24 + 37).
+    # words (35 + 2) and the video total reaches 60 (25 + 37).
     segments = [
         {"kind": "hook", "text": _hook()},
         {"kind": "content", "text": " ".join(["word"] * 35) + "."},
@@ -301,7 +301,7 @@ def test_short_content_take_is_allowed():
     ]
     result = script_segments.validate_segments(segments, video_type="full_lipsync")
     assert result["content_words"] == 37
-    assert result["total_words"] == 61
+    assert result["total_words"] == 62
 
 
 def test_long_content_take_is_allowed():
@@ -317,9 +317,9 @@ def test_long_content_take_is_allowed():
 
 
 def test_max_segments_is_400():
-    # 20 + 11*14 + 5 = 179 words: inside the 60-200 total, so the segment
+    # 25 + 11*14 + 5 = 184 words: inside the 60-200 total, so the segment
     # cap rule is what fires, not the total rule.
-    segments = [{"kind": "hook", "text": " ".join(["word"] * 20) + "."}]
+    segments = [{"kind": "hook", "text": " ".join(["word"] * 25) + "."}]
     for i in range(11):
         segments.append({"kind": "content", "text": " ".join(["body"] * 12) + f" number {i}."})
     segments.append({"kind": "content", "text": "Save this video now please."})
@@ -331,9 +331,9 @@ def test_max_segments_is_400():
 
 
 def test_max_medias_is_400():
-    # 20 + 7*14 + 5 = 123 words and 9 segments: inside the total and the
+    # 25 + 7*14 + 5 = 128 words and 9 segments: inside the total and the
     # segment cap, so the media cap rule is what fires.
-    segments = [{"kind": "hook", "text": " ".join(["word"] * 20) + "."}]
+    segments = [{"kind": "hook", "text": " ".join(["word"] * 25) + "."}]
     for i in range(7):
         segments.append(
             {
@@ -600,7 +600,7 @@ def _photos(count, prefix):
 
 def _images_segments(media=True):
     segments = [
-        {"kind": "hook", "text": _hook(), "media": _photos(3, "h")},
+        {"kind": "hook", "text": _hook(), "media": _photos(4, "h")},
         {"kind": "content", "text": _content(), "media": _photos(6, "b")},
         {
             "kind": "content",
@@ -615,7 +615,7 @@ def _images_segments(media=True):
 
 def test_images_material_accepts_media_on_every_segment():
     result = script_segments.validate_segments(_images_segments())
-    assert result["media_count"] == 11
+    assert result["media_count"] == 12
 
 
 def test_images_material_rejects_a_segment_without_media_on_that_segment():
@@ -638,16 +638,16 @@ def test_full_lipsync_still_allows_segments_without_media():
         script_segments.validate_segments(_images_segments(media=False), video_type="full_lipsync")[
             "media_count"
         ]
-        == 5
+        == 6
     )
 
 
 def _many_media_segments(count):
-    # 20 + count*14 + 5 words: inside the total and the segment cap for count <= 10.
+    # 25 + count*14 + 5 words: inside the total and the segment cap for count <= 10.
     segments = [
         {
             "kind": "hook",
-            "text": " ".join(["word"] * 20) + ".",
+            "text": " ".join(["word"] * 25) + ".",
             "media": [{"url": "https://example.com/h.jpg"}],
         }
     ]

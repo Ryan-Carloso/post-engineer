@@ -419,13 +419,13 @@ function setup(cfg: DbConfig = {}): void {
   });
 }
 
-// Images mode needs media on every segment (one photo per ~3s): hook 24
-// words -> 3, content 42 -> 6, content take 9 -> 2.
+// Images mode needs media on every segment (one photo per ~3s): hook 25
+// words -> 4, content 42 -> 6, content take 9 -> 2.
 const DEFAULT_SEGMENTS = [
   {
     kind: 'hook',
-    text: 'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.',
-    media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })),
+    text: 'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.',
+    media: [0, 1, 2, 3].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })),
   },
   {
     kind: 'content',
@@ -942,12 +942,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     const segmentsHook =
-      'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
+      'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
     const segmentsContent =
       'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
     const segmentsCtaTake = 'Save this video before your next trip to Porto.';
     const validSegments = [
-      { kind: 'hook', text: segmentsHook, media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
+      { kind: 'hook', text: segmentsHook, media: [0, 1, 2, 3].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
       {
         kind: 'content',
         text: segmentsContent,
@@ -3230,12 +3230,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
 describe('segments-only contract (Phase 4)', () => {
   const hook =
-    'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
+    'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
   const contentText =
     'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
   const ctaTake = 'Save this video before your next trip to Porto.';
   const segments = [
-    { kind: 'hook', text: hook, media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
+    { kind: 'hook', text: hook, media: [0, 1, 2, 3].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
     {
       kind: 'content',
       text: contentText,
@@ -3368,7 +3368,7 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
   it('skips the narration preflight for non-full videos but still checks segment ratios', async () => {
     // The narration check (audio/preflight-duration) is full-lip-sync
     // only; the aspect check (media/check) still runs for the segments'
-    // full-frame photos — the default persona has no face, so all 11 do —
+    // full-frame photos — the default persona has no face, so all 12 do —
     // plus the first-photo face check, which re-checks the first photo
     // for a face (issue #589).
     const calls: Array<string> = [];
@@ -3384,7 +3384,7 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
     );
     const res = await post(baseBody());
     expect(res.status).toBe(200);
-    expect(calls).toHaveLength(12);
+    expect(calls).toHaveLength(13);
     expect(calls.every((url) => url.includes('/api/v1/media/check'))).toBe(true);
     expect(calls.some((url) => url.includes('preflight-duration'))).toBe(false);
     expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);

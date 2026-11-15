@@ -32,7 +32,7 @@ import type { McpToolResponse } from '../tools-call.js';
 const BASE_URL = 'https://api.example.test';
 
 const hook =
-  'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
+  'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
 const content =
   'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
 const ctaTake = 'Save this video before your next trip to Porto.';
@@ -41,7 +41,7 @@ function photos(count: number, prefix: string): Array<{ url: string }> {
 }
 
 const validSegments = [
-  { kind: 'hook' as const, text: hook, media: photos(3, 'hook') },
+  { kind: 'hook' as const, text: hook, media: photos(4, 'hook') },
   { kind: 'content' as const, text: content, media: photos(6, 'content') },
   { kind: 'content' as const, text: ctaTake, media: photos(2, 'ctaTake') },
 ];

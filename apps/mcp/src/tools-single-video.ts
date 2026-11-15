@@ -94,8 +94,8 @@ export async function handleValidateScript(
         type: 'text',
         text: [
           `Script valid: ${payload.segmentCount} segment(s), ${payload.totalWords} words total, hook ${payload.hookWords} words, content ${payload.contentWords} words.`,
-          `Hook window: ${HOOK_MIN_SECONDS}-${HOOK_MAX_SECONDS} seconds spoken (target 20-30 words).`,
-          'Measured duration: pending — no hook-only TTS endpoint exists yet, so the measured hook duration cannot be checked in this phase; the hook word guard (15-40 words) already ran above.',
+          `Hook window: ${HOOK_MIN_SECONDS}-${HOOK_MAX_SECONDS} seconds spoken (target 25-35 words).`,
+          'Measured duration: pending — no hook-only TTS endpoint exists yet, so the measured hook duration cannot be checked in this phase; the hook word guard (25-40 words) already ran above.',
         ].join('\n'),
       },
     ],

@@ -287,8 +287,8 @@ class TestPersonaPacingConstants:
     def test_constants_are_the_approved_product_values(self):
         assert task_service.PERSONA_HOOK_MIN_SECONDS == 8.0
         assert task_service.PERSONA_HOOK_MAX_SECONDS == 12.0
-        assert task_service.PERSONA_HOOK_TARGET_WORDS_MIN == 20
-        assert task_service.PERSONA_HOOK_TARGET_WORDS_MAX == 30
+        assert task_service.PERSONA_HOOK_TARGET_WORDS_MIN == 25
+        assert task_service.PERSONA_HOOK_TARGET_WORDS_MAX == 35
         assert task_service.PERSONA_LIPSYNC_MAX_SECONDS == 12.0
 
     def test_hook_constants_stay_inside_the_gpu_ceiling(self):

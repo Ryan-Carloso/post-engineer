@@ -42,7 +42,7 @@ export const SHARED_PROMPT_BASE: string[] = [
   '',
   'Script contract, every video script follows it:',
   'Segments: first hook, then content takes in order, exactly one hook, at least one content take, at most 12 segments.',
-  'Length: 60–200 words total; hook 15–40 words, aim for 20–30 (8–12 seconds), ending with terminal punctuation; content at least 30 words. A CTA is a content take and may appear anywhere after the hook.',
+  'Length: 60–200 words total; hook 25–40 words, aim for 25–35 (8–12 seconds), ending with terminal punctuation; content at least 30 words. A CTA is a content take and may appear anywhere after the hook.',
   'Spoken English only, language "en": no links, hashtags, markdown, emoji, or stage directions in any segment.',
   'Write the video title (at most 100 characters) and the video description (at most 5000 characters): both are mandatory with every generate_video call — a missing or blank one is rejected, there is no fallback. The title is the publish title on every network; the description is the publish caption and description.',
   'Call check_script (action: validate) with the segments and fix any named error until it passes. Validate before any token is spent; never generate from an unvalidated script.',

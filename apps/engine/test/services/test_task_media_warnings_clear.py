@@ -16,12 +16,12 @@ from unittest.mock import patch
 from app.models.schema import TaskVideoRequest, VideoParams
 from app.services import task as tm
 
-# Images mode needs about one photo per 3s (hook 19 words → 3, body 38 → 5, CTA 7 → 1).
+# Images mode needs about one photo per 3s (hook 25 words → 4, body 38 → 5, CTA 7 → 1).
 SEGMENTS = [
     {
         "kind": "hook",
-        "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time.",
-        "media": [{"url": f"https://e.com/0-{i}.jpg"} for i in range(3)],
+        "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time, in the soft golden evening light.",
+        "media": [{"url": f"https://e.com/0-{i}.jpg"} for i in range(4)],
     },
     {
         "kind": "content",

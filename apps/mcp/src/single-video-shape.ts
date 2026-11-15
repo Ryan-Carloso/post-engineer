@@ -52,7 +52,7 @@ export const GeneratePersonaVideoShape = {
     .array(z.object(ScriptSegmentShape).strict())
     .min(1, 'Provide at least one segment')
     .max(12, 'At most 12 segments per video')
-    .describe('The complete script as segments (takes): first hook, then content takes in order. Total 60-200 words, content at least 30, hook 15-40 words before TTS. The hook must end with terminal punctuation. A CTA is just a content take, placed anywhere. No LLM expands this script.'),
+    .describe('The complete script as segments (takes): first hook, then content takes in order. Total 60-200 words, content at least 30, hook 25-40 words before TTS. The hook must end with terminal punctuation. A CTA is just a content take, placed anywhere. No LLM expands this script.'),
   title: z.string().min(1, 'title must be a non-empty string').max(100, 'title must be at most 100 characters').describe('Video title: the slot label sent to the web route (one call is one video).'),
   // Agent-supplied video description (issue #542 follow-up): REQUIRED —
   // the publish copy, sent top-level to the web route. The 5000-char cap

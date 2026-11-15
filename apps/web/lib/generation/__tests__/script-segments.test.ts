@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { joinSegments, validateSegments } from '../script-segments';
 
 const hook =
-  'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
+  'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
 const content =
   'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
 const cta = 'Save this video before your next trip to Porto.';
@@ -159,10 +159,10 @@ describe('validateSegments', () => {
   });
 
   it('rejects more than 12 segments inside the word total, via the cap rule', () => {
-    // 20 + 11*14 + 5 = 179 words: inside the 60-200 total, so the segment
+    // 25 + 11*14 + 5 = 184 words: inside the 60-200 total, so the segment
     // cap rule is what fires, not the total rule.
-    const hook20 = Array.from({ length: 20 }, () => 'word').join(' ') + '.';
-    const segments: Array<{ kind: string; text: string }> = [{ kind: 'hook', text: hook20 }];
+    const hook25 = Array.from({ length: 25 }, () => 'word').join(' ') + '.';
+    const segments: Array<{ kind: string; text: string }> = [{ kind: 'hook', text: hook25 }];
     for (let i = 0; i < 11; i += 1) {
       segments.push({ kind: 'content', text: Array.from({ length: 12 }, () => 'body').join(' ') + ` number ${i}.` });
     }
@@ -174,10 +174,19 @@ describe('validateSegments', () => {
     expect(result.error.rule).toBe('at most 12 segments are allowed');
   });
 
-  it('rejects a hook with fewer than 15 or more than 40 words before TTS', () => {
+  it('rejects a hook with fewer than 25 or more than 40 words before TTS', () => {
     expect(
       validateSegments([
         { kind: 'hook', text: 'Short hook here today.' },
+        { kind: 'content', text: content },
+        { kind: 'content', text: cta },
+      ]).ok,
+    ).toBe(false);
+    // Issue #563: 24 words cannot fill the 8-12s window at the measured
+    // pace (~0.34s/word); 25 is the smallest count that always lands inside.
+    expect(
+      validateSegments([
+        { kind: 'hook', text: Array.from({ length: 24 }, () => 'word').join(' ') + '.' },
         { kind: 'content', text: content },
         { kind: 'content', text: cta },
       ]).ok,
@@ -207,10 +216,10 @@ describe('validateSegments', () => {
   });
 
   it('rejects more than 6 medias inside the word total, via the cap rule', () => {
-    // 20 + 7*14 + 5 = 123 words and 9 segments: inside the total and the
+    // 25 + 7*14 + 5 = 128 words and 9 segments: inside the total and the
     // segment cap, so the media cap rule is what fires.
-    const hook20 = Array.from({ length: 20 }, () => 'word').join(' ') + '.';
-    const segments: Array<{ kind: string; text: string; media?: Array<{ url: string }> }> = [{ kind: 'hook', text: hook20 }];
+    const hook25 = Array.from({ length: 25 }, () => 'word').join(' ') + '.';
+    const segments: Array<{ kind: string; text: string; media?: Array<{ url: string }> }> = [{ kind: 'hook', text: hook25 }];
     for (let i = 0; i < 7; i += 1) {
       segments.push({
         kind: 'content',

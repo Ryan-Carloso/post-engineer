@@ -153,8 +153,8 @@ class TriageRedispatchDirectTests(unittest.TestCase):
             "segments": [
                 {
                     "kind": "hook",
-                    "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time.",
-                    "media": [{"url": f"https://e.com/h{i}.jpg"} for i in range(3)],
+                    "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time, in the soft golden evening light.",
+                    "media": [{"url": f"https://e.com/h{i}.jpg"} for i in range(4)],
                 },
                 {
                     "kind": "content",
