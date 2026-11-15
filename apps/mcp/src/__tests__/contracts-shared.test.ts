@@ -39,6 +39,12 @@ describe('contracts shared source', () => {
       expect(generated.startsWith(HEADER)).toBe(true);
       expect(generated.includes("from './endpoint.js'")).toBe(false);
       expect(generated).toBe(expected);
+      // The MCP copies keep the `.js` suffix on cross-contract imports:
+      // NodeNext requires it, and the web copies drop it for webpack.
+      for (const match of shared.matchAll(/from '\.\/([a-z0-9-]+)\.js'/g)) {
+        if (match[1] === 'endpoint') continue;
+        expect(generated).toContain(`from './${match[1]}.js'`);
+      }
     }
   });
 });

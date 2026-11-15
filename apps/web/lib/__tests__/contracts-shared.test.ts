@@ -35,11 +35,18 @@ describe('contracts shared source', () => {
     for (const file of files) {
       const shared = readFileSync(join(sharedDir, file), 'utf8');
       const generated = readFileSync(join(root, 'apps', 'web', 'lib', 'contracts', file), 'utf8');
+      // Webpack cannot resolve a `./name.js` import to `name.ts`, so the
+      // web copies drop the suffix on cross-contract imports (the sync
+      // does the same; the MCP copies keep it for NodeNext).
+      const withoutEndpoint = file === 'endpoint.ts'
+        ? shared
+        : shared.replace(/import \{[^}]*\} from '\.\/endpoint\.js';\n/, endpointBody);
       const expected = file === 'endpoint.ts'
         ? HEADER + shared
-        : HEADER + shared.replace(/import \{[^}]*\} from '\.\/endpoint\.js';\n/, endpointBody);
+        : HEADER + withoutEndpoint.replace(/from '\.\/([a-z0-9-]+)\.js'/g, "from './$1'");
       expect(generated.startsWith(HEADER)).toBe(true);
       expect(generated.includes("from './endpoint.js'")).toBe(false);
+      expect(generated).not.toMatch(/from '\.\/[a-z0-9-]+\.js'/);
       expect(generated).toBe(expected);
     }
   });

@@ -30,7 +30,21 @@
 //   field at different depths, so a relative import cannot reach it);
 //   the bounds and the describe text are pinned to the shared field below.
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+// Walk up to the repo root instead of counting parents: Stryker runs the
+// suite from a copied tree, which shifts every fixed parent index.
+function findRepoRoot(fromUrl: string): string {
+  let dir = dirname(fileURLToPath(fromUrl));
+  for (;;) {
+    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) {
+      throw new Error(`findRepoRoot: pnpm-workspace.yaml not found above ${fromUrl}`);
+    }
+    dir = parent;
+  }
+}
+
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
@@ -201,7 +215,7 @@ describe('generate tool shape vs the videos contract', () => {
       }),
     ).toBe(false);
     expect(accepts(GenerateAndScheduleBodySchema, { ...CONTRACT_GENERATE, options: { ...CONTRACT_GENERATE.options, musicMood: 'calm' } })).toBe(true);
-    const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
+    const root = findRepoRoot(import.meta.url);
     const shared = readFileSync(join(root, 'shared/music-mood-field/music-mood-field.ts'), 'utf8');
     const contract = readFileSync(join(root, 'shared/contracts/videos.ts'), 'utf8');
     const describe = shared.match(/\.describe\(\s*'([^']+)'/)?.[1];
@@ -301,7 +315,7 @@ describe('publish-by-id contract boundary', () => {
 
 describe('videos contract duplicated literals stay pinned', () => {
   it('matches the video-type suffix in the web tokens lib and the MCP video-type module', () => {
-    const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
+    const root = findRepoRoot(import.meta.url);
     const contract = readFileSync(join(root, 'shared/contracts/videos.ts'), 'utf8');
     const webTokens = readFileSync(join(root, 'apps/web/lib/tokens.ts'), 'utf8');
     const mcpVideoType = readFileSync(join(root, 'apps/mcp/src/video-type.ts'), 'utf8');
@@ -311,7 +325,7 @@ describe('videos contract duplicated literals stay pinned', () => {
   });
 
   it('matches the segments caps in the shared script-segments source', () => {
-    const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
+    const root = findRepoRoot(import.meta.url);
     const contract = readFileSync(join(root, 'shared/contracts/videos.ts'), 'utf8');
     const shared = readFileSync(join(root, 'shared/script-segments/script-segments.ts'), 'utf8');
     for (const line of [

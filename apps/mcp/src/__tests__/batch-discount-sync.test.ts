@@ -1,5 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+// Walk up to the repo root instead of counting parents: Stryker runs the
+// suite from a copied tree, which shifts every fixed parent index.
+function findRepoRoot(fromUrl: string): string {
+  let dir = dirname(fileURLToPath(fromUrl));
+  for (;;) {
+    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) {
+      throw new Error(`findRepoRoot: pnpm-workspace.yaml not found above ${fromUrl}`);
+    }
+    dir = parent;
+  }
+}
+
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,7 +31,7 @@ import {
 // its web source here.
 //---------------
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
+const root = findRepoRoot(import.meta.url);
 const rules = readFileSync(join(root, 'apps/web/lib/billing/batch-discount.ts'), 'utf8');
 // MAX_BATCH_VIDEOS and the batchKey rule live in the shared videos contract
 // now (the route imports its body schema from there); the window and the

@@ -25,6 +25,10 @@
 // imported (`./endpoint.js` resolves under `tsc` in both apps but Next's
 // webpack cannot resolve it), so generated files have no relative imports.
 // endpoint.ts itself is still generated for `BodyOf`/`ResponseOf` imports.
+// The same webpack rule applies to cross-contract imports (`./metrics.js`
+// in the shared source): the MCP copies keep the `.js` suffix (NodeNext
+// requires it), but the web copies drop it (`./metrics`), which both
+// `tsc` (bundler resolution) and Next's webpack resolve to the `.ts` file.
 // Usage: node scripts/sync-contracts.mjs [--check]
 //   --check  exit 1 (without writing) when any copy differs from shared.
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
@@ -47,11 +51,16 @@ const endpointSource = existsSync(join(sharedDir, 'endpoint.ts'))
   ? readFileSync(join(sharedDir, 'endpoint.ts'), 'utf8')
   : '';
 const endpointBody = endpointSource.replace(/import \{ z \} from 'zod';\n/, '');
-function expectedFor(sourceName) {
+function expectedFor(sourceName, forWeb) {
   const shared = readFileSync(join(sharedDir, sourceName), 'utf8');
   if (sourceName === 'endpoint.ts') return HEADER + shared;
   const withoutEndpointImport = shared.replace(/import \{[^}]*\} from '\.\/endpoint\.js';\n/, endpointBody);
-  return HEADER + withoutEndpointImport;
+  // Webpack cannot resolve a `./name.js` import to `name.ts`; drop the
+  // suffix in web copies only (the MCP copies keep it for NodeNext).
+  const text = forWeb
+    ? withoutEndpointImport.replace(/from '\.\/([a-z0-9-]+)\.js'/g, "from './$1'")
+    : withoutEndpointImport;
+  return HEADER + text;
 }
 let drifted = false;
 
@@ -68,7 +77,8 @@ for (const targetDir of targets) {
     mkdirSync(targetDir, { recursive: true });
   }
   for (const source of sources) {
-    const expected = expectedFor(source);
+    const forWeb = targetDir.includes(`${join('apps', 'web')}`);
+    const expected = expectedFor(source, forWeb);
     const target = join(targetDir, source);
     let current = undefined;
     try {
