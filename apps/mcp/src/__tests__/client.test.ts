@@ -1999,6 +1999,19 @@ describe('publishVideoDirect', () => {
     expect((video as Blob).size).toBe(8);
   });
 
+  it('does not send a JSON content type with the multipart body', async () => {
+    // A FormData body with an explicit Content-Type: application/json
+    // reaches the server as JSON, so Next's request.formData() rejects it
+    // ("Content-Type was not one of multipart/form-data ...") and the
+    // publish fails with a 500. fetch must set the multipart boundary.
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect(youtubeInput(videoPath));
+
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    expect(request?.body).toBeInstanceOf(FormData);
+    expect(new Headers(request?.headers).get('content-type')).toBeNull();
+  });
+
   it('maps account ids to the instagram field names', async () => {
     const videoPath = await writeTempVideo('clip.mp4');
     await client.publishVideoDirect({

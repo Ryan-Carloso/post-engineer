@@ -130,6 +130,7 @@
 ## Testing gotchas
 
 - Tests must not pass vacuously: assert the path under test was actually taken; mutation-verify new pins (revert the fix, the test must fail). Test names match their assertions.
+- **Test fixtures must use relative dates, never fixed future dates (2026-11-15, PR #599 CI).** `publish-existing/route.test.ts` hardcoded `expires_at: '2026-11-15T12:00:00Z'`; once the clock passed noon UTC, `loadReadyVideoUpload` threw 410 VIDEO_UPLOAD_EXPIRED and the three ready-upload tests failed in CI — while they had passed hours earlier when the date was still in the future. Derive fixture dates from `Date.now()`; a fixed future date is a time bomb, and a test that passes in the morning and fails in the afternoon is the symptom.
 - Mocks mirror production (real query chains, real envelopes, echoed payloads).
 - Env in tests: `vi.stubEnv(key, undefined)`, never `delete process.env.X`; stub/clear every related var (CI injects ambient ones like `BUILD`). Don't `mockReset()` a `vi.stubGlobal`'d fetch in `beforeEach`.
 - Multipart route tests need `// @vitest-environment node`.
