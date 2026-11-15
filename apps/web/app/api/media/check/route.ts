@@ -97,12 +97,18 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const record = payload as { body?: unknown };
   const checked =
     typeof record.body === 'object' && record.body !== null
-      ? (record.body as { code?: unknown; width?: unknown; height?: unknown })
+      ? (record.body as { code?: unknown; width?: unknown; height?: unknown; has_face?: unknown })
       : {};
   if (typeof checked.code !== 'string' || !CHECK_CODES.has(checked.code)) {
     return apiErrorResponse(502, 'Video service is unavailable.', { route: ROUTE });
   }
-  const response: { success: true; code: string; width?: number; height?: number } = {
+  const response: {
+    success: true;
+    code: string;
+    width?: number;
+    height?: number;
+    has_face?: boolean | null;
+  } = {
     success: true,
     code: checked.code,
   };
@@ -111,6 +117,13 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
   if (typeof checked.height === 'number' && Number.isFinite(checked.height)) {
     response.height = checked.height;
+  }
+  // has_face is the engine's face verdict (issue #589): pass it through
+  // so the MCP agent can pre-check the face requirement instead of
+  // learning it from the generation-time 400. A non-boolean value is
+  // dropped (older engines omit the key entirely).
+  if (typeof checked.has_face === 'boolean' || checked.has_face === null) {
+    response.has_face = checked.has_face;
   }
   return NextResponse.json(response);
 }

@@ -71,6 +71,36 @@ describe('POST /api/media/check', () => {
     expect(JSON.parse(String(fetchCall?.[1]?.body))).toEqual({ url });
   });
 
+  it('passes has_face through: true, false, and null (issue #589)', async () => {
+    for (const hasFace of [true, false, null]) {
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: 200,
+          body: { code: 'ok', width: 1080, height: 1920, has_face: hasFace },
+        }),
+      } as never);
+      const response = await POST(checkRequest('https://e.com/porto.jpg'));
+      expect(response.status).toBe(200);
+      const payload = (await response.json()) as Record<string, unknown>;
+      expect(payload.has_face).toBe(hasFace);
+    }
+  });
+
+  it('drops a non-boolean has_face instead of passing it through', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        status: 200,
+        body: { code: 'ok', width: 1080, height: 1920, has_face: 'yes' },
+      }),
+    } as never);
+    const response = await POST(checkRequest('https://e.com/porto.jpg'));
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('has_face');
+  });
+
   it('forwards videoAspect and passes wrong_aspect with dimensions through', async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,

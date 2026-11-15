@@ -362,8 +362,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
     }
   }
 
-  // Pre-charge preflights: full lip-sync narration (>60s) and segment-media
-  // aspect (issue #538) — both reject here instead of charging then refunding.
+  // Pre-charge preflights: full lip-sync narration (>60s), segment-media aspect
+  // (issue #538) and first-photo face (issue #589) — all reject before charging.
   // Runs after all other pre-charge validation, before cost/spend below.
   const preflight = await checkPreChargePreflights({
     userId,
