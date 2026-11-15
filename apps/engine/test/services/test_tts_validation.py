@@ -217,6 +217,23 @@ def test_valid_narration_synthesizes_once(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert events == []
 
 
+def test_validate_false_skips_transcription(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    # Preflight and voice previews pass validate=False: they measure or
+    # sample, they do not ship a video — no Whisper load, no re-synthesis.
+    synth_calls, events = _install_fakes(monkeypatch, [])
+    result = synthesize_chatterbox_with_validation(
+        INCIDENT_SCRIPT,
+        "habitloom",
+        str(tmp_path / "audio.mp3"),
+        validate=False,
+    )
+    assert result.ok
+    assert len(synth_calls) == 1
+    assert events == []
+
+
 def test_short_script_skips_validation(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     # Previews and preflight samples are short by design; a few words can
     # never run past Chatterbox's ~30 s stable window.
@@ -373,6 +390,43 @@ def test_voice_tts_routes_chatterbox_through_validation(
     )
     assert result.ok
     assert calls == [(INCIDENT_SCRIPT, "habitloom")]
+
+
+def test_voice_tts_forwards_validate_false_to_wrapper(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """Preflight and previews opt out: voice.tts must forward validate=False."""
+    from app.services import voice as voice_service
+
+    seen: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+
+    def fake_validated(*args: Any, **kwargs: Any) -> TtsResult:
+        seen.append((args, kwargs))
+        return _ok_result()
+
+    monkeypatch.setattr(
+        "app.services.voice.synthesize_chatterbox_with_validation",
+        fake_validated,
+    )
+    monkeypatch.setattr(
+        "app.services.cloned_voices.ownership.chatterbox_voice_allowed_for_user",
+        lambda *_args: True,
+    )
+    result = voice_service.tts(
+        text=INCIDENT_SCRIPT,
+        voice_name="chatterbox:habitloom",
+        voice_rate=1.0,
+        voice_file=str(tmp_path / "audio.mp3"),
+        user_id="user-1",
+        task_id="task-1",
+        validate=False,
+    )
+    assert result.ok
+    assert len(seen) == 1
+    args, kwargs = seen[0]
+    assert args[:5] == (INCIDENT_SCRIPT, "habitloom", str(tmp_path / "audio.mp3"), 1.0, 1.0)
+    assert args[5:] == ("task-1", False)
+    assert kwargs == {}
 
 
 def test_validate_audio_outcome_is_a_dataclass() -> None:

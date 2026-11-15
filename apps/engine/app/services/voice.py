@@ -194,11 +194,13 @@ def tts(
     voice_file: str,
     voice_volume: float = 1.0,
     voice_pitch: str = "",
-    user_id: str | None = None, task_id: str | None = None, language: str | None = None,
+    user_id: str | None = None, task_id: str | None = None,
+    language: str | None = None, validate: bool = True,
 ) -> TtsResult:
     """Synthesize speech. Failures return a TtsResult with a specific, sanitized
     `error` naming the real cause (forwarded to the task failure for PostHog).
-    Chatterbox failures fail loudly: there is no fallback voice switch."""
+    Chatterbox failures fail loudly: there is no fallback voice switch.
+    `validate=False` skips the narration check (preflight/previews)."""
     if is_no_voice(voice_name):
         duration_seconds = estimate_no_voice_duration(text)
         if not generate_silent_audio(duration_seconds, voice_file):
@@ -238,9 +240,8 @@ def tts(
         from app.services.cloned_voices.ownership import chatterbox_voice_allowed_for_user
         if not chatterbox_voice_allowed_for_user(user_id, chatterbox_voice):
             return TtsResult(error="cloned voice is not available for this user")
-        # Issue #539: prove the narration is complete before it can render.
         return synthesize_chatterbox_with_validation(
-            text, chatterbox_voice, voice_file, voice_rate, voice_volume, task_id=task_id
+            text, chatterbox_voice, voice_file, voice_rate, voice_volume, task_id, validate
         )
     routed = dispatch_openrouter_tts(voice_name, text, voice_file, voice_rate, voice_volume)
     if routed is not None:

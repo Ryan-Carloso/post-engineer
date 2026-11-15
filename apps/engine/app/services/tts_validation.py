@@ -23,6 +23,10 @@ Scope notes (issue #539):
   they catch the shipped signature — a missing ending — not every
   dropped word. A repeat is heard words, so coverage passes it: it is
   a quality defect, not missing content.
+- Preflight and voice previews pass validate=False: they measure or
+  sample, they do not ship a video, so they must not pay a Whisper
+  transcription (or fail) inside a synchronous endpoint. The gate
+  runs in generate_audio, where the video is built.
 """
 
 from __future__ import annotations
@@ -44,8 +48,10 @@ MIN_COVERAGE = 0.90
 TAIL_WORDS = 10
 MIN_TAIL_COVERAGE = 0.80
 # Short scripts take the single-POST path inside Chatterbox's ~30 s stable
-# window, so there is nothing long enough to lose its place on. This also
-# keeps voice previews and preflight samples out of the check.
+# window, so there is nothing long enough to lose its place on.
+# Preflight and previews opt out explicitly with validate=False instead:
+# their job is measurement/sampling, and the real gate runs in
+# generate_audio, where the video is actually built.
 MIN_WORDS_FOR_VALIDATION = 20
 
 
@@ -179,6 +185,7 @@ def synthesize_chatterbox_with_validation(
     voice_rate: float = 1.0,
     voice_volume: float = 1.0,
     task_id: str | None = None,
+    validate: bool = True,
 ):
     """Synthesize with Chatterbox, then prove the narration is complete.
 
@@ -189,6 +196,9 @@ def synthesize_chatterbox_with_validation(
     error fails the task at stage=audio so no truncated narration ever
     renders. Callers get a TtsResult either way, exactly like the
     plain `chatterbox_tts` this wraps.
+
+    `validate=False` skips the check entirely: preflight and voice
+    previews use it — they measure or sample, they do not ship a video.
     """
     # Lazy import: voice_providers must stay importable without this
     # module, and the tests patch chatterbox_tts at its origin.
@@ -197,7 +207,7 @@ def synthesize_chatterbox_with_validation(
     result = chatterbox_tts(text, voice, voice_file, voice_rate, voice_volume)
     if not result.ok:
         return result
-    if len(normalize_words(text)) < MIN_WORDS_FOR_VALIDATION:
+    if not validate or len(normalize_words(text)) < MIN_WORDS_FOR_VALIDATION:
         return result
 
     outcome = validate_audio(text, voice_file)
