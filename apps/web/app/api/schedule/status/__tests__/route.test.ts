@@ -187,6 +187,13 @@ describe('GET auth', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(ListPostsResponseSchema.safeParse(body).success).toBe(true);
+    // The upcoming select must carry error + published_at: the contract
+    // requires both on every slot, and PostgREST omits unselected columns,
+    // so a narrow select made listPosts fail for any account with an
+    // upcoming slot (OpenCode review on 2d9f4eb).
+    const upcomingSelect = client.chain.select.mock.calls[0]?.[0] as string;
+    expect(upcomingSelect).toContain('error');
+    expect(upcomingSelect).toContain('published_at');
     expect(body).toEqual({
       success: true,
       upcoming: upcoming.map((slot) => ({
@@ -990,7 +997,7 @@ describe('GET query contracts', () => {
   it('selects the documented columns on every query', async () => {
     const client = await getWithLimit(null);
     expect(client.chain.select).toHaveBeenCalledWith(
-      'id, slot_at, status, title, schedule_id, task_id',
+      'id, slot_at, status, title, error, published_at, schedule_id, task_id',
     );
     expect(client.chain.select).toHaveBeenCalledWith(
       'id, slot_at, status, title, error, published_at, schedule_id, task_id, publish_outcomes',

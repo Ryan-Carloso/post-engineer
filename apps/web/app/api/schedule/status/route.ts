@@ -214,7 +214,7 @@ async function getHandler(request?: Request): Promise<NextResponse> {
   // last known engine progress.
   let upcomingQuery = supabase
     .from('scheduled_posts')
-    .select('id, slot_at, status, title, schedule_id, task_id')
+    .select('id, slot_at, status, title, error, published_at, schedule_id, task_id')
     .eq('user_id', userId)
     .in('status', ['pending', 'generating', 'ready'])
     .gte('slot_at', nowIso)

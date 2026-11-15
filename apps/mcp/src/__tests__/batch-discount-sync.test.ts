@@ -49,7 +49,7 @@ describe('batch discount limits stay in sync with the web', () => {
   it('mirrors the batchKey rule of the route', () => {
     expect(BATCH_KEY_MAX_LENGTH).toBe(100);
     expect(BATCH_KEY_PATTERN).toEqual(/^[A-Za-z0-9_-]+$/);
-    expect(contract).toContain('.max(100)');
+    expect(contract).toContain('.max(BATCH_KEY_MAX_LENGTH)');
     expect(contract).toContain('.regex(BATCH_KEY_PATTERN,');
     expect(contract).toContain('export const BATCH_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;');
   });
