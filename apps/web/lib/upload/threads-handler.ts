@@ -6,12 +6,12 @@ import { publishThreadsVideo, THREADS_TEXT_MAX_CHARS, THREADS_VIDEO_MAX_BYTES } 
 import { accountFailure } from '@/lib/upload/account-error';
 import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
-import { cleanupOldUploads, uploadToStorage } from '@/lib/upload/handlers';
+import { cleanupPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
 
 //---------------
 // handleThreadsUpload — publishes the video to the user's Threads accounts.
-// Threads fetches the video from a URL, so the file goes through Supabase
-// Storage first (signed URL, same path as Instagram).
+// Threads fetches the video from a URL, so the file is stored
+// on R2 first (presigned URL, lib/upload/publish-media.ts, same path as Instagram).
 // FormData (multipart, coming from the engine or the UI):
 //   provider=threads, video (File), caption, threadsAccountIds (repeated),
 //   userId (internal engine call only).
@@ -60,7 +60,7 @@ export async function handleThreadsUpload(
   const contentType = rawFile.type === 'video/quicktime' ? 'video/quicktime' : 'video/mp4';
   const extension = contentType === 'video/quicktime' ? 'mov' : 'mp4';
   const storagePath = `threads/${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${extension}`;
-  const videoUrl = await uploadToStorage(buffer, storagePath, contentType);
+  const videoUrl = await uploadPublishMedia(buffer, storagePath, contentType);
 
   const supabase = createSupabaseServiceClient();
   const results: ThreadsAccountResult[] = [];
@@ -104,7 +104,7 @@ export async function handleThreadsUpload(
   // Fire-and-forget: remove Threads media older than 24h from the bucket,
   // mirroring the Instagram handler — otherwise every publish stores
   // its video under `threads/` forever.
-  cleanupOldUploads('threads');
+  void cleanupPublishMedia('threads');
 
   return { success: results.some((result) => result.success), results };
 }

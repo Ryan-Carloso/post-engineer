@@ -28,16 +28,6 @@ vi.mock('@/lib/logger', () => ({
 
 vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(() => ({
-    storage: {
-      listBuckets: vi.fn().mockResolvedValue({ data: [{ name: 'uploads' }], error: null }),
-      createBucket: vi.fn().mockResolvedValue({ error: null }),
-      from: vi.fn(() => ({
-        upload: vi.fn().mockResolvedValue({ error: null }),
-        createSignedUrl: vi.fn(async () => ({ data: { signedUrl: 'https://supabase.co/private.mp4?signed=1' }, error: null })),
-        list: vi.fn().mockResolvedValue({ data: [], error: null }),
-        remove: vi.fn().mockResolvedValue({ error: null }),
-      })),
-    },
     from: vi.fn(() => ({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -66,6 +56,11 @@ vi.mock('@/lib/supabase/service', () => ({
       }),
     })),
   })),
+}));
+
+vi.mock('@/lib/upload/publish-media', () => ({
+  uploadPublishMedia: vi.fn(async () => 'https://acct.r2.cloudflarestorage.com/videos/publish-media/instagram/x.jpg?X-Amz-Signature=s'),
+  cleanupPublishMedia: vi.fn(async () => 0),
 }));
 
 vi.mock('@/lib/social-accounts', () => ({
@@ -401,28 +396,24 @@ describe('handleInstagramUpload', () => {
     }
   });
 
-  it('creates the uploads bucket as private (public: false)', async () => {
-    const { createSupabaseServiceClient } = await import('@/lib/supabase/service');
-    // Overrides the mock to return an empty bucket → handler enters the creation branch
-    const createBucket = vi.fn(async () => ({ data: null, error: null }));
-    vi.mocked(createSupabaseServiceClient).mockReturnValue({
-      storage: {
-        listBuckets: vi.fn(async () => ({ data: [], error: null })),
-        createBucket,
-        from: vi.fn(() => ({
-          upload: vi.fn(async () => ({ data: {}, error: null })),
-          createSignedUrl: vi.fn(async () => ({ data: { signedUrl: 'https://s.test/x' }, error: null })),
-          list: vi.fn(async () => ({ data: [], error: null })),
-          remove: vi.fn(async () => ({ data: null, error: null })),
-        })),
-      },
-    } as never);
+  it('stores the media on R2, hands Instagram the presigned URL and cleans up old instagram media', async () => {
+    const { uploadPublishMedia, cleanupPublishMedia } = await import('@/lib/upload/publish-media');
+    const { InstagramService } = await import('@/lib/instagram');
+    const publishMedia = vi.fn(async (..._args: unknown[]) => ({ postId: 'p1', mediaId: 'm1', permalink: 'https://instagram.com/p/1' }));
+    vi.mocked(InstagramService).mockImplementationOnce(function () {
+      return { publishMedia } as never;
+    });
+    vi.mocked(uploadPublishMedia).mockClear();
+    vi.mocked(cleanupPublishMedia).mockClear();
 
     const file = new File([new Uint8Array(50)], 'img.jpg', { type: 'image/jpeg' });
-    const fd = makeFormData({ caption: 'Test' }, file);
-    await handleInstagramUpload(fd, OWNER_USER_ID, logId, startTime);
+    await handleInstagramUpload(makeFormData({ caption: 'Test' }, file), OWNER_USER_ID, logId, startTime);
 
-    expect(createBucket).toHaveBeenCalledWith(expect.any(String), { public: false });
+    expect(vi.mocked(uploadPublishMedia).mock.calls[0][1]).toMatch(/^instagram\/\d+_abc123\.jpg$/);
+    expect(publishMedia.mock.calls[0][3]).toBe(
+      'https://acct.r2.cloudflarestorage.com/videos/publish-media/instagram/x.jpg?X-Amz-Signature=s',
+    );
+    expect(cleanupPublishMedia).toHaveBeenCalledWith('instagram');
   });
 });
 
