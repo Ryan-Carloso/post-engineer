@@ -96,6 +96,7 @@ table['POST /api/videos/batch-discount'] = 'batch_discount_requested';
 table['POST /api/logout'] = 'user_logged_out';
 table['POST /api/media/check'] = 'segment_media_checked';
 table['POST /api/media/upload'] = 'segment_media_uploaded';
+table['POST /api/media/publish-existing'] = 'publish_existing_started';
 table['POST /api/persona'] = 'persona_created';
 table['POST /api/persona/avatar'] = 'persona_avatar_uploaded';
 table['POST /api/persona/cloned-voices'] = 'cloned_voice_created';

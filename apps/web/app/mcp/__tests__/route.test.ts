@@ -227,7 +227,7 @@ describe('POST /mcp', () => {
     expect(names).toContain('personas');
     expect(names).toContain('check_script');
     expect(names).toContain('publish_video');
-    expect(toolActions(listResult.result ?? {}, 'publish_video')).toEqual(['create_upload', 'complete_upload', 'publish_upload']);
+    expect(toolActions(listResult.result ?? {}, 'publish_video')).toEqual(['create_upload', 'complete_upload', 'publish_upload', 'publish_existing']);
     // #451: the hosted server must never read a path on its host.
     expect(toolActions(listResult.result ?? {}, 'media')).not.toContain('upload');
     expect(toolActions(listResult.result ?? {}, 'persona_media')).not.toContain('add_image');

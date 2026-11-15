@@ -64,6 +64,7 @@ import {
   parsePublishExistingBody,
   type ImageContentType,
   type PublishExistingRequest,
+  type ScheduledMediaKind,
 } from './schema';
 import {
   ExistingMediaError,
@@ -138,7 +139,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
   // orphan schedule row behind. The stored image is compensated below if
   // the insert fails afterwards.
   let taskId: string | null = null;
-  let mediaKindValue: string | null = null;
+  let mediaKindValue: ScheduledMediaKind | null = null;
   let mediaRef: string | null = null;
   let mediaContentType: string | null = null;
   let storedImagePath: string | null = null;

@@ -25,6 +25,12 @@ import {
 /** Inline image bytes ride in the JSON body, like the MCP media tool. */
 export const IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 
+/** The `scheduled_posts.media_kind` values this flow writes (migration 063):
+ *  'upload' for a ready signed video upload, 'image' for stored image bytes.
+ *  A task-born slot leaves the column NULL. */
+export const SCHEDULED_MEDIA_KINDS = ['upload', 'image'] as const;
+export type ScheduledMediaKind = (typeof SCHEDULED_MEDIA_KINDS)[number];
+
 export const IMAGE_CONTENT_TYPES = ['image/jpeg', 'image/png'] as const;
 export type ImageContentType = (typeof IMAGE_CONTENT_TYPES)[number];
 

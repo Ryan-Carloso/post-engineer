@@ -95,7 +95,7 @@ describe('downloadEngineTaskVideo', () => {
     const calls: Array<{ url: string; headers: Record<string, string> }> = [];
     const fetchFn = vi.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
       calls.push({ url, headers: (init?.headers ?? {}) as Record<string, string> });
-      if (url.startsWith(BASE_URL)) {
+      if (url.startsWith(`${BASE_URL}/`)) {
         return new Response(null, { status: 302, headers: { location: 'https://r2.example.com/signed-video' } });
       }
       return new Response(new Uint8Array([9, 9]), { status: 200, headers: { 'content-type': 'video/mp4' } });

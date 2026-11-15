@@ -87,6 +87,7 @@ POST   /api/videos/upload-url                                 create video uploa
 POST   /api/videos/uploads/{uploadId}/complete                complete video upload
 POST   /api/videos/publish-by-id                              publish uploaded video
 POST   /api/media/upload                                      upload media
+POST   /api/media/publish-existing                            publish or schedule existing media
 POST   /api/media/check                                       check media
 GET    /api/persona/list                                      list personas
 POST   /api/persona                                           create persona
