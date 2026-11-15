@@ -107,7 +107,10 @@ schemas) plus the `BodyOf`/`QueryOf`/`ResponseOf`/`ParamsOf` types derived
 from it. The pilot is the experiments API (`POST /api/experiments`,
 `GET /api/experiments`, `GET /api/experiments/:id`): renaming a field there
 fails `pnpm typecheck` in BOTH apps in the same change, with no runtime
-change (same URLs, same 400 messages). Request bodies are
+change (same URLs, same 400 messages). The web route reads the body
+through the shared schema. The MCP functions issue a literal
+`client.request` (method + path) and parse the response with the contract,
+so the parity gate still sees the endpoint. Request bodies are
 `z.strictObject`/`.strict()`; responses are plain `z.object` (extra fields
 ignored). Shared files import only `zod` (both apps resolve zod 4.6.7).
 
@@ -124,9 +127,16 @@ node scripts/sync-contracts.mjs
 
 The sync also runs from the root `postinstall` and `typecheck` scripts
 and is chained from `scripts/sync-script-segments.mjs` (which both apps
-already run from `prebuild`/`pretest`), so `pnpm install`, `pnpm
-typecheck`, `pnpm build` and `pnpm test` always regenerate before
-compiling or testing. `scripts/sync-contracts.mjs --check` fails when a
-copy drifts. Each app has a `contracts-shared.test.ts` drift suite and a
-`contracts-typecheck.test.ts` type pin. Never edit a generated copy by
-hand.
+already run from `prebuild`/`pretest`). `scripts/sync-contracts.mjs --check`
+fails when a copy drifts. Each app has a `contracts-shared.test.ts` drift
+suite and a `contracts-typecheck.test.ts` type pin. Never edit a generated
+copy by hand.
+
+Nx does not hash gitignored files, and the generated copies are
+gitignored, so a cached task would stay green after a contract edit.
+`nx.json` adds `shared/**` and `scripts/sync-*.mjs` to the inputs of the
+`typecheck`, `lint` and `test` target defaults. The same globs in
+`sharedGlobals` do not change the MCP task hash; the explicit target
+inputs do. `build` keeps the inputs in each app's `project.json`. The MCP
+npm release runs `pnpm build` in `apps/mcp` directly, not through Nx, and
+that `prebuild` syncs the copies.
