@@ -379,7 +379,8 @@ export interface PreChargePreflightInput {
  * All three pre-charge rejections, in route order: the full lip-sync
  * narration check first (only when full lip-sync is on), then the
  * segment-media aspect check (only when segments are present), then
- * the first-photo face check (only for face modes with a first photo).
+ * the first-photo face check (face modes only: the first segment photo,
+ * or the persona fallback photo when no segment carries one).
  * Returns the first failure, or null when nothing blocks the charge.
  * Callers must return the response without charging on any failure.
  */

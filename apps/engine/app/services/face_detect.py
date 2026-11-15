@@ -1,8 +1,10 @@
 import threading
 
 from loguru import logger
+from PIL import Image
 
 from app.config import config
+from app.services.image_fetch import MAX_PHOTO_PIXELS
 
 _FACE_MODULE_LOADED = False
 _FACE_MODULE = None
@@ -44,10 +46,11 @@ def image_contains_face(image_path: str) -> bool | None:
     Same Haar cascade and parameters as video_contains_face, on the
     image downscaled to <w_max=360>. None when the detector is
     unavailable (opencv not installed, the cascade failed to load, or
-    detection itself raised): the caller must not block on None — a
-    missing detector must never fail a video. False covers both "no
-    face" and "unreadable file": a file cv2 cannot decode cannot be
-    lip-synced either.
+    detection itself raised), or when the image is over the pixel cap:
+    the caller must not block on None — a missing detector must never
+    fail a video, and an over-cap file is not evidence of "no face".
+    False covers both "no face" and "unreadable file": a file cv2
+    cannot decode cannot be lip-synced either.
     """
     cv2 = _load_cv2()
     if cv2 is None:
@@ -58,6 +61,19 @@ def image_contains_face(image_path: str) -> bool | None:
     )
     if cascade.empty():
         logger.warning("face detection: Haar cascade failed to load; check inactive")
+        return None
+
+    try:
+        # Header-only probe: a small compressed file can declare enormous
+        # dimensions, and the full decode below would allocate gigabytes.
+        # Undecodable here means cv2 cannot decode it either, so False
+        # keeps its documented "unreadable file" meaning.
+        with Image.open(image_path) as opened:
+            width, height = opened.size
+    except (OSError, ValueError, Image.DecompressionBombError):
+        return False
+    if width * height > MAX_PHOTO_PIXELS:
+        logger.warning("face detection: image over the pixel cap; skipped")
         return None
 
     try:
