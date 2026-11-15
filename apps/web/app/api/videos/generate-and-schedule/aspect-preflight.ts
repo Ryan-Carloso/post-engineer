@@ -249,29 +249,6 @@ function mechanicalRejectionReason(code: unknown): string | undefined {
 }
 
 /**
- * Check the hook image for a detectable face before charging (issue
- * #589). The hook opens with the first segment photo, so a faceless
- * first photo must fail here — not after the charge, when the engine
- * preflight would fail the task and refund it. Only face modes are
- * gated; faceless videos never show a face. Returns null when the hook
- * image has a face (or there is nothing to check), and a NextResponse
- * otherwise: 400 naming the segment and image (or the persona photo),
- * 502 when the face is unknown. A missing has_face (an older engine)
- * passes through: the engine preflight is the backstop. A photo the
- * engine mechanically rejects (not_image, too_small, too_large) is a
- * 400 naming the real reason — checked before the face verdict, so an
- * older engine's "no face" for an undecodable file never wins.
- *
- * When no segment carries a photo the engine falls back to the persona
- * photo and face-gates that instead (full_lipsync text-only segments
- * reach it in production: media is optional there), so the fallback
- * photo is checked here too: the picked library image when one was
- * picked (dispatch signs exactly that file), else the stored avatar
- * when it is an http(s) URL the engine can download. A data URI, a
- * relative asset path, or a missing avatar cannot be checked through
- * media/check: the engine preflight is the backstop for those.
- */
-/**
  * Face-check one persona fallback photo URL through media/check: a
  * mechanically rejected file is a 400 naming the real reason, a
  * faceless one a 400 naming the photo; anything else passes. `subject`
@@ -310,6 +287,29 @@ async function checkFallbackPhotoUrl(
   return null;
 }
 
+/**
+ * Check the hook image for a detectable face before charging (issue
+ * #589). The hook opens with the first segment photo, so a faceless
+ * first photo must fail here — not after the charge, when the engine
+ * preflight would fail the task and refund it. Only face modes are
+ * gated; faceless videos never show a face. Returns null when the hook
+ * image has a face (or there is nothing to check), and a NextResponse
+ * otherwise: 400 naming the segment and image (or the persona photo),
+ * 502 when the face is unknown. A missing has_face (an older engine)
+ * passes through: the engine preflight is the backstop. A photo the
+ * engine mechanically rejects (not_image, too_small, too_large) is a
+ * 400 naming the real reason — checked before the face verdict, so an
+ * older engine's "no face" for an undecodable file never wins.
+ *
+ * When no segment carries a photo the engine falls back to the persona
+ * photo and face-gates that instead (full_lipsync text-only segments
+ * reach it in production: media is optional there), so the fallback
+ * photo is checked here too: the picked library image when one was
+ * picked (dispatch signs exactly that file), else the stored avatar
+ * when it is an http(s) URL the engine can download. A data URI, a
+ * relative asset path, or a missing avatar cannot be checked through
+ * media/check: the engine preflight is the backstop for those.
+ */
 export async function checkFirstPhotoFace(
   input: FirstPhotoFaceInput,
 ): Promise<null | NextResponse> {
