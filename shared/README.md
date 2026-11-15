@@ -137,6 +137,8 @@ gitignored, so a cached task would stay green after a contract edit.
 `nx.json` adds `shared/**` and `scripts/sync-*.mjs` to the inputs of the
 `typecheck`, `lint` and `test` target defaults. The same globs in
 `sharedGlobals` do not change the MCP task hash; the explicit target
-inputs do. `build` keeps the inputs in each app's `project.json`. The MCP
-npm release runs `pnpm build` in `apps/mcp` directly, not through Nx, and
-that `prebuild` syncs the copies.
+inputs do. The web `build` target lists the same globs in
+`apps/web/project.json`, and the root `build` script runs the sync before
+Nx, so a contract edit invalidates the cached bundle and the build
+compiles fresh copies. The MCP npm release runs `pnpm build` in
+`apps/mcp` directly, not through Nx, and that `prebuild` syncs the copies.

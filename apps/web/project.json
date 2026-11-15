@@ -19,7 +19,9 @@
       "cache": true,
       "inputs": [
         "production",
-        "^production"
+        "^production",
+        "{workspaceRoot}/shared/**/*",
+        "{workspaceRoot}/scripts/sync-*.mjs"
       ]
     },
     "lint": {

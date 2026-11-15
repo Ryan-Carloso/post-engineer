@@ -119,4 +119,28 @@ describe('Docker install layers run the contracts sync', () => {
       expect(dockerfile.indexOf('COPY shared/contracts shared/contracts')).toBeLessThan(installAt);
     }
   });
+
+  // `pnpm build` (nx build web) would otherwise compile the on-disk
+  // generated copies without regenerating them first: the root build
+  // script runs the sync before Nx, like the typecheck script does.
+  it('runs the sync before the Nx web build in the root build script', () => {
+    const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
+      scripts: { build: string };
+    };
+    expect(pkg.scripts.build).toContain('node scripts/sync-contracts.mjs');
+    expect(pkg.scripts.build.indexOf('node scripts/sync-contracts.mjs')).toBeLessThan(
+      pkg.scripts.build.indexOf('nx build web'),
+    );
+  });
+
+  // The sync alone does not invalidate a warm Nx cache (Nx does not hash
+  // the gitignored copies): the web build inputs must list the shared
+  // sources, so a contract edit changes the task hash and the build runs.
+  it('lists the shared contracts in the web build inputs', () => {
+    const project = JSON.parse(readFileSync(join(repoRoot, 'apps', 'web', 'project.json'), 'utf8')) as {
+      targets: { build: { inputs: string[] } };
+    };
+    expect(project.targets.build.inputs).toContain('{workspaceRoot}/shared/**/*');
+    expect(project.targets.build.inputs).toContain('{workspaceRoot}/scripts/sync-*.mjs');
+  });
 });

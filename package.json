@@ -9,7 +9,7 @@
     "postinstall": "node scripts/sync-contracts.mjs",
     "dev:web": "pnpm exec nx dev web",
     "dev:engine": "pnpm exec nx serve engine",
-    "build": "pnpm exec nx build web",
+    "build": "node scripts/sync-contracts.mjs && pnpm exec nx build web",
     "test": "pnpm exec nx run-many -t test",
     "lint": "pnpm exec nx run-many -t lint",
     "lint:fix": "pnpm exec nx run web:lint:fix && pnpm exec nx run-many -t lint typecheck",
