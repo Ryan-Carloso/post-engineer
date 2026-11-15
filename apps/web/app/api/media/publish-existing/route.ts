@@ -310,7 +310,7 @@ async function publishExistingMediaAsap(ctx: PublishExistingContext): Promise<Ne
   const { userId, input, accountIds, logId, startTime } = ctx;
   const providers = input.publishing.providers;
   try {
-    const publishes: Array<{ provider: string; success: boolean; results: unknown }> = [];
+    const publishes: Array<{ provider: string; success: boolean; results: ContentUploadAccountResult[] }> = [];
     if (ctx.image !== null) {
       // Semantics already restricts images to Instagram only; dispatchPublish
       // routes it through the Instagram handler and normalizes the result
@@ -341,14 +341,23 @@ async function publishExistingMediaAsap(ctx: PublishExistingContext): Promise<Ne
         publishes.push(await dispatchProvider(provider, form, ctx));
       }
     }
-    const success = publishes.every((publish) => publish.success);
+    // YouTube and Instagram handlers report success: true no matter how
+    // many accounts failed — their per-account outcomes live in results —
+    // so derive each provider's outcome from its account results before
+    // aggregating. The response (and the MCP summary built from it) must
+    // never claim a publish that never happened.
+    const derivedPublishes = publishes.map((publish) => ({
+      ...publish,
+      success: publish.results.some((result) => result.success),
+    }));
+    const success = derivedPublishes.every((publish) => publish.success);
     trackApiEvent('publish_existing_asap', {
       userId,
       mediaKind: mediaKind(input),
       providers,
       success,
     });
-    return NextResponse.json({ success, mode: 'asap', mediaKind: mediaKind(input), publishes, logId });
+    return NextResponse.json({ success, mode: 'asap', mediaKind: mediaKind(input), publishes: derivedPublishes, logId });
   } catch (error) {
     if (error instanceof ExistingMediaError) {
       return apiErrorResponse(error.status, error.message, { route: ROUTE, code: error.code });

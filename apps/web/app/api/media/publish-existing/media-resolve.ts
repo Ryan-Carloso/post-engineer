@@ -217,7 +217,9 @@ export async function loadReadyVideoUpload(
  * Store scheduled image bytes durably: the engine downloads them at
  * publish time, so a 1-hour temp asset cannot hold a post scheduled hours
  * ahead. The path (never a signed URL) rides the slot row; the object is
- * removed when the slot publishes or the schedule is cancelled.
+ * removed when the slot publishes, the schedule is cancelled, or the
+ * slot insert fails (route.ts compensation). A crash between the image
+ * upload and the slot insert can orphan the object; no sweeper covers it.
  */
 export async function storeScheduledImage(
   supabase: SupabaseClient,

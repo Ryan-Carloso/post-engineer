@@ -486,6 +486,49 @@ describe('POST /api/media/publish-existing', () => {
     }
   });
 
+  it('reports an all-failed handler result as a failed publish instead of trusting the handler flag', async () => {
+    // YouTube/Instagram handlers return success: true even when every
+    // account failed; the route must derive the outcome from results, or
+    // the MCP summary claims a publish that never happened.
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'instagram', provider_account_id: 'ig-1' }],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+    const dispatch = vi.mocked(dispatchPublish);
+    const originalImplementation = dispatch.getMockImplementation();
+    dispatch.mockResolvedValue({
+      success: true,
+      provider: 'instagram',
+      results: [{ accountId: 'ig-1', success: false, error: 'token revoked' }],
+      logId: 'log-1',
+    });
+    try {
+      const response = await POST(
+        jsonRequest({
+          media: { kind: 'image', imageData: jpeg.toString('base64'), contentType: 'image/jpeg' },
+          title: 'Sunset photo',
+          description: 'Edited photo.',
+          publishing: { mode: 'asap', providers: ['instagram'], accounts: { instagram: ['ig-1'] } },
+        }),
+      );
+      const body = await response.json();
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(false);
+      expect(body.publishes).toEqual([
+        {
+          provider: 'instagram',
+          success: false,
+          results: [{ accountId: 'ig-1', success: false, error: 'token revoked' }],
+        },
+      ]);
+    } finally {
+      if (originalImplementation !== undefined) {
+        dispatch.mockImplementation(originalImplementation);
+      }
+    }
+  });
+
   it('schedules a finished task video as a ready slot with no charge', async () => {
     const fetchFn = vi.fn(async () => new Response(JSON.stringify(taskEnvelope()), { status: 200 }));
     vi.stubGlobal('fetch', fetchFn);
