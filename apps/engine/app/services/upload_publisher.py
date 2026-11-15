@@ -3,7 +3,8 @@
 Contract target: ``POST https://post-engineer.com/api/upload-content``
 (Next.js route ``apps/web/app/api/upload-content/route.ts``).
 
-Wire contract (multipart/form-data):
+Wire contract (form data — multipart when a file part is sent,
+application/x-www-form-urlencoded when ``videoStoragePath`` replaces it):
 - Authentication: ``Authorization: Bearer <MONEYPRINT_API_SECRET>`` (engine).
 - YouTube: ``provider=youtube``, ``video`` (file), ``title``, ``description``,
   ``tags`` (single comma-separated string), ``privacyStatus``
@@ -27,8 +28,10 @@ Wire contract (multipart/form-data):
 - Fanvue: ``provider=fanvue``, ``video`` (file), ``title``, ``description``,
   repeated ``fanvueAccountIds`` fields (see ``publish_fanvue``; validated by ``fill_schedule/metadata.py``).
 
-This module owns only types, validation and multipart part builders; the HTTP
-transport lives in the client function of the same module.
+This module owns only types, validation and form-data part builders
+(multipart when a file part is sent, urlencoded when ``videoStoragePath``
+replaces it); the HTTP transport lives in the client function of the
+same module.
 """
 
 from __future__ import annotations
