@@ -234,6 +234,47 @@ def test_validate_false_skips_transcription(
     assert events == []
 
 
+def test_validation_events_carry_user_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    # Task-scoped events attribute to the real owner in PostHog:
+    # _resolve_distinct_id only reads properties["user_id"], so the
+    # validation events must carry it, never fall back to the engine
+    # pseudo-person by omission.
+    _synth, events = _install_fakes(monkeypatch, ["", ""])
+    result = synthesize_chatterbox_with_validation(
+        INCIDENT_SCRIPT,
+        "habitloom",
+        str(tmp_path / "audio.mp3"),
+        task_id="task-1",
+        user_id="user-1",
+    )
+    assert not result.ok
+    failed = [e for e in events if e["event"] == "chatterbox_tts_validation_failed"]
+    assert len(failed) == 1
+    assert failed[0]["properties"]["user_id"] == "user-1"
+    assert failed[0]["properties"]["task_id"] == "task-1"
+
+
+def test_validation_events_use_unknown_sentinel_without_user(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    # Same convention as _task_tracking_context: identity props keep
+    # the "unknown" sentinel, so a missing owner stays distinguishable
+    # from "no user recorded".
+    _synth, events = _install_fakes(monkeypatch, ["", ""])
+    result = synthesize_chatterbox_with_validation(
+        INCIDENT_SCRIPT,
+        "habitloom",
+        str(tmp_path / "audio.mp3"),
+        task_id="task-1",
+    )
+    assert not result.ok
+    failed = [e for e in events if e["event"] == "chatterbox_tts_validation_failed"]
+    assert len(failed) == 1
+    assert failed[0]["properties"]["user_id"] == "unknown"
+
+
 def test_short_script_skips_validation(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     # Previews and preflight samples are short by design; a few words can
     # never run past Chatterbox's ~30 s stable window.
@@ -425,7 +466,7 @@ def test_voice_tts_forwards_validate_false_to_wrapper(
     assert len(seen) == 1
     args, kwargs = seen[0]
     assert args[:5] == (INCIDENT_SCRIPT, "habitloom", str(tmp_path / "audio.mp3"), 1.0, 1.0)
-    assert args[5:] == ("task-1", False)
+    assert args[5:] == ("task-1", False, "user-1")
     assert kwargs == {}
 
 

@@ -166,9 +166,20 @@ def _validation_error(report: CoverageReport) -> str:
     )
 
 
-def _event_props(task_id: str | None, report: CoverageReport | None) -> dict[str, object]:
-    """Telemetry props: ids and counts only, never script text."""
-    props: dict[str, object] = {}
+def _event_props(
+    task_id: str | None,
+    report: CoverageReport | None,
+    user_id: str | None = None,
+) -> dict[str, object]:
+    """Telemetry props: ids and counts only, never script text.
+
+    `user_id` is always present, with the "unknown" sentinel when the
+    caller has no owner — the same convention as `_task_tracking_context`:
+    `_resolve_distinct_id` only attributes an event to the real owner
+    when properties["user_id"] is set, so omitting it would attribute
+    these per-user task events to the engine pseudo-person.
+    """
+    props: dict[str, object] = {"user_id": user_id or "unknown"}
     if task_id:
         props["task_id"] = task_id
     if report is not None:
@@ -186,6 +197,7 @@ def synthesize_chatterbox_with_validation(
     voice_volume: float = 1.0,
     task_id: str | None = None,
     validate: bool = True,
+    user_id: str | None = None,
 ):
     """Synthesize with Chatterbox, then prove the narration is complete.
 
@@ -199,6 +211,8 @@ def synthesize_chatterbox_with_validation(
 
     `validate=False` skips the check entirely: preflight and voice
     previews use it — they measure or sample, they do not ship a video.
+    `user_id` is carried into the telemetry props so the validation
+    events attribute to the video's owner, not the engine pseudo-person.
     """
     # Lazy import: voice_providers must stay importable without this
     # module, and the tests patch chatterbox_tts at its origin.
@@ -220,7 +234,7 @@ def synthesize_chatterbox_with_validation(
         )
         track_event(
             "chatterbox_tts_validation_unavailable",
-            _event_props(task_id, None),
+            _event_props(task_id, None, user_id),
             immediate=True,
         )
         return result
@@ -236,7 +250,7 @@ def synthesize_chatterbox_with_validation(
     )
     track_event(
         "chatterbox_tts_validation_failed",
-        _event_props(task_id, report),
+        _event_props(task_id, report, user_id),
         immediate=True,
     )
     retry = chatterbox_tts(text, voice, voice_file, voice_rate, voice_volume)
@@ -251,7 +265,7 @@ def synthesize_chatterbox_with_validation(
         )
         track_event(
             "chatterbox_tts_validation_repaired",
-            _event_props(task_id, second.report),
+            _event_props(task_id, second.report, user_id),
             immediate=True,
         )
         return retry
