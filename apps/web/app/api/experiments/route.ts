@@ -8,7 +8,8 @@ import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { personaScopeOf } from '@/lib/post-detail';
-import { CreateExperimentSchema } from '@/lib/experiments/requests';
+import { readBody } from '@/lib/contracts-server';
+import { createExperiment } from '@/lib/contracts/experiments';
 import { listExperiments } from '@/lib/experiments/read';
 
 //---------------
@@ -33,24 +34,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const limited = await applyRateLimit(request, RATE_LIMITS.experimentCreate, auth.userId);
   if (limited) return limited;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return apiErrorResponse(400, 'Invalid JSON payload.', { route: ROUTE_POST, code: 'VALIDATION_FAILED' });
-  }
-  const parsed = CreateExperimentSchema.safeParse(body);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const field = issue.path.join('.');
-    return apiErrorResponse(400, `Invalid request: ${field.length > 0 ? `${field}: ` : ''}${issue.message}`.slice(0, 500), {
-      route: ROUTE_POST,
-      code: 'VALIDATION_FAILED',
-      logMessage: 'Invalid experiment request.',
-      extra: { field: field.slice(0, 200) },
-    });
-  }
-  const input = parsed.data;
+  const parsed = await readBody(createExperiment, request, { logMessage: 'Invalid experiment request.' });
+  if (!parsed.ok) return parsed.response;
+  const input = parsed.body;
   const personaId = input.personaId ?? null;
   const supabase = createSupabaseServiceClient();
 

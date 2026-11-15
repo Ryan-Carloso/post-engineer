@@ -174,7 +174,7 @@ describe('accounts', () => {
 
 describe('experiments and check_script with a persona by name', () => {
   it('creates an experiment for a persona given by name', async () => {
-    const { call, seen } = setup({ 'GET /api/persona/list': PERSONAS, 'POST /api/experiments': { success: true } });
+    const { call, seen } = setup({ 'GET /api/persona/list': PERSONAS, 'POST /api/experiments': { success: true, experiment: { id: '22222222-2222-4222-8222-222222222222', name: 'Calm vs bold', variable: 'hook', personaId: MARIA, targetPairs: 6, variants: [{ variantId: 'hook-calm', name: 'Calm', description: 'calm' }, { variantId: 'hook-bold', name: 'Bold', description: 'bold' }] } } });
     const result = await call('experiments', {
       action: 'create',
       name: 'Calm vs bold',
@@ -186,7 +186,7 @@ describe('experiments and check_script with a persona by name', () => {
   });
 
   it('creates an experiment with no persona when none is given', async () => {
-    const { call, seen } = setup({ 'POST /api/experiments': { success: true } });
+    const { call, seen } = setup({ 'POST /api/experiments': { success: true, experiment: { id: '22222222-2222-4222-8222-222222222222', name: 'Faceless', variable: 'hook', personaId: null, targetPairs: 6, variants: [{ variantId: 'hook-a', name: 'A', description: 'a' }, { variantId: 'hook-b', name: 'B', description: 'b' }] } } });
     await call('experiments', {
       action: 'create',
       name: 'Faceless',

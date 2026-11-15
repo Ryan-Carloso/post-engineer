@@ -51,11 +51,10 @@ The consumers use byte-identical generated copies, committed to git:
 - `apps/mcp/src/music-mood-field.ts`
 
 Unlike script-segments, this file imports `zod`, so it uses only syntax
-both majors accept (the web runs Zod 4, the MCP Zod 3):
-`z.string().min().max().optional().describe()` — no `.url()`, `errorMap`,
-or other version-specific APIs. Each app resolves `zod` from its own
-dependencies. The catalog check (a catalogued mood or `"none"`) stays a
-separate web-side layer in `lib/generation/music-moods`.
+both apps accept (both run Zod 4.6.7):
+`z.string().min().max().optional().describe()`. Each app resolves `zod`
+from its own dependencies. The catalog check (a catalogued mood or `"none"`)
+stays a separate web-side layer in `lib/generation/music-moods`.
 
 To change the field, edit only the shared file, then regenerate:
 
@@ -99,3 +98,35 @@ without a package release.
 To change the base, edit only this file. The web
 `prompt-base-shared.test.ts` suite fails loudly if a copy ever
 reappears.
+
+## contracts
+
+`contracts/*.ts` are the shared endpoint contracts: one `defineEndpoint`
+per web API exchange (`method`, `path`, optional `body`/`query`, `response`
+schemas) plus the `BodyOf`/`QueryOf`/`ResponseOf`/`ParamsOf` types derived
+from it. The pilot is the experiments API (`POST /api/experiments`,
+`GET /api/experiments`, `GET /api/experiments/:id`): renaming a field there
+fails `pnpm typecheck` in BOTH apps in the same change, with no runtime
+change (same URLs, same 400 messages). Request bodies are
+`z.strictObject`/`.strict()`; responses are plain `z.object` (extra fields
+ignored). Shared files import only `zod` (both apps resolve zod 4.6.7).
+
+The consumers use generated copies, gitignored (not committed):
+
+- `apps/web/lib/contracts/*.ts`
+- `apps/mcp/src/contracts/*.ts`
+
+To change a contract, edit only the shared file, then regenerate:
+
+```sh
+node scripts/sync-contracts.mjs
+```
+
+The sync also runs from the root `postinstall` and `typecheck` scripts
+and is chained from `scripts/sync-script-segments.mjs` (which both apps
+already run from `prebuild`/`pretest`), so `pnpm install`, `pnpm
+typecheck`, `pnpm build` and `pnpm test` always regenerate before
+compiling or testing. `scripts/sync-contracts.mjs --check` fails when a
+copy drifts. Each app has a `contracts-shared.test.ts` drift suite and a
+`contracts-typecheck.test.ts` type pin. Never edit a generated copy by
+hand.
