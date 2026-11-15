@@ -62,6 +62,7 @@ const INPUT = {
   videoType: 'hook_lipsync' as const,
   avatarUrl: null as string | null,
   libraryPhotoUrl: null as string | null,
+  photoPathUrl: null as string | null,
 };
 
 const PREP: PersonaPrep = {
@@ -558,6 +559,62 @@ describe('checkFirstPhotoFace', () => {
     },
   );
 
+  it('checks the stored persona photo when the avatar is null and a photo path was signed', async () => {
+    // Uploaded/https personas store photo_path with avatar_url null, and
+    // dispatch signs photoPath as the persona fallback: a faceless stored
+    // photo must block the charge here, not after it in the engine.
+    const calls = stubFetch([engineBody('ok', 1080, 1920, false)]);
+    const result = await checkFirstPhotoFace({
+      ...INPUT,
+      segments: [],
+      avatarUrl: null,
+      photoPathUrl: 'https://cdn.example/signed-photo.jpg',
+    });
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(400);
+    const payload = (await (result as NextResponse).json()) as {
+      error?: string;
+      code?: string;
+      field?: string;
+    };
+    expect(payload.error).toContain('The persona photo has no detectable face');
+    expect(payload.code).toBe('VALIDATION_FAILED');
+    expect(payload.field).toBe('personaId');
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      url: 'https://cdn.example/signed-photo.jpg',
+      video_aspect: '9:16',
+    });
+  });
+
+  it('passes when the stored persona photo has a face', async () => {
+    stubFetch([engineBody('ok', 1080, 1920, true)]);
+    const result = await checkFirstPhotoFace({
+      ...INPUT,
+      segments: [],
+      avatarUrl: null,
+      photoPathUrl: 'https://cdn.example/signed-photo.jpg',
+    });
+    expect(result).toBeNull();
+  });
+
+  it('checks the avatar, not the stored photo, when an avatar URL is set', async () => {
+    // Dispatch prefers the hosted avatar over the signed photo path, so
+    // the pre-charge check must validate the same file.
+    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
+    const result = await checkFirstPhotoFace({
+      ...INPUT,
+      segments: [],
+      avatarUrl: 'https://e.com/avatar.jpg',
+      photoPathUrl: 'https://cdn.example/signed-photo.jpg',
+    });
+    expect(result).toBeNull();
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      url: 'https://e.com/avatar.jpg',
+      video_aspect: '9:16',
+    });
+  });
   it('checks the picked library photo, not the stored avatar, when one was picked', async () => {
     // The engine's persona fallback is the library image dispatch will
     // sign: a faceless stored avatar must not block a faced library
@@ -639,6 +696,7 @@ describe('checkPreChargePreflights', () => {
     options: OPTIONS,
     segments: SEGMENTS,
     libraryPhotoUrl: null as string | null,
+    photoPathUrl: null as string | null,
   };
 
   beforeEach(() => {

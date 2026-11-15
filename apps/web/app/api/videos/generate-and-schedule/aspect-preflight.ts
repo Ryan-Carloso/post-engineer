@@ -224,10 +224,15 @@ export interface FirstPhotoFaceInput {
   videoAspect: VideoAspectOption;
   /** The one video mode: faceless videos never show a face. */
   videoType: VideoType;
-  /** The persona's stored avatar URL (or null): the engine falls back
-   * to the persona photo when no segment carries one and no library
-   * image was picked, so the avatar is the hook image in that case. */
+  /** The persona's stored avatar URL (or null): when no segment carries
+   * a photo and no library image was picked, the engine falls back to
+   * this avatar when it is an http(s) URL the engine can download — or
+   * to the signed stored photo (photoPathUrl) when the avatar is null. */
   avatarUrl: string | null;
+  /** Signed URL of the stored persona photo (photo_path), or null: the
+   * fallback photo when the avatar is null (uploaded/https personas
+   * store photo_path with avatar_url null). */
+  photoPathUrl: string | null;
   /** Signed URL of the library image dispatch will send as the persona
    * fallback photo (null when no library image was picked): the engine
    * face-gates this file, not the stored avatar, so the pre-charge
@@ -315,7 +320,8 @@ async function checkFallbackPhotoUrl(
  * reach it in production: media is optional there), so the fallback
  * photo is checked here too: the picked library image when one was
  * picked (dispatch signs exactly that file), else the stored avatar
- * when it is an http(s) URL the engine can download. A data URI, a
+ * when it is an http(s) URL the engine can download, else the signed
+ * stored photo (photo_path) when the avatar is null. A data URI, a
  * relative asset path, or a missing avatar cannot be checked through
  * media/check: the engine preflight is the backstop for those.
  */
@@ -376,6 +382,15 @@ export async function checkFirstPhotoFace(
       'personaId',
     );
   }
+  if (input.avatarUrl === null && input.photoPathUrl !== null) {
+    return checkFallbackPhotoUrl(
+      input.userId,
+      input.videoAspect,
+      input.photoPathUrl,
+      'The persona photo',
+      'personaId',
+    );
+  }
   if (input.avatarUrl === null || !isHttpUrl(input.avatarUrl)) return null;
   return checkFallbackPhotoUrl(
     input.userId,
@@ -397,6 +412,9 @@ export interface PreChargePreflightInput {
   /** Signed URL of the library image dispatch will send as the persona
    * fallback photo (null when no library image was picked). */
   libraryPhotoUrl: string | null;
+  /** Signed URL of the stored persona photo (photo_path), or null: the
+   * fallback photo when the avatar is null. */
+  photoPathUrl: string | null;
 }
 
 /**
@@ -451,5 +469,6 @@ export async function checkPreChargePreflights(
     videoType: input.options.videoType,
     avatarUrl: input.prep.avatarUrl,
     libraryPhotoUrl: input.libraryPhotoUrl,
+    photoPathUrl: input.photoPathUrl,
   });
 }

@@ -33,7 +33,7 @@ import { refundRollbackSpend } from './rollback-refund';
 import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, verifyExperimentPairAfterInsert } from './experiment-link';
 import { scheduleAccountColumns } from './account-columns';
 import { checkPreChargePreflights } from './aspect-preflight';
-import { resolvePreChargeLibraryPhoto } from './library-photo';
+import { resolvePreChargeFallbackPhotos } from './library-photo';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
 import { validateAccounts } from './validate-accounts';
 import { getPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
@@ -349,16 +349,16 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // The fallback photo is resolved once here, pre-charge: the engine face-gates the library image dispatch signs, not the avatar.
   const requestedImageId =
     personaId !== null ? (validatedOptions.imageId?.trim() || null) : null;
-  const libraryPhoto = await resolvePreChargeLibraryPhoto(supabase, {
+  const fallbackPhotos = await resolvePreChargeFallbackPhotos(supabase, {
     personaId,
     userId,
     title,
-    niche: prep.niche,
     script: segmentsScript,
     videoType: validatedOptions.videoType,
     requestedImageId,
+    prep,
   });
-  if (libraryPhoto instanceof NextResponse) return libraryPhoto;
+  if (fallbackPhotos instanceof NextResponse) return fallbackPhotos;
 
   // Pre-charge preflights: full lip-sync narration (>60s), segment-media aspect
   // (issue #538) and first-photo face (issue #589) — all reject before charging.
@@ -369,7 +369,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
     prep,
     options: validatedOptions,
     segments: options?.segments,
-    libraryPhotoUrl: libraryPhoto.libraryPhotoUrl,
+    libraryPhotoUrl: fallbackPhotos.libraryPhotoUrl,
+    photoPathUrl: fallbackPhotos.photoPathUrl,
   });
   if (preflight instanceof NextResponse) return preflight;
 

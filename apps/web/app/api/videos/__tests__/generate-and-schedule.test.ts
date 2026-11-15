@@ -2656,6 +2656,39 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
+    it('rejects a faceless stored persona photo with 400 before any charge', async () => {
+      // Uploaded/https personas store photo_path with avatar_url null, and
+      // dispatch signs photoPath as the persona fallback: the pre-charge
+      // face check must validate that file, not pass the request through
+      // to a charge and an engine failure. Full lip-sync text-only
+      // segments reach the fallback in production (media is optional
+      // there), so the narration stub answers 51s like the other
+      // full-mode tests.
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: null, photo_path: 'personas/user-1/photo.jpg' } });
+      vi.mocked(resolveVideoImage).mockResolvedValue({ ok: true, image: null });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) =>
+          String(url).includes('/api/v1/media/check')
+            ? new Response(
+              JSON.stringify({ status: 200, body: { code: 'ok', width: 1080, height: 1920, has_face: false } }),
+              { status: 200, headers: { 'content-type': 'application/json' } },
+            )
+            : new Response(JSON.stringify({ status: 200, body: { audio_duration_seconds: 51 } }), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
+        ),
+      );
+      const res = await post(baseBody({ options: { videoType: 'full_lipsync', segments: NO_MEDIA_SEGMENTS } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toContain('The persona photo has no detectable face');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
     it('marks the slot no_task_id when the engine accepts without a task id', async () => {
       setup({ ...DEFAULT_CFG, engineNoTaskIdSubjects: ['Porto trip'] });
       const res = await post(baseBody());
