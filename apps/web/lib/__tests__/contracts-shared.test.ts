@@ -12,6 +12,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 import { METRICS_WINDOWS } from '@/lib/contracts/experiments';
+import { PUBLISH_PROVIDERS } from '@/lib/contracts/posts';
 
 const HEADER = '// GENERATED from shared/contracts — do not edit.\n// Run `node scripts/sync-contracts.mjs` from the repo root to regenerate.\n';
 
@@ -44,5 +45,17 @@ describe('contracts shared source', () => {
     const metricsQuery = readFileSync(join(root, 'apps', 'web', 'lib', 'metrics', 'metrics-query.ts'), 'utf8');
     const list = METRICS_WINDOWS.map((window) => `'${window}'`).join(', ');
     expect(metricsQuery).toContain(`export const METRICS_WINDOWS = [${list}] as const;`);
+  });
+
+  // The contract carries its own PUBLISH_PROVIDERS copy (the publish-link
+  // builder drops any other provider before a link is built). A one-sided
+  // edit would make the contract reject a link the route serves, so the
+  // copy is pinned here against the PublishProvider union the PROVIDERS
+  // set is built from.
+  it('pins the shared PUBLISH_PROVIDERS to publish-links.ts', () => {
+    const root = findRepoRoot(import.meta.url);
+    const publishLinks = readFileSync(join(root, 'apps', 'web', 'lib', 'publish-links.ts'), 'utf8');
+    const list = PUBLISH_PROVIDERS.map((provider) => `'${provider}'`).join(' | ');
+    expect(publishLinks).toContain(`export type PublishProvider = ${list};`);
   });
 });

@@ -3,6 +3,7 @@ import type { PostEngineerClient } from '../client.js';
 import { createExperiment } from '../client-experiments.js';
 import { getPrompt, listPrompts } from '../client-prompts.js';
 import { getTokenBalance, listTokenTransactions } from '../client-billing.js';
+import { getPost } from '../client-posts.js';
 
 //---------------
 // Type-level pins for the shared contracts, checked by
@@ -16,6 +17,7 @@ type ListPromptsResult = Awaited<ReturnType<typeof listPrompts>>;
 type GetPromptResult = Awaited<ReturnType<typeof getPrompt>>;
 type TokenBalanceResult = Awaited<ReturnType<typeof getTokenBalance>>;
 type TokenTransactionsResult = Awaited<ReturnType<typeof listTokenTransactions>>;
+type GetPostResult = Awaited<ReturnType<typeof getPost>>;
 
 describe('contracts typecheck', () => {
   it('rejects an unknown body field and an unknown response field at compile time', () => {
@@ -57,5 +59,14 @@ describe('contracts typecheck', () => {
     };
     expect(typeof balance).toBe('function');
     expect(typeof ledger).toBe('function');
+  });
+
+  it('rejects unknown post detail fields at compile time', () => {
+    const detail = (result: GetPostResult): unknown => {
+      if (result.kind !== 'generation') return undefined;
+      // @ts-expect-error -- the generation field is `videoSubject`, not `subject`
+      return result.generation.subject;
+    };
+    expect(typeof detail).toBe('function');
   });
 });

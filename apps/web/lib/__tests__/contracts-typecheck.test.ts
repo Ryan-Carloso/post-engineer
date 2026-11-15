@@ -3,6 +3,7 @@ import { readBody } from '@/lib/contracts-server';
 import { createExperiment } from '@/lib/contracts/experiments';
 import { getPrompt, listPrompts } from '@/lib/contracts/prompts';
 import { getTokenBalance, listTokenTransactions } from '@/lib/contracts/billing';
+import { getPost } from '@/lib/contracts/posts';
 import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
 //---------------
@@ -18,6 +19,7 @@ type ListPromptsResponse = ResponseOf<typeof listPrompts>;
 type GetPromptResponse = ResponseOf<typeof getPrompt>;
 type TokenBalanceResponse = ResponseOf<typeof getTokenBalance>;
 type TokenTransactionsResponse = ResponseOf<typeof listTokenTransactions>;
+type GetPostResponse = ResponseOf<typeof getPost>;
 
 describe('contracts typecheck', () => {
   it('pins BodyOf and ResponseOf field names', async () => {
@@ -81,5 +83,31 @@ describe('contracts typecheck', () => {
     expect(ledger.transactions[0]?.generationId).toBeNull();
     // @ts-expect-error -- the transaction field is `generationId`, not `generation_id`
     expect(ledger.transactions[0]?.generation_id).toBeUndefined();
+  });
+
+  it('pins the post detail response field names', () => {
+    const detail: GetPostResponse = {
+      success: true,
+      kind: 'generation',
+      generation: {
+        id: 'g-1',
+        generationId: 'g-1',
+        engineTaskId: null,
+        personaName: null,
+        videoSubject: 'Gym',
+        status: 'complete',
+        errorCode: null,
+        tokensRefunded: false,
+        createdAt: '2026-11-07T00:00:00Z',
+        completedAt: '2026-11-07T01:00:00Z',
+        progress: 100,
+        stage: null,
+        scriptAngle: null,
+      },
+    };
+    expect(detail.generation.videoSubject).toBe('Gym');
+    if (detail.kind !== 'generation') throw new Error('expected a generation detail');
+    // @ts-expect-error -- the generation field is `videoSubject`, not `subject`
+    expect(detail.generation.subject).toBeUndefined();
   });
 });

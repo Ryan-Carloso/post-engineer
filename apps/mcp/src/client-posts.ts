@@ -1,4 +1,7 @@
 import type { PostEngineerClient } from './client.js';
+import { parseContractResponse } from './contract-response.js';
+import { getPost as getPostContract } from './contracts/posts.js';
+import type { ResponseOf } from './contracts/endpoint.js';
 
 //---------------
 // Unified post detail (GET /api/posts/[id], issue #208), per-video
@@ -17,12 +20,13 @@ export interface PostMetricsQuery {
   angle?: string;
 }
 
-export async function getPost(client: PostEngineerClient, id: string): Promise<unknown> {
-  return client.request(
+export async function getPost(client: PostEngineerClient, id: string): Promise<ResponseOf<typeof getPostContract>> {
+  const raw = await client.request(
     `/api/posts/${encodeURIComponent(id)}`,
     { method: 'GET', headers: client.getHeaders() },
     'get post',
   );
+  return parseContractResponse(getPostContract, raw);
 }
 
 export async function getPostMetrics(

@@ -42,15 +42,38 @@ function textOf(response: unknown): string {
   return block.text;
 }
 
+// A production-shaped generation detail: the contract requires every
+// field, so a partial payload is a malformed 200.
+const GENERATION_DETAIL = {
+  id: 'g-1',
+  generationId: 'g-1',
+  engineTaskId: null,
+  personaName: null,
+  videoSubject: 'Gym',
+  status: 'complete',
+  errorCode: null,
+  tokensRefunded: false,
+  createdAt: '2026-11-07T00:00:00Z',
+  completedAt: '2026-11-07T01:00:00Z',
+  progress: 100,
+  stage: null,
+  scriptAngle: null,
+};
+
 describe('getPost', () => {
   it('GETs /api/posts/[id] with the id percent-encoded', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, kind: 'slot' });
+    const request = vi.fn().mockResolvedValue({ success: true, kind: 'generation', generation: GENERATION_DETAIL });
     await getPost(fakeClient(request), 'batch:s-1:slot:a/b');
     expect(request).toHaveBeenCalledWith(
       '/api/posts/batch%3As-1%3Aslot%3Aa%2Fb',
       { method: 'GET', headers: HEADERS },
       'get post',
     );
+  });
+
+  it('rejects a malformed 200 body', async () => {
+    const request = vi.fn().mockResolvedValue({ success: true, kind: 'slot' });
+    await expect(getPost(fakeClient(request), 'slot-1')).rejects.toThrow('Malformed response from GET /api/posts/:id');
   });
 });
 
@@ -115,10 +138,10 @@ describe('GetPostMetricsSchema', () => {
 
 describe('get_post / get_post_metrics handlers', () => {
   it('handleGetPost returns the unified detail', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, kind: 'generation', generation: { id: 'g-1' } });
+    const request = vi.fn().mockResolvedValue({ success: true, kind: 'generation', generation: GENERATION_DETAIL });
     const result = await handleGetPost(fakeClient(request), { id: 'g-1' });
     expect(result.isError).toBeFalsy();
-    expect(JSON.parse(textOf(result))).toEqual({ success: true, kind: 'generation', generation: { id: 'g-1' } });
+    expect(JSON.parse(textOf(result))).toEqual({ success: true, kind: 'generation', generation: GENERATION_DETAIL });
   });
 
   it('handleGetPost maps failures to an error response', async () => {
@@ -185,7 +208,7 @@ describe('registered posts and insights tools', () => {
   }
 
   it('get_post calls GET /api/posts/[id] through the server', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, kind: 'slot' });
+    const request = vi.fn().mockResolvedValue({ success: true, kind: 'generation', generation: GENERATION_DETAIL });
     const result = await callTool('posts', { action: 'get', id: 'slot-1' }, request);
     expect(result.isError, JSON.stringify(result.content)).toBeFalsy();
     expect(request).toHaveBeenCalledWith('/api/posts/slot-1', { method: 'GET', headers: HEADERS }, 'get post');
