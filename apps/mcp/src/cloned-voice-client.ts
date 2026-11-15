@@ -1,8 +1,11 @@
+import { lookup } from 'node:dns/promises';
 import { readFile, stat } from 'node:fs/promises';
+import { isIP } from 'node:net';
 import { basename, extname } from 'node:path';
 
 import { readApiFailure } from './errors.js';
 import { MAX_CLONE_AUDIO_BYTES, MAX_CLONE_AUDIO_MB } from './limits.js';
+import { isPublicIp } from './public-ip.js';
 
 const UPLOAD_TIMEOUT_MS = 120_000;
 
@@ -53,12 +56,46 @@ async function readBodyWithCap(
   return Buffer.concat(chunks);
 }
 
-export async function fetchCloneReferenceAudio(audioUrl: string): Promise<Blob> {
+export type HostLookup = (hostname: string) => Promise<ReadonlyArray<{ address: string }>>;
+
+export interface CloneAudioFetchOptions {
+  /** Remote (hosted) server: https only, and every resolved address must be public. */
+  readonly remote?: boolean;
+  /** DNS resolution, injectable for tests; defaults to node:dns/promises lookup(all). */
+  readonly lookup?: HostLookup;
+}
+
+const defaultLookup: HostLookup = (hostname) => lookup(hostname, { all: true });
+
+// Fail closed: a resolution error, no address, or any non-public address rejects.
+async function assertPublicHost(hostname: string, resolve: HostLookup): Promise<void> {
+  const bare = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+  let addresses: ReadonlyArray<{ address: string }>;
+  try {
+    addresses = isIP(bare) ? [{ address: bare }] : await resolve(bare);
+  } catch {
+    throw new Error('audioUrl must point to a public host');
+  }
+  if (addresses.length === 0 || !addresses.every((a) => isPublicIp(a.address))) {
+    throw new Error('audioUrl must point to a public host');
+  }
+}
+
+export async function fetchCloneReferenceAudio(
+  audioUrl: string,
+  options: CloneAudioFetchOptions = {},
+): Promise<Blob> {
   let parsed: URL;
   try {
     parsed = new URL(audioUrl);
   } catch {
     throw new Error('audioUrl must be a valid URL');
+  }
+  if (options.remote === true) {
+    if (parsed.protocol !== 'https:') {
+      throw new Error('audioUrl must use https');
+    }
+    await assertPublicHost(parsed.hostname, options.lookup ?? defaultLookup);
   }
   const loopback =
     parsed.hostname === 'localhost' ||
@@ -155,11 +192,12 @@ export async function createClonedVoiceFromUrl(
   language: string,
   consent: boolean,
   denoise: boolean,
+  options: CloneAudioFetchOptions = {},
 ): Promise<unknown> {
   if (!consent) {
     throw new Error('consent must be true to create a voice clone');
   }
-  const blob = await fetchCloneReferenceAudio(audioUrl);
+  const blob = await fetchCloneReferenceAudio(audioUrl, options);
   return postCloneReference(client, blob, 'reference.bin', language, denoise);
 }
 
