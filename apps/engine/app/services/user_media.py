@@ -230,6 +230,16 @@ def _media_id_path(media_id: str) -> tuple[str, Optional[str]]:
     return source, None
 
 
+def _face_verdict(source_path: str, failure: Optional[str]) -> bool | None:
+    """Face verdict for a checked file: None when the mechanical checks
+    rejected it (undecodable, too small, too large) — detection never
+    runs on those, and the verdict is meaningless. A wrong-ratio file
+    is still decodable, so its verdict feeds the hook gate."""
+    if failure is not None and failure != "wrong_aspect":
+        return None
+    return face_detect.image_contains_face(source_path)
+
+
 def check_media_detail(
     url: Optional[str] = None,
     media_id: Optional[str] = None,
@@ -248,10 +258,12 @@ def check_media_detail(
 
     has_face reports whether a detectable face is in the photo
     (True/False), or None when there is no file to check (expired
-    media, failed download) or the detector is unavailable. It is a
-    reported fact, never a filter: this path never rejects a photo for
-    lacking a face (issue #589 — the hook-photo gate that consumes it
-    lives in the lip-sync resolution and the web pre-charge preflight).
+    media, failed download), the detector is unavailable, or the file
+    failed the mechanical checks (undecodable, too small, too large —
+    detection never runs on those). It is a reported fact, never a
+    filter: this path never rejects a photo for lacking a face (issue
+    #589 — the hook-photo gate that consumes it lives in the lip-sync
+    resolution and the web pre-charge preflight).
     """
     if media_id is not None:
         source, reason = _media_id_path(media_id)
@@ -263,7 +275,7 @@ def check_media_detail(
             "code": code if code is not None else "ok",
             "width": size[0] if size is not None else None,
             "height": size[1] if size is not None else None,
-            "has_face": face_detect.image_contains_face(source),
+            "has_face": _face_verdict(source, code),
         }
     raw_path = os.path.join(work_dir, "check-media.raw")
     try:
@@ -277,7 +289,7 @@ def check_media_detail(
             "code": failure if failure is not None else "ok",
             "width": size[0] if size is not None else None,
             "height": size[1] if size is not None else None,
-            "has_face": face_detect.image_contains_face(raw_path),
+            "has_face": _face_verdict(raw_path, failure),
         }
     finally:
         with contextlib.suppress(OSError):

@@ -228,6 +228,22 @@ export interface FirstPhotoFaceInput {
 }
 
 /**
+ * Mechanical rejections from media/check: the file failed the engine's
+ * size/decodability checks, so its face verdict is meaningless (the
+ * engine reports has_face null for these). The text names the real
+ * reason the photo cannot be the hook image.
+ */
+const MECHANICAL_REJECTION_REASONS: Record<string, string> = {
+  not_image: 'is not a readable image',
+  too_small: 'is too small',
+  too_large: 'is too large',
+};
+
+function mechanicalRejectionReason(code: unknown): string | undefined {
+  return typeof code === 'string' ? MECHANICAL_REJECTION_REASONS[code] : undefined;
+}
+
+/**
  * Check the hook image for a detectable face before charging (issue
  * #589). The hook opens with the first segment photo, so a faceless
  * first photo must fail here — not after the charge, when the engine
@@ -236,7 +252,10 @@ export interface FirstPhotoFaceInput {
  * image has a face (or there is nothing to check), and a NextResponse
  * otherwise: 400 naming the segment and image (or the persona photo),
  * 502 when the face is unknown. A missing has_face (an older engine)
- * passes through: the engine preflight is the backstop.
+ * passes through: the engine preflight is the backstop. A photo the
+ * engine mechanically rejects (not_image, too_small, too_large) is a
+ * 400 naming the real reason — checked before the face verdict, so an
+ * older engine's "no face" for an undecodable file never wins.
  *
  * When no segment carries a photo the engine falls back to the persona
  * photo and face-gates that instead (full_lipsync text-only segments
@@ -259,6 +278,14 @@ export async function checkFirstPhotoFace(
       'first-photo-face',
     );
     if (record instanceof NextResponse) return record;
+    const rejection = mechanicalRejectionReason(record.code);
+    if (rejection !== undefined) {
+      return validationFailed(
+        ERROR_CODES.VALIDATION_FAILED,
+        `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but it ${rejection}: send a usable photo showing the persona's face.`,
+        'options.segments',
+      );
+    }
     if (record.has_face === false) {
       return validationFailed(
         ERROR_CODES.VALIDATION_FAILED,
@@ -278,6 +305,14 @@ export async function checkFirstPhotoFace(
     'first-photo-face',
   );
   if (record instanceof NextResponse) return record;
+  const rejection = mechanicalRejectionReason(record.code);
+  if (rejection !== undefined) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      `The persona photo ${rejection}: lip sync needs a usable photo of the persona's face.`,
+      'personaId',
+    );
+  }
   if (record.has_face === false) {
     return validationFailed(
       ERROR_CODES.VALIDATION_FAILED,

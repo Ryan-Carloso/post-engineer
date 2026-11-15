@@ -380,6 +380,63 @@ def test_check_media_detail_reports_has_face_for_a_media_id(tmp_path, monkeypatc
     detector.assert_called_once_with(str(portrait))
 
 
+def test_check_media_detail_skips_face_detection_for_a_rejected_file(tmp_path, monkeypatch):
+    # A file the mechanical checks reject (undecodable, too small, too
+    # large) must not reach the cv2 decode: its face verdict is
+    # meaningless, and a crafted over-cap image would make OpenCV decode
+    # up to its own ~1-gigapixel guard.
+    monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
+    not_image = tmp_path / "aabbccddeeff00112233445566778899.jpg"
+    not_image.write_bytes(b"not an image at all")
+    with patch.object(face_detect, "image_contains_face") as detector:
+        result = user_media.check_media_detail(media_id=not_image.name)
+    assert result == {"code": "not_image", "width": None, "height": None, "has_face": None}
+    detector.assert_not_called()
+
+    tiny = tmp_path / "00112233445566778899aabbccddeeff.jpg"
+    tiny.write_bytes(_jpeg(10, 10))
+    with patch.object(face_detect, "image_contains_face") as detector:
+        result = user_media.check_media_detail(media_id=tiny.name)
+    assert result == {"code": "too_small", "width": 10, "height": 10, "has_face": None}
+    detector.assert_not_called()
+
+    huge = tmp_path / "2233445566778899aabbccddeeff0011.jpg"
+    huge.write_bytes(_jpeg(8000, 7000))
+    with patch.object(face_detect, "image_contains_face") as detector:
+        result = user_media.check_media_detail(media_id=huge.name)
+    assert result == {"code": "too_large", "width": 8000, "height": 7000, "has_face": None}
+    detector.assert_not_called()
+
+
+def test_check_media_detail_still_detects_faces_for_a_wrong_aspect_file(tmp_path, monkeypatch):
+    # A wrong-ratio file is still decodable, and its face verdict feeds
+    # the hook gate — detection runs for it.
+    monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
+    landscape = tmp_path / "aabbccddeeff00112233445566778899.jpg"
+    landscape.write_bytes(_jpeg(1920, 1080))
+    with patch.object(face_detect, "image_contains_face", return_value=True) as detector:
+        result = user_media.check_media_detail(
+            media_id=landscape.name, aspect=VideoAspect.portrait
+        )
+    assert result == {"code": "wrong_aspect", "width": 1920, "height": 1080, "has_face": True}
+    detector.assert_called_once_with(str(landscape))
+
+
+def test_check_media_detail_skips_face_detection_for_a_rejected_url(tmp_path):
+    def download(url, dest_path, session=None):
+        with open(dest_path, "wb") as handle:
+            handle.write(b"not an image at all")
+        return dest_path
+
+    with (
+        patch.object(image_fetch, "download_image", side_effect=download),
+        patch.object(face_detect, "image_contains_face") as detector,
+    ):
+        result = user_media.check_media_detail(url="https://e.com/a.jpg", work_dir=str(tmp_path))
+    assert result == {"code": "not_image", "width": None, "height": None, "has_face": None}
+    detector.assert_not_called()
+
+
 def test_check_media_detail_reports_has_face_none_when_the_detector_is_unavailable(
     tmp_path, monkeypatch
 ):

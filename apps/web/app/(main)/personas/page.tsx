@@ -190,8 +190,9 @@ const PersonaCard = ({
             size={56}
           />
           {/* Issue #589: the avatar is only a reference for the agent —
-              the hook opens with the first photo of each video, never
-              this photo. */}
+              the hook opens with the first photo of each video, and this
+              photo is only the hook image when no photo was sent with
+              the video. */}
           <span className="text-[10px] font-medium whitespace-nowrap text-muted-text">
             {t('persona.photoLabel')}
           </span>

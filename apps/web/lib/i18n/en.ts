@@ -195,7 +195,7 @@ export const enDictionary: Dictionary = {
     characterHint: 'Click a card to use that ready-made character.',
     photoUpload: 'Upload photo',
     photoCurrent: 'Current photo',
-    photoHint: 'For best results, upload clear, front-facing photos framed from the shoulders up. Avoid full-body photos. Select several at once, up to {max}. Accepted formats: JPG or PNG. The agent uses this photo as a reference to generate a similar photo for each video — it never appears in videos itself.',
+    photoHint: 'For best results, upload clear, front-facing photos framed from the shoulders up. Avoid full-body photos. Select several at once, up to {max}. Accepted formats: JPG or PNG. The agent uses this photo as a reference to generate a similar photo for each video — it only appears in a video itself when no photo was sent with that video.',
     libraryLabel: 'Image library',
     libraryHint: 'Up to {max} photos of the same person. Each video picks the best match by tag, so variety improves results. Accepted formats: JPG/JPEG, PNG, or WebP (max {sizeMb}MB).',
     libraryCount: '{count} of {max} images',

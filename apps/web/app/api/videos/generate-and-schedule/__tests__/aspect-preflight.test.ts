@@ -457,6 +457,52 @@ describe('checkFirstPhotoFace', () => {
     expect(payload.field).toBe('options.segments');
   });
 
+  it.each([
+    ['not_image', 'is not a readable image'],
+    ['too_small', 'is too small'],
+    ['too_large', 'is too large'],
+  ])(
+    'rejects a mechanically rejected first photo with a 400 naming the real reason (%s)',
+    async (code, reason) => {
+      // The engine reports has_face null for a rejected file (its verdict
+      // is meaningless), so the code — not the face — must block the
+      // charge, with the real reason instead of "no face was detected".
+      stubFetch([engineBody(code, 1080, 1920)]);
+      const result = await checkFirstPhotoFace(INPUT);
+      expect(result).toBeInstanceOf(NextResponse);
+      expect((result as NextResponse).status).toBe(400);
+      const payload = (await (result as NextResponse).json()) as {
+        error?: string;
+        code?: string;
+        field?: string;
+      };
+      expect(payload.error).toContain('Segment 0 image 0');
+      expect(payload.error).toContain(reason);
+      expect(payload.error).not.toContain('no face was detected');
+      expect(payload.code).toBe('VALIDATION_FAILED');
+      expect(payload.field).toBe('options.segments');
+    },
+  );
+
+  it('rejects a mechanically rejected persona avatar with a 400 naming the real reason', async () => {
+    stubFetch([engineBody('not_image')]);
+    const result = await checkFirstPhotoFace({
+      ...INPUT,
+      segments: [],
+      avatarUrl: 'https://e.com/avatar.jpg',
+    });
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(400);
+    const payload = (await (result as NextResponse).json()) as {
+      error?: string;
+      code?: string;
+      field?: string;
+    };
+    expect(payload.error).toContain('The persona photo is not a readable image');
+    expect(payload.code).toBe('VALIDATION_FAILED');
+    expect(payload.field).toBe('personaId');
+  });
+
   it('fails closed with a 502 when the engine is unreachable', async () => {
     stubFetch([new Error('fetch failed')]);
     const result = await checkFirstPhotoFace(INPUT);
