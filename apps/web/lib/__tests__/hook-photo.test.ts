@@ -51,6 +51,22 @@ describe('hookPhotoForSegments', () => {
     ).toEqual({ url: null, source: 'upload', segmentIndex: 0, imageIndex: 0 });
   });
 
+  it('prefers the media id over the URL when the first photo carries both', () => {
+    // The engine resolves the temp asset first and only falls back to
+    // the URL, and the pre-charge face check does the same — the post
+    // detail must not render the URL image for a video that lip-synced
+    // the upload.
+    expect(
+      hookPhotoForSegments([
+        {
+          kind: 'hook',
+          text: 'Welcome.',
+          media: [{ mediaId: 'aabbcc.jpg', url: 'https://e.com/hook.jpg' }],
+        },
+      ]),
+    ).toEqual({ url: null, source: 'upload', segmentIndex: 0, imageIndex: 0 });
+  });
+
   it('returns the persona source when no segment carries a photo', () => {
     expect(hookPhotoForSegments([{ kind: 'hook', text: 'Welcome.' }])).toEqual({
       url: null,

@@ -6,7 +6,9 @@
  * order — mirroring the engine's first_segment_media in
  * apps/engine/app/services/user_media.py. A segment media item carries
  * either a mediaId (an engine temp asset, 1h TTL, no durable web URL)
- * or a url.
+ * or a url. When an item carries both, the mediaId wins: the engine
+ * resolves the temp asset first, and the pre-charge face check and the
+ * post detail follow the same order.
  */
 
 export interface SegmentMediaRef {
@@ -55,6 +57,9 @@ export interface HookPhoto {
 export function hookPhotoForSegments(segments: unknown): HookPhoto {
   const first = firstSegmentMedia(segments);
   if (first === null) return { url: null, source: 'persona', segmentIndex: null, imageIndex: null };
+  if (first.mediaId !== undefined) {
+    return { url: null, source: 'upload', segmentIndex: first.segmentIndex, imageIndex: first.imageIndex };
+  }
   if (first.url !== undefined) {
     return {
       url: first.url,
