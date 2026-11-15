@@ -71,12 +71,14 @@ def publish_slot_accounts(
     publish_video: Callable[..., Any],
     persist_outcomes: PersistOutcomes,
     record_results: RecordResults | None = None,
+    video_object_path: str | None = None,
 ) -> AccountPublishResult:
     """Publish every account that does not already have a terminal outcome.
 
     ``read_video`` runs once, only when an account is due. When it fails,
     each due account records one transient try, so a storage outage uses
     the same per-account budget and never fails accounts already live.
+    Meta providers skip the read when ``video_object_path`` is set.
     """
     outcomes = load_outcomes(slot)
     # A slot that never recorded per-account outcomes is still on the
@@ -134,19 +136,25 @@ def publish_slot_accounts(
                 "publish_attempts": max_attempts,
                 "publish_not_before": lease,
             })
-            if video_bytes is None and result.transport_error is None:
-                try:
-                    video_bytes = read_video()
-                except (OSError, RuntimeError) as exc:
-                    result.transport_error = exc
-                    if not result.first_error:
-                        result.first_error = str(exc)
-            if result.transport_error is not None or video_bytes is None:
-                reason = str(result.transport_error) if result.transport_error else "video unavailable"
-                for outcome in started:
-                    _fail_outcome(outcome, reason, "transient", None, now)
-                persist_outcomes(outcomes, {"publish_attempts": max_attempts})
-                continue
+            use_archive = video_object_path is not None and provider_name in {
+                upload_publisher.INSTAGRAM_PROVIDER,
+                upload_publisher.THREADS_PROVIDER,
+                upload_publisher.FACEBOOK_PROVIDER,
+            }
+            if not use_archive:
+                if video_bytes is None and result.transport_error is None:
+                    try:
+                        video_bytes = read_video()
+                    except (OSError, RuntimeError) as exc:
+                        result.transport_error = exc
+                        if not result.first_error:
+                            result.first_error = str(exc)
+                if result.transport_error is not None or video_bytes is None:
+                    reason = str(result.transport_error) if result.transport_error else "video unavailable"
+                    for outcome in started:
+                        _fail_outcome(outcome, reason, "transient", None, now)
+                    persist_outcomes(outcomes, {"publish_attempts": max_attempts})
+                    continue
             try:
                 metadata = _metadata(provider_name, title, schedule, [item["accountId"] for item in started], description)
             except RuntimeError as exc:
@@ -166,7 +174,7 @@ def publish_slot_accounts(
                     owner_user_id=owner,
                     metadata=metadata,
                     video_path=video_name,
-                    video_bytes=video_bytes,
+                    video_bytes=None if use_archive else video_bytes,
                     content_type="video/mp4",
                     max_attempts=1,
                     surface_application_failure=True,
@@ -174,6 +182,7 @@ def publish_slot_accounts(
                     # web route recognises a re-ask of the same publish and
                     # answers from its ledger instead of posting again.
                     publish_scope_key=f"slot:{slot['id']}:video:{video_name}",
+                    r2_object_path=video_object_path if use_archive else None,
                 )
             except upload_publisher.PublishError as exc:
                 parsed = _json_accounts(getattr(exc, "response_body", None))

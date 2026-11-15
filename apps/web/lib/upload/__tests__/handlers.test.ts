@@ -60,6 +60,7 @@ vi.mock('@/lib/supabase/service', () => ({
 
 vi.mock('@/lib/upload/publish-media', () => ({
   uploadPublishMedia: vi.fn(async () => 'https://acct.r2.cloudflarestorage.com/videos/publish-media/instagram/x.jpg?X-Amz-Signature=s'),
+  presignPublishMedia: vi.fn(async () => 'https://acct.r2.cloudflarestorage.com/videos/u1/faceless/task-7/final-1.mp4?X-Amz-Signature=a'),
   cleanupPublishMedia: vi.fn(async () => 0),
 }));
 
@@ -414,6 +415,43 @@ describe('handleInstagramUpload', () => {
       'https://acct.r2.cloudflarestorage.com/videos/publish-media/instagram/x.jpg?X-Amz-Signature=s',
     );
     expect(cleanupPublishMedia).toHaveBeenCalledWith('instagram');
+  });
+
+  it('presigns the engine archive instead of uploading a copy', async () => {
+    const { uploadPublishMedia, cleanupPublishMedia, presignPublishMedia } = await import('@/lib/upload/publish-media');
+    const { InstagramService } = await import('@/lib/instagram');
+    const publishMedia = vi.fn(async (..._args: unknown[]) => ({ postId: 'p1', mediaId: 'm1', permalink: 'https://instagram.com/p/1' }));
+    vi.mocked(InstagramService).mockImplementationOnce(function () {
+      return { publishMedia } as never;
+    });
+    vi.mocked(uploadPublishMedia).mockClear();
+    vi.mocked(cleanupPublishMedia).mockClear();
+    vi.mocked(presignPublishMedia).mockClear();
+
+    const fd = makeFormData({ caption: 'Test', videoStoragePath: 'u1/faceless/task-7/final-1.mp4' });
+    const response = await handleInstagramUpload(fd, OWNER_USER_ID, logId, startTime);
+
+    expect(response.success).toBe(true);
+    expect(presignPublishMedia).toHaveBeenCalledWith('u1/faceless/task-7/final-1.mp4');
+    expect(uploadPublishMedia).not.toHaveBeenCalled();
+    expect(cleanupPublishMedia).not.toHaveBeenCalled();
+    expect(publishMedia.mock.calls[0][3]).toBe(
+      'https://acct.r2.cloudflarestorage.com/videos/u1/faceless/task-7/final-1.mp4?X-Amz-Signature=a',
+    );
+  });
+
+  it('rejects an archive key that belongs to another user', async () => {
+    const { presignPublishMedia } = await import('@/lib/upload/publish-media');
+    vi.mocked(presignPublishMedia).mockClear();
+    const fd = makeFormData({ caption: 'Test', videoStoragePath: 'other/faceless/task-7/final-1.mp4' });
+    await expect(handleInstagramUpload(fd, OWNER_USER_ID, logId, startTime)).rejects.toThrow(ValidationError);
+    expect(presignPublishMedia).not.toHaveBeenCalled();
+  });
+
+  it('rejects a request that sends both a file and an archive key', async () => {
+    const file = new File([new Uint8Array(50)], 'clip.mp4', { type: 'video/mp4' });
+    const fd = makeFormData({ caption: 'Test', videoStoragePath: 'u1/faceless/task-7/final-1.mp4' }, file);
+    await expect(handleInstagramUpload(fd, OWNER_USER_ID, logId, startTime)).rejects.toThrow(ValidationError);
   });
 });
 

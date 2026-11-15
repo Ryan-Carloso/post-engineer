@@ -3,7 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/social-accounts', () => ({ getSocialAccountTokens: vi.fn(), touchSocialAccount: vi.fn() }));
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({ __mock: 'service-client' })) }));
-vi.mock('@/lib/upload/publish-media', () => ({ uploadPublishMedia: vi.fn(async () => 'https://s.example/signed.mp4'), cleanupPublishMedia: vi.fn(async () => 0) }));
+vi.mock('@/lib/upload/publish-media', () => ({
+  uploadPublishMedia: vi.fn(async () => 'https://s.example/signed.mp4'),
+  presignPublishMedia: vi.fn(async () => 'https://s.example/archive.mp4'),
+  cleanupPublishMedia: vi.fn(async () => 0),
+}));
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('@/lib/threads', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/threads')>()),
@@ -14,7 +18,7 @@ import { trackApiEvent } from '@/lib/analytics';
 import { ThreadsError } from '@/lib/errors';
 import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
-import { cleanupPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
+import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
 import { publishThreadsVideo } from '@/lib/threads';
 
 const MP4_BYTES = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
@@ -89,6 +93,40 @@ describe('handleThreadsUpload', () => {
     vi.mocked(publishThreadsVideo).mockRejectedValueOnce(new ThreadsError('THREADS_PUBLISH_FAILED: boom', 500));
     await handleThreadsUpload(formData(), 'user-1');
     expect(trackApiEvent).not.toHaveBeenCalled();
+  });
+
+  it('presigns the engine archive instead of uploading a copy', async () => {
+    const fd = new FormData();
+    fd.append('videoStoragePath', 'user-1/faceless/task-7/final-1.mp4');
+    fd.append('caption', 'my post');
+    fd.append('threadsAccountIds', '42');
+    const result = await handleThreadsUpload(fd, 'user-1');
+    expect(result.success).toBe(true);
+    expect(presignPublishMedia).toHaveBeenCalledWith('user-1/faceless/task-7/final-1.mp4');
+    expect(uploadPublishMedia).not.toHaveBeenCalled();
+    expect(cleanupPublishMedia).not.toHaveBeenCalled();
+    expect(vi.mocked(publishThreadsVideo).mock.calls[0][0].videoUrl).toBe('https://s.example/archive.mp4');
+  });
+
+  it('rejects an archive key that belongs to another user', async () => {
+    const fd = new FormData();
+    fd.append('videoStoragePath', 'other-user/faceless/task-7/final-1.mp4');
+    fd.append('caption', 'my post');
+    fd.append('threadsAccountIds', '42');
+    const result = await handleThreadsUpload(fd, 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.results[0].error).toContain('belong to this user');
+    expect(presignPublishMedia).not.toHaveBeenCalled();
+    expect(publishThreadsVideo).not.toHaveBeenCalled();
+  });
+
+  it('rejects a request that sends both a file and an archive key', async () => {
+    const fd = formData();
+    fd.append('videoStoragePath', 'user-1/faceless/task-7/final-1.mp4');
+    const result = await handleThreadsUpload(fd, 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.results[0].error).toContain('either a file or videoStoragePath');
+    expect(presignPublishMedia).not.toHaveBeenCalled();
   });
 
   it('keeps going after one account fails and is a success if any landed', async () => {
