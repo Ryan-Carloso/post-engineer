@@ -16,12 +16,11 @@
 // videos never leaves a free one behind.
 //---------------
 
+/** Most videos one batch may hold (MCP `generate_video` mirrors it). */
 export { MAX_BATCH_VIDEOS } from '@/lib/contracts/videos';
 
 /** One free video per this many face videos in a batch. */
 export const BATCH_FREE_EVERY = 6;
-
-/** Most videos one batch may hold (MCP `generate_video` mirrors it). */
 
 /** Every video of a batch must be created within this window of the first. */
 export const BATCH_WINDOW_MS = 10 * 60 * 1000;
