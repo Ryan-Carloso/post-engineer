@@ -8,7 +8,7 @@ from typing import Sequence
 
 from loguru import logger
 
-from app.config import config
+from app.config import config  # noqa: F401 - re-exported for tests (tm.config)
 from app.models import const
 from app.models.schema import VideoConcatMode, VideoParams
 from app.services import (
@@ -27,7 +27,7 @@ from app.services import (
 )
 from app.services import state as sm
 from app.services import image_coverage, task_webhook, user_media
-from app.services.lipsync_active import persona_lipsync_active  # noqa: F401 - re-exported for existing callers
+from app.services.lipsync_active import lip_sync_cap_seconds, persona_lipsync_active  # noqa: F401 - re-exported for existing callers
 from app.services import full_lipsync
 from app.services.music_mood import resolve_music_mood
 from app.services.pipeline_stage import PhaseTracker
@@ -950,23 +950,6 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
 
-        max_duration = int(config.app.get("max_video_duration_seconds", 40))
-        if (
-            persona_lipsync_active(params)
-            and audio_duration is not None
-            and audio_duration > max_duration
-        ):
-            limited_audio_file = path.join(
-                utils.task_dir(task_id), "audio-limited.mp3"
-            )
-            longcat.trim_audio(
-                audio_file,
-                limited_audio_file,
-                duration_seconds=max_duration,
-            )
-            audio_file = limited_audio_file
-            audio_duration = max_duration
-
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=30)
 
         if stop_at == "audio":
@@ -975,6 +958,20 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
                 audio_file=audio_file,
             )
             return {"audio_file": audio_file, "audio_duration": audio_duration}
+
+        # Fail loudly: cutting the tail would drop the CTA (#534).
+        max_duration = lip_sync_cap_seconds(params)
+        if (
+            stop_at == "video" and persona_lipsync_active(params)
+            and audio_duration is not None and audio_duration > max_duration
+        ):
+            _fail_task(
+                task_id,
+                f"narration is {audio_duration:.1f}s, over the {max_duration:g}s lip-sync cap",
+                params, stage="audio",
+            )
+            cleanup_task_intermediates(task_id, ())
+            return
 
         # 4. Generate subtitle
         phases.begin("subtitle")
@@ -991,7 +988,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         if task_local is not None:  # None: copy failed; skip the trim, never cut shared
             audio_file = task_local
             trimmed_seconds = audio_trim.trim_after_last_word(
-                audio_file, subtitle.file_to_words(subtitle_path))
+                audio_file, subtitle.file_to_words(subtitle_path), video_script
+            )
             if trimmed_seconds is not None:
                 audio_duration = math.ceil(trimmed_seconds)
 

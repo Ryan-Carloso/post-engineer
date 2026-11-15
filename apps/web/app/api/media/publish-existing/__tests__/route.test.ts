@@ -285,7 +285,7 @@ function uploadRow(overrides: Record<string, unknown> = {}): Record<string, unkn
     detected_content_type: 'video/mp4',
     size_bytes: 3,
     status: 'ready',
-    expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // relative: a hardcoded date expired 2026-11-15 and every upload test answered 410
+    expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     created_at: '2026-11-14T11:00:00Z',
     consumed_at: null,
     ...overrides,

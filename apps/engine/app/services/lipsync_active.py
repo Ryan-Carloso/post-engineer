@@ -7,6 +7,7 @@ with a visual identity (photo_url OR avatar_url) in a face mode
 persona without a visual identity has nothing to lip-sync.
 """
 
+from app.config import config
 from app.models.schema import VideoParams
 
 
@@ -16,3 +17,22 @@ def persona_lipsync_active(params: VideoParams) -> bool:
     if persona is None or params.video_type == "faceless":
         return False
     return persona.photo_url is not None or persona.avatar_url is not None
+
+
+def lip_sync_cap_seconds(params: VideoParams) -> float:
+    """Longest narration this job may carry, in seconds.
+
+    Hook lip-sync renders only the intro on the GPU, so its narration is
+    capped by the configured ``max_video_duration_seconds`` (default 40s).
+    Full lip-sync renders every window on the GPU, up to 5 windows of 12s
+    = 60s of narration, so its cap is the full-mode ceiling. One cap per
+    mode: a valid 41-60s full-mode job must never be rejected for
+    exceeding the hook cap (#534 review).
+    """
+    if params.video_type == "full_lipsync":
+        # Deferred: full_lipsync imports this module for
+        # persona_lipsync_active, so a top-level import would be circular.
+        from app.services import full_lipsync
+
+        return float(full_lipsync.MAX_FULL_LIPSYNC_SECONDS)
+    return float(config.app.get("max_video_duration_seconds", 40))
