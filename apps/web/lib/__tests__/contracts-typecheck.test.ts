@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readBody } from '@/lib/contracts-server';
 import { createExperiment } from '@/lib/contracts/experiments';
+import { getPrompt, listPrompts } from '@/lib/contracts/prompts';
 import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
 //---------------
@@ -12,6 +13,8 @@ import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
 type CreateBody = BodyOf<typeof createExperiment>;
 type CreateResponse = ResponseOf<typeof createExperiment>;
+type ListPromptsResponse = ResponseOf<typeof listPrompts>;
+type GetPromptResponse = ResponseOf<typeof getPrompt>;
 
 describe('contracts typecheck', () => {
   it('pins BodyOf and ResponseOf field names', async () => {
@@ -45,5 +48,17 @@ describe('contracts typecheck', () => {
       // @ts-expect-error -- readBody body field is `name`, not `nome`
       expect(result.body.nome).toBeUndefined();
     }
+  });
+
+  it('pins the prompts response field names', () => {
+    const list: ListPromptsResponse = { success: true, prompts: [{ slug: 'daily-news', title: 'News', description: 'News' }] };
+    expect(list.prompts[0]?.title).toBe('News');
+    // @ts-expect-error -- the list item field is `title`, not `name`
+    expect(list.prompts[0]?.name).toBeUndefined();
+
+    const detail: GetPromptResponse = { success: true, prompt: { slug: 'daily-news', title: 'News', description: 'News', prompt: 'Write...' } };
+    expect(detail.prompt.prompt).toBe('Write...');
+    // @ts-expect-error -- the detail field is `prompt`, not `text`
+    expect(detail.prompt.text).toBeUndefined();
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PostEngineerClient } from '../client.js';
 import { createExperiment } from '../client-experiments.js';
+import { getPrompt, listPrompts } from '../client-prompts.js';
 
 //---------------
 // Type-level pins for the shared contracts, checked by
@@ -10,6 +11,8 @@ import { createExperiment } from '../client-experiments.js';
 //---------------
 
 type CreateResult = Awaited<ReturnType<typeof createExperiment>>;
+type ListPromptsResult = Awaited<ReturnType<typeof listPrompts>>;
+type GetPromptResult = Awaited<ReturnType<typeof getPrompt>>;
 
 describe('contracts typecheck', () => {
   it('rejects an unknown body field and an unknown response field at compile time', () => {
@@ -25,5 +28,18 @@ describe('contracts typecheck', () => {
     expect(typeof run).toBe('function');
     expect(typeof read).toBe('function');
     expect(vi.mocked(client.request)).not.toHaveBeenCalled();
+  });
+
+  it('rejects unknown prompt fields at compile time', () => {
+    const list = (result: ListPromptsResult): unknown => {
+      // @ts-expect-error -- the list item field is `title`, not `name`
+      return result[0]?.name;
+    };
+    const detail = (result: GetPromptResult): unknown => {
+      // @ts-expect-error -- the detail field is `prompt`, not `text`
+      return result.text;
+    };
+    expect(typeof list).toBe('function');
+    expect(typeof detail).toBe('function');
   });
 });

@@ -10,6 +10,7 @@ vi.mock('@/lib/api-error-reporting', () => ({
 
 import { GET as listPrompts } from '../route';
 import { GET as getPrompt } from '../[slug]/route';
+import { GetPromptResponseSchema, ListPromptsResponseSchema } from '@/lib/contracts/prompts';
 import { PROMPTS } from '@/app/recipes/prompts';
 import { recipesI18nEn } from '@/lib/i18n/recipes-i18n-en';
 import { DAILY_NEWS_PROMPT } from '@/lib/generation/prompt-base';
@@ -59,6 +60,8 @@ describe('GET /api/prompts', () => {
       })),
     });
     expect(JSON.stringify(body)).not.toContain(DAILY_NEWS_PROMPT.slice(0, 200));
+    // The 200 body parses against the shared contract the MCP reads.
+    expect(ListPromptsResponseSchema.safeParse(body).success).toBe(true);
     expect(body).toMatchObject({
       prompts: expect.arrayContaining([
         {
@@ -92,7 +95,8 @@ describe('GET /api/prompts/[slug]', () => {
     authenticated();
     const response = await getPrompt(request('/api/prompts/daily-news'), slugContext('daily-news'));
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
+    const body: unknown = await response.json();
+    expect(body).toEqual({
       success: true,
       prompt: {
         slug: 'daily-news',
@@ -101,6 +105,8 @@ describe('GET /api/prompts/[slug]', () => {
         prompt: DAILY_NEWS_PROMPT,
       },
     });
+    // The 200 body parses against the shared contract the MCP reads.
+    expect(GetPromptResponseSchema.safeParse(body).success).toBe(true);
   });
 
   it('decodes a percent-encoded slug before matching', async () => {
