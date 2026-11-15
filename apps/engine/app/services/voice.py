@@ -12,11 +12,11 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.tools import subtitles
 
 from app.services import subtitle_cues
+from app.services.tts_validation import synthesize_chatterbox_with_validation
 from app.services.openrouter_tts import dispatch_openrouter_tts
 from app.services.voice_providers import (
     SubMaker,
     TtsResult,
-    chatterbox_tts,
     elevenlabs_tts,
     ensure_file_path_exists,
     populate_legacy_submaker_with_full_text,
@@ -238,7 +238,10 @@ def tts(
         from app.services.cloned_voices.ownership import chatterbox_voice_allowed_for_user
         if not chatterbox_voice_allowed_for_user(user_id, chatterbox_voice):
             return TtsResult(error="cloned voice is not available for this user")
-        return chatterbox_tts(text, chatterbox_voice, voice_file, voice_rate, voice_volume)
+        # Issue #539: prove the narration is complete before it can render.
+        return synthesize_chatterbox_with_validation(
+            text, chatterbox_voice, voice_file, voice_rate, voice_volume, task_id=task_id
+        )
     routed = dispatch_openrouter_tts(voice_name, text, voice_file, voice_rate, voice_volume)
     if routed is not None:
         return routed

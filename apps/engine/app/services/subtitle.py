@@ -2,6 +2,7 @@ import json
 import os.path
 import re
 from timeit import default_timer as timer
+from typing import Any
 
 try:
     from faster_whisper import WhisperModel
@@ -19,40 +20,82 @@ compute_type = config.whisper.get("compute_type", "int8")
 model = None
 
 
-def create(audio_file, subtitle_file: str = ""):
+def _load_whisper_model() -> Any:
+    """Load the cached Whisper model on first use; None when it cannot load.
+
+    Shared by `create` (subtitles) and `transcribe_text` (post-TTS
+    validation) so a video that uses both pays the model load once.
+    """
     global model
+    if model is not None:
+        return model
+    model_path = f"{utils.root_dir()}/models/whisper-{model_size}"
+    model_bin_file = f"{model_path}/model.bin"
+    if not os.path.isdir(model_path) or not os.path.isfile(model_bin_file):
+        model_path = model_size
+
+    logger.info(f"loading model: {model_path}, device: {device}, compute_type: {compute_type}")
+    try:
+        model = WhisperModel(
+            model_size_or_path=model_path, device=device, compute_type=compute_type
+        )
+    except Exception as e:
+        logger.error(
+            f"failed to load model: {e} \n\n"
+            f"********************************************\n"
+            f"this may be caused by network issue. \n"
+            f"please download the model manually and put it in the 'models' folder. \n"
+            f"see the project README FAQ (https://github.com/Ryan-Carloso/post-engineer) for more details.\n"
+            f"********************************************\n\n"
+        )
+        return None
+    return model
+
+
+def transcribe_text(audio_file: str) -> str | None:
+    """Transcribe `audio_file` to plain text; None when unavailable.
+
+    No subtitle file is written: the post-TTS validation in
+    `tts_validation` checks the narration against the script before the
+    video renders. Shares the model (and its load) with `create`, and
+    never raises — a failed transcription is the caller's decision
+    (warn and ship, or fail), not a crash here.
+    """
+    if WhisperModel is None:
+        logger.warning("faster_whisper not available, skipping whisper transcription")
+        return None
+    loaded = _load_whisper_model()
+    if loaded is None:
+        return None
+    try:
+        segments, info = loaded.transcribe(
+            audio_file,
+            beam_size=5,
+            vad_filter=True,
+            vad_parameters=dict(min_silence_duration_ms=500),
+        )
+    except Exception as exc:
+        logger.error(f"whisper transcription failed: {type(exc).__name__}: {exc}")
+        return None
+    logger.info(
+        f"detected language: '{info.language}', probability: {info.language_probability:.2f}"
+    )
+    return " ".join(segment.text.strip() for segment in segments if segment.text.strip())
+
+
+def create(audio_file, subtitle_file: str = ""):
     if WhisperModel is None:
         logger.warning("faster_whisper not available, skipping whisper subtitle generation")
         return ""
-    if not model:
-        model_path = f"{utils.root_dir()}/models/whisper-{model_size}"
-        model_bin_file = f"{model_path}/model.bin"
-        if not os.path.isdir(model_path) or not os.path.isfile(model_bin_file):
-            model_path = model_size
-
-        logger.info(
-            f"loading model: {model_path}, device: {device}, compute_type: {compute_type}"
-        )
-        try:
-            model = WhisperModel(
-                model_size_or_path=model_path, device=device, compute_type=compute_type
-            )
-        except Exception as e:
-            logger.error(
-                f"failed to load model: {e} \n\n"
-                f"********************************************\n"
-                f"this may be caused by network issue. \n"
-                f"please download the model manually and put it in the 'models' folder. \n"
-                f"see the project README FAQ (https://github.com/Ryan-Carloso/post-engineer) for more details.\n"
-                f"********************************************\n\n"
-            )
-            return None
+    loaded = _load_whisper_model()
+    if loaded is None:
+        return None
 
     logger.info(f"start, output file: {subtitle_file}")
     if not subtitle_file:
         subtitle_file = f"{audio_file}.srt"
 
-    segments, info = model.transcribe(
+    segments, info = loaded.transcribe(
         audio_file,
         beam_size=5,
         word_timestamps=True,

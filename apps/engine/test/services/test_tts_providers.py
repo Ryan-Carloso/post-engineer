@@ -127,7 +127,10 @@ class TestNoEdgeTts:
         source = VOICE.read_text(encoding="utf-8")
         assert "chatterbox_tts_with_fallback" not in source
         assert "edge_tts" not in source
-        assert "chatterbox_tts" in source
+        # Issue #539: Chatterbox synthesis goes through the validation
+        # wrapper (transcribe + coverage check, then fail loudly), not
+        # through a fallback voice.
+        assert "synthesize_chatterbox_with_validation" in source
         # Unknown voices still fail loudly (the typo-catching guarantee).
         assert "unknown voice" in source
 
@@ -199,10 +202,15 @@ class TestRemainingProviders:
         # OpenRouter dispatch lives in app/services/openrouter_tts.py so voice.py
         # stays under the file-size cap; tts() keeps a single call into it and
         # the provider behaviour is covered in test_openrouter_tts.py.
-        # Chatterbox goes straight to chatterbox_tts: the Edge TTS fallback
-        # is gone, so a Chatterbox failure fails loudly instead of switching
-        # voices.
-        assert {"chatterbox_tts", "elevenlabs_tts", "dispatch_openrouter_tts"} <= called
+        # Chatterbox goes through synthesize_chatterbox_with_validation
+        # (issue #539: transcribe + coverage check, then fail loudly): the
+        # Edge TTS fallback is gone, so a Chatterbox failure fails loudly
+        # instead of switching voices.
+        assert {
+            "synthesize_chatterbox_with_validation",
+            "elevenlabs_tts",
+            "dispatch_openrouter_tts",
+        } <= called
         assert "is_no_voice" in called
         assert "is_chatterbox_voice" in called
         assert "is_elevenlabs_voice" in called
