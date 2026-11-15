@@ -129,7 +129,16 @@ def task_local_copy(audio_file: str, task_dir: str) -> Optional[str]:
     return dest
 
 
-def trim_after_last_word(audio_file: str, words: Sequence[tuple[str, float, float]]) -> Optional[float]:
+def _normalized_word(word: str) -> str:
+    """Lowercased letters/digits only, so "HabitLoom." matches "habitloom"."""
+    return re.sub(r"[^a-z0-9]+", "", word.lower())
+
+
+def trim_after_last_word(
+    audio_file: str,
+    words: Sequence[tuple[str, float, float]],
+    script: str | None = None,
+) -> Optional[float]:
     """Cut the voiceover KEEP_AFTER_WORD_SECONDS after the last spoken word.
 
     `words` are the Whisper word boundaries (subtitle.file_to_words). Unlike
@@ -137,10 +146,23 @@ def trim_after_last_word(audio_file: str, words: Sequence[tuple[str, float, floa
     with noise or breath above the silence threshold survived it, and the
     video kept playing 3-4s past the last word. No words, or a tail under
     MIN_CUT_SECONDS, leaves the file alone.
+
+    When `script` is given, the cut only happens when the transcript's last
+    word is the script's last word: Whisper can miss or mis-hear the
+    trailing words, and cutting at a mis-transcribed tail would cut real
+    speech — the CTA — off the file (#534). A mismatch keeps the audio.
     """
     if not words:
         return None
-    last_end = max(end for _, _, end in words)
+    last_word, _start, last_end = max(words, key=lambda item: item[2])
+    if script is not None:
+        expected = _normalized_word(script.split()[-1]) if script.split() else ""
+        if expected and _normalized_word(last_word) != expected:
+            logger.warning(
+                "voiceover tail: last transcribed word does not match the "
+                "script's last word; keeping the full audio"
+            )
+            return None
     try:
         duration = _duration(audio_file)
         new_length = last_end + KEEP_AFTER_WORD_SECONDS

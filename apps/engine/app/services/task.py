@@ -950,23 +950,6 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
 
-        max_duration = int(config.app.get("max_video_duration_seconds", 40))
-        if (
-            persona_lipsync_active(params)
-            and audio_duration is not None
-            and audio_duration > max_duration
-        ):
-            limited_audio_file = path.join(
-                utils.task_dir(task_id), "audio-limited.mp3"
-            )
-            longcat.trim_audio(
-                audio_file,
-                limited_audio_file,
-                duration_seconds=max_duration,
-            )
-            audio_file = limited_audio_file
-            audio_duration = max_duration
-
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=30)
 
         if stop_at == "audio":
@@ -975,6 +958,22 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
                 audio_file=audio_file,
             )
             return {"audio_file": audio_file, "audio_duration": audio_duration}
+
+        # Fail loudly: cutting the tail would drop the CTA (#534).
+        max_duration = int(config.app.get("max_video_duration_seconds", 40))
+        if (
+            stop_at == "video"
+            and persona_lipsync_active(params)
+            and audio_duration is not None
+            and audio_duration > max_duration
+        ):
+            _fail_task(
+                task_id,
+                f"narration is {audio_duration:.1f}s, over the {max_duration}s lip-sync cap",
+                params, stage="audio",
+            )
+            cleanup_task_intermediates(task_id, ())
+            return
 
         # 4. Generate subtitle
         phases.begin("subtitle")
@@ -991,7 +990,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         if task_local is not None:  # None: copy failed; skip the trim, never cut shared
             audio_file = task_local
             trimmed_seconds = audio_trim.trim_after_last_word(
-                audio_file, subtitle.file_to_words(subtitle_path))
+                audio_file, subtitle.file_to_words(subtitle_path), video_script
+            )
             if trimmed_seconds is not None:
                 audio_duration = math.ceil(trimmed_seconds)
 

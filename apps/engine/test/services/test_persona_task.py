@@ -10,6 +10,7 @@ import pytest
 from unittest.mock import patch
 from pydantic import ValidationError
 
+from app.config import config
 from app.models.schema import PersonaParams, VideoParams
 from app.services import task as task_service
 from app.services import video as video_service
@@ -301,3 +302,73 @@ class TestPersonaPacingConstants:
         )
         assert not hasattr(params, "persona_hook_min_seconds")
         assert not hasattr(params, "persona_hook_max_seconds")
+
+
+class TestLipSyncDurationCap:
+    """Issue #534 defect 2: an over-long lip-sync narration must fail loudly.
+
+    The old code silently cut the audio to max_video_duration_seconds, so a
+    narration longer than the cap shipped with its tail — always the CTA —
+    never spoken. The trim fix in #535 and the chunking in #541 closed the
+    other two cut sites; the cap must fail the task instead, before any
+    GPU/render spend, so a video is never delivered missing its ending.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _cap(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setitem(config.app, "max_video_duration_seconds", 10)
+
+    def _start(self, audio_duration, stop_at="video"):
+        params = _params(name="Ana", voice_id="calm")
+        with (
+            patch.object(task_service.video_storage, "require_r2_configuration"),
+            patch.object(task_service.start_preflight, "run"),
+            patch.object(task_service.sm.state, "update_task"),
+            patch.object(task_service.sm.state, "get_task", return_value={}),
+            patch.object(task_service, "track_event"),
+            patch.object(
+                task_service, "generate_script",
+                return_value="Hook here.\n\nBody here.\n\nFollow HabitLoom.",
+            ),
+            patch.object(task_service, "save_script_data"),
+            patch.object(
+                task_service, "generate_audio",
+                return_value=("audio.mp3", audio_duration, None),
+            ),
+            patch.object(task_service, "_fail_task") as fail_task,
+            patch.object(task_service, "cleanup_task_intermediates") as cleanup,
+            patch.object(task_service, "generate_subtitle", return_value="sub.srt") as gen_subtitle,
+            patch.object(task_service.longcat, "trim_audio") as trim_audio,
+            patch.object(task_service, "_complete_task") as complete_task,
+        ):
+            task_service.start(task_id="task-cap", params=params, stop_at=stop_at)
+        return fail_task, cleanup, gen_subtitle, trim_audio, complete_task
+
+    def test_overlong_lip_sync_narration_fails_loudly(self):
+        fail_task, cleanup, gen_subtitle, trim_audio, _complete = self._start(45.0)
+
+        fail_task.assert_called_once()
+        assert "45.0" in str(fail_task.call_args)
+        assert "10s" in str(fail_task.call_args)
+        assert fail_task.call_args.kwargs.get("stage") == "audio"
+        gen_subtitle.assert_not_called()
+        trim_audio.assert_not_called()
+        cleanup.assert_called_once()
+
+    def test_audio_only_run_ignores_the_cap(self):
+        fail_task, _cleanup, _gen_subtitle, trim_audio, complete_task = self._start(
+            45.0, stop_at="audio"
+        )
+
+        fail_task.assert_not_called()
+        trim_audio.assert_not_called()
+        complete_task.assert_called_once()
+
+    def test_narration_at_the_cap_continues(self):
+        fail_task, _cleanup, _gen_subtitle, trim_audio, complete_task = self._start(
+            10.0, stop_at="subtitle"
+        )
+
+        fail_task.assert_not_called()
+        trim_audio.assert_not_called()
+        complete_task.assert_called_once()
