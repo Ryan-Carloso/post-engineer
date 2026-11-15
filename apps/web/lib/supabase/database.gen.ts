@@ -587,6 +587,7 @@ export interface Database {
         media_kind: 'upload' | 'image' | null;
         media_ref: string | null;
         media_content_type: string | null;
+        media_claimed_at: string | null;
         };
         Insert: {
         id?: string;
@@ -619,6 +620,7 @@ export interface Database {
         media_kind?: 'upload' | 'image' | null;
         media_ref?: string | null;
         media_content_type?: string | null;
+        media_claimed_at?: string | null;
         };
         Update: {
         id?: string;
@@ -651,6 +653,7 @@ export interface Database {
         media_kind?: 'upload' | 'image' | null;
         media_ref?: string | null;
         media_content_type?: string | null;
+        media_claimed_at?: string | null;
         };
         Relationships: [];
       };

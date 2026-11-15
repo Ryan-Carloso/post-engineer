@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import requests
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services.fill_schedule import FillScheduleScheduler
@@ -29,6 +31,14 @@ UTC = timezone.utc
 NOW = datetime(2026, 11, 14, 12, 0, tzinfo=UTC)
 UPLOAD_ID = "22222222-2222-4222-8222-222222222222"
 USER_ID = "user-1"
+CLAIMED_AT = "2026-11-14T11:30:00+00:00"
+
+
+def _not_found_error() -> requests.exceptions.HTTPError:
+    """A storage 404 shaped like production: raise_for_status's HTTPError."""
+    error = requests.exceptions.HTTPError("404 Client Error")
+    error.response = _FakeResponse(status_code=404)
+    return error
 
 
 class _FakeResponse:
@@ -207,7 +217,7 @@ class PublishExistingMediaTests(unittest.TestCase):
         store = MagicMock()
         store.claim_ready_slot.return_value = True
         store.get_video_upload.return_value = _upload_row()
-        store.claim_video_upload.return_value = _upload_row(status="consumed")
+        store.claim_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
         store.download_storage_object.return_value = b"video-bytes"
         publisher = self._publisher(store)
         with patch(
@@ -221,6 +231,14 @@ class PublishExistingMediaTests(unittest.TestCase):
             "videos", f"{USER_ID}/direct-uploads/{UPLOAD_ID}.mp4"
         )
         store.claim_video_upload.assert_called_once_with(UPLOAD_ID)
+        # The claim is recorded on the slot: a resume trusts a `consumed`
+        # row only when it is this claim.
+        self.assertTrue(
+            any(
+                call.kwargs.get("media_claimed_at") == CLAIMED_AT
+                for call in store.update_slot.call_args_list
+            )
+        )
         _args, kwargs = publish_accounts.call_args
         self.assertEqual(_args[2], [f"{UPLOAD_ID}.mp4"])
         self.assertEqual(kwargs["content_type"], "video/mp4")
@@ -281,7 +299,7 @@ class PublishExistingMediaTests(unittest.TestCase):
         store.claim_ready_slot.return_value = True
         store.claim_resumable_slot.return_value = True
         store.get_video_upload.return_value = _upload_row()
-        store.claim_video_upload.return_value = _upload_row(status="consumed")
+        store.claim_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
         store.download_storage_object.return_value = b"video-bytes"
         publisher = self._publisher(store)
         retrying = AccountPublishResult(
@@ -304,6 +322,13 @@ class PublishExistingMediaTests(unittest.TestCase):
             published = publisher._publish_one(_media_slot(), NOW, resumed=False)
         self.assertEqual(published, 0)
         store.claim_video_upload.assert_called_once_with(UPLOAD_ID)
+        # The first attempt recorded its claim on the slot.
+        self.assertTrue(
+            any(
+                call.kwargs.get("media_claimed_at") == CLAIMED_AT
+                for call in store.update_slot.call_args_list
+            )
+        )
         # The object is still needed: no cleanup while retrying.
         store.remove_storage_object.assert_not_called()
         self.assertTrue(
@@ -312,13 +337,14 @@ class PublishExistingMediaTests(unittest.TestCase):
                 for call in store.update_slot.call_args_list
             )
         )
-        # Resume: the row is `consumed` by our own first attempt.
-        store.get_video_upload.return_value = _upload_row(status="consumed")
+        # Resume: the row is `consumed` by our own first attempt (the
+        # tick re-read the slot with the recorded claim).
+        store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
         with patch(
             "app.services.fill_schedule.publish.publish_slot_accounts",
             return_value=_published_result(),
         ) as publish_accounts:
-            published = publisher._publish_one(_media_slot(), NOW, resumed=True)
+            published = publisher._publish_one(_media_slot(media_claimed_at=CLAIMED_AT), NOW, resumed=True)
         self.assertEqual(published, 1)
         # The provider was retried; the claim was not taken a second time.
         publish_accounts.assert_called_once()
@@ -502,10 +528,13 @@ class ResolveExistingMediaDirectTests(unittest.TestCase):
         # is `consumed` by then, so a fresh `ready` check would fail the
         # slot permanently and leak the claimed object.
         store = MagicMock()
-        store.get_video_upload.return_value = _upload_row(status="consumed")
+        store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
         store.download_storage_object.return_value = b"video-bytes"
         fail = MagicMock()
-        resolved = resolve_existing_media(store, fail, _media_slot(), NOW, resumed=True)
+        # Same instant, different spelling: the comparison is on instants,
+        # not strings (PostgREST re-serializes timestamptz).
+        slot = _media_slot(media_claimed_at="2026-11-14T11:30:00.000000+00:00")
+        resolved = resolve_existing_media(store, fail, slot, NOW, resumed=True)
         self.assertIsNotNone(resolved)
         assert resolved is not None
         videos, reader, content_type, cleanup = resolved
@@ -515,6 +544,63 @@ class ResolveExistingMediaDirectTests(unittest.TestCase):
         self.assertEqual(cleanup, ("videos", f"{USER_ID}/direct-uploads/{UPLOAD_ID}.mp4"))
         fail.assert_not_called()
         store.claim_video_upload.assert_not_called()
+
+    def test_upload_consumed_row_with_foreign_claim_fails_permanently_on_resume(self):
+        # Another consumer (a second slot with the same upload id, or an
+        # ASAP publish) claimed the row: trusting it would double-publish
+        # media that is already live, or re-download an object that is
+        # already gone.
+        store = MagicMock()
+        store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
+        fail = MagicMock()
+        slot = _media_slot(media_claimed_at="2026-11-14T10:00:00+00:00")
+        self.assertIsNone(resolve_existing_media(store, fail, slot, NOW, resumed=True))
+        fail.assert_called_once()
+        self.assertEqual(fail.call_args[0][0], "scheduled video upload is no longer ready")
+        store.download_storage_object.assert_not_called()
+        store.claim_video_upload.assert_not_called()
+
+    def test_upload_consumed_row_without_recorded_claim_fails_permanently_on_resume(self):
+        # No recorded claim on the slot (a pre-migration row, or a crash
+        # between the claim and the record): ownership cannot be proven,
+        # so the resume fails closed instead of trusting the row.
+        store = MagicMock()
+        store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
+        fail = MagicMock()
+        self.assertIsNone(resolve_existing_media(store, fail, _media_slot(), NOW, resumed=True))
+        fail.assert_called_once()
+        self.assertEqual(fail.call_args[0][0], "scheduled video upload is no longer ready")
+        store.download_storage_object.assert_not_called()
+
+    def test_upload_gone_object_fails_permanently_on_resume(self):
+        # The object is gone (another consumer published and cleaned it
+        # up): parking would retry it on every tick forever.
+        store = MagicMock()
+        store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
+        store.download_storage_object.side_effect = _not_found_error()
+        fail = MagicMock()
+        slot = _media_slot(media_claimed_at=CLAIMED_AT)
+        self.assertIsNone(resolve_existing_media(store, fail, slot, NOW, resumed=True))
+        fail.assert_called_once()
+        self.assertEqual(fail.call_args[0][0], "scheduled video upload file is gone")
+        self.assertFalse(
+            any("publish_not_before" in call.kwargs for call in store.update_slot.call_args_list)
+        )
+
+    def test_upload_gone_object_fails_permanently_on_first_attempt(self):
+        # A missing object never comes back, so the first attempt fails
+        # permanently instead of parking; the single-use row is not burned.
+        store = MagicMock()
+        store.get_video_upload.return_value = _upload_row()
+        store.download_storage_object.side_effect = _not_found_error()
+        fail = MagicMock()
+        self.assertIsNone(resolve_existing_media(store, fail, _media_slot(), NOW))
+        fail.assert_called_once()
+        self.assertEqual(fail.call_args[0][0], "scheduled video upload file is gone")
+        store.claim_video_upload.assert_not_called()
+        self.assertFalse(
+            any("publish_not_before" in call.kwargs for call in store.update_slot.call_args_list)
+        )
 
     def test_image_resolves_from_the_uploads_bucket(self):
         store = MagicMock()
@@ -545,6 +631,19 @@ class ResolveExistingMediaDirectTests(unittest.TestCase):
         self.assertIsNone(image_cleanup(other_user))
         self.assertIsNone(image_cleanup(_media_slot(media_kind="image", media_ref="other/a.jpg")))
         self.assertIsNone(image_cleanup(_media_slot(media_kind="upload", media_ref=UPLOAD_ID)))
+        # Dot segments escape the owner prefix when the storage gateway
+        # normalizes them, so they are rejected even under the prefix.
+        self.assertIsNone(
+            image_cleanup(
+                _media_slot(media_kind="image", media_ref="scheduled-media/user-1/../../user-2/x.jpg")
+            )
+        )
+        self.assertIsNone(
+            image_cleanup(_media_slot(media_kind="image", media_ref="scheduled-media/user-1/./x.jpg"))
+        )
+        self.assertIsNone(
+            image_cleanup(_media_slot(media_kind="image", media_ref="scheduled-media/user-1//x.jpg"))
+        )
 
     def test_cleanup_existing_media_removes_and_warns_on_failure(self):
         store = MagicMock()

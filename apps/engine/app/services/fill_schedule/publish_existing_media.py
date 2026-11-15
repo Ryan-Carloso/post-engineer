@@ -35,6 +35,41 @@ def r2_reader(object_path: str) -> Callable[[], bytes]:
     return lambda: video_storage.read_final_video_r2(object_path)
 
 
+def _parse_instant(value: Any) -> datetime | None:
+    """Parse an ISO timestamp (or pass a datetime through); None when unparseable."""
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _slot_owns_upload_claim(slot: dict[str, Any], row: dict[str, Any]) -> bool:
+    """True when the row's claim is this slot's own first-attempt claim.
+
+    Compares instants, not strings: PostgREST re-serializes timestamptz
+    (trailing-zero trimming), so the same instant can arrive spelled
+    differently on the two reads.
+    """
+    claimed_at = _parse_instant(slot.get("media_claimed_at"))
+    consumed_at = _parse_instant(row.get("consumed_at"))
+    return claimed_at is not None and claimed_at == consumed_at
+
+
+def _is_not_found(exc: BaseException) -> bool:
+    """True when a storage download failed because the object is gone.
+
+    A missing object never comes back, so the slot fails permanently
+    instead of parking and retrying it forever. Anything else (5xx,
+    timeout, network) stays transient.
+    """
+    response = getattr(exc, "response", None)
+    return getattr(response, "status_code", None) == 404
+
+
 def image_cleanup(slot: dict[str, Any]) -> MediaCleanup:
     """Stored-image cleanup for a slot.
 
@@ -49,6 +84,8 @@ def image_cleanup(slot: dict[str, Any]) -> MediaCleanup:
     if not isinstance(ref, str) or not ref or not user_id:
         return None
     if not ref.startswith(f"scheduled-media/{user_id}/"):
+        return None
+    if any(part in ("", ".", "..") for part in ref.split("/")):
         return None
     return ("uploads", ref)
 
@@ -82,10 +119,13 @@ def resolve_existing_media(
     must retry later (left in `publishing` with a lease). An upload is
     downloaded BEFORE the claim so a storage outage never burns the
     single-use row; the claim is the last step before dispatch. A resume
-    re-uses the claim its own first attempt won: the row is `consumed`
-    by then, and re-checking for `ready` would fail the slot permanently
-    and leak the claimed object. The slot claim serializes the slot, so
-    a `consumed` row on resume belongs to this slot's first attempt.
+    re-uses the claim its own first attempt won: the slot records the
+    claim's consumed_at at claim time (media_claimed_at) and a `consumed`
+    row is trusted only when consumed_at matches it. A `consumed` row
+    claimed by anyone else fails the slot permanently — re-using it would
+    double-publish media that is already live, or re-download an object
+    that is already gone. A storage 404 on download fails permanently
+    too: a missing object never comes back.
     """
     media_kind = slot.get("media_kind")
     media_ref = slot.get("media_ref")
@@ -103,9 +143,12 @@ def resolve_existing_media(
                 "Publish failed: scheduled video upload not found; video refunded",
             )
             return None
-        if row.get("status") == "consumed" and resumed:
-            # This slot's own first attempt claimed the row (the slot
-            # claim serializes the slot); re-use it instead of failing.
+        if (
+            row.get("status") == "consumed"
+            and resumed
+            and _slot_owns_upload_claim(slot, row)
+        ):
+            # This slot's own first attempt claimed the row; re-use it.
             already_claimed = True
         elif row.get("status") != "ready":
             fail_permanently(
@@ -125,6 +168,12 @@ def resolve_existing_media(
         try:
             video_bytes = store.download_storage_object("videos", storage_path)
         except Exception as exc:  # noqa: BLE001 - transient: retry next tick
+            if _is_not_found(exc):
+                fail_permanently(
+                    "scheduled video upload file is gone",
+                    "Publish failed: scheduled video upload file is gone; video refunded",
+                )
+                return None
             logger.warning(
                 f"fill_schedule: slot {slot['id']} scheduled upload download failed, "
                 f"retrying later: {scrub_error_text(str(exc), max_chars=200)}"
@@ -141,6 +190,14 @@ def resolve_existing_media(
                 "Publish failed: scheduled video upload was already used; video refunded",
             )
             return None
+        if not already_claimed:
+            # Record the claim on the slot: a resume trusts a `consumed`
+            # row only when it is this claim (consumed_at matches). A
+            # claim that returns no consumed_at still publishes, but the
+            # resume cannot prove ownership and fails closed instead.
+            claimed_at = claimed.get("consumed_at")
+            if isinstance(claimed_at, str) and claimed_at:
+                store.update_slot(slot["id"], media_claimed_at=claimed_at)
         content_type = str(
             row.get("declared_content_type") or row.get("detected_content_type") or "video/mp4"
         )
@@ -164,6 +221,12 @@ def resolve_existing_media(
         try:
             image_bytes = store.download_storage_object("uploads", str(slot["media_ref"]))
         except Exception as exc:  # noqa: BLE001 - transient: retry next tick
+            if _is_not_found(exc):
+                fail_permanently(
+                    "scheduled image file is gone",
+                    "Publish failed: scheduled image file is gone; video refunded",
+                )
+                return None
             logger.warning(
                 f"fill_schedule: slot {slot['id']} scheduled image download failed, "
                 f"retrying later: {scrub_error_text(str(exc), max_chars=200)}"

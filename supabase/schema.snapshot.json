@@ -1227,6 +1227,12 @@
                     "type": "text",
                     "default": null,
                     "notNull": false
+                },
+                {
+                    "name": "media_claimed_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
                 }
             ],
             "policies": {
