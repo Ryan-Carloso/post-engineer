@@ -19,6 +19,7 @@ vi.mock('@/lib/supabase/service', () => ({
 //---------------
 
 import { GET, parseTransactionsLimit, parseTransactionsOffset } from '../route';
+import { ListTokenTransactionsResponseSchema } from '@/lib/contracts/billing';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -155,7 +156,8 @@ describe('GET /api/billing/transactions', () => {
     const res = await GET(new Request('https://example.com/api/billing/transactions'));
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
+    const body: unknown = await res.json();
+    expect(body).toEqual({
       success: true,
       transactions: [
         {
@@ -181,6 +183,8 @@ describe('GET /api/billing/transactions', () => {
       limit: 20,
       offset: 0,
     });
+    // The 200 body parses against the shared contract the MCP reads.
+    expect(ListTokenTransactionsResponseSchema.safeParse(body).success).toBe(true);
   });
 
   it('queries only the current user rows, ordered by created_at desc', async () => {

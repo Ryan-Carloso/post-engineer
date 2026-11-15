@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readBody } from '@/lib/contracts-server';
 import { createExperiment } from '@/lib/contracts/experiments';
 import { getPrompt, listPrompts } from '@/lib/contracts/prompts';
+import { getTokenBalance, listTokenTransactions } from '@/lib/contracts/billing';
 import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
 //---------------
@@ -15,6 +16,8 @@ type CreateBody = BodyOf<typeof createExperiment>;
 type CreateResponse = ResponseOf<typeof createExperiment>;
 type ListPromptsResponse = ResponseOf<typeof listPrompts>;
 type GetPromptResponse = ResponseOf<typeof getPrompt>;
+type TokenBalanceResponse = ResponseOf<typeof getTokenBalance>;
+type TokenTransactionsResponse = ResponseOf<typeof listTokenTransactions>;
 
 describe('contracts typecheck', () => {
   it('pins BodyOf and ResponseOf field names', async () => {
@@ -60,5 +63,23 @@ describe('contracts typecheck', () => {
     expect(detail.prompt.prompt).toBe('Write...');
     // @ts-expect-error -- the detail field is `prompt`, not `text`
     expect(detail.prompt.text).toBeUndefined();
+  });
+
+  it('pins the billing response field names', () => {
+    const balance: TokenBalanceResponse = { success: true, balance: 8, free: 3 };
+    expect(balance.balance).toBe(8);
+    // @ts-expect-error -- the balance field is `balance`, not `total`
+    expect(balance.total).toBeUndefined();
+
+    const ledger: TokenTransactionsResponse = {
+      success: true,
+      transactions: [{ id: 'tx-1', amount: -1, type: 'spend', description: null, reason: null, generationId: null, createdAt: '2026-10-08T10:00:00Z' }],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    };
+    expect(ledger.transactions[0]?.generationId).toBeNull();
+    // @ts-expect-error -- the transaction field is `generationId`, not `generation_id`
+    expect(ledger.transactions[0]?.generation_id).toBeUndefined();
   });
 });

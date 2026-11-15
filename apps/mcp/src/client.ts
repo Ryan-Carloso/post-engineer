@@ -26,6 +26,15 @@ import type {
 import { buildDirectPublishForm, requireDirectPublishFields } from './direct-publish-form.js';
 import { isRecord, narrowDirectPublishAccountResult } from './direct-publish-narrowing.js';
 import { requirePublishingAccounts } from './require-publishing-accounts.js';
+import {
+  getTokenBalance,
+  listTokenTransactions,
+} from './client-billing.js';
+import type { ResponseOf } from './contracts/endpoint.js';
+import {
+  getTokenBalance as getTokenBalanceContract,
+  listTokenTransactions as listTokenTransactionsContract,
+} from './contracts/billing.js';
 
 // Re-exported so existing import sites (`./client.js`) keep working.
 export type {
@@ -467,12 +476,8 @@ export class PostEngineerClient {
     );
   }
 
-  async getTokenBalance(): Promise<unknown> {
-    return this.request(
-      '/api/billing/tokens',
-      { method: 'GET', headers: this.getHeaders() },
-      'get token balance'
-    );
+  async getTokenBalance(): Promise<ResponseOf<typeof getTokenBalanceContract>> {
+    return getTokenBalance(this);
   }
 
   async listVideoGenerations(limit?: number): Promise<unknown> {
@@ -498,25 +503,8 @@ export class PostEngineerClient {
     );
   }
 
-  async listTokenTransactions(limit?: number, offset?: number): Promise<unknown> {
-    // The server silently falls back to its defaults on invalid paging —
-    // fail fast with the field named instead of sending values the caller
-    // never meant.
-    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 100)) {
-      throw new Error('limit must be an integer between 1 and 100.');
-    }
-    if (offset !== undefined && (!Number.isInteger(offset) || offset < 0)) {
-      throw new Error('offset must be a non-negative integer.');
-    }
-    const params = new URLSearchParams();
-    if (limit !== undefined) params.set('limit', String(limit));
-    if (offset !== undefined) params.set('offset', String(offset));
-    const query = params.size > 0 ? `?${params.toString()}` : '';
-    return this.request(
-      `/api/billing/transactions${query}`,
-      { method: 'GET', headers: this.getHeaders() },
-      'list token transactions'
-    );
+  async listTokenTransactions(limit?: number, offset?: number): Promise<ResponseOf<typeof listTokenTransactionsContract>> {
+    return listTokenTransactions(this, limit, offset);
   }
 
   async getPersonaDeletePreview(personaId: string): Promise<unknown> {

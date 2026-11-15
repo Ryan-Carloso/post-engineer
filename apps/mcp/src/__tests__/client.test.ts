@@ -587,7 +587,17 @@ describe('PostEngineerClient', () => {
   it('lists token transactions with limit and offset', async () => {
     const mockLedger = {
       success: true,
-      transactions: [{ id: 'tx-1', amount: -1 }],
+      transactions: [
+        {
+          id: 'tx-1',
+          amount: -1,
+          type: 'spend',
+          description: 'Video generation',
+          reason: 'generation_completed',
+          generationId: 'gen-1',
+          createdAt: '2026-10-08T10:00:00Z',
+        },
+      ],
       total: 42,
       limit: 20,
       offset: 0,

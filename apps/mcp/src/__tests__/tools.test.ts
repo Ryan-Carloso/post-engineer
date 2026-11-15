@@ -1435,7 +1435,7 @@ describe('token ledger tool', () => {
       total: 42,
       limit: 20,
       offset: 0,
-    });
+    } as never);
 
     const response = await handleListTokenTransactions(mockClient, { limit: 20, offset: 0 });
     expect(mockClient.listTokenTransactions).toHaveBeenCalledWith(20, 0);
@@ -1710,28 +1710,19 @@ describe('new tool error paths and narrowing fallbacks', () => {
     expect(textOf(response)).toBe('Error listing token transactions: network down');
   });
 
-  it('handleListTokenTransactions treats a missing envelope as an empty ledger', async () => {
+  it('handleListTokenTransactions surfaces a malformed 200 as a plain failure', async () => {
     const { handleListTokenTransactions } = await import('../tools.js');
-    vi.mocked(mockClient.listTokenTransactions).mockResolvedValue(null);
+    // The contract-typed client rejects a missing envelope with a
+    // malformed-response error instead of rendering an empty ledger.
+    vi.mocked(mockClient.listTokenTransactions).mockRejectedValue(
+      new Error('Malformed response from GET /api/billing/transactions.'),
+    );
 
     const response = await handleListTokenTransactions(mockClient, {});
-    expect(response.isError).toBeUndefined();
-    const text = textOf(response);
-    expect(text).toContain('showing 0 of ? transaction(s)');
-  });
-
-  it('handleListTokenTransactions coerces malformed rows to nulls', async () => {
-    const { handleListTokenTransactions } = await import('../tools.js');
-    vi.mocked(mockClient.listTokenTransactions).mockResolvedValue({
-      transactions: [42, { id: 'tx-1', amount: 'a lot' }],
-      total: 2,
-    });
-
-    const response = await handleListTokenTransactions(mockClient, {});
-    expect(response.isError).toBeUndefined();
-    const text = textOf(response);
-    expect(text).toContain('"id": null');
-    expect(text).toContain('"amount": null');
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe(
+      'Error listing token transactions: Malformed response from GET /api/billing/transactions.',
+    );
   });
 
   it('handleDeletePersona surfaces a plain failure without the structured contract', async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PostEngineerClient } from '../client.js';
 import { createExperiment } from '../client-experiments.js';
 import { getPrompt, listPrompts } from '../client-prompts.js';
+import { getTokenBalance, listTokenTransactions } from '../client-billing.js';
 
 //---------------
 // Type-level pins for the shared contracts, checked by
@@ -13,6 +14,8 @@ import { getPrompt, listPrompts } from '../client-prompts.js';
 type CreateResult = Awaited<ReturnType<typeof createExperiment>>;
 type ListPromptsResult = Awaited<ReturnType<typeof listPrompts>>;
 type GetPromptResult = Awaited<ReturnType<typeof getPrompt>>;
+type TokenBalanceResult = Awaited<ReturnType<typeof getTokenBalance>>;
+type TokenTransactionsResult = Awaited<ReturnType<typeof listTokenTransactions>>;
 
 describe('contracts typecheck', () => {
   it('rejects an unknown body field and an unknown response field at compile time', () => {
@@ -41,5 +44,18 @@ describe('contracts typecheck', () => {
     };
     expect(typeof list).toBe('function');
     expect(typeof detail).toBe('function');
+  });
+
+  it('rejects unknown billing fields at compile time', () => {
+    const balance = (result: TokenBalanceResult): unknown => {
+      // @ts-expect-error -- the balance field is `balance`, not `total`
+      return result.total;
+    };
+    const ledger = (result: TokenTransactionsResult): unknown => {
+      // @ts-expect-error -- the transaction field is `generationId`, not `generation_id`
+      return result.transactions[0]?.generation_id;
+    };
+    expect(typeof balance).toBe('function');
+    expect(typeof ledger).toBe('function');
   });
 });
