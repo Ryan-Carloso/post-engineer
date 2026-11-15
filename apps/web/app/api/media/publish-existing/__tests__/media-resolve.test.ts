@@ -1,8 +1,12 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+vi.mock('@/lib/logger', () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
+
+import { logger } from '@/lib/logger';
 import {
-  ExistingMediaError,
   downloadEngineTaskVideo,
   fetchEngineTaskRecord,
   loadReadyVideoUpload,
@@ -68,9 +72,13 @@ describe('fetchEngineTaskRecord', () => {
     });
   });
 
-  it('throws on an unsafe task id without fetching', async () => {
+  it('throws a coded 400 on an unsafe task id without fetching', async () => {
     const fetchFn = vi.fn(async () => jsonResponse(200, taskBody()));
-    await expect(fetchEngineTaskRecord('../escape', USER_ID, fetchFn)).rejects.toThrow('Invalid taskId');
+    await expect(fetchEngineTaskRecord('../escape', USER_ID, fetchFn)).rejects.toMatchObject({
+      status: 400,
+      code: 'VALIDATION_FAILED',
+      message: 'taskId is invalid.',
+    });
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
@@ -215,11 +223,20 @@ describe('storeScheduledImage', () => {
     expect(options.contentType).toBe('image/jpeg');
   });
 
-  it('throws ExistingMediaError when storage refuses the upload', async () => {
+  it('throws a generic 500 when storage refuses the upload, and logs the upstream error server-side', async () => {
     const upload = vi.fn(async () => ({ data: null, error: { message: 'bucket gone' } }));
     const supabase = { storage: { from: vi.fn(() => ({ upload })) } };
     await expect(
       storeScheduledImage(supabase as never, USER_ID, Buffer.from([0xff, 0xd8, 0xff]), 'image/jpeg'),
-    ).rejects.toBeInstanceOf(ExistingMediaError);
+    ).rejects.toMatchObject({
+      status: 500,
+      code: 'MEDIA_STORE_FAILED',
+      message: 'Something went wrong. Please try again later.',
+    });
+    expect(logger.error).toHaveBeenCalledWith(
+      '[publish-existing] scheduled image storage failed',
+      expect.objectContaining({ message: 'bucket gone' }),
+      expect.objectContaining({ userId: USER_ID }),
+    );
   });
 });

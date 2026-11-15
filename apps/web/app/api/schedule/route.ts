@@ -263,7 +263,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   // Scheduled images (issue #384) store their bytes in the `uploads`
   // bucket: the rows are gone, so remove the objects now (best-effort —
   // a failure is logged inside, never fails the cancel).
-  await removeCancelledMediaImages(createSupabaseServiceClient(), removed);
+  await removeCancelledMediaImages(createSupabaseServiceClient(), removed, user.id);
 
   // Only slots whose generation never ran go to the clawback: the
   // settlement refunds the slots it is given, so passing a generated slot

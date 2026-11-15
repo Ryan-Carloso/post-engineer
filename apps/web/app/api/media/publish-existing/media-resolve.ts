@@ -10,6 +10,8 @@ import { randomUUID } from 'node:crypto';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
+import { logger } from '@/lib/logger';
 import { engineAuthHeaders } from '@/lib/request-auth';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
 import {
@@ -86,7 +88,7 @@ export async function fetchEngineTaskRecord(
   fetchFn: typeof fetch = fetch,
 ): Promise<EngineTaskRecord | null> {
   if (!SAFE_TASK_ID.test(taskId)) {
-    throw new Error(`Invalid taskId: ${taskId}`);
+    throw new ExistingMediaError('taskId is invalid.', 400, 'VALIDATION_FAILED');
   }
   const baseUrl = engineBaseUrl();
   const { controller, done } = withTimeout(TASK_RECORD_TIMEOUT_MS);
@@ -229,8 +231,11 @@ export async function storeScheduledImage(
     .from(SCHEDULED_IMAGE_BUCKET)
     .upload(path, buffer, { contentType, upsert: false });
   if (error !== null || data === null) {
+    // The upstream message stays server-side: the client gets the safe
+    // generic message, never the storage provider's error text.
+    logger.error('[publish-existing] scheduled image storage failed', error ?? undefined, { userId });
     throw new ExistingMediaError(
-      `Failed to store the image for scheduling: ${error?.message ?? 'no path returned'}`,
+      formatErrorMessage(ERROR_CODES.INTERNAL_ERROR),
       500,
       'MEDIA_STORE_FAILED',
     );
