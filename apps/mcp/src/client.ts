@@ -51,6 +51,12 @@ import {
   listSchedules as listSchedulesContract,
   updateSlotTitle as updateSlotTitleContract,
 } from './contracts/schedule.js';
+import {
+  VIDEO_GENERATIONS_MAX_LIMIT,
+  getVideoGeneration as getVideoGenerationContract,
+  getVideoStatus as getVideoStatusContract,
+  listVideoGenerations as listVideoGenerationsContract,
+} from './contracts/video-tasks.js';
 
 // Re-exported so existing import sites (`./client.js`) keep working.
 export type {
@@ -435,27 +441,29 @@ export class PostEngineerClient {
     return getTokenBalance(this);
   }
 
-  async listVideoGenerations(limit?: number): Promise<unknown> {
+  async listVideoGenerations(limit?: number): Promise<ResponseOf<typeof listVideoGenerationsContract>> {
     // The server silently falls back to its default on an invalid limit —
     // fail fast with the field named instead of sending a value the caller
     // never meant.
-    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 200)) {
-      throw new Error('limit must be an integer between 1 and 200.');
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > VIDEO_GENERATIONS_MAX_LIMIT)) {
+      throw new Error(`limit must be an integer between 1 and ${VIDEO_GENERATIONS_MAX_LIMIT}.`);
     }
     const query = limit !== undefined ? `?limit=${encodeURIComponent(String(limit))}` : '';
-    return this.request(
+    const raw = await this.request(
       `/api/persona/video-generations${query}`,
       { method: 'GET', headers: this.getHeaders() },
       'list video generations'
     );
+    return parseContractResponse(listVideoGenerationsContract, raw);
   }
 
-  async getVideoGeneration(generationId: string): Promise<unknown> {
-    return this.request(
+  async getVideoGeneration(generationId: string): Promise<ResponseOf<typeof getVideoGenerationContract>> {
+    const raw = await this.request(
       `/api/persona/video-generations/${encodeURIComponent(generationId)}`,
       { method: 'GET', headers: this.getHeaders() },
       'get video generation'
     );
+    return parseContractResponse(getVideoGenerationContract, raw);
   }
 
   async listTokenTransactions(limit?: number, offset?: number): Promise<ResponseOf<typeof listTokenTransactionsContract>> {
@@ -574,12 +582,13 @@ export class PostEngineerClient {
     );
   }
 
-  async getVideoStatus(taskId: string): Promise<unknown> {
-    return this.request(
+  async getVideoStatus(taskId: string): Promise<ResponseOf<typeof getVideoStatusContract>> {
+    const raw = await this.request(
       `/api/persona/video-status/${encodeURIComponent(taskId)}`,
       { method: 'GET', headers: this.getHeaders() },
       'get video status'
     );
+    return parseContractResponse(getVideoStatusContract, raw);
   }
 
   async listPersonaImages(personaId: string): Promise<unknown> {

@@ -8,6 +8,7 @@ import { getRetentionCurve, listMetrics } from '@/lib/contracts/metrics';
 import { checkMedia, uploadContent, uploadMedia } from '@/lib/contracts/media';
 import { connectBlueskyAccount, getOAuthConnectUrl, getPersonaPublishingAccounts, listSocialAccounts } from '@/lib/contracts/accounts';
 import { cancelSchedule, deleteSlot, getSlot, listPosts, listSchedules, updateSlotTitle } from '@/lib/contracts/schedule';
+import { cancelVideoTask, getVideoGeneration, getVideoStatus, listVideoGenerations } from '@/lib/contracts/video-tasks';
 import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
 //---------------
@@ -40,6 +41,10 @@ type GetSlotResponse = ResponseOf<typeof getSlot>;
 type UpdateSlotBody = BodyOf<typeof updateSlotTitle>;
 type UpdateSlotResponse = ResponseOf<typeof updateSlotTitle>;
 type DeleteSlotResponse = ResponseOf<typeof deleteSlot>;
+type ListVideoGenerationsResponse = ResponseOf<typeof listVideoGenerations>;
+type GetVideoGenerationResponse = ResponseOf<typeof getVideoGeneration>;
+type GetVideoStatusResponse = ResponseOf<typeof getVideoStatus>;
+type CancelVideoTaskResponse = ResponseOf<typeof cancelVideoTask>;
 
 describe('contracts typecheck', () => {
   it('pins BodyOf and ResponseOf field names', async () => {
@@ -288,5 +293,50 @@ describe('contracts typecheck', () => {
     expect(updated.title).toBe('New title');
     const deleted: DeleteSlotResponse = { success: true };
     expect(deleted.success).toBe(true);
+  });
+
+  it('pins the video-tasks response field names', () => {
+    const list: ListVideoGenerationsResponse = {
+      success: true,
+      generations: [
+        {
+          id: 'row-1', generationId: 'gen-1', engineTaskId: 'task-1', personaName: 'Ava',
+          videoSubject: 'Launch day', status: 'completed', errorCode: null,
+          tokensRefunded: false, createdAt: '2026-10-08T10:00:00Z', completedAt: '2026-10-08T10:05:00Z',
+        },
+      ],
+    };
+    expect(list.generations[0]?.generationId).toBe('gen-1');
+    // @ts-expect-error -- the generation row field is `generationId`, not `generation_id`
+    expect(list.generations[0]?.generation_id).toBeUndefined();
+    const detail: GetVideoGenerationResponse = {
+      success: true,
+      generation: {
+        id: 'row-1', generationId: 'gen-1', engineTaskId: null, personaName: null,
+        videoSubject: null, status: 'failed', errorCode: 'engine_restart',
+        tokensRefunded: true, createdAt: '2026-10-08T10:00:00Z', completedAt: null,
+      },
+    };
+    expect(detail.generation.status).toBe('failed');
+    // @ts-expect-error -- the generation row field is `engineTaskId`, not `engine_task_id`
+    expect(detail.generation.engine_task_id).toBeUndefined();
+    const status: GetVideoStatusResponse = {
+      status: 200,
+      message: 'success',
+      body: { task_id: 'task-1', state: 1, progress: 100, stage: null, postUrl: null },
+    };
+    expect(status.body.task_id).toBe('task-1');
+    // @ts-expect-error -- the task body keeps its snake_case `task_id`
+    expect(status.body.taskId).toBeUndefined();
+    // @ts-expect-error -- the engine envelope carries `status`, not `success`
+    expect(status.success).toBeUndefined();
+    const cancelled: CancelVideoTaskResponse = {
+      status: 200,
+      message: 'success',
+      body: { task_id: 'task-1', state: 1, progress: 100, videos: [], combined_videos: [] },
+    };
+    expect(cancelled.status).toBe(200);
+    // @ts-expect-error -- the delete response has no `deleted` flag
+    expect(cancelled.deleted).toBeUndefined();
   });
 });

@@ -17,6 +17,7 @@ import { CHECK_MEDIA_CODES, MEDIA_ID_PATTERN, VIDEO_ASPECTS } from '@/lib/contra
 import { PUBLISH_PROVIDERS } from '@/lib/contracts/posts';
 import { OAUTH_CONNECT_PROVIDERS, PublicAccountItemSchema } from '@/lib/contracts/accounts';
 import { CancelRefundSchema, RANGE_STATUSES, ScheduleRowSchema } from '@/lib/contracts/schedule';
+import { VideoGenerationRowSchema } from '@/lib/contracts/video-tasks';
 
 const HEADER = '// GENERATED from shared/contracts — do not edit.\n// Run `node scripts/sync-contracts.mjs` from the repo root to regenerate.\n';
 
@@ -219,5 +220,38 @@ describe('contracts shared source', () => {
     expect(range).toContain('RANGE_MAX_SPAN_DAYS,');
     expect(range).toContain('RANGE_MAX_SLOTS,');
     expect(range).toContain('RANGE_STATUSES,');
+  });
+
+  // The video-tasks contract carries its own VideoGenerationRow copy (the
+  // generations routes map the snake_case DB row to it). A one-sided edit
+  // would make the contract reject a column the route selects, so every
+  // row key must appear in the route's select list (snake_case mapped to
+  // camelCase).
+  it('pins the shared VideoGenerationRow keys to the generations GET select', () => {
+    const root = findRepoRoot(import.meta.url);
+    const route = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'persona', 'video-generations', 'route.ts'), 'utf8');
+    const match = route.match(/\.select\(\s*'([^']+)'/);
+    expect(match).not.toBeNull();
+    const columns = (match as RegExpMatchArray)[1].split(',').map((column) => column.trim());
+    const toCamel = (column: string): string =>
+      column.replace(/_([a-z])/g, (_whole, letter: string) => letter.toUpperCase());
+    for (const key of Object.keys(VideoGenerationRowSchema.shape)) {
+      expect(columns.map(toCamel)).toContain(key);
+    }
+    expect(Object.keys(VideoGenerationRowSchema.shape)).toHaveLength(columns.length);
+  });
+
+  // The generations limit parser moved into the contract; the list route
+  // imports it from there and re-exports it so the existing import path
+  // keeps working. If either is dropped, the route loses its validator or
+  // the parser tests lose theirs.
+  it('pins the generations route to the contract limit parser', () => {
+    const root = findRepoRoot(import.meta.url);
+    const route = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'persona', 'video-generations', 'route.ts'), 'utf8');
+    expect(route).toContain("from '@/lib/contracts/video-tasks'");
+    expect(route).toContain('parseGenerationsLimit,');
+    expect(route).toContain("export { parseGenerationsLimit } from '@/lib/contracts/video-tasks';");
+    const api = readFileSync(join(root, 'apps', 'web', 'lib', 'api.ts'), 'utf8');
+    expect(api).toContain("import type { VideoGenerationRow as VideoGeneration } from '@/lib/contracts/video-tasks';");
   });
 });

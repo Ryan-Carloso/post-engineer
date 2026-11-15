@@ -669,7 +669,23 @@ describe('PostEngineerClient', () => {
   });
 
   it('lists video generations with an optional limit', async () => {
-    const mockHistory = { success: true, generations: [{ generationId: 'gen-1' }] };
+    const mockHistory = {
+      success: true,
+      generations: [
+        {
+          id: 'row-1',
+          generationId: 'gen-1',
+          engineTaskId: 'task-1',
+          personaName: 'Ava',
+          videoSubject: 'Launch day',
+          status: 'completed',
+          errorCode: null,
+          tokensRefunded: false,
+          createdAt: '2026-10-08T10:00:00Z',
+          completedAt: '2026-10-08T10:05:00Z',
+        },
+      ],
+    };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -699,7 +715,21 @@ describe('PostEngineerClient', () => {
   });
 
   it('gets one video generation by id', async () => {
-    const mockGeneration = { success: true, generation: { generationId: 'gen-1' } };
+    const mockGeneration = {
+      success: true,
+      generation: {
+        id: 'row-1',
+        generationId: 'gen-1',
+        engineTaskId: 'task-1',
+        personaName: 'Ava',
+        videoSubject: 'Launch day',
+        status: 'completed',
+        errorCode: null,
+        tokensRefunded: false,
+        createdAt: '2026-10-08T10:00:00Z',
+        completedAt: '2026-10-08T10:05:00Z',
+      },
+    };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -1220,9 +1250,16 @@ describe('generate and schedule video client', () => {
 
   it('retrieves video task status', async () => {
     const mockStatus = {
-      success: true,
-      status: 'completed',
-      videoUrl: 'https://cdn.example.com/video.mp4',
+      status: 200,
+      message: 'success',
+      body: {
+        task_id: 'task-abc-123',
+        state: 1,
+        progress: 100,
+        stage: null,
+        error: null,
+        postUrl: null,
+      },
     };
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -1624,6 +1661,37 @@ describe('PostEngineerClient configuration', () => {
     });
 
     await expect(new PostEngineerClient({ apiKey: 'k' }).deleteSlot('slot-1')).rejects.toThrow('Malformed response from DELETE /api/schedule/slots/:slotId');
+  });
+
+  it('rejects a malformed generations 200 instead of listing a partial row', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, generations: [{ generationId: 'gen-1' }] }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).listVideoGenerations()).rejects.toThrow('Malformed response from GET /api/persona/video-generations');
+  });
+
+  it('rejects a malformed generation 200 instead of presenting a partial row', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, generation: { generationId: 'gen-1' } }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).getVideoGeneration('gen-1')).rejects.toThrow('Malformed response from GET /api/persona/video-generations/:generationId');
+  });
+
+  it('rejects a malformed video status 200 without the engine envelope', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({ success: true, status: 'completed', videoUrl: 'https://cdn.example.com/video.mp4' }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).getVideoStatus('task-abc-123')).rejects.toThrow('Malformed response from GET /api/persona/video-status/:taskId');
   });
 
   it('rejects a non-http(s) POST_ENGINEER_API_URL override', () => {

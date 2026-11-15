@@ -1157,7 +1157,7 @@ describe('video task progress narrowing', () => {
   });
 
   it('narrowTaskProgress reports explicit nulls when the task payload is missing', async () => {
-    vi.mocked(mockClient.getVideoStatus).mockResolvedValue({ ok: true });
+    vi.mocked(mockClient.getVideoStatus).mockResolvedValue({ ok: true } as never);
 
     const response = await progressResponse(mockClient, 'task-9');
     const text = textOf(response);
@@ -1252,7 +1252,7 @@ describe('narrowTaskProgress type narrowing', () => {
         error: { reason: 'x' },
         postUrl: 42,
       },
-    });
+    } as never);
 
     const response = await progressResponse(mockClient, 't-1');
     const text = textOf(response);
@@ -1265,7 +1265,7 @@ describe('narrowTaskProgress type narrowing', () => {
   });
 
   it('reports all nulls when the payload is not an object', async () => {
-    vi.mocked(mockClient.getVideoStatus).mockResolvedValue('not-an-object');
+    vi.mocked(mockClient.getVideoStatus).mockResolvedValue('not-an-object' as never);
 
     const response = await progressResponse(mockClient, 't-1');
     const text = textOf(response);
@@ -1280,7 +1280,7 @@ describe('narrowTaskProgress type narrowing', () => {
   it('keeps well-typed fields and nulls only the missing ones', async () => {
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
       body: { task_id: 't-2', state: 1, progress: 60, postUrl: 'https://post-engineer.com/posts/slot-1' },
-    });
+    } as never);
 
     const response = await progressResponse(mockClient, 't-2');
     const text = textOf(response);
@@ -1447,7 +1447,7 @@ describe('video generation history tools', () => {
           internalField: 'rides through unparsed',
         },
       ],
-    });
+    } as never);
 
     const response = await handleListVideoGenerations(mockClient, { limit: 10 });
     expect(mockClient.listVideoGenerations).toHaveBeenCalledWith(10);
@@ -1768,26 +1768,16 @@ describe('new tool error paths and narrowing fallbacks', () => {
     expect(textOf(response)).toBe('Error listing video generations: network down');
   });
 
-  it('handleListVideoGenerations treats a missing envelope as an empty history', async () => {
+  it('handleListVideoGenerations surfaces a malformed 200 as a plain failure', async () => {
     const { handleListVideoGenerations } = await import('../tools.js');
-    vi.mocked(mockClient.listVideoGenerations).mockResolvedValue(null);
+    const { MalformedContractResponseError } = await import('../contract-response.js');
+    vi.mocked(mockClient.listVideoGenerations).mockRejectedValue(
+      new MalformedContractResponseError('Malformed response from GET /api/persona/video-generations.'),
+    );
 
     const response = await handleListVideoGenerations(mockClient, {});
-    expect(response.isError).toBeUndefined();
-    expect(textOf(response)).toContain('0 video generation(s) in history (newest first).');
-  });
-
-  it('handleListVideoGenerations coerces malformed rows to nulls', async () => {
-    const { handleListVideoGenerations } = await import('../tools.js');
-    vi.mocked(mockClient.listVideoGenerations).mockResolvedValue({
-      generations: [null, { id: 7, generationId: 'gen-1', tokensRefunded: 'yes' }],
-    });
-
-    const response = await handleListVideoGenerations(mockClient, {});
-    expect(response.isError).toBeUndefined();
-    const text = textOf(response);
-    expect(text).toContain('"id": null');
-    expect(text).toContain('"tokensRefunded": null');
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error listing video generations: Malformed response from GET /api/persona/video-generations.');
   });
 
   it('handleGetVideoGeneration surfaces API errors with the structured contract', async () => {
@@ -1811,13 +1801,16 @@ describe('new tool error paths and narrowing fallbacks', () => {
     expect(textOf(response)).toBe('Error getting video generation: network down');
   });
 
-  it('handleGetVideoGeneration falls back to arg values when the detail has no fields', async () => {
+  it('handleGetVideoGeneration surfaces a malformed detail as an error instead of falling back to arg values', async () => {
     const { handleGetVideoGeneration } = await import('../tools.js');
-    vi.mocked(mockClient.getVideoGeneration).mockResolvedValue(null);
+    const { MalformedContractResponseError } = await import('../contract-response.js');
+    vi.mocked(mockClient.getVideoGeneration).mockRejectedValue(
+      new MalformedContractResponseError('Malformed response from GET /api/persona/video-generations/:generationId.'),
+    );
 
     const response = await handleGetVideoGeneration(mockClient, { generationId: 'gen-1' });
-    expect(response.isError).toBeUndefined();
-    expect(textOf(response)).toContain('Generation gen-1: "(untitled)" — unknown.');
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error getting video generation: Malformed response from GET /api/persona/video-generations/:generationId.');
   });
 
   it('handleListTokenTransactions surfaces a plain failure without the structured contract', async () => {

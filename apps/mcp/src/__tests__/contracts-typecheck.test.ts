@@ -7,6 +7,7 @@ import { getPost, getPostMetrics, getYouTubeRetentionCurve } from '../client-pos
 import { publishVideoDirect } from '../client-publish-uploaded.js';
 import { checkSegmentMedia, uploadSegmentMedia } from '../client-user-media.js';
 import { getPersonaPublishingAccounts } from '../client-publishing-accounts.js';
+import { cancelVideoTask } from '../client-video-task.js';
 
 //---------------
 // Type-level pins for the shared contracts, checked by
@@ -34,6 +35,10 @@ type ListPostsResult = Awaited<ReturnType<PostEngineerClient['listPosts']>>;
 type CancelScheduleResult = Awaited<ReturnType<PostEngineerClient['cancelSchedule']>>;
 type GetSlotResult = Awaited<ReturnType<PostEngineerClient['getSlot']>>;
 type UpdateSlotResult = Awaited<ReturnType<PostEngineerClient['updateSlotTitle']>>;
+type ListVideoGenerationsResult = Awaited<ReturnType<PostEngineerClient['listVideoGenerations']>>;
+type GetVideoGenerationResult = Awaited<ReturnType<PostEngineerClient['getVideoGeneration']>>;
+type GetVideoStatusResult = Awaited<ReturnType<PostEngineerClient['getVideoStatus']>>;
+type CancelVideoTaskResult = Awaited<ReturnType<typeof cancelVideoTask>>;
 
 describe('contracts typecheck', () => {
   it('rejects an unknown body field and an unknown response field at compile time', () => {
@@ -161,5 +166,33 @@ describe('contracts typecheck', () => {
     expect(typeof cancel).toBe('function');
     expect(typeof slot).toBe('function');
     expect(typeof update).toBe('function');
+  });
+
+  it('rejects unknown video-tasks fields at compile time', () => {
+    const list = (result: ListVideoGenerationsResult): unknown => {
+      // @ts-expect-error -- the generation row field is `generationId`, not `generation_id`
+      return result.generations[0]?.generation_id;
+    };
+    const detail = (result: GetVideoGenerationResult): unknown => {
+      // @ts-expect-error -- the generation row field is `engineTaskId`, not `engine_task_id`
+      return result.generation.engine_task_id;
+    };
+    const status = (result: GetVideoStatusResult): unknown => {
+      // @ts-expect-error -- the task body keeps its snake_case `task_id`
+      return result.body.taskId;
+    };
+    const statusEnvelope = (result: GetVideoStatusResult): unknown => {
+      // @ts-expect-error -- the engine envelope carries `status`, not `success`
+      return result.success;
+    };
+    const cancel = (result: CancelVideoTaskResult): unknown => {
+      // @ts-expect-error -- the delete response has no `deleted` flag
+      return result.deleted;
+    };
+    expect(typeof list).toBe('function');
+    expect(typeof detail).toBe('function');
+    expect(typeof status).toBe('function');
+    expect(typeof statusEnvelope).toBe('function');
+    expect(typeof cancel).toBe('function');
   });
 });

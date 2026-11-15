@@ -428,12 +428,8 @@ export async function handleGetVideoGeneration(
   args: z.infer<typeof GetVideoGenerationSchema>
 ): Promise<McpToolResponse> {
   try {
-    const result = (await client.getVideoGeneration(args.generationId)) as {
-      generation?: unknown;
-    } | null;
-    const generation = narrowVideoGeneration(
-      result !== null && typeof result === 'object' ? result.generation : null
-    );
+    const result = await client.getVideoGeneration(args.generationId);
+    const generation = narrowVideoGeneration(result.generation);
     const humanSummary = `Generation ${generation.generationId ?? args.generationId}: "${generation.videoSubject ?? '(untitled)'}" — ${generation.status ?? 'unknown'}.`;
     return {
       content: [
