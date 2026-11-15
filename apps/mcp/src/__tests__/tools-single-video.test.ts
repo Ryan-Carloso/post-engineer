@@ -288,7 +288,7 @@ describe('validate_script tool', () => {
 
   it('returns an error when the web endpoint rejects the script', async () => {
     const client = mockClient();
-    vi.mocked(client.validateScript).mockResolvedValue({ success: false, error: 'Script rejected.' });
+    vi.mocked(client.validateScript).mockRejectedValue(new ApiError('Script rejected.', null, null));
     const response = await handleValidateScript(client, { segments });
     expect(response.isError).toBe(true);
     expect(textOf(response)).toContain('Script rejected');
@@ -325,8 +325,8 @@ describe('score_draft tool', () => {
       score: 100,
       reasons: [{ rule: 'hook', detail: 'First line is 10 words.', points: 20 }],
       counts: { chars: 400, words: 54, hashtags: 2, links: 0, firstLineWords: 10, slopHits: [], topThemeMatch: 'Porto mornings' },
-      baseline: { postsMeasured: 2, topAngles: [], medianEngagement: 82.5, bestEngagement: 115 },
-      publishCheck: { ok: true, failures: [], warnings: [] },
+      baseline: { postsMeasured: 2, topAngles: [], medianEngagement: 82.5, bestEngagement: 115, truncated: false },
+      publishCheck: { network: 'linkedin', ok: true, failures: [], warnings: [] },
     };
     const request = vi.fn().mockResolvedValue(payload);
     const response = await handleScoreDraft(fakeClient(request), { draft: 'The best Porto mornings start before the tourists wake up.' });
@@ -344,7 +344,14 @@ describe('score_draft tool', () => {
   });
 
   it('sends only the set optionals', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, score: 50 });
+    const request = vi.fn().mockResolvedValue({
+      success: true,
+      score: 50,
+      reasons: [],
+      counts: { chars: 6, words: 1, hashtags: 0, links: 0, firstLineWords: 1, slopHits: [], topThemeMatch: null },
+      baseline: { postsMeasured: 0, topAngles: [], medianEngagement: null, bestEngagement: null, truncated: false },
+      publishCheck: null,
+    });
     await handleScoreDraft(fakeClient(request), {
       draft: 'Draft.',
       network: 'linkedin',

@@ -61,6 +61,10 @@ import {
   listVoices as listVoicesContract,
 } from './contracts/voices.js';
 import {
+  generateAndSchedule as generateAndScheduleContract,
+  validateScript as validateScriptContract,
+} from './contracts/videos.js';
+import {
   MAX_DESCRIPTION_LENGTH as MAX_LIBRARY_DESCRIPTION_LENGTH,
   MAX_LIBRARY_IMAGES,
   MAX_TAG_LENGTH as MAX_LIBRARY_TAG_LENGTH,
@@ -537,10 +541,10 @@ export class PostEngineerClient {
     return parseContractResponse(disconnectAccountContract, raw);
   }
 
-  async validateScript(segments: unknown, videoType: VideoType = 'hook_lipsync'): Promise<unknown> {
+  async validateScript(segments: unknown, videoType: VideoType = 'hook_lipsync'): Promise<ResponseOf<typeof validateScriptContract>> {
     // Mechanical validation only: the web route debits no tokens and
     // schedules nothing — it re-runs the generate route's validation.
-    return this.request(
+    const raw = await this.request(
       '/api/videos/validate-script',
       {
         method: 'POST',
@@ -549,9 +553,10 @@ export class PostEngineerClient {
       },
       'validate script'
     );
+    return parseContractResponse(validateScriptContract, raw);
   }
 
-  async generatePersonaVideo(input: GeneratePersonaVideoInput): Promise<unknown> {
+  async generatePersonaVideo(input: GeneratePersonaVideoInput): Promise<ResponseOf<typeof generateAndScheduleContract>> {
     const title = requireTitle(input.title);
     // Map the per-provider account arrays into the publishing.accounts
     // record. Only set entries the caller provided: the server enforces
@@ -570,7 +575,7 @@ export class PostEngineerClient {
     if (mode === 'scheduled' && (input.startAt === undefined || input.times === undefined)) {
       throw new Error("startAt and times are required when mode is 'scheduled'.");
     }
-    return this.request(
+    const raw = await this.request(
       '/api/videos/generate-and-schedule',
       {
         method: 'POST',
@@ -606,6 +611,7 @@ export class PostEngineerClient {
       },
       'generate and schedule video'
     );
+    return parseContractResponse(generateAndScheduleContract, raw);
   }
 
   async getVideoStatus(taskId: string): Promise<ResponseOf<typeof getVideoStatusContract>> {

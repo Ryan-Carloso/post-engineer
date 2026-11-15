@@ -133,7 +133,12 @@ The personas calls (`POST /api/persona`, `GET /api/persona/list`, `GET /api/pers
 `PATCH /api/persona`, `GET /api/persona/delete-preview`, `DELETE /api/persona`,
 `GET /api/persona/images`, `POST /api/persona/images`, `PATCH /api/persona/images`,
 `DELETE /api/persona/images`, including the persona constants, the library row shapes,
-and the personaId/id query parsing) follow the same shape.
+and the personaId/id query parsing) follow the same shape. The videos calls
+(`POST /api/videos/generate-and-schedule`, `POST /api/videos/validate-script`,
+`POST /api/videos/score-draft`, `POST /api/videos/batch-discount`, `POST /api/videos/upload-url`,
+`POST /api/videos/uploads/[uploadId]/complete`, `POST /api/videos/publish-by-id`, including
+the video-type literals, the segments caps, the batch/draft/upload constants and the
+publish-by-id body) follow the same shape.
 The two preview endpoints (`POST /api/persona/voices/[voiceId]/preview`,
 `POST /api/persona/cloned-voices/[cloneId]/preview`) return raw audio bytes, not JSON,
 so they share only the request body (`PreviewVoiceBodySchema`, 300-char cap) — the

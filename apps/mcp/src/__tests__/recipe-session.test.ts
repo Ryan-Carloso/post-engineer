@@ -78,7 +78,7 @@ function apiResponse(url: string): Response {
     return json(200, {
       success: true,
       schedule: { id: 'sch-1', mode: 'asap' },
-      slots: [{ slotId: 's1', slotAt: null, title: 'Porto trip', taskId: 'task-1', status: 'queued' }],
+      slots: [{ slotId: 's1', slotAt: '2026-10-30T18:00:00Z', title: 'Porto trip', taskId: 'task-1', status: 'queued' }],
       replayed: false,
     });
   }

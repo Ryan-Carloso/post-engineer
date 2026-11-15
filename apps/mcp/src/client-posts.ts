@@ -8,6 +8,7 @@ import {
 import type { SocialProvider } from './contracts/metrics.js';
 import { getPost as getPostContract } from './contracts/posts.js';
 import { listPostsInRange as listPostsInRangeContract } from './contracts/schedule.js';
+import { scoreDraft as scoreDraftContract } from './contracts/videos.js';
 import type { ResponseOf } from './contracts/endpoint.js';
 
 //---------------
@@ -80,18 +81,19 @@ export interface ScoreDraftInput {
 export async function scoreDraft(
   client: PostEngineerClient,
   input: ScoreDraftInput,
-): Promise<unknown> {
+): Promise<ResponseOf<typeof scoreDraftContract>> {
   // Same parameter names as the route's body; omitted optionals are not
   // sent (the route rejects empty parameters).
   const body: Record<string, unknown> = { draft: input.draft };
   if (input.network !== undefined) body.network = input.network;
   if (input.personaId !== undefined) body.personaId = input.personaId;
   if (input.kind !== undefined) body.kind = input.kind;
-  return client.request(
+  const raw = await client.request(
     '/api/videos/score-draft',
     { method: 'POST', headers: client.getHeaders(), body: JSON.stringify(body) },
     'score draft',
   );
+  return parseContractResponse(scoreDraftContract, raw);
 }
 
 // GET /api/schedule/status in range mode (?from=&to=): every post, any status,

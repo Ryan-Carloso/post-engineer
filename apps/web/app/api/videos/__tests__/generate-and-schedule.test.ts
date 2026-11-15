@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextResponse } from 'next/server';
 import { findRepoRoot } from '@/test/repo-root';
+import { GenerateAndScheduleResponseSchema } from '@/lib/contracts/videos';
 
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
@@ -509,6 +510,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(200);
       expect(json.success).toBe(true);
       expect(json.replayed).toBe(false);
+      expect(GenerateAndScheduleResponseSchema.safeParse(json).success).toBe(true);
       expect(typeof json.schedule.id).toBe('string');
       expect(json.schedule.id.length).toBeGreaterThan(0);      expect(json.slots).toHaveLength(1);
       expect(json.slots[0]).toMatchObject({ title: 'Porto trip', taskId: 'task-Porto trip', status: 'generating' });

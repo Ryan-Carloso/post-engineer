@@ -998,13 +998,37 @@ describe('generate and schedule video client', () => {
     options: { videoType: 'hook_lipsync' as const },
   };
 
+  // Full production shapes: generatePersonaVideo and validateScript parse
+  // every 200 against the videos contract now, so the mock answers each
+  // endpoint with the shape its route returns.
+  const GENERATE_RESPONSE = {
+    success: true,
+    schedule: { id: 'sch-1', mode: 'scheduled' },
+    slots: [{ slotId: 'slot-1', slotAt: '2026-10-05T20:00:00Z', title: 'Launch a SaaS in days', taskId: 'task-1', status: 'scheduled' }],
+    replayed: false,
+  };
+  const VALIDATE_RESPONSE = {
+    success: true,
+    valid: true,
+    segmentCount: 1,
+    totalWords: 3,
+    hookWords: 3,
+    contentWords: 0,
+    mediaCount: 0,
+    hookWindowSeconds: { min: 8, max: 12 },
+    measuredDurationSeconds: null,
+    measured: 'pending',
+    measuredReason: 'No hook-only TTS endpoint exists yet, so the measured hook duration cannot be checked in this phase.',
+  };
+
   beforeEach(() => {
     client = new PostEngineerClient({ apiKey: 'test-token-123' });
-    global.fetch = vi.fn().mockResolvedValue({
+    global.fetch = vi.fn().mockImplementation(async (url: unknown) => ({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify({ success: true }),
-    });
+      text: async () =>
+        JSON.stringify(String(url).includes('/api/videos/validate-script') ? VALIDATE_RESPONSE : GENERATE_RESPONSE),
+    }));
   });
 
   function requestBody(callIndex = 0): Record<string, unknown> {
@@ -1044,7 +1068,7 @@ describe('generate and schedule video client', () => {
         timezone: 'Europe/Lisbon',
       },
     });
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual(GENERATE_RESPONSE);
   });
 
   it('posts segments to the validate-script endpoint and returns its payload', async () => {
@@ -1062,7 +1086,29 @@ describe('generate and schedule video client', () => {
     );
     expect(lastRequestBody().segments).toEqual(segments);
     expect(lastRequestBody().videoType).toBe('hook_lipsync');
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual(VALIDATE_RESPONSE);
+  });
+
+  it('reports a malformed generate 200 as an error instead of an empty result', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+    await expect(client.generatePersonaVideo(baseInput)).rejects.toThrow(
+      'Malformed response from POST /api/videos/generate-and-schedule',
+    );
+  });
+
+  it('reports a malformed validate 200 as an error instead of an empty result', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+    await expect(client.validateScript([{ kind: 'hook', text: 'Hook text here.' }])).rejects.toThrow(
+      'Malformed response from POST /api/videos/validate-script',
+    );
   });
 
   it('nests each provider account array under publishing.accounts', async () => {

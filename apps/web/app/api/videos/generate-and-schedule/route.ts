@@ -14,7 +14,6 @@
 //---------------
 
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -25,21 +24,21 @@ import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { type DistributedSlot } from '@/lib/schedule/slot-distribution';
 import { validateSlots } from './slot-validation';
 import { isValidTimezone } from '@/lib/timezone';
-import { computeVideoTokens, netLedgerSpent, toFiniteNumber, unknownVideoTypeMessage, VIDEO_TYPE_ERROR_SUFFIX } from '@/lib/tokens';
+import { computeVideoTokens, netLedgerSpent, toFiniteNumber } from '@/lib/tokens';
 import { refundSlotTokens } from '@/lib/billing/refund-tokens';
 import { buildSlotRows } from './slot-rows';
 import { answerSchedulePkRace } from './pk-race';
 import { fetchReplay } from './replay';
 import { refundRollbackSpend } from './rollback-refund';
-import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, verifyExperimentPairAfterInsert } from './experiment-link';
+import { buildPairFacts, checkExperimentLink, verifyExperimentPairAfterInsert } from './experiment-link';
 import { scheduleAccountColumns } from './account-columns';
 import { checkPreChargePreflights } from './aspect-preflight';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
 import { validateAccounts } from './validate-accounts';
 import { getPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
-import { segmentsRequestSchema } from './segments-schema';
+import { GenerateAndScheduleBodySchema, type GenerateAndScheduleBody } from '@/lib/contracts/videos';
 import { rawKeyIssues } from './request-title';
-import { checkSemantics, MAX_REPORTED_ISSUES, rejectInvalidRequest, shapeIssues } from './request-validation';
+import { checkSemantics, rejectInvalidRequest, shapeIssues } from './request-validation';
 import {
   persistVoiceSwap,
   preparePost,
@@ -55,7 +54,6 @@ import {
 } from '@/lib/generation/video-job-payload';
 import { recordGenerationStart, recordGenerationUpdate, startEngineVideoTask } from '@/lib/generation/video-generation';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
-import { musicMoodField } from '@/lib/generation/music-mood-field';
 import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { resolveIdempotency } from '@/lib/idempotency';
 import { trackApiEvent } from '@/lib/analytics';
@@ -66,75 +64,6 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 
 const ROUTE = 'POST /api/videos/generate-and-schedule';
 
-//---------------
-// Request shape. Semantic checks (codes, fields) run after the shape parse
-// so every failure carries a stable code + field.
-//---------------
-const PublishingScheduleSchema = z.object({
-  startAt: z.string(),
-  times: z.array(z.string()),
-  timezone: z.string(),
-});
-
-const PublishingSchema = z.object({
-  // 'scheduled' (default): publish at the slot times. 'asap': publish each
-  // video the moment generation finishes, with no scheduled time.
-  mode: z.enum(['scheduled', 'asap']).optional(),
-  providers: z.array(z.string()).max(MAX_REPORTED_ISSUES),
-  accounts: z.record(z.string(), z.array(z.string())).optional(), pinterestBoardId: z.string().max(100).optional(),
-  // Required in scheduled mode, forbidden in asap mode (a stray plan would
-  // be silently ignored, so it is a 400 instead).
-  schedule: PublishingScheduleSchema.optional(),
-  // ASAP-only: the user's IANA zone, kept for display. Optional because the
-  // schedules.timezone column is NOT NULL DEFAULT 'UTC'.
-  timezone: z.string().optional(),
-});
-
-const OptionsSchema = z
-  .object({
-    // The one video mode (issue #542 follow-up), required: it decides
-    // render path + price. Zod v4 dropped errorMap, so the message lives
-    // in `error` (missing -> required, else unknown-mode with costs).
-    videoType: z.enum(['full_lipsync', 'hook_lipsync', 'faceless'], {
-      error: (issue) => (issue.input === undefined ? `options.videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}` : unknownVideoTypeMessage(issue.input)),
-    }),
-    musicMood: musicMoodField,
-    audioUrl: z.string().optional(),
-    imageId: z.string().optional(),
-    // Segments contract (MCP first, Phase 1): one call = one video; the
-    // joined script becomes the video script, no LLM expands it. The engine's persona script budget and duration trim still apply downstream.
-    segments: segmentsRequestSchema.optional(),
-    webhookUrl: z.string().optional(),
-    voiceId: z.string().optional(),
-    // The rest of a persona's editorial definition, for a post created
-    // WITHOUT one (migration 012). With a persona these still override it.
-    videoAspect: z.enum(['9:16', '16:9', '1:1']).optional(),
-    videoLayout: z.enum(['standard', 'react']).optional(),
-    paragraphNumber: z.number().int().min(1).max(10).optional(),
-    language: z.string().optional(),
-    niche: z.string().optional(),
-  })
-  .optional();
-
-const BodySchema = z.object({
-  // Optional: a post without a persona is faceless (options.videoType
-  // 'faceless') and defined entirely by options + title + description.
-  personaId: z.string().optional(),
-  // The slot label. A `topics` key is rejected explicitly in
-  // postHandler before this parse (a plain zod object would strip it
-  // silently and the caller would think videos were created).
-  // At most 100 chars (YouTube's cap): the engine rejects longer titles at dispatch, so fail here, pre-charge.
-  title: z.string().max(100, 'title must be at most 100 characters.'),
-  // Agent-supplied video description (issue #542 follow-up), REQUIRED: the publish copy. Zod v4 dropped required_error, so the missing-value message lives in `error`.
-  description: z.string({ error: (issue) => (issue.input === undefined ? 'description is required: the publish copy for this video.' : undefined) }).min(1, 'description must be a non-empty string: the publish copy for this video.').max(5000, 'description must be at most 5000 characters.'),
-  publishing: PublishingSchema,
-  options: OptionsSchema,
-  idempotencyKey: z.string().optional(),
-  // Paired A/B experiment link (issue #476), checked before the charge.
-  experiment: ExperimentLinkSchema.optional(),
-});
-
-type ParsedBody = z.infer<typeof BodySchema>;
 
 interface SlotResult {
   slotId: string;
@@ -176,7 +105,7 @@ interface ResolvedPublishPlan {
 }
 
 function validatePublishMode(
-  publishing: ParsedBody['publishing'],
+  publishing: GenerateAndScheduleBody['publishing'],
   now: Date,
 ): ResolvedPublishPlan | NextResponse {
   const mode: PublishMode = publishing.mode ?? 'scheduled';
@@ -237,7 +166,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // Shape, title, segments, providers, options and persona-less rules: all
   // collected, then one 400 with every problem (see request-validation.ts).
   const rawIssues = rawKeyIssues(body);
-  const parsed = BodySchema.safeParse(body);
+  const parsed = GenerateAndScheduleBodySchema.safeParse(body);
   if (!parsed.success) return rejectInvalidRequest([...rawIssues, ...shapeIssues(parsed.error)]);
   const { publishing, options, idempotencyKey, experiment } = parsed.data;
 

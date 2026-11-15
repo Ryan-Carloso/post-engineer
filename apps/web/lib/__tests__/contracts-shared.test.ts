@@ -20,6 +20,7 @@ import { CancelRefundSchema, RANGE_STATUSES, ScheduleRowSchema } from '@/lib/con
 import { VideoGenerationRowSchema } from '@/lib/contracts/video-tasks';
 import { VOICE_ACCENTS, VOICE_GENDERS, VOICE_KINDS } from '@/lib/contracts/voices';
 import { FACE_QUALITIES, MAX_DESCRIPTION_LENGTH, MAX_TAG_LENGTH, PERSONA_CTA_MAX_LENGTH, PERSONA_IMAGE_WARNING_CODES, VIDEO_LAYOUTS } from '@/lib/contracts/personas';
+import { BATCH_KEY_MAX_LENGTH, BATCH_KEY_PATTERN, DRAFT_KINDS, DRAFT_MAX_INPUT_CHARS, HOOK_MAX_SECONDS, HOOK_MIN_SECONDS, MAX_BATCH_VIDEOS, MAX_IMAGES_MODE_MEDIAS, MAX_REPORTED_ISSUES, MAX_SEGMENTS, MAX_VIDEO_UPLOAD_BYTES, PUBLISH_NETWORKS, VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, VIDEO_UPLOAD_CONTENT_TYPES } from '@/lib/contracts/videos';
 
 const HEADER = '// GENERATED from shared/contracts — do not edit.\n// Run `node scripts/sync-contracts.mjs` from the repo root to regenerate.\n';
 
@@ -333,5 +334,83 @@ describe('contracts shared source', () => {
     const preview = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'persona', 'delete-preview', 'route.ts'), 'utf8');
     expect(preview).toContain("from '@/lib/contracts/personas'");
     expect(preview).toContain('parsePersonaIdQuery');
+  });
+
+  // The videos contract duplicates VIDEO_TYPES + the costs suffix from
+  // lib/tokens.ts (the video-type sync tests pin tokens.ts to the engine,
+  // and this pin keeps the contract's copy identical to it). A one-sided
+  // edit would make the contract reject a mode the route serves, or the
+  // route report costs the contract does not know.
+  it('pins the videos type literals to lib/tokens.ts', () => {
+    const root = findRepoRoot(import.meta.url);
+    const tokens = readFileSync(join(root, 'apps', 'web', 'lib', 'tokens.ts'), 'utf8');
+    expect(VIDEO_TYPES).toEqual(['full_lipsync', 'hook_lipsync', 'faceless']);
+    expect(tokens).toContain("export const VIDEO_TYPES = ['full_lipsync', 'hook_lipsync', 'faceless'] as const;");
+    expect(VIDEO_TYPE_ERROR_SUFFIX).toBe('use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)');
+    expect(tokens).toContain("export const VIDEO_TYPE_ERROR_SUFFIX =\n  'use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)';");
+  });
+
+  // The segments caps are duplicated in the contract because a synced
+  // contract cannot import the shared script-segments source (the two
+  // apps keep its generated copy at different depths). A one-sided edit
+  // would make the contract accept a script the validator rejects.
+  it('pins the videos segment caps to the shared script-segments source', () => {
+    const root = findRepoRoot(import.meta.url);
+    const shared = readFileSync(join(root, 'shared', 'script-segments', 'script-segments.ts'), 'utf8');
+    expect(MAX_SEGMENTS).toBe(12);
+    expect(MAX_IMAGES_MODE_MEDIAS).toBe(30);
+    expect(HOOK_MIN_SECONDS).toBe(8);
+    expect(HOOK_MAX_SECONDS).toBe(12);
+    for (const line of [
+      'export const MAX_SEGMENTS = 12;',
+      'export const MAX_IMAGES_MODE_MEDIAS = 30;',
+      'export const HOOK_MIN_SECONDS = 8;',
+      'export const HOOK_MAX_SECONDS = 12;',
+    ]) {
+      expect(shared).toContain(line);
+    }
+  });
+
+  // The batch, draft, upload and report constants moved into the videos
+  // contract; the old modules re-export them so existing import paths
+  // keep working. The generate route reads its body schema from the
+  // contract and the segments/experiment helpers re-export theirs.
+  it('pins the videos constants to the contract re-exports', () => {
+    const root = findRepoRoot(import.meta.url);
+    const batch = readFileSync(join(root, 'apps', 'web', 'lib', 'billing', 'batch-discount.ts'), 'utf8');
+    expect(batch).toContain("export { MAX_BATCH_VIDEOS } from '@/lib/contracts/videos';");
+    expect(MAX_BATCH_VIDEOS).toBe(12);
+    expect(BATCH_KEY_MAX_LENGTH).toBe(100);
+    expect(BATCH_KEY_PATTERN).toEqual(/^[A-Za-z0-9_-]+$/);
+    const draft = readFileSync(join(root, 'apps', 'web', 'lib', 'draft-scoring.ts'), 'utf8');
+    expect(draft).toContain("export { DRAFT_KINDS, DRAFT_MAX_INPUT_CHARS, PUBLISH_NETWORKS } from '@/lib/contracts/videos';");
+    expect(DRAFT_KINDS).toEqual(['post', 'script']);
+    expect(DRAFT_MAX_INPUT_CHARS).toBe(10000);
+    const upload = readFileSync(join(root, 'apps', 'web', 'lib', 'videos', 'signed-upload.ts'), 'utf8');
+    expect(upload).toContain("from '@/lib/contracts/videos'");
+    expect(upload).toContain('MAX_VIDEO_UPLOAD_BYTES,');
+    expect(upload).toContain('VIDEO_UPLOAD_CONTENT_TYPES,');
+    expect(MAX_VIDEO_UPLOAD_BYTES).toBe(2 * 1024 * 1024 * 1024);
+    expect(VIDEO_UPLOAD_CONTENT_TYPES).toEqual(['video/mp4', 'video/quicktime']);
+    const issues = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'videos', 'generate-and-schedule', 'validation-issues.ts'), 'utf8');
+    expect(issues).toContain("export { MAX_REPORTED_ISSUES } from '@/lib/contracts/videos';");
+    expect(MAX_REPORTED_ISSUES).toBe(20);
+    const segments = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'videos', 'generate-and-schedule', 'segments-schema.ts'), 'utf8');
+    expect(segments).toContain("export { segmentOverlaySchema, segmentsRequestSchema } from '@/lib/contracts/videos';");
+    const link = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'videos', 'generate-and-schedule', 'experiment-link.ts'), 'utf8');
+    expect(link).toContain("from '@/lib/contracts/videos'");
+    expect(link).toContain('ExperimentLinkSchema,');
+    const route = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'videos', 'generate-and-schedule', 'route.ts'), 'utf8');
+    expect(route).toContain("from '@/lib/contracts/videos'");
+    expect(route).toContain('GenerateAndScheduleBodySchema,');
+  });
+
+  // PUBLISH_NETWORKS is the same 10 providers as SOCIAL_PROVIDERS, in
+  // linkedin-first order (the score route lists networks that way). A
+  // one-sided edit would make the contract reject a network the metrics
+  // layer serves, or vice versa.
+  it('pins PUBLISH_NETWORKS to SOCIAL_PROVIDERS as a set', () => {
+    expect([...PUBLISH_NETWORKS].sort()).toEqual([...SOCIAL_PROVIDERS].sort());
+    expect(PUBLISH_NETWORKS[0]).toBe('linkedin');
   });
 });

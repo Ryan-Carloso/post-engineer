@@ -206,7 +206,12 @@ describe('experiments and check_script with a persona by name', () => {
   });
 
   it('scores a draft against the measured posts of a persona given by name', async () => {
-    const { call, seen } = setup({ 'GET /api/persona/list': PERSONAS, 'POST /api/videos/score-draft': { score: 80 } });
+    const { call, seen } = setup({ 'GET /api/persona/list': PERSONAS, 'POST /api/videos/score-draft': {
+        success: true, score: 80, reasons: [],
+        counts: { chars: 0, words: 0, hashtags: 0, links: 0, firstLineWords: 0, slopHits: [], topThemeMatch: null },
+        baseline: { postsMeasured: 0, topAngles: [], medianEngagement: null, bestEngagement: null, truncated: false },
+        publishCheck: null,
+      } });
     const result = await call('check_script', { action: 'score', draft: 'A short draft about training plans that is long enough.', network: 'youtube', persona: 'Maria' });
     expect(result.isError).toBe(false);
     expect(seen.find((request) => request.path === '/api/videos/score-draft')?.body).toMatchObject({ personaId: MARIA });

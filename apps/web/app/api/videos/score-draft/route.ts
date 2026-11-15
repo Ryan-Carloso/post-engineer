@@ -75,7 +75,7 @@ function parseBody(body: unknown): ScoreDraftBody | NextResponse {
   const network = record.network;
   if (
     network !== undefined
-    && (typeof network !== 'string' || !(PUBLISH_NETWORKS as string[]).includes(network))
+    && (typeof network !== 'string' || !(PUBLISH_NETWORKS as readonly string[]).includes(network))
   ) {
     return apiErrorResponse(400, `network must be one of ${PUBLISH_NETWORKS.map((n) => `"${n}"`).join(', ')} when given.`, {
       code: ERROR_CODES.VALIDATION_FAILED,
@@ -92,7 +92,7 @@ function parseBody(body: unknown): ScoreDraftBody | NextResponse {
     });
   }
   const kind = record.kind;
-  if (kind !== undefined && (typeof kind !== 'string' || !(DRAFT_KINDS as string[]).includes(kind))) {
+  if (kind !== undefined && (typeof kind !== 'string' || !(DRAFT_KINDS as readonly string[]).includes(kind))) {
     return apiErrorResponse(400, 'kind must be "post" or "script" when given.', {
       code: ERROR_CODES.VALIDATION_FAILED,
       field: 'kind',

@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextResponse } from 'next/server';
+import { CompleteVideoUploadResponseSchema } from '@/lib/contracts/videos';
 
 vi.mock('@/lib/request-auth', () => ({ requireSupabaseSession: vi.fn() }));
 vi.mock('@/lib/rate-limit', () => ({
@@ -63,6 +64,7 @@ describe('POST /api/videos/uploads/[uploadId]/complete', () => {
     expect(response.status).toBe(200);
     const payload = (await response.json()) as Record<string, unknown>;
     expect(payload).toMatchObject({ success: true, uploadId: 'upload-1', status: 'ready', contentType: 'video/mp4' });
+    expect(CompleteVideoUploadResponseSchema.safeParse(payload).success).toBe(true);
     expect(vi.mocked(completeVideoUpload).mock.calls[0]?.[2]).toBe('user-uuid-1');
   });
 

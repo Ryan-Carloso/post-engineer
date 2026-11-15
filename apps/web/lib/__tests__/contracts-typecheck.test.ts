@@ -11,6 +11,7 @@ import { cancelSchedule, deleteSlot, getSlot, listPosts, listSchedules, updateSl
 import { cancelVideoTask, getVideoGeneration, getVideoStatus, listVideoGenerations } from '@/lib/contracts/video-tasks';
 import { createClonedVoice, deleteClonedVoice, getClonedVoice, listClonedVoices, listVoices } from '@/lib/contracts/voices';
 import { addPersonaImage, createPersona, deletePersona, deletePersonaImage, getPersonaDeletePreview, listFaces, listPersonaImages, listPersonas, updatePersona, updatePersonaImage } from '@/lib/contracts/personas';
+import { applyBatchDiscount, completeVideoUpload, generateAndSchedule, mintVideoUpload, publishUploadedVideo, scoreDraft, validateScript } from '@/lib/contracts/videos';
 import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
 //---------------
@@ -67,6 +68,15 @@ type AddPersonaImageResponse = ResponseOf<typeof addPersonaImage>;
 type UpdatePersonaImageBody = BodyOf<typeof updatePersonaImage>;
 type UpdatePersonaImageResponse = ResponseOf<typeof updatePersonaImage>;
 type DeletePersonaImageResponse = ResponseOf<typeof deletePersonaImage>;
+type GenerateAndScheduleBody = BodyOf<typeof generateAndSchedule>;
+type GenerateAndScheduleResponse = ResponseOf<typeof generateAndSchedule>;
+type ValidateScriptResponse = ResponseOf<typeof validateScript>;
+type ScoreDraftResponse = ResponseOf<typeof scoreDraft>;
+type BatchDiscountBody = BodyOf<typeof applyBatchDiscount>;
+type BatchDiscountResponse = ResponseOf<typeof applyBatchDiscount>;
+type MintVideoUploadResponse = ResponseOf<typeof mintVideoUpload>;
+type CompleteVideoUploadResponse = ResponseOf<typeof completeVideoUpload>;
+type PublishByIdBody = BodyOf<typeof publishUploadedVideo>;
 
 describe('contracts typecheck', () => {
   it('pins BodyOf and ResponseOf field names', async () => {
@@ -497,5 +507,75 @@ describe('contracts typecheck', () => {
     expect(updateImageBody.isPrimary).toBe(true);
     const deletedImage: DeletePersonaImageResponse = { success: true };
     expect(deletedImage.success).toBe(true);
+  });
+
+  it('pins the videos field names', () => {
+    const body: GenerateAndScheduleBody = {
+      title: 'Launch a SaaS in days',
+      description: 'Agent description.',
+      publishing: { providers: ['youtube'] },
+      options: { videoType: 'hook_lipsync' },
+    };
+    expect(body.publishing.providers).toEqual(['youtube']);
+    // @ts-expect-error -- the generate body field is `publishing.providers`, not `publishing.provider`
+    expect(body.publishing.provider).toBeUndefined();
+    const generated: GenerateAndScheduleResponse = {
+      success: true,
+      schedule: { id: 'sch-1', mode: 'scheduled' },
+      slots: [{ slotId: 'slot-1', slotAt: '2026-10-05T20:00:00Z', title: 'Launch', taskId: 'task-1', status: 'scheduled' }],
+      replayed: false,
+    };
+    expect(generated.schedule.id).toBe('sch-1');
+    expect(generated.slots[0]?.taskId).toBe('task-1');
+    // @ts-expect-error -- the slot field is `taskId`, not `task_id`
+    expect(generated.slots[0]?.task_id).toBeUndefined();
+    // @ts-expect-error -- the response flag is `replayed`, not `isReplay`
+    expect(generated.isReplay).toBeUndefined();
+    const validated: ValidateScriptResponse = {
+      success: true, valid: true, segmentCount: 1, totalWords: 3, hookWords: 3, contentWords: 0, mediaCount: 0,
+      hookWindowSeconds: { min: 8, max: 12 }, measuredDurationSeconds: null, measured: 'pending',
+      measuredReason: 'No hook-only TTS endpoint exists yet, so the measured hook duration cannot be checked in this phase.',
+    };
+    expect(validated.hookWindowSeconds.min).toBe(8);
+    expect(validated.measured).toBe('pending');
+    // @ts-expect-error -- the validate response field is `hookWindowSeconds`, not `hookWindow`
+    expect(validated.hookWindow).toBeUndefined();
+    const scored: ScoreDraftResponse = {
+      success: true, score: 100, reasons: [],
+      counts: { chars: 400, words: 54, hashtags: 2, links: 0, firstLineWords: 10, slopHits: [], topThemeMatch: 'Porto mornings' },
+      baseline: { postsMeasured: 2, topAngles: [], medianEngagement: 82.5, bestEngagement: 115, truncated: false },
+      publishCheck: { network: 'linkedin', ok: true, failures: [], warnings: [] },
+    };
+    expect(scored.counts.topThemeMatch).toBe('Porto mornings');
+    // @ts-expect-error -- the score response field is `publishCheck`, not `check`
+    expect(scored.check).toBeUndefined();
+    const batchBody: BatchDiscountBody = { batchKey: 'batch-1', scheduleIds: ['11111111-2222-4333-8444-555555555555'] };
+    expect(batchBody.batchKey).toBe('batch-1');
+    // @ts-expect-error -- the batch body field is `scheduleIds`, not `schedule_ids`
+    expect(batchBody.schedule_ids).toBeUndefined();
+    const batch: BatchDiscountResponse = {
+      success: true, batchId: 'batch-1', videos: 6, faceVideos: 6, earnedFreeVideos: 1,
+      freeVideos: [{ scheduleId: '11111111-2222-4333-8444-555555555555', slotId: 'slot-1', discountTokens: 8 }],
+      discountTokens: 8, chargedTokens: 40, warnings: [],
+    };
+    expect(batch.freeVideos[0]?.slotId).toBe('slot-1');
+    // @ts-expect-error -- the free-video field is `slotId`, not `id`
+    expect(batch.freeVideos[0]?.id).toBeUndefined();
+    const minted: MintVideoUploadResponse = {
+      success: true, uploadId: 'up-1', signedUrl: 'https://storage.test/upload', token: 'tok',
+      storagePath: 'user-1/direct-uploads/up-1.mp4', expiresAt: '2026-11-12T00:15:00.000Z', maxBytes: 8,
+    };
+    expect(minted.storagePath).toBe('user-1/direct-uploads/up-1.mp4');
+    // @ts-expect-error -- the mint response field is `uploadId`, not `id`
+    expect(minted.id).toBeUndefined();
+    const completed: CompleteVideoUploadResponse = { success: true, uploadId: 'up-1', status: 'ready', contentType: 'video/mp4', sizeBytes: 8 };
+    expect(completed.status).toBe('ready');
+    // @ts-expect-error -- the complete response field is `status`, not `state`
+    expect(completed.state).toBeUndefined();
+    const publishBody: PublishByIdBody = { uploadId: '11111111-2222-4333-8444-555555555555', provider: 'instagram', accountIds: ['ig-1'] };
+    expect(publishBody.uploadId).toBe('11111111-2222-4333-8444-555555555555');
+    // @ts-expect-error -- the publish body field is `uploadId`, not `id`
+    const wrongPublish: PublishByIdBody = { id: 'up-1', provider: 'instagram', accountIds: ['ig-1'] };
+    expect(typeof wrongPublish).toBe('object');
   });
 });

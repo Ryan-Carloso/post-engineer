@@ -6,6 +6,8 @@
  * a client<->errors import cycle.
  */
 
+import { MAX_VIDEO_UPLOAD_BYTES } from './contracts/videos.js';
+
 /**
  * Max caller text for voices (action: preview_clone), in characters after trimming.
  * Same literal as the engine (app/services/cloned_voices/preview_text.py)
@@ -62,17 +64,17 @@ export const MAX_SEGMENT_MEDIA_BYTES = 8 * 1024 * 1024;
 export const MAX_SEGMENT_MEDIA_MB = MAX_SEGMENT_MEDIA_BYTES / (1024 * 1024);
 
 /**
- * Max direct-publish video size in bytes (2GB). Mirrors the server-side
- * limit in POST /api/upload-content (youtube handler): the MCP fails fast
- * locally instead of uploading gigabytes the server would reject.
+ * Max direct-publish video size in bytes (2GB). Lives in the shared videos
+ * contract (`shared/contracts/videos.ts`): the MCP fails fast locally
+ * instead of uploading gigabytes the server would reject.
  */
-export const MAX_UPLOAD_VIDEO_BYTES = 2 * 1024 * 1024 * 1024;
+export { MAX_VIDEO_UPLOAD_BYTES as MAX_UPLOAD_VIDEO_BYTES };
 
 /**
  * Same limit in whole GB, derived from the byte limit so user-facing copy
  * can't drift from the enforced bound.
  */
-export const MAX_UPLOAD_VIDEO_GB = MAX_UPLOAD_VIDEO_BYTES / (1024 * 1024 * 1024);
+export const MAX_UPLOAD_VIDEO_GB = MAX_VIDEO_UPLOAD_BYTES / (1024 * 1024 * 1024);
 
 /**
  * Persona-hook layouts the server accepts. The list lives in the shared
@@ -115,14 +117,12 @@ export {
 export type { ExperimentVariable } from './contracts/experiments.js';
 
 /**
- * Batch discount limits (issue #487), mirrored from
- * `apps/web/lib/billing/batch-discount.ts` (MAX_BATCH_VIDEOS,
- * BATCH_FREE_EVERY) and the batchKey rule of
- * `apps/web/app/api/videos/batch-discount/route.ts`. Pinned by
+ * Batch discount limits (issue #487). MAX_BATCH_VIDEOS and the batchKey
+ * rule live in the shared videos contract (`shared/contracts/videos.ts`);
+ * BATCH_FREE_EVERY and the window stay mirrored from
+ * `apps/web/lib/billing/batch-discount.ts`. Pinned by
  * `batch-discount-sync.test.ts`.
  */
-export const MAX_BATCH_VIDEOS = 12;
+export { BATCH_KEY_MAX_LENGTH, BATCH_KEY_PATTERN, MAX_BATCH_VIDEOS } from './contracts/videos.js';
 export const BATCH_FREE_EVERY = 6;
 export const BATCH_WINDOW_MINUTES = 10;
-export const BATCH_KEY_MAX_LENGTH = 100;
-export const BATCH_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;

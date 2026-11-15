@@ -4,7 +4,9 @@ import { createExperiment } from '../client-experiments.js';
 import { getPrompt, listPrompts } from '../client-prompts.js';
 import { getTokenBalance, listTokenTransactions } from '../client-billing.js';
 import { getPost, getPostMetrics, getYouTubeRetentionCurve } from '../client-posts.js';
-import { publishVideoDirect } from '../client-publish-uploaded.js';
+import { createVideoUpload, completeVideoUpload, publishUploadedVideo, publishVideoDirect } from '../client-publish-uploaded.js';
+import { scoreDraft } from '../client-posts.js';
+import { applyBatchDiscount } from '../client-batch.js';
 import { checkSegmentMedia, uploadSegmentMedia } from '../client-user-media.js';
 import { getPersonaPublishingAccounts } from '../client-publishing-accounts.js';
 import { cancelVideoTask } from '../client-video-task.js';
@@ -55,6 +57,13 @@ type GetPersonaDeletePreviewResult = Awaited<ReturnType<PostEngineerClient['getP
 type AddPersonaImageResult = Awaited<ReturnType<PostEngineerClient['addPersonaImage']>>;
 type UpdatePersonaImageResult = Awaited<ReturnType<PostEngineerClient['updatePersonaImage']>>;
 type DeletePersonaImageResult = Awaited<ReturnType<PostEngineerClient['deletePersonaImage']>>;
+type GenerateAndScheduleResult = Awaited<ReturnType<PostEngineerClient['generatePersonaVideo']>>;
+type ValidateScriptResult = Awaited<ReturnType<PostEngineerClient['validateScript']>>;
+type ScoreDraftResult = Awaited<ReturnType<typeof scoreDraft>>;
+type BatchDiscountResult = Awaited<ReturnType<typeof applyBatchDiscount>>;
+type MintVideoUploadResult = Awaited<ReturnType<typeof createVideoUpload>>;
+type CompleteVideoUploadResult = Awaited<ReturnType<typeof completeVideoUpload>>;
+type PublishUploadedResult = Awaited<ReturnType<typeof publishUploadedVideo>>;
 
 describe('contracts typecheck', () => {
   it('rejects an unknown body field and an unknown response field at compile time', () => {
@@ -306,5 +315,70 @@ describe('contracts typecheck', () => {
     expect(typeof added).toBe('function');
     expect(typeof updatedImage).toBe('function');
     expect(typeof deletedImage).toBe('function');
+  });
+
+  it('rejects unknown videos fields at compile time', () => {
+    const client = { request: vi.fn(), getHeaders: () => ({}) } as unknown as PostEngineerClient;
+    const run = (): void => {
+      // @ts-expect-error -- the generate input takes flat `providers`, not a nested `publishing` object
+      void client.generatePersonaVideo({ publishing: { providers: ['youtube'] } });
+    };
+    const schedule = (result: GenerateAndScheduleResult): unknown => {
+      // @ts-expect-error -- the response schedule field is `id`, not `scheduleId`
+      return result.schedule.scheduleId;
+    };
+    const slot = (result: GenerateAndScheduleResult): unknown => {
+      // @ts-expect-error -- the slot field is `taskId`, not `task_id`
+      return result.slots[0]?.task_id;
+    };
+    const replayed = (result: GenerateAndScheduleResult): unknown => {
+      // @ts-expect-error -- the response flag is `replayed`, not `isReplay`
+      return result.isReplay;
+    };
+    const validate = (result: ValidateScriptResult): unknown => {
+      // @ts-expect-error -- the validate response field is `hookWindowSeconds`, not `hookWindow`
+      return result.hookWindow;
+    };
+    const measured = (result: ValidateScriptResult): unknown => {
+      // @ts-expect-error -- the validate response field is `measured`, not `status`
+      return result.status;
+    };
+    const score = (result: ScoreDraftResult): unknown => {
+      // @ts-expect-error -- the counts field is `topThemeMatch`, not `theme`
+      return result.counts.theme;
+    };
+    const check = (result: ScoreDraftResult): unknown => {
+      // @ts-expect-error -- the score response field is `publishCheck`, not `check`
+      return result.check;
+    };
+    const free = (result: BatchDiscountResult): unknown => {
+      // @ts-expect-error -- the free-video field is `slotId`, not `id`
+      return result.freeVideos[0]?.id;
+    };
+    const minted = (result: MintVideoUploadResult): unknown => {
+      // @ts-expect-error -- the client drops `storagePath`; the mint response keeps it server-side only
+      return result.storagePath;
+    };
+    const completed = (result: CompleteVideoUploadResult): unknown => {
+      // @ts-expect-error -- the complete response field is `status`, not `state`
+      return result.state;
+    };
+    const published = (result: PublishUploadedResult): unknown => {
+      // @ts-expect-error -- the publish-by-id response field is `successCount`, not `count`
+      return result.count;
+    };
+    expect(typeof run).toBe('function');
+    expect(typeof schedule).toBe('function');
+    expect(typeof slot).toBe('function');
+    expect(typeof replayed).toBe('function');
+    expect(typeof validate).toBe('function');
+    expect(typeof measured).toBe('function');
+    expect(typeof score).toBe('function');
+    expect(typeof check).toBe('function');
+    expect(typeof free).toBe('function');
+    expect(typeof minted).toBe('function');
+    expect(typeof completed).toBe('function');
+    expect(typeof published).toBe('function');
+    expect(vi.mocked(client.request)).not.toHaveBeenCalled();
   });
 });

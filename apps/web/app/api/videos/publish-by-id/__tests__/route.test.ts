@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextResponse } from 'next/server';
+import { UploadContentResponseSchema } from '@/lib/contracts/media';
 
 vi.mock('@/lib/request-auth', () => ({ requireSupabaseSession: vi.fn() }));
 vi.mock('@/lib/rate-limit', () => ({
@@ -91,6 +92,7 @@ describe('POST /api/videos/publish-by-id', () => {
     const payload = (await response.json()) as Record<string, unknown>;
     expect(payload.success).toBe(true);
     expect(payload.successCount).toBe(1);
+    expect(UploadContentResponseSchema.safeParse(payload).success).toBe(true);
     expect(vi.mocked(publishUploadedVideo).mock.calls[0]?.[2]).toBe('user-uuid-1');
   });
 
