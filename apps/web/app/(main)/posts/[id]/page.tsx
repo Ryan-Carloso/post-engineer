@@ -15,9 +15,10 @@ import {
 } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import AccountCard from '@/components/account-card';
-import { buildGenerationRows } from './generation-rows';
 import { DetailProgressBar } from './detail-progress-bar';
 import { formatDateTime, ScheduleSection } from './schedule-section';
+import { GenerationFactsSection } from './generation-facts-section';
+import { HookPhotoSection } from './hook-photo-section';
 import { RescheduleSection } from './reschedule-section';
 import { ScriptAngleSection } from './script-angle-section';
 import { usePostAccountCards, type AccountCardData } from './account-cards';
@@ -228,42 +229,6 @@ export const PostIdSection = ({ postId }: { postId: string }) => {
 
 
 //---------------
-// GenerationFactsSection — read-only record of what the post was generated
-// with. The facts come from the post_* snapshot columns written at creation
-// (migration 012) plus the slot's faceless flag — deliberately a snapshot,
-// so editing the persona afterwards cannot rewrite an already-queued video.
-// This section is a record of what was charged for: it must never gain edit
-// affordances.
-//---------------
-export const GenerationFactsSection = ({
-  generation,
-  personaName,
-}: {
-  generation: SlotDetailPayload['generation'];
-  personaName: string;
-}) => {
-  const { t } = useI18n();
-  const rows = buildGenerationRows(generation, personaName, t);
-  return (
-    <section aria-label={t('posts.generationFactsLabel')} className="mt-6">
-      <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        {t('posts.generationFactsLabel')}
-      </p>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        {rows.map((row) => (
-          <div key={row.label}>
-            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              {row.label}
-            </p>
-            <p className="mt-1 text-sm font-semibold text-primary">{row.value}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-};
-
-//---------------
 // DetailPlayer — the full-width player section. The video keeps its
 // intrinsic aspect ratio (h-auto — faceless videos are often vertical
 // 9:16; a forced 16:9 box letterboxes them into a black rectangle). The
@@ -458,6 +423,8 @@ export const SlotDetail = ({
           </a>
         </div>
       )}
+
+      <HookPhotoSection hookPhoto={slot.hookPhoto} faceless={generation.faceless} />
 
       <div className="mt-6">
         <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t('posts.captionLabel')}</p>

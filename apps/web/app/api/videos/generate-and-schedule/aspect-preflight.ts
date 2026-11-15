@@ -19,17 +19,23 @@
 // Failure is fail-closed: an unreachable engine, a timeout, a non-JSON
 // answer, or a missing code returns a 502 with NO charge, never a
 // proceed. Any other code (ok, or a skip the task already handles — an
-// expired media id, a blocked download, a face) never blocks here.
+// expired media id, a blocked download, a face) never blocks the aspect
+// check. The first-photo face check below is stricter: it blocks an
+// unloadable first photo, because the engine gate fails the task on a
+// blocked download, a timeout, or an expired media id.
 //
-// Both pre-charge checks live in this module — the narration-length
-// check (full lip-sync) first, then the aspect check — so route.ts
-// stays under the file-size ratchet: one call site instead of two
-// preflight blocks.
+// All three pre-charge checks live in this module — the narration-length
+// check (full lip-sync) first, then the aspect check, then the
+// first-photo face check — so route.ts stays under the file-size
+// ratchet: one call site instead of three preflight blocks.
 //---------------
 
 import { NextResponse } from 'next/server';
 
 import { ERROR_CODES } from '@/lib/error-codes';
+import { isHttpUrl } from '@/lib/generation/custom-audio';
+import { firstSegmentMedia } from '@/lib/hook-photo';
+import type { SegmentMediaRef } from '@/lib/hook-photo';
 import { engineAuthHeaders } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
 import type { VideoType } from '@/lib/tokens';
@@ -40,8 +46,8 @@ import type { ValidatedOptions } from './options-validation';
 
 // One media check is a local resolve or a single download; past this
 // the request fails closed (502, no charge) rather than charging on an
-// unknown ratio.
-export const SEGMENT_MEDIA_ASPECT_TIMEOUT_MS = 30_000;
+// unknown ratio or face.
+export const MEDIA_CHECK_TIMEOUT_MS = 30_000;
 
 export type VideoAspectOption = '9:16' | '16:9' | '1:1';
 
@@ -56,11 +62,71 @@ export interface SegmentMediaAspectInput {
   videoType: VideoType;
 }
 
-interface SegmentMediaRef {
-  segmentIndex: number;
-  imageIndex: number;
-  mediaId?: string;
-  url?: string;
+interface MediaCheckRecord {
+  code?: unknown;
+  width?: unknown;
+  height?: unknown;
+  has_face?: unknown;
+}
+
+/**
+ * One engine media/check call, shared by the aspect and first-photo
+ * face preflights. Returns the parsed body record, or a 502
+ * NextResponse when the ratio/face is unknown: unreachable engine,
+ * timeout, non-JSON answer, or a missing code all fail closed with NO
+ * charge, never a proceed. The env gate lives here so both callers
+ * fail the same way when the engine is unconfigured.
+ */
+async function fetchMediaCheck(
+  ref: SegmentMediaRef,
+  userId: string,
+  videoAspect: VideoAspectOption,
+  logTag: string,
+): Promise<MediaCheckRecord | NextResponse> {
+  const baseUrl = process.env.MONEYPRINT_API_URL;
+  if (!baseUrl || !process.env.MONEYPRINT_API_SECRET) {
+    logger.error(`[${logTag}] engine URL or secret is not defined`);
+    return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MEDIA_CHECK_TIMEOUT_MS);
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${baseUrl.replace(/\/+$/, '')}/api/v1/media/check`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...engineAuthHeaders(userId),
+      },
+      body: JSON.stringify(
+        ref.mediaId !== undefined
+          ? { media_id: ref.mediaId, video_aspect: videoAspect }
+          : { url: ref.url, video_aspect: videoAspect },
+      ),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(timeout);
+    logger.error(`[${logTag}] engine unreachable`, error);
+    return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
+  }
+  clearTimeout(timeout);
+  if (!upstream.ok) {
+    logger.error(`[${logTag}] engine check failed`, undefined, {
+      status: upstream.status,
+    });
+    return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
+  }
+  const parsed: unknown = await upstream.json().catch(() => null);
+  const body = (parsed as { body?: unknown } | null)?.body;
+  const record = (
+    typeof body === 'object' && body !== null ? body : {}
+  ) as MediaCheckRecord;
+  if (typeof record.code !== 'string') {
+    logger.error(`[${logTag}] engine check returned no code`);
+    return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
+  }
+  return record;
 }
 
 // Mirrors the engine (media_aspect.ratio_label and
@@ -123,51 +189,15 @@ export async function checkSegmentMediaAspect(
   // face, full lip-sync) needs no engine call — and must not fail a
   // request that never touches the engine.
   if (refs.length === 0) return null;
-  const baseUrl = process.env.MONEYPRINT_API_URL;
-  if (!baseUrl || !process.env.MONEYPRINT_API_SECRET) {
-    logger.error('[segment-media-aspect] engine URL or secret is not defined');
-    return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
-  }
   const [targetW, targetH] = aspectResolution(input.videoAspect);
   for (const ref of refs) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), SEGMENT_MEDIA_ASPECT_TIMEOUT_MS);
-    let upstream: Response;
-    try {
-      upstream = await fetch(`${baseUrl.replace(/\/+$/, '')}/api/v1/media/check`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...engineAuthHeaders(input.userId),
-        },
-        body: JSON.stringify(
-          ref.mediaId !== undefined
-            ? { media_id: ref.mediaId, video_aspect: input.videoAspect }
-            : { url: ref.url, video_aspect: input.videoAspect },
-        ),
-        signal: controller.signal,
-      });
-    } catch (error) {
-      clearTimeout(timeout);
-      logger.error('[segment-media-aspect] engine unreachable', error);
-      return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
-    }
-    clearTimeout(timeout);
-    if (!upstream.ok) {
-      logger.error('[segment-media-aspect] engine check failed', undefined, {
-        status: upstream.status,
-      });
-      return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
-    }
-    const parsed: unknown = await upstream.json().catch(() => null);
-    const body = (parsed as { body?: unknown } | null)?.body;
-    const record = (
-      typeof body === 'object' && body !== null ? body : {}
-    ) as { code?: unknown; width?: unknown; height?: unknown };
-    if (typeof record.code !== 'string') {
-      logger.error('[segment-media-aspect] engine check returned no code');
-      return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
-    }
+    const record = await fetchMediaCheck(
+      ref,
+      input.userId,
+      input.videoAspect,
+      'segment-media-aspect',
+    );
+    if (record instanceof NextResponse) return record;
     if (record.code === 'wrong_aspect') {
       const width = typeof record.width === 'number' ? record.width : null;
       const height = typeof record.height === 'number' ? record.height : null;
@@ -187,6 +217,190 @@ export async function checkSegmentMediaAspect(
   return null;
 }
 
+export interface FirstPhotoFaceInput {
+  userId: string;
+  /** Raw segments from the request (already shape-validated upstream). */
+  segments: unknown;
+  videoAspect: VideoAspectOption;
+  /** The one video mode: faceless videos never show a face. */
+  videoType: VideoType;
+  /** The persona's stored avatar URL (or null): when no segment carries
+   * a photo and no library image was picked, the engine falls back to
+   * this avatar when it is an http(s) URL the engine can download — or
+   * to the signed stored photo (photoPathUrl) when the avatar is null. */
+  avatarUrl: string | null;
+  /** Signed URL of the stored persona photo (photo_path), or null: the
+   * fallback photo when the avatar is null (uploaded/https personas
+   * store photo_path with avatar_url null). */
+  photoPathUrl: string | null;
+  /** Signed URL of the library image dispatch will send as the persona
+   * fallback photo (null when no library image was picked): the engine
+   * face-gates this file, not the stored avatar, so the pre-charge
+   * check must validate it instead. */
+  libraryPhotoUrl: string | null;
+}
+
+/**
+ * Mechanical rejections from media/check: the file failed the engine's
+ * size/decodability checks, so its face verdict is meaningless (the
+ * engine reports has_face null for these). The text names the real
+ * reason the photo cannot be the hook image. These apply to the first
+ * segment photo only: the engine really rejects those files there
+ * (resolve_first_segment_photo runs _validate_photo), while the persona
+ * fallback has no size bounds — only an unreadable file is a 400 there.
+ */
+const MECHANICAL_REJECTION_REASONS: Record<string, string> = {
+  not_image: 'is not a readable image',
+  too_small: 'is too small',
+  too_large: 'is too large',
+};
+
+function mechanicalRejectionReason(code: unknown): string | undefined {
+  return typeof code === 'string' ? MECHANICAL_REJECTION_REASONS[code] : undefined;
+}
+
+/**
+ * Face-check one persona fallback photo URL through media/check: a
+ * faceless one is a 400 naming the photo; anything else passes.
+ * `subject` names the photo in the 400 ("The photo selected for this
+ * video" for a picked library image, "The persona photo" for the stored
+ * avatar). Only an unreadable file is a 400 here: the engine applies no
+ * mechanical photo bounds to the persona fallback (only the 20 MB SSRF
+ * download cap and image/*), so a too small or too large fallback photo
+ * still renders — while the engine's face gate rejects an undecodable
+ * file too, so that rejection mirrors it.
+ */
+async function checkFallbackPhotoUrl(
+  userId: string,
+  videoAspect: VideoAspectOption,
+  url: string,
+  subject: string,
+  field: string,
+): Promise<null | NextResponse> {
+  const record = await fetchMediaCheck(
+    { segmentIndex: 0, imageIndex: 0, url },
+    userId,
+    videoAspect,
+    'first-photo-face',
+  );
+  if (record instanceof NextResponse) return record;
+  if (record.code === 'not_image') {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      `${subject} is not a readable image: lip sync needs a usable photo of the persona's face.`,
+      field,
+    );
+  }
+  if (record.has_face === false) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      `${subject} has no detectable face: lip sync needs a photo of the persona's face.`,
+      field,
+    );
+  }
+  return null;
+}
+
+/**
+ * Check the hook image for a detectable face before charging (issue
+ * #589). The hook opens with the first segment photo, so a faceless
+ * first photo must fail here — not after the charge, when the engine
+ * preflight would fail the task and refund it. Only face modes are
+ * gated; faceless videos never show a face. Returns null when the hook
+ * image has a face (or there is nothing to check), and a NextResponse
+ * otherwise: 400 naming the segment and image (or the persona photo),
+ * 502 when the face is unknown. A missing has_face (an older engine)
+ * passes through: the engine preflight is the backstop. A photo the
+ * engine mechanically rejects (not_image, too_small, too_large) is a
+ * 400 naming the real reason — checked before the face verdict, so an
+ * older engine's "no face" for an undecodable file never wins.
+ *
+ * When no segment carries a photo the engine falls back to the persona
+ * photo and face-gates that instead (full_lipsync text-only segments
+ * reach it in production: media is optional there), so the fallback
+ * photo is checked here too: the picked library image when one was
+ * picked (dispatch signs exactly that file), else the stored avatar
+ * when it is an http(s) URL the engine can download, else the signed
+ * stored photo (photo_path) when the avatar is null. A data URI, a
+ * relative asset path, or a missing avatar cannot be checked through
+ * media/check: the engine preflight is the backstop for those.
+ */
+export async function checkFirstPhotoFace(
+  input: FirstPhotoFaceInput,
+): Promise<null | NextResponse> {
+  if (input.videoType === 'faceless') return null;
+  const first = firstSegmentMedia(input.segments);
+  if (first !== null) {
+    const record = await fetchMediaCheck(
+      first,
+      input.userId,
+      input.videoAspect,
+      'first-photo-face',
+    );
+    if (record instanceof NextResponse) return record;
+    const rejection = mechanicalRejectionReason(record.code);
+    if (rejection !== undefined) {
+      return validationFailed(
+        ERROR_CODES.VALIDATION_FAILED,
+        `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but it ${rejection}: send a usable photo showing the persona's face.`,
+        'options.segments',
+      );
+    }
+    // The engine gate fails the task on any resolve_first_segment_photo
+    // reason except no_segment_media, so a first photo the engine cannot
+    // load must block the charge too — otherwise the route charges and
+    // the engine fails the task and refunds it.
+    if (
+      record.code === 'blocked_403' ||
+      record.code === 'timeout' ||
+      record.code === 'media_expired'
+    ) {
+      return validationFailed(
+        ERROR_CODES.VALIDATION_FAILED,
+        `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but it could not be loaded (${record.code}): send a usable photo showing the persona's face.`,
+        'options.segments',
+      );
+    }
+    if (record.has_face === false) {
+      return validationFailed(
+        ERROR_CODES.VALIDATION_FAILED,
+        `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but no face was detected in it: send a photo showing the persona's face.`,
+        'options.segments',
+      );
+    }
+    return null;
+  }
+  // The engine's persona fallback photo is the library image dispatch
+  // will sign, not the stored avatar: when one was picked, check that
+  // file; only fall back to the stored avatar for an empty library.
+  if (input.libraryPhotoUrl !== null) {
+    return checkFallbackPhotoUrl(
+      input.userId,
+      input.videoAspect,
+      input.libraryPhotoUrl,
+      'The photo selected for this video',
+      'personaId',
+    );
+  }
+  if (input.avatarUrl === null && input.photoPathUrl !== null) {
+    return checkFallbackPhotoUrl(
+      input.userId,
+      input.videoAspect,
+      input.photoPathUrl,
+      'The persona photo',
+      'personaId',
+    );
+  }
+  if (input.avatarUrl === null || !isHttpUrl(input.avatarUrl)) return null;
+  return checkFallbackPhotoUrl(
+    input.userId,
+    input.videoAspect,
+    input.avatarUrl,
+    'The persona photo',
+    'personaId',
+  );
+}
+
 export interface PreChargePreflightInput {
   userId: string;
   /** Joined segments script — the exact text the video task will speak. */
@@ -195,14 +409,22 @@ export interface PreChargePreflightInput {
   options: ValidatedOptions;
   /** Raw segments from the request (already shape-validated upstream). */
   segments: unknown;
+  /** Signed URL of the library image dispatch will send as the persona
+   * fallback photo (null when no library image was picked). */
+  libraryPhotoUrl: string | null;
+  /** Signed URL of the stored persona photo (photo_path), or null: the
+   * fallback photo when the avatar is null. */
+  photoPathUrl: string | null;
 }
 
 /**
- * Both pre-charge rejections, in route order: the full lip-sync
+ * All three pre-charge rejections, in route order: the full lip-sync
  * narration check first (only when full lip-sync is on), then the
- * segment-media aspect check (only when segments are present). Returns
- * the first failure, or null when nothing blocks the charge. Callers
- * must return the response without charging on any failure.
+ * segment-media aspect check (only when segments are present), then
+ * the first-photo face check (face modes only: the first segment photo,
+ * or the persona fallback photo when no segment carries one).
+ * Returns the first failure, or null when nothing blocks the charge.
+ * Callers must return the response without charging on any failure.
  */
 export async function checkPreChargePreflights(
   input: PreChargePreflightInput,
@@ -230,14 +452,23 @@ export async function checkPreChargePreflights(
     const message = `Persona video aspect is '${effectiveAspect}', expected 9:16, 16:9 or 1:1: update the persona.`;
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, message, 'personaId');
   }
-  return checkSegmentMediaAspect({
+  const videoAspect: VideoAspectOption =
+    effectiveAspect === '16:9' || effectiveAspect === '1:1' ? effectiveAspect : '9:16';
+  const aspect = await checkSegmentMediaAspect({
     userId: input.userId,
     segments: input.segments,
-    videoAspect:
-      effectiveAspect === '16:9' || effectiveAspect === '1:1'
-        ? effectiveAspect
-        : '9:16',
+    videoAspect,
     hasFace: input.options.videoType !== 'faceless' && input.prep.photoPath !== null,
     videoType: input.options.videoType,
+  });
+  if (aspect instanceof NextResponse) return aspect;
+  return checkFirstPhotoFace({
+    userId: input.userId,
+    segments: input.segments,
+    videoAspect,
+    videoType: input.options.videoType,
+    avatarUrl: input.prep.avatarUrl,
+    libraryPhotoUrl: input.libraryPhotoUrl,
+    photoPathUrl: input.photoPathUrl,
   });
 }

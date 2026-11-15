@@ -34,6 +34,7 @@ import { refundRollbackSpend } from './rollback-refund';
 import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, verifyExperimentPairAfterInsert } from './experiment-link';
 import { scheduleAccountColumns } from './account-columns';
 import { checkPreChargePreflights } from './aspect-preflight';
+import { resolvePreChargeFallbackPhotos } from './library-photo';
 import { resolvePublishingAccounts, signedUrl } from './persona-prep';
 import { validateAccounts } from './validate-accounts';
 import { getPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
@@ -345,26 +346,23 @@ async function postHandler(request: Request): Promise<NextResponse> {
   );
   if (accountIds instanceof NextResponse) return accountIds;
 
-  // Pinned library image: fail fast when the id does not resolve, before
-  // any charge. Per-video resolution still happens at dispatch time.
+  // Pinned library image: fail fast when the id does not resolve, before any charge.
+  // The fallback photo is resolved once here, pre-charge: the engine face-gates the library image dispatch signs, not the avatar.
   const requestedImageId =
     personaId !== null ? (validatedOptions.imageId?.trim() || null) : null;
-  if (requestedImageId && personaId !== null) {
-    const imageCheck = await resolveVideoImage(supabase, personaId, userId, [], {
-      title,
-      niche: prep.niche,
-      // Image keyword matching uses the actual segments script now, not
-      // the removed prompt: the prompt was only ever a proxy for it.
-      script: segmentsScript,
-      imageId: requestedImageId,
-    });
-    if (!imageCheck.ok) {
-      return validationFailed(ERROR_CODES.VALIDATION_FAILED, imageCheck.error, 'options.imageId', imageCheck.status);
-    }
-  }
+  const fallbackPhotos = await resolvePreChargeFallbackPhotos(supabase, {
+    personaId,
+    userId,
+    title,
+    script: segmentsScript,
+    videoType: validatedOptions.videoType,
+    requestedImageId,
+    prep,
+  });
+  if (fallbackPhotos instanceof NextResponse) return fallbackPhotos;
 
-  // Pre-charge preflights: full lip-sync narration (>60s) and segment-media
-  // aspect (issue #538) — both reject here instead of charging then refunding.
+  // Pre-charge preflights: full lip-sync narration (>60s), segment-media aspect
+  // (issue #538) and first-photo face (issue #589) — all reject before charging.
   // Runs after all other pre-charge validation, before cost/spend below.
   const preflight = await checkPreChargePreflights({
     userId,
@@ -372,6 +370,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
     prep,
     options: validatedOptions,
     segments: options?.segments,
+    libraryPhotoUrl: fallbackPhotos.libraryPhotoUrl,
+    photoPathUrl: fallbackPhotos.photoPathUrl,
   });
   if (preflight instanceof NextResponse) return preflight;
 

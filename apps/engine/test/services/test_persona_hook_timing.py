@@ -156,6 +156,12 @@ class TestLipsyncIntroIsCappedNotSkipped:
                 )
             )
             track = stack.enter_context(patch.object(persona_hook, "track_event"))
+            # The face gate is orthogonal to the hook timing pinned here
+            # (the data-URI avatar bytes are not a decodable photo): the
+            # gate has its own tests in test_persona_preflight.py.
+            stack.enter_context(
+                patch("app.services.face_detect.image_contains_face", return_value=True)
+            )
             result = task_service.prepare_persona_lipsync_video(
                 task_id="task-1",
                 params=_lipsync_params(),

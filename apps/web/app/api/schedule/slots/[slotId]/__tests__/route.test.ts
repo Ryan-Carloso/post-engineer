@@ -1331,7 +1331,7 @@ describe('slot id normalization', () => {
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'select')
         .map((c) => c.args),
-    ).toEqual([['id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, publish_outcomes']]);
+    ).toEqual([['id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, publish_outcomes, segments']]);
     expect(
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'eq')

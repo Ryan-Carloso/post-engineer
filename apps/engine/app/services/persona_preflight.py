@@ -14,7 +14,12 @@ from app.services.lipsync_active import persona_lipsync_active
 
 
 def preflight_persona_image(task_id: str, params: VideoParams, max_bytes: int) -> None:
-    """Download and validate the persona image when lip-sync will need it.
+    """Download and validate the lip-sync image when lip-sync will need it.
+
+    When the job carries segments, resolve_persona_image downloads and
+    face-checks the first segment photo instead of the persona image; the
+    persona image is only fetched for segment-less jobs and text-only
+    segments.
 
     Raises ``longcat.LongCatError`` when the image is unusable; the reason
     has every URL replaced (``resolve_persona_image`` scrubs it). A job
