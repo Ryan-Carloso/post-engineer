@@ -339,3 +339,75 @@ def test_task_start_copies_shared_audio_before_the_word_cut():
     word_cut = source.index("audio_trim.trim_after_last_word(")
     assert copy_call < word_cut
     assert "if task_local is not None:" in source
+
+
+def test_word_cut_skipped_when_last_word_mismatches_script(tmp_path):
+    # Issue #534 defect 2: Whisper can miss or mis-hear the trailing words
+    # (the #539 video's captions show "22%" that was never spoken). Cutting
+    # the audio at a mis-transcribed last word would cut real speech — the
+    # CTA tail — off the file. A mismatch keeps the full audio instead.
+    audio = tmp_path / "audio.mp3"
+    audio.write_bytes(b"x")
+    words = [("a", 0.0, 1.0), ("b", 20.0, 28.4)]
+    with patch.object(audio_trim.subprocess, "run") as run, patch.object(
+        audio_trim, "_duration", return_value=33.0
+    ):
+        assert (
+            audio_trim.trim_after_last_word(str(audio), words, "Ends with c.")
+            is None
+        )
+    run.assert_not_called()
+    assert audio.read_bytes() == b"x"
+
+
+def test_word_cut_kept_when_last_word_matches_script(tmp_path):
+    # Same tail, but the transcript's last word is the script's last word:
+    # the cut is safe and still happens.
+    audio = tmp_path / "audio.mp3"
+    audio.write_bytes(b"x")
+    calls = []
+    words = [("Follow", 20.0, 27.0), ("HabitLoom", 27.0, 28.4)]
+    with patch.object(
+        audio_trim.subprocess, "run", side_effect=_fake_cut(tmp_path, calls)
+    ), patch.object(audio_trim, "_duration", return_value=33.0):
+        assert (
+            audio_trim.trim_after_last_word(
+                str(audio), words, "Hook here. Body here. Follow HabitLoom."
+            )
+            == 28.4 + audio_trim.KEEP_AFTER_WORD_SECONDS
+        )
+    assert len(calls) == 1
+    assert audio.read_bytes() == b"y"
+
+
+def test_word_cut_match_ignores_case_and_punctuation(tmp_path):
+    # "HabitLoom." in the transcript vs "habitloom" in the script: the same
+    # word, so the cut still happens.
+    audio = tmp_path / "audio.mp3"
+    audio.write_bytes(b"x")
+    words = [("habitloom.", 27.0, 28.4)]
+    with patch.object(
+        audio_trim.subprocess, "run", side_effect=_fake_cut(tmp_path, [])
+    ), patch.object(audio_trim, "_duration", return_value=33.0):
+        assert (
+            audio_trim.trim_after_last_word(str(audio), words, "Follow HabitLoom")
+            == 28.4 + audio_trim.KEEP_AFTER_WORD_SECONDS
+        )
+
+
+def test_word_cut_skipped_when_script_last_word_has_no_ascii_letters(tmp_path):
+    # Issue #534 review: a CJK/Cyrillic/Arabic last word normalizes to "",
+    # which used to silently disable the guard and cut unverified speech.
+    # An unmatchable last word keeps the full audio instead.
+    audio = tmp_path / "audio.mp3"
+    audio.write_bytes(b"x")
+    words = [("你好", 20.0, 28.4)]
+    with patch.object(audio_trim.subprocess, "run") as run, patch.object(
+        audio_trim, "_duration", return_value=33.0
+    ):
+        assert (
+            audio_trim.trim_after_last_word(str(audio), words, "早上好。你好")
+            is None
+        )
+    run.assert_not_called()
+    assert audio.read_bytes() == b"x"
