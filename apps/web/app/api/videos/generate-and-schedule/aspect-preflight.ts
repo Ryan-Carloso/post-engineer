@@ -21,7 +21,7 @@
 // proceed. Any other code (ok, or a skip the task already handles — an
 // expired media id, a blocked download, a face) never blocks here.
 //
-// Both pre-charge checks live in this module — the narration-length
+// All three pre-charge checks live in this module — the narration-length
 // check (full lip-sync) first, then the aspect check, then the
 // first-photo face check — so route.ts stays under the file-size
 // ratchet: one call site instead of three preflight blocks.
@@ -30,6 +30,7 @@
 import { NextResponse } from 'next/server';
 
 import { ERROR_CODES } from '@/lib/error-codes';
+import { isHttpUrl } from '@/lib/generation/custom-audio';
 import { firstSegmentMedia } from '@/lib/hook-photo';
 import type { SegmentMediaRef } from '@/lib/hook-photo';
 import { engineAuthHeaders } from '@/lib/request-auth';
@@ -220,27 +221,58 @@ export interface FirstPhotoFaceInput {
   videoAspect: VideoAspectOption;
   /** The one video mode: faceless videos never show a face. */
   videoType: VideoType;
+  /** The persona's stored avatar URL (or null): the engine falls back
+   * to the persona photo when no segment carries one, so the avatar is
+   * the hook image in that case. */
+  avatarUrl: string | null;
 }
 
 /**
- * Check the first photo of the video for a detectable face before
- * charging (issue #589). The hook opens with the first segment photo,
- * so a faceless first photo must fail here — not after the charge,
- * when the engine preflight would fail the task and refund it. Only
- * face modes are gated; faceless videos never show a face. Returns
- * null when the first photo has a face (or there is no first photo to
- * check), and a NextResponse otherwise: 400 naming the segment and
- * image, 502 when the face is unknown. A missing has_face (an older
- * engine) passes through: the engine preflight is the backstop.
+ * Check the hook image for a detectable face before charging (issue
+ * #589). The hook opens with the first segment photo, so a faceless
+ * first photo must fail here — not after the charge, when the engine
+ * preflight would fail the task and refund it. Only face modes are
+ * gated; faceless videos never show a face. Returns null when the hook
+ * image has a face (or there is nothing to check), and a NextResponse
+ * otherwise: 400 naming the segment and image (or the persona photo),
+ * 502 when the face is unknown. A missing has_face (an older engine)
+ * passes through: the engine preflight is the backstop.
+ *
+ * When no segment carries a photo the engine falls back to the persona
+ * photo and face-gates that instead (full_lipsync text-only segments
+ * reach it in production: media is optional there), so the stored
+ * avatar is checked here too when it is an http(s) URL the engine can
+ * download. A data URI, a relative asset path, or a missing avatar
+ * cannot be checked through media/check: the engine preflight is the
+ * backstop for those.
  */
 export async function checkFirstPhotoFace(
   input: FirstPhotoFaceInput,
 ): Promise<null | NextResponse> {
   if (input.videoType === 'faceless') return null;
   const first = firstSegmentMedia(input.segments);
-  if (first === null) return null;
+  if (first !== null) {
+    const record = await fetchMediaCheck(
+      first,
+      input.userId,
+      input.videoAspect,
+      'first-photo-face',
+    );
+    if (record instanceof NextResponse) return record;
+    if (record.has_face === false) {
+      return validationFailed(
+        ERROR_CODES.VALIDATION_FAILED,
+        `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but no face was detected in it: send a photo showing the persona's face.`,
+        'options.segments',
+      );
+    }
+    return null;
+  }
+  if (input.avatarUrl === null || !isHttpUrl(input.avatarUrl)) return null;
+  // The avatar is the hook image here: the segment indices on the ref
+  // are unused (the 400 below names the persona photo, not a segment).
   const record = await fetchMediaCheck(
-    first,
+    { segmentIndex: 0, imageIndex: 0, url: input.avatarUrl },
     input.userId,
     input.videoAspect,
     'first-photo-face',
@@ -249,8 +281,8 @@ export async function checkFirstPhotoFace(
   if (record.has_face === false) {
     return validationFailed(
       ERROR_CODES.VALIDATION_FAILED,
-      `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but no face was detected in it: send a photo showing the persona's face.`,
-      'options.segments',
+      `The persona photo has no detectable face: lip sync needs a photo of the persona's face.`,
+      'personaId',
     );
   }
   return null;
@@ -315,5 +347,6 @@ export async function checkPreChargePreflights(
     segments: input.segments,
     videoAspect,
     videoType: input.options.videoType,
+    avatarUrl: input.prep.avatarUrl,
   });
 }

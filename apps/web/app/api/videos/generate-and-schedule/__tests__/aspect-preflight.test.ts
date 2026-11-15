@@ -60,6 +60,7 @@ const INPUT = {
   videoAspect: '9:16' as const,
   hasFace: false,
   videoType: 'hook_lipsync' as const,
+  avatarUrl: null as string | null,
 };
 
 const PREP: PersonaPrep = {
@@ -348,6 +349,74 @@ describe('checkFirstPhotoFace', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('checks the persona avatar when no segment carries a photo', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
+    const result = await checkFirstPhotoFace({
+      ...INPUT,
+      segments: [],
+      avatarUrl: 'https://e.com/avatar.jpg',
+    });
+    expect(result).toBeNull();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('https://engine.test/api/v1/media/check');
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      url: 'https://e.com/avatar.jpg',
+      video_aspect: '9:16',
+    });
+  });
+
+  it('rejects a faceless persona avatar with a 400 naming the persona photo', async () => {
+    stubFetch([engineBody('ok', 1080, 1920, false)]);
+    const result = await checkFirstPhotoFace({
+      ...INPUT,
+      segments: [],
+      avatarUrl: 'https://e.com/avatar.jpg',
+    });
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(400);
+    const payload = (await (result as NextResponse).json()) as {
+      error?: string;
+      code?: string;
+      field?: string;
+    };
+    expect(payload.error).toContain('The persona photo has no detectable face');
+    expect(payload.code).toBe('VALIDATION_FAILED');
+    expect(payload.field).toBe('personaId');
+  });
+
+  it('passes a data-URI avatar without an engine call: media/check cannot fetch it', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
+    const result = await checkFirstPhotoFace({
+      ...INPUT,
+      segments: [],
+      avatarUrl: 'data:image/png;base64,iVBORw0KGgo=',
+    });
+    expect(result).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('passes a relative-asset avatar without an engine call: media/check needs an absolute URL', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
+    const result = await checkFirstPhotoFace({
+      ...INPUT,
+      segments: [],
+      avatarUrl: '/caracter-samples/file-1.png',
+    });
+    expect(result).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('fails closed with a 502 when the avatar check cannot reach the engine', async () => {
+    stubFetch([new Error('fetch failed')]);
+    const result = await checkFirstPhotoFace({
+      ...INPUT,
+      segments: [],
+      avatarUrl: 'https://e.com/avatar.jpg',
+    });
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(502);
+  });
+
   it('passes when the first photo has a face and sends the media id', async () => {
     const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
     const result = await checkFirstPhotoFace(INPUT);
@@ -618,5 +687,42 @@ describe('checkPreChargePreflights', () => {
     expect(checkFullLipsyncNarration).not.toHaveBeenCalled();
     // The aspect failure short-circuits: the first-photo face check never runs.
     expect(calls).toHaveLength(1);
+  });
+
+  it('checks the persona avatar for full lip-sync text-only segments', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920, false)]);
+    vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
+    const result = await checkPreChargePreflights({
+      ...COMBINED,
+      options: { ...OPTIONS, videoType: 'full_lipsync' },
+      prep: { ...PREP, avatarUrl: 'https://e.com/avatar.jpg' },
+      segments: [
+        { kind: 'hook', text: 'Welcome to Porto.' },
+        { kind: 'content', text: 'Where the river meets the sea.' },
+      ],
+    });
+    expect(result).not.toBeNull();
+    expect(result?.status).toBe(400);
+    const payload = (await result?.json()) as { error?: string; field?: string };
+    expect(payload.error).toContain('The persona photo has no detectable face');
+    expect(payload.field).toBe('personaId');
+    expect(checkFullLipsyncNarration).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('passes text-only segments with no avatar through to the engine backstop', async () => {
+    const calls = stubFetch([engineBody('ok')]);
+    vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
+    const result = await checkPreChargePreflights({
+      ...COMBINED,
+      options: { ...OPTIONS, videoType: 'full_lipsync' },
+      segments: [
+        { kind: 'hook', text: 'Welcome to Porto.' },
+        { kind: 'content', text: 'Where the river meets the sea.' },
+      ],
+    });
+    expect(result).toBeNull();
+    expect(checkFullLipsyncNarration).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveLength(0);
   });
 });

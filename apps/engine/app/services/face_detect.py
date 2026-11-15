@@ -12,9 +12,10 @@ _FACE_MODULE_LOCK = threading.Lock()
 def _load_cv2():
     """Lazy-load cv2 (opencv-python-headless) to defer the import cost.
 
-    Detection only runs when material_exclude_people=true; if the package
-    is not installed, log it and treat the filter as inactive (don't fail
-    the task).
+    Detection runs from three callers: the material_exclude_people video
+    filter, the media/check has_face report, and the lip-sync hook-photo
+    face gate. If the package is not installed, log it and let each
+    caller treat the detector as unavailable (don't fail the task).
     """
     global _FACE_MODULE, _FACE_MODULE_LOADED
     if _FACE_MODULE_LOADED:
@@ -31,8 +32,8 @@ def _load_cv2():
         except ImportError:
             _FACE_MODULE_LOADED = True
             logger.warning(
-                "material_exclude_people=true but opencv-python-headless is not "
-                "installed; face filtering disabled. Run `uv sync` to install it."
+                "opencv-python-headless is not installed; face detection "
+                "unavailable. Run `uv sync` to install it."
             )
     return _FACE_MODULE
 

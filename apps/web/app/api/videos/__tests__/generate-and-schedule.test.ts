@@ -868,16 +868,23 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
     it('sends video_type full_lipsync to the engine for an opt-in full-mode post', async () => {
       // The preflight runs before charging: stub a fitting narration so
-      // the request proceeds past it to dispatch.
+      // the request proceeds past it to dispatch. The avatar face check
+      // also runs (text-only segments fall back to the persona photo),
+      // so media/check URLs answer with a faced photo like the default stub.
       vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
       vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
       vi.stubGlobal(
         'fetch',
-        vi.fn(async () =>
-          new Response(JSON.stringify({ status: 200, body: { audio_duration_seconds: 51 } }), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          }),
+        vi.fn(async (url: string) =>
+          String(url).includes('/api/v1/media/check')
+            ? new Response(
+              JSON.stringify({ status: 200, body: { code: 'ok', width: 1080, height: 1920, has_face: true } }),
+              { status: 200, headers: { 'content-type': 'application/json' } },
+            )
+            : new Response(JSON.stringify({ status: 200, body: { audio_duration_seconds: 51 } }), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
         ),
       );
       try {
@@ -3243,11 +3250,16 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
     vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        new Response(JSON.stringify({ status: 200, body: { audio_duration_seconds: duration } }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
+      vi.fn(async (url: string) =>
+        String(url).includes('/api/v1/media/check')
+          ? new Response(
+            JSON.stringify({ status: 200, body: { code: 'ok', width: 1080, height: 1920, has_face: true } }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          )
+          : new Response(JSON.stringify({ status: 200, body: { audio_duration_seconds: duration } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
       ),
     );
   }

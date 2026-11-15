@@ -273,9 +273,9 @@ class ResolvePersonaImageFirstPhotoTests(unittest.TestCase):
                 self.assertTrue(os.path.exists(asset))
 
     def test_no_segment_media_falls_back_to_the_persona_photo(self):
-        # Request validation already requires media on every segment
-        # for the images modes, so this state only reaches the resolver
-        # from a hand-built params object: duck-type it.
+        # The images modes require media on every segment, so this state
+        # reaches the resolver in production only from full_lipsync
+        # text-only segments (media is optional there): duck-type it.
         from types import SimpleNamespace
 
         with tempfile.TemporaryDirectory() as task_dir:
