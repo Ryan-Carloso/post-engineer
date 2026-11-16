@@ -265,12 +265,11 @@ class BatchGenerator:
                 # slot is a data error, not a generation attempt.
                 if request.video_language.strip() and not is_english_language(request.video_language):
                     raise ValueError(ENGLISH_ONLY_VIDEO_MESSAGE)
-                # Funnel entry fires from on_accepted, once the manager
-                # has accepted the slot and before the worker runs. A
-                # rejection (SlotDeferred) is not a generation attempt:
-                # no requested event, no refund, the slot stays pending.
-                # A failure after acceptance still has its requested
-                # event, so the failure % keeps a denominator.
+                # Funnel entry fires from on_accepted: after the reservation
+                # and the task-row write, before the worker. SlotDeferred is
+                # no attempt (no event, no refund, slot stays pending). A
+                # failed task-row write emits failed with no requested event
+                # (outside the denominator); later failures have both.
                 def _accepted() -> None:
                     tm.track_generation_requested(
                         task_id,
