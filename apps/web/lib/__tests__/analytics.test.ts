@@ -89,6 +89,13 @@ describe('trackApiEventAs', () => {
     expect(props.safe).toBe('ok');
   });
 
+  it('captures only the library tag when no properties are given', () => {
+    const captureAs = vi.fn();
+    (getPostHogServer as ReturnType<typeof vi.fn>).mockReturnValue({ captureAs });
+    trackApiEventAs('user-1', 'experiment_concluded');
+    expect(captureAs).toHaveBeenCalledWith('user-1', 'experiment_concluded', { $lib: 'posthog-server' });
+  });
+
   it('never throws when PostHog is not configured', () => {
     (getPostHogServer as ReturnType<typeof vi.fn>).mockReturnValue(null);
     expect(() => trackApiEventAs('user-1', 'x', {})).not.toThrow();
