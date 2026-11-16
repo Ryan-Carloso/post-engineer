@@ -2,9 +2,9 @@ import { beforeEach, describe, it, expect, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
-vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
+vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn(), trackApiEventAs: vi.fn() }));
 
-import { trackApiEvent } from '@/lib/analytics';
+import { trackApiEvent, trackApiEventAs } from '@/lib/analytics';
 import { EXPERIMENT_VIDEO_LINKED_EVENT } from '../experiment-link-telemetry';
 import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, pairMismatch, verifyExperimentPairAfterInsert, type PairFacts } from '../experiment-link';
 import type { PersonaPrep } from '../persona-prep';
@@ -357,16 +357,21 @@ describe('verifyExperimentPairAfterInsert', () => {
   describe('experiment_video_linked', () => {
     beforeEach(() => {
       vi.mocked(trackApiEvent).mockClear();
+      vi.mocked(trackApiEventAs).mockClear();
     });
 
     function linkedCall(): Record<string, unknown> | undefined {
-      const call = vi.mocked(trackApiEvent).mock.calls.find((entry) => entry[0] === EXPERIMENT_VIDEO_LINKED_EVENT);
-      return call?.[1];
+      const call = vi.mocked(trackApiEventAs).mock.calls.find((entry) => entry[1] === EXPERIMENT_VIDEO_LINKED_EVENT);
+      // Attributed to the caller, so the experiments funnel joins it to
+      // the same person as experiments (action: create) and results.
+      expect(call?.[0]).toBe(USER_ID);
+      return call?.[2];
     }
 
     it('emits after a passing re-check, with pair_complete false when the partner slot is absent', async () => {
       await expect(verify({ slots: { data: [OWN_SLOT], error: null } }).promise).resolves.toEqual({ ok: true });
-      expect(vi.mocked(trackApiEvent)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(trackApiEventAs)).toHaveBeenCalledTimes(1);
+      expect(trackApiEvent).not.toHaveBeenCalled();
       expect(linkedCall()).toEqual({
         experiment_id: EXPERIMENT_ID,
         variant_id: 'hook-aggressive',
@@ -418,7 +423,7 @@ describe('verifyExperimentPairAfterInsert', () => {
         replayScheduleId: SCHEDULE_ID,
         facts: facts(),
       });
-      expect(trackApiEvent).not.toHaveBeenCalled();
+      expect(trackApiEventAs).not.toHaveBeenCalled();
     });
   });
 });

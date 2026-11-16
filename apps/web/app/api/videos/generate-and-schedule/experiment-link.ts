@@ -331,6 +331,7 @@ export async function verifyExperimentPairAfterInsert(
     if (!compared.ok) return compared;
   }
   recordExperimentVideoLinked({
+    userId,
     experimentId: link.experimentId,
     variantId: link.variantId,
     pair: link.pair,
