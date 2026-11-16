@@ -207,6 +207,17 @@ describe('prompt tool names match registered MCP tools', () => {
     expect(missing).toEqual([]);
   });
 
+  it('tells the agent to wait for the final outcome instead of polling', () => {
+    const base = promptBase.SHARED_PROMPT_BASE.join('\n');
+    expect(base).toContain('waitSeconds');
+    expect(base).toContain('nextPollInSeconds');
+    expect(promptBase.AB_HOOK_TEST_PROMPT).toContain('waitSeconds');
+    expect(promptBase.AB_HOOK_TEST_PROMPT).not.toContain('while a video generates');
+    for (const { text } of servedPromptTexts()) {
+      expect(text).not.toContain('until it finishes');
+    }
+  });
+
   it('only names an action that the tool really has', () => {
     const registered = registeredTools();
     const unknown = mentionedActions().filter(({ tool, action }) => !registered.get(tool)?.has(action));
